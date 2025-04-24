@@ -75,12 +75,13 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
                         .WithName((Twine("end_of_task_") + Twine(i)).str());
     taskStarts[task] = startVar;
     taskEnds[task] = endVar;
-    auto resource = prob.getLinkedResourceType(task);
-    unsigned duration = *prob.getLatency(*resource);
+    auto opr = prob.getLinkedOperatorType(task);
+    unsigned duration = *prob.getLatency(*opr);
     IntervalVar taskInterval =
         cpModel.NewIntervalVar(startVar, duration, endVar)
             .WithName((Twine("task_interval_") + Twine(i)).str());
 
+    auto resource = prob.getLinkedResourceType(task);
     if (prob.getLimit(*resource))
       resourcesToTaskIntervals[resource.value()].emplace_back(taskInterval);
   }
@@ -100,7 +101,7 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
   // Establish "cumulative" constraints in order to constrain maximum
   // concurrent usage of operators.
   for (auto resourceToTaskIntervals : resourcesToTaskIntervals) {
-    Problem::OperatorType &resource = resourceToTaskIntervals.getFirst();
+    Problem::ResourceType &resource = resourceToTaskIntervals.getFirst();
     auto capacity = prob.getLimit(resource);
     SmallVector<IntervalVar, 4> &taskIntervals =
         resourceToTaskIntervals.getSecond();
@@ -115,7 +116,8 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
       auto i = item.index();
       auto taskInterval = item.value();
       IntVar demandVar = cpModel.NewIntVar(Domain(1)).WithName(
-          (Twine("demand_") + Twine(i) + Twine("_") + Twine(resource.strref()))
+          (Twine("demand_") + Twine(i) + Twine("_") +
+           Twine(resource.getAttr().strref()))
               .str());
       // Conventional formulation for SharedOperatorsProblem;
       // interval during which the resource is occupied has size 1.
