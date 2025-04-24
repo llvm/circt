@@ -31,8 +31,18 @@ HierPathOp HierPathCache::getOrCreatePath(ArrayAttr pathArray, Location loc,
   auto pathIter = pathCache.find(pathArray);
   if (pathIter != pathCache.end()) {
     auto &hierPathOp = pathIter->getSecond();
-    hierPathOp->setLoc(
-        FusedLoc::get(loc.getContext(), hierPathOp->getLoc(), loc));
+    auto oldLoc = hierPathOp->getLoc();
+    // Fuse the location of all old locations and the new location.
+    SmallVector<Location> locations;
+    if (auto fusedLoc = dyn_cast<FusedLoc>(oldLoc)) {
+      auto oldLocs = fusedLoc.getLocations();
+      locations.append(oldLocs.begin(), oldLocs.end());
+    } else {
+      locations.push_back(oldLoc);
+    }
+    locations.push_back(loc);
+    // Update the location on the original HierPathOp.
+    hierPathOp->setLoc(FusedLoc::get(loc.getContext(), locations));
     return hierPathOp;
   }
 
