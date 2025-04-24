@@ -49,7 +49,7 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
 
   DenseMap<Operation *, IntVar> taskStarts;
   DenseMap<Operation *, IntVar> taskEnds;
-  DenseMap<Problem::OperatorType, SmallVector<IntervalVar, 4>>
+  DenseMap<Problem::ResourceType, SmallVector<IntervalVar, 4>>
       resourcesToTaskIntervals;
 
   // First get horizon, i.e., the time taken if all operations were executed
@@ -75,7 +75,7 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
                         .WithName((Twine("end_of_task_") + Twine(i)).str());
     taskStarts[task] = startVar;
     taskEnds[task] = endVar;
-    auto resource = prob.getLinkedOperatorType(task);
+    auto resource = prob.getLinkedResourceType(task);
     unsigned duration = *prob.getLatency(*resource);
     IntervalVar taskInterval =
         cpModel.NewIntervalVar(startVar, duration, endVar)

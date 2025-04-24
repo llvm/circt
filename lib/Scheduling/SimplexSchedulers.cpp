@@ -243,8 +243,8 @@ private:
 
     using TableType = SmallDenseMap<unsigned, DenseSet<Operation *>>;
     using ReverseTableType = SmallDenseMap<Operation *, unsigned>;
-    SmallDenseMap<Problem::OperatorType, TableType> tables;
-    SmallDenseMap<Problem::OperatorType, ReverseTableType> reverseTables;
+    SmallDenseMap<Problem::ResourceType, TableType> tables;
+    SmallDenseMap<Problem::ResourceType, ReverseTableType> reverseTables;
 
     explicit MRT(ModuloSimplexScheduler &sched) : sched(sched) {}
     LogicalResult enter(Operation *op, unsigned timeStep);
@@ -874,7 +874,10 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 //===----------------------------------------------------------------------===//
 
 static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
-  return prob.getLimit(*prob.getLinkedOperatorType(op)).value_or(0) > 0;
+  auto maybeRsrc = prob.getLinkedResourceType(op);
+  if (!maybeRsrc)
+    return false;
+  return prob.getLimit(*maybeRsrc).value_or(0) > 0;
 }
 
 LogicalResult SharedOperatorsSimplexScheduler::schedule() {
@@ -923,21 +926,21 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
                             getStartTime(startTimeVariables[b]);
                    });
 
-  // Store the number of operations using an operator type in a particular time
+  // Store the number of operations using a resource type in a particular time
   // step.
-  SmallDenseMap<Problem::OperatorType, SmallDenseMap<unsigned, unsigned>>
+  SmallDenseMap<Problem::ResourceType, SmallDenseMap<unsigned, unsigned>>
       reservationTable;
 
   for (auto *op : limitedOps) {
-    auto opr = *prob.getLinkedOperatorType(op);
-    unsigned limit = prob.getLimit(opr).value_or(0);
+    auto rsrc = *prob.getLinkedResourceType(op);
+    unsigned limit = prob.getLimit(rsrc).value_or(0);
     assert(limit > 0);
 
     // Find the first time step (beginning at the current start time in the
     // partial schedule) in which an operator instance is available.
     unsigned startTimeVar = startTimeVariables[op];
     unsigned candTime = getStartTime(startTimeVar);
-    while (reservationTable[opr].lookup(candTime) == limit)
+    while (reservationTable[rsrc].lookup(candTime) == limit)
       ++candTime;
 
     // Fix the start time. As explained above, this cannot make the problem
@@ -947,7 +950,7 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     (void)fixed;
 
     // Record the operator use.
-    ++reservationTable[opr][candTime];
+    ++reservationTable[rsrc][candTime];
 
     LLVM_DEBUG(dbgs() << "After scheduling " << startTimeVar
                       << " to t=" << candTime << ":\n";
@@ -993,15 +996,15 @@ LogicalResult ModuloSimplexScheduler::checkLastOp() {
 
 LogicalResult ModuloSimplexScheduler::MRT::enter(Operation *op,
                                                  unsigned timeStep) {
-  auto opr = *sched.prob.getLinkedOperatorType(op);
-  auto lim = *sched.prob.getLimit(opr);
+  auto rsrc = *sched.prob.getLinkedResourceType(op);
+  auto lim = *sched.prob.getLimit(rsrc);
   assert(lim > 0);
 
-  auto &revTab = reverseTables[opr];
+  auto &revTab = reverseTables[rsrc];
   assert(!revTab.count(op));
 
   unsigned slot = timeStep % sched.parameterT;
-  auto &cell = tables[opr][slot];
+  auto &cell = tables[rsrc][slot];
   if (cell.size() < lim) {
     cell.insert(op);
     revTab[op] = slot;
@@ -1011,11 +1014,11 @@ LogicalResult ModuloSimplexScheduler::MRT::enter(Operation *op,
 }
 
 void ModuloSimplexScheduler::MRT::release(Operation *op) {
-  auto opr = *sched.prob.getLinkedOperatorType(op);
-  auto &revTab = reverseTables[opr];
+  auto rsrc = *sched.prob.getLinkedResourceType(op);
+  auto &revTab = reverseTables[rsrc];
   auto it = revTab.find(op);
   assert(it != revTab.end());
-  tables[opr][it->second].erase(op);
+  tables[rsrc][it->second].erase(op);
   revTab.erase(it);
 }
 
@@ -1167,10 +1170,10 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
 
 unsigned ModuloSimplexScheduler::computeResMinII() {
   unsigned resMinII = 1;
-  SmallDenseMap<Problem::OperatorType, unsigned> uses;
+  SmallDenseMap<Problem::ResourceType, unsigned> uses;
   for (auto *op : prob.getOperations())
     if (isLimited(op, prob))
-      ++uses[*prob.getLinkedOperatorType(op)];
+      ++uses[*prob.getLinkedResourceType(op)];
 
   for (auto pair : uses)
     resMinII = std::max(

@@ -24,25 +24,30 @@ def InstanceOp : SSPOp<"instance",
   let description = [{
     This operation represents an instance of a static scheduling problem,
     comprised of an operator library (`OperatorLibraryOp`, a container for
-    `OperatorTypeOp`s) and the dependence graph (`DependenceGraphOp`, a
+    `OperatorTypeOp`s), an resource library (`ResourceLibraryOp`, a container
+    for `ResourceTypeOp`s), and the dependence graph (`DependenceGraphOp`, a
     container for `OperationOp`s). The instance and its components (operations,
-    operator types and dependences) can carry properties, i.e. special MLIR
-    attributes inheriting from the TableGen classes in `PropertyBase.td`. The
-    `ssp` dialect provides attribute definitions (and short-form
-    pretty-printing) for CIRCT's built-in scheduling problems.
+    operator types, resource types and dependences) can carry properties,
+    i.e. special MLIR attributes inheriting from the TableGen classes in
+    `PropertyBase.td`. The `ssp` dialect provides attribute definitions (and
+    short-form pretty-printing) for CIRCT's built-in scheduling problems.
     
     **Example**
     ```mlir
     ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
       library {
-        operator_type @MemPort [latency<1>, limit<1>]
+        operator_type @Memory [latency<1>]
         operator_type @Add [latency<1>]
       }
+      resource {
+        resource_type @ReadPort [limit<1>]
+        resource_type @WritePort [limit<1>]
+      }
       graph {
-        %0 = operation<@MemPort> @load_A(@store_A [dist<1>]) [t<2>]
-        %1 = operation<@MemPort> @load_B() [t<0>]
-        %2 = operation<@Add> @add(%0, %1) [t<3>]
-        operation<@MemPort> @store_A(%2) [t<4>]
+        %0 = operation<@Memory> @load_A uses<@ReadPort>(@store_A [dist<1>]) [t<2>]
+        %1 = operation<@Memory> @load_B uses<@ReadPort>() [t<0>]
+        %2 = operation<@Add> @add(%0, %1) [t<3>]  // no `resource_type` needed
+        operation<@Memory> @store_A uses<@WritePort>(%2) [t<4>]
       }
     }
     ```
@@ -71,6 +76,7 @@ def InstanceOp : SSPOp<"instance",
 
     // Access to container ops
     ::circt::ssp::OperatorLibraryOp getOperatorLibrary();
+    ::circt::ssp::ResourceLibraryOp getResourceLibrary();
     ::circt::ssp::DependenceGraphOp getDependenceGraph();
   }];
 
@@ -98,6 +104,44 @@ def OperatorLibraryOp : SSPOp<"library",
     `InstanceOp`.
   }];
   
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
+  let assemblyFormat = "($sym_name^)? $body attr-dict";
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    // OpAsmOpInterface
+    static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
+
+    // SymbolOpInterface
+    static bool isOptionalSymbol() { return true; }
+
+    // Convenience
+    ::mlir::Block *getBodyBlock() {
+      return &getBody().getBlocks().front();
+    }
+  }];
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins ), [{
+      ::mlir::Region* region = $_state.addRegion();
+      region->push_back(new ::mlir::Block());
+    }]>
+  ];
+}
+
+def ResourceLibraryOp : SSPOp<"resource",
+    [NoRegionArguments, SingleBlock,
+     NoTerminator, OpAsmOpInterface, SymbolTable, Symbol]> {
+  let summary = "Container for resource types.";
+  let description = [{
+    The resource library represents different kinds of resource of desired
+    usage on the target architecture/IR. Each resource will be represented by
+    the individual `ResourceTypeOp`s. An `OperationOp` can be associated with
+    zero, one, or multiple resources. This operation may be used outside of
+    an `InstanceOp` so different problems can share the same resource constraints.
+  }];
+
   let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name);
   let assemblyFormat = "($sym_name^)? $body attr-dict";
   let regions = (region SizedRegion<1>:$body);
@@ -165,7 +209,24 @@ def OperatorTypeOp : SSPOp<"operator_type",
 
     **Example**
     ```mlir
-    operator_type @MemPort [latency<1>, limit<1>]
+    operator_type @MemPort [latency<1>]
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<ArrayAttr>:$sspProperties);
+  let assemblyFormat = "$sym_name custom<SSPProperties>($sspProperties) attr-dict";
+}
+
+def ResourceTypeOp : SSPOp<"resource_type",
+    [Symbol, HasParent<"ResourceLibraryOp">]> {
+  let summary = "Resource of desired usage on the target architecture/IR.";
+  let description = [{
+    This resource represents a resource type, which can be augmented with a
+    set of problem-specific properties, and is identified through a unique name.
+
+    **Example**
+    ```mlir
+    resource_type @MemPort [limit<1>]
     ```
   }];
 
@@ -189,12 +250,13 @@ def OperationOp : SSPOp<"operation",
     operands/results. The operation and the incoming dependences can carry
     properties.
 
-    The `linkedOperatorType` property in the root `Problem` class is central to
-    the problem models, because it links operations to their properties in the
-    target IR. Therefore, the referenced operator type symbol is parsed/printed
-    right after the operation keyword in the custom assembly syntax. Flat symbol
-    references are resolved by name in the surrounding instance's operator
-    library. Nested references can point to arbitrary operator libraries.
+    The `linkedOperatorType` and `linkedResourceType` property in the root
+    `Problem` class are central to the problem models, because it links operations
+    to their properties in the target IR. Therefore, the referenced operator/resource
+    type symbol is parsed/printed right after the operation keyword in the custom
+    assembly syntax. Flat symbol references are resolved by name in the surrounding
+    instance's operator/resource library. Nested references can point to arbitrary
+    operator/resource libraries.
 
     **Examples**
     ```mlir
@@ -205,7 +267,7 @@ def OperationOp : SSPOp<"operation",
     %5:2 = operation<@Div>(%3, %4) // multiple results
     
     // named, mix of def-use and auxiliary dependences
-    operation<@MemPort> @store_A(%2, @store_B, @load_A)
+    operation<@MemAccess> @store_A uses<@MemPort>(%2, @store_B, @load_A)
     
     // dependence properties
     operation<@Barrier>(%2 [dist<1>], %5#1, @store_A [dist<3>])
@@ -230,6 +292,9 @@ def OperationOp : SSPOp<"operation",
 
     // Find the attribute modeling the `linkedOperatorType` property
     ::circt::ssp::LinkedOperatorTypeAttr getLinkedOperatorTypeAttr();
+
+    // Find the attribute modeling the `linkedResourceType` property
+    ::circt::ssp::LinkedResourceTypeAttr getLinkedResourceTypeAttr();
   }];
 
   let skipDefaultBuilders = true;

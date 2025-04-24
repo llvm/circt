@@ -87,6 +87,9 @@ ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
       if (latency.has_value())
         modProb.setLatency(opr.value(), latency.value());
     }
+    auto rsrc = prob.getLinkedResourceType(op);
+    if (rsrc.has_value())
+      modProb.setLinkedResourceType(op, rsrc.value());
     modProb.insertOperation(op);
   }
 
@@ -323,8 +326,13 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
           problem.setLatency(memOpr, 1);
-          problem.setLimit(memOpr, 1);
           problem.setLinkedOperatorType(memOp, memOpr);
+
+          auto memRsrc = problem.getOrInsertResourceType(
+              "mem_" + std::to_string(hash_value(memRef)) + "_rsrc");
+          problem.setLimit(memRsrc, 1);
+          problem.setLinkedResourceType(memOp, memRsrc);
+
           return WalkResult::advance();
         })
         .Case<AffineLoadOp, memref::LoadOp>([&](Operation *memOp) {
@@ -337,8 +345,13 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           Problem::OperatorType memOpr = problem.getOrInsertOperatorType(
               "mem_" + std::to_string(hash_value(memRef)));
           problem.setLatency(memOpr, 1);
-          problem.setLimit(memOpr, 1);
           problem.setLinkedOperatorType(memOp, memOpr);
+
+          auto memRsrc = problem.getOrInsertResourceType(
+              "mem_" + std::to_string(hash_value(memRef)) + "_rsrc");
+          problem.setLimit(memRsrc, 1);
+          problem.setLinkedResourceType(memOp, memRsrc);
+
           return WalkResult::advance();
         })
         .Case<MulIOp>([&](Operation *mcOp) {
@@ -368,7 +381,7 @@ LogicalResult AffineToLoopSchedule::solveSchedulingProblem(
   LLVM_DEBUG(forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
     llvm::dbgs() << "Scheduling inputs for " << *op;
     auto opr = problem.getLinkedOperatorType(op);
-    llvm::dbgs() << "\n  opr = " << opr;
+    llvm::dbgs() << "\n  opr = " << opr->getAttr();
     llvm::dbgs() << "\n  latency = " << problem.getLatency(*opr);
     for (auto dep : problem.getDependences(op))
       if (dep.isAuxiliary())

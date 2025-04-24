@@ -48,7 +48,13 @@ def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
   "LinkedOperatorType", "::mlir::SymbolRefAttr", "::circt::scheduling::Problem"> {
   let mnemonic = "opr";
   let unwrapValue = [{ getValue().getLeafReference() }];
-  let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value) }];
+  let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value.getAttr()) }];
+}
+def LinkedResourceTypeProp : OperationProperty<SSPDialect,
+  "LinkedResourceType", "::mlir::SymbolRefAttr", "::circt::scheduling::Problem"> {
+  let mnemonic = "rsrc";
+  let unwrapValue = [{ getValue().getLeafReference() }];
+  let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value.getAttr()) }];
 }
 def StartTimeProp : OperationProperty<SSPDialect,
   "StartTime", "unsigned", "::circt::scheduling::Problem"> {
@@ -89,7 +95,7 @@ in {
 }
 
 // SharedOperatorsProblem
-def LimitProp : OperatorTypeProperty<SSPDialect,
+def LimitProp : ResourceTypeProperty<SSPDialect,
   "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
   let mnemonic = "limit";
 }

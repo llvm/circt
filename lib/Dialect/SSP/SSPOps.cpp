@@ -44,6 +44,10 @@ OperatorLibraryOp InstanceOp::getOperatorLibrary() {
   return *getOps<OperatorLibraryOp>().begin();
 }
 
+ResourceLibraryOp InstanceOp::getResourceLibrary() {
+  return *getOps<ResourceLibraryOp>().begin();
+}
+
 DependenceGraphOp InstanceOp::getDependenceGraph() {
   return *getOps<DependenceGraphOp>().begin();
 }
@@ -70,6 +74,21 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
 
   if (parser.parseGreater())
     return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("uses"))) {
+    if (parser.parseLess())
+      return failure();
+
+    SymbolRefAttr rsrcRef;
+    if (parser.parseAttribute(rsrcRef))
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected symbol reference in uses<>");
+
+    alreadyParsed.push_back(builder.getAttr<LinkedResourceTypeAttr>(rsrcRef));
+
+    if (parser.parseGreater())
+      return failure();
+  }
 
   // (Scheduling) operation's name
   StringAttr opName;
@@ -303,6 +322,16 @@ LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
         properties, [](Attribute a) { return isa<LinkedOperatorTypeAttr>(a); });
     if (it != properties.end())
       return cast<LinkedOperatorTypeAttr>(*it);
+  }
+  return {};
+}
+
+LinkedResourceTypeAttr OperationOp::getLinkedResourceTypeAttr() {
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
+    const auto *it = llvm::find_if(
+        properties, [](Attribute a) { return isa<LinkedResourceTypeAttr>(a); });
+    if (it != properties.end())
+      return cast<LinkedResourceTypeAttr>(*it);
   }
   return {};
 }
