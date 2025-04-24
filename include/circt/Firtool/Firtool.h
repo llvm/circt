@@ -444,11 +444,11 @@ LogicalResult populatePreprocessTransforms(mlir::PassManager &pm,
                                            const FirtoolOptions &opt);
 
 LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
-                                         const FirtoolOptions &opt,
-                                         StringRef inputFilename);
+                                         const FirtoolOptions &opt);
 
 LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
-                                    const FirtoolOptions &opt);
+                                    const FirtoolOptions &opt,
+                                    StringRef inputFilename);
 
 LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
 

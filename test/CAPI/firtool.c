@@ -50,11 +50,11 @@ void exportVerilog(MlirContext ctx, bool disableOptimization) {
       circtFirtoolPopulatePreprocessTransforms(pm, options);
   assert(mlirLogicalResultIsSuccess(result));
 
-  result = circtFirtoolPopulateCHIRRTLToLowFIRRTL(
-      pm, options, mlirStringRefCreateFromCString("-"));
+  result = circtFirtoolPopulateCHIRRTLToLowFIRRTL(pm, options);
   assert(mlirLogicalResultIsSuccess(result));
 
-  result = circtFirtoolPopulateLowFIRRTLToHW(pm, options);
+  result = circtFirtoolPopulateLowFIRRTLToHW(
+      pm, options, mlirStringRefCreateFromCString("-"));
   assert(mlirLogicalResultIsSuccess(result));
 
   result = circtFirtoolPopulateHWToSV(pm, options);
