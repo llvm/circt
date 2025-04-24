@@ -5,6 +5,7 @@ ssp.instance @Foo of "Problem" {
   library {
     operator_type @Bar [latency<1>]
   }
+  resource {}
   graph {
 // CHECK: op0 -> op1
 // CHECK: op0 -> op2

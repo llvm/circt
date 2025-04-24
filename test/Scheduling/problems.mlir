@@ -8,6 +8,8 @@ ssp.instance @unit_latencies of "Problem" {
   library {
     operator_type @_1 [latency<1>]
   }
+  resource {
+  }
   // ASAP: graph
   graph {
     // ASAP-NEXT: [t<0>]
@@ -40,6 +42,8 @@ ssp.instance @arbitrary_latencies of "Problem" {
     operator_type @_6 [latency<6>]
     operator_type @_10 [latency<10>]
   }
+  resource {
+  }
   // ASAP: graph
   graph {
     // ASAP-NEXT: [t<0>]
@@ -65,6 +69,8 @@ ssp.instance @arbitrary_latencies of "Problem" {
 ssp.instance @auxiliary_dependences of "Problem" {
   library {
     operator_type @_1 [latency<1>]
+  }
+  resource {
   }
   // ASAP: graph
   graph {

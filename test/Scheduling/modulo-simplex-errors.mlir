@@ -5,6 +5,8 @@ ssp.instance of "ModuloProblem" {
   library {
     operator_type @_1 [latency<1>]
   }
+  resource {
+  }
   graph {
     operation<@_1> @last()
     operation<@_1>(@last)
@@ -17,6 +19,8 @@ ssp.instance of "ModuloProblem" {
 ssp.instance of "ModuloProblem" {
   library {
     operator_type @_1 [latency<1>]
+  }
+  resource {
   }
   graph {
     operation<@_1>()
