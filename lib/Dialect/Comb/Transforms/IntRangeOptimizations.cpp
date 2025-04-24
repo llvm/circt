@@ -125,12 +125,8 @@ void CombIntRangeNarrowingPass::runOnOperation() {
 
   RewritePatternSet patterns(ctx);
   populateCombNarrowingPatterns(patterns, solver);
-  GreedyRewriteConfig config;
-  // We specifically need bottom-up traversal as cmpi pattern needs range
-  // data, attached to its original argument values.
-  config.useTopDownTraversal = false;
 
-  if (failed(applyPatternsGreedily(op, std::move(patterns), config)))
+  if (failed(applyPatternsGreedily(op, std::move(patterns))))
     signalPassFailure();
 }
 

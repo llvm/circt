@@ -295,7 +295,7 @@ void TestCombIntegerRangeAnalysisPass::runOnOperation() {
   solver.load<IntegerRangeAnalysis>();
   if (failed(solver.initializeAndRun(op)))
     return signalPassFailure();
-  
+
   // Append the integer range analysis as an operation attribute.
   op->walk([&](Operation *op) {
     for (auto value : op->getResults()) {
