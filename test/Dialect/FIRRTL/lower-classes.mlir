@@ -5,7 +5,7 @@ firrtl.circuit "Component" {
   // CHECK-SAME: %[[REF1:[^ ]+]]: !om.class.type<@Class_1>
   // CHECK-SAME: -> (someReference: !om.class.type<@Class_1>)
   firrtl.class private @Class_0(in %someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out %someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
-    // CHECK: om.class.fields %[[REF1]] : !om.class.type<@Class_1>
+    // CHECK: om.class.fields {fields_locs = [#loc]} %[[REF1]] : !om.class.type<@Class_1>
     firrtl.propassign %someReference, %someReference_in : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
   }
 
@@ -14,7 +14,7 @@ firrtl.circuit "Component" {
   firrtl.class private @Class_1(out %someInt: !firrtl.integer) {
     // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si4> : !om.integer
     %0 = firrtl.integer 1
-    // CHECK: om.class.fields %[[C1]] : !om.integer
+    // CHECK: om.class.fields {fields_locs = [#loc1]} %[[C1]] : !om.integer
     firrtl.propassign %someInt, %0 : !firrtl.integer
   }
 
@@ -23,7 +23,7 @@ firrtl.circuit "Component" {
   firrtl.class private @Class_2(out %someString: !firrtl.string) {
     // CHECK: %[[C2:.+]] = om.constant "fubar" : !om.string
     %0 = firrtl.string "fubar"
-    // CHECK: om.class.fields %[[C2]] : !om.string
+    // CHECK: om.class.fields {fields_locs = [#loc2]} %[[C2]] : !om.string
     firrtl.propassign %someString, %0 : !firrtl.string
   }
 
@@ -42,7 +42,7 @@ firrtl.circuit "Component" {
     firrtl.propassign %obj0_someReference_in, %obj1 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
 
     // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]], [@someReference] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
-    // CHECK: om.class.fields %[[REF]] : !om.class.type<@Class_1>
+    // CHECK: om.class.fields {fields_locs = [#loc3]} %[[REF]] : !om.class.type<@Class_1>
     %obj0_someReference = firrtl.object.subfield %obj0[someReference] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
     firrtl.propassign %obj_0_out, %obj0_someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
   }
@@ -52,7 +52,7 @@ firrtl.circuit "Component" {
   firrtl.class @ReadOutputPort(out %output : !firrtl.integer) {
     // CHECK: %[[OBJ:.+]] = om.object @Class_1(%basepath) : (!om.basepath) -> !om.class.type<@Class_1>
     // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]], [@someInt] : (!om.class.type<@Class_1>) -> !om.integer
-    // CHECK: om.class.fields %[[FIELD]] : !om.integer
+    // CHECK: om.class.fields {fields_locs = [#loc4]} %[[FIELD]] : !om.integer
     %obj = firrtl.object @Class_1(out someInt: !firrtl.integer)
     %0 = firrtl.object.subfield %obj[someInt] : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
     firrtl.propassign %output, %0 : !firrtl.integer
@@ -138,14 +138,14 @@ firrtl.circuit "Component" {
     %objs = firrtl.list.create %c1, %c2 : !firrtl.list<class<@ClassTest()>>
     firrtl.propassign %out_objs, %objs : !firrtl.list<class<@ClassTest()>>
 
-    // CHECK-NEXT: om.class.fields %[[STRINGS]], %[[EMPTY]], %[[NESTED]], %[[OBJS]] : !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.list<!om.string>>, !om.list<!om.class.type<@ClassTest>>
+    // CHECK-NEXT: om.class.fields {fields_locs = [#loc6, #loc7, #loc8, #loc9]} %[[STRINGS]], %[[EMPTY]], %[[NESTED]], %[[OBJS]] : !om.list<!om.string>, !om.list<!om.string>, !om.list<!om.list<!om.string>>, !om.list<!om.class.type<@ClassTest>>
   }
 
   // CHECK-LABEL: om.class @BoolTest
   // CHECK-SAME: -> (b: i1)
   firrtl.class @BoolTest(out %b : !firrtl.bool) {
     // CHECK-NEXT: %[[TRUE:.+]] = om.constant true
-    // CHECK-NEXT: om.class.fields %[[TRUE]] : i1
+    // CHECK-NEXT: om.class.fields {fields_locs = [#loc10]} %[[TRUE]] : i1
     %true = firrtl.bool true
     firrtl.propassign %b, %true : !firrtl.bool
   }
@@ -154,7 +154,7 @@ firrtl.circuit "Component" {
   // CHECK-SAME: -> (d: f64)
   firrtl.class @DoubleTest(out %d : !firrtl.double) {
     // CHECK-NEXT: %[[DBL:.+]] = om.constant 4.0{{0*[eE]}}-01 : f64
-    // CHECK-NEXT: om.class.fields %[[DBL]] : f64
+    // CHECK-NEXT: om.class.fields {fields_locs = [#loc11]} %[[DBL]] : f64
     %dbl = firrtl.double 0.4
     firrtl.propassign %d, %dbl: !firrtl.double
   }
@@ -242,14 +242,14 @@ firrtl.circuit "PathModule" {
     firrtl.propassign %propOut, %1 : !firrtl.list<integer>
     // CHECK:  %[[c0:.+]] = om.constant #om.integer<123 : si12> : !om.integer
     // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
-    // CHECK:  om.class.fields %[[c1]] : !om.list<!om.integer>
+    // CHECK:  om.class.fields {fields_locs = [#loc12]} %[[c1]] : !om.list<!om.integer>
   }
 
    // CHECK: -> (propOut:
    firrtl.module @ListConcat(in %propIn0: !firrtl.list<integer>, in %propIn1: !firrtl.list<integer>, out %propOut: !firrtl.list<integer>) {
     // CHECK: [[CONCAT:%.+]] = om.list_concat %propIn0, %propIn1
     %1 = firrtl.list.concat %propIn0, %propIn1 : !firrtl.list<integer>
-    // CHECK: om.class.fields [[CONCAT]]
+    // CHECK: om.class.fields {fields_locs = [#loc13]} [[CONCAT]]
     firrtl.propassign %propOut, %1 : !firrtl.list<integer>
   }
 }
@@ -262,7 +262,7 @@ firrtl.circuit "WireProp" {
   firrtl.module @WireProp(in %in: !firrtl.string, out %out: !firrtl.string) attributes {convention = #firrtl<convention scalarized>} {
     // CHECK-NOT: firrtl.wire
     // CHECK-NOT: firrtl.propassign
-    // CHECK: om.class.fields %[[IN]] : !om.string
+    // CHECK: om.class.fields {fields_locs = [#loc14]} %[[IN]] : !om.string
     %s = firrtl.wire : !firrtl.string
     firrtl.propassign %s, %in : !firrtl.string
     firrtl.propassign %out, %s : !firrtl.string
@@ -331,7 +331,7 @@ firrtl.circuit "ModuleInstances" {
   // CHECK: om.class.extern @TheRealName_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
 
   // CHECK: om.class @Module_Class(%basepath: !om.basepath, %[[IN_PROP0:.+]]: !om.string) -> (outputProp: !om.string)
-  // CHECK:   om.class.fields %[[IN_PROP0]] : !om.string
+  // CHECK:   om.class.fields {fields_locs = [#loc15]} %[[IN_PROP0]] : !om.string
 
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string) -> (outputProp: !om.string)
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXT_NLA]]
@@ -342,7 +342,7 @@ firrtl.circuit "ModuleInstances" {
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[MOD_NLA]]
   // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[BASEPATH]], %[[F0]])
   // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
-  // CHECK:   om.class.fields %[[F1]] : !om.string
+  // CHECK:   om.class.fields {fields_locs = [#loc16]} %[[F1]] : !om.string
 }
 
 // CHECK-LABEL: firrtl.circuit "AnyCast"
@@ -355,7 +355,7 @@ firrtl.circuit "AnyCast" {
     %fooObject = firrtl.object @Foo()
     // CHECK: %[[CAST:.+]] = om.any_cast %[[OBJ]]
     %0 = firrtl.object.anyref_cast %fooObject : !firrtl.class<@Foo()>
-    // CHECK: om.class.fields %[[CAST]] : !om.any
+    // CHECK: om.class.fields {fields_locs = [#loc17]} %[[CAST]] : !om.any
     firrtl.propassign %foo, %0 : !firrtl.anyref
   }
 }
@@ -565,11 +565,11 @@ firrtl.circuit "RTLPorts" {
   // CHECK: om.class @NeedsRTLPorts(%basepath: !om.basepath, %containingModule_in: !om.path, %ports: !om.list<!om.class.type<@RtlPort>>)
   // CHECK-SAME: -> (containingModule: !om.path, ports: !om.list<!om.class.type<@RtlPort>>)
   firrtl.class @NeedsRTLPorts(in %containingModule_in: !firrtl.path, out %containingModule: !firrtl.path) {
-    // CHECK: om.class.fields  %containingModule_in, %ports : !om.path, !om.list<!om.class.type<@RtlPort>>
+    // CHECK: om.class.fields {fields_locs = [#loc19, #loc20]} %containingModule_in, %ports : !om.path, !om.list<!om.class.type<@RtlPort>>
     firrtl.propassign %containingModule, %containingModule_in : !firrtl.path
   }
 
   // CHECK: om.class @RtlPort(%ref: !om.path, %direction: !om.string, %width: !om.integer)  -> (ref: !om.path, direction: !om.string, width: !om.integer)
-  // CHECK-NEXT: om.class.fields %ref, %direction, %width : !om.path, !om.string, !om.integer
+  // CHECK-NEXT: om.class.fields {fields_locs = [#loc20, #loc20, #loc20]} %ref, %direction, %width : !om.path, !om.string, !om.integer
 
 }

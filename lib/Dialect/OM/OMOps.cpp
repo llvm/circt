@@ -291,10 +291,19 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   Block *body = &classOp.getRegion().emplaceBlock();
   auto prevLoc = odsBuilder.saveInsertionPoint();
   odsBuilder.setInsertionPointToEnd(body);
+
+  mlir::SmallVector<Attribute> locAttrs;
+  for (size_t i = 0; i < fieldNames.size(); ++i) {
+    locAttrs.push_back(cast<Attribute>(LocationAttr(loc)));
+  }
+
   odsBuilder.create<ClassFieldsOp>(
-      loc, llvm::map_to_vector(fieldTypes, [&](Type type) -> Value {
-        return body->addArgument(type, loc);
-      }));
+      loc,
+      llvm::map_to_vector(
+          fieldTypes,
+          [&](Type type) -> Value { return body->addArgument(type, loc); }),
+      odsBuilder.getArrayAttr(locAttrs));
+
   odsBuilder.restoreInsertionPoint(prevLoc);
 
   return classOp;
@@ -415,25 +424,15 @@ void circt::om::ClassOp::addNewFieldsOp(mlir::OpBuilder &builder,
   }
   // Also store the locations incase there's some other analysis that might
   // be able to use the default FusedLoc representation.
-  builder.create<ClassFieldsOp>(
-      builder.getFusedLoc(locs, builder.getArrayAttr(locAttrs)), values);
+  builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), values,
+                                builder.getArrayAttr(locAttrs));
 }
 
 mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
-  Location loc = this->getFieldsOp()->getLoc();
-  if (auto locs = dyn_cast<FusedLoc>(loc)) {
-    // Because it's possible for a user to construct a fields op directly and
-    // place a FusedLoc that doersn't follow the storage format of
-    // addNewFieldsOp, we assert the information has been stored appropriately
-    ArrayAttr metadataArr = dyn_cast<ArrayAttr>(locs.getMetadata());
-    assert(metadataArr && "Expected fused loc to store metadata array");
-    assert(i < metadataArr.size() &&
-           "expected index to be less than array size");
-    LocationAttr locAttr = dyn_cast<LocationAttr>(metadataArr[i]);
-    assert(locAttr && "expected metadataArr entry to be location attribute");
-    loc = Location(locAttr);
-  }
-  return loc;
+  auto fieldLocs = this->getFieldsOp().getFieldsLocs();
+  if (!fieldLocs)
+    return this->getFieldsOp().getLoc();
+  return cast<LocationAttr>(fieldLocs.value()[i]);
 }
 
 //===----------------------------------------------------------------------===//

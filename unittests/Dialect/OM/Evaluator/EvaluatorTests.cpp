@@ -168,7 +168,8 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
   auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
+                                ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -253,7 +254,8 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   builder.setInsertionPointToStart(&body);
   auto constant = builder.create<ConstantOp>(
       circt::om::IntegerAttr::get(&context, constantType));
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({constant}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({constant}),
+                                ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -304,7 +306,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -368,7 +370,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
       builder.create<ObjectFieldOp>(builder.getI32Type(), object,
                                     builder.getArrayAttr(FlatSymbolRefAttr::get(
                                         builder.getStringAttr("field"))));
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({field}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({field}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -407,7 +409,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
+                                ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
@@ -422,7 +425,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object, object}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object, object}),
+                                ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -476,7 +480,8 @@ TEST(EvaluatorTests, AnyCastObject) {
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
+                                ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
@@ -491,7 +496,7 @@ TEST(EvaluatorTests, AnyCastObject) {
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   auto cast = builder.create<AnyCastOp>(object);
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({cast}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({cast}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -545,7 +550,7 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto cast = builder.create<AnyCastOp>(body.getArgument(0));
   SmallVector<Value> objectParams = {cast};
   auto object = builder.create<ObjectOp>(innerCls, objectParams);
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
