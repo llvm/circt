@@ -53,8 +53,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 }
 
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
-                                                  const FirtoolOptions &opt,
-                                                  StringRef inputFilename) {
+                                                  const FirtoolOptions &opt) {
   // TODO: Ensure instance graph and other passes can handle instance choice
   // then run this pass after all diagnostic passes have run.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
@@ -217,6 +216,17 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createVectorizationPass());
 
+  return success();
+}
+
+LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
+                                             const FirtoolOptions &opt,
+                                             StringRef inputFilename) {
+  // Lower the ref.resolve and ref.send ops and remove the RefType ports.
+  // LowerToHW cannot handle RefType so, this pass must be run to remove all
+  // RefType ports and ops.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
+
   // Layer lowering passes.  Move operations into layers when possible and
   // remove layers by converting them to other constructs.  This lowering
   // process can create a few optimization opportunities.
@@ -258,20 +268,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                : opt.getBlackBoxRootPath();
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createBlackBoxReaderPass(blackBoxRoot));
-  return success();
-}
 
-LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
-                                             const FirtoolOptions &opt) {
   // Remove TraceAnnotations and write their updated paths to an output
   // annotation file.
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createResolveTracesPass(opt.getOutputAnnotationFilename()));
-
-  // Lower the ref.resolve and ref.send ops and remove the RefType ports.
-  // LowerToHW cannot handle RefType so, this pass must be run to remove all
-  // RefType ports and ops.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPIPass());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
@@ -306,6 +307,8 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   pm.nestAny().addPass(verif::createStripContractsPass());
   pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(
+      verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
   if (opt.shouldExtractTestCode())
     pm.addPass(sv::createSVExtractTestCodePass(
@@ -752,6 +755,12 @@ struct FirtoolCmdOptions {
       llvm::cl::desc(
           "Specialize instance choice to default, if no option selected"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<verif::SymbolicValueLowering> symbolicValueLowering{
+      "symbolic-values",
+      llvm::cl::desc("Control how symbolic values are lowered"),
+      llvm::cl::init(verif::SymbolicValueLowering::ExtModule),
+      verif::symbolicValueLoweringCLValues()};
 };
 } // namespace
 
@@ -789,7 +798,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
       stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
-      disableCSEinClasses(false), selectDefaultInstanceChoice(false) {
+      disableCSEinClasses(false), selectDefaultInstanceChoice(false),
+      symbolicValueLowering(verif::SymbolicValueLowering::ExtModule) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -840,4 +850,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
   addCompanionAssume = clOptions->addCompanionAssume;
   selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
+  symbolicValueLowering = clOptions->symbolicValueLowering;
 }

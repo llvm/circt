@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWModuleGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"

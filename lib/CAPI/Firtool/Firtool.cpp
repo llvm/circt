@@ -340,16 +340,17 @@ circtFirtoolPopulatePreprocessTransforms(MlirPassManager pm,
 
 MlirLogicalResult
 circtFirtoolPopulateCHIRRTLToLowFIRRTL(MlirPassManager pm,
-                                       CirctFirtoolFirtoolOptions options,
-                                       MlirStringRef inputFilename) {
-  return wrap(firtool::populateCHIRRTLToLowFIRRTL(*unwrap(pm), *unwrap(options),
-                                                  unwrap(inputFilename)));
+                                       CirctFirtoolFirtoolOptions options) {
+  return wrap(
+      firtool::populateCHIRRTLToLowFIRRTL(*unwrap(pm), *unwrap(options)));
 }
 
 MlirLogicalResult
 circtFirtoolPopulateLowFIRRTLToHW(MlirPassManager pm,
-                                  CirctFirtoolFirtoolOptions options) {
-  return wrap(firtool::populateLowFIRRTLToHW(*unwrap(pm), *unwrap(options)));
+                                  CirctFirtoolFirtoolOptions options,
+                                  MlirStringRef inputFilename) {
+  return wrap(firtool::populateLowFIRRTLToHW(*unwrap(pm), *unwrap(options),
+                                             unwrap(inputFilename)));
 }
 
 MlirLogicalResult

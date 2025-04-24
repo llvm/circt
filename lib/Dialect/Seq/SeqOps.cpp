@@ -12,7 +12,6 @@
 
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"

@@ -90,6 +90,11 @@ struct CLOptions {
                "corresponding line"),
       cl::init(false), cl::Hidden, cl::cat(cat)};
 
+  cl::opt<bool> verbosePassExecutions{
+      "verbose-pass-executions",
+      cl::desc("Print passes as they are being executed"), cl::init(false),
+      cl::cat(cat)};
+
   cl::opt<LoweringMode> loweringMode{
       cl::desc("Specify how to process the input:"),
       cl::values(
@@ -439,6 +444,9 @@ static LogicalResult executeWithSources(MLIRContext *context,
     PassManager pm(context);
     pm.enableVerifier(true);
     pm.enableTiming(ts);
+    pm.addInstrumentation(
+        std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
+            "circt-verilog"));
     if (failed(applyPassManagerCLOptions(pm)))
       return failure();
     populatePasses(pm);

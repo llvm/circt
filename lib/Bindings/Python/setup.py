@@ -86,6 +86,7 @@ class CMakeBuild(build_py):
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
         "-DLLVM_TARGETS_TO_BUILD=host",
         "-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
+        "-DMLIR_BINDINGS_PYTHON_NB_DOMAIN=circt",
         "-DCIRCT_BINDINGS_PYTHON_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG=firtool"

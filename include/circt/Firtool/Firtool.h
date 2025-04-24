@@ -16,6 +16,7 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Pass/PassManager.h"
 #include "llvm/Support/CommandLine.h"
@@ -135,6 +136,10 @@ public:
   bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
   bool shouldSelectDefaultInstanceChoice() const {
     return selectDefaultInstanceChoice;
+  }
+
+  verif::SymbolicValueLowering getSymbolicValueLowering() const {
+    return symbolicValueLowering;
   }
 
   // Setters, used by the CAPI
@@ -376,6 +381,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setSymbolicValueLowering(verif::SymbolicValueLowering mode) {
+    symbolicValueLowering = mode;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -425,6 +435,7 @@ private:
   bool addCompanionAssume;
   bool disableCSEinClasses;
   bool selectDefaultInstanceChoice;
+  verif::SymbolicValueLowering symbolicValueLowering;
 };
 
 void registerFirtoolCLOptions();
@@ -433,11 +444,11 @@ LogicalResult populatePreprocessTransforms(mlir::PassManager &pm,
                                            const FirtoolOptions &opt);
 
 LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
-                                         const FirtoolOptions &opt,
-                                         StringRef inputFilename);
+                                         const FirtoolOptions &opt);
 
 LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
-                                    const FirtoolOptions &opt);
+                                    const FirtoolOptions &opt,
+                                    StringRef inputFilename);
 
 LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
 

@@ -729,6 +729,10 @@ module Expressions;
   bit [1:0][31:0] arrayInt;
   // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
   bit [31:0] uarrayInt [2];
+  // CHECK: %arr1 = moore.variable : <uarray<2 x i32>
+  bit [31:0] arr1 [2];
+  // CHECK: %arr2 = moore.variable : <uarray<2 x i32>
+  bit [31:0] arr2 [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
 
@@ -1147,6 +1151,24 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.eq [[TMP1]], [[TMP2]] : l32 -> l1
     y = d == e;
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 43
+    // CHECK: [[TMP1:%.+]] = moore.constant 9002
+    // CHECK: moore.array_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+    arr1 = '{43, 9002};
+    // CHECK: [[TMP0:%.+]] = moore.constant 43
+    // CHECK: [[TMP1:%.+]] = moore.constant 9002
+    // CHECK: moore.array_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+    arr2 = '{43, 9002};
+    // CHECK: [[TMP1:%.+]] = moore.read %arr1
+    // CHECK: [[TMP2:%.+]] = moore.read %arr2
+    // CHECK: moore.uarray_cmp eq [[TMP1]], [[TMP2]] : <2 x i32> -> i1
+    x = arr1 == arr2;
+    // CHECK: [[TMP3:%.+]] = moore.read %arr1
+    // CHECK: [[TMP4:%.+]] = moore.read %arr2
+    // CHECK: moore.uarray_cmp ne [[TMP3]], [[TMP4]] : <2 x i32> -> i1
+    x = arr1 != arr2;
+
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
     // CHECK: moore.ne [[TMP1]], [[TMP2]] : i32 -> i1
