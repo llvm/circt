@@ -156,8 +156,13 @@ def ClassOp : OMClassLike<"class", [
 def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
       HasParent<"ClassOp">]> {
   let arguments = (ins Variadic<AnyType>:$fields, 
-                       OptionalAttr<LocationArrayAttr>:$fields_locs);
-  let assemblyFormat = "attr-dict ($fields^ `:` qualified(type($fields)))?";
+                       OptionalAttr<LocationArrayAttr>:$field_locs);
+  let assemblyFormat = [{
+    attr-dict ($fields^ `:` qualified(type($fields)))?
+    custom<FieldLocs>($field_locs)
+  }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

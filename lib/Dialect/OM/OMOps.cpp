@@ -20,7 +20,7 @@ using namespace mlir;
 using namespace circt::om;
 
 //===----------------------------------------------------------------------===//
-// Path Printers and Parsers
+// Custom Printers and Parsers
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseBasePathString(OpAsmParser &parser, PathAttr &path) {
@@ -72,6 +72,33 @@ static void printPathString(OpAsmPrinter &p, Operation *op, PathAttr path,
   if (!field.getValue().empty())
     p << field.getValue();
   p << '\"';
+}
+
+static ParseResult parseFieldLocs(OpAsmParser &parser, ArrayAttr &fieldLocs) {
+  if (parser.parseOptionalKeyword("field_locs"))
+    return success();
+  uint count = 0;
+  auto parseElt = [&]() -> ParseResult {
+    if (count > 0) {
+      parser.emitError(parser.getCurrentLocation(),
+                       "found more than one field_locs array");
+      return failure();
+    }
+    count++;
+    return parser.parseAttribute(fieldLocs);
+  };
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseElt);
+}
+
+static void printFieldLocs(OpAsmPrinter &printer, Operation *op,
+                           ArrayAttr fieldLocs) {
+  mlir::OpPrintingFlags flags;
+  if (!flags.shouldPrintDebugInfo() || !fieldLocs)
+    return;
+  printer << "field_locs(";
+  printer.printAttribute(fieldLocs);
+  printer << ")";
 }
 
 //===----------------------------------------------------------------------===//
@@ -418,6 +445,7 @@ void circt::om::ClassOp::addNewFieldsOp(mlir::OpBuilder &builder,
                                         mlir::ArrayRef<Value> values) {
   // Store the original locations as a metadata array so that unique locations
   // are preserved as a mapping from field index to location
+  assert(locs.size() == values.size() && "Expected a location per value");
   mlir::SmallVector<Attribute> locAttrs;
   for (auto loc : locs) {
     locAttrs.push_back(cast<Attribute>(LocationAttr(loc)));
@@ -429,9 +457,11 @@ void circt::om::ClassOp::addNewFieldsOp(mlir::OpBuilder &builder,
 }
 
 mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
-  auto fieldLocs = this->getFieldsOp().getFieldsLocs();
-  if (!fieldLocs)
-    return this->getFieldsOp().getLoc();
+  auto fieldLocs = this->getFieldsOp().getFieldLocs();
+  if (!fieldLocs.has_value())
+    return UnknownLoc::get(this->getContext());
+  assert(i < fieldLocs.value().size() &&
+         "field index too large for location array");
   return cast<LocationAttr>(fieldLocs.value()[i]);
 }
 
@@ -472,6 +502,18 @@ circt::om::ClassExternOp::getFieldType(mlir::StringAttr field) {
 
 void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
   replaceClassLikeFieldTypes(*this, replacer);
+}
+
+//===----------------------------------------------------------------------===//
+// ClassFieldsOp
+//===----------------------------------------------------------------------===//
+//
+LogicalResult circt::om::ClassFieldsOp::verify() { 
+  auto fieldLocs = this->getFieldLocs();
+  if (fieldLocs.has_value())
+    if (fieldLocs.value().size() != this->getFields().size())
+      return this->emitOpError("size of field_locs does not match number of fields");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

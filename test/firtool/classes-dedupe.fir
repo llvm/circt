@@ -119,7 +119,7 @@ circuit Test : %[[
     ; CHECK: om.path_create reference %basepath [[NLA2]]
     propassign out_2, path("OMReferenceTarget:~Test|CPU_1/fetch_1:Fetch_1>foo")
 
-    ; CHECK: om.class.fields {fields_locs = [#loc21, #loc22, #loc23, #loc24, #loc25, #loc26]} [[FOO_1]], [[FOO_2]], [[FOO_3]], [[FOO_4]], %4, %5 : !om.class.type<@Foo_1>, !om.class.type<@Foo_2>, !om.class.type<@Foo_3>, !om.class.type<@Foo_3>, !om.path, !om.path
+    ; CHECK: om.class.fields [[FOO_1]], [[FOO_2]], [[FOO_3]], [[FOO_4]], %4, %5 : !om.class.type<@Foo_1>, !om.class.type<@Foo_2>, !om.class.type<@Foo_3>, !om.class.type<@Foo_3>, !om.path, !om.path
 
   ; CHECK-NOT: OM_2
   class OM_2 :

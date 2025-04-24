@@ -178,3 +178,19 @@ om.class @A(%arg: i1) -> (a: i2) {
   // expected-note @+1 {{see terminator:}}
   om.class.fields %arg : i1
 }
+
+
+// -----
+
+om.class @A(%arg: i1) -> (a: i1) {
+  // expected-error @+1 {{custom op 'om.class.fields' found more than one field_locs array}}
+  om.class.fields %arg : i1 field_locs([loc("loc0")], [loc("loc1")])
+}
+
+
+// -----
+
+om.class @A(%arg: i1) -> (a: i1) {
+  // expected-error @+1 {{'om.class.fields' op size of field_locs does not match number of fields}}
+  om.class.fields %arg : i1 field_locs([loc("loc0"), loc("loc1")])
+}
