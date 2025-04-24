@@ -236,11 +236,11 @@ MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulatePreprocessTransforms(
     MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateCHIRRTLToLowFIRRTL(
-    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
-    MlirStringRef inputFilename);
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateLowFIRRTLToHW(
-    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringRef inputFilename);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateHWToSV(
     MlirPassManager pm, CirctFirtoolFirtoolOptions options);

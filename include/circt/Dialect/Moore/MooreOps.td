@@ -614,6 +614,15 @@ def SExtOp : ExtOpBase<"sext"> {
 // Expressions
 //===----------------------------------------------------------------------===//
 
+def UArrayCmpPredicateAttr : I64EnumAttr<
+    "UArrayCmpPredicate", "",
+    [
+      I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>
+    ]> {
+  let cppNamespace = "circt::moore";
+}
+
 def NegOp : MooreOp<"neg", [Pure, SameOperandsAndResultType]> {
   let summary = "Arithmetic negation";
   let description = [{
@@ -888,6 +897,34 @@ class ShiftOpBase<string mnemonic> : MooreOp<mnemonic, [
 def ShlOp : ShiftOpBase<"shl"> { let summary = "Logical left shift"; }
 def ShrOp : ShiftOpBase<"shr"> { let summary = "Logical right shift"; }
 def AShrOp : ShiftOpBase<"ashr"> { let summary = "Arithmetic right shift"; }
+
+def UArrayCmpOp : MooreOp<"uarray_cmp", [
+  Pure,
+  Commutative,
+  SameTypeOperands,
+]> {
+  let description = [{
+    Performs an elementwise comparison of two unpacked arrays
+    using the specified predicate (for example, "eq" for equality or "ne" for inequality)
+    and returns a single bit result.
+    Its first argument is an attribute that defines which type of comparison is
+    performed. The following comparisons are supported:
+
+    -   equal (mnemonic: `"eq"`; integer value: `0`)
+    -   not equal (mnemonic: `"ne"`; integer value: `1`)
+
+    The result is `1` if the comparison is true and `0` otherwise.
+  }];
+  let arguments = (ins 
+    UArrayCmpPredicateAttr:$predicate,
+    UnpackedArrayType:$lhs,
+    UnpackedArrayType:$rhs
+  );
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $predicate $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];  
+}
 
 class LogicalEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,

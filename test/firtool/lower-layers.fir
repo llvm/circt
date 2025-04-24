@@ -1,4 +1,4 @@
-; RUN: firtool %s -disable-all-randomization -split-input-file | FileCheck %s
+; RUN: firtool %s -disable-all-randomization -split-input-file -advanced-layer-sink -lowering-options=emittedLineLength=1024 | FileCheck %s
 
 ; This is an end-to-end example of a test-bench (Foo) enabling verification,
 ; probing into a device-under-test (Bar), and reading from hardware which is
@@ -83,14 +83,11 @@ circuit TestHarness:
 
   layer Verification, bind:
 
-  ; CHECK: module DUT_Verification(
-  ; CHECK:   input        clock,
-  ; CHECK:   input [31:0] a
-  ; CHECK: );
+  ; CHECK: module DUT_Verification();
   ; CHECK:   reg  [31:0] pc_d;
   ; CHECK:   wire [31:0] pc_d_probe = pc_d;
-  ; CHECK:   always @(posedge clock)
-  ; CHECK:     pc_d <= a;
+  ; CHECK:   always @(posedge DUT.clock)
+  ; CHECK:     pc_d <= DUT.a;
   ; CHECK: endmodule
 
   ; CHECK: module DUT(
@@ -124,15 +121,11 @@ circuit TestHarness:
     layerblock Verification:
       define trace = x
 
-  ; CHECK: module TestHarness_Verification(
-  ; CHECK:   input [31:0] dut_trace,
-  ; CHECK:   input        clock,
-  ; CHECK:                reset
-  ; CHECK: );
+  ; CHECK: module TestHarness_Verification()
   ; CHECK:   `ifndef SYNTHESIS
-  ; CHECK:     always @(posedge clock) begin
-  ; CHECK:       if ((`PRINTF_COND_) & reset)
-  ; CHECK:         $fwrite(32'h80000002, "The last PC was: %x", dut_trace);
+  ; CHECK:     always @(posedge TestHarness.clock) begin
+  ; CHECK:       if ((`PRINTF_COND_) & TestHarness.reset)
+  ; CHECK:         $fwrite(`PRINTF_FD_, "The last PC was: %x", TestHarness.dut.verification.pc_d_probe);
   ; CHECK:     end // always @(posedge)
   ; CHECK:   `endif // not def SYNTHESIS
   ; CHECK: endmodule
@@ -167,13 +160,95 @@ circuit TestHarness:
 ; CHECK: FILE "layers-TestHarness-Verification.sv"
 ; CHECK: `ifndef layers_TestHarness_Verification
 ; CHECK: `define layers_TestHarness_Verification
-; CHECK: bind DUT DUT_Verification verification (
-; CHECK:   .clock (clock),
-; CHECK:   .a     (a)
-; CHECK: );
-; CHECK: bind TestHarness TestHarness_Verification verification (
-; CHECK:   .dut_trace (TestHarness.dut.verification.pc_d_probe),
-; CHECK:   .clock     (clock),
-; CHECK:   .reset     (reset)
-; CHECK: );
+; CHECK: bind DUT DUT_Verification verification ();
+; CHECK: bind TestHarness TestHarness_Verification verification ();
 ; CHECK: `endif // layers_TestHarness_Verification
+
+; // -----
+
+; This example demonstrates forcing _out_ of a layer into the outer module, a
+; parent layer, or into another module.
+
+FIRRTL version 5.1.0
+circuit Foo: %[[
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~|ForceOutOfLayer>a"},
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~|Submodule>root"},
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~|Submodule>a"},
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~|Submodule>b"}
+]]
+
+  layer A, bind:
+  layer B, inline:
+
+  ; Test that forcing out of a layer into the root module works.
+  ;
+  ; CHECK:      module ForceOutOfLayer_A();
+  ; CHECK:        initial
+  ; CHECK-NEXT:     force ForceOutOfLayer.a = 2'h1;
+  ; CHECK:      endmodule
+  ;
+  ; CHECK:      module ForceOutOfLayer();
+  ; CHECK:        initial
+  ; CHECK-NEXT:     force ForceOutOfLayer.a = 2'h2;
+  ; CHECK:      endmodule
+  module ForceOutOfLayer:
+
+    wire a: UInt<2>
+    connect a, UInt<2>(0)
+
+    wire a_probe: RWProbe<UInt<2>>
+    define a_probe = rwprobe(a)
+
+    layerblock A:
+      force_initial(a_probe, UInt<2>(1))
+
+    layerblock B:
+      force_initial(a_probe, UInt<2>(2))
+
+  ; Test that forcing out of a layer into another works.  Test both forcing into
+  ; the other module and forcing into a layer in the other module.
+  ;
+  ; CHECK:      module ForceIntoSubmodule_A();
+  ; CHECK:        initial
+  ; CHECK-NEXT:     force ForceIntoSubmodule.submodule.root = 2'h1;
+  ; CHECK-NEXT:     force ForceIntoSubmodule.submodule.a.a = 2'h1;
+  ; CHECK:      endmodule
+  ;
+  ; CHECK:      module ForceIntoSubmodule();
+  ; CHECK:        initial
+  ; CHECK-NEXT:     force ForceIntoSubmodule.submodule.root = 2'h2;
+  ; CHECK-NEXT:     force ForceIntoSubmodule.submodule.b = 2'h2;
+  ; CHECK:      endmodule
+  module Submodule:
+    output root_probe: RWProbe<UInt<2>>
+    output a_probe: RWProbe<UInt<2>, A>
+    output b_probe: RWProbe<UInt<2>, B>
+
+    wire root: UInt<2>
+    connect root, UInt<2>(0)
+    define root_probe = rwprobe(root)
+
+    layerblock A:
+      wire a: UInt<2>
+      connect a, UInt<2>(0)
+      define a_probe = rwprobe(a)
+
+    layerblock B:
+      wire b: UInt<2>
+      connect b, UInt<2>(0)
+      define b_probe = rwprobe(b)
+
+  module ForceIntoSubmodule:
+    inst submodule of Submodule
+
+    layerblock A:
+      force_initial(submodule.root_probe, UInt<2>(1))
+      force_initial(submodule.a_probe, UInt<2>(1))
+
+    layerblock B:
+      force_initial(submodule.root_probe, UInt<2>(2))
+      force_initial(submodule.b_probe, UInt<2>(2))
+
+  public module Foo:
+    inst forceOutOfLayer of ForceOutOfLayer
+    inst forceIntoSubmodule of ForceIntoSubmodule

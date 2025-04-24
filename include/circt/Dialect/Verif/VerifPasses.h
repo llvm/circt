@@ -14,6 +14,8 @@
 #ifndef CIRCT_DIALECT_VERIF_VERIFPASSES_H
 #define CIRCT_DIALECT_VERIF_VERIFPASSES_H
 
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>
@@ -22,11 +24,24 @@ namespace circt {
 namespace verif {
 class FormalOp;
 class RequireLike;
-} // namespace verif
-} // namespace circt
 
-namespace circt {
-namespace verif {
+/// Ways to lower symbolic values.
+enum class SymbolicValueLowering {
+  /// Lower to instances of an external module.
+  ExtModule,
+  /// Lower to wire declarations with a `(* anyseq *)` attribute.
+  Yosys,
+};
+
+/// Construct the command line options to pick one of the symbolic value
+/// lowerings.
+static inline llvm::cl::ValuesClass symbolicValueLoweringCLValues() {
+  return llvm::cl::values(
+      clEnumValN(SymbolicValueLowering::ExtModule, "extmodule",
+                 "Lower to instances of an external module"),
+      clEnumValN(SymbolicValueLowering::Yosys, "yosys",
+                 "Lower to `(* anyseq *)` wire declarations"));
+}
 
 #define GEN_PASS_DECL
 #define GEN_PASS_REGISTRATION

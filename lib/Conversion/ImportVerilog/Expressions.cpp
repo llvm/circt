@@ -290,9 +290,17 @@ struct RvalueExprVisitor {
     }
 
     case BinaryOperator::Equality:
-      return createBinary<moore::EqOp>(lhs, rhs);
+      if (isa<moore::UnpackedArrayType>(lhs.getType()))
+        return builder.create<moore::UArrayCmpOp>(
+            loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
+      else
+        return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
-      return createBinary<moore::NeOp>(lhs, rhs);
+      if (isa<moore::UnpackedArrayType>(lhs.getType()))
+        return builder.create<moore::UArrayCmpOp>(
+            loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
+      else
+        return createBinary<moore::NeOp>(lhs, rhs);
     case BinaryOperator::CaseEquality:
       return createBinary<moore::CaseEqOp>(lhs, rhs);
     case BinaryOperator::CaseInequality:

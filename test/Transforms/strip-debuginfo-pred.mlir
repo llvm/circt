@@ -9,7 +9,7 @@ func.func @inline_notation() {
 // CHECK: affine.for
 // CHECK-NEXT: loc("foo")
   affine.for %i0 = 0 to 8 {
-  } loc(fused["foo", "foo.txt":10:8]) 
+  } loc(fused["foo", "foo.txt":10:8, "foo"])
   return
 }
 

@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTVerifTransforms
   LowerContracts.cpp
   LowerFormalToHW.cpp
+  LowerSymbolicValues.cpp
   PrepareForFormal.cpp
   SimplifyAssumeEq.cpp
   StripContracts.cpp
@@ -10,10 +11,11 @@ add_circt_dialect_library(CIRCTVerifTransforms
   CIRCTVerifTransformsIncGen
 
   LINK_LIBS PUBLIC
-  CIRCTVerif
-  CIRCTLTL
   CIRCTHW
+  CIRCTLTL
   CIRCTSupport
+  CIRCTSV
+  CIRCTVerif
   MLIRIR
   MLIRPass
   MLIRTransforms
