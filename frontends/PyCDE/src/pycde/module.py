@@ -562,7 +562,12 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
-        circt_inputs[name] = port.type(signal).value
+        try:
+          circt_inputs[name] = port.type(signal).value
+        except Exception as e:
+          raise PortError(
+              f"Input port '{name}' could not be converted to type "
+              f"{port.type}: {e}")
 
     missing = list(
         filter(lambda name: name not in circt_inputs, port_input_lookup.keys()))
@@ -643,9 +648,6 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
         # Pass through the appid if it was provided.
         kwargs["appid"] = appid
 
-    for name, signal in inputs.items():
-      if not isinstance(signal, Signal):
-        raise PortError(f"Input '{name}' must be a Signal")
     self.inst = self._builder.instantiate(self, inputs, **kwargs)
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid

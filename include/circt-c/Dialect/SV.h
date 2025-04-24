@@ -31,6 +31,11 @@ MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
 MLIR_CAPI_EXPORTED bool svSVAttributeAttrGetEmitAsComment(MlirAttribute);
 
+// MacroIdentAttr API
+MLIR_CAPI_EXPORTED bool svAttrIsAMacroIdentAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute svMacroIdentAttrGet(MlirContext, MlirStringRef ident);
+MLIR_CAPI_EXPORTED MlirStringRef svMacroIdentAttrGetIdent(MlirAttribute);
+
 #ifdef __cplusplus
 }
 #endif

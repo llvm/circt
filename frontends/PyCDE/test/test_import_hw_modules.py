@@ -5,6 +5,7 @@ from pycde.circt.dialects import hw
 
 from pycde import Input, Output, System, generator, Module, types
 from pycde.module import import_hw_module
+from pycde.types import Bit
 
 import sys
 
@@ -21,17 +22,14 @@ hw.module @and(in %a: i1, in %b: i1, out out: i1) {
 """)
 
 imported_modules = []
-for op in mlir_module.body:
-  if isinstance(op, hw.HWModuleOp):
-    imported_module = import_hw_module(op)
-    imported_modules.append(imported_module)
+
 
 
 class Top(Module):
-  a = Input(types.i1)
-  b = Input(types.i1)
-  out0 = Output(types.i1)
-  out1 = Output(types.i1)
+  a = Input(Bit)
+  b = Input(Bit)
+  out0 = Output(Bit)
+  out1 = Output(Bit)
 
   @generator
   def generate(ports):
@@ -44,6 +42,10 @@ class Top(Module):
 
 
 system = System([Top], output_directory=sys.argv[1])
+for op in mlir_module.body:
+  if isinstance(op, hw.HWModuleOp):
+    imported_module = import_hw_module(sys, op)
+    imported_modules.append(imported_module)
 system.generate()
 
 # CHECK: hw.module @Top(in %a : i1, in %b : i1, out out0 : i1, out out1 : i1)

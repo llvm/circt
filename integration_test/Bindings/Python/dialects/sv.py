@@ -18,6 +18,11 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
   print(f"sv_attr: {sv_attr} {sv_attr.name} {sv_attr.expression}")
   # CHECK: sv_attr: #sv.attribute<"no_merge"> no_merge None
 
+  ident = "MY_MACRO"
+  attr = sv.MacroIdentAttr.get(ident, ctx)
+  print(f"macro_ident: {attr} {attr.ident}")
+  # CHECK: macro_ident: #sv<macro.ident @MY_MACRO> MY_MACRO
+
   i1 = ir.IntegerType.get_signless(1)
   i1_inout = hw.InOutType.get(i1)
 
