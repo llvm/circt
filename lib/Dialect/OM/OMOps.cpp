@@ -498,7 +498,7 @@ void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
 // ClassFieldsOp
 //===----------------------------------------------------------------------===//
 //
-LogicalResult circt::om::ClassFieldsOp::verify() { 
+LogicalResult circt::om::ClassFieldsOp::verify() {
   auto fieldLocs = this->getFieldLocs();
   if (fieldLocs.has_value()) {
     auto fieldLocsVal = fieldLocs.value();
