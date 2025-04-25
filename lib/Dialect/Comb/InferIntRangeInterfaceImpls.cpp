@@ -172,9 +172,10 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                         SetIntRangeFn setResultRange) {
   // Right-shift and truncate (trunaction implicitly handled)
-  auto lowBit = getLowBit();
-  auto umin = argRanges[0].umin().ushl_sat(lowBit);
-  auto umax = argRanges[0].umax().ushl_sat(lowBit);
+  const auto resWidth = getResult().getType().getIntOrFloatBitWidth();
+  const auto lowBit = getLowBit();
+  auto umin = argRanges[0].umin().lshr(lowBit).trunc(resWidth);
+  auto umax = argRanges[0].umax().lshr(lowBit).trunc(resWidth);
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
 };
@@ -234,11 +235,56 @@ void comb::MuxOp::inferResultRangesFromOptional(
 void comb::ICmpOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                      SetIntRangeFn setResultRange) {
   comb::ICmpPredicate combPred = getPredicate();
-  intrange::CmpPredicate pred = static_cast<intrange::CmpPredicate>(combPred);
-  const ConstantIntRanges &lhs = argRanges[0], &rhs = argRanges[1];
 
   APInt min = APInt::getZero(1);
   APInt max = APInt::getAllOnes(1);
+
+  if (combPred == comb::ICmpPredicate::ceq ||
+      combPred == comb::ICmpPredicate::cne ||
+      combPred == comb::ICmpPredicate::weq ||
+      combPred == comb::ICmpPredicate::wne) {
+    // These predicates are not supported for integer range analysis
+    setResultRange(getResult(), ConstantIntRanges::fromUnsigned(min, max));
+    return;
+  }
+
+  intrange::CmpPredicate pred;
+  switch (combPred) {
+  case comb::ICmpPredicate::eq:
+    pred = intrange::CmpPredicate::eq;
+    break;
+  case comb::ICmpPredicate::ne:
+    pred = intrange::CmpPredicate::ne;
+    break;
+  case comb::ICmpPredicate::slt:
+    pred = intrange::CmpPredicate::slt;
+    break;
+  case comb::ICmpPredicate::sle:
+    pred = intrange::CmpPredicate::sle;
+    break;
+  case comb::ICmpPredicate::sgt:
+    pred = intrange::CmpPredicate::sgt;
+    break;
+  case comb::ICmpPredicate::sge:
+    pred = intrange::CmpPredicate::sge;
+    break;
+  case comb::ICmpPredicate::ult:
+    pred = intrange::CmpPredicate::ult;
+    break;
+  case comb::ICmpPredicate::ule:
+    pred = intrange::CmpPredicate::ule;
+    break;
+  case comb::ICmpPredicate::ugt:
+    pred = intrange::CmpPredicate::ugt;
+    break;
+  case comb::ICmpPredicate::uge:
+    pred = intrange::CmpPredicate::uge;
+    break;
+  default:
+    llvm_unreachable("Unknown comparison predicate");
+  }
+
+  const ConstantIntRanges &lhs = argRanges[0], &rhs = argRanges[1];
 
   std::optional<bool> truthValue = intrange::evaluatePred(pred, lhs, rhs);
   if (truthValue.has_value() && *truthValue)

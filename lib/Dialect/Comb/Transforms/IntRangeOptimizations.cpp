@@ -58,6 +58,9 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
                                 PatternRewriter &rewriter) const override {
 
     auto opWidth = op.getType().getIntOrFloatBitWidth();
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(
+          op, "Only support binary operations with one result");
 
     SmallVector<ConstantIntRanges> ranges;
     if (failed(collectRanges(solver, op->getOperands(), ranges)))
