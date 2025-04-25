@@ -312,10 +312,7 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   auto prevLoc = odsBuilder.saveInsertionPoint();
   odsBuilder.setInsertionPointToEnd(body);
 
-  mlir::SmallVector<Attribute> locAttrs;
-  for (size_t i = 0; i < fieldNames.size(); ++i) {
-    locAttrs.push_back(cast<Attribute>(LocationAttr(loc)));
-  }
+  mlir::SmallVector<Attribute> locAttrs(fieldNames.size(), LocationAttr(loc));
 
   odsBuilder.create<ClassFieldsOp>(
       loc,
