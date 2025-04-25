@@ -262,7 +262,7 @@ void hostmemTest(AcceleratorConnection *conn, Accelerator *acc, bool read,
     dataPtr[i] = 0;
   scratchRegion->flush();
 
-  for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+  for (size_t width : {32, 64, 128, 256, 384, 504, 512, 513})
     hostmemTest(acc, *scratchRegion, width, scratchRegion->getDevicePtr(), read,
                 write);
 }
