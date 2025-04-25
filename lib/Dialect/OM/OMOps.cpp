@@ -447,9 +447,10 @@ void circt::om::ClassOp::addNewFieldsOp(mlir::OpBuilder &builder,
 }
 
 mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {
-  auto fieldLocs = this->getFieldsOp().getFieldLocs();
+  auto fieldsOp = this->getFieldsOp();
+  auto fieldLocs = fieldsOp.getFieldLocs();
   if (!fieldLocs.has_value())
-    return UnknownLoc::get(this->getContext());
+    return fieldsOp.getLoc();
   assert(i < fieldLocs.value().size() &&
          "field index too large for location array");
   return cast<LocationAttr>(fieldLocs.value()[i]);
