@@ -316,6 +316,5 @@ om.class @IntegerArithmetic() {
   // CHECK: om.integer.shl %0, %1 : !om.integer
   %5 = om.integer.shl %0, %1 : !om.integer
 
-  // empty field_locs is fine
-  om.class.fields field_locs()
+  om.class.fields
 }

@@ -183,7 +183,7 @@ om.class @A(%arg: i1) -> (a: i2) {
 // -----
 
 om.class @A(%arg: i1) -> (a: i1) {
-  // expected-error @+1 {{custom op 'om.class.fields' found more than one field_locs array}}
+  // expected-error @+1 {{expected ')'}}
   om.class.fields %arg : i1 field_locs([loc("loc0")], [loc("loc1")])
 }
 

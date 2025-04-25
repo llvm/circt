@@ -77,18 +77,11 @@ static void printPathString(OpAsmPrinter &p, Operation *op, PathAttr path,
 static ParseResult parseFieldLocs(OpAsmParser &parser, ArrayAttr &fieldLocs) {
   if (parser.parseOptionalKeyword("field_locs"))
     return success();
-  uint count = 0;
-  auto parseElt = [&]() -> ParseResult {
-    if (count > 0) {
-      parser.emitError(parser.getCurrentLocation(),
-                       "found more than one field_locs array");
-      return failure();
-    }
-    count++;
-    return parser.parseAttribute(fieldLocs);
-  };
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseElt);
+  if (parser.parseLParen() || parser.parseAttribute(fieldLocs) ||
+      parser.parseRParen()) {
+    return failure();
+  }
+  return success();
 }
 
 static void printFieldLocs(OpAsmPrinter &printer, Operation *op,
