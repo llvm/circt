@@ -623,6 +623,19 @@ def UArrayCmpPredicateAttr : I64EnumAttr<
   let cppNamespace = "circt::moore";
 }
 
+def StringCmpPredicateAttr : I64EnumAttr<
+    "StringCmpPredicate", "",
+    [
+     I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>,
+      I64EnumAttrCase<"lt", 2>,
+      I64EnumAttrCase<"le", 3>,
+      I64EnumAttrCase<"gt", 4>,
+      I64EnumAttrCase<"ge", 5>
+    ]> {
+  let cppNamespace = "circt::moore";
+}
+
 def NegOp : MooreOp<"neg", [Pure, SameOperandsAndResultType]> {
   let summary = "Arithmetic negation";
   let description = [{
@@ -924,6 +937,35 @@ def UArrayCmpOp : MooreOp<"uarray_cmp", [
   let assemblyFormat = [{
     $predicate $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
   }];  
+}
+
+def StringCmpOp : MooreOp<"string_cmp", [
+  Pure,
+  SameTypeOperands
+]> {
+  let description = [{
+    Compares two string operands using the specified
+    predicate and returns a single bit result. Supported predicates:
+    - eq : equal
+    - ne : not equal
+    - lt : less than
+    - le : less or equal
+    - gt : greater than
+    - ge : greater or equal
+
+    The equality operator yields 1 if its operands are equal and 0 otherwise.
+    Relational operators compare two strings lexicographically,
+    returning 1 when the specified condition holds and 0 when it does not.
+  }];
+  let arguments = (ins
+    StringCmpPredicateAttr:$predicate,
+    StringType:$lhs,
+    StringType:$rhs
+  );
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $predicate $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];
 }
 
 class LogicalEqOpBase<string mnemonic> : MooreOp<mnemonic, [
