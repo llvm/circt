@@ -127,10 +127,9 @@ def ClassOp : OMClassLike<"class", [
     // the field location will break.
     // This is required because MLIR's FusedLoc uses a "set" semantics where a
     // single location is used to represent multiple fields with the same
-    // location.  The OM implementation uses the metadata attribute on FusedLoc
-    // to store the original array of locations, so that the specific location
-    // of a field may be easily retrieved by index using the
-    // `getFieldLocByIndex` API.
+    // location.  The OM implementation uses an attribute to store the original
+    // array of locations, so that the specific location of a field may be
+    // easily retrieved by index using the `getFieldLocByIndex` API.
     void addNewFieldsOp(mlir::OpBuilder &builder, mlir::ArrayRef<mlir::Location>
                    locs, mlir::ArrayRef<mlir::Value> values);
 
@@ -156,8 +155,14 @@ def ClassOp : OMClassLike<"class", [
 
 def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
       HasParent<"ClassOp">]> {
-  let arguments = (ins Variadic<AnyType>:$fields);
-  let assemblyFormat = "attr-dict ($fields^ `:` qualified(type($fields)))?";
+  let arguments = (ins Variadic<AnyType>:$fields, 
+                       OptionalAttr<LocationArrayAttr>:$field_locs);
+  let assemblyFormat = [{
+    attr-dict ($fields^ `:` qualified(type($fields)))?
+    custom<FieldLocs>($field_locs)
+  }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
