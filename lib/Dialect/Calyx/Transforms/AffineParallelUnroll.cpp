@@ -131,7 +131,7 @@ void MemoryBankConflictResolver::accumulateReadWriteOps(
 
         AffineAccessExpr key{read.getMemRef(), read.getAffineMap(),
                              read.getMapOperands()};
-        readOpCounts[key]++;
+        ++readOpCounts[key];
       } else {
         allWriteOps.insert(cast<AffineWriteOpInterface>(op));
       }
@@ -204,13 +204,14 @@ MemoryBankConflictResolver::readOpAnalysis(AffineParallelOp affineParallelOp) {
       continue;
 
     // Only hoist once per unique access
-    if (!hoistedReads.contains(key)) {
+    auto hoistedReadsIt = hoistedReads.find(key);
+    if (hoistedReadsIt == hoistedReads.end()) {
       builder.setInsertionPoint(affineParallelOp);
       Operation *cloned = builder.clone(*readOp.getOperation());
-      hoistedReads[key] = cloned->getResult(0);
+      hoistedReadsIt = hoistedReads.insert({key, cloned->getResult(0)}).first;
     }
 
-    readOp->getResult(0).replaceAllUsesWith(hoistedReads[key]);
+    readOp->getResult(0).replaceAllUsesWith(hoistedReadsIt->second);
     readOp.getOperation()->erase();
   }
 

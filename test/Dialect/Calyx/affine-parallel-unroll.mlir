@@ -394,7 +394,7 @@ module {
 
 // -----
 
-// Test hosting read when the access indices depend on outer nested for-loops.
+// Test hoisting read when the access indices depend on outer nested for-loops.
 
 // CHECK-LABEL:   func.func @hoist_read(
 // CHECK-SAME:                          %[[VAL_0:[0-9]+|[a-zA-Z$._-][a-zA-Z0-9$._-]*]]: memref<2x2xf32>,
