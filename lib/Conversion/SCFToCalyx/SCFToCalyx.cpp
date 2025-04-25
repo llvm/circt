@@ -2602,7 +2602,7 @@ public:
       }
     }
 
-    return createOptNewTopLevelFn(moduleOp, topLevelFunction);
+    return modifyTopLevelFuncInPlace(moduleOp, topLevelFunction);
   }
 
   struct LoweringPattern {
@@ -2843,6 +2843,58 @@ private:
     builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
                            fnOperands);
     builder.create<ReturnOp>(caller.getLoc());
+  }
+
+  /// Modifies the top-level function in-place if it has `memref` function
+  /// arguments. Concretely, we convert those arguments to `memref.alloc`s in
+  /// the function body.
+  LogicalResult modifyTopLevelFuncInPlace(ModuleOp moduleOp,
+                                          std::string &topLevelFunction) {
+    auto hasMemrefArguments = [](FuncOp func) {
+      return std::any_of(
+          func.getArguments().begin(), func.getArguments().end(),
+          [](BlockArgument arg) { return isa<MemRefType>(arg.getType()); });
+    };
+
+    if (auto topLevelFuncOp = dyn_cast<FuncOp>(
+            SymbolTable::lookupSymbolIn(moduleOp, topLevelFunction))) {
+      if (!hasMemrefArguments(topLevelFuncOp))
+        return success();
+
+      OpBuilder builder(topLevelFuncOp);
+      Location loc = topLevelFuncOp.getLoc();
+      builder.setInsertionPointToStart(&topLevelFuncOp.getBody().front());
+
+      // First collect the MemRef arguments to replace with their indices
+      SmallVector<std::pair<BlockArgument, unsigned>, 4> argsToReplace;
+      for (auto funcArg : topLevelFuncOp.getArguments()) {
+        if (isa<MemRefType>(funcArg.getType()))
+          argsToReplace.push_back({funcArg, funcArg.getArgNumber()});
+      }
+
+      unsigned numErased = 0;
+      for (auto &argPair : argsToReplace) {
+        auto funcArg = argPair.first;
+        auto originalIndex = argPair.second;
+
+        // Adjust the index based on how many arguments we've already erased
+        unsigned adjustedIndex = originalIndex - numErased;
+
+        auto newlyCreatedAllocOp = builder.create<memref::AllocOp>(
+            loc, cast<MemRefType>(funcArg.getType()));
+
+        funcArg.replaceAllUsesWith(newlyCreatedAllocOp);
+
+        topLevelFuncOp.eraseArgument(adjustedIndex);
+        numErased++;
+      }
+    } else {
+      moduleOp.emitOpError("Original top-level function '" + topLevelFunction +
+                           "' not found!");
+      return failure();
+    }
+
+    return success();
   }
 
   /// Conditionally creates an optional new top-level function; and inserts a
