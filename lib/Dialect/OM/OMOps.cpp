@@ -500,9 +500,15 @@ void circt::om::ClassExternOp::replaceFieldTypes(AttrTypeReplacer replacer) {
 //
 LogicalResult circt::om::ClassFieldsOp::verify() { 
   auto fieldLocs = this->getFieldLocs();
-  if (fieldLocs.has_value())
-    if (fieldLocs.value().size() != this->getFields().size())
-      return this->emitOpError("size of field_locs does not match number of fields");
+  if (fieldLocs.has_value()) {
+    auto fieldLocsVal = fieldLocs.value();
+    if (fieldLocsVal.size() != this->getFields().size()) {
+      auto error = this->emitOpError("size of field_locs (")
+                   << fieldLocsVal.size()
+                   << ") does not match number of fields ("
+                   << this->getFields().size() << ")";
+    }
+  }
   return success();
 }
 
