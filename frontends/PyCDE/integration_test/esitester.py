@@ -304,20 +304,21 @@ class EsiTesterTop(Module):
 
   @generator
   def construct(ports):
-    PrintfExample(clk=ports.clk, rst=ports.rst)
-    for width in [32, 64, 96, 128, 256, 384, 504, 512]:
-      ReadMem(width)(appid=esi.AppID("readmem", width),
-                     clk=ports.clk,
-                     rst=ports.rst)
+    # PrintfExample(clk=ports.clk, rst=ports.rst)
+    # for width in [32, 64, 96, 128, 256, 384, 504, 512, 513]:
+    for width in [513]:
+      # ReadMem(width)(appid=esi.AppID("readmem", width),
+      #                clk=ports.clk,
+      #                rst=ports.rst)
       WriteMem(width)(appid=esi.AppID("writemem", width),
                       clk=ports.clk,
                       rst=ports.rst)
-      ToHostDMATest(width)(appid=esi.AppID("tohostdmatest", width),
-                           clk=ports.clk,
-                           rst=ports.rst)
-      FromHostDMATest(width)(appid=esi.AppID("fromhostdmatest", width),
-                             clk=ports.clk,
-                             rst=ports.rst)
+      # ToHostDMATest(width)(appid=esi.AppID("tohostdmatest", width),
+      #                      clk=ports.clk,
+      #                      rst=ports.rst)
+      # FromHostDMATest(width)(appid=esi.AppID("fromhostdmatest", width),
+      #                        clk=ports.clk,
+      #                        rst=ports.rst)
 
 
 if __name__ == "__main__":
