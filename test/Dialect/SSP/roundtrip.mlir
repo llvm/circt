@@ -236,10 +236,10 @@ ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
     resource_type @WritePort [limit<1>]
   }
   graph {
-    %0 = operation<@MemAccess> uses<@ReadPort>@load_A(@store_A [dist<1>]) [t<2>]
-    %1 = operation<@MemAccess> uses<@ReadPort>@load_B() [t<0>]
+    %0 = operation<@MemAccess> uses<@ReadPort> @load_A(@store_A [dist<1>]) [t<2>]
+    %1 = operation<@MemAccess> uses<@ReadPort> @load_B() [t<0>]
     %2 = operation<@Add> @add(%0, %1) [t<3>]
-    operation<@MemAccess> uses<@WritePort>@store_A(%2) [t<4>]
+    operation<@MemAccess> uses<@WritePort> @store_A(%2) [t<4>]
     operation<@Implicit> @last(@store_A) [t<5>]
   }
 }

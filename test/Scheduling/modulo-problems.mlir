@@ -15,7 +15,7 @@ ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
     %0 = operation<@L1_1> uses<@L1_rsrc>(@op3 [dist<1>]) [t<2>]
     %1 = operation<@L1_1> uses<@L1_rsrc>() [t<0>]
     %2 = operation<@_1>(%0, %1) [t<3>]
-    %3 = operation<@L1_1> uses<@L1_rsrc>@op3(%2) [t<4>]
+    %3 = operation<@L1_1> uses<@L1_rsrc> @op3(%2) [t<4>]
     operation<@_1> @last(%3) [t<5>]
   }
 }
@@ -38,8 +38,8 @@ ssp.instance @minII_feasible of "ModuloProblem" [II<3>] {
     %2 = operation<@_2>(@op5 [dist<3>]) [t<1>]
     %3 = operation<@_1>(%1, %0) [t<2>]
     %4 = operation<@L1_3> uses<@L1_rsrc>(%3, %2) [t<3>]
-    %5 = operation<@L1_3> uses<@L1_rsrc>@op5(%0, %4) [t<7>]
-    %6 = operation<@L1_3> uses<@L1_rsrc>@op6(%4, %5) [t<11>]
+    %5 = operation<@L1_3> uses<@L1_rsrc> @op5(%0, %4) [t<7>]
+    %6 = operation<@L1_3> uses<@L1_rsrc> @op6(%4, %5) [t<11>]
     // SIMPLEX: @last(%{{.*}}) [t<14>]
     operation<@_1> @last(%6) [t<14>]
   }
