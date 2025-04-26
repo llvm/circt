@@ -174,6 +174,11 @@ void OperationOp::print(OpAsmPrinter &p) {
     p.printAttribute(linkedOpr.getValue());
     alreadyPrinted.push_back(linkedOpr);
   }
+  if (auto linkedRsrc = getLinkedResourceTypeAttr()) {
+    p << "> uses<";
+    p.printAttribute(linkedRsrc.getValue());
+    alreadyPrinted.push_back(linkedRsrc);
+  }
   p << '>';
 
   // (Scheduling) operation's name
