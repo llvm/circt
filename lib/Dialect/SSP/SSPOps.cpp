@@ -14,6 +14,7 @@
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Builders.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace circt::ssp;
@@ -76,18 +77,23 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   if (succeeded(parser.parseOptionalKeyword("uses"))) {
-    if (parser.parseLess())
+    SmallVector<Attribute> rsrcRefs;
+    auto parseOne = [&]() -> ParseResult {
+      SymbolRefAttr rsrcRef;
+      if (parser.parseAttribute(rsrcRef))
+        return parser.emitError(parser.getCurrentLocation(),
+                                "expected symbol reference inside uses[...]");
+      rsrcRefs.push_back(rsrcRef);
+      return success();
+    };
+    if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Square,
+                                       parseOne))
       return failure();
 
-    SymbolRefAttr rsrcRef;
-    if (parser.parseAttribute(rsrcRef))
-      return parser.emitError(parser.getCurrentLocation(),
-                              "expected symbol reference in uses<>");
+    auto linkedRsrcsAttr = builder.getAttr<LinkedResourceTypesAttr>(
+        builder.getArrayAttr(rsrcRefs));
 
-    alreadyParsed.push_back(builder.getAttr<LinkedResourceTypeAttr>(rsrcRef));
-
-    if (parser.parseGreater())
-      return failure();
+    alreadyParsed.push_back(linkedRsrcsAttr);
   }
 
   // (Scheduling) operation's name
@@ -174,12 +180,22 @@ void OperationOp::print(OpAsmPrinter &p) {
     p.printAttribute(linkedOpr.getValue());
     alreadyPrinted.push_back(linkedOpr);
   }
-  if (auto linkedRsrc = getLinkedResourceTypeAttr()) {
-    p << "> uses<";
-    p.printAttribute(linkedRsrc.getValue());
-    alreadyPrinted.push_back(linkedRsrc);
-  }
   p << '>';
+
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
+    for (auto attr : properties) {
+      if (auto linkedRsrcs = dyn_cast<LinkedResourceTypesAttr>(attr)) {
+        auto rsrcList = linkedRsrcs.getValue();
+        if (!rsrcList.empty()) {
+          p << " uses[";
+          llvm::interleaveComma(
+              rsrcList, p, [&](Attribute rsrc) { p.printAttribute(rsrc); });
+          p << "]";
+        }
+        alreadyPrinted.push_back(linkedRsrcs);
+      }
+    }
+  }
 
   // (Scheduling) operation's name
   if (StringAttr symName = getSymNameAttr()) {
@@ -331,12 +347,13 @@ LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
   return {};
 }
 
-LinkedResourceTypeAttr OperationOp::getLinkedResourceTypeAttr() {
+LinkedResourceTypesAttr OperationOp::getLinkedResourceTypesAttr() {
   if (ArrayAttr properties = getSspPropertiesAttr()) {
-    const auto *it = llvm::find_if(
-        properties, [](Attribute a) { return isa<LinkedResourceTypeAttr>(a); });
+    const auto *it = llvm::find_if(properties, [](Attribute a) {
+      return isa<LinkedResourceTypesAttr>(a);
+    });
     if (it != properties.end())
-      return cast<LinkedResourceTypeAttr>(*it);
+      return cast<LinkedResourceTypesAttr>(*it);
   }
   return {};
 }

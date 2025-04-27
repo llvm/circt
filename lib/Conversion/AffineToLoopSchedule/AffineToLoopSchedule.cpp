@@ -87,9 +87,9 @@ ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
       if (latency.has_value())
         modProb.setLatency(opr.value(), latency.value());
     }
-    auto rsrc = prob.getLinkedResourceType(op);
+    auto rsrc = prob.getLinkedResourceTypes(op);
     if (rsrc.has_value())
-      modProb.setLinkedResourceType(op, rsrc.value());
+      modProb.setLinkedResourceTypes(op, rsrc.value());
     modProb.insertOperation(op);
   }
 
@@ -331,7 +331,8 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           auto memRsrc = problem.getOrInsertResourceType(
               "mem_" + std::to_string(hash_value(memRef)) + "_rsrc");
           problem.setLimit(memRsrc, 1);
-          problem.setLinkedResourceType(memOp, memRsrc);
+          problem.setLinkedResourceTypes(
+              memOp, SmallVector<Problem::ResourceType>{memRsrc});
 
           return WalkResult::advance();
         })
@@ -350,7 +351,8 @@ LogicalResult AffineToLoopSchedule::populateOperatorTypes(
           auto memRsrc = problem.getOrInsertResourceType(
               "mem_" + std::to_string(hash_value(memRef)) + "_rsrc");
           problem.setLimit(memRsrc, 1);
-          problem.setLinkedResourceType(memOp, memRsrc);
+          problem.setLinkedResourceTypes(
+              memOp, SmallVector<Problem::ResourceType>{memRsrc});
 
           return WalkResult::advance();
         })

@@ -176,11 +176,11 @@ ssp.instance @mco_outgoing_delays of "ChainingProblem" {
 // CHECK:    resource_type @fastAdder [limit<1>]
 // CHECK:  }
 // CHECK:   graph {
-// CHECK:     %[[op_0:.*]] = operation<@slowAdd> uses<@slowAdder>() [t<0>]
-// CHECK:     %[[op_1:.*]] = operation<@slowAdd> uses<@slowAdder>() [t<1>]
-// CHECK:     %[[op_2:.*]] = operation<@fastAdd> uses<@fastAdder>() [t<0>]
-// CHECK:     %[[op_3:.*]] = operation<@slowAdd> uses<@slowAdder>() [t<1>]
-// CHECK:     %[[op_4:.*]] = operation<@fastAdd> uses<@fastAdder>() [t<1>]
+// CHECK:     %[[op_0:.*]] = operation<@slowAdd> uses[@slowAdder]() [t<0>]
+// CHECK:     %[[op_1:.*]] = operation<@slowAdd> uses[@slowAdder]() [t<1>]
+// CHECK:     %[[op_2:.*]] = operation<@fastAdd> uses[@fastAdder]() [t<0>]
+// CHECK:     %[[op_3:.*]] = operation<@slowAdd> uses[@slowAdder]() [t<1>]
+// CHECK:     %[[op_4:.*]] = operation<@fastAdd> uses[@fastAdder]() [t<1>]
 // CHECK:     %[[op_5:.*]] = operation<@_0>(%[[op_0]], %[[op_1]], %[[op_2]], %[[op_3]], %[[op_4]]) [t<10>]
 // CHECK:     operation<@_1>() [t<10>]
 // CHECK:   }
@@ -197,11 +197,11 @@ ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
     resource_type @fastAdder [limit<1>]
   }
   graph {
-    %0 = operation<@slowAdd> uses<@slowAdder>() [t<0>]
-    %1 = operation<@slowAdd> uses<@slowAdder>() [t<1>]
-    %2 = operation<@fastAdd> uses<@fastAdder>() [t<0>]
-    %3 = operation<@slowAdd> uses<@slowAdder>() [t<1>]
-    %4 = operation<@fastAdd> uses<@fastAdder>() [t<1>]
+    %0 = operation<@slowAdd> uses[@slowAdder]() [t<0>]
+    %1 = operation<@slowAdd> uses[@slowAdder]() [t<1>]
+    %2 = operation<@fastAdd> uses[@fastAdder]() [t<0>]
+    %3 = operation<@slowAdd> uses[@slowAdder]() [t<1>]
+    %4 = operation<@fastAdd> uses[@fastAdder]() [t<1>]
     %5 = operation<@_0>(%0, %1, %2, %3, %4) [t<10>]
     operation<@_1>() [t<10>]
   }
@@ -218,10 +218,10 @@ ssp.instance @multiple_oprs of "SharedOperatorsProblem" {
 // CHECK:    resource_type @WritePort [limit<1>]
 // CHECK:  }
 // CHECK:   graph {
-// CHECK:     %[[op_0:.*]] = operation<@MemAccess> uses<@ReadPort> @load_A(@store_A [dist<1>]) [t<2>]
-// CHECK:     %[[op_1:.*]] = operation<@MemAccess> uses<@ReadPort> @load_B() [t<0>]
+// CHECK:     %[[op_0:.*]] = operation<@MemAccess> uses[@ReadPort] @load_A(@store_A [dist<1>]) [t<2>]
+// CHECK:     %[[op_1:.*]] = operation<@MemAccess> uses[@ReadPort] @load_B() [t<0>]
 // CHECK:     %[[op_2:.*]] = operation<@Add> @add(%[[op_0]], %[[op_1]]) [t<3>]
-// CHECK:     operation<@MemAccess> uses<@WritePort> @store_A(%[[op_2]]) [t<4>]
+// CHECK:     operation<@MemAccess> uses[@WritePort] @store_A(%[[op_2]]) [t<4>]
 // CHECK:     operation<@Implicit> @last(@store_A) [t<5>]
 // CHECK:   }
 // CHECK: }
@@ -236,10 +236,10 @@ ssp.instance @canis14_fig2 of "ModuloProblem" [II<3>] {
     resource_type @WritePort [limit<1>]
   }
   graph {
-    %0 = operation<@MemAccess> uses<@ReadPort> @load_A(@store_A [dist<1>]) [t<2>]
-    %1 = operation<@MemAccess> uses<@ReadPort> @load_B() [t<0>]
+    %0 = operation<@MemAccess> uses[@ReadPort] @load_A(@store_A [dist<1>]) [t<2>]
+    %1 = operation<@MemAccess> uses[@ReadPort] @load_B() [t<0>]
     %2 = operation<@Add> @add(%0, %1) [t<3>]
-    operation<@MemAccess> uses<@WritePort> @store_A(%2) [t<4>]
+    operation<@MemAccess> uses[@WritePort] @store_A(%2) [t<4>]
     operation<@Implicit> @last(@store_A) [t<5>]
   }
 }

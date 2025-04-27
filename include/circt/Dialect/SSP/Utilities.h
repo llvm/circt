@@ -268,34 +268,42 @@ ProblemT loadProblem(InstanceOp instOp,
     // Nothing else to check if no linked resource type is set for `opOp`,
     // because the operation doesn't carry a `LinkedResourceTypeAttr`, or that
     // class is not part of the `OperationPropertyTs` to load.
-    if (!prob.getLinkedResourceType(opOp).has_value())
+    if (!prob.getLinkedResourceTypes(opOp).has_value())
       return;
 
     // Otherwise, inspect the corresponding attribute to make sure the resource
     // type is available.
-    SymbolRefAttr rsrcRef = opOp.getLinkedResourceTypeAttr().getValue();
+    SmallVector<ResourceType> loadedRsrcs;
+    for (auto attr : opOp.getLinkedResourceTypesAttr().getValue()) {
+      SymbolRefAttr rsrcRef = dyn_cast<SymbolRefAttr>(attr);
+      assert(rsrcRef &&
+             "expected SymbolRefAttr inside LinkedResourceTypesAttr");
 
-    Operation *rsrcOp;
-    // 1) Look in the instance's resource library.
-    rsrcOp = SymbolTable::lookupSymbolIn(rsrcLibraryOp, rsrcRef);
-    // 2) Try to resolve a nested reference to the instance's resource library.
-    if (!rsrcOp)
-      rsrcOp = SymbolTable::lookupSymbolIn(instOp, rsrcRef);
-    // 3) Look outside of the instance.
-    if (!rsrcOp)
-      rsrcOp =
-          SymbolTable::lookupNearestSymbolFrom(instOp->getParentOp(), rsrcRef);
+      Operation *rsrcOp;
+      // 1) Look in the instance's resource library.
+      rsrcOp = SymbolTable::lookupSymbolIn(rsrcLibraryOp, rsrcRef);
+      // 2) Try to resolve a nested reference to the instance's resource
+      // library.
+      if (!rsrcOp)
+        rsrcOp = SymbolTable::lookupSymbolIn(instOp, rsrcRef);
+      // 3) Look outside of the instance.
+      if (!rsrcOp)
+        rsrcOp = SymbolTable::lookupNearestSymbolFrom(instOp->getParentOp(),
+                                                      rsrcRef);
 
-    assert(rsrcOp && isa<ResourceTypeOp>(rsrcOp)); // checked by verifier
+      assert(rsrcOp && isa<ResourceTypeOp>(rsrcOp)); // checked by verifier
 
-    // Load the resource type from `rsrcOp` if needed.
-    auto &rsrc = resourceTypes[rsrcOp];
-    if (!rsrc.getAttr())
-      rsrc = loadResourceType<ProblemT, ResourceTypePropertyTs...>(
-          prob, cast<ResourceTypeOp>(rsrcOp), resourceTypeIds);
+      // Load the resource type from `rsrcOp` if needed.
+      auto &rsrc = resourceTypes[rsrcOp];
+      if (!rsrc.getAttr())
+        rsrc = loadResourceType<ProblemT, ResourceTypePropertyTs...>(
+            prob, cast<ResourceTypeOp>(rsrcOp), resourceTypeIds);
+
+      loadedRsrcs.push_back(rsrc);
+    }
 
     // Update `opOp`'s property (may be a no-op if `rsrc` wasn't renamed).
-    prob.setLinkedResourceType(opOp, rsrc);
+    prob.setLinkedResourceTypes(opOp, loadedRsrcs);
   });
 
   // Then walk them again, and load auxiliary dependences as well as any
@@ -582,7 +590,7 @@ InstanceOp saveProblem(ProblemT &prob, OpBuilder &builder) {
 template <>
 struct Default<scheduling::Problem> {
   static constexpr auto operationProperties = std::make_tuple(
-      LinkedOperatorTypeAttr(), LinkedResourceTypeAttr(), StartTimeAttr());
+      LinkedOperatorTypeAttr(), LinkedResourceTypesAttr(), StartTimeAttr());
   static constexpr auto operatorTypeProperties = std::make_tuple(LatencyAttr());
   static constexpr auto resourceTypeProperties = std::make_tuple();
   static constexpr auto dependenceProperties = std::make_tuple();

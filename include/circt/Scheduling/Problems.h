@@ -179,7 +179,7 @@ private:
 
   // Operation properties
   OperationProperty<OperatorType> linkedOperatorType;
-  OperationProperty<ResourceType> linkedResourceType;
+  OperationProperty<SmallVector<ResourceType>> linkedResourceTypes;
   OperationProperty<unsigned> startTime;
 
   // Operator type properties
@@ -260,12 +260,13 @@ public:
     linkedOperatorType[op] = opr;
   }
 
-  /// The linked resource type provides the available resource for \p op.
-  std::optional<ResourceType> getLinkedResourceType(Operation *op) {
-    return linkedResourceType.lookup(op);
+  /// The linked resource type provides the available resources for \p op.
+  std::optional<SmallVector<ResourceType>>
+  getLinkedResourceTypes(Operation *op) {
+    return linkedResourceTypes.lookup(op);
   }
-  void setLinkedResourceType(Operation *op, ResourceType rsrc) {
-    linkedResourceType[op] = rsrc;
+  void setLinkedResourceTypes(Operation *op, SmallVector<ResourceType> rsrc) {
+    linkedResourceTypes[op] = rsrc;
   }
 
   /// The latency is the number of cycles \p opr needs to compute its result.

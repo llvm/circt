@@ -347,20 +347,22 @@ LogicalResult SharedOperatorsProblem::checkLatency(Operation *op) {
   if (failed(Problem::checkLatency(op)))
     return failure();
 
-  auto maybeRsrc = getLinkedResourceType(op);
-  if (!maybeRsrc)
+  auto maybeRsrcs = getLinkedResourceTypes(op);
+  if (!maybeRsrcs)
     return success();
 
   auto maybeOpr = getLinkedOperatorType(op);
   if (!maybeOpr)
     return success();
 
-  auto limit = getLimit(*maybeRsrc);
-  if (limit && *limit > 0 && *getLatency(*maybeOpr) == 0)
-    return getContainingOp()->emitError()
-           << "Operator type '" << maybeOpr->getValue()
-           << "' using limited resource '" << maybeRsrc->getValue()
-           << "' has zero latency.";
+  for (auto rsrc : *maybeRsrcs) {
+    auto limit = getLimit(rsrc);
+    if (limit && *limit > 0 && *getLatency(*maybeOpr) == 0)
+      return getContainingOp()->emitError()
+             << "Operator type '" << maybeOpr->getValue()
+             << "' using limited resource '" << rsrc.getValue()
+             << "' has zero latency.";
+  }
   return success();
 }
 
@@ -371,8 +373,13 @@ LogicalResult SharedOperatorsProblem::verifyUtilization(ResourceType rsrc) {
 
   llvm::SmallDenseMap<unsigned, unsigned> nOpsPerTimeStep;
   for (auto *op : getOperations()) {
-    auto maybeLinked = getLinkedResourceType(op);
-    if (!maybeLinked || *maybeLinked != rsrc)
+    auto maybeRsrcs = getLinkedResourceTypes(op);
+    if (!maybeRsrcs)
+      continue;
+
+    if (llvm::none_of(*maybeRsrcs, [&](ResourceType linkedRsrc) {
+          return linkedRsrc == rsrc;
+        }))
       continue;
 
     ++nOpsPerTimeStep[*getStartTime(op)];
@@ -411,9 +418,15 @@ LogicalResult ModuloProblem::verifyUtilization(ResourceType rsrc) {
   unsigned ii = *getInitiationInterval();
   llvm::SmallDenseMap<unsigned, unsigned> nOpsPerCongruenceClass;
   for (auto *op : getOperations()) {
-    auto maybeLinked = getLinkedResourceType(op);
-    if (!maybeLinked || *maybeLinked != rsrc)
+    auto maybeRsrcs = getLinkedResourceTypes(op);
+    if (!maybeRsrcs)
       continue;
+
+    if (llvm::none_of(*maybeRsrcs, [&](ResourceType linkedRsrc) {
+          return linkedRsrc == rsrc;
+        }))
+      continue;
+
     ++nOpsPerCongruenceClass[*getStartTime(op) % ii];
   }
 

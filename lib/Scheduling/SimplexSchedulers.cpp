@@ -874,10 +874,12 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 //===----------------------------------------------------------------------===//
 
 static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
-  auto maybeRsrc = prob.getLinkedResourceType(op);
-  if (!maybeRsrc)
+  auto maybeRsrcs = prob.getLinkedResourceTypes(op);
+  if (!maybeRsrcs)
     return false;
-  return prob.getLimit(*maybeRsrc).value_or(0) > 0;
+  return llvm::any_of(*maybeRsrcs, [&](Problem::ResourceType rsrc) {
+    return prob.getLimit(rsrc).value_or(0) > 0;
+  });
 }
 
 LogicalResult SharedOperatorsSimplexScheduler::schedule() {
@@ -932,7 +934,14 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
       reservationTable;
 
   for (auto *op : limitedOps) {
-    auto rsrc = *prob.getLinkedResourceType(op);
+    auto maybeRsrcs = prob.getLinkedResourceTypes(op);
+    assert(maybeRsrcs && "Limited operation must have linked resource types");
+
+    auto &rsrcs = *maybeRsrcs;
+    assert(rsrcs.size() == 1 &&
+           "Multi-resource operations are not yet supported by this scheduler");
+
+    auto rsrc = rsrcs[0];
     unsigned limit = prob.getLimit(rsrc).value_or(0);
     assert(limit > 0);
 
@@ -996,7 +1005,14 @@ LogicalResult ModuloSimplexScheduler::checkLastOp() {
 
 LogicalResult ModuloSimplexScheduler::MRT::enter(Operation *op,
                                                  unsigned timeStep) {
-  auto rsrc = *sched.prob.getLinkedResourceType(op);
+  auto maybeRsrcs = sched.prob.getLinkedResourceTypes(op);
+  assert(maybeRsrcs && "Operation must have linked resource types");
+
+  auto &rsrcs = *maybeRsrcs;
+  assert(rsrcs.size() == 1 &&
+         "Multi-resource operations are not yet supported by MRT");
+
+  auto rsrc = rsrcs[0];
   auto lim = *sched.prob.getLimit(rsrc);
   assert(lim > 0);
 
@@ -1014,7 +1030,14 @@ LogicalResult ModuloSimplexScheduler::MRT::enter(Operation *op,
 }
 
 void ModuloSimplexScheduler::MRT::release(Operation *op) {
-  auto rsrc = *sched.prob.getLinkedResourceType(op);
+  auto maybeRsrcs = sched.prob.getLinkedResourceTypes(op);
+  assert(maybeRsrcs && "Operation must have linked resource types");
+
+  auto &rsrcs = *maybeRsrcs;
+  assert(rsrcs.size() == 1 &&
+         "Multi-resource operations are not yet supported by MRT");
+
+  auto rsrc = rsrcs[0];
   auto &revTab = reverseTables[rsrc];
   auto it = revTab.find(op);
   assert(it != revTab.end());
@@ -1171,9 +1194,16 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
 unsigned ModuloSimplexScheduler::computeResMinII() {
   unsigned resMinII = 1;
   SmallDenseMap<Problem::ResourceType, unsigned> uses;
-  for (auto *op : prob.getOperations())
-    if (isLimited(op, prob))
-      ++uses[*prob.getLinkedResourceType(op)];
+  for (auto *op : prob.getOperations()) {
+    auto maybeRsrcs = prob.getLinkedResourceTypes(op);
+    if (!maybeRsrcs)
+      continue;
+
+    for (auto rsrc : *maybeRsrcs) {
+      if (prob.getLimit(rsrc).value_or(0) > 0)
+        ++uses[rsrc];
+    }
+  }
 
   for (auto pair : uses)
     resMinII = std::max(
