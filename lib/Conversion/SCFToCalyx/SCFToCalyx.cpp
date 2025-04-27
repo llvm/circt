@@ -2881,7 +2881,7 @@ private:
     for (auto funcOp : moduleOp.getOps<FuncOp>()) {
       if (funcOp.getSymName().str() == topLevelFunction)
         // We don't need to propagate anymore.
-        return success();
+        continue;
 
       if (auto externalMemoryAllocs = extractExternalMemoryAllocs(funcOp)) {
         auto callerLookup = findUniqueCaller(moduleOp, funcOp);
