@@ -367,6 +367,10 @@ public:
     });
 
     if (!writeJson.empty()) {
+      auto &extMemData = getState<ComponentLoweringState>().getExtMemData();
+      if (extMemData.getAsObject()->empty())
+        return success();
+
       if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
         std::string filename = fileLoc.getFilename().str();
         std::filesystem::path path(filename);
@@ -381,7 +385,7 @@ public:
         }
         llvm::raw_os_ostream llvmOut(outFile);
         llvm::json::OStream jsonOS(llvmOut, /*IndentSize=*/2);
-        jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
+        jsonOS.value(extMemData);
         jsonOS.flush();
         outFile.close();
       }
