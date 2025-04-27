@@ -81,9 +81,13 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
         cpModel.NewIntervalVar(startVar, duration, endVar)
             .WithName((Twine("task_interval_") + Twine(i)).str());
 
-    auto resource = prob.getLinkedResourceType(task);
-    if (prob.getLimit(*resource))
-      resourcesToTaskIntervals[resource.value()].emplace_back(taskInterval);
+    auto resourceListOpt = prob.getLinkedResourceTypes(task);
+    if (resourceListOpt) {
+      for (const auto &resource : *resourceListOpt) {
+        if (auto limitOpt = prob.getLimit(resource))
+          resourcesToTaskIntervals[resource].push_back(taskInterval);
+      }
+    }
   }
 
   // Check for cycles and otherwise establish operation ordering
