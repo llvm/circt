@@ -301,7 +301,9 @@ void comb::ICmpOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
     pred = intrange::CmpPredicate::uge;
     break;
   default:
-    llvm_unreachable("Unknown comparison predicate");
+    // These predicates are not supported for integer range analysis
+    setResultRange(getResult(), ConstantIntRanges::fromUnsigned(min, max));
+    return;
   }
 
   const ConstantIntRanges &lhs = argRanges[0], &rhs = argRanges[1];
