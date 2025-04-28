@@ -11,6 +11,7 @@ func.func @dummy8(%arg0: tuple<index, index>) -> () {return}
 func.func @dummy9(%arg0: !rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> () {return}
 func.func @dummy10(%arg0: !rtg.set<tuple<index>>) -> () {return}
 func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
+func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates() {
@@ -34,7 +35,6 @@ rtg.test @setOperations() {
   // CHECK-NEXT: [[V2:%.+]] = index.constant 4
   // CHECK-NEXT: [[V3:%.+]] = rtg.set_create [[V1]], [[V2]] : index
   // CHECK-NEXT: func.call @dummy1([[V0]], [[V1]], [[V3]]) :
-  // CHECK-NEXT: }
   %0 = index.constant 2
   %1 = index.constant 3
   %2 = index.constant 4
@@ -47,6 +47,12 @@ rtg.test @setOperations() {
   %diff = rtg.set_difference %set, %new_set : !rtg.set<index>
   %5 = rtg.set_select_random %diff : !rtg.set<index> {rtg.elaboration_custom_seed = 2}
   func.call @dummy1(%4, %5, %diff) : (index, index, !rtg.set<index>) -> ()
+
+  // CHECK-NEXT: [[V4:%.+]] = index.constant 1 
+  // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V4]] x [[V2]], [[V4]] x [[V0]]) : index 
+  // CHECK-NEXT: func.call @dummy12([[V5]]) : (!rtg.bag<index>)
+  %6 = rtg.set_convert_to_bag %set1 : !rtg.set<index>
+  func.call @dummy12(%6) : (!rtg.bag<index>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @setCartesianProduct

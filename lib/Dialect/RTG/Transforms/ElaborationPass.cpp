@@ -1155,6 +1155,16 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(SetConvertToBagOp op) {
+    auto set = get<SetStorage *>(op.getInput())->set;
+    MapVector<ElaboratorValue, uint64_t> bag;
+    for (auto val : set)
+      bag.insert({val, 1});
+    state[op.getResult()] = sharedState.internalizer.internalize<BagStorage>(
+        std::move(bag), op.getType());
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(BagCreateOp op) {
     MapVector<ElaboratorValue, uint64_t> bag;
     for (auto [val, multiple] :

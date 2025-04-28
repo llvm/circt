@@ -91,6 +91,13 @@ class Set(Value):
     assert len(args) > 0, "at least one set must be provided"
     return rtg.SetCartesianProductOp(args)
 
+  def to_bag(self) -> Value:
+    """
+    Returns this set converted to a bag. Does not modify this object.
+    """
+
+    return rtg.SetConvertToBagOp(self)
+
   def get_random(self) -> Value:
     """
     Returns an element from the set picked uniformly at random. If the set is
