@@ -714,7 +714,7 @@ private:
       elements.push_back(materialized);
     }
 
-    auto res = builder.create<ArrayCreateOp>(loc, val->type, elements);
+    Value res = builder.create<ArrayCreateOp>(loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -1208,6 +1208,26 @@ public:
              << idx << " of an array with " << array.size() << " elements";
 
     state[op.getResult()] = array[idx];
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ArrayInjectOp op) {
+    auto array = get<ArrayStorage *>(op.getArray())->array;
+    size_t idx = get<size_t>(op.getIndex());
+
+    if (array.size() <= idx)
+      return op->emitError("invalid to access index ")
+             << idx << " of an array with " << array.size() << " elements";
+
+    array[idx] = state[op.getValue()];
+    state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
+        op.getResult().getType(), std::move(array));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ArraySizeOp op) {
+    auto array = get<ArrayStorage *>(op.getArray())->array;
+    state[op.getResult()] = array.size();
     return DeletionKind::Delete;
   }
 

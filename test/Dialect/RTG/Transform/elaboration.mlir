@@ -523,6 +523,15 @@ rtg.test @arrays() {
   %1 = rtg.array_create %idx1, %idx2 : index
   %2 = rtg.array_extract %1[%idx1] : !rtg.array<index>
   func.call @dummy2(%2) : (index) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %3 = rtg.array_inject %1[%idx1], %idx2 : !rtg.array<index>
+  %4 = rtg.array_extract %3[%idx1] : !rtg.array<index>
+  func.call @dummy2(%4) : (index) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %5 = rtg.array_size %3 : !rtg.array<index>
+  func.call @dummy2(%5) : (index) -> ()
 }
 
 // -----
@@ -642,4 +651,16 @@ rtg.test @oobArrayAccess() {
   // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
   %2 = rtg.array_extract %1[%0] : !rtg.array<index>
   func.call @dummy6(%2) : (index) -> ()
+}
+
+// -----
+
+func.func @dummy6(%arg0: !rtg.array<index>) -> () {return}
+
+rtg.test @oobArrayAccess() {
+  %0 = index.constant 0
+  %1 = rtg.array_create : index
+  // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
+  %2 = rtg.array_inject %1[%0], %0 : !rtg.array<index>
+  func.call @dummy6(%2) : (!rtg.array<index>) -> ()
 }
