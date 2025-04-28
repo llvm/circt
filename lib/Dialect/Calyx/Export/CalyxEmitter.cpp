@@ -495,11 +495,19 @@ private:
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
           APInt value = op.getValue();
+          auto &stream = isIndented ? indent() : os;
+          bool isNegative = value.isNegative();
+          StringRef base = isNegative ? "b" : "d";
 
-          (isIndented ? indent() : os)
-              << std::to_string(value.getBitWidth()) << apostrophe() << "d";
-          // We currently default to the decimal representation.
-          value.print(os, /*isSigned=*/false);
+          stream << std::to_string(value.getBitWidth()) << apostrophe() << base;
+
+          if (isNegative) {
+            SmallString<8> str;
+            value.toStringUnsigned(str, /*Radix=*/2);
+            stream << str;
+          } else {
+            value.print(stream, /*isSigned=*/false);
+          }
         })
         .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
         .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
