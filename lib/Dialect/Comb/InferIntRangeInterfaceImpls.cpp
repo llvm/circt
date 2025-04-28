@@ -259,15 +259,6 @@ void comb::ICmpOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   APInt min = APInt::getZero(1);
   APInt max = APInt::getAllOnes(1);
 
-  if (combPred == comb::ICmpPredicate::ceq ||
-      combPred == comb::ICmpPredicate::cne ||
-      combPred == comb::ICmpPredicate::weq ||
-      combPred == comb::ICmpPredicate::wne) {
-    // These predicates are not supported for integer range analysis
-    setResultRange(getResult(), ConstantIntRanges::fromUnsigned(min, max));
-    return;
-  }
-
   intrange::CmpPredicate pred;
   switch (combPred) {
   case comb::ICmpPredicate::eq:

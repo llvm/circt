@@ -23,12 +23,14 @@ def LowerComb : Pass<"lower-comb"> {
 }
 
 def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
-  let summary = "Reduce comb operations bitwidth based on integer range analysis.";
+  let summary = "Reduce comb op bitwidth based on integer range analysis.";
   let description = [{
-    Compute a basic value range analysis, by propagating integer intervals through the domain.
-    The analysis is limited by a lack of sign-extension operator in the comb dialect, leading to 
-    an over-approximation. Particularly for signed arithmetic, a single interval
-    is often an over-approximation, a more precise analysis would require a union of intervals.
+    Compute a basic value range analysis, by propagating integer intervals 
+    through the domain. The analysis is limited by a lack of sign-extension 
+    operator in the comb dialect, leading to an over-approximation. 
+    Particularly for signed arithmetic, a single interval is often an 
+    over-approximation, a more precise analysis would require a union of 
+    intervals.
   }];
 }
 
