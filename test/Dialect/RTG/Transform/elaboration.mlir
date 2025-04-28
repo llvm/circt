@@ -480,6 +480,11 @@ rtg.sequence @switchNestedCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %s
   rtg.label local %l8
 }
 
+rtg.target @singleCoreTarget : !rtg.dict<single_core: !rtgtest.cpu> {
+  %2 = rtg.constant #rtgtest.cpu<0>
+  rtg.yield %2 : !rtgtest.cpu
+}
+
 rtg.sequence @interleaveSequencesSeq0() {
   rtgtest.rv32i.ebreak
   rtgtest.rv32i.ebreak
@@ -565,6 +570,14 @@ rtg.test @tuples() {
 
   // CHECK-NEXT: func.call @dummy2(%idx0)
   func.call @dummy2(%1) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @useFolders_singleCoreTarget
+rtg.test @useFolders(single_core = %single_core: !rtgtest.cpu) {
+  // CHECK-NEXT: index.constant 0
+  // CHECK-NEXT: call @dummy2
+  %0 = rtgtest.get_hartid %single_core
+  func.call @dummy2(%0) : (index) -> ()
 }
 
 // -----
