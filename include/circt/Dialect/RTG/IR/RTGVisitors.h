@@ -55,6 +55,8 @@ public:
             SetSizeOp,
             // Arrays
             ArrayCreateOp, ArrayExtractOp, ArrayInjectOp, ArraySizeOp,
+            // Tuples
+            TupleCreateOp, TupleExtractOp,
             // Immediates
             IntToImmediateOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -112,6 +114,8 @@ public:
   HANDLE(ArrayExtractOp, Unhandled);
   HANDLE(ArrayInjectOp, Unhandled);
   HANDLE(ArraySizeOp, Unhandled);
+  HANDLE(TupleCreateOp, Unhandled);
+  HANDLE(TupleExtractOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);

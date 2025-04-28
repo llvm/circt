@@ -94,6 +94,7 @@ struct InterleavedSequenceStorage;
 struct SetStorage;
 struct VirtualRegisterStorage;
 struct UniqueLabelStorage;
+struct TupleStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -112,7 +113,7 @@ using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *>;
+                 LabelValue, ArrayStorage *, TupleStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -386,6 +387,22 @@ struct ArrayStorage {
   const SmallVector<ElaboratorValue> array;
 };
 
+/// Storage object for 'tuple`-typed values.
+struct TupleStorage {
+  TupleStorage(SmallVector<ElaboratorValue> &&values)
+      : hashcode(llvm::hash_combine_range(values.begin(), values.end())),
+        values(std::move(values)) {}
+
+  bool isEqual(const TupleStorage *other) const {
+    return hashcode == other->hashcode && values == other->values;
+  }
+
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
+
+  const SmallVector<ElaboratorValue> values;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -432,6 +449,8 @@ private:
       return internedRandomizedSequences;
     else if constexpr (std::is_same_v<StorageTy, InterleavedSequenceStorage>)
       return internedInterleavedSequences;
+    else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
+      return internedTuples;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -456,6 +475,8 @@ private:
   DenseSet<HashedStorage<InterleavedSequenceStorage>,
            StorageKeyInfo<InterleavedSequenceStorage>>
       internedInterleavedSequences;
+  DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
+      internedTuples;
 };
 
 } // namespace
@@ -533,6 +554,13 @@ static void print(const UniqueLabelStorage *val, llvm::raw_ostream &os) {
 
 static void print(const LabelValue &val, llvm::raw_ostream &os) {
   os << "<label " << val.name << ">";
+}
+
+static void print(const TupleStorage *val, llvm::raw_ostream &os) {
+  os << "<tuple (";
+  llvm::interleaveComma(val->values, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << ")>";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -814,6 +842,18 @@ private:
               std::queue<RandomizedSequenceStorage *> &elabRequests,
               function_ref<InFlightDiagnostic()> emitError) {
     Value res = builder.create<LabelDeclOp>(loc, val.name, ValueRange());
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(TupleStorage *val, Location loc,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> materialized;
+    materialized.reserve(val->values.size());
+    for (auto v : val->values)
+      materialized.push_back(materialize(v, loc, elabRequests, emitError));
+    Value res = builder.create<TupleCreateOp>(loc, materialized);
     materializedValues[val] = res;
     return res;
   }
@@ -1330,6 +1370,23 @@ public:
   FailureOr<DeletionKind> visitOp(ContextSwitchOp op) {
     testState.contextSwitches[{op.getFromAttr(), op.getToAttr()}] =
         get<SequenceStorage *>(op.getSequence());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(TupleCreateOp op) {
+    SmallVector<ElaboratorValue> values;
+    values.reserve(op.getElements().size());
+    for (auto el : op.getElements())
+      values.push_back(state[el]);
+
+    state[op.getResult()] =
+        sharedState.internalizer.internalize<TupleStorage>(std::move(values));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(TupleExtractOp op) {
+    auto *tuple = get<TupleStorage *>(op.getTuple());
+    state[op.getResult()] = tuple->values[op.getIndex().getZExtValue()];
     return DeletionKind::Delete;
   }
 
