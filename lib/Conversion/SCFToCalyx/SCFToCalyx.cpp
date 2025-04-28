@@ -2578,8 +2578,10 @@ using namespace circt::scftocalyx;
 //===----------------------------------------------------------------------===//
 class SCFToCalyxPass : public circt::impl::SCFToCalyxBase<SCFToCalyxPass> {
 public:
-  SCFToCalyxPass()
-      : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {}
+  SCFToCalyxPass(std::string topLevelFunction)
+      : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {
+    this->topLevelFunctionOpt = topLevelFunction;
+  }
   void runOnOperation() override;
 
   LogicalResult setTopLevelFunction(mlir::ModuleOp moduleOp,
@@ -3042,8 +3044,9 @@ void SCFToCalyxPass::runOnOperation() {
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<OperationPass<ModuleOp>> createSCFToCalyxPass() {
-  return std::make_unique<SCFToCalyxPass>();
+std::unique_ptr<OperationPass<ModuleOp>>
+createSCFToCalyxPass(std::string topLevelFunction) {
+  return std::make_unique<SCFToCalyxPass>(topLevelFunction);
 }
 
 } // namespace circt
