@@ -36,7 +36,7 @@ public:
             ConstantOp,
             // Bags
             BagCreateOp, BagSelectRandomOp, BagDifferenceOp, BagUnionOp,
-            BagUniqueSizeOp,
+            BagUniqueSizeOp, BagConvertToSetOp,
             // Contexts
             OnContextOp, ContextSwitchOp,
             // Labels
@@ -111,6 +111,7 @@ public:
   HANDLE(BagDifferenceOp, Unhandled);
   HANDLE(BagUnionOp, Unhandled);
   HANDLE(BagUniqueSizeOp, Unhandled);
+  HANDLE(BagConvertToSetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
   HANDLE(ArrayExtractOp, Unhandled);
   HANDLE(ArrayInjectOp, Unhandled);
