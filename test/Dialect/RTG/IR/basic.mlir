@@ -59,21 +59,23 @@ rtg.sequence @seqRandomizationAndEmbedding() {
 }
 
 // CHECK-LABEL: @sets
-func.func @sets(%arg0: i32, %arg1: i32) {
+func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
   // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
   // CHECK: [[R:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<i32>
   // CHECK: [[EMPTY:%.+]] = rtg.set_create : i32
   // CHECK: [[DIFF:%.+]] = rtg.set_difference [[SET]], [[EMPTY]] : !rtg.set<i32>
   // CHECK: rtg.set_union [[SET]], [[DIFF]] : !rtg.set<i32>
   // CHECK: rtg.set_size [[SET]] : !rtg.set<i32>
+  // CHECK: rtg.set_cartesian_product [[SET]], [[SET]] : !rtg.set<i32>, !rtg.set<i32>
   %set = rtg.set_create %arg0, %arg1 : i32
   %r = rtg.set_select_random %set : !rtg.set<i32>
   %empty = rtg.set_create : i32
   %diff = rtg.set_difference %set, %empty : !rtg.set<i32>
   %union = rtg.set_union %set, %diff : !rtg.set<i32>
   %size = rtg.set_size %set : !rtg.set<i32>
+  %prod = rtg.set_cartesian_product %set, %set : !rtg.set<i32>, !rtg.set<i32>
 
-  return
+  return %prod : !rtg.set<tuple<i32, i32>>
 }
 
 // CHECK-LABEL: @bags

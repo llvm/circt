@@ -108,6 +108,11 @@ def seq1():
   Label.declare("s1").place()
 
 
+@sequence(Set.type(Tuple.type(Integer.type(), Bool.type())))
+def seq2(set):
+  pass
+
+
 # MLIR-LABEL: rtg.test @test0
 # MLIR-NEXT: }
 
@@ -390,13 +395,22 @@ def test8_random_integer(a, b):
   int_consumer(Integer.random(a, b))
 
 
-# MLIR-LABEL: rtg.test @test9_tuples
+# MLIR-LABEL: rtg.test @test90_tuples
 # MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
 # MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : tuple<index, i1>
 
 
 @test(("a", Integer.type()), ("b", Bool.type()),
       ("tup", Tuple.type(Integer.type(), Bool.type())))
-def test9_tuples(a, b, tup):
+def test90_tuples(a, b, tup):
   tup = Tuple.create(a, b)
   consumer(tup[1])
+
+
+# MLIR-LABEL: rtg.test @test91_sets
+# MLIR-NEXT: rtg.set_cartesian_product %a, %b : !rtg.set<index>, !rtg.set<i1>
+
+
+@test(("a", Set.type(Integer.type())), ("b", Set.type(Bool.type())))
+def test91_sets(a, b):
+  seq2(Set.cartesian_product(a, b))

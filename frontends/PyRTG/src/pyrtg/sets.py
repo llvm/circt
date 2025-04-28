@@ -79,6 +79,18 @@ class Set(Value):
         ), "type of the provided value must match element type of the set"
     return self - Set.create(other)
 
+  @staticmethod
+  def cartesian_product(*args: Set) -> Set:
+    """
+    Compute the n-ary cartesian product of the given sets.
+    This means, for n input sets it computes
+    `X_1 x ... x X_n = {(x_1, ..., x_n) | x_i \in X_i for i  \in {1, ..., n}}`.
+    At least one input set has to be provided (i.e., `n > 0`).
+    """
+
+    assert len(args) > 0, "at least one set must be provided"
+    return rtg.SetCartesianProductOp(args)
+
   def get_random(self) -> Value:
     """
     Returns an element from the set picked uniformly at random. If the set is

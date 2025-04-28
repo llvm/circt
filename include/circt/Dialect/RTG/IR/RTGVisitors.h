@@ -52,7 +52,7 @@ public:
             RandomizeSequenceOp, EmbedSequenceOp, InterleaveSequencesOp,
             // Sets
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
-            SetSizeOp,
+            SetSizeOp, SetCartesianProductOp,
             // Arrays
             ArrayCreateOp, ArrayExtractOp, ArrayInjectOp, ArraySizeOp,
             // Tuples
@@ -105,6 +105,7 @@ public:
   HANDLE(SetDifferenceOp, Unhandled);
   HANDLE(SetUnionOp, Unhandled);
   HANDLE(SetSizeOp, Unhandled);
+  HANDLE(SetCartesianProductOp, Unhandled);
   HANDLE(BagCreateOp, Unhandled);
   HANDLE(BagSelectRandomOp, Unhandled);
   HANDLE(BagDifferenceOp, Unhandled);

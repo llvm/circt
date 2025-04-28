@@ -359,6 +359,37 @@ def SetSizeOp : RTGOp<"set_size", [Pure]> {
   }];
 }
 
+def SetCartesianProductOp : RTGOp<"set_cartesian_product", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "computes the n-ary cartesian product of sets";
+  let description = [{
+    This operation computes a set of tuples from a list of input sets such that
+    each combination of elements from the input sets is present in the result
+    set. More formally, for n input sets it computes
+    `X_1 x ... x X_n = {(x_1, ..., x_n) | x_i \in X_i for i  \in {1, ..., n}}`.
+    At least one input set has to be provided (i.e., `n > 0`).
+
+    For example, given two sets A and B with elements
+    `A = {a0, a1}, B = {b0, b1}` the result set R will be
+    `R = {(a0, b0), (a0, b1), (a1, b0), (a1, b1)}`.
+
+    Note that an RTG set does not provide any guarantees about the order of
+    elements an can thus not be iterated over or indexed into, however, a
+    random element can be selected and subtracted from the set until it is
+    empty. This procedure is determinstic and will yield the same sequence of
+    elements for a fixed seed and RTG version. If more guarantees about the
+    order of elements is necessary, use arrays instead (and compute the
+    cartesian product manually using nested loops).
+  }];
+
+  let arguments = (ins Variadic<SetType>:$inputs);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = "$inputs `:` qualified(type($inputs)) attr-dict";
+}
+
 //===- Bag Operations ------------------------------------------------------===//
 
 def BagCreateOp : RTGOp<"bag_create", [Pure, SameVariadicOperandSize]> {
