@@ -210,6 +210,8 @@ def run() -> None:
 
     # Produce the MLIR from the frontend language (which might already be MLIR)
     mlir_module = frontend_codegen(args)
+    if not mlir_module.operation.verify():
+      return
 
     # Compile the MLIR up to the specified point.
     compile(mlir_module, args)

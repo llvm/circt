@@ -16,6 +16,7 @@ declare_mlir_python_sources(PyRTGSources
   pyrtg/__init__.py
   pyrtg/arrays.py
   pyrtg/bags.py
+  pyrtg/control_flow.py
   pyrtg/core.py
   pyrtg/index.py
   pyrtg/integers.py
@@ -28,6 +29,7 @@ declare_mlir_python_sources(PyRTGSources
   pyrtg/tests.py
   pyrtg/resources.py
   pyrtg/rtgtest.py
+  pyrtg/scf.py
   rtgtool/rtgtool.py
 )
 
