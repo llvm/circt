@@ -1194,6 +1194,73 @@ TEST(EvaluatorTests, ListConcatField) {
                    .getValue());
 }
 
+TEST(EvaluatorTests, ListOfListConcat) {
+  StringRef mod = "om.class @ListOfListConcat()  -> (result: "
+                  "    !om.list<!om.list<!om.string>>) {"
+                  "  %0 = om.constant \"foo\" : !om.string"
+                  "  %1 = om.constant \"bar\" : !om.string"
+                  "  %2 = om.constant \"baz\" : !om.string"
+                  "  %3 = om.constant \"qux\" : !om.string"
+                  "  %4 = om.list_create %0, %1 : !om.string"
+                  "  %5 = om.list_create %4 : !om.list<!om.string>"
+                  "  %6 = om.list_create %2, %3 : !om.string"
+                  "  %7 = om.list_create %6 : !om.list<!om.string>"
+                  "  %8 = om.list_concat %5, %7 : <!om.list<!om.string>>"
+                  "  om.class.fields %8 : !om.list<!om.list<!om.string>> "
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "ListOfListConcat"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  auto finalList =
+      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+
+  ASSERT_EQ(2U, finalList.size());
+
+  auto sublist0 =
+      llvm::cast<evaluator::ListValue>(finalList[0].get())->getElements();
+
+  ASSERT_EQ("foo", llvm::cast<evaluator::AttributeValue>(sublist0[0].get())
+                       ->getAs<StringAttr>()
+                       .getValue()
+                       .str());
+
+  ASSERT_EQ("bar", llvm::cast<evaluator::AttributeValue>(sublist0[1].get())
+                       ->getAs<StringAttr>()
+                       .getValue()
+                       .str());
+
+  auto sublist1 =
+      llvm::cast<evaluator::ListValue>(finalList[1].get())->getElements();
+
+  ASSERT_EQ("baz", llvm::cast<evaluator::AttributeValue>(sublist1[0].get())
+                       ->getAs<StringAttr>()
+                       .getValue()
+                       .str());
+
+  ASSERT_EQ("qux", llvm::cast<evaluator::AttributeValue>(sublist1[1].get())
+                       ->getAs<StringAttr>()
+                       .getValue()
+                       .str());
+}
+
 TEST(EvaluatorTests, TupleGet) {
   StringRef mod = "om.class @Tuple() -> (val: !om.string) {"
                   "  %int = om.constant 1 : i1"
