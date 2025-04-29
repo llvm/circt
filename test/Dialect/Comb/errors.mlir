@@ -13,9 +13,9 @@ hw.module @err(in %a: i1, in %b: i1) {
 }
 
 // -----
-hw.module @err(in %a: i4, in %b: i7) {
+hw.module @err(in %a: i4, out out: i7) {
   // expected-note @+1 {{prior use here}}
   %0 = comb.concat %a, %a : i4, i4
   // expected-error @+1 {{use of value '%0' expects different type than prior uses: 'i7' vs 'i8'}}
-  %1 = comb.and %0, %b : i7
+  hw.output %0 : i7
 }
