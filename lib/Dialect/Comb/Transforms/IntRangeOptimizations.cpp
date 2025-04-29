@@ -75,7 +75,7 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
     }
     if (removeWidth == 0)
       return rewriter.notifyMatchFailure(op, "no bits to remove");
-    else if (removeWidth == opWidth)
+    if (removeWidth == opWidth)
       return rewriter.notifyMatchFailure(
           op, "all bits to remove - replace by zero");
 

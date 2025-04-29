@@ -28,9 +28,9 @@ using namespace circt::comb;
 void comb::AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                     SetIntRangeFn setResultRange) {
   auto resultRange = argRanges[0];
-  for (size_t i = 1; i < argRanges.size(); ++i)
+  for (auto argRange : argRanges.drop_front())
     resultRange =
-        inferAdd({resultRange, argRanges[i]}, intrange::OverflowFlags::None);
+        inferAdd({resultRange, argRange}, intrange::OverflowFlags::None);
 
   setResultRange(getResult(), resultRange);
 };
@@ -52,9 +52,9 @@ void comb::SubOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::MulOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                     SetIntRangeFn setResultRange) {
   auto resultRange = argRanges[0];
-  for (size_t i = 1; i < argRanges.size(); ++i)
+  for (auto argRange : argRanges.drop_front())
     resultRange =
-        inferMul({resultRange, argRanges[i]}, intrange::OverflowFlags::None);
+        inferMul({resultRange, argRange}, intrange::OverflowFlags::None);
 
   setResultRange(getResult(), resultRange);
 }
@@ -101,8 +101,8 @@ void comb::ModSOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::AndOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                     SetIntRangeFn setResultRange) {
   auto resultRange = argRanges[0];
-  for (size_t i = 1; i < argRanges.size(); ++i)
-    resultRange = inferAnd({resultRange, argRanges[i]});
+  for (auto argRange : argRanges.drop_front())
+    resultRange = inferAnd({resultRange, argRange});
 
   setResultRange(getResult(), resultRange);
 }
@@ -114,8 +114,8 @@ void comb::AndOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::OrOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                    SetIntRangeFn setResultRange) {
   auto resultRange = argRanges[0];
-  for (size_t i = 1; i < argRanges.size(); ++i)
-    resultRange = inferOr({resultRange, argRanges[i]});
+  for (auto argRange : argRanges.drop_front())
+    resultRange = inferOr({resultRange, argRange});
 
   setResultRange(getResult(), resultRange);
 }
@@ -127,8 +127,8 @@ void comb::OrOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void comb::XorOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                     SetIntRangeFn setResultRange) {
   auto resultRange = argRanges[0];
-  for (size_t i = 1; i < argRanges.size(); ++i)
-    resultRange = inferXor({resultRange, argRanges[i]});
+  for (auto argRange : argRanges.drop_front())
+    resultRange = inferXor({resultRange, argRange});
 
   setResultRange(getResult(), resultRange);
 }
