@@ -297,18 +297,6 @@ static unsigned getTotalWidth(ValueRange inputs) {
   return resultWidth;
 }
 
-LogicalResult ConcatOp::verify() {
-  unsigned tyWidth = cast<IntegerType>(getType()).getWidth();
-  unsigned operandsTotalWidth = getTotalWidth(getInputs());
-  if (tyWidth != operandsTotalWidth)
-    return emitOpError("ConcatOp requires operands total width to "
-                       "match type width. operands "
-                       "totalWidth is")
-           << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
-
-  return success();
-}
-
 void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
                      ValueRange tl) {
   result.addOperands(ValueRange{hd});
