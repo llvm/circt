@@ -173,14 +173,21 @@ def WriteMem(width: int) -> typing.Type['WriteMem']:
                                      clear=Bits(1)(0),
                                      increment=Bits(1)(1))
 
-      hostmem_write_req, _ = esi.HostMem.wrap_write_req(
+      hostmem_write_valid = mmio_xact.reg(ports.clk, ports.rst)
+      hostmem_write_req, hostmem_write_ready = esi.HostMem.wrap_write_req(
           write_loc,
           cycle_counter.out.as_bits(),
           tag.out,
-          valid=mmio_xact.reg(ports.clk, ports.rst))
+          valid=hostmem_write_valid)
 
       hostmem_write_resp = esi.HostMem.write(appid=AppID("WriteMem_hostwrite"),
                                              req=hostmem_write_req)
+
+      written = Counter(64)(clk=ports.clk,
+                            rst=ports.rst,
+                            clear=Bits(1)(0),
+                            increment=hostmem_write_valid & hostmem_write_ready)
+      esi.Telemetry.report_signal(esi.AppID("timesWritten"), written.out)
 
   return WriteMem
 
@@ -243,6 +250,13 @@ def ToHostDMATest(width: int):
           cycle_counter.out, count_valid)
       out_xact.assign(out_channel_ready & count_valid)
       ChannelService.to_host(name=AppID("out"), chan=out_channel)
+
+      total_write_counter = Counter(64)(clk=ports.clk,
+                                        rst=ports.rst,
+                                        clear=Bits(1)(0),
+                                        increment=write_cntr_incr)
+      esi.Telemetry.report_signal(esi.AppID("totalWrites"),
+                                  total_write_counter.out)
 
   return ToHostDMATest
 
@@ -308,7 +322,7 @@ class EsiTesterTop(Module):
   def construct(ports):
     PrintfExample(clk=ports.clk, rst=ports.rst)
     for width in [32, 64, 96, 128, 256, 384, 504, 512, 513]:
-    # for width in [513]:
+      # for width in [513]:
       ReadMem(width)(appid=esi.AppID("readmem", width),
                      clk=ports.clk,
                      rst=ports.rst)

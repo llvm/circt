@@ -174,9 +174,11 @@ namespace {
 /// Cosim client implementation of a write channel port.
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
+  WriteCosimChannelPort(AcceleratorConnection &conn,
+                        ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
                         const Type *type, std::string name)
-      : WriteChannelPort(type), rpcClient(rpcClient), desc(desc), name(name) {}
+      : WriteChannelPort(type), conn(conn), rpcClient(rpcClient), desc(desc),
+        name(name) {}
   ~WriteCosimChannelPort() = default;
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
@@ -192,6 +194,16 @@ public:
 
   /// Send a write message to the server.
   void write(const MessageData &data) override {
+    Logger &logger = conn.getLogger();
+    logger.debug(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_write";
+          msg = "Sending message on channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          details->emplace("data", data);
+        });
     ClientContext context;
     AddressedMessage msg;
     msg.set_channel_name(name);
@@ -211,6 +223,7 @@ public:
   }
 
 protected:
+  AcceleratorConnection &conn;
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.
   ChannelDesc desc;
@@ -350,7 +363,8 @@ public:
 
     // Get ports, create the function, then connect to it.
     cmdArgPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), cmdArg, cmdType, "__cosim_mmio_read_write.arg");
+        conn, rpcClient->stub.get(), cmdArg, cmdType,
+        "__cosim_mmio_read_write.arg");
     cmdRespPort = std::make_unique<ReadCosimChannelPort>(
         conn, rpcClient->stub.get(), cmdResp, i64Type,
         "__cosim_mmio_read_write.result");
@@ -471,7 +485,7 @@ public:
     // Get ports. Unfortunately, we can't model this as a callback since there
     // will sometimes be multiple responses per request.
     readRespPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), readResp, readRespType,
+        conn, rpcClient->stub.get(), readResp, readRespType,
         "__cosim_hostmem_read_resp.data");
     readReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, rpcClient->stub.get(), readArg, readReqType,
@@ -495,7 +509,7 @@ public:
 
     // Get ports, create the function, then connect to it.
     writeRespPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), writeResp, writeRespType,
+        conn, rpcClient->stub.get(), writeResp, writeRespType,
         "__cosim_hostmem_write.result");
     writeReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, rpcClient->stub.get(), writeArg, writeReqType,
@@ -674,7 +688,7 @@ CosimEngine::createPort(AppIDPath idPath, const std::string &channelName,
   std::string fullChannelName = idPath.toStr() + "." + channelName;
   if (BundlePort::isWrite(dir))
     port = std::make_unique<WriteCosimChannelPort>(
-        conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
+        conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
   else
     port = std::make_unique<ReadCosimChannelPort>(
         conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);

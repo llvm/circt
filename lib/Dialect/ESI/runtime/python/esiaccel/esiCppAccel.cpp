@@ -58,6 +58,10 @@ struct polymorphic_type_hook<Service> {
       type = &typeid(HostMem);
       return p;
     }
+    if (auto p = dynamic_cast<const TelemetryService *>(svc)) {
+      type = &typeid(TelemetryService);
+      return p;
+    }
     return svc;
   }
 };
@@ -341,6 +345,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
           return MessageData(dataVec);
         });
       });
+
+  py::class_<TelemetryService::Telemetry, ServicePort>(m, "Telemetry")
+      .def("connect", &TelemetryService::Telemetry::connect)
+      .def("read", &TelemetryService::Telemetry::read);
 
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.

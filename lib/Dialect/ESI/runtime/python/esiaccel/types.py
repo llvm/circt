@@ -370,6 +370,8 @@ class BundlePort:
       return super().__new__(CallbackPort)
     if isinstance(cpp_port, cpp.MMIORegion):
       return super().__new__(MMIORegion)
+    if isinstance(cpp_port, cpp.Telemetry):
+      return super().__new__(TelemetryPort)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -488,3 +490,18 @@ class CallbackPort(BundlePort):
 
     self.cpp_port.connect(lambda x: type_convert_wrapper(cb=cb, msg=x))
     self.connected = True
+
+
+class TelemetryPort(BundlePort):
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.connected = False
+
+  def connect(self):
+    self.cpp_port.connect()
+    self.connected = True
+
+  def read(self) -> Future:
+    cpp_future = self.cpp_port.read()
+    return MessageFuture(self.cpp_port.type, cpp_future)

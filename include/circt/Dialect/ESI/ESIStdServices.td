@@ -124,3 +124,24 @@ def HostMemServiceDeclOp: ESI_Op<"service.std.hostmem",
     std::optional<StringRef> getTypeName() { return "esi.service.std.hostmem"; }
   }];
 }
+
+def TelemetryServiceDeclOp: ESI_Op<"service.std.telemetry",
+          [HasParent<"::mlir::ModuleOp">, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+  let summary = "Telemetry service";
+  let description = [{
+    Declares a service to send telemetry data. Has one port 'report' for
+    something to request telemetry data (via a 'get' channel to the client and a
+    'data' channel for the return value).
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    std::optional<StringRef> getTypeName() { return "esi.service.std.telemetry"; }
+  }];
+}
