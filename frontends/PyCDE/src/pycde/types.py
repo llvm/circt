@@ -813,7 +813,6 @@ class Bundle(Type):
     a_bundle, a_froms = self.pack(**to_channel_wires)
     b_bundle, b_froms = b_type.pack(**a_froms.from_channels)
     for name, wire in to_channel_wires.items():
-      assert name in b_froms
       wire.assign(b_froms[name])
     return a_bundle, b_bundle
 

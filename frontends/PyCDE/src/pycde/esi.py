@@ -102,6 +102,16 @@ class ServiceDecl(_PyProxy):
         inputs=[x.value for x in inputs]).operation.results
     return [_FromCirctValue(x) for x in impl_results]
 
+  def implement_as(self,
+                   builtin_type: str,
+                   *args: List[Signal],
+                   appid: Optional[AppID] = None):
+    """Implement this service using a CIRCT implementation named
+    'builtin_type'."""
+    if appid is None:
+      appid = AppID(self.name)
+    return self.instantiate_builtin(appid, builtin_type, inputs=args)
+
 
 class _RequestConnection:
   """Indicates a service with a 'from server' port. Call to create a 'from
@@ -462,11 +472,15 @@ def DeclareRandomAccessMemory(inner_type: Type,
 
     def __init__(self):
       super().__init__(self.__class__)
+      self.num_autonamed = 0
 
-    def write_cast_type(self, appid: AppID, data_type: Type):
+    def get_casted_write(self, data_type: Type, appid: Optional[AppID] = None):
       """Return a request for a write operation with the given data type.
       Sometimes necessary since the type of an imported RAM may not be
       correct."""
+      if appid is None:
+        appid = AppID(self.name + "_writer", self.num_autonamed)
+      self.num_autonamed += 1
       orig_req = self.write(appid)
       new_arg_type = StructType([
           ("address", UInt(DeclareRandomAccessMemory.address_width)),
@@ -761,6 +775,9 @@ class _FuncService(ServiceDecl):
     super().__init__(self.__class__)
 
   def get_coerced(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
+    return self.get(name, bundle_type)
+
+  def get(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
     """Treat any bi-directional bundle as a function by getting a proper
     function bundle with the appropriate types, then renaming the channels to
     match the 'bundle_type'. Returns a bundle signal of type 'bundle_type'."""
@@ -793,18 +810,18 @@ class _FuncService(ServiceDecl):
     from_channel.assign(from_chans[from_channel_bc.name])
     return ret_bundle
 
-  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
-    """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
-    'result' channels going FROM the server and TO the server, respectively."""
-    self._materialize_service_decl()
+  # def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
+  #   """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
+  #   'result' channels going FROM the server and TO the server, respectively."""
+  #   self._materialize_service_decl()
 
-    func_call = _FromCirctValue(
-        raw_esi.RequestConnectionOp(
-            func_type._type,
-            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
-            name._appid).toClient)
-    assert isinstance(func_call, BundleSignal)
-    return func_call
+  #   func_call = _FromCirctValue(
+  #       raw_esi.RequestConnectionOp(
+  #           func_type._type,
+  #           hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+  #           name._appid).toClient)
+  #   assert isinstance(func_call, BundleSignal)
+  #   return func_call
 
   def get_call_chans(self, name: AppID, arg_type: Type,
                      result: Signal) -> ChannelSignal:

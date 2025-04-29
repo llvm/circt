@@ -140,7 +140,7 @@ class System:
   def import_mlir(self,
                   module,
                   lowering=None,
-                  filename: Optional[str] = None) -> Dict[str, Any]:
+                  output_filename: Optional[str] = None) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space."""
 
     compat_mod = ir.Module.parse(str(module))
@@ -165,9 +165,9 @@ class System:
           ret[ir.StringAttr(op.attributes["sym_name"]).value] = op
         # TODO: do symbol renaming.
         self.body.append(op)
-      if filename is not None and not isinstance(op, hw.TypeScopeOp):
+      if output_filename is not None and not isinstance(op, hw.TypeScopeOp):
         op.attributes["output_file"] = hw.OutputFileAttr.get_from_filename(
-            ir.StringAttr.get(filename), False, True)
+            ir.StringAttr.get(output_filename), False, True)
     return ret
 
   def create_physical_region(self, name: str = None):
