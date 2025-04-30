@@ -214,7 +214,6 @@ def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
-  let hasVerifier = 1;
 
   let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
 
