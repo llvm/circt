@@ -393,10 +393,12 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       return success();
     }
 
-    if (width < 8)
-      return LowerRippleCarryAdder(op, inputs, rewriter);
-    else
-      return LowerKoggeStoneAdder(op, inputs, rewriter);
+    // if (width < 8)
+    //   return LowerRippleCarryAdder(op, inputs, rewriter);
+    // if (width < 32)
+    //   return LowerKoggeStoneAdder(op, inputs, rewriter);
+    
+    return LowerBrentKungAdder(op, inputs, rewriter);
   }
 
   // Implement the Kogge-Stone adder as a separate method
@@ -470,9 +472,11 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
     for (int64_t i = 0; i < width; ++i) {
       // p_i = a_i XOR b_i
-      LLVM_DEBUG(llvm::dbgs() << "P0" << i << " = A" << i << "\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "P0" << i << " = A" << i << " XOR B" << i << "\n");
       // g_i = a_i AND b_i
-      LLVM_DEBUG(llvm::dbgs() << "G0" << i << " = B" << i << "\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "G0" << i << " = A" << i << " AND B" << i << "\n");
     }
 
     for (int64_t stage = 0; (1u << stage) < width; stage++) {
@@ -495,7 +499,144 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     LLVM_DEBUG(llvm::dbgs() << "RES0 = P0\n");
     for (int64_t i = 1; i < width; ++i)
       LLVM_DEBUG(llvm::dbgs()
-                 << "RES" << i << " = P" << i << "XOR G" << i - 1 << "\n");
+                 << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n");
+
+    return success();
+  }
+
+  // Implement the Kogge-Stone adder as a separate method
+  LogicalResult
+  LowerBrentKungAdder(comb::AddOp op, ValueRange inputs,
+                       ConversionPatternRewriter &rewriter) const {
+    auto width = op.getType().getIntOrFloatBitWidth();
+
+    Value carry;
+
+    auto aBits = extractBits(rewriter, inputs[0]);
+    auto bBits = extractBits(rewriter, inputs[1]);
+    // Stage 1: Construct propagate (p) and generate (g) signals
+    SmallVector<Value> p, g;
+
+    for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
+      // p_i = a_i XOR b_i
+      p.push_back(rewriter.create<comb::XorOp>(op.getLoc(), aBit, bBit));
+      // g_i = a_i AND b_i
+      g.push_back(rewriter.create<comb::AndOp>(op.getLoc(), aBit, bBit));
+    }
+
+    // Create copies of p and g for the prefix computation
+    SmallVector<Value> pPrefix = p;
+    SmallVector<Value> gPrefix = g;
+ 
+    // Step 2: Brent-Kung parallel prefix computation
+    // First, compute prefix for adjacent pairs (distance 1)
+    for (unsigned stride = 1; stride < width; stride *= 2) {
+      for (unsigned i = stride * 2 - 1; i < width; i += stride * 2) {
+        unsigned j = i - stride;
+
+        // (g_{i}, p_{i}) o (g_{j}, p_{j}) = (g_{i} + p_{i}·g_{j}, p_{i}·p_{j})
+        // Group generate: g_i OR (p_i AND g_j)
+        Value andPG = rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], gPrefix[j]);
+        gPrefix[i] = rewriter.create<comb::OrOp>(op.getLoc(), gPrefix[i], andPG);
+
+        // Group propagate: p_i AND p_j
+        pPrefix[i] = rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
+      }
+    }
+
+    // Step 3: Back propagation phase - distribute prefix computations
+    for (unsigned stride = width / 4; stride > 0; stride /= 2) {
+      for (unsigned i = stride * 3 - 1; i < width; i += stride * 2) {
+          unsigned j = i - stride;
+
+          // Group generate: g_i OR (p_i AND g_j)
+          Value andPG = rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], gPrefix[j]);
+          gPrefix[i] = rewriter.create<OrOp>(op.getLoc(), gPrefix[i], andPG);
+
+          // Group propagate: p_i AND p_j
+          pPrefix[i] = rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
+      }
+    }
+
+    // Stage 3: Generate sum bits
+    // NOTE: The result is stored in reverse order.
+    SmallVector<Value> results;
+    results.resize(width);
+    // Sum bit 0 is just p[0] since carry_in = 0
+    results[width - 1] = p[0];
+
+    // For remaining bits, sum_i = p_i XOR c_(i-1)
+    for (int64_t i = 1; i < width; ++i) {
+      // The carry into position i is the group generate from position i-1
+      results[width - 1 - i] =
+          rewriter.create<comb::XorOp>(op.getLoc(), p[i], gPrefix[i - 1]);
+    }
+
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+
+    LLVM_DEBUG(llvm::dbgs()
+               << "Lower comb.add to Brent-Kung of width " << width << "\n"
+               << "--------------------------------------- Init\n");
+
+    for (int64_t i = 0; i < width; ++i) {
+      // p_i = a_i XOR b_i
+      LLVM_DEBUG(llvm::dbgs()
+                 << "P0" << i << " = A" << i << " XOR B" << i << "\n");
+      // g_i = a_i AND b_i
+      LLVM_DEBUG(llvm::dbgs()
+                 << "G0" << i << " = A" << i << " AND B" << i << "\n");
+    }
+
+    unsigned stage = 0;
+    for (unsigned stride = 1; stride < width; stride *= 2) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "--------------------------------------- Stage " << stage
+                 << "\n");
+      for (unsigned i = stride * 2 - 1; i < width; i += stride * 2) {
+        unsigned j = i - stride;
+
+        // (g_{i}, p_{i}) o (g_{j}, p_{j}) = (g_{i} + p_{i}·g_{j}, p_{i}·p_{j})
+        // Group generate: g_i OR (p_i AND g_j)
+        LLVM_DEBUG(llvm::dbgs()
+                   << "G" << i << stage + 1 << " = G" << i << stage << " OR (P"
+                   << i << stage << " AND G" << j << stage << ")\n");
+
+        // Group propagate: p_i AND p_j
+        LLVM_DEBUG(llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                                << " AND P" << j << stage << "\n");
+      }
+      stage++;
+    }
+
+    // Step 3: Back propagation phase - distribute prefix computations
+    for (unsigned stride = width / 4; stride > 0; stride /= 2) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "--------------------------------------- Back Propagation "
+                    "Stage "
+                 << stage << "\n");
+      for (unsigned i = stride * 3 - 1; i < width; i += stride * 2) {
+          unsigned j = i - stride;
+
+          // Group generate: g_i OR (p_i AND g_j)
+          // Value andPG = rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i + stride], gPrefix[i]);
+          // gPrefix[i + stride] = rewriter.create<OrOp>(op.getLoc(), gPrefix[i + stride], andPG);
+          LLVM_DEBUG(llvm::dbgs()
+                   << "G" << i << stage + 1 << " = G" << i << stage << " OR (P"
+                   << i << stage << " AND G" << j << stage << ")\n");
+
+          // Group propagate: p_i AND p_j
+          // pPrefix[i + stride] = rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i + stride], pPrefix[i]);
+          LLVM_DEBUG(llvm::dbgs() << "P" << i << stage + 1 << " = P" << i  << stage
+                                << " AND P" << j << stage << "\n");
+      }
+      stage--;
+    }
+    LLVM_DEBUG(llvm::dbgs()
+               << "--------------------------------------- Completion\n");
+    LLVM_DEBUG(llvm::dbgs() << "RES0 = P0\n");
+    for (int64_t i = 1; i < width; ++i)
+      LLVM_DEBUG(llvm::dbgs()
+                 << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n");
 
     return success();
   }
