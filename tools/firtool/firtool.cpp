@@ -273,12 +273,12 @@ enum class LayerSpecializationOpt { None, Enable, Disable };
 static llvm::cl::opt<LayerSpecializationOpt> defaultLayerSpecialization{
     "default-layer-specialization",
     llvm::cl::desc("The default specialization for layers"),
-    llvm::cl::values(
-        clEnumValN(LayerSpecializationOpt::None, "none", "Layers are disabled"),
-        clEnumValN(LayerSpecializationOpt::Disable, "disable",
-                   "Layers are disabled"),
-        clEnumValN(LayerSpecializationOpt::Enable, "enable",
-                   "Layers are enabled")),
+    llvm::cl::values(clEnumValN(LayerSpecializationOpt::None, "none",
+                                "Layers are unchanged"),
+                     clEnumValN(LayerSpecializationOpt::Disable, "disable",
+                                "Layers are disabled"),
+                     clEnumValN(LayerSpecializationOpt::Enable, "enable",
+                                "Layers are enabled")),
     cl::init(LayerSpecializationOpt::None), cl::cat(mainCategory)};
 
 /// Specify the select option for specializing instance choice. Currently
