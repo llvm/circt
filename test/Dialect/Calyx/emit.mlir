@@ -614,3 +614,33 @@ module attributes {calyx.entrypoint = "main"} {
     }
   } {toplevel}
 }
+
+// -----
+
+// Emit negative floating point values
+
+module attributes {calyx.entrypoint = "main"} {
+  calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+    %true = hw.constant true
+    %cst = calyx.constant @cst_0 <-4.200000e+00 : f32> : i32
+    %c0_i32 = hw.constant 0 : i32
+    %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i1
+    %mem_0.addr0, %mem_0.clk, %mem_0.reset, %mem_0.content_en, %mem_0.write_en, %mem_0.write_data, %mem_0.read_data, %mem_0.done = calyx.seq_mem @mem_0 <[1] x 32> [1] {external = true} : i1, i1, i1, i1, i1, i32, i32, i1
+    calyx.wires {
+      calyx.group @bb0_0 {
+        calyx.assign %std_slice_0.in = %c0_i32 : i32
+        calyx.assign %mem_0.addr0 = %std_slice_0.out : i1
+        // CHECK:     mem_0.write_data = 32'b11000000100001100110011001100110;
+        calyx.assign %mem_0.write_data = %cst : i32
+        calyx.assign %mem_0.write_en = %true : i1
+        calyx.assign %mem_0.content_en = %true : i1
+        calyx.group_done %mem_0.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.enable @bb0_0
+      }
+    }
+  } {toplevel}
+}
