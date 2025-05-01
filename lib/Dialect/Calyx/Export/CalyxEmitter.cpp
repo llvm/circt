@@ -1104,6 +1104,22 @@ void Emitter::emitAssignment(AssignOp op) {
     emitValue(op.getGuard(), /*isIndented=*/false);
     os << questionMark();
   }
+  if (auto constantOp =
+          dyn_cast_or_null<calyx::ConstantOp>(op.getSrc().getDefiningOp())) {
+    TypedAttr attr = constantOp.getValueAttr();
+    assert(isa<FloatAttr>(attr) && "must be a floating point constant");
+    auto fltAttr = dyn_cast<FloatAttr>(attr);
+    assert(attr != nullptr && "must be a floating point constant");
+    APFloat value = fltAttr.getValue();
+    if (value.isInfinity() || value.isNaN() || value.isNegative()) {
+      SmallString<8> str;
+      auto intValue = value.bitcastToAPInt();
+      intValue.toStringUnsigned(str, /*Radix=*/2);
+      os << std::to_string(intValue.getBitWidth()) << apostrophe() << "b" << str
+         << semicolonEndL();
+      return;
+    }
+  }
   emitValue(op.getSrc(), /*isIndented=*/false);
   os << semicolonEndL();
 }
