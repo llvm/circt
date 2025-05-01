@@ -1108,7 +1108,8 @@ void Emitter::emitAssignment(AssignOp op) {
           dyn_cast_or_null<calyx::ConstantOp>(op.getSrc().getDefiningOp())) {
     TypedAttr attr = constantOp.getValueAttr();
     assert(isa<FloatAttr>(attr) && "must be a floating point constant");
-    auto fltAttr = cast<FloatAttr>(attr);
+    auto fltAttr = dyn_cast<FloatAttr>(attr);
+    assert(attr != nullptr && "must be a floating point constant");
     APFloat value = fltAttr.getValue();
     if (value.isInfinity() || value.isNaN() || value.isNegative()) {
       SmallString<8> str;
