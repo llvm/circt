@@ -626,7 +626,7 @@ def UArrayCmpPredicateAttr : I64EnumAttr<
 def StringCmpPredicateAttr : I64EnumAttr<
     "StringCmpPredicate", "",
     [
-     I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"eq", 0>,
       I64EnumAttrCase<"ne", 1>,
       I64EnumAttrCase<"lt", 2>,
       I64EnumAttrCase<"le", 3>,
