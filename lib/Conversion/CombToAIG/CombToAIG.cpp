@@ -394,18 +394,66 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     if (width < 8)
-      return LowerRippleCarryAdder(op, inputs, rewriter);
+      LowerRippleCarryAdder(op, inputs, rewriter);
+    else
+      LowerParallelPrefixAdder(op, inputs, rewriter);
 
-    return LowerParallelPrefixAdder(op, inputs, rewriter);
+    return success();
   }
 
-  // Implement a parallel prefix adder - with Kogge-Stone or Brent-Kung
-  LogicalResult
-  LowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
-                           ConversionPatternRewriter &rewriter) const {
+  // Implement a basic ripple-carry adder for small bitwidths.
+  void LowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
+                             ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
-
+    // Implement a naive Ripple-carry full adder.
     Value carry;
+
+    auto aBits = extractBits(rewriter, inputs[0]);
+    auto bBits = extractBits(rewriter, inputs[1]);
+    SmallVector<Value> results;
+    results.resize(width);
+    for (int64_t i = 0; i < width; ++i) {
+      SmallVector<Value> xorOperands = {aBits[i], bBits[i]};
+      if (carry)
+        xorOperands.push_back(carry);
+
+      // sum[i] = xor(carry[i-1], a[i], b[i])3
+      // NOTE: The result is stored in reverse order.
+      results[width - i - 1] =
+          rewriter.create<comb::XorOp>(op.getLoc(), xorOperands, true);
+
+      // If this is the last bit, we are done.
+      if (i == width - 1)
+        break;
+
+      // carry[i] = (carry[i-1] & (a[i] ^ b[i])) | (a[i] & b[i])
+      Value nextCarry = rewriter.create<comb::AndOp>(
+          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
+      if (!carry) {
+        // This is the first bit, so the carry is the next carry.
+        carry = nextCarry;
+        continue;
+      }
+
+      auto aXnorB = rewriter.create<comb::XorOp>(
+          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
+      auto andOp = rewriter.create<comb::AndOp>(
+          op.getLoc(), ValueRange{carry, aXnorB}, true);
+      carry = rewriter.create<comb::OrOp>(op.getLoc(),
+                                          ValueRange{andOp, nextCarry}, true);
+    }
+    LLVM_DEBUG(llvm::dbgs() << "Lower comb.add to Ripple-Carry Adder of width "
+                            << width << "\n");
+
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
+  }
+
+  // Implement a parallel prefix adder - with Kogge-Stone or Brent-Kung trees
+  // Will introduce unused signals for the carry bits but these will be removed
+  // by the AIG pass.
+  void LowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
+                                ConversionPatternRewriter &rewriter) const {
+    auto width = op.getType().getIntOrFloatBitWidth();
 
     auto aBits = extractBits(rewriter, inputs[0]);
     auto bBits = extractBits(rewriter, inputs[1]);
@@ -418,6 +466,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       // g_i = a_i AND b_i
       g.push_back(rewriter.create<comb::AndOp>(op.getLoc(), aBit, bBit));
     }
+
     LLVM_DEBUG(llvm::dbgs()
                << "Lower comb.add to Parallel-Prefix of width " << width << "\n"
                << "--------------------------------------- Init\n");
@@ -460,36 +509,31 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     for (int64_t i = 1; i < width; ++i)
       LLVM_DEBUG(llvm::dbgs()
                  << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n");
-
-    return success();
   }
 
-  // Implement the Kogge-Stone adder as a separate method
+  // Implement the Kogge-Stone parallel prefix tree
+  // Described in https://en.wikipedia.org/wiki/Kogge%E2%80%93Stone_adder
+  // Slightly better delay than Brent-Kung, but more area.
   void LowerKoggeStonePrefixTree(comb::AddOp op, ValueRange inputs,
                                  ConversionPatternRewriter &rewriter,
                                  SmallVector<Value> &pPrefix,
                                  SmallVector<Value> &gPrefix) const {
     auto width = op.getType().getIntOrFloatBitWidth();
+
     // Kogge-Stone parallel prefix computation
     for (int64_t stride = 1; stride < width; stride *= 2) {
-
-      SmallVector<Value> pNew = pPrefix;
-      SmallVector<Value> gNew = gPrefix;
-
       for (int64_t i = stride; i < width; ++i) {
         int64_t j = i - stride;
-        // Group propagate: p_i:j = p_i:k AND p_k-1:j
-        pNew[i] =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
-
-        // Group generate: g_i:j = g_i:k OR (p_i:k AND g_k-1:j)
-        Value andTerm =
+        // Group generate: g_i OR (p_i AND g_j)
+        Value andPG =
             rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], gPrefix[j]);
-        gNew[i] = rewriter.create<comb::OrOp>(op.getLoc(), gPrefix[i], andTerm);
-      }
+        gPrefix[i] =
+            rewriter.create<comb::OrOp>(op.getLoc(), gPrefix[i], andPG);
 
-      pPrefix = pNew;
-      gPrefix = gNew;
+        // Group propagate: p_i AND p_j
+        pPrefix[i] =
+            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
+      }
     }
 
     int64_t stage = 0;
@@ -497,27 +541,32 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       LLVM_DEBUG(llvm::dbgs()
                  << "--------------------------------------- Kogge-Stone Stage "
                  << stage << "\n");
-      int64_t gap = 1 << stage;
-      for (int64_t i = gap; i < width; ++i) {
-        // Group propagate: p_i:j = p_i:k AND p_k-1:j
-        LLVM_DEBUG(llvm::dbgs() << "P" << stage + 1 << i << " = P" << stage << i
-                                << " AND P" << stage << i - gap << "\n");
-        // Group generate: g_i:j = g_i:k OR (p_i:k AND g_k-1:j)
+      for (int64_t i = stride; i < width; ++i) {
+        int64_t j = i - stride;
+        // Group generate: g_i OR (p_i AND g_j)
         LLVM_DEBUG(llvm::dbgs()
-                   << "G" << stage + 1 << i << " = G" << stage << i << " OR (P"
-                   << stage << i << " AND G" << stage << i - gap << ")\n");
+                   << "G" << i << stage + 1 << " = G" << i << stage << " OR (P"
+                   << i << stage << " AND G" << j << stage << ")\n");
+
+        // Group propagate: p_i AND p_j
+        LLVM_DEBUG(llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                                << " AND P" << j << stage << "\n");
       }
       stage++;
     }
   }
 
-  // Implement the Brent-Kung adder as a separate method
+  // Implement the Brent-Kung parallel prefix tree
+  // Described in https://en.wikipedia.org/wiki/Brent%E2%80%93Kung_adder
+  // Slightly worse delay than Kogge-Stone, but less area.
   void LowerBrentKungPrefixTree(comb::AddOp op, ValueRange inputs,
                                 ConversionPatternRewriter &rewriter,
                                 SmallVector<Value> &pPrefix,
                                 SmallVector<Value> &gPrefix) const {
     auto width = op.getType().getIntOrFloatBitWidth();
-    // Step 2: Brent-Kung parallel prefix computation
+
+    // Brent-Kung parallel prefix computation
+    // Forward phase
     int64_t stride;
     for (stride = 1; stride < width; stride *= 2) {
       for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
@@ -535,7 +584,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       }
     }
 
-    // Step 3: Back propagation phase - distribute prefix computations
+    // Backward phase
     for (; stride > 0; stride /= 2) {
       for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
         int64_t j = i - stride;
@@ -571,7 +620,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       stage++;
     }
 
-    // Step 3: Back propagation phase - distribute prefix computations
     for (; stride > 0; stride /= 2) {
       if (stride * 3 - 1 < width)
         LLVM_DEBUG(llvm::dbgs()
@@ -592,56 +640,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       }
       stage--;
     }
-  }
-
-  // Implement a basic ripple-carry adder for small bitwidths.
-  LogicalResult
-  LowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
-                        ConversionPatternRewriter &rewriter) const {
-    auto width = op.getType().getIntOrFloatBitWidth();
-    // Implement a naive Ripple-carry full adder.
-    Value carry;
-
-    auto aBits = extractBits(rewriter, inputs[0]);
-    auto bBits = extractBits(rewriter, inputs[1]);
-    SmallVector<Value> results;
-    results.resize(width);
-    for (int64_t i = 0; i < width; ++i) {
-      SmallVector<Value> xorOperands = {aBits[i], bBits[i]};
-      if (carry)
-        xorOperands.push_back(carry);
-
-      // sum[i] = xor(carry[i-1], a[i], b[i])
-      // NOTE: The result is stored in reverse order.
-      results[width - i - 1] =
-          rewriter.create<comb::XorOp>(op.getLoc(), xorOperands, true);
-
-      // If this is the last bit, we are done.
-      if (i == width - 1) {
-        break;
-      }
-
-      // carry[i] = (carry[i-1] & (a[i] ^ b[i])) | (a[i] & b[i])
-      Value nextCarry = rewriter.create<comb::AndOp>(
-          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
-      if (!carry) {
-        // This is the first bit, so the carry is the next carry.
-        carry = nextCarry;
-        continue;
-      }
-
-      auto aXnorB = rewriter.create<comb::XorOp>(
-          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
-      auto andOp = rewriter.create<comb::AndOp>(
-          op.getLoc(), ValueRange{carry, aXnorB}, true);
-      carry = rewriter.create<comb::OrOp>(op.getLoc(),
-                                          ValueRange{andOp, nextCarry}, true);
-    }
-    LLVM_DEBUG(llvm::dbgs() << "Lower comb.add to Ripple-Carry Adder of width "
-                            << width << "\n");
-
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
-    return success();
   }
 };
 
