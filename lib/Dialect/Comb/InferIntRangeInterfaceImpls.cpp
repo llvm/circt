@@ -21,6 +21,7 @@ using namespace mlir;
 using namespace mlir::intrange;
 using namespace circt;
 using namespace circt::comb;
+
 //===----------------------------------------------------------------------===//
 // AddOp
 //===----------------------------------------------------------------------===//
@@ -33,7 +34,7 @@ void comb::AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
         inferAdd({resultRange, argRange}, intrange::OverflowFlags::None);
 
   setResultRange(getResult(), resultRange);
-};
+}
 
 //===----------------------------------------------------------------------===//
 // SubOp
@@ -183,7 +184,7 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   }
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
-};
+}
 
 //===----------------------------------------------------------------------===//
 // ExtractOp
@@ -198,7 +199,7 @@ void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   auto umax = argRanges[0].umax().lshr(lowBit).trunc(resWidth);
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
-};
+}
 
 //===----------------------------------------------------------------------===//
 // ReplicateOp
@@ -222,7 +223,7 @@ void comb::ReplicateOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   }
   auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
   setResultRange(getResult(), urange);
-};
+}
 
 //===----------------------------------------------------------------------===//
 // MuxOp
