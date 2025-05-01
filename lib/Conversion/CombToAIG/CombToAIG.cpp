@@ -530,7 +530,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
  
     // Step 2: Brent-Kung parallel prefix computation
     // First, compute prefix for adjacent pairs (distance 1)
-    for (unsigned stride = 1; stride < width; stride *= 2) {
+    unsigned stride = 1;
+    for (; stride < width; stride *= 2) {
       for (unsigned i = stride * 2 - 1; i < width; i += stride * 2) {
         unsigned j = i - stride;
 
@@ -545,7 +546,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     // Step 3: Back propagation phase - distribute prefix computations
-    for (unsigned stride = width / 4; stride > 0; stride /= 2) {
+    for (; stride > 0; stride /= 2) {
       for (unsigned i = stride * 3 - 1; i < width; i += stride * 2) {
           unsigned j = i - stride;
 
@@ -588,7 +589,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     unsigned stage = 0;
-    for (unsigned stride = 1; stride < width; stride *= 2) {
+    for (stride = 1; stride < width; stride *= 2) {
       LLVM_DEBUG(llvm::dbgs()
                  << "--------------------------------------- Stage " << stage
                  << "\n");
@@ -609,7 +610,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     // Step 3: Back propagation phase - distribute prefix computations
-    for (unsigned stride = width / 4; stride > 0; stride /= 2) {
+    for (; stride > 0; stride /= 2) {
       LLVM_DEBUG(llvm::dbgs()
                  << "--------------------------------------- Back Propagation "
                     "Stage "
