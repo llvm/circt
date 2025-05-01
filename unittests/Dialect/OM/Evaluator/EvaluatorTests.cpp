@@ -1261,6 +1261,56 @@ TEST(EvaluatorTests, ListOfListConcat) {
                        .str());
 }
 
+TEST(EvaluatorTests, ListConcatPartialCycle) {
+  StringRef mod =
+      "om.class @Child(%field_in: !om.any) -> (field: !om.list<!om.any>) {"
+      "  %1 = om.list_create %field_in : !om.any"
+      "  om.class.fields %1 : !om.list<!om.any>"
+      "}"
+      "om.class @Leaf() -> () {"
+      "  om.class.fields"
+      "}"
+      "om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){"
+      "  %0 = om.object @Child(%6) : (!om.any) -> !om.class.type<@Child>"
+      "  %1 = om.object.field %0, [@field] : (!om.class.type<@Child>) -> "
+      "!om.list<!om.any>"
+      "  %2 = om.object @Child(%8) : (!om.any) -> !om.class.type<@Child>"
+      "  %3 = om.object.field %2, [@field] : (!om.class.type<@Child>) -> "
+      "!om.list<!om.any>"
+      "  %4 = om.list_concat %1, %3 : <!om.any>"
+      "  %5 = om.object @Leaf() : () -> !om.class.type<@Leaf>"
+      "  %6 = om.any_cast %5 : (!om.class.type<@Leaf>) -> !om.any"
+      "  %7 = om.object @Leaf() : () -> !om.class.type<@Leaf>"
+      "  %8 = om.any_cast %7 : (!om.class.type<@Leaf>) -> !om.any"
+      "  om.class.fields %4 : !om.list<!om.any>"
+      "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "ListConcatPartialCycle"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  auto finalList =
+      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+
+  ASSERT_EQ(2U, finalList.size());
+}
+
 TEST(EvaluatorTests, TupleGet) {
   StringRef mod = "om.class @Tuple() -> (val: !om.string) {"
                   "  %int = om.constant 1 : i1"
