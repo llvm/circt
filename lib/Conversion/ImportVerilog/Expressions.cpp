@@ -589,7 +589,6 @@ struct RvalueExprVisitor {
 
     // Traverse open range list.
     for (const auto *listExpr : expr.rangeList()) {
-      Value cond;
       // The open range list on the right-hand side of the inside operator is a
       // comma-separated list of expressions or ranges.
       if (const auto *openRange =
@@ -616,26 +615,41 @@ struct RvalueExprVisitor {
         } else {
           rightValue = builder.create<moore::UleOp>(loc, lhs, highBound);
         }
-        cond = builder.create<moore::AndOp>(loc, leftValue, rightValue);
+        conditions.push_back(
+            builder.create<moore::AndOp>(loc, leftValue, rightValue));
       } else {
         // Handle expressions.
         if (!listExpr->type->isSimpleBitVector()) {
           if (listExpr->type->isUnpackedArray()) {
+            if (listExpr->type->isFixedSize()) {
+              const auto &uaType =
+                  listExpr->type->as<slang::ast::FixedSizeUnpackedArrayType>();
+              auto value = context.convertRvalueExpression(*listExpr);
+              if (!value)
+                return {};
+              if (failed(context.collectConditionsForUnpackedArray(
+                      uaType, value, conditions, lhs, loc)))
+                return {};
+            } else {
+              mlir::emitError(loc, "unsized unpacked arrays in 'inside' "
+                                   "expressions not supported");
+              return {};
+            }
+          } else {
             mlir::emitError(
-                loc, "unpacked arrays in 'inside' expressions not supported");
+                loc,
+                "only simple bit vectors supported in 'inside' expressions");
             return {};
           }
-          mlir::emitError(
-              loc, "only simple bit vectors supported in 'inside' expressions");
-          return {};
+        } else {
+          auto value = context.convertToSimpleBitVector(
+              context.convertRvalueExpression(*listExpr));
+          if (!value)
+            return {};
+          conditions.push_back(
+              builder.create<moore::WildcardEqOp>(loc, lhs, value));
         }
-        auto value = context.convertToSimpleBitVector(
-            context.convertRvalueExpression(*listExpr));
-        if (!value)
-          return {};
-        cond = builder.create<moore::WildcardEqOp>(loc, lhs, value);
       }
-      conditions.push_back(cond);
     }
 
     // Calculate the final result by `or` op.
@@ -1416,4 +1430,40 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
+}
+
+LogicalResult Context::collectConditionsForUnpackedArray(
+    const slang::ast::FixedSizeUnpackedArrayType &slangType,
+    Value upackedArrayValue, SmallVector<Value> &conditions, Value lhs,
+    Location loc) {
+  auto type = convertType(slangType);
+  if (!type) {
+    return failure();
+  }
+  auto mooreType = dyn_cast<moore::UnpackedArrayType>(type);
+  const auto &elementType = slangType.elementType;
+  for (slang::int32_t i = slangType.getFixedRange().lower();
+       i <= slangType.getFixedRange().upper(); i++) {
+    auto elemValue = builder.create<moore::ExtractOp>(
+        loc, mooreType.getElementType(), upackedArrayValue, i);
+    if (elementType.isUnpackedArray()) {
+      if (failed(collectConditionsForUnpackedArray(
+              elementType.as<slang::ast::FixedSizeUnpackedArrayType>(),
+              elemValue, conditions, lhs, loc))) {
+        return failure();
+      }
+    } else if (elementType.isSingular()) {
+      if (elementType.isIntegral()) {
+        conditions.push_back(
+            builder.create<moore::WildcardEqOp>(loc, lhs, elemValue));
+      } else {
+        conditions.push_back(builder.create<moore::EqOp>(loc, lhs, elemValue));
+      }
+    } else {
+      assert(false && "Slang guarantees only singular values and fixed-size "
+                      "unpacked arrays allowed as elements of unpacked arrays "
+                      "in 'inside' expressions");
+    }
+  }
+  return success();
 }
