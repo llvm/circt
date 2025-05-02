@@ -554,6 +554,8 @@ module {
 // CHECK-DAG:        calyx.assign %std_fpToIntFN_0.in = %in0 : i32
 // CHECK-DAG:        calyx.assign %std_fpToIntFN_0.signedOut = %true : i1
 // CHECK-DAG:        %0 = comb.xor %std_fpToIntFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %fptosi_0_reg.in = %std_fpToIntFN_0.out : i64
+// CHECK-DAG:        calyx.assign %fptosi_0_reg.write_en = %true : i1
 // CHECK-DAG:        calyx.assign %std_fpToIntFN_0.go = %0 ? %true : i1
 // CHECK-DAG:        calyx.group_done %fptosi_0_reg.done : i1
 // CHECK-DAG:      }
@@ -573,6 +575,8 @@ module {
 // CHECK:      calyx.group @bb0_0 {
 // CHECK-DAG:        calyx.assign %std_intToFpFN_0.in = %in0 : i64
 // CHECK-DAG:        calyx.assign %std_intToFpFN_0.signedIn = %true : i1
+// CHECK-DAG:        calyx.assign %sitofp_0_reg.in = %std_intToFpFN_0.out : i32
+// CHECK-DAG:        calyx.assign %sitofp_0_reg.write_en = %true : i1
 // CHECK-DAG:        %0 = comb.xor %std_intToFpFN_0.done, %true : i1
 // CHECK-DAG:        calyx.assign %std_intToFpFN_0.go = %0 ? %true : i1
 // CHECK-DAG:        calyx.group_done %sitofp_0_reg.done : i1
