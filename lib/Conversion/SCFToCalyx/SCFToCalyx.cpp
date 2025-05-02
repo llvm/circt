@@ -698,6 +698,9 @@ private:
     }
     op.getResult().replaceAllUsesWith(reg.getOut());
 
+    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), calyxOp.getOut());
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), c1);
+
     rewriter.create<calyx::AssignOp>(
         loc, calyxOp.getGo(), c1,
         comb::createOrFoldNot(loc, calyxOp.getDone(), builder));

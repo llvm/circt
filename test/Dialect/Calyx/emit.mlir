@@ -467,12 +467,16 @@ module attributes {calyx.entrypoint = "main"} {
       // CHECK-LABEL:    group bb0_0 {
       // CHECK-NEXT:      std_fptointFN_0.in = in0;
       // CHECK-NEXT:      std_fptointFN_0.signedOut = 1'b1;
+      // CHECK-NEXT:      fptosi_0_reg.in = std_fptointFN_0.out;
+      // CHECK-NEXT:      fptosi_0_reg.write_en = 1'b1;
       // CHECK-NEXT:      std_fptointFN_0.go = !std_fptointFN_0.done ? 1'b1;
       // CHECK-NEXT:      bb0_0[done] = fptosi_0_reg.done;
       // CHECK-NEXT:    }
       calyx.group @bb0_0 {
         calyx.assign %std_fptointFN_0.in = %in0 : i32
         calyx.assign %std_fptointFN_0.signedOut = %true : i1
+        calyx.assign %fptosi_0_reg.in = %std_fptointFN_0.out : i64
+        calyx.assign %fptosi_0_reg.write_en = %true : i1
         %0 = comb.xor %std_fptointFN_0.done, %true : i1
         calyx.assign %std_fptointFN_0.go = %0 ? %true : i1
         calyx.group_done %fptosi_0_reg.done : i1
@@ -509,12 +513,16 @@ module attributes {calyx.entrypoint = "main"} {
         // CHECK-LABEL:    group bb0_0 {
         // CHECK-NEXT:      std_intToFpFN_0.in = in0;
         // CHECK-NEXT:      std_intToFpFN_0.signedIn = 1'b1;
+        // CHECK-NEXT:      sitofp_0_reg.in = std_intToFpFN_0.out;
+        // CHECK-NEXT:      sitofp_0_reg.write_en = 1'b1;
         // CHECK-NEXT:      std_intToFpFN_0.go = !std_intToFpFN_0.done ? 1'b1;
         // CHECK-NEXT:      bb0_0[done] = sitofp_0_reg.done;
         // CHECK-NEXT:    }
       calyx.group @bb0_0 {
         calyx.assign %std_intToFpFN_0.in = %in0 : i64
         calyx.assign %std_intToFpFN_0.signedIn = %true : i1
+        calyx.assign %sitofp_0_reg.in = %std_intToFpFN_0.out : i32
+        calyx.assign %sitofp_0_reg.write_en = %true : i1
         %0 = comb.xor %std_intToFpFN_0.done, %true : i1
         calyx.assign %std_intToFpFN_0.go = %0 ? %true : i1
         calyx.group_done %sitofp_0_reg.done : i1
