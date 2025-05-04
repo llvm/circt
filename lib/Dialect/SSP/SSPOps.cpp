@@ -76,26 +76,6 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseGreater())
     return failure();
 
-  if (succeeded(parser.parseOptionalKeyword("uses"))) {
-    SmallVector<Attribute> rsrcRefs;
-    auto parseOne = [&]() -> ParseResult {
-      SymbolRefAttr rsrcRef;
-      if (parser.parseAttribute(rsrcRef))
-        return parser.emitError(parser.getCurrentLocation(),
-                                "expected symbol reference inside uses[...]");
-      rsrcRefs.push_back(rsrcRef);
-      return success();
-    };
-    if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Square,
-                                       parseOne))
-      return failure();
-
-    auto linkedRsrcsAttr = builder.getAttr<LinkedResourceTypesAttr>(
-        builder.getArrayAttr(rsrcRefs));
-
-    alreadyParsed.push_back(linkedRsrcsAttr);
-  }
-
   // (Scheduling) operation's name
   StringAttr opName;
   (void)parser.parseOptionalSymbolName(opName, SymbolTable::getSymbolAttrName(),
@@ -138,6 +118,26 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren,
                                      parseDependenceSourceWithAttrDict))
     return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("uses"))) {
+    SmallVector<Attribute> rsrcRefs;
+    auto parseOne = [&]() -> ParseResult {
+      SymbolRefAttr rsrcRef;
+      if (parser.parseAttribute(rsrcRef))
+        return parser.emitError(parser.getCurrentLocation(),
+                                "expected symbol reference inside uses[...]");
+      rsrcRefs.push_back(rsrcRef);
+      return success();
+    };
+    if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Square,
+                                       parseOne))
+      return failure();
+
+    auto linkedRsrcsAttr = builder.getAttr<LinkedResourceTypesAttr>(
+        builder.getArrayAttr(rsrcRefs));
+
+    alreadyParsed.push_back(linkedRsrcsAttr);
+  }
 
   if (!dependences.empty())
     result.addAttribute(builder.getStringAttr("dependences"),
@@ -182,21 +182,6 @@ void OperationOp::print(OpAsmPrinter &p) {
   }
   p << '>';
 
-  if (ArrayAttr properties = getSspPropertiesAttr()) {
-    for (auto attr : properties) {
-      if (auto linkedRsrcs = dyn_cast<LinkedResourceTypesAttr>(attr)) {
-        auto rsrcList = linkedRsrcs.getValue();
-        if (!rsrcList.empty()) {
-          p << " uses[";
-          llvm::interleaveComma(
-              rsrcList, p, [&](Attribute rsrc) { p.printAttribute(rsrc); });
-          p << "]";
-        }
-        alreadyPrinted.push_back(linkedRsrcs);
-      }
-    }
-  }
-
   // (Scheduling) operation's name
   if (StringAttr symName = getSymNameAttr()) {
     p << ' ';
@@ -237,6 +222,21 @@ void OperationOp::print(OpAsmPrinter &p) {
     });
   }
   p << ')';
+
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
+    for (auto attr : properties) {
+      if (auto linkedRsrcs = dyn_cast<LinkedResourceTypesAttr>(attr)) {
+        auto rsrcList = linkedRsrcs.getValue();
+        if (!rsrcList.empty()) {
+          p << " uses[";
+          llvm::interleaveComma(
+              rsrcList, p, [&](Attribute rsrc) { p.printAttribute(rsrc); });
+          p << "]";
+        }
+        alreadyPrinted.push_back(linkedRsrcs);
+      }
+    }
+  }
 
   // Properties
   if (ArrayAttr properties = getSspPropertiesAttr()) {

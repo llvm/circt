@@ -44,10 +44,10 @@ def InstanceOp : SSPOp<"instance",
         resource_type @WritePort [limit<1>]
       }
       graph {
-        %0 = operation<@Memory> @load_A uses[@ReadPort](@store_A [dist<1>]) [t<2>]
-        %1 = operation<@Memory> @load_B uses[@ReadPort]() [t<0>]
+        %0 = operation<@Memory> @load_A(@store_A [dist<1>]) uses[@ReadPort] [t<2>]
+        %1 = operation<@Memory> @load_B() uses[@ReadPort] [t<0>]
         %2 = operation<@Add> @add(%0, %1) [t<3>]  // no `resource_type` needed
-        operation<@Memory> @store_A uses[@WritePort](%2) [t<4>]
+        operation<@Memory> @store_A(%2) uses[@WritePort] [t<4>]
       }
     }
     ```
@@ -267,7 +267,7 @@ def OperationOp : SSPOp<"operation",
     %5:2 = operation<@Div>(%3, %4) // multiple results
     
     // named, mix of def-use and auxiliary dependences
-    operation<@MemAccess> @store_A uses[@MemPort](%2, @store_B, @load_A)
+    operation<@MemAccess> @store_A(%2, @store_B, @load_A) uses[@MemPort]
     
     // dependence properties
     operation<@Barrier>(%2 [dist<1>], %5#1, @store_A [dist<3>])

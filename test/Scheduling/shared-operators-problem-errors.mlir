@@ -9,7 +9,7 @@ ssp.instance @limited_but_zero_latency of "SharedOperatorsProblem" {
     resource_type @limited_rsrc [limit<1>]
   }
   graph {
-    operation<@limited> uses[@limited_rsrc]() [t<0>]
+    operation<@limited>() uses[@limited_rsrc] [t<0>]
   }
 }
 
@@ -24,8 +24,8 @@ ssp.instance @oversubscribed of "SharedOperatorsProblem" {
     resource_type @limited_rsrc [limit<2>]
   }
   graph {
-    operation<@limited> uses[@limited_rsrc]() [t<0>]
-    operation<@limited> uses[@limited_rsrc]() [t<0>]
-    operation<@limited> uses[@limited_rsrc]() [t<0>]
+    operation<@limited>() uses[@limited_rsrc] [t<0>]
+    operation<@limited>() uses[@limited_rsrc] [t<0>]
+    operation<@limited>() uses[@limited_rsrc] [t<0>]
   }
 }

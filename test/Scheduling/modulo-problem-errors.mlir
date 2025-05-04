@@ -9,8 +9,8 @@ ssp.instance @oversubscribed of "ModuloProblem" [II<2>] {
     resource_type @limited_rsrc [limit<2>]
   }
   graph {
-    operation<@limited> uses[@limited_rsrc]() [t<1>]
-    operation<@limited> uses[@limited_rsrc]() [t<3>]
-    operation<@limited> uses[@limited_rsrc]() [t<5>]
+    operation<@limited>() uses[@limited_rsrc] [t<1>]
+    operation<@limited>() uses[@limited_rsrc] [t<3>]
+    operation<@limited>() uses[@limited_rsrc] [t<5>]
   }
 }

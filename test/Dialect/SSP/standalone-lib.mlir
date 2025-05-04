@@ -24,11 +24,11 @@
 // CHECK:     resource_type @Rsrc [limit<3>]
 // CHECK:   }
 // CHECK:   graph {
-// CHECK:     operation<@Opr> uses[@Rsrc]()
-// CHECK:     operation<@InternalLib::@Opr> uses[@InternalRsrc::@Rsrc]()
-// CHECK:     operation<@SomeInstance::@InternalLib::@Opr> uses[@SomeInstance::@InternalRsrc::@Rsrc]()
-// CHECK:     operation<@Lib::@Opr> uses[@RsrcLib::@Rsrc]()
-// CHECK:     operation<@SomeModule::@Lib::@Opr> uses[@SomeModule::@RsrcLib::@Rsrc]()
+// CHECK:     operation<@Opr>() uses[@Rsrc]
+// CHECK:     operation<@InternalLib::@Opr>() uses[@InternalRsrc::@Rsrc]
+// CHECK:     operation<@SomeInstance::@InternalLib::@Opr>() uses[@SomeInstance::@InternalRsrc::@Rsrc]
+// CHECK:     operation<@Lib::@Opr>() uses[@RsrcLib::@Rsrc]
+// CHECK:     operation<@SomeModule::@Lib::@Opr>() uses[@SomeModule::@RsrcLib::@Rsrc]
 // CHECK:   }
 // CHECK: }
 
@@ -46,11 +46,11 @@
 // INFRA:     resource_type @Rsrc_2 [limit<2>]
 // INFRA:   }
 // INFRA:   graph {
-// INFRA:     operation<@Opr> uses[@Rsrc]()
-// INFRA:     operation<@Opr> uses[@Rsrc]()
-// INFRA:     operation<@Opr> uses[@Rsrc]()
-// INFRA:     operation<@Opr_1> uses[@Rsrc_1]()
-// INFRA:     operation<@Opr_2> uses[@Rsrc_2]()
+// INFRA:     operation<@Opr>() uses[@Rsrc]
+// INFRA:     operation<@Opr>() uses[@Rsrc]
+// INFRA:     operation<@Opr>() uses[@Rsrc]
+// INFRA:     operation<@Opr_1>() uses[@Rsrc_1]
+// INFRA:     operation<@Opr_2>() uses[@Rsrc_2]
 // INFRA:   }
 // INFRA: }
 
@@ -76,10 +76,10 @@ ssp.instance @SomeInstance of "ModuloProblem" {
     resource_type @Rsrc [limit<3>]
   }
   graph {
-    operation<@Opr> uses[@Rsrc]()
-    operation<@InternalLib::@Opr> uses[@InternalRsrc::@Rsrc]()
-    operation<@SomeInstance::@InternalLib::@Opr> uses[@SomeInstance::@InternalRsrc::@Rsrc]()
-    operation<@Lib::@Opr> uses[@RsrcLib::@Rsrc]()
-    operation<@SomeModule::@Lib::@Opr> uses[@SomeModule::@RsrcLib::@Rsrc]()
+    operation<@Opr>() uses[@Rsrc]
+    operation<@InternalLib::@Opr>() uses[@InternalRsrc::@Rsrc]
+    operation<@SomeInstance::@InternalLib::@Opr>() uses[@SomeInstance::@InternalRsrc::@Rsrc]
+    operation<@Lib::@Opr>() uses[@RsrcLib::@Rsrc]
+    operation<@SomeModule::@Lib::@Opr>() uses[@SomeModule::@RsrcLib::@Rsrc]
   }
 }
