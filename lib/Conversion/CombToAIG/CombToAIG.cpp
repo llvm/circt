@@ -394,15 +394,15 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     if (width < 8)
-      LowerRippleCarryAdder(op, inputs, rewriter);
+      lowerRippleCarryAdder(op, inputs, rewriter);
     else
-      LowerParallelPrefixAdder(op, inputs, rewriter);
+      lowerParallelPrefixAdder(op, inputs, rewriter);
 
     return success();
   }
 
   // Implement a basic ripple-carry adder for small bitwidths.
-  void LowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
+  void lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
                              ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
     // Implement a naive Ripple-carry full adder.
@@ -417,7 +417,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       if (carry)
         xorOperands.push_back(carry);
 
-      // sum[i] = xor(carry[i-1], a[i], b[i])3
+      // sum[i] = xor(carry[i-1], a[i], b[i])
       // NOTE: The result is stored in reverse order.
       results[width - i - 1] =
           rewriter.create<comb::XorOp>(op.getLoc(), xorOperands, true);
@@ -451,7 +451,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   // Implement a parallel prefix adder - with Kogge-Stone or Brent-Kung trees
   // Will introduce unused signals for the carry bits but these will be removed
   // by the AIG pass.
-  void LowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
+  void lowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
                                 ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
 
@@ -459,6 +459,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     auto bBits = extractBits(rewriter, inputs[1]);
     // Construct propagate (p) and generate (g) signals
     SmallVector<Value> p, g;
+    p.reserve(width);
+    g.reserve(width);
 
     for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
       // p_i = a_i XOR b_i
@@ -467,26 +469,25 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       g.push_back(rewriter.create<comb::AndOp>(op.getLoc(), aBit, bBit));
     }
 
-    LLVM_DEBUG(llvm::dbgs()
-               << "Lower comb.add to Parallel-Prefix of width " << width << "\n"
-               << "--------------------------------------- Init\n");
+    LLVM_DEBUG({
+      llvm::dbgs() << "Lower comb.add to Parallel-Prefix of width " << width
+                   << "\n--------------------------------------- Init\n";
 
-    for (int64_t i = 0; i < width; ++i) {
-      // p_i = a_i XOR b_i
-      LLVM_DEBUG(llvm::dbgs()
-                 << "P0" << i << " = A" << i << " XOR B" << i << "\n");
-      // g_i = a_i AND b_i
-      LLVM_DEBUG(llvm::dbgs()
-                 << "G0" << i << " = A" << i << " AND B" << i << "\n");
-    }
+      for (int64_t i = 0; i < width; ++i) {
+        // p_i = a_i XOR b_i
+        llvm::dbgs() << "P0" << i << " = A" << i << " XOR B" << i << "\n";
+        // g_i = a_i AND b_i
+        llvm::dbgs() << "G0" << i << " = A" << i << " AND B" << i << "\n";
+      }
+    });
 
     // Create copies of p and g for the prefix computation
     SmallVector<Value> pPrefix = p;
     SmallVector<Value> gPrefix = g;
     if (width < 32)
-      LowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
     else
-      LowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
 
     // Generate result sum bits
     // NOTE: The result is stored in reverse order.
@@ -503,18 +504,18 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
     rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
 
-    LLVM_DEBUG(llvm::dbgs()
-               << "--------------------------------------- Completion\n");
-    LLVM_DEBUG(llvm::dbgs() << "RES0 = P0\n");
-    for (int64_t i = 1; i < width; ++i)
-      LLVM_DEBUG(llvm::dbgs()
-                 << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n");
+    LLVM_DEBUG({
+      llvm::dbgs() << "--------------------------------------- Completion\n"
+                   << "RES0 = P0\n";
+      for (int64_t i = 1; i < width; ++i)
+        llvm::dbgs() << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n";
+    });
   }
 
   // Implement the Kogge-Stone parallel prefix tree
   // Described in https://en.wikipedia.org/wiki/Kogge%E2%80%93Stone_adder
   // Slightly better delay than Brent-Kung, but more area.
-  void LowerKoggeStonePrefixTree(comb::AddOp op, ValueRange inputs,
+  void lowerKoggeStonePrefixTree(comb::AddOp op, ValueRange inputs,
                                  ConversionPatternRewriter &rewriter,
                                  SmallVector<Value> &pPrefix,
                                  SmallVector<Value> &gPrefix) const {
@@ -535,31 +536,32 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
             rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
       }
     }
+    LLVM_DEBUG({
+      int64_t stage = 0;
+      for (int64_t stride = 1; stride < width; stride *= 2) {
+        llvm::dbgs()
+            << "--------------------------------------- Kogge-Stone Stage "
+            << stage << "\n";
+        for (int64_t i = stride; i < width; ++i) {
+          int64_t j = i - stride;
+          // Group generate: g_i OR (p_i AND g_j)
+          llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
+                       << " OR (P" << i << stage << " AND G" << j << stage
+                       << ")\n";
 
-    int64_t stage = 0;
-    for (int64_t stride = 1; stride < width; stride *= 2) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "--------------------------------------- Kogge-Stone Stage "
-                 << stage << "\n");
-      for (int64_t i = stride; i < width; ++i) {
-        int64_t j = i - stride;
-        // Group generate: g_i OR (p_i AND g_j)
-        LLVM_DEBUG(llvm::dbgs()
-                   << "G" << i << stage + 1 << " = G" << i << stage << " OR (P"
-                   << i << stage << " AND G" << j << stage << ")\n");
-
-        // Group propagate: p_i AND p_j
-        LLVM_DEBUG(llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
-                                << " AND P" << j << stage << "\n");
+          // Group propagate: p_i AND p_j
+          llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                       << " AND P" << j << stage << "\n";
+        }
+        ++stage;
       }
-      stage++;
-    }
+    });
   }
 
   // Implement the Brent-Kung parallel prefix tree
   // Described in https://en.wikipedia.org/wiki/Brent%E2%80%93Kung_adder
   // Slightly worse delay than Kogge-Stone, but less area.
-  void LowerBrentKungPrefixTree(comb::AddOp op, ValueRange inputs,
+  void lowerBrentKungPrefixTree(comb::AddOp op, ValueRange inputs,
                                 ConversionPatternRewriter &rewriter,
                                 SmallVector<Value> &pPrefix,
                                 SmallVector<Value> &gPrefix) const {
@@ -600,46 +602,47 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       }
     }
 
-    int64_t stage = 0;
-    for (stride = 1; stride < width; stride *= 2) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "--------------------------------------- Brent-Kung FW "
-                 << stage << " : Stride " << stride << "\n");
-      for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
-        int64_t j = i - stride;
+    LLVM_DEBUG({
+      int64_t stage = 0;
+      for (stride = 1; stride < width; stride *= 2) {
+        llvm::dbgs() << "--------------------------------------- Brent-Kung FW "
+                     << stage << " : Stride " << stride << "\n";
+        for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
+          int64_t j = i - stride;
 
-        // Group generate: g_i OR (p_i AND g_j)
-        LLVM_DEBUG(llvm::dbgs()
-                   << "G" << i << stage + 1 << " = G" << i << stage << " OR (P"
-                   << i << stage << " AND G" << j << stage << ")\n");
+          // Group generate: g_i OR (p_i AND g_j)
+          llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
+                       << " OR (P" << i << stage << " AND G" << j << stage
+                       << ")\n";
 
-        // Group propagate: p_i AND p_j
-        LLVM_DEBUG(llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
-                                << " AND P" << j << stage << "\n");
+          // Group propagate: p_i AND p_j
+          llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                       << " AND P" << j << stage << "\n";
+        }
+        ++stage;
       }
-      stage++;
-    }
 
-    for (; stride > 0; stride /= 2) {
-      if (stride * 3 - 1 < width)
-        LLVM_DEBUG(llvm::dbgs()
-                   << "--------------------------------------- Brent-Kung BW "
-                   << stage << " : Stride " << stride << "\n");
+      for (; stride > 0; stride /= 2) {
+        if (stride * 3 - 1 < width)
+          llvm::dbgs()
+              << "--------------------------------------- Brent-Kung BW "
+              << stage << " : Stride " << stride << "\n";
 
-      for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
-        int64_t j = i - stride;
+        for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
+          int64_t j = i - stride;
 
-        // Group generate: g_i OR (p_i AND g_j)
-        LLVM_DEBUG(llvm::dbgs()
-                   << "G" << i << stage + 1 << " = G" << i << stage << " OR (P"
-                   << i << stage << " AND G" << j << stage << ")\n");
+          // Group generate: g_i OR (p_i AND g_j)
+          llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
+                       << " OR (P" << i << stage << " AND G" << j << stage
+                       << ")\n";
 
-        // Group propagate: p_i AND p_j
-        LLVM_DEBUG(llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
-                                << " AND P" << j << stage << "\n");
+          // Group propagate: p_i AND p_j
+          llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                       << " AND P" << j << stage << "\n";
+        }
+        --stage;
       }
-      stage--;
-    }
+    });
   }
 };
 

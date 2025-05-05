@@ -29,6 +29,24 @@ hw.module @add(in %lhs: i2, in %rhs: i2, out out: i2) {
   hw.output %0 : i2
 }
 
+// CHECK-LABEL: @add_17
+hw.module @add_17(in %lhs: i17, in %rhs: i17, out out: i17) {
+  %0 = comb.add %lhs, %rhs : i17
+  hw.output %0 : i17
+}
+
+// CHECK-LABEL: @add_35
+hw.module @add_35(in %lhs: i35, in %rhs: i35, out out: i35) {
+  %0 = comb.add %lhs, %rhs : i35
+  hw.output %0 : i35
+}
+
+// CHECK-LABEL: @add_64
+hw.module @add_64(in %lhs: i64, in %rhs: i64, out out: i64) {
+  %0 = comb.add %lhs, %rhs : i64
+  hw.output %0 : i64
+}
+
 // CHECK-LABEL: @sub
 // ALLOW_ADD-LABEL: @sub
 // ALLOW_ADD-NEXT: %[[NOT_RHS:.+]] = aig.and_inv not %rhs
