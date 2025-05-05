@@ -329,23 +329,52 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   StringRef circuitName = circuitOp.getName();
   hw::InnerSymbolNamespace ns(moduleOp);
 
-  // A cache of nodes we've created for values which are captured, but cannot
-  // have a symbol attached to them.  This is done to avoid creating the same
-  // node multiple times.
-  DenseMap<Value, NodeOp> nodeCache;
+  // A cache of values to nameable ops that can be used
+  DenseMap<Value, Operation *> nameableCache;
 
-  // Get or create a node within this module.  This is used when we need to
-  // create an XMRDerefOp to an expression.
-  auto getOrCreateNodeOp = [&](Value operand, ImplicitLocOpBuilder &builder,
-                               StringRef nameHint) -> NodeOp {
-    auto it = nodeCache.find(operand);
-    if (it != nodeCache.end())
+  // Get or create a nameable op (a node) for some value.  If value is a result
+  // of an operation that can support a name, then use that, except for
+  // instances and memories.  If the operation can't support a name, but
+  // provides a name hint, then use that.
+  auto getOrCreateNameableOp =
+      [&](Value operand, ImplicitLocOpBuilder &builder) -> Operation * {
+    // Use the cache hit.
+    auto it = nameableCache.find(operand);
+    if (it != nameableCache.end())
       return it->getSecond();
+
+    // This _is_ a nameable op with a simple result.  Put that in the cache and
+    // use it.  For more complex operations, e.g., instances, do not do this.
+    // If we supported inner symbols on instance ports, then we could avoid
+    // needing to create a node.
+    auto *definingOp = operand.getDefiningOp();
+    if (isa_and_present<NodeOp, RegOp, RegResetOp, WireOp>(definingOp)) {
+      nameableCache.insert({operand, definingOp});
+      return definingOp;
+    }
+
+    // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfter(operand.getDefiningOp());
-    return nodeCache
-        .insert({operand,
-                 builder.create<NodeOp>(operand.getLoc(), operand, nameHint)})
+    SmallString<16> nameHint;
+    // Try to generate a "good" name hint to use for the node.
+    if (auto *definingOp = operand.getDefiningOp()) {
+      if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
+        nameHint.append(instanceOp.getName());
+        nameHint.push_back('_');
+        nameHint.append(
+            instanceOp.getPortName(cast<OpResult>(operand).getResultNumber()));
+      } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
+        nameHint.append(opName);
+      }
+      if (!nameHint.empty())
+        nameHint.append("_probe");
+    }
+    return nameableCache
+        .insert({operand, builder.create<NodeOp>(operand.getLoc(), operand,
+                                                 nameHint.empty()
+                                                     ? "_layer_probe"
+                                                     : StringRef(nameHint))})
         .first->getSecond();
   };
 
@@ -414,7 +443,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         // expressions or instance ports.
         //
         // [1]: https://github.com/llvm/circt/issues/8426
-        definingOp = getOrCreateNodeOp(value, localBuilder, "_layer_probe");
+        definingOp = getOrCreateNameableOp(value, localBuilder);
         innerRef = getInnerRefTo(
             definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
       } else {
