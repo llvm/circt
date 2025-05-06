@@ -333,8 +333,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   DenseMap<Value, Operation *> nameableCache;
 
   // Get or create a node op for a value captured by a layer block.
-  auto getOrCreateNodeOp =
-      [&](Value operand, ImplicitLocOpBuilder &builder) -> Operation * {
+  auto getOrCreateNodeOp = [&](Value operand,
+                               ImplicitLocOpBuilder &builder) -> Operation * {
     // Use the cache hit.
     auto it = nameableCache.find(operand);
     if (it != nameableCache.end())
