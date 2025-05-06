@@ -43,12 +43,15 @@ def CompressOp : DatapathOp<"compress", [Pure]> {
   let hasVerifier = 1;
   // let hasCanonicalizeMethod = true;
 
-  // let builders = [
-  //   OpBuilder<(ins "Value":$lhs, "int32_t":$lowBit, "int32_t":$bitWidth), [{
-  //     auto resultType = $_builder.getIntegerType(bitWidth);
-  //     return build($_builder, $_state, resultType, lhs, lowBit);
-  //   }]>
-  // ];
+  let builders = [
+    OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
+      auto inputType = lhs.front().getType();
+      SmallVector<Type> resultTypes(targetRows, inputType);
+      // for (auto i=0; i< targetRows; ++i) 
+      //   resultTypes.push_back(inputType);
+      return build($_builder, $_state, resultTypes, lhs, targetRows);
+    }]>
+  ];
 }
 
 #endif // CIRCT_DIALECT_DATAPATH_OPS_TD
