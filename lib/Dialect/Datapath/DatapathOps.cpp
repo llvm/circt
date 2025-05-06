@@ -20,10 +20,16 @@ using namespace datapath;
 //===----------------------------------------------------------------------===//
 
 LogicalResult CompressOp::verify() {
-  // The source must be equal or smaller than the dest type, and an even
-  // multiple of it.  Both are already known to be signless integers.
-  if (getOperands().empty())
-    return emitOpError("requires 1 or more args");
+  // The compressor must reduce the number of operands by at least 1 otherwise 
+  // it fails to perform any reduction.
+  if (getNumOperands() < 3)
+    return emitOpError("Requires 3 or more arguments - otherwise use add");
+
+  if (getNumResults() >= getNumOperands())
+    return emitOpError("Must reduce the number of operands by at least 1");
+
+  if (getNumResults() < 2)
+    return emitOpError("Must produce at least 2 results");
   
   return success();
 }
