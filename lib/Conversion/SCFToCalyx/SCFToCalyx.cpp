@@ -2693,10 +2693,10 @@ public:
     // will only be established later in the conversion process, so ensure
     // that rewriter optimizations (especially DCE) are disabled.
     GreedyRewriteConfig config;
-    config.enableRegionSimplification =
-        mlir::GreedySimplifyRegionLevel::Disabled;
+    config.setRegionSimplificationLevel(
+        mlir::GreedySimplifyRegionLevel::Disabled);
     if (runOnce)
-      config.maxIterations = 1;
+      config.setMaxIterations(1);
 
     /// Can't return applyPatternsGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,
