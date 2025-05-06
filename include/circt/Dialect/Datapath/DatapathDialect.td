@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_DATAPATH_DIALECT_TD
-#define CIRCT_DIALECT_DATAPATH_DIALECT_TD
+#ifndef CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_TD
+#define CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_TD
 
 include "mlir/IR/OpBase.td"
 
@@ -28,4 +28,6 @@ def DatapathDialect : Dialect {
   let cppNamespace = "::circt::datapath";
 }
 
-#endif // CIRCT_DIALECT_DATAPATH_DIALECT_TD
+include "circt/Dialect/HW/HWTypes.td"
+
+#endif // CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_TD

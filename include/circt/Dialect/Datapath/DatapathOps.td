@@ -17,6 +17,10 @@ include "circt/Dialect/Datapath/DatapathDialect.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
+include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.
 class DatapathOp<string mnemonic, list<Trait> traits = []> :
@@ -29,21 +33,22 @@ def CompressOp : DatapathOp<"compress", [Pure]> {
                 "to be added to targetRows output bitvectors.";
 
   let arguments = (ins Variadic<HWIntegerType>:$inputs, I32Attr:$targetRows);
-  let results = (outs Variadic<HWIntegerType>:$result);
+  let results   = (outs Variadic<HWIntegerType>:$results);
 
   let assemblyFormat =
-    "$inputs `to` $targetRows attr-dict `:` type($inputs)";
+    // "$inputs `to` $targetRows attr-dict `:` qualified(type($inputs))";
+    "$inputs `to` $targetRows attr-dict `:` functional-type($inputs, $results)";
 
-  let hasFolder = true;
+  // let hasFolder = true;
   let hasVerifier = 1;
-  let hasCanonicalizeMethod = true;
+  // let hasCanonicalizeMethod = true;
 
-  let builders = [
-    OpBuilder<(ins "Value":$lhs, "int32_t":$lowBit, "int32_t":$bitWidth), [{
-      auto resultType = $_builder.getIntegerType(bitWidth);
-      return build($_builder, $_state, resultType, lhs, lowBit);
-    }]>
-  ];
+  // let builders = [
+  //   OpBuilder<(ins "Value":$lhs, "int32_t":$lowBit, "int32_t":$bitWidth), [{
+  //     auto resultType = $_builder.getIntegerType(bitWidth);
+  //     return build($_builder, $_state, resultType, lhs, lowBit);
+  //   }]>
+  // ];
 }
 
 #endif // CIRCT_DIALECT_DATAPATH_OPS_TD

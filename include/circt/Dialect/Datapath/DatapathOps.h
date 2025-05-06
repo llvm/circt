@@ -9,6 +9,12 @@
 #ifndef CIRCT_DIALECT_DATAPATH_DATAPATHOPS_H
 #define CIRCT_DIALECT_DATAPATH_DATAPATHOPS_H
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/IR/OpImplementation.h"
+
+#include "circt/Dialect/Datapath/DatapathDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Datapath/Datapath.h.inc"
 
