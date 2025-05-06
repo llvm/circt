@@ -332,26 +332,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   // A cache of values to nameable ops that can be used
   DenseMap<Value, Operation *> nameableCache;
 
-  // Get or create a nameable op (a node) for some value.  If value is a result
-  // of an operation that can support a name, then use that, except for
-  // instances and memories.  If the operation can't support a name, but
-  // provides a name hint, then use that.
-  auto getOrCreateNameableOp =
+  // Get or create a node op for a value captured by a layer block.
+  auto getOrCreateNodeOp =
       [&](Value operand, ImplicitLocOpBuilder &builder) -> Operation * {
     // Use the cache hit.
     auto it = nameableCache.find(operand);
     if (it != nameableCache.end())
       return it->getSecond();
-
-    // This _is_ a nameable op with a simple result.  Put that in the cache and
-    // use it.  For more complex operations, e.g., instances, do not do this.
-    // If we supported inner symbols on instance ports, then we could avoid
-    // needing to create a node.
-    auto *definingOp = operand.getDefiningOp();
-    if (isa_and_present<NodeOp, RegOp, RegResetOp, WireOp>(definingOp)) {
-      nameableCache.insert({operand, definingOp});
-      return definingOp;
-    }
 
     // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
@@ -367,8 +354,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
         nameHint.append(opName);
       }
-      if (!nameHint.empty())
-        nameHint.append("_probe");
     }
     return nameableCache
         .insert({operand, builder.create<NodeOp>(operand.getLoc(), operand,
@@ -433,17 +418,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       auto *definingOp = value.getDefiningOp();
       hw::InnerRefAttr innerRef;
       if (definingOp) {
-        // TODO: Always create a node.  This is a trade-off between
-        // optimizations and dead code.  By adding the node, this allows the
-        // original path to be better optimized, but will leave dead code in the
-        // design.  If the node is not created, then the output is less
-        // optimized.  Err on the side of dead code.  This _should_ be able to
-        // be removed eventually [1].  A node should only be necessary for
-        // operations which cannot have a symbol attached to them, i.e.,
-        // expressions or instance ports.
-        //
-        // [1]: https://github.com/llvm/circt/issues/8426
-        definingOp = getOrCreateNameableOp(value, localBuilder);
+        // Always create a node.  This is a trade-off between optimizations and
+        // dead code.  By adding the node, this allows the original path to be
+        // better optimized, but will leave dead code in the design.  If the
+        // node is not created, then the output is less optimized.  Err on the
+        // side of dead code.  This dead node _may_ be eventually inlined by
+        // `ExportVerilog`.  However, this is not guaranteed.
+        definingOp = getOrCreateNodeOp(value, localBuilder);
         innerRef = getInnerRefTo(
             definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
       } else {
