@@ -131,7 +131,8 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4
 //CHECK:             sv.for %i = %c0_i4 to %c-6_i4 step %c1_i4 : i4 {
 //CHECK:               sv.for %j = %c0_i6 to %c-32_i6 step %c-32_i6_2 : i6 {
 //CHECK:                 %RANDOM = sv.macro.ref.expr.se @RANDOM
-//CHECK:                 %[[PART_SELECT:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%j : 32] : !hw.inout<i32>, i6
+//CHECK:                 %[[TRUNCATE_J:.+]] = comb.extract %j from 0 : (i6) -> i4
+//CHECK:                 %[[PART_SELECT:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%[[TRUNCATE_J]] : 32] : !hw.inout<i32>, i4
 //CHECK:                 sv.bpassign %[[PART_SELECT]], %RANDOM : i32
 //CHECK:               }
 //CHECK:               %[[MEM_INDEX:.+]] = sv.array_index_inout %Memory[%i] : !hw.inout<uarray<10xi16>>, i4
@@ -445,3 +446,65 @@ hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(in %rw_addr: i4, 
 // CHECK: [[TMP:%.+]] = comb.and [[WRITE_WMODE_3R]], %true
 // CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[TMP]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
+
+emit.fragment @Fragment {}
+hw.module.generated @TestFragment, @FIRRTLMem(
+  in %ro_addr_0: i4,
+  in %ro_en_0: i1,
+  in %ro_clock_0: i1,
+  out ro_data_0: i16
+) attributes {
+  depth = 10 : i64,
+  numReadPorts = 1 : ui32,
+  numReadWritePorts = 0 : ui32,
+  numWritePorts = 0 : ui32,
+  readLatency = 0 : ui32,
+  readUnderWrite = 0 : i32,
+  width = 16 : ui32,
+  writeClockIDs = [],
+  writeLatency = 1 : ui32,
+  writeUnderWrite = 0 : i32,
+  initFilename = "",
+  initIsBinary = false,
+  initIsInline = false,
+  emit.fragments = [@Fragment]
+}
+
+// CHECK-LABEL: hw.module private @TestFragment
+// CHECK-SAME:    emit.fragments = [@Fragment]
+
+// Test an i1 memory.
+ hw.module.generated @ram_2x1, @FIRRTLMem(
+  in %R0_addr : i1,
+  in %R0_en : i1,
+  in %R0_clk : i1,
+  out R0_data : i1,
+  in %W0_addr : i1,
+  in %W0_en : i1,
+  in %W0_clk : i1,
+  in %W0_data : i1
+  ) attributes {
+  depth = 2 : i64,
+  initFilename = "",
+  initIsBinary = false,
+  initIsInline = false,
+  maskGran = 1 : ui32,
+  numReadPorts = 1 : ui32,
+  numReadWritePorts = 0 : ui32,
+  numWritePorts = 1 : ui32,
+  readLatency = 0 : ui32,
+  readUnderWrite = 0 : i32,
+  width = 1 : ui32,
+  writeClockIDs = [0 : i32],
+  writeLatency = 1 : ui32,
+  writeUnderWrite = 1 : i32}
+
+// CHECK-LABEL: hw.module private @ram_2x1
+// CHECK:        %[[c0_i6:.+]] = hw.constant 0 : i6
+// CHECK-NEXT:   %[[c_32_i6:.+]] = hw.constant -32 : i6
+// CHECK-NEXT:   %[[c_32_i6_0:.+]] = hw.constant -32 : i6
+// CHECK-NEXT:   sv.for %[[J:.+]] = %[[c0_i6]] to %[[c_32_i6]] step %[[c_32_i6_0]] : i6 {
+// CHECK-NEXT:     %[[RANDOM:.+]] = sv.macro.ref.expr.se @RANDOM() : () -> i32
+// CHECK-NEXT:     %false = hw.constant false
+// CHECK-NEXT:     %[[V7:.+]] = sv.indexed_part_select_inout %_RANDOM_MEM[%false : 32] : !hw.inout<i32>, i1
+// CHECK-NEXT:     sv.bpassign %[[V7]], %RANDOM : i32

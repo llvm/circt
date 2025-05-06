@@ -27,6 +27,11 @@ def RTGTestDialect : Dialect {
 
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
+
+  let hasConstantMaterializer = 1;
+
+  let dependentDialects = ["::circt::rtg::RTGDialect"];
+
   let cppNamespace = "::circt::rtgtest";
 
   let extraClassDeclaration = [{

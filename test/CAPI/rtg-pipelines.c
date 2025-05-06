@@ -18,11 +18,12 @@ int main(int argc, char **argv) {
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__rtg__(), ctx);
 
   MlirModule moduleOp = mlirModuleCreateParse(
-      ctx, mlirStringRefCreateFromCString("rtg.sequence @seq {\n"
-                                          "}\n"
-                                          "rtg.test @test : !rtg.dict<> {\n"
-                                          "  %0 = rtg.sequence_closure @seq\n"
-                                          "}\n"));
+      ctx, mlirStringRefCreateFromCString(
+               "rtg.sequence @seq() {\n"
+               "}\n"
+               "rtg.test @test() {\n"
+               "  %0 = rtg.get_sequence @seq : !rtg.sequence\n"
+               "}\n"));
   if (mlirModuleIsNull(moduleOp)) {
     printf("ERROR: Could not parse.\n");
     mlirContextDestroy(ctx);

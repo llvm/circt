@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-roundtrip %s | FileCheck %s
 
 // CHECK-LABEL: @basic
 // CHECK-SAME: (in [[IN0:%.+]] : i32, out out0 : i32)
@@ -6,13 +6,6 @@ hw.module @basic(in %in0 : i32, out out0 : i32) {
   // CHECK: %{{.*}} = llhd.delay [[IN0]] by <0ns, 1d, 0e> : i32
   %0 = llhd.delay %in0 by <0ns, 1d, 0e> : i32
   hw.output %0 : i32
-}
-
-// CHECK-LABEL: @connect_ports
-// CHECK-SAME: (inout %[[IN:.+]] : [[TYPE:.+]], inout %[[OUT:.+]] : [[TYPE]])
-// CHECK-NEXT: llhd.con %[[IN]], %[[OUT]] : !hw.inout<[[TYPE]]>
-hw.module @connect_ports(inout %in: i32, inout %out: i32) {
-  llhd.con %in, %out : !hw.inout<i32>
 }
 
 // CHECK-LABEL: @sigExtract
@@ -166,8 +159,8 @@ hw.module @check_wait_1 () {
   llhd.process {
     // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
     %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait for %[[TIME]], ^[[BB:.*]](%[[TIME]] : !llhd.time)
-    llhd.wait for %time, ^bb1(%time: !llhd.time)
+    // CHECK-NEXT: llhd.wait delay %[[TIME]], ^[[BB:.*]](%[[TIME]] : !llhd.time)
+    llhd.wait delay %time, ^bb1(%time: !llhd.time)
     // CHECK-NEXT: ^[[BB]](%[[T:.*]]: !llhd.time):
   ^bb1(%t: !llhd.time):
     llhd.halt
@@ -200,8 +193,8 @@ hw.module @check_wait_3 (inout %arg0 : i64, inout %arg1 : i1) {
   llhd.process {
     // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
     %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait for %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
-    llhd.wait for %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
+    // CHECK-NEXT: llhd.wait delay %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
+    llhd.wait delay %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
     // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>, %[[B:.*]]: !hw.inout<i64>):
   ^bb1(%a: !hw.inout<i1>, %b: !hw.inout<i64>):
     llhd.halt
@@ -215,5 +208,13 @@ hw.module @FinalProcess () {
   // CHECK-NEXT: }
   llhd.final {
     llhd.halt
+  }
+}
+
+hw.module @ProcessWithResults(in %arg0: i42, in %arg1: i9001) {
+  %0:2 = llhd.process -> i42, i9001 {
+    llhd.wait yield (%arg0, %arg1 : i42, i9001), ^bb1
+  ^bb1:
+    llhd.halt %arg0, %arg1 : i42, i9001
   }
 }

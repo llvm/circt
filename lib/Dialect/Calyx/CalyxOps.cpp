@@ -1213,12 +1213,29 @@ FloatingPointStandard CompareFOpIEEE754::getFloatingPointStandard() {
   return FloatingPointStandard::IEEE754;
 }
 
+FloatingPointStandard FpToIntOpIEEE754::getFloatingPointStandard() {
+  return FloatingPointStandard::IEEE754;
+}
+
+FloatingPointStandard IntToFpOpIEEE754::getFloatingPointStandard() {
+  return FloatingPointStandard::IEEE754;
+}
+
+FloatingPointStandard DivSqrtOpIEEE754::getFloatingPointStandard() {
+  return FloatingPointStandard::IEEE754;
+}
+
 std::string AddFOpIEEE754::getCalyxLibraryName() { return "std_addFN"; }
 
 std::string MulFOpIEEE754::getCalyxLibraryName() { return "std_mulFN"; }
 
 std::string CompareFOpIEEE754::getCalyxLibraryName() { return "std_compareFN"; }
 
+std::string FpToIntOpIEEE754::getCalyxLibraryName() { return "std_fpToInt"; }
+
+std::string IntToFpOpIEEE754::getCalyxLibraryName() { return "std_intToFp"; }
+
+std::string DivSqrtOpIEEE754::getCalyxLibraryName() { return "std_divSqrtFN"; }
 //===----------------------------------------------------------------------===//
 // GroupInterface
 //===----------------------------------------------------------------------===//

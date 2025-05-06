@@ -13,6 +13,7 @@
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/SymbolTable.h"
@@ -39,7 +40,9 @@ using SymMappingTy =
     llvm::DenseMap<std::pair<ModuleOp, StringAttr>, StringAttr>;
 
 struct ModuleInfo {
-  ModuleInfo(mlir::ModuleOp module) : module(module) {}
+  ModuleInfo(mlir::ModuleOp module) : module(module) {
+    block = std::make_unique<Block>();
+  }
 
   // Populate `symbolToClasses`.
   LogicalResult initialize();
@@ -52,6 +55,9 @@ struct ModuleInfo {
 
   // A target module.
   ModuleOp module;
+
+  // A block to store original operations.
+  std::unique_ptr<Block> block;
 };
 
 struct LinkModulesPass
@@ -65,8 +71,10 @@ LogicalResult ModuleInfo::initialize() {
   for (auto &op : llvm::make_early_inc_range(module.getOps())) {
     if (auto classLike = dyn_cast<ClassLike>(op))
       symbolToClasses.insert({classLike.getSymNameAttr(), classLike});
-    else
-      op.erase();
+    else {
+      // Keep the op.
+      op.moveBefore(block.get(), block->end());
+    }
   }
   return success();
 }
@@ -293,11 +301,13 @@ void LinkModulesPass::runOnOperation() {
 
   // Finally move operations to the toplevel module.
   auto *block = toplevelModule.getBody();
-  for (auto info : modules) {
+  for (auto &info : modules) {
     block->getOperations().splice(block->end(),
                                   info.module.getBody()->getOperations());
-    // Erase the module.
-    info.module.erase();
+    // Restore non-OM operations.
+    assert(info.module.getBody()->empty());
+    info.module.getBody()->getOperations().splice(
+        info.module.getBody()->begin(), info.block->getOperations());
   }
 }
 

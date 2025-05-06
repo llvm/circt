@@ -47,8 +47,8 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
   }
   // CHECK: emit.file "ClockGates.txt" {
   // CHECK-NEXT:          sv.verbatim
-  // CHECK-SAME{LITERAL}:   clock_gate_1 -> {{0}}.{{1}}.{{2}}\0A
-  // CHECK-SAME{LITERAL}:   clock_gate_0 -> {{0}}.{{1}}.{{3}}\0A
+  // CHECK-SAME{LITERAL}:   clock_gate_1 -> {{0}}.{{1}}.{{2}}.gate\0A
+  // CHECK-SAME{LITERAL}:   clock_gate_0 -> {{0}}.{{1}}.{{3}}.gate\0A
   // CHECK-SAME:            symbols = [
   // CHECK-SAME:              @DUTModule
   // CHECK-SAME:              #hw.innerNameRef<@DUTModule::[[INJMOD_SYM]]>

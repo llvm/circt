@@ -193,19 +193,6 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
   ContainerHWModSymbolMap &modSymMap;
 };
 
-struct ThisOpConversionPattern : public OpConversionPattern<ThisOp> {
-  ThisOpConversionPattern(MLIRContext *ctx)
-      : OpConversionPattern<ThisOp>(ctx) {}
-
-  LogicalResult
-  matchAndRewrite(ThisOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // TODO: remove this op from the dialect - not needed anymore.
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
 struct ContainerInstanceOpConversionPattern
     : public OpConversionPattern<ContainerInstanceOp> {
 
@@ -369,7 +356,7 @@ void ContainersToHWPass::runOnOperation() {
   modSymCache.addDefinitions(getOperation());
   Namespace modNamespace;
   modNamespace.add(modSymCache);
-  target.addIllegalOp<ContainerOp, ContainerInstanceOp, ThisOp>();
+  target.addIllegalOp<ContainerOp, ContainerInstanceOp>();
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
   // Remove the name of the kanagawa.design's from the namespace - The
@@ -390,7 +377,6 @@ void ContainersToHWPass::runOnOperation() {
   patterns.add<ContainerOpConversionPattern>(ctx, modNamespace, portOrder,
                                              modSymMap);
   patterns.add<ContainerInstanceOpConversionPattern>(ctx, portOrder, modSymMap);
-  patterns.add<ThisOpConversionPattern>(ctx);
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))

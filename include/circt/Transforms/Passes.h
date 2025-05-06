@@ -36,6 +36,9 @@ enum class OpCountEmissionFormat {
 
 #include "circt/Transforms/Passes.h.inc"
 
+void populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
+                                 TypeConverter &typeConverter);
+
 std::unique_ptr<mlir::Pass> createMapArithToCombPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefPass();
 std::unique_ptr<mlir::Pass> createFlattenMemRefCallsPass();
@@ -44,10 +47,14 @@ std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
 std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
 std::unique_ptr<mlir::Pass> createPrintOpCountPass();
-std::unique_ptr<mlir::Pass> createMemoryBankingPass(
-    std::optional<unsigned> bankingFactor = std::nullopt,
-    std::optional<unsigned> bankingDimension = std::nullopt);
+std::unique_ptr<mlir::Pass>
+createMemoryBankingPass(ArrayRef<unsigned> bankingFactors = {},
+                        ArrayRef<unsigned> bankingDimensions = {});
 std::unique_ptr<mlir::Pass> createIndexSwitchToIfPass();
+std::unique_ptr<mlir::Pass> createHierarchicalRunner(
+    const std::string &topName,
+    llvm::function_ref<void(mlir::OpPassManager &)> pipeline,
+    bool includeBoundInstances = false);
 
 //===----------------------------------------------------------------------===//
 // Utility functions.

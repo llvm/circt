@@ -41,13 +41,13 @@
 #ifdef CIRCT_INCLUDE_TESTS
 #include "circt/Dialect/RTGTest/IR/RTGTestDialect.h"
 #endif
-#include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "mlir/Dialect/SMT/IR/SMTDialect.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
@@ -85,7 +85,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
 #endif
     seq::SeqDialect,
     sim::SimDialect,
-    smt::SMTDialect,
+    mlir::smt::SMTDialect,
     ssp::SSPDialect,
     sv::SVDialect,
     systemc::SystemCDialect,

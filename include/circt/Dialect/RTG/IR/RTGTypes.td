@@ -16,30 +16,49 @@
 include "circt/Dialect/RTG/IR/RTGDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
-class RTGTypeDef<string name> : TypeDef<RTGDialect, name>;
+class RTGTypeDef<string name, list<Trait> traits = []>
+  : TypeDef<RTGDialect, name, traits>;
+
+//===----------------------------------------------------------------------===//
+// Sequence Types
+//===----------------------------------------------------------------------===//
 
 def SequenceType : RTGTypeDef<"Sequence"> {
-  let summary = "handle to a sequence closure";
+  let summary = "handle to a sequence or sequence family";
   let description = [{
-    An SSA value of this type refers to an `rtg.sequence` operation and the
-    argument values it should be invoked with (if it has any).
+    An SSA value of this type refers to a sequence if the list of element types
+    is empty or a sequence family if there are elements left to be substituted.
   }];
+
+  let parameters = (ins OptionalArrayRefParameter<
+                          "mlir::Type", "element types">:$elementTypes);
 
   let mnemonic = "sequence";
-  let assemblyFormat = "";
+  let assemblyFormat = "(`<` $elementTypes^ `>`)?";
 }
 
-def LabelType : RTGTypeDef<"Label"> {
-  let summary = "a reference to a label";
+def RandomizedSequenceType : RTGTypeDef<"RandomizedSequence"> {
+  let summary = "handle to a fully randomized sequence";
   let description = [{
-    This type represents a label. Payload dialects can add operations to cast
-    from this type to an immediate type they can use as an operand to an
-    instruction.
+    Sequences can contain operations to randomize their content in various ways.
+    A sequence of this type is guaranteed to not have any such operations
+    anymore (transitively).
   }];
 
-  let mnemonic = "label";
-  let assemblyFormat = "";
+  let mnemonic = "randomized_sequence";
 }
+
+def FullySubstitutedSequenceType : DialectType<RTGDialect,
+    CPred<"llvm::isa<rtg::SequenceType>($_self) && "
+          "llvm::cast<rtg::SequenceType>($_self).getElementTypes().empty()">,
+    "fully substituted sequence type", "::circt::rtg::SequenceType">,
+  BuildableType<
+    "::circt::rtg::SequenceType::get($_builder.getContext(), " #
+                                    "llvm::ArrayRef<::mlir::Type>{})">;
+
+//===----------------------------------------------------------------------===//
+// Types for common datastructures
+//===----------------------------------------------------------------------===//
 
 def SetType : RTGTypeDef<"Set"> {
   let summary = "a set of values";
@@ -100,5 +119,60 @@ def DictType : RTGTypeDef<"Dict"> {
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }
+
+def ArrayType : RTGTypeDef<"Array"> {
+  let summary = "an array type with dynamic size";
+  let description = [{
+    Represents an array type with dynamic size. The array contains elements of
+    the specified type only.
+  }];
+
+  let parameters = (ins "::mlir::Type":$elementType);
+
+  let mnemonic = "array";
+  let assemblyFormat = "`<` $elementType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "mlir::Type":$elementType),
+      "return $_get(elementType.getContext(), elementType);">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// Types for ISA targets
+//===----------------------------------------------------------------------===//
+
+class RTGISATypeDef<string name, list<Trait> traits = []>
+  : RTGTypeDef<name, traits> { let mnemonic = "isa." # !tolower(name); }
+
+
+def LabelType : RTGISATypeDef<"Label"> {
+  let summary = "a reference to a label";
+  let description = [{
+    This type represents a label. Payload dialects can add operations to cast
+    from this type to an immediate type they can use as an operand to an
+    instruction or allow an operand of this type directly.
+  }];
+
+  let assemblyFormat = "";
+}
+
+def ImmediateType : RTGISATypeDef<"Immediate"> {
+  let summary = "an ISA immediate";
+  let description = [{
+    This type represents immediates of arbitrary but fixed bit-width.
+    The RTG dialect provides this type to avoid duplication in ISA payload
+    dialects.
+  }];
+
+  let parameters = (ins "uint32_t":$width);
+  let assemblyFormat = "`<` $width `>`";
+}
+
+class ImmediateOfWidth<int width> : Type<
+  And<[CPred<"llvm::isa<::circt::rtg::ImmediateType>($_self)">,
+       CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " # width>]>,
+  "a " # width # "-bit immediate">,
+  BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " # width # ")">;
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

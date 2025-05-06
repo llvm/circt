@@ -318,7 +318,9 @@ bool firrtl::hasDontTouch(Value value) {
   if (auto *op = value.getDefiningOp())
     return hasDontTouch(op);
   auto arg = dyn_cast<BlockArgument>(value);
-  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  auto module = dyn_cast<FModuleOp>(arg.getOwner()->getParentOp());
+  if (!module)
+    return false;
   return (module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
@@ -2215,24 +2217,30 @@ LogicalResult LayerOp::verify() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-void InstanceOp::build(
-    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
-    StringRef moduleName, StringRef name, NameKindEnum nameKind,
-    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, StringAttr innerSym) {
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations,
+                       ArrayRef<Attribute> layers, bool lowerToBind,
+                       bool doNotPrint, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, annotations, portAnnotations, layers,
-        lowerToBind,
+        lowerToBind, doNotPrint,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
-void InstanceOp::build(
-    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
-    StringRef moduleName, StringRef name, NameKindEnum nameKind,
-    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations,
+                       ArrayRef<Attribute> layers, bool lowerToBind,
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.getOrAddProperties<Properties>().setModuleName(
       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -2247,6 +2255,9 @@ void InstanceOp::build(
       builder.getArrayAttr(layers));
   if (lowerToBind)
     result.getOrAddProperties<Properties>().setLowerToBind(
+        builder.getUnitAttr());
+  if (doNotPrint)
+    result.getOrAddProperties<Properties>().setDoNotPrint(
         builder.getUnitAttr());
   if (innerSym)
     result.getOrAddProperties<Properties>().setInnerSym(innerSym);
@@ -2270,7 +2281,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -2296,7 +2307,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym);
+      doNotPrint ? builder.getUnitAttr() : UnitAttr(), innerSym);
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
@@ -2304,7 +2315,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        StringRef name, NameKindEnum nameKind,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> layers, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
@@ -2319,7 +2330,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
                newPortDirections, newPortNames, annotations, newPortAnnotations,
-               layers, lowerToBind, innerSym);
+               layers, lowerToBind, doNotPrint, innerSym);
 }
 
 LogicalResult InstanceOp::verify() {
@@ -2363,7 +2374,8 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
   auto newOp = builder.create<InstanceOp>(
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLayers(), getLowerToBind(), getInnerSymAttr());
+      newPortAnnotations, getLayers(), getLowerToBind(), getDoNotPrint(),
+      getInnerSymAttr());
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
@@ -2436,7 +2448,8 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   return OpBuilder(*this).create<InstanceOp>(
       getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLayers(), getLowerToBind(), getInnerSymAttr());
+      newPortAnnos, getLayers(), getLowerToBind(), getDoNotPrint(),
+      getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -3393,14 +3406,80 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult
-FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
-  // The referenced symbol is restricted to FModuleOps
-  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleOp>(
-      *this, getModuleNameAttr());
-  if (!referencedModule)
-    return (*this)->emitOpError("invalid symbol reference");
+FormalOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
+  auto *op = symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (!op)
+    return emitOpError() << "targets unknown module " << getModuleNameAttr();
+
+  if (!isa<FModuleLike>(op)) {
+    auto d = emitOpError() << "target " << getModuleNameAttr()
+                           << " is not a module";
+    d.attachNote(op->getLoc()) << "target defined here";
+    return d;
+  }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimulationOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
+  auto *op = symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (!op)
+    return emitOpError() << "targets unknown module " << getModuleNameAttr();
+
+  auto complain = [&] {
+    auto d = emitOpError() << "target " << getModuleNameAttr() << " ";
+    d.attachNote(op->getLoc()) << "target defined here";
+    return d;
+  };
+
+  auto module = dyn_cast<FModuleLike>(op);
+  if (!module)
+    return complain() << "is not a module";
+
+  auto numPorts = module.getPortDirections().size();
+  if (numPorts != 4)
+    return complain() << "must have 4 ports, got " << numPorts << " instead";
+
+  auto checkPort = [&](unsigned idx, StringRef expName, Direction expDir,
+                       llvm::function_ref<bool(Type)> checkType,
+                       StringRef expType) {
+    auto name = module.getPortNameAttr(idx);
+    if (name != expName) {
+      complain() << "port " << idx << " must be called \"" << expName
+                 << "\", got " << name << " instead";
+      return false;
+    }
+    if (auto dir = module.getPortDirection(idx); dir != expDir) {
+      auto stringify = [](Direction dir) {
+        return dir == Direction::In ? "an input" : "an output";
+      };
+      complain() << "port " << name << " must be " << stringify(expDir)
+                 << ", got " << stringify(dir) << " instead";
+      return false;
+    }
+    if (auto type = module.getPortType(idx); !checkType(type)) {
+      complain() << "port " << name << " must be a '!firrtl." << expType
+                 << "', got " << type << " instead";
+      return false;
+    }
+    return true;
+  };
+
+  auto isClock = [](Type type) { return isa<ClockType>(type); };
+  auto isBool = [](Type type) {
+    if (auto uintType = dyn_cast<UIntType>(type))
+      return uintType.getWidth() == 1;
+    return false;
+  };
+  return success(checkPort(0, "clock", Direction::In, isClock, "clock") &&
+                 checkPort(1, "init", Direction::In, isBool, "uint<1>") &&
+                 checkPort(2, "done", Direction::Out, isBool, "uint<1>") &&
+                 checkPort(3, "success", Direction::Out, isBool, "uint<1>"));
 }
 
 //===----------------------------------------------------------------------===//
@@ -3427,6 +3506,16 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyProbeType(
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
+//===----------------------------------------------------------------------===//
+// ContractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContractOp::verify() {
+  if (getBody().getArgumentTypes() != getInputs().getType())
+    return emitOpError("result types and region argument types must match");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3518,9 +3607,11 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
   if (!isValidSrc(srcFlow)) {
-    // A sink that is a port output or instance input used as a source is okay.
+    // A sink that is a port output or instance input used as a source is okay,
+    // as long as it is not a property.
     auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+    if (isa<PropertyType>(src.getType()) ||
+        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
       auto srcRef = getFieldRefFromValue(src, /*lookThroughCasts=*/true);
       auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
@@ -5754,6 +5845,17 @@ static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
   printElideEmptyName(p, op, attr, {"formatString"});
 }
 
+static ParseResult parseFPrintfAttrs(OpAsmParser &p,
+                                     NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printFPrintfAttrs(OpAsmPrinter &p, Operation *op,
+                              DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr,
+                      {"formatString", "outputFile", "operandSegmentSizes"});
+}
+
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
   return parseElideEmptyName(p, resultAttrs);
 }
@@ -6286,6 +6388,156 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!layerOp) {
     return emitOpError("invalid symbol reference");
   }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Format Sring operations
+//===----------------------------------------------------------------------===//
+
+void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "time");
+}
+
+void HierarchicalModuleNameOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "hierarchicalmodulename");
+}
+
+ParseResult FPrintFOp::parse(::mlir::OpAsmParser &parser,
+                             ::mlir::OperationState &result) {
+  // Parse required clock and condition operands
+  OpAsmParser::UnresolvedOperand clock, cond;
+  if (parser.parseOperand(clock) || parser.parseComma() ||
+      parser.parseOperand(cond) || parser.parseComma())
+    return failure();
+
+  auto parseFormatString =
+      [&parser](llvm::SMLoc &loc, StringAttr &result,
+                SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operands)
+      -> ParseResult {
+    loc = parser.getCurrentLocation();
+    // NOTE: Don't use parseAttribute. "format_string" : !firrtl.clock is
+    // considered as a typed attr.
+    std::string resultStr;
+    if (parser.parseString(&resultStr))
+      return failure();
+    result = parser.getBuilder().getStringAttr(resultStr);
+
+    // This is an optional
+    if (parser.parseOperandList(operands, AsmParser::Delimiter::OptionalParen))
+      return failure();
+    return success();
+  };
+
+  // Parse output file and format string substitutions
+  SmallVector<OpAsmParser::UnresolvedOperand> outputFileSubstitutions,
+      substitutions;
+  llvm::SMLoc outputFileLoc, formatStringLoc;
+
+  if (parseFormatString(
+          outputFileLoc,
+          result.getOrAddProperties<FPrintFOp::Properties>().outputFile,
+          outputFileSubstitutions) ||
+      parser.parseComma() ||
+      parseFormatString(
+          formatStringLoc,
+          result.getOrAddProperties<FPrintFOp::Properties>().formatString,
+          substitutions))
+    return failure();
+
+  if (parseFPrintfAttrs(parser, result.attributes))
+    return failure();
+
+  // Parse types
+  Type clockType, condType;
+  SmallVector<Type> restTypes;
+
+  if (parser.parseColon() || parser.parseType(clockType) ||
+      parser.parseComma() || parser.parseType(condType))
+    return failure();
+
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseTypeList(restTypes))
+      return failure();
+  }
+
+  // Set operand segment sizes
+  result.getOrAddProperties<FPrintFOp::Properties>().operandSegmentSizes = {
+      1, 1, static_cast<int32_t>(outputFileSubstitutions.size()),
+      static_cast<int32_t>(substitutions.size())};
+
+  // Resolve all operands
+  if (parser.resolveOperand(clock, clockType, result.operands) ||
+      parser.resolveOperand(cond, condType, result.operands) ||
+      parser.resolveOperands(
+          outputFileSubstitutions,
+          ArrayRef(restTypes).take_front(outputFileSubstitutions.size()),
+          outputFileLoc, result.operands) ||
+      parser.resolveOperands(
+          substitutions,
+          ArrayRef(restTypes).drop_front(outputFileSubstitutions.size()),
+          formatStringLoc, result.operands))
+    return failure();
+
+  return success();
+}
+
+void FPrintFOp::print(OpAsmPrinter &p) {
+  p << " " << getClock() << ", " << getCond() << ", ";
+  p.printAttributeWithoutType(getOutputFileAttr());
+  if (!getOutputFileSubstitutions().empty()) {
+    p << "(";
+    p.printOperands(getOutputFileSubstitutions());
+    p << ")";
+  }
+  p << ", ";
+  p.printAttributeWithoutType(getFormatStringAttr());
+  if (!getSubstitutions().empty()) {
+    p << "(";
+    p.printOperands(getSubstitutions());
+    p << ")";
+  }
+  printFPrintfAttrs(p, *this, (*this)->getAttrDictionary());
+  p << " : " << getClock().getType() << ", " << getCond().getType();
+  if (!getOutputFileSubstitutions().empty() || !getSubstitutions().empty()) {
+    for (auto type : getOperands().drop_front(2).getTypes()) {
+      p << ", ";
+      p.printType(type);
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// FFlushOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FFlushOp::verify() {
+  if (!getOutputFileAttr() && !getOutputFileSubstitutions().empty())
+    return emitOpError("substitutions without output file are not allowed");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto ref = getInstanceAttr();
+  auto target = ns.lookup(ref);
+  if (!target)
+    return emitError() << "target " << ref << " cannot be resolved";
+
+  if (!target.isOpOnly())
+    return emitError() << "target " << ref << " is not an operation";
+
+  auto instance = dyn_cast<InstanceOp>(target.getOp());
+  if (!instance)
+    return emitError() << "target " << ref << " is not an instance";
+
+  if (!instance.getDoNotPrint())
+    return emitError() << "target " << ref << " is not marked doNotPrint";
 
   return success();
 }

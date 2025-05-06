@@ -1,13 +1,13 @@
 // RUN: circt-opt %s --lower-smt-to-z3-llvm --canonicalize | \
-// RUN: mlir-cpu-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
+// RUN: mlir-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
 // RUN: FileCheck %s
 
 // RUN: circt-opt %s --lower-smt-to-z3-llvm=debug=true --canonicalize | \
-// RUN: mlir-cpu-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
+// RUN: mlir-runner -e entry -entry-point-result=void --shared-libs=%libz3 | \
 // RUN: FileCheck %s
 
 // REQUIRES: libz3
-// REQUIRES: mlir-cpu-runner
+// REQUIRES: mlir-runner
 
 func.func @entry() {
   %false = llvm.mlir.constant(0 : i1) : i1
@@ -247,26 +247,26 @@ func.func @check(%expr: !smt.bool) {
   smt.assert %expr
   %0 = smt.check sat {
     %1 = llvm.mlir.addressof @sat : !llvm.ptr
-    llvm.call @printf(%1) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr) -> i32
+    llvm.call @printf(%1) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr) -> ()
     %c1 = llvm.mlir.constant(1 : i32) : i32
     smt.yield %c1 : i32
   } unknown {
     %1 = llvm.mlir.addressof @unknown : !llvm.ptr
-    llvm.call @printf(%1) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr) -> i32
+    llvm.call @printf(%1) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr) -> ()
     %c0 = llvm.mlir.constant(0 : i32) : i32
     smt.yield %c0 : i32
   } unsat {
     %1 = llvm.mlir.addressof @unsat : !llvm.ptr
-    llvm.call @printf(%1) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr) -> i32
+    llvm.call @printf(%1) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr) -> ()
     %c-1 = llvm.mlir.constant(-1 : i32) : i32
     smt.yield %c-1 : i32
   } -> i32
   %1 = llvm.mlir.addressof @res : !llvm.ptr
-  llvm.call @printf(%1, %0) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, i32) -> i32
+  llvm.call @printf(%1, %0) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, i32) -> ()
   return
 }
 
-llvm.func @printf(!llvm.ptr, ...) -> i32
+llvm.func @printf(!llvm.ptr, ...) -> ()
 llvm.mlir.global private constant @res("Res: %d\n\00") {addr_space = 0 : i32}
 llvm.mlir.global private constant @sat("sat\n\00") {addr_space = 0 : i32}
 llvm.mlir.global private constant @unsat("unsat\n\00") {addr_space = 0 : i32}

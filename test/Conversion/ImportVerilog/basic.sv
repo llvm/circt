@@ -11,9 +11,29 @@ timeprecision 10fs;
 timeunit 100ps/10fs;
 `timescale 100ps/10fs;
 
-// Ignore type aliases and enum variant names imported into the parent scope.
+// Ignore type aliases, forward declarations of type aliases, and enum variant
+// names imported into the parent scope. These are resolved by Slang.
+typedef MyInt;
 typedef int MyInt;
+typedef MyInt;
+typedef MyInt;
 typedef enum { VariantA, VariantB } MyEnum;
+
+module Typedefs1;
+  typedef MyInt2;
+  typedef int MyInt2;
+  typedef MyInt2;
+  typedef MyInt2;
+  typedef enum { VariantC, VariantD } MyEnum2;
+endmodule
+
+function void Typedefs2();
+  typedef MyInt2;
+  typedef int MyInt2;
+  typedef MyInt2;
+  typedef MyInt2;
+  typedef enum { VariantC, VariantD } MyEnum2;
+endfunction
 
 // Ignore imports.
 import Package::*;
@@ -131,37 +151,6 @@ module Basic;
   // CHECK: %b2 = moore.variable [[TMP1]] : <i1>
   bit [0:0] b1;
   bit b2 = b1;
-
-  // CHECK: moore.procedure initial {
-  // CHECK: }
-  initial;
-
-  // CHECK: moore.procedure final {
-  // CHECK: }
-  final begin end
-
-  // CHECK: moore.procedure always {
-  // CHECK:   %x = moore.variable
-  // CHECK:   %y = moore.variable
-  // CHECK: }
-  always begin
-    int x;
-    begin
-      int y;
-    end
-  end
-
-  // CHECK: moore.procedure always_comb {
-  // CHECK: }
-  always_comb begin end
-
-  // CHECK: moore.procedure always_latch {
-  // CHECK: }
-  always_latch begin end
-
-  // CHECK: moore.procedure always_ff {
-  // CHECK: }
-  always_ff @* begin end
 
   // CHECK: [[TMP1:%.+]] = moore.read %v2
   // CHECK: moore.assign %v1, [[TMP1]] : i32
@@ -693,6 +682,10 @@ module Expressions;
   logic y;
   // CHECK: %vec_1 = moore.variable : <l32>
   logic [31:0] vec_1;
+  // CHECK: %vec_1a = moore.variable : <l17>
+  logic [31:15] vec_1a;
+  // CHECK: %vec_1b = moore.variable : <l32>
+  logic [-31:0] vec_1b;
   // CHECK: %vec_2 = moore.variable : <l32>
   logic [0:31] vec_2;
   // CHECK: %vec_3 = moore.variable : <l16>
@@ -736,6 +729,10 @@ module Expressions;
   bit [1:0][31:0] arrayInt;
   // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
   bit [31:0] uarrayInt [2];
+  // CHECK: %arr1 = moore.variable : <uarray<2 x i32>
+  bit [31:0] arr1 [2];
+  // CHECK: %arr2 = moore.variable : <uarray<2 x i32>
+  bit [31:0] arr2 [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
 
@@ -886,11 +883,19 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.concat [[TMP1]] : (!moore.i1) -> i1
     // CHECK: moore.replicate [[TMP2]] : i1 -> i32
     a = {32{1'b0}};
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %c : <i32>
+    // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.i32, !moore.i32) -> i64
+    a = {a, {0{b}}, c};
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %c : <i32>
+    // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.i32, !moore.i32) -> i64
+    a = {a, {0{b}}, {0{a, {0{b}}, c}}, c};
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
     // CHECK: moore.extract [[TMP1]] from 1 : l32 -> l3
     y = vec_1[3:1];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_2 : <l32>
-    // CHECK: moore.extract [[TMP1]] from 2 : l32 -> l2
+    // CHECK: moore.extract [[TMP1]] from 29 : l32 -> l2
     y = vec_2[2:3];
     // CHECK: [[TMP1:%.+]] = moore.read %d : <l32>
     // CHECK: [[TMP2:%.+]] = moore.read %x : <i1>
@@ -907,8 +912,56 @@ module Expressions;
     // CHECK: moore.extract [[TMP1]] from 15 : l32 -> l1
     y = vec_1[15+:1];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_2 : <l32>
-    // CHECK: moore.extract [[TMP1]] from 0 : l32 -> l1
+    // CHECK: moore.extract [[TMP1]] from 31 : l32 -> l1
     y = vec_2[0+:1];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_2 : <l32> 
+    // CHECK: [[TMP2:%.+]] = moore.read %vec_1 : <l32> 
+    // CHECK: [[TMP3:%.+]] = moore.constant 31 : l32 
+    // CHECK: [[TMP4:%.+]] = moore.sub [[TMP3]], [[TMP2]] : l32 
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP4]] : l32, l32 -> l2
+    y = vec_2[vec_1+:2];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_2 : <l32> 
+    // CHECK: [[TMP2:%.+]] = moore.read %vec_1 : <l32> 
+    // CHECK: [[TMP3:%.+]] = moore.constant 31 : l32 
+    // CHECK: [[TMP4:%.+]] = moore.sub [[TMP3]], [[TMP2]] : l32 
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP4]] : l32, l32 -> l1
+    y = vec_2[vec_1];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1a : <l17> 
+    // CHECK: [[TMP2:%.+]] = moore.read %vec_1 : <l32> 
+    // CHECK: [[TMP3:%.+]] = moore.constant 15 : l32 
+    // CHECK: [[TMP4:%.+]] = moore.sub [[TMP2]], [[TMP3]] : l32 
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP4]] : l17, l32 -> l2
+    y = vec_1a[vec_1+:2];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1a : <l17> 
+    // CHECK: [[TMP2:%.+]] = moore.read %vec_1 : <l32> 
+    // CHECK: [[TMP3:%.+]] = moore.constant 15 : l32 
+    // CHECK: [[TMP4:%.+]] = moore.sub [[TMP2]], [[TMP3]] : l32 
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP4]] : l17, l32 -> l1
+    y = vec_1a[vec_1];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1b : <l32> 
+    // CHECK: [[TMP2:%.+]] = moore.read %vec_1 : <l32> 
+    // CHECK: [[TMP3:%.+]] = moore.neg [[TMP2]] : l32 
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP3]] : l32, l32 -> l2
+    y = vec_1b[vec_1+:2];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1b : <l32> 
+    // CHECK: [[TMP2:%.+]] = moore.read %vec_1 : <l32> 
+    // CHECK: [[TMP3:%.+]] = moore.neg [[TMP2]] : l32 
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP3]] : l32, l32 -> l1
+    y = vec_1b[vec_1];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1a : <l17> 
+    // CHECK: [[TMP2:%.+]] = moore.read %x : <i1> 
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> !moore.i5
+    // CHECK: [[TMP4:%.+]] = moore.constant 15 : i5
+    // CHECK: [[TMP5:%.+]] = moore.sub [[TMP3]], [[TMP4]] : i5
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP5]] : l17, i5 -> l2
+    y = vec_1a[x+:2];
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1a : <l17> 
+    // CHECK: [[TMP2:%.+]] = moore.read %x : <i1> 
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> !moore.i5
+    // CHECK: [[TMP4:%.+]] = moore.constant 15 : i5
+    // CHECK: [[TMP5:%.+]] = moore.sub [[TMP3]], [[TMP4]] : i5
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP5]] : l17, i5 -> l1
+    y = vec_1a[x];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1
     // CHECK: [[TMP2:%.+]] = moore.constant 1 : i32
     // CHECK: [[TMP3:%.+]] = moore.read %a
@@ -918,9 +971,9 @@ module Expressions;
     // CHECK: moore.dyn_extract [[TMP1]] from [[TMP6]] : l32, i32 -> l1
     c = vec_1[1*a-:1];
     // CHECK: [[TMP1:%.+]] = moore.read %arr : <uarray<3 x uarray<6 x i4>>>
-    // CHECK: [[TMP3:%.+]] = moore.extract [[TMP1]] from 3 : uarray<3 x uarray<6 x i4>> -> uarray<6 x i4>
-    // CHECK: [[TMP5:%.+]] = moore.extract [[TMP3]] from 7 : uarray<6 x i4> -> i4
-    // CHECK: moore.extract [[TMP5]] from 3 : i4 -> i2
+    // CHECK: [[TMP3:%.+]] = moore.extract [[TMP1]] from 0 : uarray<3 x uarray<6 x i4>> -> uarray<6 x i4>
+    // CHECK: [[TMP5:%.+]] = moore.extract [[TMP3]] from 0 : uarray<6 x i4> -> i4
+    // CHECK: moore.extract [[TMP5]] from 2 : i4 -> i2
     c = arr[3][7][4:3];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
     // CHECK: [[TMP2:%.+]] = moore.read %c : <i32>
@@ -1098,6 +1151,24 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.eq [[TMP1]], [[TMP2]] : l32 -> l1
     y = d == e;
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 43
+    // CHECK: [[TMP1:%.+]] = moore.constant 9002
+    // CHECK: moore.array_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+    arr1 = '{43, 9002};
+    // CHECK: [[TMP0:%.+]] = moore.constant 43
+    // CHECK: [[TMP1:%.+]] = moore.constant 9002
+    // CHECK: moore.array_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+    arr2 = '{43, 9002};
+    // CHECK: [[TMP1:%.+]] = moore.read %arr1
+    // CHECK: [[TMP2:%.+]] = moore.read %arr2
+    // CHECK: moore.uarray_cmp eq [[TMP1]], [[TMP2]] : <2 x i32> -> i1
+    x = arr1 == arr2;
+    // CHECK: [[TMP3:%.+]] = moore.read %arr1
+    // CHECK: [[TMP4:%.+]] = moore.read %arr2
+    // CHECK: moore.uarray_cmp ne [[TMP3]], [[TMP4]] : <2 x i32> -> i1
+    x = arr1 != arr2;
+
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
     // CHECK: moore.ne [[TMP1]], [[TMP2]] : i32 -> i1
@@ -2165,49 +2236,49 @@ endmodule
 module ImmediateAssertiWithActionBlock;
   logic x;
   int a;
-// CHEK: moore.procedure always {
-  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
-  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
-// CHEK: ^bb1:  // pred: ^bb0
-  // CHEK: [[C1:%.+]] = moore.constant 1 : i32
-  // CHEK: moore.blocking_assign %a, [[C1]] : i32
-  // CHEK: cf.br ^bb2
-// CHEK: ^bb2:  // 2 preds: ^bb0, ^bb1
-  // CHEK:   moore.return
-// CHEK: }
+// CHECK: moore.procedure always {
+  // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHECK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHECK: ^bb1:  // pred: ^bb0
+  // CHECK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHECK: moore.blocking_assign %a, [[C1]] : i32
+  // CHECK: cf.br ^bb2
+// CHECK: ^bb2:  // 2 preds: ^bb0, ^bb1
+  // CHECK:   moore.return
+// CHECK: }
   assert (x) a = 1;
 
-// CHEK: moore.procedure always {
-  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
-  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
-// CHEK: ^bb1:  // pred: ^bb0
-  // CHEK: cf.br ^bb3
-// CHEK: ^bb2:  // pred: ^bb0
-  // CHEK: [[C0:%.+]] = moore.constant 0 : i32
-  // CHEK: moore.blocking_assign %a, [[C0]] : i32
-  // CHEK: cf.br ^bb3
-// CHEK: ^bb3:  // 2 preds: ^bb1, ^bb2
-  // CHEK: moore.return
-// CHEK: }
+// CHECK: moore.procedure always {
+  // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHECK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHECK: ^bb1:  // pred: ^bb0
+  // CHECK: cf.br ^bb3
+// CHECK: ^bb2:  // pred: ^bb0
+  // CHECK: [[C0:%.+]] = moore.constant 0 : i32
+  // CHECK: moore.blocking_assign %a, [[C0]] : i32
+  // CHECK: cf.br ^bb3
+// CHECK: ^bb3:  // 2 preds: ^bb1, ^bb2
+  // CHECK: moore.return
+// CHECK: }
   assert (x) else a = 0;
 
-// CHEK: moore.procedure always {
-  // CHEK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHEK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
-  // CHEK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
-// CHEK: ^bb1:  // pred: ^bb0
-  // CHEK: [[C1:%.+]] = moore.constant 1 : i32
-  // CHEK: moore.blocking_assign %a, [[C1]] : i32
-  // CHEK: cf.br ^bb3
-// CHEK: ^bb2:  // pred: ^bb0
-  // CHEK: [[C0:%.+]] = moore.constant 0 : i32
-  // CHEK: moore.blocking_assign %a, [[C0]] : i32
-  // CHEK: cf.br ^bb3
-// CHEK: ^bb3:  // 2 preds: ^bb1, ^bb2
-  // CHEK: moore.return
-// CHEK: }
+// CHECK: moore.procedure always {
+  // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
+  // CHECK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
+// CHECK: ^bb1:  // pred: ^bb0
+  // CHECK: [[C1:%.+]] = moore.constant 1 : i32
+  // CHECK: moore.blocking_assign %a, [[C1]] : i32
+  // CHECK: cf.br ^bb3
+// CHECK: ^bb2:  // pred: ^bb0
+  // CHECK: [[C0:%.+]] = moore.constant 0 : i32
+  // CHECK: moore.blocking_assign %a, [[C0]] : i32
+  // CHECK: cf.br ^bb3
+// CHECK: ^bb3:  // 2 preds: ^bb1, ^bb2
+  // CHECK: moore.return
+// CHECK: }
   assert (x) a = 1; else a = 0;
 endmodule
 
@@ -2292,3 +2363,28 @@ function int AssignFuncArgs2(int x, int y);
   // CHECK: [[ADD:%.+]] = moore.add [[READ_X]], [[READ_Y]] : i32
   return x+y;
 endfunction
+
+// CHECK-LABEL: moore.module @RangeElementSelection(
+module RangeElementSelection(
+    input reg [3:0] a [0:2],
+    output reg [3:0] b,
+    input reg [1:0] c);
+    // CHECK: [[A:%.+]] = moore.variable name "a" : <uarray<3 x l4>
+    // CHECK: [[C:%.+]] = moore.variable name "c" : <l2>
+
+    always_comb begin
+      // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <uarray<3 x l4>>
+      // CHECK: [[READ_C:%.+]] = moore.read [[C]] : <l2>
+      // CHECK: [[M2:%.+]] = moore.constant -2 : l2
+      // CHECK: [[SUB_1:%.+]] = moore.sub [[M2]], [[READ_C]] : l2
+      // CHECK: [[DYN_EXT_1:%.+]] = moore.dyn_extract [[READ_A]] from [[SUB_1]] : uarray<3 x l4>, l2 -> l4
+      // CHECK: [[READ_B:%.+]] = moore.read %b : <l4>
+      // CHECK: [[READ_C_1:%.+]] = moore.read [[C]] : <l2>
+      // CHECK: [[EXTRACT:%.+]] = moore.extract [[READ_C_1]] from 0 : l2 -> l1
+      // CHECK: [[ONE:%.+]] = moore.constant 1 : l1
+      // CHECK: [[SUB_2:%.+]] = moore.sub [[EXTRACT]], [[ONE]] : l1
+      // CHECK: [[DYN_EXT_2:%.+]] = moore.dyn_extract [[READ_B]] from [[SUB_2]] : l4, l1 -> l2
+      b = a[c];
+      b[3:0] = b[c[0]-:2];
+    end
+endmodule

@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Visitors.h"
@@ -23,7 +23,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_PROCESSLOWERING
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -69,10 +69,10 @@ static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
 
   if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
     // No optional time argument is allowed
-    if (wait.getTime()) {
+    if (wait.getDelay()) {
       LLVM_DEBUG({
-        llvm::dbgs() << "llhd.wait terminators with optional time "
-                        "argument cannot be lowered to structural LLHD\n";
+        llvm::dbgs() << "llhd.wait terminators with delay cannot be lowered to "
+                        "structural LLHD\n";
       });
       return failure();
     }
@@ -159,8 +159,3 @@ void ProcessLoweringPass::runOnOperation() {
   });
 }
 } // namespace
-
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::llhd::createProcessLoweringPass() {
-  return std::make_unique<ProcessLoweringPass>();
-}

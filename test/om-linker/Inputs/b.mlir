@@ -6,4 +6,5 @@ module {
   om.class @Conflict(){
     om.class.fields
   }
+  hw.module.extern @hello()
 }

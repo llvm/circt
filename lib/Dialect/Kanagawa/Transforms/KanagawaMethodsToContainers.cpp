@@ -44,11 +44,6 @@ struct DataflowMethodOpConversion
         op.getLoc(), op.getInnerSym(), /*isTopLevel=*/false);
     rewriter.setInsertionPointToStart(newContainer.getBodyBlock());
 
-    // Create mandatory %this
-    // TODO @mortbopet: this will most likely already be present at the
-    // method.df level soon...
-    rewriter.create<ThisOp>(op.getLoc(), newContainer.getInnerRef());
-
     // Create in- and output ports.
     llvm::SmallVector<Value> argValues;
     for (auto [arg, name] : llvm::zip_equal(

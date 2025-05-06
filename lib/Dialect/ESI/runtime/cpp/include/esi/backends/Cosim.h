@@ -32,9 +32,12 @@ class ChannelDesc;
 
 namespace backends {
 namespace cosim {
+class CosimEngine;
 
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::AcceleratorConnection {
+  friend class CosimEngine;
+
 public:
   CosimAccelerator(Context &, std::string hostname, uint16_t port);
   ~CosimAccelerator();
@@ -50,17 +53,14 @@ public:
   // Set the way this connection will retrieve the manifest.
   void setManifestMethod(ManifestMethod method);
 
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *,
-                     const ServiceTable &) override;
-
   // C++ doesn't have a mechanism to forward declare a nested class and we don't
   // want to include the generated header here. So we have to wrap it in a
   // forward-declared struct we write ourselves.
   struct StubContainer;
+
+  void createEngine(const std::string &engineTypeName, AppIDPath idPath,
+                    const ServiceImplDetails &details,
+                    const HWClientDetails &clients) override;
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
@@ -74,9 +74,6 @@ private:
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.
   std::set<std::unique_ptr<ChannelPort>> channels;
-  // Map from client path to channel assignments for that client.
-  std::map<AppIDPath, std::map<std::string, std::string>>
-      clientChannelAssignments;
 
   ManifestMethod manifestMethod = Cosim;
 };

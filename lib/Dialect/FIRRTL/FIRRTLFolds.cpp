@@ -315,7 +315,7 @@ static LogicalResult canonicalizePrimOp(
                       ->materializeConstant(rewriter, cst, type, op->getLoc())
                       ->getResult(0);
   else
-    resultValue = result.get<Value>();
+    resultValue = cast<Value>(result);
 
   // Insert a pad if the type widths disagree.
   if (width !=
@@ -2269,10 +2269,14 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   if (!isDefinedByOneConstantOp(reg.getResetSignal()))
     return failure();
 
+  auto resetValue = reg.getResetValue();
+  if (reg.getType(0) != resetValue.getType())
+    return failure();
+
   // Ignore 'passthrough'.
   (void)dropWrite(rewriter, reg->getResult(0), {});
   replaceOpWithNewOpAndCopyName<NodeOp>(
-      rewriter, reg, reg.getResetValue(), reg.getNameAttr(), reg.getNameKind(),
+      rewriter, reg, resetValue, reg.getNameAttr(), reg.getNameKind(),
       reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
   return success();
 }
@@ -3204,16 +3208,19 @@ static LogicalResult canonicalizeImmediateVerifOp(Op op,
 void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<AssertOp>);
+  results.add<patterns::AssertXWhenX>(context);
 }
 
 void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<AssumeOp>);
+  results.add<patterns::AssumeXWhenX>(context);
 }
 
 void UnclockedAssumeIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<UnclockedAssumeIntrinsicOp>);
+  results.add<patterns::UnclockedAssumeIntrinsicXWhenX>(context);
 }
 
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,

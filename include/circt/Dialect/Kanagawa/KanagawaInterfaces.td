@@ -68,8 +68,7 @@ def PortOpInterface : OpInterface<"PortOpInterface", [NamedInnerSymbol]> {
 def ScopeOpInterface : OpInterface<"ScopeOpInterface", [NamedInnerSymbol]> {
   let cppNamespace = "circt::kanagawa";
   let description = [{
-    An interface for operations which define Kanagawa scopes, that can be referenced
-    by an `kanagawa.this` operation.
+    An interface for operations which define Kanagawa scopes.
   }];
 
   let verify = "return detail::verifyScopeOpInterface($_op);";
@@ -80,20 +79,6 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [NamedInnerSymbol]> {
       "mlir::Block*", "getBodyBlock",
       (ins), [{
         return $_op.getBodyBlock();
-      }]
-    >,
-    InterfaceMethod<
-      "Returns `%this` of the scope",
-      "mlir::TypedValue<ScopeRefType>", "getThis",
-      (ins), [{
-        return *detail::getThisFromScope($_op);
-      }]
-    >,
-    InterfaceMethod<
-      "Returns the `ThisOp` of this scope",
-      "Operation*", "getThisOp",
-      (ins), [{
-        return cast<ScopeOpInterface>($_op.getOperation()).getThis().getDefiningOp();
       }]
     >,
     InterfaceMethod<

@@ -242,7 +242,9 @@ class Verilator(Simulator):
         "-DTOP_MODULE=" + self.sources.top,
     ]
     if self.debug:
-      cmd += ["--trace", "--trace-params", "--trace-structs"]
+      cmd += [
+          "--trace", "--trace-params", "--trace-structs", "--trace-underscore"
+      ]
       cflags.append("-DTRACE")
     if len(cflags) > 0:
       cmd += ["-CFLAGS", " ".join(cflags)]

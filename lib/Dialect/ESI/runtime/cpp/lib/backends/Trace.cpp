@@ -33,9 +33,13 @@ constexpr uint32_t ESIVersion = 0;
 
 namespace {
 class TraceChannelPort;
-}
+class TraceEngine;
+} // namespace
+
+TraceAccelerator::Impl &TraceAccelerator::getImpl() { return *impl; }
 
 struct esi::backends::trace::TraceAccelerator::Impl {
+  friend class TraceAccelerator;
   Impl(Mode mode, std::filesystem::path manifestJson,
        std::filesystem::path traceFile)
       : manifestJson(manifestJson), traceFile(traceFile) {
@@ -63,15 +67,9 @@ struct esi::backends::trace::TraceAccelerator::Impl {
     }
   }
 
-  Service *createService(Service::Type svcType, AppIDPath idPath,
-                         const ServiceImplDetails &details,
+  Service *createService(TraceAccelerator &conn, Service::Type svcType,
+                         AppIDPath idPath, const ServiceImplDetails &details,
                          const HWClientDetails &clients);
-
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
-                                                          const BundleType *);
 
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
@@ -146,17 +144,11 @@ TraceAccelerator::TraceAccelerator(Context &ctxt, Mode mode,
 }
 TraceAccelerator::~TraceAccelerator() { disconnect(); }
 
-Service *TraceAccelerator::createService(Service::Type svcType,
-                                         AppIDPath idPath, std::string implName,
-                                         const ServiceImplDetails &details,
-                                         const HWClientDetails &clients) {
-  return impl->createService(svcType, idPath, details, clients);
-}
 namespace {
 class TraceSysInfo : public SysInfo {
 public:
-  TraceSysInfo(std::filesystem::path manifestJson)
-      : manifestJson(manifestJson) {}
+  TraceSysInfo(AcceleratorConnection &conn, std::filesystem::path manifestJson)
+      : SysInfo(conn), manifestJson(manifestJson) {}
 
   uint32_t getEsiVersion() const override { return ESIVersion; }
 
@@ -232,39 +224,41 @@ private:
 } // namespace
 
 namespace {
-class TraceCustomService : public CustomService {
+class TraceEngine : public Engine {
 public:
-  TraceCustomService(TraceAccelerator::Impl &impl, AppIDPath idPath,
-                     const ServiceImplDetails &details,
-                     const HWClientDetails &clients)
-      : CustomService(idPath, details, clients) {}
+  TraceEngine(AcceleratorConnection &conn, TraceAccelerator::Impl &impl)
+      : Engine(conn), impl(impl) {}
+
+  std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
+                                          const std::string &channelName,
+                                          BundleType::Direction dir,
+                                          const Type *type) override {
+    std::unique_ptr<ChannelPort> port;
+    if (BundlePort::isWrite(dir))
+      port = std::make_unique<WriteTraceChannelPort>(impl, type, idPath,
+                                                     channelName);
+    else
+      port = std::make_unique<ReadTraceChannelPort>(impl, type);
+    return port;
+  }
+
+private:
+  TraceAccelerator::Impl &impl;
 };
 } // namespace
 
-std::map<std::string, ChannelPort &>
-TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
-                                           const BundleType *bundleType) {
-  std::map<std::string, ChannelPort &> channels;
-  for (auto [name, dir, type] : bundleType->getChannels()) {
-    ChannelPort *port;
-    if (BundlePort::isWrite(dir))
-      port = new WriteTraceChannelPort(*this, type, idPath, name);
-    else
-      port = new ReadTraceChannelPort(*this, type);
-    channels.emplace(name, *port);
-    adoptChannelPort(port);
-  }
-  return channels;
-}
-
-std::map<std::string, ChannelPort &> TraceAccelerator::requestChannelsFor(
-    AppIDPath idPath, const BundleType *bundleType, const ServiceTable &) {
-  return impl->requestChannelsFor(idPath, bundleType);
+void TraceAccelerator::createEngine(const std::string &dmaEngineName,
+                                    AppIDPath idPath,
+                                    const ServiceImplDetails &details,
+                                    const HWClientDetails &clients) {
+  registerEngine(idPath, std::make_unique<TraceEngine>(*this, getImpl()),
+                 clients);
 }
 
 class TraceMMIO : public MMIO {
 public:
-  TraceMMIO(TraceAccelerator::Impl &impl) : impl(impl) {}
+  TraceMMIO(TraceAccelerator &conn, const HWClientDetails &clients)
+      : MMIO(conn, clients), impl(conn.getImpl()) {}
 
   virtual uint64_t read(uint32_t addr) const override {
     uint64_t data = rand();
@@ -286,7 +280,7 @@ private:
 
 class TraceHostMem : public HostMem {
 public:
-  TraceHostMem(TraceAccelerator::Impl &impl) : impl(impl) {}
+  TraceHostMem(TraceAccelerator &conn) : HostMem(conn), impl(conn.getImpl()) {}
 
   struct TraceHostMemRegion : public HostMemRegion {
     TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
@@ -338,18 +332,16 @@ private:
   TraceAccelerator::Impl &impl;
 };
 
-Service *
-TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
-                                      const ServiceImplDetails &details,
-                                      const HWClientDetails &clients) {
+Service *TraceAccelerator::createService(Service::Type svcType,
+                                         AppIDPath idPath, std::string implName,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
-    return new TraceSysInfo(manifestJson);
+    return new TraceSysInfo(*this, getImpl().manifestJson);
   if (svcType == typeid(MMIO))
-    return new TraceMMIO(*this);
+    return new TraceMMIO(*this, clients);
   if (svcType == typeid(HostMem))
     return new TraceHostMem(*this);
-  if (svcType == typeid(CustomService))
-    return new TraceCustomService(*this, idPath, details, clients);
   return nullptr;
 }
 

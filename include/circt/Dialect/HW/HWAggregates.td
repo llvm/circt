@@ -129,12 +129,6 @@ def ArraySliceOp : HWOp<"array_slice", [Pure]> {
         (!hw.array<1024xi8>) -> !hw.array<16xi8>
     ```
 
-    Would translate to the following SystemVerilog:
-
-    ```
-    logic [7:0][15:0] subArray = largerArray[offset +: 16];
-    ```
-
     Width of 'idx' is defined to be the precise number of bits required to
     index the 'input' array. More precisely: for an input array of size M,
     the width of 'idx' is ceil(log2(M)). Lower and upper bound indexes which

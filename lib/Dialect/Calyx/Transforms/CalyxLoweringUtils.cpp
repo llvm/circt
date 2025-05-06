@@ -458,6 +458,14 @@ void ComponentLoweringStateInterface::addInstance(StringRef calleeName,
   instanceMap[calleeName] = instanceOp;
 }
 
+bool ComponentLoweringStateInterface::isSeqGuardCmpLibOp(Operation *op) {
+  return seqGuardCmpLibOps.contains(op);
+}
+
+void ComponentLoweringStateInterface::addSeqGuardCmpLibOp(Operation *op) {
+  seqGuardCmpLibOps.insert(op);
+}
+
 //===----------------------------------------------------------------------===//
 // CalyxLoweringState
 //===----------------------------------------------------------------------===//
@@ -712,8 +720,14 @@ void InlineCombGroups::recurseInlineCombGroups(
             calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
             calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp,
             calyx::ConstantOp, calyx::AddFOpIEEE754, calyx::MulFOpIEEE754,
-            calyx::CompareFOpIEEE754>(src.getDefiningOp()))
+            calyx::CompareFOpIEEE754, calyx::FpToIntOpIEEE754,
+            calyx::IntToFpOpIEEE754, calyx::DivSqrtOpIEEE754>(
+            src.getDefiningOp()))
       continue;
+
+    if (state.isSeqGuardCmpLibOp(src.getDefiningOp())) {
+      continue;
+    }
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
         state.getEvaluatingGroup(src).getOperation());
@@ -847,24 +861,6 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
           createInstance(callOp.getLoc(), rewriter, getComponent(), resultTypes,
                          instanceName, componentOp.getName());
       getState().addInstance(instanceName, instanceOp);
-      hw::ConstantOp constantOp =
-          createConstant(callOp.getLoc(), rewriter, getComponent(), 1, 1);
-      OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(
-          getComponent().getWiresOp().getBodyBlock());
-
-      // Creates the group that initializes the instance.
-      calyx::GroupOp groupOp = rewriter.create<calyx::GroupOp>(
-          callOp.getLoc(), "init_" + instanceName);
-      rewriter.setInsertionPointToStart(groupOp.getBodyBlock());
-      auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
-      auto results = instanceOp.getResults();
-      for (const auto &[portInfo, result] : llvm::zip(portInfos, results)) {
-        if (portInfo.hasAttribute(goPort) || portInfo.hasAttribute(resetPort))
-          rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
-        else if (portInfo.hasAttribute(donePort))
-          rewriter.create<calyx::GroupDoneOp>(callOp.getLoc(), result);
-      }
     }
     WalkResult::advance();
   });
@@ -975,6 +971,14 @@ PredicateInfo getPredicateInfo(CmpFPredicate pred) {
   }
 
   return info;
+}
+
+bool parentIsSeqCell(const Value value) {
+  if (Operation *defOp = value.getDefiningOp()) {
+    auto cellOp = dyn_cast_or_null<calyx::CellInterface>(defOp);
+    return cellOp && !cellOp.isCombinational();
+  }
+  return false;
 }
 
 } // namespace calyx

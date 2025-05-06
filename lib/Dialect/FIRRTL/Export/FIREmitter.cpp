@@ -61,6 +61,9 @@ struct Emitter {
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
   void emitDeclaration(FormalOp op);
+  void emitDeclaration(SimulationOp op);
+  void emitFormalLike(Operation *op, StringRef keyword, StringAttr symName,
+                      StringAttr moduleName, DictionaryAttr params);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
 
   void emitParamAssign(ParamDeclAttr param, Operation *op,
@@ -78,7 +81,13 @@ struct Emitter {
   void emitStatement(NodeOp op);
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
+  void emitFormatString(Operation *op, StringRef formatString, OperandRange ops,
+                        llvm::SmallVectorImpl<Value> &substitutions);
+  template <class T>
+  void emitPrintfLike(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
+  void emitStatement(FPrintFOp op);
+  void emitStatement(FFlushOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
@@ -145,6 +154,8 @@ struct Emitter {
   void emitExpression(PadPrimOp op) { emitPrimExpr("pad", op, op.getAmount()); }
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
+
+  void emitExpression(TimeOp op){};
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -372,7 +383,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op) {};
+    SymInfos(Operation *op) : symbolTable(op), istc(op){};
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -407,9 +418,8 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
-          .Case<OptionOp>([&](auto op) { emitDeclaration(op); })
-          .Case<FormalOp>([&](auto op) { emitDeclaration(op); })
+          .Case<LayerOp, OptionOp, FormalOp, SimulationOp>(
+              [&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -651,16 +661,30 @@ void Emitter::emitDeclaration(OptionOp op) {
 
 /// Emit a formal test definition.
 void Emitter::emitDeclaration(FormalOp op) {
+  emitFormalLike(op, "formal", op.getSymNameAttr(),
+                 op.getModuleNameAttr().getAttr(), op.getParameters());
+}
+
+/// Emit a simulation test definition.
+void Emitter::emitDeclaration(SimulationOp op) {
+  emitFormalLike(op, "simulation", op.getSymNameAttr(),
+                 op.getModuleNameAttr().getAttr(), op.getParameters());
+}
+
+/// Emit a formal or simulation test definition.
+void Emitter::emitFormalLike(Operation *op, StringRef keyword,
+                             StringAttr symName, StringAttr moduleName,
+                             DictionaryAttr params) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
-  ps << "formal " << PPExtString(legalize(op.getSymNameAttr()));
-  ps << " of " << PPExtString(legalize(op.getModuleNameAttr().getAttr()));
+  ps << keyword << " " << PPExtString(legalize(symName));
+  ps << " of " << PPExtString(legalize(moduleName));
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
-    for (auto param : op.getParameters()) {
+    for (auto param : params) {
       startStatement();
       ps << PPExtString(param.getName()) << PP::nbsp << "=" << PP::nbsp;
       emitParamValue(param.getValue(), op);
@@ -690,12 +714,12 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
-              AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
-              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
-              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              LayerBlockOp, GenericIntrinsicOp>(
+              PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
+              ConnectOp, MatchingConnectOp, PropAssignOp, InstanceOp,
+              InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
+              CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
+              RefDefineOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
+              RefReleaseInitialOp, LayerBlockOp, GenericIntrinsicOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -826,6 +850,71 @@ void Emitter::emitStatement(SkipOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitFormatString(Operation *op, StringRef origFormatString,
+                               OperandRange substitutionOperands,
+                               llvm::SmallVectorImpl<Value> &substitutions) {
+  // Replace the generic "{{}}" special substitutions with their attributes.
+  // E.g.:
+  //
+  //     "hello {{}} world"(%time)
+  //
+  // Becomes:
+  //
+  //     "hello {{SimulationTime}} world"
+  SmallString<64> formatString;
+  for (size_t i = 0, e = origFormatString.size(), opIdx = 0; i != e; ++i) {
+    auto c = origFormatString[i];
+    switch (c) {
+    case '%': {
+      formatString.push_back(c);
+
+      // Parse the width specifier.
+      SmallString<6> width;
+      c = origFormatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = origFormatString[++i];
+      }
+
+      // Parse the radix.
+      switch (c) {
+      case 'b':
+      case 'd':
+      case 'x':
+        if (!width.empty())
+          formatString.append(width);
+        [[fallthrough]];
+      case 'c':
+        substitutions.push_back(substitutionOperands[opIdx++]);
+        [[fallthrough]];
+      default:
+        formatString.push_back(c);
+      }
+      break;
+    }
+    case '{':
+      if (origFormatString.slice(i, i + 4) == "{{}}") {
+        formatString.append("{{");
+        TypeSwitch<Operation *>(substitutionOperands[opIdx++].getDefiningOp())
+            .Case<TimeOp>(
+                [&](auto time) { formatString.append("SimulationTime"); })
+            .Case<HierarchicalModuleNameOp>([&](auto time) {
+              formatString.append("HierarchicalModuleName");
+            })
+            .Default([&](auto) {
+              emitError(op, "unsupported fstring substitution type");
+            });
+        formatString.append("}}");
+      }
+      i += 3;
+      break;
+    default:
+      formatString.push_back(c);
+    }
+  }
+  ps.writeQuotedEscaped(formatString);
+}
+
 void Emitter::emitStatement(PrintFOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -834,8 +923,11 @@ void Emitter::emitStatement(PrintFOp op) {
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
-    ps.writeQuotedEscaped(op.getFormatString());
-    for (auto operand : op.getSubstitutions()) {
+
+    SmallVector<Value, 4> substitutions;
+    emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
+                     substitutions);
+    for (auto operand : substitutions) {
       ps << "," << PP::space;
       emitExpression(operand);
     }
@@ -843,6 +935,62 @@ void Emitter::emitStatement(PrintFOp op) {
     if (!op.getName().empty()) {
       ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(FPrintFOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "fprintf(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    ps << "," << PP::space;
+
+    SmallVector<Value, 4> outputFileSubstitutions;
+    emitFormatString(op, op.getOutputFile(), op.getOutputFileSubstitutions(),
+                     outputFileSubstitutions);
+    if (!outputFileSubstitutions.empty()) {
+      ps << "," << PP::space;
+      interleaveComma(outputFileSubstitutions);
+    }
+
+    ps << "," << PP::space;
+    SmallVector<Value, 4> substitutions;
+    emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
+                     substitutions);
+    if (!substitutions.empty()) {
+      ps << "," << PP::space;
+      interleaveComma(substitutions);
+    }
+
+    ps << ")" << PP::end;
+    if (!op.getName().empty()) {
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
+    }
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(FFlushOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "fflush(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    if (op.getOutputFileAttr()) {
+      ps << "," << PP::space;
+      SmallVector<Value, 4> substitutions;
+      emitFormatString(op, op.getOutputFileAttr(),
+                       op.getOutputFileSubstitutions(), substitutions);
+      if (!substitutions.empty()) {
+        ps << "," << PP::space;
+        interleaveComma(substitutions);
+      }
+    }
+    ps << ")" << PP::end;
   });
   emitLocationAndNewLine(op);
 }
@@ -884,7 +1032,8 @@ void Emitter::emitStatement(ConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
@@ -910,7 +1059,8 @@ void Emitter::emitStatement(MatchingConnectOp op) {
   } else {
     auto emitLHS = [&]() { emitExpression(op.getDest()); };
     if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
-      emitAssignLike(emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
+      emitAssignLike(
+          emitLHS, [&]() { ps << "invalid"; }, PPExtString("is"));
     } else {
       emitAssignLike(
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
@@ -1228,10 +1378,11 @@ void Emitter::emitExpression(Value value) {
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp,
           // Reference expressions
-          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
-          [&](auto op) {
-            ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
-          })
+          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
+          // Format String expressions
+          TimeOp>([&](auto op) {
+        ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
+      })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
         ps << "<unsupported-expr-" << PPExtString(op->getName().stripDialect())

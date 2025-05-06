@@ -22,6 +22,6 @@ jobs:
       llvm_enable_assertions: ON
       build_shared_libs: OFF
       llvm_force_enable_stats: ON
-      runTests: true
+      run_tests: true
       cmake_c_compiler: cl
       cmake_cxx_compiler: cl

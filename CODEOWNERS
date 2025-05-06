@@ -45,7 +45,6 @@ tools/arcilator @fabianschuiki @maerhart
 # SMT
 **/Dialect/SMT @maerhart
 lib/Conversion/SMTToZ3LLVM @maerhart
-lib/Target/ExportSMTLIB @maerhart
 
 # SV
 **/Dialect/SV @darthscsi

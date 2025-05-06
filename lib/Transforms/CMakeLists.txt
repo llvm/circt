@@ -1,12 +1,13 @@
 add_circt_library(CIRCTTransforms
   FlattenMemRefs.cpp
-  StripDebugInfoWithPred.cpp
+  HierarchicalRunner.cpp
+  IndexSwitchToIf.cpp
+  InsertMergeBlocks.cpp
   MapArithToComb.cpp
   MaximizeSSA.cpp
-  InsertMergeBlocks.cpp
-  PrintOpCount.cpp
   MemoryBanking.cpp
-  IndexSwitchToIf.cpp
+  PrintOpCount.cpp
+  StripDebugInfoWithPred.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Transforms

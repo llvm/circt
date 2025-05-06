@@ -48,7 +48,6 @@ public:
     addConversion([](Type t) { return t; });
     addConversion([](WindowType window) { return window.getLoweredType(); });
     addSourceMaterialization(wrapMaterialization);
-    addArgumentMaterialization(wrapMaterialization);
     addTargetMaterialization(unwrapMaterialization);
   }
 

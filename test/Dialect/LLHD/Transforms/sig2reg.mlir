@@ -1,4 +1,4 @@
-// RUN: circt-opt --llhd-sig2reg %s | FileCheck %s
+// RUN: circt-opt --llhd-sig2reg -cse %s | FileCheck %s
 
 func.func @getTime() -> !llhd.time {
   %time = llhd.constant_time <1ns, 0d, 0e>
@@ -54,4 +54,116 @@ hw.module @basic(in %init : i32, in %cond : i1, in %in0 : i32, in %in1 : i32, ou
 
   // CHECK: hw.output %in0, [[DELAY]], [[PRB3]], %init, [[PRB5]], [[PRB6]], [[PRB7]] :
   hw.output %prb1, %prb2, %prb3, %prb4, %prb5, %prb6, %prb7 : i32, i32, i32, i32, i32, i32, i32
+}
+
+// CHECK-LABEL: hw.module @aliasStatic
+hw.module @aliasStatic(in %init : i4, in %in0 : i1, in %in1 : i1, out out: i4) {
+  // CHECK-NEXT: [[C_2_I4:%.+]] = hw.constant -2 : i4
+  // CHECK-NEXT: [[V0:%.+]] = comb.and %init, [[C_2_I4]] : i4
+  // CHECK-NEXT: [[C0_I3:%.+]] = hw.constant 0 : i3
+  // CHECK-NEXT: [[V1:%.+]] = comb.concat [[C0_I3]], %in1 : i3, i1
+  // CHECK-NEXT: [[V2:%.+]] = comb.or [[V1]], [[V0]] : i4
+  // CHECK-NEXT: [[C1_I4:%.+]] = hw.constant 1 : i4
+  // CHECK-NEXT: [[C_3_I4:%.+]] = hw.constant -3 : i4
+  // CHECK-NEXT: [[V3:%.+]] = comb.and [[V2]], [[C_3_I4]] : i4
+  // CHECK-NEXT: [[V4:%.+]] = comb.concat [[C0_I3]], %in0 : i3, i1
+  // CHECK-NEXT: [[V5:%.+]] = comb.shl [[V4]], [[C1_I4]] : i4
+  // CHECK-NEXT: [[V6:%.+]] = comb.or [[V5]], [[V3]] : i4
+  // CHECK-NEXT: [[C2_I4:%.+]] = hw.constant 2 : i4
+  // CHECK-NEXT: [[C_5_I4:%.+]] = hw.constant -5 : i4
+  // CHECK-NEXT: [[V7:%.+]] = comb.and [[V6]], [[C_5_I4]] : i4
+  // CHECK-NEXT: [[V8:%.+]] = comb.shl [[V1]], [[C2_I4]] : i4
+  // CHECK-NEXT: [[V9:%.+]] = comb.or [[V8]], [[V7]] : i4
+  // CHECK-NEXT: hw.output [[V9]] : i4
+
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %true = hw.constant true
+  %c1_c2 = hw.constant 1 : i2
+  %c0_c2 = hw.constant 0 : i2
+  %false = hw.constant false
+  %out = llhd.sig %init : i4
+  %3 = llhd.sig.extract %out from %c1_c2 : (!hw.inout<i4>) -> !hw.inout<i2>
+  %6 = llhd.sig.extract %3 from %false : (!hw.inout<i2>) -> !hw.inout<i1>
+  %7 = llhd.sig.extract %3 from %true : (!hw.inout<i2>) -> !hw.inout<i1>
+  llhd.drv %6, %in0 after %0 : !hw.inout<i1>
+  llhd.drv %7, %in1 after %0 : !hw.inout<i1>
+  %4 = llhd.sig.extract %out from %c0_c2 : (!hw.inout<i4>) -> !hw.inout<i1>
+  llhd.drv %4, %in1 after %0 : !hw.inout<i1>
+  %5 = llhd.prb %out : !hw.inout<i4>
+  hw.output %5 : i4
+}
+
+// CHECK-LABEL: hw.module @aliasDynamicSuccess
+hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %idx0 : i2, in %idx1 : i1, out out: i8) {
+  // CHECK-NEXT: [[C1_I8:%.+]] = hw.constant 1 : i8
+  // CHECK-NEXT: [[C0_I8:%.+]] = hw.constant 0 : i8
+  // CHECK-NEXT: [[C0_I6:%.+]] = hw.constant 0 : i6
+  // CHECK-NEXT: [[V0:%.+]] = comb.concat [[C0_I6]], %idx0 : i6, i2
+  // CHECK-NEXT: [[V1:%.+]] = comb.add [[V0]], [[C0_I8]] : i8
+  // CHECK-NEXT: [[C0_I7:%.+]] = hw.constant 0 : i7
+  // CHECK-NEXT: [[V2:%.+]] = comb.concat [[C0_I7]], %idx1 : i7, i1
+  // CHECK-NEXT: [[V3:%.+]] = comb.add [[V1]], [[V2]] : i8
+  // CHECK-NEXT: [[V4:%.+]] = comb.shl [[C1_I8]], [[V3]] : i8
+  // CHECK-NEXT: [[C_1_I8:%.+]] = hw.constant -1 : i8
+  // CHECK-NEXT: [[V5:%.+]] = comb.xor [[V4]], [[C_1_I8]] : i8
+  // CHECK-NEXT: [[V6:%.+]] = comb.and %init, [[V5]] : i8
+  // CHECK-NEXT: [[V7:%.+]] = comb.concat [[C0_I7]], %in0 : i7, i1
+  // CHECK-NEXT: [[V8:%.+]] = comb.shl [[V7]], [[V3]] : i8
+  // CHECK-NEXT: [[V9:%.+]] = comb.or [[V8]], [[V6]] : i8
+  // CHECK-NEXT: [[C4_I8:%.+]] = hw.constant 4 : i8
+  // CHECK-NEXT: [[V10:%.+]] = comb.add [[V0]], [[C4_I8]] : i8
+  // CHECK-NEXT: [[V11:%.+]] = comb.shl [[C1_I8]], [[V10]] : i8
+  // CHECK-NEXT: [[V12:%.+]] = comb.xor [[V11]], [[C_1_I8]] : i8
+  // CHECK-NEXT: [[V13:%.+]] = comb.and [[V9]], [[V12]] : i8
+  // CHECK-NEXT: [[V14:%.+]] = comb.concat [[C0_I7]], %in1 : i7, i1
+  // CHECK-NEXT: [[V15:%.+]] = comb.shl [[V14]], [[V10]] : i8
+  // CHECK-NEXT: [[V16:%.+]] = comb.or [[V15]], [[V13]] : i8
+  // CHECK-NEXT: hw.output [[V16]] : i8
+
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c4_c3 = hw.constant 4 : i3
+  %c0_c3 = hw.constant 0 : i3
+  %out = llhd.sig %init : i8
+  %3 = llhd.sig.extract %out from %c0_c3 : (!hw.inout<i8>) -> !hw.inout<i4>
+  %4 = llhd.sig.extract %out from %c4_c3 : (!hw.inout<i8>) -> !hw.inout<i4>
+  %5 = llhd.sig.extract %3 from %idx0 : (!hw.inout<i4>) -> !hw.inout<i2>
+  %6 = llhd.sig.extract %5 from %idx1 : (!hw.inout<i2>) -> !hw.inout<i1>
+  %7 = llhd.sig.extract %4 from %idx0 : (!hw.inout<i4>) -> !hw.inout<i1>
+  llhd.drv %6, %in0 after %0 : !hw.inout<i1>
+  llhd.drv %7, %in1 after %0 : !hw.inout<i1>
+  %8 = llhd.prb %out : !hw.inout<i8>
+  hw.output %8 : i8
+}
+
+// CHECK-LABEL: hw.module @aliasDynamicFailure
+hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %idx0 : i1, in %idx1 : i1, out out: i4) {
+  // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: [[C_2_I2:%.+]] = hw.constant -2 : i2
+  // CHECK-NEXT: [[C0_I2:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : i4
+  // CHECK-NEXT: [[V1:%.+]] = llhd.sig.extract [[OUT]] from [[C0_I2]] : (!hw.inout<i4>) -> !hw.inout<i2>
+  // CHECK-NEXT: [[V2:%.+]] = llhd.sig.extract [[OUT]] from [[C_2_I2]] : (!hw.inout<i4>) -> !hw.inout<i2>
+  // CHECK-NEXT: [[V3:%.+]] = llhd.sig.extract [[V1]] from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
+  // CHECK-NEXT: [[V4:%.+]] = llhd.sig.extract [[V2]] from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
+  // CHECK-NEXT: [[V5:%.+]] = llhd.sig.extract [[V2]] from %idx1 : (!hw.inout<i2>) -> !hw.inout<i1>
+  // CHECK-NEXT: llhd.drv [[V3]], %in0 after [[TIME]] : !hw.inout<i1>
+  // CHECK-NEXT: llhd.drv [[V4]], %in1 after [[TIME]] : !hw.inout<i1>
+  // CHECK-NEXT: llhd.drv [[V5]], %in0 after [[TIME]] : !hw.inout<i1>
+  // CHECK-NEXT: [[V6:%.+]] = llhd.prb [[OUT]] : !hw.inout<i4>
+  // CHECK-NEXT: hw.output [[V6]] : i4
+
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c2_c2 = hw.constant 2 : i2
+  %c0_c2 = hw.constant 0 : i2
+  %out = llhd.sig %init : i4
+  %3 = llhd.sig.extract %out from %c0_c2 : (!hw.inout<i4>) -> !hw.inout<i2>
+  %4 = llhd.sig.extract %out from %c2_c2 : (!hw.inout<i4>) -> !hw.inout<i2>
+  %5 = llhd.sig.extract %3 from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
+  %6 = llhd.sig.extract %4 from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
+  %7 = llhd.sig.extract %4 from %idx1 : (!hw.inout<i2>) -> !hw.inout<i1>
+  llhd.drv %5, %in0 after %0 : !hw.inout<i1>
+  llhd.drv %6, %in1 after %0 : !hw.inout<i1>
+  llhd.drv %7, %in0 after %0 : !hw.inout<i1>
+  %8 = llhd.prb %out : !hw.inout<i4>
+  hw.output %8 : i4
 }

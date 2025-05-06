@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/SMTToZ3LLVM.h"
-#include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -21,6 +20,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -149,9 +149,11 @@ protected:
       auto module =
           builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
       builder.setInsertionPointToEnd(module.getBody());
-      funcOp = LLVM::lookupOrCreateFn(module, name, funcType.getParams(),
-                                      funcType.getReturnType(),
-                                      funcType.getVarArg());
+      auto funcOpResult = LLVM::lookupOrCreateFn(
+          builder, module, name, funcType.getParams(), funcType.getReturnType(),
+          funcType.getVarArg());
+      assert(succeeded(funcOpResult) && "expected to lookup or create printf");
+      funcOp = funcOpResult.value();
     }
     return builder.create<LLVM::CallOp>(loc, funcOp, args);
   }
@@ -794,8 +796,8 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = op.getLoc();
     auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
-    auto printfType =
-        LLVM::LLVMFunctionType::get(rewriter.getI32Type(), {ptrTy}, true);
+    auto printfType = LLVM::LLVMFunctionType::get(
+        LLVM::LLVMVoidType::get(rewriter.getContext()), {ptrTy}, true);
 
     auto getHeaderString = [](const std::string &title) {
       unsigned titleSize = title.size() + 2; // Add a space left and right

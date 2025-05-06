@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceImplementation.h"
@@ -2110,6 +2109,9 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 }
 
 OpFoldResult ArrayConcatOp::fold(FoldAdaptor adaptor) {
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
   auto inputs = adaptor.getInputs();
   SmallVector<Attribute> array;
   for (size_t i = 0, e = getNumOperands(); i < e; ++i) {

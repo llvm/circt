@@ -8,23 +8,6 @@ hw.module @errors(in %in0: i32, out out0: i8) {
 
 // -----
 
-// expected-note @+1 {{prior use here}}
-hw.module @connect_different_types(inout %in: i8, inout %out: i32) {
-  // expected-error @+1 {{use of value '%out' expects different type}}
-  llhd.con %in, %out : !hw.inout<i8>
-}
-
-// -----
-
-hw.module @connect_non_signals(inout %in: i32, inout %out: i32) {
-  %0 = llhd.prb %in : !hw.inout<i32>
-  %1 = llhd.prb %out : !hw.inout<i32>
-  // expected-error @+1 {{'llhd.con' op operand #0 must be InOutType, but got 'i32'}}
-  llhd.con %0, %1 : i32
-}
-
-// -----
-
 hw.module @illegal_signal_to_array(inout %sig : !hw.array<3xi32>, in %ind : i2) {
   // expected-error @+1 {{'llhd.sig.array_slice' op result #0 must be InOutType of an ArrayType values, but got '!hw.array<3xi32>'}}
   %0 = llhd.sig.array_slice %sig at %ind : (!hw.inout<array<3xi32>>) -> !hw.array<3xi32>
@@ -112,4 +95,54 @@ hw.module @check_illegal_drv(inout %sig : i1) {
   %c = hw.constant 0 : i32
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   "llhd.drv"(%sig, %c, %time) {} : (!hw.inout<i1>, i32, !llhd.time) -> ()
+}
+
+// -----
+
+hw.module @YieldFromFinal(in %arg0: i42) {
+  llhd.final {
+    // expected-error @below {{'llhd.halt' op has 1 yield operands, but enclosing 'llhd.final' returns 0}}
+    llhd.halt %arg0 : i42
+  }
+}
+
+// -----
+
+hw.module @WaitYieldCount(in %arg0: i42) {
+  llhd.process {
+    // expected-error @below {{'llhd.wait' op has 1 yield operands, but enclosing 'llhd.process' returns 0}}
+    llhd.wait yield (%arg0 : i42), ^bb1
+  ^bb1:
+    llhd.halt
+  }
+}
+
+
+// -----
+
+hw.module @HaltYieldCount(in %arg0: i42) {
+  llhd.process {
+    // expected-error @below {{'llhd.halt' op has 1 yield operands, but enclosing 'llhd.process' returns 0}}
+    llhd.halt %arg0 : i42
+  }
+}
+
+// -----
+
+hw.module @WaitYieldTypes(in %arg0: i42) {
+  llhd.process -> i42, i9001 {
+    // expected-error @below {{type of yield operand 1 ('i42') does not match enclosing 'llhd.process' result type ('i9001')}}
+    llhd.wait yield (%arg0, %arg0 : i42, i42), ^bb1
+  ^bb1:
+    llhd.halt
+  }
+}
+
+// -----
+
+hw.module @HaltYieldTypes(in %arg0: i42) {
+  llhd.process -> i42, i9001 {
+    // expected-error @below {{type of yield operand 1 ('i42') does not match enclosing 'llhd.process' result type ('i9001')}}
+    llhd.halt %arg0, %arg0 : i42, i42
+  }
 }

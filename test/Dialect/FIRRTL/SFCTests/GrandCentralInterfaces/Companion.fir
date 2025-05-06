@@ -19,7 +19,6 @@ circuit Foo : %[[
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Foo",
               "module": "Foo",
               "path": [],
               "ref": "a",

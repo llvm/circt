@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
@@ -1429,6 +1430,9 @@ struct FIRModuleContext : public FIRParser {
                           insertNameIntoGlobalScope);
   }
 
+  // Removes a symbol from symbolTable (Workaround since symbolTable is private)
+  void removeSymbolEntry(StringRef name);
+
   /// Resolved a symbol table entry to a value.  Emission of error is optional.
   ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
                                  SMLoc loc, bool fatal = true);
@@ -1510,6 +1514,11 @@ private:
 
 } // end anonymous namespace
 
+// Removes a symbol from symbolTable (Workaround since symbolTable is private)
+void FIRModuleContext::removeSymbolEntry(StringRef name) {
+  symbolTable.erase(name);
+}
+
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
 ///
@@ -1521,12 +1530,22 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
                                              bool insertNameIntoGlobalScope) {
   // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
   // if we hit a missing element (SMLoc is null).
-  auto entryIt =
-      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry()).first;
-  if (entryIt->second.first.isValid()) {
-    emitError(loc, "redefinition of name '" + name + "'")
-            .attachNote(translateLocation(entryIt->second.first))
-        << "previous definition here";
+  auto [entryIt, inserted] =
+      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry());
+
+  // If insertion failed, the name already exists
+  if (!inserted) {
+    if (entryIt->second.first.isValid()) {
+      // Valid activeSMLoc: active symbol in current scope redeclared
+      emitError(loc, "redefinition of name '" + name + "' ")
+              .attachNote(translateLocation(entryIt->second.first))
+          << "previous definition here.";
+    } else {
+      // Invalid activeSMLoc: symbol from a completed scope redeclared
+      emitError(loc, "redefinition of name '" + name + "' ")
+          << "- FIRRTL has flat namespace and requires all "
+          << "declarations in a module to have unique names.";
+    }
     return failure();
   }
 
@@ -1535,7 +1554,6 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
   entryIt->second = {loc, entry};
   if (currentScope && !insertNameIntoGlobalScope)
     currentScope->scopedDecls.push_back(&*entryIt);
-
   return success();
 }
 
@@ -1554,12 +1572,12 @@ ParseResult FIRModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
 ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
                                                  SymbolValueEntry &entry,
                                                  SMLoc loc, bool fatal) {
-  if (!entry.is<Value>()) {
+  if (!isa<Value>(entry)) {
     if (fatal)
       emitError(loc, "bundle value should only be used from subfield");
     return failure();
   }
-  result = entry.get<Value>();
+  result = cast<Value>(entry);
   return success();
 }
 
@@ -1567,14 +1585,14 @@ ParseResult FIRModuleContext::resolveSymbolEntry(Value &result,
                                                  SymbolValueEntry &entry,
                                                  StringRef fieldName,
                                                  SMLoc loc) {
-  if (!entry.is<UnbundledID>()) {
+  if (!isa<UnbundledID>(entry)) {
     emitError(loc, "value should not be used from subfield");
     return failure();
   }
 
   auto fieldAttr = StringAttr::get(getContext(), fieldName);
 
-  unsigned unbundledId = entry.get<UnbundledID>() - 1;
+  unsigned unbundledId = cast<UnbundledID>(entry) - 1;
   assert(unbundledId < unbundledValues.size());
   UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
   for (auto elt : ubEntry) {
@@ -1902,7 +1920,17 @@ private:
                             SymbolRefAttr layerSym);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
+
+  // Parse a format string and build operations for FIRRTL "special"
+  // substitutions. Set `formatStringResult` to the validated format string and
+  // `operands` to the list of actual operands.
+  ParseResult parseFormatString(SMLoc formatStringLoc, StringRef formatString,
+                                ArrayRef<Value> specOperands,
+                                StringAttr &formatStringResult,
+                                SmallVectorImpl<Value> &operands);
   ParseResult parsePrintf();
+  ParseResult parseFPrintf();
+  ParseResult parseFFlush();
   ParseResult parseSkip();
   ParseResult parseStop();
   ParseResult parseAssert();
@@ -1935,6 +1963,7 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
   ParseResult parseRegisterWithReset();
+  ParseResult parseContract(unsigned blockIndent);
 
   // Helper to fetch a module referenced by an instance-like statement.
   FModuleLike getReferencedModule(SMLoc loc, StringRef moduleName);
@@ -2211,7 +2240,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (!moduleContext.resolveSymbolEntry(result, symtabEntry, loc, false))
       break;
 
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+    assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
     // Otherwise we referred to an implicitly bundled value.  We *must* be in
     // the midst of processing a field ID reference or 'is invalid'.  If not,
@@ -2223,7 +2252,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
       locationProcessor.setLoc(loc);
       // Invalidate all of the results of the bundled value.
-      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      unsigned unbundledId = cast<UnbundledID>(symtabEntry) - 1;
       UnbundledValueEntry &ubEntry =
           moduleContext.getUnbundledEntry(unbundledId);
       for (auto elt : ubEntry)
@@ -2667,6 +2696,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= cmem | smem | mem
 ///      ::= node | wire
 ///      ::= register
+///      ::= contract
 ///
 ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   auto kind = getToken().getKind();
@@ -2705,6 +2735,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseInvalidate();
   case FIRToken::lp_printf:
     return parsePrintf();
+  case FIRToken::lp_fprintf:
+    return parseFPrintf();
+  case FIRToken::lp_fflush:
+    return parseFFlush();
   case FIRToken::kw_skip:
     return parseSkip();
   case FIRToken::lp_stop:
@@ -2776,6 +2810,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseRegister(stmtIndent);
   case FIRToken::kw_regreset:
     return parseRegisterWithReset();
+  case FIRToken::kw_contract:
+    return parseContract(stmtIndent);
   }
 }
 
@@ -2900,6 +2936,117 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
+// Parse a format string and build operations for FIRRTL "special"
+// substitutions. Set `formatStringResult` to the validated format string and
+// `operands` to the list of actual operands.
+ParseResult FIRStmtParser::parseFormatString(SMLoc formatStringLoc,
+                                             StringRef formatString,
+                                             ArrayRef<Value> specOperands,
+                                             StringAttr &formatStringResult,
+                                             SmallVectorImpl<Value> &operands) {
+  // Validate the format string and remove any "special" substitutions.  Only do
+  // this for FIRRTL versions > 5.0.0.  If at a different FIRRTL version, then
+  // just parse this as if it was a string.
+  SmallVector<Attribute, 4> specialSubstitutions;
+  SmallString<64> validatedFormatString;
+  if (version < FIRVersion(5, 0, 0)) {
+    validatedFormatString = formatString;
+    operands.append(specOperands.begin(), specOperands.end());
+  } else {
+    for (size_t i = 0, e = formatString.size(), opIdx = 0; i != e; ++i) {
+      auto c = formatString[i];
+      switch (c) {
+      // FIRRTL percent format strings.  If this is actually a format string,
+      // then grab one of the "spec" operands.
+      case '%': {
+        validatedFormatString.push_back(c);
+
+        // Parse the width specifier.
+        SmallString<6> width;
+        c = formatString[++i];
+        while (isdigit(c)) {
+          width.push_back(c);
+          c = formatString[++i];
+        }
+
+        // Parse the radix.
+        switch (c) {
+        case 'c':
+          if (!width.empty()) {
+            emitError(formatStringLoc) << "ASCII character format specifiers "
+                                          "('%c') may not specify a width";
+            return failure();
+          }
+          [[fallthrough]];
+        case 'b':
+        case 'd':
+        case 'x':
+          if (!width.empty())
+            validatedFormatString.append(width);
+          operands.push_back(specOperands[opIdx++]);
+          break;
+        case '%':
+          if (!width.empty()) {
+            emitError(formatStringLoc)
+                << "literal percents ('%%') may not specify a width";
+            return failure();
+          }
+          break;
+        // Anything else is illegal.
+        default:
+          emitError(formatStringLoc)
+              << "unknown printf substitution '%" << width << c << "'";
+          return failure();
+        }
+        validatedFormatString.push_back(c);
+        break;
+      }
+      // FIRRTL special format strings.  If this is a special format string,
+      // then create an operation for it and put its result in the operand list.
+      // This will cause the operands to interleave with the spec operands.
+      // Replace any special format string with the generic '{{}}' placeholder.
+      case '{': {
+        if (formatString[i + 1] != '{') {
+          validatedFormatString.push_back(c);
+          break;
+        }
+        // Handle a special substitution.
+        i += 2;
+        size_t start = i;
+        while (formatString[i] != '}')
+          ++i;
+        if (formatString[i] != '}') {
+          llvm::errs() << "expected '}' to terminate special substitution";
+          return failure();
+        }
+
+        auto specialString = formatString.slice(start, i);
+        if (specialString == "SimulationTime") {
+          operands.push_back(builder.create<TimeOp>());
+        } else if (specialString == "HierarchicalModuleName") {
+          operands.push_back(builder.create<HierarchicalModuleNameOp>());
+        } else {
+          emitError(formatStringLoc)
+              << "unknown printf substitution '" << specialString
+              << "' (did you misspell it?)";
+          return failure();
+        }
+
+        validatedFormatString.append("{{}}");
+        ++i;
+        break;
+      }
+      default:
+        validatedFormatString.push_back(c);
+      }
+    }
+  }
+
+  formatStringResult =
+      builder.getStringAttr(FIRToken::getStringValue(validatedFormatString));
+  return success();
+}
+
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
@@ -2909,33 +3056,147 @@ ParseResult FIRStmtParser::parsePrintf() {
   if (parseExp(clock, "expected clock expression in printf") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseExp(condition, "expected condition in printf") ||
-      parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::comma, "expected ','"))
+    return failure();
+
+  auto formatStringLoc = getToken().getLoc();
+  if (parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
 
-  SmallVector<Value, 4> operands;
+  SmallVector<Value, 4> specOperands;
   while (consumeIf(FIRToken::comma)) {
-    operands.push_back({});
-    if (parseExp(operands.back(), "expected operand in printf"))
+    specOperands.push_back({});
+    if (parseExp(specOperands.back(), "expected operand in printf"))
       return failure();
   }
-  if (parseToken(FIRToken::r_paren, "expected ')'"))
-    return failure();
 
   StringAttr name;
-  if (parseOptionalName(name))
-    return failure();
-
-  if (parseOptionalInfo())
+  if (parseToken(FIRToken::r_paren, "expected ')'") ||
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  builder.create<PrintFOp>(clock, condition,
-                           builder.getStringAttr(formatStrUnescaped), operands,
+  StringAttr formatStrUnescaped;
+  SmallVector<Value> operands;
+  if (parseFormatString(formatStringLoc, formatString, specOperands,
+                        formatStrUnescaped, operands))
+    return failure();
+
+  builder.create<PrintFOp>(clock, condition, formatStrUnescaped, operands,
                            name);
+  return success();
+}
+
+/// fprintf ::= 'fprintf(' exp exp StringLit StringLit exp* ')' name? info?
+ParseResult FIRStmtParser::parseFPrintf() {
+  if (requireFeature(nextFIRVersion, "fprintf"))
+    return failure();
+  auto startTok = consumeToken(FIRToken::lp_fprintf);
+
+  Value clock, condition;
+  StringRef outputFile, formatString;
+  if (parseExp(clock, "expected clock expression in fprintf") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(condition, "expected condition in fprintf") ||
+      parseToken(FIRToken::comma, "expected ','"))
+    return failure();
+
+  auto outputFileLoc = getToken().getLoc();
+  if (parseGetSpelling(outputFile) ||
+      parseToken(FIRToken::string, "expected output file in fprintf"))
+    return failure();
+
+  SmallVector<Value, 4> outputFileSpecOperands;
+  while (consumeIf(FIRToken::comma)) {
+    // Stop parsing operands when we see the format string.
+    if (getToken().getKind() == FIRToken::string)
+      break;
+    outputFileSpecOperands.push_back({});
+    if (parseExp(outputFileSpecOperands.back(), "expected operand in fprintf"))
+      return failure();
+  }
+
+  auto formatStringLoc = getToken().getLoc();
+  if (parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in printf"))
+    return failure();
+
+  SmallVector<Value, 4> specOperands;
+  while (consumeIf(FIRToken::comma)) {
+    specOperands.push_back({});
+    if (parseExp(specOperands.back(), "expected operand in fprintf"))
+      return failure();
+  }
+
+  StringAttr name;
+  if (parseToken(FIRToken::r_paren, "expected ')'") ||
+      parseOptionalName(name) || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  StringAttr outputFileNameStrUnescaped;
+  SmallVector<Value> outputFileOperands;
+  if (parseFormatString(outputFileLoc, outputFile, outputFileSpecOperands,
+                        outputFileNameStrUnescaped, outputFileOperands))
+    return failure();
+
+  StringAttr formatStrUnescaped;
+  SmallVector<Value> operands;
+  if (parseFormatString(formatStringLoc, formatString, specOperands,
+                        formatStrUnescaped, operands))
+    return failure();
+
+  builder.create<FPrintFOp>(clock, condition, outputFileNameStrUnescaped,
+                            outputFileOperands, formatStrUnescaped, operands,
+                            name);
+  return success();
+}
+
+/// fflush ::= 'fflush(' exp exp (StringLit exp*)? ')' info?
+ParseResult FIRStmtParser::parseFFlush() {
+  if (requireFeature(nextFIRVersion, "fflush"))
+    return failure();
+
+  auto startTok = consumeToken(FIRToken::lp_fflush);
+
+  Value clock, condition;
+  if (parseExp(clock, "expected clock expression in 'fflush'") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(condition, "expected condition in 'fflush'"))
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+  StringAttr outputFileNameStrUnescaped;
+  SmallVector<Value> outputFileOperands;
+  // Parse file name if present.
+  if (consumeIf(FIRToken::comma)) {
+    SmallVector<Value, 4> outputFileSpecOperands;
+    auto outputFileLoc = getToken().getLoc();
+    StringRef outputFile;
+    if (parseGetSpelling(outputFile) ||
+        parseToken(FIRToken::string, "expected output file in fflush"))
+      return failure();
+
+    while (consumeIf(FIRToken::comma)) {
+      outputFileSpecOperands.push_back({});
+      if (parseExp(outputFileSpecOperands.back(), "expected operand in fflush"))
+        return failure();
+    }
+
+    if (parseFormatString(outputFileLoc, outputFile, outputFileSpecOperands,
+                          outputFileNameStrUnescaped, outputFileOperands))
+      return failure();
+  }
+
+  if (parseToken(FIRToken::r_paren, "expected ')' in 'fflush'") ||
+      parseOptionalInfo())
+    return failure();
+
+  builder.create<FFlushOp>(clock, condition, outputFileNameStrUnescaped,
+                           outputFileOperands);
   return success();
 }
 
@@ -3304,7 +3565,7 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
     if (!moduleContext.resolveSymbolEntry(result, symtabEntry, loc, false))
       return success();
 
-    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+    assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
     // Handle the normal "instance.x" reference.
     StringRef fieldName;
@@ -3419,7 +3680,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
     }
   } else {
     // This target can be a port or a regular value.
-    result = symtabEntry.get<Value>();
+    result = cast<Value>(symtabEntry);
   }
 
   assert(result);
@@ -3980,12 +4241,12 @@ ParseResult FIRStmtParser::parseInvalidate() {
   // We're dealing with an instance.  This instance may or may not have a
   // trailing expression.  Handle the special case of no trailing expression
   // first by invalidating all of its results.
-  assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+  assert(isa<UnbundledID>(symtabEntry) && "should be an instance");
 
   if (getToken().isNot(FIRToken::period)) {
     locationProcessor.setLoc(loc);
     // Invalidate all of the results of the bundled value.
-    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+    unsigned unbundledId = cast<UnbundledID>(symtabEntry) - 1;
     UnbundledValueEntry &ubEntry = moduleContext.getUnbundledEntry(unbundledId);
     for (auto elt : ubEntry)
       emitInvalidate(elt.second);
@@ -4128,7 +4389,7 @@ ParseResult FIRStmtParser::parseInstance() {
   hw::InnerSymAttr sym = {};
   auto result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
-      annotations.getValue(), portAnnotations, false, sym);
+      annotations.getValue(), portAnnotations, false, false, sym);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -4731,6 +4992,81 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
+/// contract ::= 'contract' (id,+ '=' exp,+) ':' info? contract_body
+/// contract_body ::= simple_stmt | INDENT simple_stmt+ DEDENT
+ParseResult FIRStmtParser::parseContract(unsigned blockIndent) {
+  if (requireFeature(missingSpecFIRVersion, "contracts"))
+    return failure();
+
+  auto startTok = consumeToken(FIRToken::kw_contract);
+
+  // Parse the contract results and expressions.
+  SmallVector<StringRef> ids;
+  SmallVector<SMLoc> locs;
+  SmallVector<Value> values;
+  SmallVector<Type> types;
+  if (!consumeIf(FIRToken::colon)) {
+    auto parseContractId = [&] {
+      StringRef id;
+      locs.push_back(getToken().getLoc());
+      if (parseId(id, "expected contract result name"))
+        return failure();
+      ids.push_back(id);
+      return success();
+    };
+    auto parseContractValue = [&] {
+      Value value;
+      if (parseExp(value, "expected expression for contract result"))
+        return failure();
+      values.push_back(value);
+      types.push_back(value.getType());
+      return success();
+    };
+    if (parseListUntil(FIRToken::equal, parseContractId) ||
+        parseListUntil(FIRToken::colon, parseContractValue))
+      return failure();
+  }
+  if (parseOptionalInfo())
+    return failure();
+
+  // Each result must have a corresponding expression assigned.
+  if (ids.size() != values.size())
+    return emitError(startTok.getLoc())
+           << "contract requires same number of results and expressions; got "
+           << ids.size() << " results and " << values.size()
+           << " expressions instead";
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Add block arguments for each result and declare their names in a subscope
+  // for the contract body.
+  auto contract = builder.create<ContractOp>(types, values);
+  auto &block = contract.getBody().emplaceBlock();
+
+  // Parse the contract body.
+  {
+    FIRModuleContext::ContextScope scope(moduleContext, &block);
+    for (auto [id, loc, type] : llvm::zip(ids, locs, types)) {
+      auto arg = block.addArgument(type, LocWithInfo(loc, this).getLoc());
+      if (failed(moduleContext.addSymbolEntry(id, arg, loc)))
+        return failure();
+    }
+    if (getIndentation() > blockIndent)
+      if (parseSubBlock(block, blockIndent, SymbolRefAttr{}))
+        return failure();
+  }
+
+  // Declare the results.
+  for (auto [id, loc, value, result] :
+       llvm::zip(ids, locs, values, contract.getResults())) {
+    // Remove previous symbol to avoid duplicates
+    moduleContext.removeSymbolEntry(id);
+    if (failed(moduleContext.addSymbolEntry(id, result, loc)))
+      return failure();
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FIRCircuitParser
 //===----------------------------------------------------------------------===//
@@ -4761,6 +5097,9 @@ private:
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
   ParseResult parseFormal(CircuitOp circuit, unsigned indent);
+  ParseResult parseSimulation(CircuitOp circuit, unsigned indent);
+  template <class Op>
+  ParseResult parseFormalLike(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -5051,6 +5390,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
     case FIRToken::kw_option:
+    case FIRToken::kw_simulation:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -5314,19 +5654,33 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
-/// formal-old ::= 'formal' id 'of' id ',' 'bound' '=' int info?
-/// formal-new ::= 'formal' id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
+/// formal ::= 'formal' formal-like
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_formal);
+  return parseFormalLike<FormalOp>(circuit, indent);
+}
+
+/// simulation ::= 'simulation' formal-like
+ParseResult FIRCircuitParser::parseSimulation(CircuitOp circuit,
+                                              unsigned indent) {
+  consumeToken(FIRToken::kw_simulation);
+  return parseFormalLike<SimulationOp>(circuit, indent);
+}
+
+/// formal-like ::= formal-like-old | formal-like-new
+/// formal-like-old ::= id 'of' id ',' 'bound' '=' int info?
+/// formal-like-new ::= id 'of' id ':' info? INDENT (param NEWLINE)* DEDENT
+template <class Op>
+ParseResult FIRCircuitParser::parseFormalLike(CircuitOp circuit,
+                                              unsigned indent) {
   StringRef id, moduleName;
   int64_t bound = 0;
   LocWithInfo info(getToken().getLoc(), this);
   auto builder = circuit.getBodyBuilder();
 
-  // Parse the name and target module of the formal test.
-  // `formal`
-  if (parseId(id, "expected formal test name") ||
-      parseToken(FIRToken::kw_of, "expected 'of' in formal test") ||
+  // Parse the name and target module of the test.
+  if (parseId(id, "expected test name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in test") ||
       parseId(moduleName, "expected module name"))
     return failure();
 
@@ -5347,7 +5701,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
     params.set("bound", builder.getIntegerAttr(builder.getI32Type(), bound));
   } else {
     // Parse the new style declaration with a `:` and parameter list.
-    if (parseToken(FIRToken::colon, "expected ':' in formal test") ||
+    if (parseToken(FIRToken::colon, "expected ':' in test") ||
         info.parseOptionalInfo())
       return failure();
     while (getIndentation() > indent) {
@@ -5363,8 +5717,8 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
     }
   }
 
-  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName,
-                                   params.getDictionary(getContext()));
+  builder.create<Op>(info.getLoc(), id, moduleName,
+                     params.getDictionary(getContext()));
   return success();
 }
 
@@ -5383,11 +5737,11 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_formal:
-    if (requireFeature({4, 0, 0}, "inline formal tests"))
+    if (requireFeature({4, 0, 0}, "formal tests"))
       return failure();
     return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
-    if (requireFeature({1, 2, 0}, "inline formal tests") ||
+    if (requireFeature({1, 2, 0}, "intrinsic modules") ||
         removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
     return parseIntModule(circuit, indent);
@@ -5404,6 +5758,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     if (getToken().getKind() == FIRToken::kw_module)
       return parseModule(circuit, /*isPublic=*/true, indent);
     return emitError(getToken().getLoc(), "only modules may be public");
+  case FIRToken::kw_simulation:
+    if (requireFeature(nextFIRVersion, "simulation tests"))
+      return failure();
+    return parseSimulation(circuit, indent);
   case FIRToken::kw_type:
     return parseTypeDecl();
   case FIRToken::kw_option:
@@ -5728,6 +6086,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:
+    case FIRToken::kw_simulation:
     case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())

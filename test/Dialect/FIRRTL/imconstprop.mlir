@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop))' --split-input-file  %s | FileCheck %s
+// RUN: circt-opt --firrtl-imconstprop --split-input-file --allow-unregistered-dialect %s | FileCheck %s
 
 firrtl.circuit "Test" {
 
@@ -895,4 +895,39 @@ firrtl.circuit "Layers" {
       %b = firrtl.node sym @sym_b %a : !firrtl.uint<1>
     }
   }
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "PublicTop"
+firrtl.circuit "PublicTop" {
+  // CHECK-LABEL: firrtl.module private @Foo
+  firrtl.module private @Foo(in %a: !firrtl.uint<1>) {
+    // CHECK-NOT: firrtl.constant 0
+    // CHECK: firrtl.int.verif.assert %a
+    firrtl.int.verif.assert %a : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>) {
+    // CHECK-NOT: firrtl.constant 0
+    // CHECK: firrtl.int.verif.assert %a
+    firrtl.int.verif.assert %a : !firrtl.uint<1>
+  }
+  firrtl.module @PublicTop() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.uint<1>)
+    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.uint<1>)
+    firrtl.matchingconnect %foo_a, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_a, %c0_ui1 : !firrtl.uint<1>
+  }
+  firrtl.module private @PrivateTop1(in %a: !firrtl.uint<1>) {
+    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.uint<1>)
+    firrtl.matchingconnect %foo_a, %a : !firrtl.uint<1>
+  }
+  firrtl.module private @PrivateTop2(in %a: !firrtl.uint<1>) {
+    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.uint<1>)
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+  }
+  firrtl.formal @Test, @PrivateTop1 {}
+  "some_unknown_dialect.op"() { magic = @PrivateTop2 } : () -> ()
 }

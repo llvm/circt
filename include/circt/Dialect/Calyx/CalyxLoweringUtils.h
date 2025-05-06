@@ -340,7 +340,7 @@ class ComponentLoweringStateInterface {
 public:
   ComponentLoweringStateInterface(calyx::ComponentOp component);
 
-  ~ComponentLoweringStateInterface();
+  virtual ~ComponentLoweringStateInterface();
 
   /// Returns the calyx::ComponentOp associated with this lowering state.
   calyx::ComponentOp getComponentOp();
@@ -404,6 +404,14 @@ public:
 
   /// Put the name of the callee and the instance of the call into map.
   void addInstance(StringRef calleeName, InstanceOp instanceOp);
+
+  /// Returns if `op` is a compare operator that requires a register to hold the
+  /// value of its sequential guard computation.
+  bool isSeqGuardCmpLibOp(Operation *op);
+
+  /// Add `op` if it's a compare operator that requires a register to hold the
+  /// value of its sequential guard computation.
+  void addSeqGuardCmpLibOp(Operation *op);
 
   /// Returns the evaluating group or None if not found.
   template <typename TGroupOp = calyx::GroupInterface>
@@ -535,6 +543,10 @@ private:
   /// A json file to store external global memory data. See
   /// https://docs.calyxir.org/lang/data-format.html?highlight=json#the-data-format
   llvm::json::Value extMemData;
+
+  /// A set of compare operators that require registers to hold their sequential
+  /// guard computation.
+  DenseSet<Operation *> seqGuardCmpLibOps;
 };
 
 /// An interface for conversion passes that lower Calyx programs. This handles
@@ -880,6 +892,10 @@ Type toBitVector(T type) {
   }
   return type;
 }
+
+// Returns whether `value` is the result of a sequential Calyx library
+// operation.
+bool parentIsSeqCell(Value value);
 
 } // namespace calyx
 } // namespace circt

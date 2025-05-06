@@ -4,6 +4,7 @@ set(libs
   CIRCTHW
   CIRCTImportVerilog
   CIRCTLLHD
+  CIRCTLLHDTransforms
   CIRCTMoore
   CIRCTMooreToCore
   CIRCTMooreTransforms
@@ -14,6 +15,7 @@ set(libs
   MLIRBytecodeReader
   MLIRControlFlowDialect
   MLIRFuncDialect
+  MLIRFuncInlinerExtension
   MLIRIR
   MLIRParser
   MLIRSCFDialect

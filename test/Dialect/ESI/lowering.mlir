@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
-// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
+// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --hw-flatten-io --lower-esi-to-hw | FileCheck --check-prefix=HW %s
 
 hw.module.extern @Sender(in %clk: !seq.clock, out x: !esi.channel<i4>, out y: i8) attributes {esi.bundle}
 hw.module.extern @ArrSender(out x: !esi.channel<!hw.array<4xi64>>) attributes {esi.bundle}
@@ -53,8 +53,18 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
   // IFACE-NEXT:    %[[#modport4:]] = sv.modport.get %i4ToRecv2 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
   // IFACE-NEXT:    hw.instance "recv2" @Reciever(a: %[[#modport4:]]: !sv.modport<@IValidReady_i4::@source>, clk: %clk: !seq.clock) -> ()
 
+  // HW-LABEL:    hw.module @test(in %clk : !seq.clock, in %rst : i1)
   // After all 3 ESI lowering passes, there shouldn't be any ESI constructs!
   // HW-NOT: esi
+}
+
+// https://github.com/llvm/circt/issues/8295
+hw.module @bug8295(out x: !esi.channel<i4>, out sv: i1, out sr: i1, out sd: i4) {
+  %sv, %sr, %sd = esi.snoop.vr %x : !esi.channel<i4>
+  %data = hw.constant 0 : i4
+  %valid = hw.constant 1 : i1
+  %x, %ready = esi.wrap.vr %data, %valid : i4
+  hw.output %x, %sv, %sr, %sd : !esi.channel<i4>, i1, i1, i4
 }
 
 hw.module @add11(in %clk: !seq.clock, in %ints: !esi.channel<i32>, out mutatedInts: !esi.channel<i32>, out c4: i4) {
@@ -76,6 +86,9 @@ hw.module @InternRcvr(in %in: !esi.channel<!hw.array<4xi8>>) {}
 hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
   %ints, %c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %ints: !esi.channel<i32>) -> (mutatedInts: !esi.channel<i32>, c4: i4)
 
+  %valid, %ready, %data = esi.snoop.vr %ints: !esi.channel<i32>
+  %xact = comb.and %valid, %ready : i1
+
   %nullBit = esi.null : !esi.channel<i4>
   hw.instance "nullRcvr" @Reciever(a: %nullBit: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
 
@@ -83,14 +96,15 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
   hw.instance "nullInternRcvr" @InternRcvr(in: %nullArray: !esi.channel<!hw.array<4xi8>>) -> ()
 }
 // HW-LABEL: hw.module @test2(in %clk : !seq.clock, in %rst : i1) {
-// HW:   %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
-// HW:   [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
-// HW:   sv.interface.signal.assign %i4ToNullRcvr(@IValidReady_i4::@data) = [[ZERO]] : i4
-// HW:   [[ZM:%.+]] = sv.modport.get %{{.+}} @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
-// HW:   hw.instance "nullRcvr" @Reciever(a: [[ZM]]: !sv.modport<@IValidReady_i4::@source>, clk: %clk: !seq.clock) -> ()
-// HW:   %c0_i32 = hw.constant 0 : i32
-// HW:   [[ZA:%.+]] = hw.bitcast %c0_i32 : (i32) -> !hw.array<4xi8>
-// HW:   %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false_0: i1) -> (in_ready: i1)
+// HW-NEXT:    %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
+// HW-NEXT:    [[XACT:%.+]] = comb.and %adder.mutatedInts_valid, %adder.ints_ready : i1
+// HW:         [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
+// HW:         sv.interface.signal.assign %i4ToNullRcvr(@IValidReady_i4::@data) = [[ZERO]] : i4
+// HW:         [[ZM:%.+]] = sv.modport.get %{{.+}} @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
+// HW:         hw.instance "nullRcvr" @Reciever(a: [[ZM]]: !sv.modport<@IValidReady_i4::@source>, clk: %clk: !seq.clock) -> ()
+// HW:         %c0_i32 = hw.constant 0 : i32
+// HW:         [[ZA:%.+]] = hw.bitcast %c0_i32 : (i32) -> !hw.array<4xi8>
+// HW:         %nullInternRcvr.in_ready = hw.instance "nullInternRcvr" @InternRcvr(in: [[ZA]]: !hw.array<4xi8>, in_valid: %false_0: i1) -> (in_ready: i1)
 
 hw.module @twoChannelArgs(in %clk: !seq.clock, in %ints: !esi.channel<i32>, in %foo: !esi.channel<i7>) {
   %rdy = hw.constant 1 : i1

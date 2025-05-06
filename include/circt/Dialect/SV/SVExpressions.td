@@ -201,6 +201,21 @@ def ConstantStrOp : SVOp<"constantStr", [Pure]> {
   let assemblyFormat = " $str attr-dict";
 }
 
+def SFormatFOp : SVOp<"sformatf", [Pure]> {
+  let summary = "'$sformatf' task";
+  let description = [{
+    This operations represents `$sformatf` task that produces a string from
+    a format string and substitutions.
+
+    See section 21.3.3 of 1800-2023 for more details.
+  }];
+
+  let arguments = (ins StrAttr: $format_string, Variadic<AnyType>:$substitutions);
+  let results = (outs HWStringType:$result);
+  let assemblyFormat =
+    "$format_string attr-dict (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?";
+}
+
 def LocalParamOp : SVOp<"localparam",
       [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";
@@ -264,6 +279,28 @@ def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let arguments = (ins AnyType:$expression);
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
+}
+
+def TimeOp : SVOp<"system.time", []> {
+  let summary = "`$time` system function";
+  let description = [{
+    Return a 64-bit integer value representing the time at which the function
+    was called.
+  }];
+  let arguments = (ins);
+  let results = (outs I64:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def STimeOp : SVOp<"system.stime", []> {
+  let summary = "`$time` system function";
+  let description = [{
+    Return a 32-bit integer value representing the time at which the function
+    was called.
+  }];
+  let arguments = (ins);
+  let results = (outs I32:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def UnpackedArrayCreateOp : SVOp<"unpacked_array_create", [Pure, SameTypeOperands]> {

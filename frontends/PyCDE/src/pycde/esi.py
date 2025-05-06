@@ -3,13 +3,13 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
-                     _PyProxy, PortError)
+                     _PyProxy, PortError, Reset)
 from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
                       _FromCirctValue, UIntSignal)
-from .support import optional_dict_to_dict_attr, get_user_loc
+from .support import clog2, optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, StructType, Type, UInt, types,
@@ -20,6 +20,7 @@ from .circt.dialects import esi as raw_esi, hw, msft
 
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, cast
+import typing
 
 import atexit
 
@@ -128,6 +129,22 @@ def Cosim(decl: ServiceDecl, clk, rst):
   decl.instantiate_builtin(AppID("cosim", 0), "cosim", [], [clk, rst])
 
 
+class EngineModule(Module):
+  """A module which implements an ESI engines. Engines have the responsibility
+  of transporting messages between two different devices."""
+
+  @property
+  def TypeName(self):
+    assert False, "Engine modules must have a TypeName property."
+
+  def __init__(self, appid: AppID, **inputs):
+    super(EngineModule, self).__init__(appid=appid, **inputs)
+
+  @property
+  def appid(self) -> AppID:
+    return AppID(self.inst.attributes["esi.appid"])
+
+
 class NamedChannelValue(ChannelSignal):
   """A ChannelValue with the name of the client request."""
 
@@ -174,6 +191,10 @@ class _OutputBundleSetter(AssignableSignal):
   def client_name(self) -> List[AppID]:
     return [AppID(x) for x in self.req.relativeAppIDPath]
 
+  @property
+  def client_name_str(self) -> str:
+    return "_".join([str(appid) for appid in self.client_name])
+
   def assign(self, new_value: ChannelSignal):
     """Assign the generated channel to this request."""
     if self._bundle_to_replace is None:
@@ -184,6 +205,47 @@ class _OutputBundleSetter(AssignableSignal):
           f"Channel type mismatch. Expected {self.type}, got {new_value.type}.")
     msft.replaceAllUsesWith(self._bundle_to_replace, new_value.value)
     self._bundle_to_replace = None
+
+  def cleanup(self):
+    """Null out all the references to all the ops to allow them to be GC'd."""
+    self.req = None
+    self.rec = None
+
+
+class EngineServiceRecord:
+  """Represents a record in the engine section of the manifest."""
+
+  def __init__(self,
+               engine: EngineModule,
+               details: Optional[Dict[str, object]] = None):
+    rec_appid = AppID(f"{engine.appid.name}_record", engine.appid.index)
+    details = optional_dict_to_dict_attr(details)
+    self._rec = raw_esi.ServiceImplRecordOp(appID=rec_appid._appid,
+                                            serviceImplName=engine.TypeName,
+                                            implDetails=details,
+                                            isEngine=True)
+    self._rec.regions[0].blocks.append()
+
+  def add_record(self,
+                 client: _OutputBundleSetter,
+                 channel_assignments: Optional[Dict] = None,
+                 details: Optional[Dict[str, object]] = None):
+    """Add a record to the manifest for this client request. Generally used to
+    give the runtime necessary information about how to connect to the client
+    through the generated service. For instance, offsets into an MMIO space."""
+
+    channel_assignments = optional_dict_to_dict_attr(channel_assignments)
+    details = optional_dict_to_dict_attr(details)
+
+    with get_user_loc(), ir.InsertionPoint.at_block_begin(
+        self._rec.reqDetails.blocks[0]):
+      raw_esi.ServiceImplClientRecordOp(
+          client.req.relativeAppIDPath,
+          client.req.servicePort,
+          ir.TypeAttr.get(client.req.toClient.type),
+          channelAssignments=channel_assignments,
+          implDetails=details,
+      )
 
 
 class _ServiceGeneratorBundles:
@@ -209,6 +271,13 @@ class _ServiceGeneratorBundles:
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
 
+  def emit_engine(self,
+                  engine: EngineModule,
+                  details: Dict[str, object] = None):
+    """Emit and return an engine record."""
+    with get_user_loc(), ir.InsertionPoint(self._rec):
+      return EngineServiceRecord(engine, details)
+
   @property
   def to_client_reqs(self) -> List[_OutputBundleSetter]:
     return self._output_reqs
@@ -218,6 +287,13 @@ class _ServiceGeneratorBundles:
       if req._bundle_to_replace is not None:
         name_str = str(req.client_name)
         raise ValueError(f"{name_str} has not been connected.")
+
+  def cleanup(self):
+    """Null out all the references to all the ops to allow them to be GC'd."""
+    for req in self._output_reqs:
+      req.cleanup()
+    self._req = None
+    self._rec = None
 
 
 class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
@@ -243,7 +319,8 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
         impl_opts=opts,
         loc=self.loc)
 
-  def generate_svc_impl(self, serviceReq: raw_esi.ServiceImplementReqOp,
+  def generate_svc_impl(self, sys: System,
+                        serviceReq: raw_esi.ServiceImplementReqOp,
                         record_op: raw_esi.ServiceImplRecordOp) -> bool:
     """"Generate the service inline and replace the `ServiceInstanceOp` which is
     being implemented."""
@@ -251,7 +328,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     assert len(self.generators) == 1
     generator: Generator = list(self.generators.values())[0]
     ports = self.generator_port_proxy(serviceReq.operation.operands, self)
-    with self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
+    with sys, self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
 
       # Run the generator.
       bundles = _ServiceGeneratorBundles(self, serviceReq, record_op)
@@ -268,7 +345,17 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
       for idx, port_value in enumerate(ports._output_values):
         msft.replaceAllUsesWith(serviceReq.operation.results[idx],
                                 port_value.value)
-      serviceReq.operation.erase()
+
+    # Erase the service request op so as to avoid bundles with no consumers.
+    serviceReq.operation.erase()
+
+    # The service implementation generator could have instantiated new modules,
+    # so we need to generate them. Don't run the appID indexer since during a
+    # pass, the IR can be invalid and the indexers assumes it is valid.
+    sys.generate(skip_appid_index=True)
+    # Now that the bundles should be assigned, we can cleanup the bundles and
+    # delete the service request op.
+    bundles.cleanup()
 
     return rc
 
@@ -339,14 +426,9 @@ class _ServiceGeneratorRegistry:
     if impl_name not in self._registry:
       return False
     (impl, sys) = self._registry[impl_name]
-    with sys:
-      ret = impl._builder.generate_svc_impl(serviceReq=req.opview,
-                                            record_op=rec.opview)
-    # The service implementation generator could have instantiated new modules,
-    # so we need to generate them. Don't run the appID indexer since during a
-    # pass, the IR can be invalid and the indexers assumes it is valid.
-    sys.generate(skip_appid_index=True)
-    return ret
+    return impl._builder.generate_svc_impl(sys,
+                                           serviceReq=req.opview,
+                                           record_op=rec.opview)
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()
@@ -514,9 +596,11 @@ class MMIO:
 class _HostMem(ServiceDecl):
   """ESI standard service to request read or write access to host memory."""
 
+  TagType = UInt(8)
+
   ReadReqType = StructType([
       ("address", UInt(64)),
-      ("tag", UInt(8)),
+      ("tag", TagType),
   ])
 
   def __init__(self):
@@ -531,14 +615,14 @@ class _HostMem(ServiceDecl):
     ])
     return Bundle([
         BundledChannel("req", ChannelDirection.FROM, write_req_type),
-        BundledChannel("ackTag", ChannelDirection.TO, UInt(8))
+        BundledChannel("ackTag", ChannelDirection.TO, _HostMem.TagType),
     ])
 
   def write_req_channel_type(self, data_type: Type) -> StructType:
     """Return a write request struct type for 'data_type'."""
     return StructType([
         ("address", UInt(64)),
-        ("tag", UInt(8)),
+        ("tag", _HostMem.TagType),
         ("data", data_type),
     ])
 
@@ -556,46 +640,58 @@ class _HostMem(ServiceDecl):
 
   def write(self, appid: AppID, req: ChannelSignal) -> ChannelSignal:
     """Create a write request to the host memory out of a request channel."""
-    self._materialize_service_decl()
-
     # Extract the data type from the request channel and call the helper to get
     # the write bundle type for the req channel.
-    req_data_type = req.type.inner_type.data
-    write_bundle_type = self.write_req_bundle_type(req_data_type)
+    write_bundle_type = self.write_req_bundle_type(req.type.inner_type.data)
+    bundle = self.write_from_bundle(appid, write_bundle_type)
+    resp = bundle.unpack(req=req)['ackTag']
+    return resp
 
-    bundle = cast(
+  def write_from_bundle(self, appid: AppID,
+                        write_bundle_type: Bundle) -> BundleSignal:
+    self._materialize_service_decl()
+
+    return cast(
         BundleSignal,
         _FromCirctValue(
             raw_esi.RequestConnectionOp(
                 write_bundle_type._type,
                 hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
                 appid._appid).toClient))
-    resp = bundle.unpack(req=req)['ackTag']
-    return resp
 
-  # Create a read request to the host memory out of a request channel and return
-  # the response channel with the specified data type.
-  def read(self, appid: AppID, req: ChannelSignal,
-           data_type: Type) -> ChannelSignal:
-    self._materialize_service_decl()
-
+  def read_bundle_type(self, resp_type: Type) -> Bundle:
+    """Build a read bundle type for the given data type."""
     resp_type = StructType([
         ("tag", UInt(8)),
-        ("data", data_type),
+        ("data", resp_type),
     ])
     read_bundle_type = Bundle([
         BundledChannel("req", ChannelDirection.FROM, _HostMem.ReadReqType),
         BundledChannel("resp", ChannelDirection.TO, resp_type)
     ])
+    return read_bundle_type
 
-    bundle = cast(
+  def read_from_bundle(self, appid: AppID,
+                       read_bundle_type: Bundle) -> BundleSignal:
+    """Request a connection based for a given read bundle type."""
+    return cast(
         BundleSignal,
         _FromCirctValue(
             raw_esi.RequestConnectionOp(
                 read_bundle_type._type,
                 hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("read")),
                 appid._appid).toClient))
-    resp = bundle.unpack(req=req)['resp']
+
+  def read(self, appid: AppID, req: ChannelSignal,
+           data_type: Type) -> ChannelSignal:
+    """Create a read request to the host memory out of a request channel and
+    return the response channel with the specified data type."""
+
+    self._materialize_service_decl()
+
+    read_bundle_type = self.read_bundle_type(data_type)
+    bundle_sig = self.read_from_bundle(appid, read_bundle_type)
+    resp = bundle_sig.unpack(req=req)['resp']
     return resp
 
   @staticmethod
@@ -763,6 +859,50 @@ def package(sys: System):
   shutil.copy(__dir__ / "ESIPrimitives.sv", sys.hw_output_dir)
 
 
+def TaggedDemux(num_clients: int,
+                channel_type: Channel) -> typing.Type["TaggedDemuxImpl"]:
+  """Construct a tagged demultiplexer for a given tagged data type.
+  'tagged_data_type' is assumed to be a struct with a 'tag' field and a 'data'
+  field OR a UInt representing the tag itself. Demux the data to the appropriate
+  output channel based on the tag."""
+
+  class TaggedDemuxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    in_ = Input(channel_type)
+
+    output_names = [f"out{i}" for i in range(num_clients)]
+    for idx in range(num_clients):
+      locals()[output_names[idx]] = Output(channel_type)
+
+    def get_out(self, idx: int) -> ChannelSignal:
+      return getattr(self, self.output_names[idx])
+
+    @generator
+    def build(ports) -> None:
+      upstream_ready_wire = Wire(Bits(1))
+      upstream_data, upstream_valid = ports.in_.unwrap(upstream_ready_wire)
+      upstream_data_type = upstream_data.type
+
+      upstream_ready = Bits(1)(1)
+      for idx in range(num_clients):
+        if isinstance(upstream_data_type, StructType):
+          tag = upstream_data.tag
+        elif isinstance(upstream_data_type, UInt):
+          tag = upstream_data
+        else:
+          raise TypeError("TaggedDemux input must be a struct or UInt.")
+        output_valid = upstream_valid & (tag == UInt(8)(idx))
+        output_ch, output_ready = channel_type.wrap(upstream_data, output_valid)
+        setattr(ports, TaggedDemuxImpl.output_names[idx], output_ch)
+        upstream_ready = upstream_ready & output_ready
+
+      upstream_ready_wire.assign(upstream_ready)
+
+  return TaggedDemuxImpl
+
+
 def ChannelDemux2(data_type: Type):
 
   class ChannelDemux2(Module):
@@ -796,34 +936,58 @@ def ChannelDemux2(data_type: Type):
   return ChannelDemux2
 
 
-def ChannelDemux(input: ChannelSignal, sel: BitsSignal,
-                 num_outs: int) -> List[ChannelSignal]:
-  """Build a demultiplexer of ESI channels. Ideally, this would be a
-  parameterized module with an array of output channels, but the current ESI
-  channel-port lowering doesn't deal with arrays of channels. Independent of the
-  signaling protocol."""
+def ChannelDemux(input: ChannelSignal,
+                 sel: BitsSignal,
+                 num_outs: int,
+                 instance_name: Optional[str] = None) -> List[ChannelSignal]:
+  """Build a demultiplexer of ESI channels. 'num_outs' is the number of outputs,
+  sel it the select signal, and input is the input channel. Function simply
+  passes though to the module and is provided to legacy reasons."""
+  demux = ChannelDemuxMod(input.type, num_outs)(input=input,
+                                                sel=sel,
+                                                instance_name=instance_name)
+  return [getattr(demux, f"output_{i}") for i in range(num_outs)]
 
-  dmux2 = ChannelDemux2(input.type)
 
-  def build_tree(inter_input: ChannelSignal, inter_sel: BitsSignal,
-                 inter_num_outs: int, path: str) -> List[ChannelSignal]:
-    """Builds a binary tree of demuxes to demux the input channel."""
-    if inter_num_outs == 0:
-      return []
-    if inter_num_outs == 1:
-      return [inter_input]
+@modparams
+def ChannelDemuxMod(input_channel_type: Type, num_outs: int):
+  """Build a demultiplexer of ESI channels."""
 
-    demux2 = dmux2(sel=inter_sel[-1].as_bits(),
-                   inp=inter_input,
-                   instance_name=f"demux2_path{path}")
-    next_sel = inter_sel[:-1].as_bits()
-    tree0 = build_tree(demux2.output0, next_sel, (inter_num_outs + 1) // 2,
-                       path + "0")
-    tree1 = build_tree(demux2.output1, next_sel, (inter_num_outs + 1) // 2,
-                       path + "1")
-    return tree0 + tree1
+  class ChannelDemuxImpl(Module):
+    input = Input(input_channel_type)
+    sel = Input(Bits(clog2(num_outs)))
 
-  return build_tree(input, sel, num_outs, "")
+    # Add an output port for each read client.
+    for i in range(num_outs):
+      locals()[f"output_{i}"] = Output(input_channel_type)
+
+    @generator
+    def build(ports) -> None:
+      dmux2 = ChannelDemux2(ports.input.type)
+
+      def build_tree(inter_input: ChannelSignal, inter_sel: BitsSignal,
+                     inter_num_outs: int, path: str) -> List[ChannelSignal]:
+        """Builds a binary tree of demuxes to demux the input channel."""
+        if inter_num_outs == 0:
+          return []
+        if inter_num_outs == 1:
+          return [inter_input]
+
+        demux2 = dmux2(sel=inter_sel[-1].as_bits(),
+                       inp=inter_input,
+                       instance_name=f"demux2_path{path}")
+        next_sel = inter_sel[:-1].as_bits()
+        tree0 = build_tree(demux2.output0, next_sel, (inter_num_outs + 1) // 2,
+                           path + "0")
+        tree1 = build_tree(demux2.output1, next_sel, (inter_num_outs + 1) // 2,
+                           path + "1")
+        return tree0 + tree1
+
+      outputs = build_tree(ports.input, ports.sel, num_outs, "")
+      for idx, output in enumerate(outputs):
+        setattr(ports, f"output_{idx}", output)
+
+  return ChannelDemuxImpl
 
 
 def ChannelMux2(data_type: Channel):

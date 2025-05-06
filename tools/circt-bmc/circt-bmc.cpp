@@ -15,8 +15,11 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/SMT/SMTDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
@@ -26,6 +29,7 @@
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
+#include "mlir/Dialect/SMT/IR/SMTDialect.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
@@ -98,6 +102,11 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> risingClocksOnly(
+    "rising-clocks-only",
+    cl::desc("Only consider the circuit and property on rising clock edges"),
+    cl::init(false), cl::cat(mainCategory));
+
 #ifdef CIRCT_BMC_ENABLE_JIT
 
 enum OutputFormat { OutputMLIR, OutputLLVM, OutputSMTLIB, OutputRunJIT };
@@ -168,14 +177,19 @@ static LogicalResult executeBMC(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-bmc"));
 
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
   lowerToBMCOptions.topModule = moduleName;
+  lowerToBMCOptions.risingClocksOnly = risingClocksOnly;
   pm.addPass(createLowerToBMC(lowerToBMCOptions));
   pm.addPass(createConvertHWToSMT());
   pm.addPass(createConvertCombToSMT());
-  pm.addPass(createConvertVerifToSMT());
+  ConvertVerifToSMTOptions convertVerifToSMTOptions;
+  convertVerifToSMTOptions.risingClocksOnly = risingClocksOnly;
+  pm.addPass(createConvertVerifToSMT(convertVerifToSMTOptions));
   pm.addPass(createSimpleCanonicalizerPass());
 
   if (outputFormat != OutputMLIR && outputFormat != OutputSMTLIB) {
@@ -228,6 +242,9 @@ static LogicalResult executeBMC(MLIRContext &context) {
   };
 
   std::unique_ptr<mlir::ExecutionEngine> engine;
+  std::function<llvm::Error(llvm::Module *)> transformer =
+      mlir::makeOptimizingTransformer(
+          /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
   {
     auto timer = ts.nest("Setting up the JIT");
     auto entryPoint =
@@ -250,8 +267,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
                                               sharedLibs.end());
     mlir::ExecutionEngineOptions engineOptions;
-    engineOptions.transformer = mlir::makeOptimizingTransformer(
-        /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
+    engineOptions.transformer = transformer;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.sharedLibPaths = sharedLibraries;
     engineOptions.enableObjectDump = true;
@@ -307,11 +323,21 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-                  circt::seq::SeqDialect, circt::smt::SMTDialect,
-                  mlir::func::FuncDialect, circt::verif::VerifDialect,
-                  mlir::LLVM::LLVMDialect, mlir::arith::ArithDialect,
-                  mlir::BuiltinDialect>();
+  // clang-format off
+  registry.insert<
+    circt::comb::CombDialect,
+    circt::emit::EmitDialect,
+    circt::hw::HWDialect,
+    circt::om::OMDialect,
+    circt::seq::SeqDialect,
+    mlir::smt::SMTDialect,
+    circt::verif::VerifDialect,
+    mlir::arith::ArithDialect,
+    mlir::BuiltinDialect,
+    mlir::func::FuncDialect,
+    mlir::LLVM::LLVMDialect
+  >();
+  // clang-format on
   mlir::func::registerInlinerExtension(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

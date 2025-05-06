@@ -76,7 +76,11 @@ void LowerToBMCPass::runOnOperation() {
 
   // Lookup or declare printf function.
   auto printfFunc =
-      LLVM::lookupOrCreateFn(moduleOp, "printf", ptrTy, voidTy, true);
+      LLVM::lookupOrCreateFn(builder, moduleOp, "printf", ptrTy, voidTy, true);
+  if (failed(printfFunc)) {
+    moduleOp->emitError("failed to lookup or create printf");
+    return signalPassFailure();
+  }
 
   // Replace the top-module with a function performing the BMC
   auto entryFunc = builder.create<func::FuncOp>(
@@ -91,8 +95,8 @@ void LowerToBMCPass::runOnOperation() {
     terminator->erase();
   }
 
-  // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
-  // iterations
+  // Double the bound given to the BMC op unless in rising clocks only mode, as
+  // a clock cycle involves two negations
   verif::BoundedModelCheckingOp bmcOp;
   auto numRegs = hwModule->getAttrOfType<IntegerAttr>("num_regs");
   auto initialValues = hwModule->getAttrOfType<ArrayAttr>("initial_values");
@@ -105,8 +109,8 @@ void LowerToBMCPass::runOnOperation() {
       }
     }
     bmcOp = builder.create<verif::BoundedModelCheckingOp>(
-        loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue(),
-        initialValues);
+        loc, risingClocksOnly ? bound : 2 * bound,
+        cast<IntegerAttr>(numRegs).getValue().getZExtValue(), initialValues);
   } else {
     hwModule->emitOpError("no num_regs or initial_values attribute found - "
                           "please run externalize "
@@ -142,11 +146,12 @@ void LowerToBMCPass::runOnOperation() {
   {
     OpBuilder::InsertionGuard guard(builder);
     // Initialize clock to 0 if it exists, otherwise just yield nothing
+    // We initialize to 1 if we're in rising clocks only mode
     auto *initBlock = builder.createBlock(&bmcOp.getInit());
     builder.setInsertionPointToStart(initBlock);
     if (hasClk) {
-      auto initVal =
-          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 0);
+      auto initVal = builder.create<hw::ConstantOp>(loc, builder.getI1Type(),
+                                                    risingClocksOnly ? 1 : 0);
       auto toClk = builder.create<seq::ToClockOp>(loc, initVal);
       builder.create<verif::YieldOp>(loc, ValueRange{toClk});
     } else {
@@ -158,13 +163,20 @@ void LowerToBMCPass::runOnOperation() {
     builder.setInsertionPointToStart(loopBlock);
     if (hasClk) {
       loopBlock->addArgument(seq::ClockType::get(ctx), loc);
-      auto fromClk =
-          builder.create<seq::FromClockOp>(loc, loopBlock->getArgument(0));
-      auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
-      auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
-      auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
-      // Only yield clock value
-      builder.create<verif::YieldOp>(loc, ValueRange{toClk});
+      if (risingClocksOnly) {
+        // In rising clocks only mode we don't need to toggle the clock
+        builder.create<verif::YieldOp>(loc,
+                                       ValueRange{loopBlock->getArgument(0)});
+      } else {
+        auto fromClk =
+            builder.create<seq::FromClockOp>(loc, loopBlock->getArgument(0));
+        auto cNeg1 =
+            builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
+        auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
+        auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
+        // Only yield clock value
+        builder.create<verif::YieldOp>(loc, ValueRange{toClk});
+      }
     } else {
       builder.create<verif::YieldOp>(loc, ValueRange{});
     }
@@ -203,7 +215,8 @@ void LowerToBMCPass::runOnOperation() {
 
   auto formatString = builder.create<LLVM::SelectOp>(
       loc, bmcOp.getResult(), successStrAddr.value(), failureStrAddr.value());
-  builder.create<LLVM::CallOp>(loc, printfFunc, ValueRange{formatString});
+  builder.create<LLVM::CallOp>(loc, printfFunc.value(),
+                               ValueRange{formatString});
   builder.create<func::ReturnOp>(loc);
 
   if (insertMainFunc) {

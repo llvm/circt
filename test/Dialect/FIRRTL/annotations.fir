@@ -20,7 +20,8 @@ circuit Foo: %[[
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations =
+    ; CHECK: firrtl.circuit "Foo"
+    ; CHECK-SAME: rawAnnotations =
     ; CHECK-SAME: array = [1, 2, 3]
     ; CHECK-SAME: boolean = true
     ; CHECK-SAME: float = 3.140
@@ -37,7 +38,8 @@ circuit Foo: %[[{"class": "circt.testNT", "\"":"}]]"}]]
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations =
+    ; CHECK: firrtl.circuit "Foo"
+    ; CHECK-SAME: rawAnnotations =
 
 ; // -----
 FIRRTL version 4.0.0
@@ -47,7 +49,8 @@ circuit Foo: %[[{"class":"circt.testNT","a":"{\"b\":null}"}]]
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {rawAnnotations = [{a = {b}, class = "circt.testNT"}]}
+    ; CHECK: firrtl.circuit "Foo"
+    ; CHECK-SAME: rawAnnotations = [{a = {b}, class = "circt.testNT"}]
 
 ; // -----
 FIRRTL version 4.0.0

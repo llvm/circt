@@ -54,6 +54,8 @@ namespace circt {
 class ComponentLoweringStateInterface;
 namespace scftocalyx {
 
+static constexpr std::string_view unrolledParallelAttr = "calyx.unroll";
+
 //===----------------------------------------------------------------------===//
 // Utility types
 //===----------------------------------------------------------------------===//
@@ -138,6 +140,20 @@ using Scheduleable =
 
 class IfLoweringStateInterface {
 public:
+  void setCondReg(scf::IfOp op, calyx::RegisterOp regOp) {
+    Operation *operation = op.getOperation();
+    auto [it, succeeded] = condReg.insert(std::make_pair(operation, regOp));
+    assert(succeeded &&
+           "A condition register was already set for this scf::IfOp!");
+  }
+
+  calyx::RegisterOp getCondReg(scf::IfOp op) {
+    auto it = condReg.find(op.getOperation());
+    if (it != condReg.end())
+      return it->second;
+    return nullptr;
+  }
+
   void setThenGroup(scf::IfOp op, calyx::GroupOp group) {
     Operation *operation = op.getOperation();
     assert(thenGroup.count(operation) == 0 &&
@@ -185,6 +201,8 @@ public:
   }
 
 private:
+  // The register to hold the result of a non-combinational guard.
+  DenseMap<Operation *, calyx::RegisterOp> condReg;
   DenseMap<Operation *, calyx::GroupOp> thenGroup;
   DenseMap<Operation *, calyx::GroupOp> elseGroup;
   DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> resultRegs;
@@ -253,6 +271,31 @@ public:
   }
 };
 
+/// Stores the state information for condition checks involving sequential
+/// computation.
+class SeqOpLoweringStateInterface {
+public:
+  void setSeqResReg(Operation *op, calyx::RegisterOp reg) {
+    auto cellOp = dyn_cast<calyx::CellInterface>(op);
+    assert(cellOp && !cellOp.isCombinational());
+    auto [it, succeeded] = resultRegs.insert(std::make_pair(op, reg));
+    assert(succeeded &&
+           "A register was already set for this sequential operation!");
+  }
+  // Get the register for a specific pipe operation
+  calyx::RegisterOp getSeqResReg(Operation *op) {
+    auto it = resultRegs.find(op);
+    assert(it != resultRegs.end() &&
+           "No register was set for this sequential operation!");
+    return it->second;
+  }
+
+private:
+  // Maps the result of a sequential operation to the register that stores
+  // the result.
+  DenseMap<Operation *, calyx::RegisterOp> resultRegs;
+};
+
 /// Handles the current state of lowering of a Calyx component. It is mainly
 /// used as a key/value store for recording information during partial lowering,
 /// which is required at later lowering passes.
@@ -260,6 +303,7 @@ class ComponentLoweringState : public calyx::ComponentLoweringStateInterface,
                                public WhileLoopLoweringStateInterface,
                                public ForLoopLoweringStateInterface,
                                public IfLoweringStateInterface,
+                               public SeqOpLoweringStateInterface,
                                public calyx::SchedulerInterface<Scheduleable> {
 public:
   ComponentLoweringState(calyx::ComponentOp component)
@@ -292,21 +336,22 @@ public:
     funcOp.walk([&](Operation *_op) {
       opBuiltSuccessfully &=
           TypeSwitch<mlir::Operation *, bool>(_op)
-              .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
-                             /// SCF
-                             scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
-                             scf::ParallelOp, scf::ReduceOp,
-                             /// memref
-                             memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                             memref::StoreOp, memref::GetGlobalOp,
-                             /// standard arithmetic
-                             AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
-                             MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
-                             /// floating point
-                             AddFOp, MulFOp, CmpFOp,
-                             /// others
-                             SelectOp, IndexCastOp, CallOp>(
+              .template Case<
+                  arith::ConstantOp, ReturnOp, BranchOpInterface,
+                  /// SCF
+                  scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
+                  scf::ParallelOp, scf::ReduceOp, scf::ExecuteRegionOp,
+                  /// memref
+                  memref::AllocOp, memref::AllocaOp, memref::LoadOp,
+                  memref::StoreOp, memref::GetGlobalOp,
+                  /// standard arithmetic
+                  AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
+                  XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp, MulIOp, DivUIOp,
+                  DivSIOp, RemUIOp, RemSIOp,
+                  /// floating point
+                  AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp, DivFOp,
+                  /// others
+                  SelectOp, IndexCastOp, BitcastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -362,8 +407,12 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, RemUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, RemSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, SubFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CmpFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, FPToSIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, SIToFPOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, DivFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -376,6 +425,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, ExtSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ReturnOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, BitcastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
@@ -389,7 +439,77 @@ private:
                         scf::ReduceOp reduceOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
                         scf::ParallelOp parallelOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        scf::ExecuteRegionOp executeRegionOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
+
+  // Sets up the necessary state and resources for a `CmpIOp` in
+  // `buildLibraryBinaryPipeOp` if `cmpIOp` has sequential logic based on its
+  // operands.
+  template <typename TCalyxLibOp>
+  void setupCmpIOp(PatternRewriter &rewriter, CmpIOp cmpIOp, Operation *group,
+                   calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
+                   TCalyxLibOp calyxOp) const {
+    bool lhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getLhs());
+    bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
+
+    StringRef opName = cmpIOp.getOperationName().split(".").second;
+    Type width = cmpIOp.getResult().getType();
+
+    condReg = createRegister(
+        cmpIOp.getLoc(), rewriter, getComponent(),
+        width.getIntOrFloatBitWidth(),
+        getState<ComponentLoweringState>().getUniqueName(opName));
+
+    for (auto *user : cmpIOp->getUsers()) {
+      if (auto ifOp = dyn_cast<scf::IfOp>(user))
+        getState<ComponentLoweringState>().setCondReg(ifOp, condReg);
+    }
+
+    assert(
+        lhsIsSeqOp != rhsIsSeqOp &&
+        "unexpected sequential operation on both sides; please open an issue");
+    // If `cmpIOp`'s lhs/rhs operand is the result of a sequential operation,
+    // its result will be stored in a register.
+    resReg =
+        cast<calyx::RegisterOp>(lhsIsSeqOp ? cmpIOp.getLhs().getDefiningOp()
+                                           : cmpIOp.getRhs().getDefiningOp());
+
+    auto groupOp = cast<calyx::GroupOp>(group);
+    getState<ComponentLoweringState>().addBlockScheduleable(cmpIOp->getBlock(),
+                                                            groupOp);
+
+    rewriter.setInsertionPointToEnd(groupOp.getBodyBlock());
+    auto loc = cmpIOp.getLoc();
+    assert(
+        (isa<calyx::EqLibOp, calyx::NeqLibOp, calyx::SleLibOp, calyx::SltLibOp,
+             calyx::LeLibOp, calyx::LtLibOp, calyx::GeLibOp, calyx::GtLibOp,
+             calyx::SgeLibOp, calyx::SgtLibOp>(calyxOp.getOperation())) &&
+        "Must be a Calyx comparison library operation.");
+    int64_t outputIndex = 2;
+    rewriter.create<calyx::AssignOp>(loc, condReg.getIn(),
+                                     calyxOp.getResult(outputIndex));
+    rewriter.create<calyx::AssignOp>(
+        loc, condReg.getWriteEn(),
+        createConstant(loc, rewriter,
+                       getState<ComponentLoweringState>().getComponentOp(), 1,
+                       1));
+    rewriter.create<calyx::GroupDoneOp>(loc, condReg.getDone());
+
+    getState<ComponentLoweringState>().addSeqGuardCmpLibOp(cmpIOp);
+  }
+
+  template <typename CmpILibOp>
+  LogicalResult buildCmpIOpHelper(PatternRewriter &rewriter, CmpIOp op) const {
+    bool isIfOpGuard = std::any_of(op->getUsers().begin(), op->getUsers().end(),
+                                   [](auto op) { return isa<scf::IfOp>(op); });
+    bool isSeqCondCheck = isIfOpGuard && (calyx::parentIsSeqCell(op.getLhs()) ||
+                                          calyx::parentIsSeqCell(op.getRhs()));
+
+    if (isSeqCondCheck)
+      return buildLibraryOp<calyx::GroupOp, CmpILibOp>(rewriter, op);
+    return buildLibraryOp<calyx::CombGroupOp, CmpILibOp>(rewriter, op);
+  }
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -423,17 +543,31 @@ private:
 
     /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
+
+    bool isSeqCondCheck = isa<calyx::GroupOp>(group);
+    calyx::RegisterOp condReg = nullptr, resReg = nullptr;
+    if (isa<CmpIOp>(op) && isSeqCondCheck) {
+      auto cmpIOp = cast<CmpIOp>(op);
+      setupCmpIOp(rewriter, cmpIOp, group, condReg, resReg, calyxOp);
+    }
+
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    for (auto dstOp : enumerate(opInputPorts))
-      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
-                                       op->getOperand(dstOp.index()));
+
+    for (auto dstOp : enumerate(opInputPorts)) {
+      auto srcOp = calyx::parentIsSeqCell(dstOp.value())
+                       ? condReg.getOut()
+                       : op->getOperand(dstOp.index());
+      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
+    }
 
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
       getState<ComponentLoweringState>().registerEvaluatingGroup(res.value(),
                                                                  group);
-      op->getResult(res.index()).replaceAllUsesWith(res.value());
+      auto dstOp = isSeqCondCheck ? condReg.getOut() : res.value();
+      op->getResult(res.index()).replaceAllUsesWith(dstOp);
     }
+
     return success();
   }
 
@@ -467,6 +601,7 @@ private:
     auto reg = createRegister(
         op.getLoc(), rewriter, getComponent(), width.getIntOrFloatBitWidth(),
         getState<ComponentLoweringState>().getUniqueName(opName));
+
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
     OpBuilder builder(group->getRegion(0));
@@ -505,6 +640,12 @@ private:
                                /*subtract=*/1);
       }
       rewriter.create<calyx::AssignOp>(loc, opFOp.getSubOp(), subOp);
+    } else if (auto opFOp =
+                   dyn_cast<calyx::DivSqrtOpIEEE754>(opPipe.getOperation())) {
+      bool isSqrt = !isa<arith::DivFOp>(op);
+      hw::ConstantOp sqrtOp =
+          createConstant(loc, rewriter, getComponent(), /*width=*/1, isSqrt);
+      rewriter.create<calyx::AssignOp>(loc, opFOp.getSqrtOp(), sqrtOp);
     }
 
     // Register the values for the pipeline.
@@ -513,6 +654,50 @@ private:
                                                                group);
     getState<ComponentLoweringState>().registerEvaluatingGroup(
         opPipe.getRight(), group);
+
+    getState<ComponentLoweringState>().setSeqResReg(out.getDefiningOp(), reg);
+
+    return success();
+  }
+
+  template <typename TCalyxLibOp, typename TSrcOp>
+  LogicalResult buildFpIntTypeCastOp(PatternRewriter &rewriter, TSrcOp op,
+                                     unsigned inputWidth, unsigned outputWidth,
+                                     StringRef signedPort) const {
+    Location loc = op.getLoc();
+    IntegerType one = rewriter.getI1Type(),
+                inWidth = rewriter.getIntegerType(inputWidth),
+                outWidth = rewriter.getIntegerType(outputWidth);
+    auto calyxOp =
+        getState<ComponentLoweringState>().getNewLibraryOpInstance<TCalyxLibOp>(
+            rewriter, loc, {one, one, one, inWidth, one, outWidth, one});
+    hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
+    StringRef opName = op.getOperationName().split(".").second;
+    rewriter.setInsertionPointToStart(getComponent().getBodyBlock());
+    auto reg = createRegister(
+        loc, rewriter, getComponent(), outWidth.getIntOrFloatBitWidth(),
+        getState<ComponentLoweringState>().getUniqueName(opName));
+
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    OpBuilder builder(group->getRegion(0));
+    getState<ComponentLoweringState>().addBlockScheduleable(op->getBlock(),
+                                                            group);
+
+    rewriter.setInsertionPointToEnd(group.getBodyBlock());
+    rewriter.create<calyx::AssignOp>(loc, calyxOp.getIn(), op.getIn());
+    if (isa<calyx::FpToIntOpIEEE754>(calyxOp)) {
+      rewriter.create<calyx::AssignOp>(
+          loc, cast<calyx::FpToIntOpIEEE754>(calyxOp).getSignedOut(), c1);
+    } else if (isa<calyx::IntToFpOpIEEE754>(calyxOp)) {
+      rewriter.create<calyx::AssignOp>(
+          loc, cast<calyx::IntToFpOpIEEE754>(calyxOp).getSignedIn(), c1);
+    }
+    op.getResult().replaceAllUsesWith(reg.getOut());
+
+    rewriter.create<calyx::AssignOp>(
+        loc, calyxOp.getGo(), c1,
+        comb::createOrFoldNot(loc, calyxOp.getDone(), builder));
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
 
     return success();
   }
@@ -783,6 +968,22 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     SubFOp subf) const {
+  Location loc = subf.getLoc();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  subf.getType().getIntOrFloatBitWidth());
+  auto subFOp =
+      getState<ComponentLoweringState>()
+          .getNewLibraryOpInstance<calyx::AddFOpIEEE754>(
+              rewriter, loc,
+              {one, one, one, one, one, width, width, three, width, five, one});
+  return buildLibraryBinaryPipeOp<calyx::AddFOpIEEE754>(rewriter, subf, subFOp,
+                                                        subFOp.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      MulFOp mulf) const {
   Location loc = mulf.getLoc();
   IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
@@ -911,7 +1112,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   case CombLogic::None: {
     // it's guaranteed to be either ORD or UNO
     outputValue = inputRegs[0].getOut();
-    doneValue = inputRegs[0].getOut();
+    doneValue = inputRegs[0].getDone();
     break;
   }
   case CombLogic::And: {
@@ -973,6 +1174,38 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       calyxCmpFOp.getRight(), group);
 
   return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     FPToSIOp fptosi) const {
+  return buildFpIntTypeCastOp<calyx::FpToIntOpIEEE754>(
+      rewriter, fptosi, fptosi.getIn().getType().getIntOrFloatBitWidth(),
+      fptosi.getOut().getType().getIntOrFloatBitWidth(), "signedOut");
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     SIToFPOp sitofp) const {
+  return buildFpIntTypeCastOp<calyx::IntToFpOpIEEE754>(
+      rewriter, sitofp, sitofp.getIn().getType().getIntOrFloatBitWidth(),
+      sitofp.getOut().getType().getIntOrFloatBitWidth(), "signedIn");
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     DivFOp divf) const {
+  Location loc = divf.getLoc();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  divf.getType().getIntOrFloatBitWidth());
+  auto divFOp = getState<ComponentLoweringState>()
+                    .getNewLibraryOpInstance<calyx::DivSqrtOpIEEE754>(
+                        rewriter, loc,
+                        {/*clk=*/one, /*reset=*/one, /*go=*/one,
+                         /*control=*/one, /*sqrtOp=*/one, /*left=*/width,
+                         /*right=*/width, /*roundingMode=*/three, /*out=*/width,
+                         /*exceptionalFlags=*/five, /*done=*/one});
+  return buildLibraryBinaryPipeOp<calyx::DivSqrtOpIEEE754>(
+      rewriter, divf, divFOp, divFOp.getOut());
 }
 
 template <typename TAllocOp>
@@ -1168,6 +1401,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     if (auto ifOp = dyn_cast<scf::IfOp>(yieldOp->getParentOp()))
       // Empty yield inside ifOp, essentially a no-op.
       return success();
+    if (auto executeRegionOp =
+            dyn_cast<scf::ExecuteRegionOp>(yieldOp->getParentOp()))
+      // Empty yield inside an `ExecuteRegionOp` acts as the terminator op.
+      return success();
     return yieldOp.getOperation()->emitError()
            << "Unsupported empty yieldOp outside ForOp or IfOp.";
   }
@@ -1352,28 +1589,29 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CmpIOp op) const {
   switch (op.getPredicate()) {
   case CmpIPredicate::eq:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::EqLibOp>(rewriter, op);
   case CmpIPredicate::ne:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::NeqLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::NeqLibOp>(rewriter, op);
   case CmpIPredicate::uge:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::GeLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::GeLibOp>(rewriter, op);
   case CmpIPredicate::ult:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::LtLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::LtLibOp>(rewriter, op);
   case CmpIPredicate::ugt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::GtLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::GtLibOp>(rewriter, op);
   case CmpIPredicate::ule:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::LeLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::LeLibOp>(rewriter, op);
   case CmpIPredicate::sge:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SgeLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SgeLibOp>(rewriter, op);
   case CmpIPredicate::slt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SltLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SltLibOp>(rewriter, op);
   case CmpIPredicate::sgt:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SgtLibOp>(rewriter, op);
   case CmpIPredicate::sle:
-    return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
+    return buildCmpIOpHelper<calyx::SleLibOp>(rewriter, op);
   }
   llvm_unreachable("unsupported comparison predicate");
 }
+
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      TruncIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::SliceLibOp>(
@@ -1414,6 +1652,14 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   }
   rewriter.eraseOp(op);
   return res;
+}
+
+// The Calyx language treats values as bit vectors, i.e., there is no type
+// system, so this is essentially a no-op.
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     BitcastOp op) const {
+  rewriter.replaceAllUsesWith(op.getOut(), op.getIn());
+  return success();
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1465,8 +1711,22 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      scf::ParallelOp parOp) const {
+  if (!parOp->hasAttr(unrolledParallelAttr)) {
+    parOp.emitError(
+        "AffineParallelUnroll must be run in order to lower scf.parallel");
+    return failure();
+  }
   getState<ComponentLoweringState>().addBlockScheduleable(
       parOp.getOperation()->getBlock(), ParScheduleable{parOp});
+  return success();
+}
+
+LogicalResult
+BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                       scf::ExecuteRegionOp executeRegionOp) const {
+  // Simply return success because the only remaining `scf.execute_region` op
+  // are generated by the `BuildParGroups` pass - the rest of them are inlined
+  // by the `InlineExecuteRegionOpPattern`.
   return success();
 }
 
@@ -1506,6 +1766,14 @@ class InlineExecuteRegionOpPattern
 
   LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
                                 PatternRewriter &rewriter) const override {
+    if (auto parOp = dyn_cast_or_null<scf::ParallelOp>(execOp->getParentOp())) {
+      if (auto boolAttr = dyn_cast_or_null<mlir::BoolAttr>(
+              parOp->getAttr(unrolledParallelAttr)))
+        // If the `ExecuteRegionOp` was inserted when running the
+        // `AffineParallelUnrollPass` (indicated by having `calyx.unroll`
+        // attribute), we should skip inline.
+        return success();
+    }
     /// Determine type of "yield" operations inside the ERO.
     TypeRange yieldTypes = execOp.getResultTypes();
 
@@ -1864,113 +2132,6 @@ class BuildIfGroups : public calyx::FuncOpPartialLoweringPattern {
   }
 };
 
-class BuildParGroups : public calyx::FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  partiallyLowerFuncToComp(FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    WalkResult walkResult = funcOp.walk([&](scf::ParallelOp scfParOp) {
-      if (!scfParOp.getResults().empty()) {
-        scfParOp.emitError(
-            "Reduce operations in scf.parallel is not supported yet");
-        return WalkResult::interrupt();
-      }
-
-      if (failed(partialEval(rewriter, scfParOp)))
-        return WalkResult::interrupt();
-
-      return WalkResult::advance();
-    });
-
-    return walkResult.wasInterrupted() ? failure() : success();
-  }
-
-private:
-  // Partially evaluate/pre-compute all blocks being executed in parallel by
-  // statically generate loop indices combinations
-  LogicalResult partialEval(PatternRewriter &rewriter,
-                            scf::ParallelOp scfParOp) const {
-    assert(scfParOp.getLoopSteps() && "Parallel loop must have steps");
-    auto *body = scfParOp.getBody();
-    auto parOpIVs = scfParOp.getInductionVars();
-    auto steps = scfParOp.getStep();
-    auto lowerBounds = scfParOp.getLowerBound();
-    auto upperBounds = scfParOp.getUpperBound();
-    rewriter.setInsertionPointAfter(scfParOp);
-    scf::ParallelOp newParOp = scfParOp.cloneWithoutRegions();
-    auto loc = newParOp.getLoc();
-    rewriter.insert(newParOp);
-    OpBuilder insideBuilder(newParOp);
-    Block *currBlock = nullptr;
-    auto &region = newParOp.getRegion();
-
-    // extract lower bounds, upper bounds, and steps as integer index values
-    SmallVector<int64_t> lbVals, ubVals, stepVals;
-    for (auto lb : lowerBounds) {
-      auto lbOp = lb.getDefiningOp<arith::ConstantIndexOp>();
-      assert(lbOp &&
-             "Lower bound must be a statically computable constant index");
-      lbVals.push_back(lbOp.value());
-    }
-    for (auto ub : upperBounds) {
-      auto ubOp = ub.getDefiningOp<arith::ConstantIndexOp>();
-      assert(ubOp &&
-             "Upper bound must be a statically computable constant index");
-      ubVals.push_back(ubOp.value());
-    }
-    for (auto step : steps) {
-      auto stepOp = step.getDefiningOp<arith::ConstantIndexOp>();
-      assert(stepOp && "Step must be a statically computable constant index");
-      stepVals.push_back(stepOp.value());
-    }
-
-    // Initialize indices with lower bounds
-    SmallVector<int64_t> indices = lbVals;
-
-    while (true) {
-      // Each iteration starts with a fresh mapping, so each new block’s
-      // argument of a region-based operation (such as `scf.for`) get re-mapped
-      // independently.
-      IRMapping operandMap;
-
-      // Create a new block in the region for the current combination of indices
-      currBlock = &region.emplaceBlock();
-      insideBuilder.setInsertionPointToEnd(currBlock);
-
-      // Map induction variables to constant indices
-      for (unsigned i = 0; i < indices.size(); ++i) {
-        Value ivConstant =
-            insideBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
-        operandMap.map(parOpIVs[i], ivConstant);
-      }
-
-      for (auto it = body->begin(); it != std::prev(body->end()); ++it)
-        insideBuilder.clone(*it, operandMap);
-
-      // Increment indices using `step`
-      bool done = false;
-      for (int dim = indices.size() - 1; dim >= 0; --dim) {
-        indices[dim] += stepVals[dim];
-        if (indices[dim] < ubVals[dim])
-          break;
-        indices[dim] = lbVals[dim];
-        if (dim == 0)
-          // All combinations have been generated
-          done = true;
-      }
-      if (done)
-        break;
-    }
-
-    rewriter.setInsertionPointToEnd(newParOp.getBody());
-    rewriter.create<scf::ReduceOp>(newParOp.getLoc());
-
-    rewriter.replaceOp(scfParOp, newParOp);
-    return success();
-  }
-};
-
 /// Builds a control schedule by traversing the CFG of the function and
 /// associating this with the previously created groups.
 /// For simplicity, the generated control flow is expanded for all possible
@@ -2043,15 +2204,25 @@ private:
       } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
         auto parOp = parSchedPtr->parOp;
         auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
-        for (auto &innerBlock : parOp.getRegion().getBlocks()) {
-          rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
-          auto seqOp = rewriter.create<calyx::SeqOp>(parOp.getLoc());
-          rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
-          if (LogicalResult res = scheduleBasicBlock(
-                  rewriter, path, seqOp.getBodyBlock(), &innerBlock);
-              res.failed())
-            return res;
-        }
+
+        WalkResult walkResult =
+            parOp.walk([&](scf::ExecuteRegionOp execRegion) {
+              rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
+              auto seqOp = rewriter.create<calyx::SeqOp>(execRegion.getLoc());
+              rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
+
+              for (auto &execBlock : execRegion.getRegion().getBlocks()) {
+                if (LogicalResult res = scheduleBasicBlock(
+                        rewriter, path, seqOp.getBodyBlock(), &execBlock);
+                    res.failed()) {
+                  return WalkResult::interrupt();
+                }
+              }
+              return WalkResult::advance();
+            });
+
+        if (walkResult.wasInterrupted())
+          return failure();
       } else if (auto *forSchedPtr = std::get_if<ForScheduleable>(&group);
                  forSchedPtr) {
         auto forOp = forSchedPtr->forOp;
@@ -2084,11 +2255,16 @@ private:
         Location loc = ifOp->getLoc();
 
         auto cond = ifOp.getCondition();
-        auto condGroup = getState<ComponentLoweringState>()
-                             .getEvaluatingGroup<calyx::CombGroupOp>(cond);
 
-        auto symbolAttr = FlatSymbolRefAttr::get(
-            StringAttr::get(getContext(), condGroup.getSymName()));
+        FlatSymbolRefAttr symbolAttr = nullptr;
+        auto condReg = getState<ComponentLoweringState>().getCondReg(ifOp);
+        if (!condReg) {
+          auto condGroup = getState<ComponentLoweringState>()
+                               .getEvaluatingGroup<calyx::CombGroupOp>(cond);
+
+          symbolAttr = FlatSymbolRefAttr::get(
+              StringAttr::get(getContext(), condGroup.getSymName()));
+        }
 
         bool initElse = !ifOp.getElseRegion().empty();
         auto ifCtrlOp = rewriter.create<calyx::IfOp>(
@@ -2142,8 +2318,6 @@ private:
         OpBuilder::InsertionGuard g(rewriter);
         auto callBody = rewriter.create<calyx::SeqOp>(instanceOp.getLoc());
         rewriter.setInsertionPointToStart(callBody.getBodyBlock());
-        std::string initGroupName = "init_" + instanceOp.getSymName().str();
-        rewriter.create<calyx::EnableOp>(instanceOp.getLoc(), initGroupName);
 
         auto callee = callSchedPtr->callOp.getCallee();
         auto *calleeOp = SymbolTable::lookupNearestSymbolFrom(
@@ -2464,8 +2638,9 @@ public:
     target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
-                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp, CallOp, AddFOp, MulFOp, CmpFOp>();
+                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp,
+                      BitcastOp, FuncOp, ExtSIOp, CallOp, AddFOp, SubFOp,
+                      MulFOp, CmpFOp, FPToSIOp, SIToFPOp, DivFOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
@@ -2749,9 +2924,6 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
   addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
-
-  addOncePattern<BuildParGroups>(loweringPatterns, patternState, funcMap,
-                                 *loweringState);
 
   /// This pattern converts all index typed values to an i32 integer.
   addOncePattern<calyx::ConvertIndexTypes>(loweringPatterns, patternState,

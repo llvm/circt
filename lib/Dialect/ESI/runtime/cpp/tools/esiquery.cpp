@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
@@ -27,43 +28,34 @@ void printInfo(std::ostream &os, AcceleratorConnection &acc);
 void printHier(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
-  // TODO: find a command line parser library rather than doing this by hand.
-  if (argc < 3) {
-    std::cerr << "Expected usage: " << argv[0]
-              << " <backend> <connection specifier> [command]" << std::endl;
-    return -1;
-  }
+  CliParser cli("esiquery");
+  cli.description("Query an ESI system for information from the manifest.");
 
-  Context ctxt;
+  CLI::App *versionSub =
+      cli.add_subcommand("version", "Print ESI system version");
+  CLI::App *infoSub =
+      cli.add_subcommand("info", "Print ESI system information");
+  CLI::App *hierSub = cli.add_subcommand("hier", "Print ESI system hierarchy");
 
-  const char *backend = argv[1];
-  const char *conn = argv[2];
-  std::string cmd;
-  if (argc > 3)
-    cmd = argv[3];
+  if (int rc = cli.esiParse(argc, argv))
+    return rc;
+  if (!cli.get_help_ptr()->empty())
+    return 0;
 
+  Context &ctxt = cli.getContext();
   try {
-    std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
+    std::unique_ptr<AcceleratorConnection> acc = cli.connect();
     const auto &info = *acc->getService<services::SysInfo>();
 
-    if (cmd == "version")
-      std::cout << "ESI system version: " << info.getEsiVersion() << std::endl;
-    else if (cmd == "json_manifest")
-      std::cout << info.getJsonManifest() << std::endl;
-    else if (cmd == "info")
+    if (*versionSub)
+      std::cout << info.getEsiVersion() << std::endl;
+    else if (*infoSub)
       printInfo(std::cout, *acc);
-    else if (cmd == "hier")
+    else if (*hierSub)
       printHier(std::cout, *acc);
-    else {
-      std::cout << "Connection successful." << std::endl;
-      if (!cmd.empty()) {
-        std::cerr << "Unknown command: " << cmd << std::endl;
-        return 1;
-      }
-    }
     return 0;
   } catch (std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
+    ctxt.getLogger().error("esiquery", e.what());
     return -1;
   }
 }

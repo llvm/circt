@@ -30,14 +30,16 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [15:0] out16,
 // CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout
+// CHECK-NEXT:    output [1:0]  orvout,
+// CHECK-NEXT:           [63:0] outTime,
+// CHECK-NEXT:           [31:0] outSTime
 // CHECK-NEXT:  );
 
 hw.module @Expressions(in %in4: i4, in %clock: i1,
   out out1a: i1, out out1b: i1, out out1c: i1,
   out out1d: i1, out out1e: i1, out out1f: i1, out out1g: i1,
-   out out4: i4, out out4s: i4, out out16: i16, out out16s: i16,
-   out sext17: i17, out orvout: i2) {
+  out out4: i4, out out4s: i4, out out16: i16, out out16s: i16,
+  out sext17: i17, out orvout: i2, out outTime: i64, out outSTime:i32) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -148,7 +150,14 @@ hw.module @Expressions(in %in4: i4, in %clock: i1,
   %orpre2 = comb.extract %in4 from 2 : (i4) -> i2
   %orpre3 = comb.extract %in4 from 1 : (i4) -> i2
   %orv = comb.or %orpre1, %orpre2, %orpre3 {sv.namehint = "hintyhint"}: i2
-  hw.output %0, %1, %2, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2
+
+  // Time system functions
+  // CHECK: assign outTime = $time;
+  %time = sv.system.time : i64
+  // CHECK: assign outSTime = $stime;
+  %stime = sv.system.stime : i32
+
+  hw.output %0, %1, %2, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv, %time, %stime : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2, i64, i32
 }
 
 // CHECK-LABEL: module Precedence(
@@ -801,3 +810,9 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  ._io_req_ready_output (1'h0)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
+
+// CHECK: `include "foo/bar"
+sv.include local "foo/bar"
+
+// CHECK: `include <foo/bar>
+sv.include system "foo/bar"

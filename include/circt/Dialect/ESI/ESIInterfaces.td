@@ -64,7 +64,7 @@ def IsManifestData : OpInterface<"IsManifestData"> {
   }];
 
   let methods = [
-    StaticInterfaceMethod<
+    InterfaceMethod<
       "Get the class name for this op.",
       "StringRef", "getManifestClass", (ins)
     >,

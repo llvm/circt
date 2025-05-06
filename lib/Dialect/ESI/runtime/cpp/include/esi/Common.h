@@ -147,7 +147,8 @@ std::ostream &operator<<(std::ostream &, const esi::AppID &);
 //===----------------------------------------------------------------------===//
 
 namespace esi {
-std::string toHex(uint32_t val);
+std::string toHex(void *val);
+std::string toHex(uint64_t val);
 } // namespace esi
 
 #endif // ESI_COMMON_H

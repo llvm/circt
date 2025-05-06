@@ -25,10 +25,14 @@ def RTGDialect : Dialect {
     test can, for example, be a sequence of ISA instructions to test a CPU core.
   }];
 
+  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
   let cppNamespace = "::circt::rtg";
 
+  let hasConstantMaterializer = 1;
+
   let extraClassDeclaration = [{
+    void registerAttributes();
     void registerTypes();
   }];
 }

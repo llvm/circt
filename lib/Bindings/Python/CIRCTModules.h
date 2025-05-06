@@ -13,23 +13,23 @@
 #ifndef CIRCT_BINDINGS_PYTHON_CIRCTMODULES_H
 #define CIRCT_BINDINGS_PYTHON_CIRCTMODULES_H
 
-#include <pybind11/pybind11.h>
+#include <nanobind/nanobind.h>
 
 namespace circt {
 namespace python {
 
-void populateDialectESISubmodule(pybind11::module &m);
-void populateDialectHWSubmodule(pybind11::module &m);
-void populateDialectMSFTSubmodule(pybind11::module &m);
-void populateDialectOMSubmodule(pybind11::module &m);
-void populateDialectRTGSubmodule(pybind11::module &m);
-void populateDialectRTGToolSubmodule(pybind11::module &m);
+void populateDialectESISubmodule(nanobind::module_ &m);
+void populateDialectHWSubmodule(nanobind::module_ &m);
+void populateDialectMSFTSubmodule(nanobind::module_ &m);
+void populateDialectOMSubmodule(nanobind::module_ &m);
+void populateDialectRTGSubmodule(nanobind::module_ &m);
+void populateDialectRTGToolSubmodule(nanobind::module_ &m);
 #ifdef CIRCT_INCLUDE_TESTS
-void populateDialectRTGTestSubmodule(pybind11::module &m);
+void populateDialectRTGTestSubmodule(nanobind::module_ &m);
 #endif
-void populateDialectSeqSubmodule(pybind11::module &m);
-void populateDialectSVSubmodule(pybind11::module &m);
-void populateSupportSubmodule(pybind11::module &m);
+void populateDialectSeqSubmodule(nanobind::module_ &m);
+void populateDialectSVSubmodule(nanobind::module_ &m);
+void populateSupportSubmodule(nanobind::module_ &m);
 
 } // namespace python
 } // namespace circt

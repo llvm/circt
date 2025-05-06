@@ -40,7 +40,8 @@ circuit Top:
   module InputOnly:
     input clock : Clock
     input cond : UInt<1>
-    assert(clock, cond, cond, "Some assertion")
+    input en : UInt<1>
+    assert(clock, cond, en, "Some assertion")
 
   ; CHECK: module Top_assert(
   ; CHECK-NOT: endmodule
@@ -62,5 +63,6 @@ circuit Top:
     inst input_only of InputOnly
     connect input_only.clock, clock
     connect input_only.cond, cond
+    connect input_only.en, en
 
     intrinsic(circt_verif_assert<label="foo">, cond, en)

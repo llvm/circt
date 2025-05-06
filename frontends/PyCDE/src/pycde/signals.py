@@ -13,7 +13,7 @@ from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 import re
 import numpy as np
 
@@ -336,7 +336,7 @@ class BitsSignal(BitVectorSignal):
     return self.slice(idx, 1)
 
   @staticmethod
-  def concat(items: List[BitVectorSignal]):
+  def concat(items: Iterable[BitVectorSignal]):
     """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
     return comb.ConcatOp(*items)
@@ -550,6 +550,8 @@ class ArraySignal(Signal):
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
+      if isinstance(idx, UIntSignal):
+        idx = idx.as_bits()
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
@@ -560,6 +562,8 @@ class ArraySignal(Signal):
     idxs = s.indices(len(self))
     if idxs[2] != 1:
       raise ValueError("Array slices do not support steps")
+    if not isinstance(idxs[0], int) or not isinstance(idxs[1], int):
+      raise ValueError("Array slices must be constant ints")
 
     from .types import types
     from .dialects import hw
@@ -748,6 +752,13 @@ class ChannelSignal(Signal):
             stages=stages,
         ), self.type)
 
+  def snoop(self) -> Tuple[Bits(1), Bits(1), Type]:
+    """Combinationally snoop on the internal signals of a channel."""
+    from .dialects import esi
+    assert self.type.signaling == ChannelSignaling.ValidReady, "Only valid-ready channels can be snooped currently"
+    snoop = esi.SnoopValidReadyOp(self.value)
+    return snoop[0], snoop[1], snoop[2]
+
   def transform(self, transform: Callable[[Signal], Signal]) -> ChannelSignal:
     """Transform the data in the channel using the provided function. Said
     function must be combinational so it is intended for wire and simple type
@@ -776,6 +787,19 @@ class ChannelSignal(Signal):
     bbuf = b.buffer(clk, rst, 1)
     both_ready.assign(a_rdy & b_rdy)
     return abuf, bbuf
+
+  def wait_for_ready(self, other: ChannelSignal) -> ChannelSignal:
+    """Return a channel which doesn't issue valid unless some other channel is
+    ready to recieve data."""
+    from .constructs import Wire
+    from .types import Bits
+    _, other_ready, _ = other.snoop()
+    ready_wire = Wire(Bits(1))
+    data, valid = self.unwrap(ready_wire)
+    out_valid = valid & other_ready
+    out_chan, ready = self.type.wrap(data, out_valid)
+    ready_wire.assign(ready)
+    return out_chan
 
 
 class BundleSignal(Signal):

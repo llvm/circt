@@ -1,12 +1,8 @@
-//===- LLHDOps.cpp - Implement the LLHD operations ------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This file implements the LLHD ops.
 //
 //===----------------------------------------------------------------------===//
 
@@ -417,6 +413,13 @@ PrbOp::ensureOnlySafeAccesses(const MemorySlot &slot,
   return success();
 }
 
+void PrbOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  if (mayHaveSSADominance(*getOperation()->getParentRegion()))
+    effects.emplace_back(MemoryEffects::Read::get(), &getSignalMutable());
+}
+
 //===----------------------------------------------------------------------===//
 // DrvOp
 //===----------------------------------------------------------------------===//
@@ -479,27 +482,67 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// WaitOp
+// ProcessOp
 //===----------------------------------------------------------------------===//
 
-// Implement this operation for the BranchOpInterface
-SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
-  assert(index == 0 && "invalid successor index");
-  return SuccessorOperands(getDestOpsMutable());
-}
+LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
+  if (op.getBody().hasOneBlock()) {
+    auto &block = op.getBody().front();
+    if (block.getOperations().size() == 1 && isa<HaltOp>(block.getTerminator()))
+      rewriter.eraseOp(op);
+  }
 
-//===----------------------------------------------------------------------===//
-// ConnectOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
-                                            PatternRewriter &rewriter) {
-  if (op.getLhs() == op.getRhs())
-    rewriter.eraseOp(op);
   return success();
 }
 
-#include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"
+//===----------------------------------------------------------------------===//
+// WaitOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyYieldResults(Operation *op,
+                                        ValueRange yieldOperands) {
+  // Determine the result values of the parent.
+  auto *parentOp = op->getParentOp();
+  TypeRange resultTypes =
+      TypeSwitch<Operation *, TypeRange>(parentOp)
+          .Case<ProcessOp>([](auto op) { return op.getResultTypes(); })
+          .Case<FinalOp>([](auto) { return TypeRange{}; });
+
+  // Check that the number of yield operands matches the process.
+  if (yieldOperands.size() != resultTypes.size())
+    return op->emitOpError()
+           << "has " << yieldOperands.size()
+           << " yield operands, but enclosing '" << parentOp->getName()
+           << "' returns " << resultTypes.size();
+
+  // Check that the types match.
+  for (unsigned i = 0; i < yieldOperands.size(); ++i)
+    if (yieldOperands[i].getType() != resultTypes[i])
+      return op->emitError()
+             << "type of yield operand " << i << " ("
+             << yieldOperands[i].getType() << ") does not match enclosing '"
+             << parentOp->getName() << "' result type (" << resultTypes[i]
+             << ")";
+
+  return success();
+}
+
+LogicalResult WaitOp::verify() {
+  return verifyYieldResults(*this, getYieldOperands());
+}
+
+//===----------------------------------------------------------------------===//
+// HaltOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult HaltOp::verify() {
+  return verifyYieldResults(*this, getYieldOperands());
+}
+
+//===----------------------------------------------------------------------===//
+// Auto-Generated Implementations
+//===----------------------------------------------------------------------===//
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/LLHD/IR/LLHD.cpp.inc"
+#include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"

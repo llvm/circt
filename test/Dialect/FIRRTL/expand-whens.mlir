@@ -38,6 +38,8 @@ firrtl.module @shadow_when(in %p : !firrtl.uint<1>) {
 firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in %enable : !firrtl.uint<1>, in %reset : !firrtl.uint<1>) {
   firrtl.when %p : !firrtl.uint<1> {
     firrtl.printf %clock, %enable, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.fprintf %clock, %enable, "test.txt", "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.fflush %clock, %enable : !firrtl.clock, !firrtl.uint<1>
     firrtl.stop %clock, %enable, 0 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
@@ -45,6 +47,8 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
     firrtl.int.unclocked_assume %p, %enable, "" : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
     firrtl.printf %clock, %reset, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.fprintf %clock, %enable, "test.txt", "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.fflush %clock, %enable : !firrtl.clock, !firrtl.uint<1>
     firrtl.stop %clock, %enable, 1 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
@@ -53,32 +57,40 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
   }
 }
 // CHECK-LABEL: firrtl.module @simulation(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
-// CHECK-NEXT:   %0 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.printf %clock, %0, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.stop %clock, %1, 0 : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %2 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assert %clock, %p, %2, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %3 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assume %clock, %p, %3, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %4 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.cover %clock, %p, %4, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %5 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.int.unclocked_assume %p, %5, "" : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT:   %6 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %7 = firrtl.and %6, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.printf %clock, %7, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %8 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.stop %clock, %8, 1 : !firrtl.clock, !firrtl.uint<1>
-// CHECK-NEXT:   %9 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assert %clock, %p, %9, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %10 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.assume %clock, %p, %10, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %11 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.cover %clock, %p, %11, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
-// CHECK-NEXT:   %12 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.int.unclocked_assume %p, %12, "" : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT:   }
+// CHECK-NEXT:   %[[PRINT_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.printf %clock, %[[PRINT_ENABLE]], "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[FPRINTF_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.fprintf %clock, %[[FPRINTF_ENABLE]], "test.txt", "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[FFLUSH_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.fflush %clock, %[[FFLUSH_ENABLE]] : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[STOP_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.stop %clock, %[[STOP_ENABLE]], 0 : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[ASSERT_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.assert %clock, %p, %[[ASSERT_ENABLE]], "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+// CHECK-NEXT:   %[[ASSUME_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.assume %clock, %p, %[[ASSUME_ENABLE]], "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+// CHECK-NEXT:   %[[COVER_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.cover %clock, %p, %[[COVER_ENABLE]], "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+// CHECK-NEXT:   %[[UNCLOCKED_ENABLE:.+]] = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.int.unclocked_assume %p, %[[UNCLOCKED_ENABLE]], "" : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:   %[[NOT_P:.+]] = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   %[[ELSE_PRINT_ENABLE:.+]] = firrtl.and %[[NOT_P]], %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.printf %clock, %[[ELSE_PRINT_ENABLE]], "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[ELSE_FPRINT_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.fprintf %clock, %[[ELSE_FPRINT_ENABLE]], "test.txt", "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[ELSE_FFLUSH_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.fflush %clock, %[[ELSE_FFLUSH_ENABLE]] : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[ELSE_STOP_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.stop %clock, %[[ELSE_STOP_ENABLE]], 1 : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   %[[ELSE_ASSERT_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.assert %clock, %p, %[[ELSE_ASSERT_ENABLE]], "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+// CHECK-NEXT:   %[[ELSE_ASSUME_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.assume %clock, %p, %[[ELSE_ASSUME_ENABLE]], "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+// CHECK-NEXT:   %[[ELSE_COVER_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.cover %clock, %p, %[[ELSE_COVER_ENABLE]], "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+// CHECK-NEXT:   %[[ELSE_UNCLOCKED_ENABLE:.+]] = firrtl.and %[[NOT_P]], %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.int.unclocked_assume %p, %[[ELSE_UNCLOCKED_ENABLE]], "" : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT: }
 
 
 // Test nested when operations work correctly.

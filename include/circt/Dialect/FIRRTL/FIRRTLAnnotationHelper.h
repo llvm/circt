@@ -155,7 +155,7 @@ struct AnnoTargetCache {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
               chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
-              chirrtl::MemoryDebugPortOp, PrintFOp>([&](auto op) {
+              chirrtl::MemoryDebugPortOp, PrintFOp, FPrintFOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
           if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});
@@ -384,43 +384,52 @@ LogicalResult applyWiring(const AnnoPathValue &target, DictionaryAttr anno,
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,
 /// this is specialized to print a useful error message, specific to custom
-/// annotation process, on failure.
+/// processing, on failure.
 template <typename A>
-A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
-           Location loc, Twine className, Twine path = Twine()) {
+A tryGetAsBase(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
+               Twine whatSpecific, Twine whatFull, Twine path = Twine()) {
+  SmallString<128> msg;
   // Check that the key exists.
   auto value = dict.get(key);
   if (!value) {
-    SmallString<128> msg;
     if (path.isTriviallyEmpty())
-      msg = ("Annotation '" + className + "' did not contain required key '" +
-             key + "'.")
-                .str();
+      (whatSpecific + " did not contain required key '" + key + "'.")
+          .toVector(msg);
     else
-      msg = ("Annotation '" + className + "' with path '" + path +
-             "' did not contain required key '" + key + "'.")
-                .str();
+      (whatSpecific + " with path '" + path +
+       "' did not contain required key '" + key + "'.")
+          .toVector(msg);
     mlir::emitError(loc, msg).attachNote()
-        << "The full Annotation is reproduced here: " << root << "\n";
+        << "The full " << whatFull << " is reproduced here: " << root;
     return nullptr;
   }
   // Check that the value has the correct type.
-  auto valueA = dyn_cast_or_null<A>(value);
+  auto valueA = dyn_cast<A>(value);
   if (!valueA) {
-    SmallString<128> msg;
     if (path.isTriviallyEmpty())
-      msg = ("Annotation '" + className +
-             "' did not contain the correct type for key '" + key + "'.")
-                .str();
+      (whatSpecific + " did not contain the correct type for key '" + key +
+       "'.")
+          .toVector(msg);
     else
-      msg = ("Annotation '" + className + "' with path '" + path +
-             "' did not contain the correct type for key '" + key + "'.")
-                .str();
+      (whatSpecific + " with path '" + path +
+       "' did not contain the correct type for key '" + key + "'.")
+          .toVector(msg);
     mlir::emitError(loc, msg).attachNote()
-        << "The full Annotation is reproduced here: " << root << "\n";
+        << "The full " << whatFull << " is reproduced here: " << root;
     return nullptr;
   }
   return valueA;
+}
+
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the
+/// value of a specific type associated with a key in a dictionary. However,
+/// this is specialized to print a useful error message, specific to custom
+/// annotation process, on failure.
+template <typename A>
+A tryGetAs(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
+           Twine clazz, Twine path = Twine()) {
+  return tryGetAsBase<A>(dict, root, key, loc, "Annotation '" + clazz + "'",
+                         "Annotation", path);
 }
 
 /// Add ports to the module and all its instances and return the clone for

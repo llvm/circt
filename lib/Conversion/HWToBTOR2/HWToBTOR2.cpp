@@ -14,7 +14,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWModuleGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -52,6 +51,8 @@ struct ConvertHWToBTOR2Pass
       public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
       public verif::Visitor<ConvertHWToBTOR2Pass> {
 public:
+  using verif::Visitor<ConvertHWToBTOR2Pass>::visitVerif;
+
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
   void runOnOperation() override;
@@ -843,14 +844,8 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
-  // Cover is not supported in btor2
-  void visitVerif(verif::CoverOp op) {
-    op->emitError("Cover is not supported in btor2!");
-    return signalPassFailure();
-  }
-
-  void visitVerif(verif::ClockedCoverOp op) {
-    op->emitError("Cover is not supported in btor2!");
+  void visitUnhandledVerif(Operation *op) {
+    op->emitError("not supported in btor2!");
     return signalPassFailure();
   }
 

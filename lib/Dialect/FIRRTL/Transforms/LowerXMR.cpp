@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -130,7 +131,12 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     CircuitNamespace ns(getOperation());
     circuitNamespace = &ns;
 
-    llvm::EquivalenceClasses<Value, ValueComparator> eq;
+    hw::HierPathCache pc(
+        &ns, OpBuilder::InsertPoint(getOperation().getBodyBlock(),
+                                    getOperation().getBodyBlock()->begin()));
+    hierPathCache = &pc;
+
+    llvm::EquivalenceClasses<Value> eq;
     dataFlowClasses = &eq;
 
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
@@ -300,80 +306,82 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     SmallVector<FModuleOp> publicModules;
 
     // Traverse the modules in post order.
-    for (auto node : llvm::post_order(&instanceGraph)) {
-      auto module = dyn_cast<FModuleOp>(*node->getModule());
-      if (!module)
-        continue;
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Traversing module:" << module.getModuleNameAttr() << "\n");
 
-      moduleStates.insert({module, ModuleState(module)});
+    DenseSet<InstanceGraphNode *> visited;
+    for (auto *root : instanceGraph) {
+      for (auto *node : llvm::post_order_ext(root, visited)) {
+        auto module = dyn_cast<FModuleOp>(*node->getModule());
+        if (!module)
+          continue;
+        LLVM_DEBUG(llvm::dbgs() << "Traversing module:"
+                                << module.getModuleNameAttr() << "\n");
 
-      if (module.isPublic())
-        publicModules.push_back(module);
+        moduleStates.insert({module, ModuleState(module)});
 
-      auto result = module.walk([&](Operation *op) {
-        if (transferFunc(op).failed())
-          return WalkResult::interrupt();
-        return WalkResult::advance();
-      });
+        if (module.isPublic())
+          publicModules.push_back(module);
 
-      if (result.wasInterrupted())
-        return signalPassFailure();
+        auto result = module.walk([&](Operation *op) {
+          if (transferFunc(op).failed())
+            return WalkResult::interrupt();
+          return WalkResult::advance();
+        });
 
-      // Clear any enabled layers.
-      module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));
-
-      // Since we walk operations pre-order and not along dataflow edges,
-      // ref.sub may not be resolvable when we encounter them (they're not just
-      // unification). This can happen when refs go through an output port or
-      // input instance result and back into the design. Handle these by walking
-      // them, resolving what we can, until all are handled or nothing can be
-      // resolved.
-      while (!indexingOps.empty()) {
-        // Grab the set of unresolved ref.sub's.
-        decltype(indexingOps) worklist;
-        worklist.swap(indexingOps);
-
-        for (auto op : worklist) {
-          auto inputEntry =
-              getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
-          // If we can't resolve, add back and move on.
-          if (!inputEntry)
-            indexingOps.push_back(op);
-          else
-            addReachingSendsEntry(op.getResult(), op.getOperation(),
-                                  inputEntry);
-        }
-        // If nothing was resolved, give up.
-        if (worklist.size() == indexingOps.size()) {
-          auto op = worklist.front();
-          getRemoteRefSend(op.getInput());
-          op.emitError(
-                "indexing through probe of unknown origin (input probe?)")
-              .attachNote(op.getInput().getLoc())
-              .append("indexing through this reference");
+        if (result.wasInterrupted())
           return signalPassFailure();
-        }
-      }
 
-      // Record all the RefType ports to be removed later.
-      size_t numPorts = module.getNumPorts();
-      for (size_t portNum = 0; portNum < numPorts; ++portNum)
-        if (isa<RefType>(module.getPortType(portNum))) {
-          setPortToRemove(module, portNum, numPorts);
+        // Clear any enabled layers.
+        module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));
+
+        // Since we walk operations pre-order and not along dataflow edges,
+        // ref.sub may not be resolvable when we encounter them (they're not
+        // just unification). This can happen when refs go through an output
+        // port or input instance result and back into the design. Handle these
+        // by walking them, resolving what we can, until all are handled or
+        // nothing can be resolved.
+        while (!indexingOps.empty()) {
+          // Grab the set of unresolved ref.sub's.
+          decltype(indexingOps) worklist;
+          worklist.swap(indexingOps);
+
+          for (auto op : worklist) {
+            auto inputEntry =
+                getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
+            // If we can't resolve, add back and move on.
+            if (!inputEntry)
+              indexingOps.push_back(op);
+            else
+              addReachingSendsEntry(op.getResult(), op.getOperation(),
+                                    inputEntry);
+          }
+          // If nothing was resolved, give up.
+          if (worklist.size() == indexingOps.size()) {
+            auto op = worklist.front();
+            getRemoteRefSend(op.getInput());
+            op.emitError(
+                  "indexing through probe of unknown origin (input probe?)")
+                .attachNote(op.getInput().getLoc())
+                .append("indexing through this reference");
+            return signalPassFailure();
+          }
         }
+
+        // Record all the RefType ports to be removed later.
+        size_t numPorts = module.getNumPorts();
+        for (size_t portNum = 0; portNum < numPorts; ++portNum)
+          if (isa<RefType>(module.getPortType(portNum))) {
+            setPortToRemove(module, portNum, numPorts);
+          }
+      }
     }
 
     LLVM_DEBUG({
-      for (auto I = dataFlowClasses->begin(), E = dataFlowClasses->end();
-           I != E; ++I) { // Iterate over all of the equivalence sets.
+      for (const auto &I :
+           *dataFlowClasses) { // Iterate over all of the equivalence sets.
         if (!I->isLeader())
           continue; // Ignore non-leader sets.
         // Print members in this set.
-        llvm::interleave(llvm::make_range(dataFlowClasses->member_begin(I),
-                                          dataFlowClasses->member_end()),
-                         llvm::dbgs(), "\n");
+        llvm::interleave(dataFlowClasses->members(*I), llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << I->getData() << "\n =>";
         auto iter = dataflowAt.find(I->getData());
         if (iter != dataflowAt.end()) {
@@ -406,8 +414,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     opsToRemove.clear();
     xmrPathSuffix.clear();
     circuitNamespace = nullptr;
-    pathCache.clear();
-    pathInsertPoint = {};
+    hierPathCache = nullptr;
   }
 
   /// Generate the ABI ref_<module> prefix string into `prefix`.
@@ -494,7 +501,9 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     if (!refSendPath.empty())
       // Compute the HierPathOp that stores the path.
       ref = FlatSymbolRefAttr::get(
-          getOrCreatePath(builder.getArrayAttr(refSendPath), builder)
+          hierPathCache
+              ->getOrCreatePath(builder.getArrayAttr(refSendPath),
+                                builder.getLoc())
               .getSymNameAttr());
 
     return success();
@@ -826,43 +835,6 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
 
   bool isZeroWidth(FIRRTLBaseType t) { return t.getBitWidthOrSentinel() == 0; }
 
-  /// Return a HierPathOp for the provided pathArray.  This will either return
-  /// an existing HierPathOp or it will create and return a new one.
-  hw::HierPathOp getOrCreatePath(ArrayAttr pathArray,
-                                 ImplicitLocOpBuilder &builder) {
-    assert(pathArray && !pathArray.empty());
-    // Return an existing HierPathOp if one exists with the same path.
-    auto pathIter = pathCache.find(pathArray);
-    if (pathIter != pathCache.end())
-      return pathIter->second;
-
-    // Reset the insertion point after this function returns.
-    OpBuilder::InsertionGuard guard(builder);
-
-    // Set the insertion point to either the known location where the pass
-    // inserts HierPathOps or to the start of the circuit.
-    if (pathInsertPoint.isSet())
-      builder.restoreInsertionPoint(pathInsertPoint);
-    else
-      builder.setInsertionPointToStart(getOperation().getBodyBlock());
-
-    // Create the new HierPathOp and insert it into the pathCache.
-    hw::HierPathOp path =
-        pathCache
-            .insert({pathArray,
-                     builder.create<hw::HierPathOp>(
-                         circuitNamespace->newName("xmrPath"), pathArray)})
-            .first->second;
-    path.setVisibility(SymbolTable::Visibility::Private);
-
-    // Save the insertion point so other unique HierPathOps will be created
-    // after this one.
-    pathInsertPoint = builder.saveInsertionPoint();
-
-    // Return the new path.
-    return path;
-  }
-
 private:
   /// Cached module namespaces.
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
@@ -883,15 +855,7 @@ private:
   /// no NextNodeOnPath, which denotes a leaf node on the path.
   SmallVector<XMRNode> refSendPathList;
 
-  /// llvm::EquivalenceClasses wants comparable elements. This comparator uses
-  /// uses pointer comparison on the Impl.
-  struct ValueComparator {
-    bool operator()(const Value &lhs, const Value &rhs) const {
-      return lhs.getImpl() < rhs.getImpl();
-    }
-  };
-
-  llvm::EquivalenceClasses<Value, ValueComparator> *dataFlowClasses;
+  llvm::EquivalenceClasses<Value> *dataFlowClasses;
   // Instance and module ref ports that needs to be removed.
   DenseMap<Operation *, llvm::BitVector> refPortsToRemoveMap;
 
@@ -903,12 +867,9 @@ private:
 
   CircuitNamespace *circuitNamespace;
 
-  /// A cache of already created HierPathOps.  This is used to avoid repeatedly
-  /// creating the same HierPathOp.
-  DenseMap<Attribute, hw::HierPathOp> pathCache;
-
-  /// The insertion point where the pass inserts HierPathOps.
-  OpBuilder::InsertPoint pathInsertPoint = {};
+  /// Utility to create HerPathOps at a predefined location in the circuit.
+  /// This handles caching and keeps the order consistent.
+  hw::HierPathCache *hierPathCache;
 
   /// Per-module helpers for creating operations within modules.
   DenseMap<FModuleOp, ModuleState> moduleStates;

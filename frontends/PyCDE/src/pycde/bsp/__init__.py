@@ -4,17 +4,16 @@
 
 from typing import Optional
 
-from .cosim import CosimBSP
+from .cosim import CosimBSP, CosimBSP_DMA
 from .xrt import XrtBSP
 
 
 def get_bsp(name: Optional[str] = None):
   if name is None or name == "cosim":
     return CosimBSP
+  elif name == "cosim_dma":
+    return CosimBSP_DMA
   elif name == "xrt":
     return XrtBSP
-  elif name == "xrt_cosim":
-    from .xrt import XrtCosimBSP
-    return XrtCosimBSP
   else:
     raise ValueError(f"Unknown bsp type: {name}")

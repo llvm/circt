@@ -174,3 +174,114 @@ hw.module @shift2(in %lhs: i2, in %rhs: i2, out out_shl: i2, out out_shr: i2, ou
   hw.output %0, %1, %2 : i2, i2, i2
 }
 
+// CHECK-LABEL: @divmod
+// ALLOW_ICMP-LABEL: @divmod
+hw.module @divmod(in %in: i1, in %rhs: i2, out out_divu: i2, out out_modu: i2, out out_divs: i2, out out_mods: i2) {
+  %false = hw.constant false
+  %lhs = comb.concat %false, %in : i1, i1
+  // =DIVU===================================
+  // | in | rhs[1] | rhs[0] | divu(=in/rhs) |
+  // | ------------------------------------ |
+  // | 0  |   0    |   0    |  undef(=0)    |
+  // | 0  |   0    |   1    |  0            |
+  // | 0  |   1    |   0    |  0            |
+  // | 0  |   1    |   1    |  0            |
+  // | 1  |   0    |   0    |  undef(=0)    |
+  // | 1  |   0    |   1    |  1            |
+  // | 1  |   1    |   0    |  0            |
+  // | 1  |   1    |   1    |  0            |
+  // ========================================
+  // ALLOW_ICMP:      %[[C0_I2:.+]] = hw.constant 0 : i2
+  // ALLOW_ICMP-NEXT: %[[C1_I2:.+]] = hw.constant 1 : i2
+  // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[MUX1:.+]] = comb.mux %[[RHS_0]], %[[C1_I2]], %[[C0_I2]] : i2
+  // ALLOW_ICMP-NEXT: %[[MUX2:.+]] = comb.mux %[[RHS_1]], %[[C0_I2]], %[[MUX1]] : i2
+  // ALLOW_ICMP-NEXT: %[[DIVU:.+]] = comb.mux %in, %[[MUX2]], %[[C0_I2]] : i2
+  %0 = comb.divu %lhs, %rhs : i2
+
+  // =MODU===================================
+  // | in | rhs[1] | rhs[0] | modu(=in%rhs) |
+  // | ------------------------------------ |
+  // | 0  |   0    |   0    |  undef(=0)    |
+  // | 0  |   0    |   1    |  0            |
+  // | 0  |   1    |   0    |  0            |
+  // | 0  |   1    |   1    |  0            |
+  // | 1  |   0    |   0    |  undef(=0)    |
+  // | 1  |   0    |   1    |  0            |
+  // | 1  |   1    |   0    |  1            |
+  // | 1  |   1    |   1    |  1            |
+  // ========================================
+  // ALLOW_ICMP: %[[C0_I2:.+]] = hw.constant 0 : i2
+  // ALLOW_ICMP-NEXT: %[[C1_I2:.+]] = hw.constant 1 : i2
+  // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[MUX1:.+]] = comb.mux %[[RHS_1]], %[[C1_I2]], %[[C0_I2]] : i2
+  // ALLOW_ICMP-NEXT: %[[MODU:.+]] = comb.mux %in, %[[MUX1]], %[[C0_I2]] : i2
+  %1 = comb.modu %lhs, %rhs : i2
+
+  // =DIVS===================================
+  // | in | rhs[1] | rhs[0] | divs(=in/rhs) |
+  // | ------------------------------------ |
+  // | 0  |   0    |   0    |  undef(=0)    |
+  // | 0  |   0    |   1    |  0            |
+  // | 0  |   1    |   0    |  0            |
+  // | 0  |   1    |   1    |  0            |
+  // | 1  |   0    |   0    |  undef(=0)    |
+  // | 1  |   0    |   1    |  1            |
+  // | 1  |   1    |   0    |  0            |
+  // | 1  |   1    |   1    |  -1           |
+  // ========================================
+  // ALLOW_ICMP:      %[[C0_I2:.+]] = hw.constant 0 : i2
+  // ALLOW_ICMP-NEXT: %[[C1_I2:.+]] = hw.constant 1 : i2
+  // ALLOW_ICMP-NEXT: %[[C_MINUS_1_I2:.+]] = hw.constant -1 : i2
+  // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[MUX1:.+]] = comb.mux %[[RHS_0]], %[[C_MINUS_1_I2]], %[[C0_I2]] : i2
+  // ALLOW_ICMP-NEXT: %[[MUX2:.+]] = comb.mux %[[RHS_0]], %[[C1_I2]], %[[C0_I2]] : i2
+  // ALLOW_ICMP-NEXT: %[[MUX3:.+]] = comb.mux %[[RHS_1]], %[[MUX1]], %[[MUX2]] : i2
+  // ALLOW_ICMP-NEXT: %[[DIVS:.+]] = comb.mux %in, %[[MUX3]], %[[C0_I2]] : i2
+  %2 = comb.divs %lhs, %rhs : i2
+
+  // =MODS===================================
+  // | in | rhs[1] | rhs[0] | mods(=in%rhs) |
+  // | ------------------------------------ |
+  // | 0  |   0    |   0    |  undef(=0)    |
+  // | 0  |   0    |   1    |  0            |
+  // | 0  |   1    |   0    |  0            |
+  // | 0  |   1    |   1    |  0            |
+  // | 1  |   0    |   0    |  undef(=0)    |
+  // | 1  |   0    |   1    |  0            |
+  // | 1  |   1    |   0    |  1            |
+  // | 1  |   1    |   1    |  0            |
+  // ========================================
+  // ALLOW_ICMP:      %[[C0_I2:.+]] = hw.constant 0 : i2
+  // ALLOW_ICMP-NEXT: %[[C1_I2:.+]] = hw.constant 1 : i2
+  // ALLOW_ICMP-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+  // ALLOW_ICMP-NEXT: %[[MUX1:.+]] = comb.mux %[[RHS_0]], %[[C0_I2]], %[[C1_I2]] : i2
+  // ALLOW_ICMP-NEXT: %[[MUX2:.+]] = comb.mux %[[RHS_1]], %[[MUX1]], %[[C0_I2]] : i2
+  // ALLOW_ICMP-NEXT: %[[MODS:.+]] = comb.mux %in, %[[MUX2]], %[[C0_I2]] : i2
+  %3 = comb.mods %lhs, %rhs : i2
+
+  // ALLOW_ICMP-NEXT: hw.output %[[DIVU]], %[[MODU]], %[[DIVS]], %[[MODS]]
+  hw.output %0, %1, %2, %3 : i2, i2, i2, i2
+}
+
+
+// CHECK-LABEL: @divmodu_power_of_two
+// ALLOW_ICMP-LABEL: @divmodu_power_of_two
+hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8) {
+  %rhs = hw.constant 8 : i8
+  %0 = comb.divu %lhs, %rhs : i8
+  %1 = comb.modu %lhs, %rhs : i8
+  // ALLOW_ICMP:      %[[UPPER_5:.+]] = comb.extract %lhs from 3 : (i8) -> i5
+  // ALLOW_ICMP-NEXT: %[[C0_I3:.+]] = hw.constant 0 : i3
+  // ALLOW_ICMP-NEXT: %[[DIVU:.+]] = comb.concat %[[C0_I3]], %[[UPPER_5]] : i3, i5
+  // ALLOW_ICMP-NEXT: %[[LOWER_3:.+]] = comb.extract %lhs from 0 : (i8) -> i3
+  // ALLOW_ICMP-NEXT: %[[C0_I5:.+]] = hw.constant 0 : i5
+  // ALLOW_ICMP-NEXT: %[[MODU:.+]] = comb.concat %[[C0_I5]], %[[LOWER_3]] : i5, i3
+  // ALLOW_ICMP-NEXT: hw.output %[[DIVU]], %[[MODU]] : i8, i8
+  hw.output %0, %1 : i8, i8
+}
+

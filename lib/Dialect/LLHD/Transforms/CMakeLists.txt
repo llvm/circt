@@ -1,7 +1,12 @@
 add_circt_dialect_library(CIRCTLLHDTransforms
+  Deseq.cpp
   DesequentializationPass.cpp
+  DNF.cpp
   EarlyCodeMotionPass.cpp
   FunctionEliminationPass.cpp
+  HoistSignals.cpp
+  LowerProcesses.cpp
+  Mem2Reg.cpp
   MemoryToBlockArgumentPass.cpp
   ProcessLoweringPass.cpp
   Sig2RegPass.cpp
@@ -14,10 +19,11 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
-  CIRCTSeq
   CIRCTLLHD
-  MLIRIR
+  CIRCTSeq
   MLIRControlFlowDialect
   MLIRFuncDialect
+  MLIRIR
+  MLIRSCFDialect
   MLIRTransformUtils
 )

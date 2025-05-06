@@ -31,7 +31,7 @@ with Context() as ctx:
   assert (not bundle_type.resettable)
   for bchan in bundle_type.channels:
     print(bchan)
-  # CHECK: ('i16chan', <ChannelDirection.TO: 1>, Type(!esi.channel<i16>))
+  # CHECK: ('i16chan', ChannelDirection.TO, Type(!esi.channel<i16>))
   print()
 
   bundle_type = esi.BundleType.get(

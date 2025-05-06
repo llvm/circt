@@ -10,49 +10,36 @@
 #define CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYINTERFACES_TD
 
 include "mlir/IR/Interfaces.td"
-include "mlir/IR/OpBase.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
-def RegisterOpInterface : OpInterface<"RegisterOpInterface"> {
+def RegisterAttrInterface : AttrInterface<"RegisterAttrInterface", [TypedAttrInterface]> {
   let description = [{
-    This interface should be implemented by operations that represent
-    ISA registers. It is used for register allocation, emission, etc.
-
-    Virtual registers are indicated by a register index of ~0.
+    This interface should be implemented by attributes that represent
+    ISA registers. It is used for elaboration, register allocation, emission,
+    etc.
   }];
   let cppNamespace = "::circt::rtg";
 
   let methods = [
-    InterfaceMethod<[{
-        Returns the bitvector of the Dialect's canonical register indices for
-        which this operation allows.
-      }],
-      "::llvm::BitVector", "getAllowedRegs">,
-    InterfaceMethod<[{
-        Returns the Dialect's canonical register index of the register if it
-        selects a specific one, or ~0 if it isn't fixed yet.
-      }],
-      "unsigned", "getFixedReg">,
-    InterfaceMethod<[{
-        Sets this operation to use a specific register given by the Dialect's
-        canonical register index.
-      }],
-      "void", "setFixedReg", (ins "unsigned":$reg)>,
     InterfaceMethod<[{
         Returns the class specific index of the register. This translates from
         the flat internal representation to the architectural representation.
       }],
       "unsigned", "getClassIndex">,
     InterfaceMethod<[{
-        Returns the class specific index of the register. This translates from
-        the flat internal representation to the architectural representation.
-        This returns an APInt for the common binary encoding.
-      }],
-      "llvm::APInt", "getClassIndexBinary">,
-    InterfaceMethod<[{
         Returns a suitable string for use in assembly format.
       }],
-      "std::string", "getRegisterAssembly">,
+      "llvm::StringLiteral", "getRegisterAssembly">,
   ];
+}
+
+def RegisterTypeInterface : TypeInterface<"RegisterTypeInterface"> {
+  let description = [{
+    This interface should be implemented by types that represent
+    ISA registers. It is used for elaboration, register allocation, emission,
+    etc.
+  }];
+  let cppNamespace = "::circt::rtg";
 }
 
 def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
@@ -80,5 +67,34 @@ def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
            "llvm::ArrayRef<mlir::Attribute>":$operands)>,
   ];
 }
+
+def InstructionOpAdaptorTrait : NativeOpTrait<"InstructionOpAdaptorTrait"> {
+  let extraConcreteClassDeclaration = [{
+    static void printInstructionBinary(llvm::raw_ostream &os,
+                                       FoldAdaptor adaptor);
+
+    static void printInstructionAssembly(llvm::raw_ostream &os,
+                                         FoldAdaptor adaptor);
+  }];
+
+  let extraConcreteClassDefinition = [{
+    void $cppClass::printInstructionBinary(
+        llvm::raw_ostream &os, llvm::ArrayRef<mlir::Attribute> operands) {
+      printInstructionBinary(os, FoldAdaptor(operands));
+    }
+
+    void $cppClass::printInstructionAssembly(
+        llvm::raw_ostream &os, llvm::ArrayRef<mlir::Attribute> operands) {
+      printInstructionAssembly(os, FoldAdaptor(operands));
+    }
+  }];
+
+  let cppNamespace = "::circt::rtg";
+}
+
+def InstructionOpAdaptor : TraitList<[
+  DeclareOpInterfaceMethods<InstructionOpInterface>,
+  InstructionOpAdaptorTrait,
+]>;
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYINTERFACES_TD

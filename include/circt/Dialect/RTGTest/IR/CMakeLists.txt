@@ -9,6 +9,6 @@ mlir_tablegen(RTGTestEnums.h.inc -gen-enum-decls)
 mlir_tablegen(RTGTestEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(CIRCTRTGTestEnumsIncGen)
 
-mlir_tablegen(RTGTestAttributes.h.inc -gen-attrdef-decls)
-mlir_tablegen(RTGTestAttributes.cpp.inc -gen-attrdef-defs)
+mlir_tablegen(RTGTestAttributes.h.inc -gen-attrdef-decls --attrdefs-dialect=rtgtest)
+mlir_tablegen(RTGTestAttributes.cpp.inc -gen-attrdef-defs --attrdefs-dialect=rtgtest)
 add_public_tablegen_target(CIRCTRTGTestAttributeIncGen)

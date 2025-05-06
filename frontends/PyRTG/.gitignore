@@ -1,0 +1,5 @@
+
+# /src/circt created via
+#   `ln -s <build dir>/tools/circt/python_packages/pyrtg/pyrtg/circt frontends/PyRTG/src/circt`
+# to help PyRTG devs with code completion.
+/src/pyrtg/circt

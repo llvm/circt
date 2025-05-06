@@ -64,69 +64,6 @@ private:
   SmallVector<IntegerAttr> table;
 };
 
-/// A wrapper around ConversionPattern that matches specifically on LutOp
-/// operations and hold a LutCalculator member variable that allows to compute
-/// the lookup-table entries and cache the result.
-class LutLoweringPattern : public ConversionPattern {
-public:
-  LutLoweringPattern(LutCalculator &lutCalculator, MLIRContext *context,
-                     mlir::PatternBenefit benefit = 1)
-      : ConversionPattern(LutOp::getOperationName(), benefit, context),
-        lutCalculator(lutCalculator) {}
-  LutLoweringPattern(LutCalculator &lutCalculator, TypeConverter &typeConverter,
-                     MLIRContext *context, mlir::PatternBenefit benefit = 1)
-      : ConversionPattern(typeConverter, LutOp::getOperationName(), benefit,
-                          context),
-        lutCalculator(lutCalculator) {}
-
-  /// Wrappers around the ConversionPattern methods that pass the LutOp
-  /// type and guarantee that the LutCalculator is up-to-date.
-  LogicalResult match(Operation *op) const final {
-    auto lut = cast<LutOp>(op);
-    if (failed(lutCalculator.computeTableEntries(lut)))
-      return failure();
-    return match(lut);
-  }
-  void rewrite(Operation *op, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const final {
-    rewrite(cast<LutOp>(op), LutOpAdaptor(operands, op->getAttrDictionary()),
-            rewriter);
-  }
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto lut = cast<LutOp>(op);
-    if (failed(lutCalculator.computeTableEntries(lut)))
-      return failure();
-    return matchAndRewrite(lut, LutOpAdaptor(operands, op->getAttrDictionary()),
-                           rewriter);
-  }
-
-  /// Rewrite and Match methods that operate on the LutOp type. These must be
-  /// overridden by the derived pattern class.
-  virtual LogicalResult match(LutOp op) const {
-    llvm_unreachable("must override match or matchAndRewrite");
-  }
-  virtual void rewrite(LutOp op, LutOpAdaptor adaptor,
-                       ConversionPatternRewriter &rewriter) const {
-    llvm_unreachable("must override matchAndRewrite or a rewrite method");
-  }
-  virtual LogicalResult
-  matchAndRewrite(LutOp op, LutOpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const {
-    if (failed(match(op)))
-      return failure();
-    rewrite(op, adaptor, rewriter);
-    return success();
-  }
-
-protected:
-  LutCalculator &lutCalculator;
-
-private:
-  using ConversionPattern::matchAndRewrite;
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -261,12 +198,15 @@ namespace {
 /// integer that is shifed and truncated according to the lookup/index value.
 /// Encoding the lookup tables as intermediate values in the instruction stream
 /// should provide better performnace than loading from some global constant.
-struct LutToInteger : LutLoweringPattern {
-  using LutLoweringPattern::LutLoweringPattern;
+struct LutToInteger : OpConversionPattern<LutOp> {
+  LutToInteger(LutCalculator &calculator, MLIRContext *context)
+      : OpConversionPattern<LutOp>(context), lutCalculator(calculator) {}
 
   LogicalResult
   matchAndRewrite(LutOp lut, LutOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    if (failed(lutCalculator.computeTableEntries(lut)))
+      return failure();
 
     const uint32_t tableSize = lutCalculator.getTableSize();
     const uint32_t inputBw = lutCalculator.getInputBitWidth();
@@ -310,17 +250,23 @@ struct LutToInteger : LutLoweringPattern {
     rewriter.replaceOp(lut, extracted);
     return success();
   }
+
+  LutCalculator &lutCalculator;
 };
 
 /// Lower lookup-tables with a total size bigger than 256 bits to a constant
 /// array that is stored as constant global data and thus a lookup consists of a
 /// memory load at the correct offset of that global data frame.
-struct LutToArray : LutLoweringPattern {
-  using LutLoweringPattern::LutLoweringPattern;
+struct LutToArray : OpConversionPattern<LutOp> {
+  LutToArray(LutCalculator &calculator, MLIRContext *context)
+      : OpConversionPattern<LutOp>(context), lutCalculator(calculator) {}
 
   LogicalResult
   matchAndRewrite(LutOp lut, LutOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    if (failed(lutCalculator.computeTableEntries(lut)))
+      return failure();
+
     auto constants = lutCalculator.getRefToTableEntries();
     SmallVector<Attribute> constantAttrs(constants.begin(), constants.end());
     auto tableSize = lutCalculator.getTableSize();
@@ -340,6 +286,8 @@ struct LutToArray : LutLoweringPattern {
     rewriter.replaceOp(lut, extracted);
     return success();
   }
+
+  LutCalculator &lutCalculator;
 };
 
 } // namespace

@@ -74,6 +74,21 @@ else()
   endif()
 endif()
 
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt
+  GIT_TAG        11.1.4)
+FetchContent_MakeAvailable(fmt)
+
+# CLI11 is used for tools' command line options parsing.
+FetchContent_Declare(
+    cli11_proj
+    QUIET
+    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+    GIT_TAG v2.5.0
+)
+FetchContent_MakeAvailable(cli11_proj)
+
 # In a Python wheel build, we need to install libraries to different places.
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
 if (WHEEL_BUILD)
@@ -100,6 +115,7 @@ set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Common.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Design.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Engines.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Logging.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
@@ -110,6 +126,7 @@ set(ESICppRuntimeSources
 set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/CLI.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Design.h
@@ -165,6 +182,7 @@ endif()
 target_link_libraries(ESICppRuntime PUBLIC
   ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
+  fmt::fmt-header-only
 )
 if(NOT MSVC)
   target_link_libraries(ESICppRuntime PRIVATE
@@ -218,7 +236,10 @@ set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
 add_executable(esiquery
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
-target_link_libraries(esiquery PRIVATE ESICppRuntime)
+target_link_libraries(esiquery PRIVATE
+  ESICppRuntime
+  CLI11::CLI11
+)
 add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
   DESTINATION bin
@@ -233,7 +254,10 @@ install(TARGETS esiquery
 add_executable(esitester
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esitester.cpp
 )
-target_link_libraries(esitester PRIVATE ESICppRuntime)
+target_link_libraries(esitester PRIVATE
+  ESICppRuntime
+  CLI11::CLI11
+)
 add_dependencies(ESIRuntime esitester)
 
 ##===----------------------------------------------------------------------===//

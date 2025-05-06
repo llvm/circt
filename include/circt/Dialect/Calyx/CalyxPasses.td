@@ -185,4 +185,124 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createGoInsertionPass()";
 }
 
+def AffineParallelUnroll : Pass<"affine-parallel-unroll", "::mlir::func::FuncOp"> {
+  let summary = "Unrolls affine.parallel operations in a way suitable for Calyx.";
+  let description = [{
+    This pass unrolls `affine.parallel` operations completely and wrap each unrolled body
+    with `scf.execute_region` operations to better align with `calyx.par`'s representation.
+    Moreover, the newly created `affine.parallel` will be attached with attributes to 
+    indicate that this is different from normal `affine.parallel`. Behavior is undefined if
+    there is a data race or memory banking contention.
+    An example:
+    ```
+    affine.parallel (%x, %y) from (0, 0) to (2, 2) {
+      %0 = memref.load %alloc_0[%x, %y] : memref<2x2xf32>
+      %1 = memref.load %alloc_1[%x, %y] : memref<2x2xf32>
+      %2 = arith.addf %0, %1 : f32
+      memref.store %2, %alloc_2[%x, %y] : memref<2x2xf32>
+    }
+    =>
+    affine.parallel _ from 0 to 1 {
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c0, %c0] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c0, %c0] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c0, %c0] : memref<2x2xf32>
+      }
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c0, %c1] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c0, %c1] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c0, %c1] : memref<2x2xf32>
+      }
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c1, %c0] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c1, %c0] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c1, %c0] : memref<2x2xf32>
+      }
+      scf.execute_region {
+        %0 = memref.load %alloc_0[%c1, %c1] : memref<2x2xf32>
+        %1 = memref.load %alloc_1[%c1, %c1] : memref<2x2xf32>
+        %2 = arith.addf %0, %1 : f32
+        memref.store %2, %alloc_2[%c1, %c1] : memref<2x2xf32>
+      }
+    } {calyx.unroll = true}
+    ```
+  }];
+  let dependentDialects = ["mlir::affine::AffineDialect"];
+  let constructor = "circt::calyx::createAffineParallelUnrollPass()";
+}
+
+def AffineToSCF : Pass<"calyx-affine-to-scf", "::mlir::func::FuncOp"> {
+  let summary = "Lowers the Affine dialect to the SCF dialect while attaching "
+        "relevant information used for the SCFToCalyx or the LoopScheduleToCalyx pass.";
+  let dependentDialects = [
+    "mlir::memref::MemRefDialect",
+    "mlir::scf::SCFDialect",
+    "mlir::arith::ArithDialect"
+  ];
+  let constructor = "circt::calyx::createAffineToSCFPass()";
+}
+
+def AffinePloopUnparallelize : Pass<"affine-ploop-unparallelize", "::mlir::func::FuncOp"> {
+  let summary = "Unparallelize `affine.parallel` op to `affine.for`";
+  let dependentDialects = ["mlir::affine::AffineDialect"];
+  let constructor = "circt::calyx::createAffinePloopUnparallelizePass()";
+  let description = [{
+      Unparallelize `affine.parallel` op to `affine.for` by the factor
+      specified in the attribute. For example:
+      ```
+      #map_mod = affine_map<d0 -> d0 mod 2>
+      affine.parallel (%ip) = (0) to (6) {
+        %mod = affine.apply #map_mod(%ip)
+        scf.index_switch %mod:
+        case 1 {
+          affine.store %cst, %mem0[%ip floordiv 2] : memref<3xf32>
+        }
+        case 0 {
+          affine.store %cst, %mem1[%ip floordiv 2] : memref<3xf32>
+        }
+        default {}
+      } {unparallelize.factor = 2}
+
+      =>
+
+      #map_sum = affine_map<(d0, d1) -> (d0 + d1)>
+      #map_mod = affine_map<d0 -> d0 mod 2>
+      affine.for %if = 0 to 6 step 2 {
+        affine.parallel (%ip) = (0) to (2) {
+          %i = affine.apply #map_sum(%if, %ip)
+          %mod = affine.apply #map_mod(%i)
+          scf.index_switch %mod:
+          case 0 {
+            affine.store %cst, %mem0[%i floordiv 2] : memref<3xf32>
+          }
+          case 1 {
+            affine.store %cst, %mem1[%i floordiv 2] : memref<3xf32>
+          }
+          default {}
+        }
+      }
+      ```
+  }];
+}
+
+def ExcludeExecuteRegionCanonicalize : Pass<"exclude-exec-region-canonicalize", "::mlir::func::FuncOp"> {
+  let summary = "Canonicalize all legal operations except `scf.execute_region`";
+  let dependentDialects = [
+     "mlir::memref::MemRefDialect",
+     "mlir::scf::SCFDialect",
+     "mlir::arith::ArithDialect",
+     "mlir::affine::AffineDialect"
+  ];
+  let constructor = "circt::calyx::createExcludeExecuteRegionCanonicalizePass()";
+  let description = [{
+    The AffineParallelUnroll pass unrolls the body of `affine.parallel`
+    to multiple copies of `scf.execute_region`s. Since the semantics
+    of those `scf.execute_region` has deviated from the original MLIR
+    definition, a new canonicalization pass that does not operate on
+    `scf.execute_region` is needed.
+  }];
+}
 #endif // CIRCT_DIALECT_CALYX_CALYXPASSES_TD

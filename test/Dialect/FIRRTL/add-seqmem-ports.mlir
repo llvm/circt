@@ -3,11 +3,14 @@
 // Should create the output file even if there are no seqmems.
 // CHECK-LABEL: firrtl.circuit "NoMems" {
 // CHECK-NOT: class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation"
-firrtl.circuit "NoMems" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
-    filename = "sram.txt"
-  }]} {
+firrtl.circuit "NoMems" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
+      filename = "sram.txt"
+    }
+  ]
+} {
   firrtl.module @NoMems() {}
   // CHECK:      emit.file "metadata{{/|\\\\}}sram.txt" {
   // CHECK-NEXT:   sv.verbatim ""
@@ -17,11 +20,14 @@ firrtl.circuit "NoMems" attributes {annotations = [
 // Test for when there is a memory but no ports are added. The output file
 // should be empty.
 // CHECK-LABEL: firrtl.circuit "NoAddedPorts"  {
-firrtl.circuit "NoAddedPorts" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
-    filename = "sram.txt"
-  }]} {
+firrtl.circuit "NoAddedPorts" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
+      filename = "sram.txt"
+    }
+  ]
+} {
   // CHECK: firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   firrtl.module @NoAddedPorts() {
@@ -36,17 +42,20 @@ firrtl.circuit "NoAddedPorts" attributes {annotations = [
 // should be empty.
 // CHECK-LABEL: firrtl.circuit "NoMemory"  {
 // CHECK-NOT: class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation"
-firrtl.circuit "NoMemory" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
-    filename = "sram.txt"
-  },
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_input",
-    input = true,
-    width = 5
-  }]} {
+firrtl.circuit "NoMemory" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
+      filename = "sram.txt"
+    },
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 5
+    }
+  ]
+} {
   firrtl.module @NoMemory() {
   }
   // CHECK:      emit.file "metadata{{/|\\\\}}sram.txt" {
@@ -56,13 +65,16 @@ firrtl.circuit "NoMemory" attributes {annotations = [
 
 // Test for a single added port.
 // CHECK-LABEL: firrtl.circuit "Single"  {
-firrtl.circuit "Single" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_input",
-    input = true,
-    width = 3
-  }]} {
+firrtl.circuit "Single" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 3
+    }
+  ]
+} {
   // CHECK:      firrtl.memmodule @MWrite_ext
   // CHECK-SAME:    in user_input: !firrtl.uint<3>
   // CHECK-SAME:    extraPorts = [{direction = "input", name = "user_input", width = 3 : ui32}]
@@ -74,19 +86,22 @@ firrtl.circuit "Single" attributes {annotations = [
 
 // Test for two ports added.
 // CHECK-LABEL: firrtl.circuit "Two"  {
-firrtl.circuit "Two" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_input",
-    input = true,
-    width = 3
-  },
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_output",
-    input = false,
-    width = 4
-  }]} {
+firrtl.circuit "Two" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 3
+    },
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_output",
+      input = false,
+      width = 4
+    }
+  ]
+} {
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   // The ports should be attached in the opposite order of the annotations.
   // CHECK: firrtl.module @Child(out %sram_0_user_output: !firrtl.uint<4>, in %sram_0_user_input: !firrtl.uint<3>)
@@ -112,19 +127,22 @@ firrtl.circuit "Two" attributes {annotations = [
 // Test for a ports added port with a DUT. The input ports should be wired to
 // zero, and not wired up through the test harness.
 // CHECK-LABEL: firrtl.circuit "TestHarness"  {
-firrtl.circuit "TestHarness" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_input",
-    input = true,
-    width = 3
-  },
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_output",
-    input = false,
-    width = 4
-  }]} {
+firrtl.circuit "TestHarness" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 3
+    },
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_output",
+      input = false,
+      width = 4
+    }
+  ]
+} {
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   // CHECK: firrtl.module @DUT(out %sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in %sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
   firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
@@ -139,23 +157,26 @@ firrtl.circuit "TestHarness" attributes {annotations = [
 }
 
 // Slightly more complicated test.
-firrtl.circuit "Complex" attributes {annotations = [
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
-    filename = "sram.txt"
-  },
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_input",
-    input = true,
-    width = 3
-  },
-  {
-    class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
-    name = "user_output",
-    input = false,
-    width = 4
-  }]} {
+firrtl.circuit "Complex" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
+      filename = "sram.txt"
+    },
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_input",
+      input = true,
+      width = 3
+    },
+    {
+      class = "sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+      name = "user_output",
+      input = false,
+      width = 4
+    }
+  ]
+} {
 
   // CHECK:  hw.hierpath private @[[memNLA:.+]] [@DUT::@[[MWRITE_EXT:.+]]]
   // CHECK:  hw.hierpath private @[[memNLA_0:.+]] [@DUT::@[[CHILD:.+]], @Child::@[[CHILD_MWRITE_EXT:.+]]]

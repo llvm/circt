@@ -1,7 +1,6 @@
 // RUN: circt-opt --kanagawa-argify-blocks %s | FileCheck %s
 
 // CHECK-LABEL: kanagawa.class sym @Argify {
-// CHECK-NEXT:   %this = kanagawa.this <@foo::@Argify> 
 // CHECK-NEXT:   kanagawa.method @foo() -> () {
 // CHECK-NEXT:     %c32_i32 = hw.constant 32 : i32
 // CHECK-NEXT:     %0:2 = kanagawa.sblock.isolated (%arg0 : i32 = %c32_i32) -> (i32, i32) {
@@ -15,7 +14,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @Argify {
-  %this = kanagawa.this <@foo::@Argify>
 
   kanagawa.method @foo()  {
     %c32 = hw.constant 32 : i32

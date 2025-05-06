@@ -168,7 +168,8 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
   auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
+                                ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -253,7 +254,8 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   builder.setInsertionPointToStart(&body);
   auto constant = builder.create<ConstantOp>(
       circt::om::IntegerAttr::get(&context, constantType));
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({constant}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({constant}),
+                                ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -304,7 +306,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -368,7 +370,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
       builder.create<ObjectFieldOp>(builder.getI32Type(), object,
                                     builder.getArrayAttr(FlatSymbolRefAttr::get(
                                         builder.getStringAttr("field"))));
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({field}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({field}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -407,7 +409,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
+                                ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
@@ -422,7 +425,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object, object}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object, object}),
+                                ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -476,7 +480,8 @@ TEST(EvaluatorTests, AnyCastObject) {
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>());
+  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
+                                ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
@@ -491,7 +496,7 @@ TEST(EvaluatorTests, AnyCastObject) {
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   auto cast = builder.create<AnyCastOp>(object);
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({cast}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({cast}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -545,7 +550,7 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto cast = builder.create<AnyCastOp>(body.getArgument(0));
   SmallVector<Value> objectParams = {cast};
   auto object = builder.create<ObjectOp>(innerCls, objectParams);
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}));
+  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -1187,6 +1192,122 @@ TEST(EvaluatorTests, ListConcatField) {
                    ->getAs<circt::om::IntegerAttr>()
                    .getValue()
                    .getValue());
+}
+
+TEST(EvaluatorTests, TupleGet) {
+  StringRef mod = "om.class @Tuple() -> (val: !om.string) {"
+                  "  %int = om.constant 1 : i1"
+                  "  %str = om.constant \"foo\" : !om.string"
+                  "  %tuple = om.tuple_create %int, %str  : i1, !om.string"
+                  "  %val = om.tuple_get %tuple[1]  : tuple<i1, !om.string>"
+                  "  om.class.fields %val : !om.string"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Tuple"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("val")
+                        .value();
+
+  ASSERT_EQ("foo", llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                       ->getAs<StringAttr>()
+                       .getValue()
+                       .str());
+}
+
+TEST(EvaluatorTests, NestedReferenceValue) {
+  StringRef mod =
+      "om.class @Empty() {"
+      "  om.class.fields"
+      "}"
+      "om.class @Any() -> (object: !om.any, string: !om.any) {"
+      "  %0 = om.object @Empty() : () -> !om.class.type<@Empty>"
+      "  %1 = om.any_cast %0 : (!om.class.type<@Empty>) -> !om.any"
+      "  %2 = om.constant \"foo\" : !om.string"
+      "  %3 = om.any_cast %2 : (!om.string) -> !om.any"
+      "  om.class.fields %1, %3 : !om.any, !om.any"
+      "}"
+      "om.class @InnerClass1(%anyListIn: !om.list<!om.any>)  -> (any_list1: "
+      "!om.list<!om.any>) {"
+      "  om.class.fields %anyListIn : !om.list<!om.any>"
+      "}"
+      "om.class @InnerClass2(%anyListIn: !om.list<!om.any>)  -> (any_list2: "
+      "!om.list<!om.any>) {"
+      "  om.class.fields %anyListIn : !om.list<!om.any>"
+      "}"
+      "om.class @OuterClass2()  -> (om: !om.class.type<@InnerClass2>) {"
+      "  %0 = om.object @InnerClass2(%5) : (!om.list<!om.any>) -> "
+      "!om.class.type<@InnerClass2>"
+      "  %1 = om.object @Any() : () -> !om.class.type<@Any>"
+      "  %2 = om.object.field %1, [@object] : (!om.class.type<@Any>) -> "
+      "!om.any"
+      "  %3 = om.object @Any() : () -> !om.class.type<@Any>"
+      "  %4 = om.object.field %3, [@object] : (!om.class.type<@Any>) -> "
+      "!om.any"
+      "  %5 = om.list_create %2, %4 : !om.any"
+      "  om.class.fields %0 : !om.class.type<@InnerClass2>"
+      "}"
+      "om.class @OuterClass1()  -> (om: !om.any) {"
+      "  %0 = om.object @InnerClass1(%8) : (!om.list<!om.any>) -> "
+      "!om.class.type<@InnerClass1>"
+      "  %1 = om.any_cast %0 : (!om.class.type<@InnerClass1>) -> !om.any"
+      "  %2 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>"
+      "  %3 = om.object.field %2, [@om] : (!om.class.type<@OuterClass2>) -> "
+      "!om.class.type<@InnerClass2>"
+      "  %4 = om.any_cast %3 : (!om.class.type<@InnerClass2>) -> !om.any"
+      "  %5 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>"
+      "  %6 = om.object.field %5, [@om] : (!om.class.type<@OuterClass2>) -> "
+      "!om.class.type<@InnerClass2>"
+      "  %7 = om.any_cast %6 : (!om.class.type<@InnerClass2>) -> !om.any"
+      "  %8 = om.list_create %4, %7 : !om.any"
+      "  om.class.fields %1 : !om.any"
+      "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "OuterClass1"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  ASSERT_TRUE(isa<evaluator::ObjectValue>(
+      llvm::cast<evaluator::ListValue>(
+          llvm::cast<evaluator::ObjectValue>(
+              llvm::cast<evaluator::ListValue>(
+                  llvm::cast<evaluator::ObjectValue>(
+                      llvm::cast<evaluator::ObjectValue>(result->get())
+                          ->getField("om")
+                          ->get())
+                      ->getField("any_list1")
+                      ->get())
+                  ->getElements()[0]
+                  .get())
+              ->getField("any_list2")
+              ->get())
+          ->getElements()[0]
+          .get()));
 }
 
 } // namespace

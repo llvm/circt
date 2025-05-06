@@ -1,8 +1,9 @@
 add_circt_unittest(CIRCTRTGTestTests
-  RegisterTest.cpp
+  MaterializerTest.cpp
 )
 
 target_link_libraries(CIRCTRTGTestTests
   PRIVATE
   CIRCTRTGTestDialect
+  MLIRIR
 )

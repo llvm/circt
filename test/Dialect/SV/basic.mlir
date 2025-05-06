@@ -283,6 +283,13 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
     sv.readmem %memForReadMem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
   }
 
+
+  // CHECK-NEXT: sv.system.time : i64
+  %time = sv.system.time : i64
+
+  // CHECK-NEXT: sv.system.stime : i32
+  %stime = sv.system.stime : i32
+
   // CHECK-NEXT: hw.output
   hw.output
 }
@@ -421,5 +428,21 @@ hw.module @test_open_array(in %clock : i1, in %in_0 : i8, in %in_1 : i8) {
   %1 = sv.unpacked_open_array_cast %0 : (!hw.uarray<2xi8>) -> !sv.open_uarray<i8>
   sv.always posedge %clock {
     sv.func.call.procedural @open_array(%1) : (!sv.open_uarray<i8>) -> ()
+  }
+}
+
+// CHECK-LABEL: hw.module @test_sformatf(in %a : i8) {
+// CHECK-NEXT:  sv.sformatf "foo%d"(%a) : i8
+hw.module @test_sformatf(in %a : i8) {
+  %0 = sv.sformatf "foo%d"(%a) : i8
+}
+
+// CHECK-LABEL: hw.module @test_fflush(in %a : i32) {
+// CHECK: sv.fflush
+// CHECK-NEXT: sv.fflush fd %a
+hw.module @test_fflush(in %a : i32) {
+  sv.initial {
+    sv.fflush
+    sv.fflush fd %a
   }
 }

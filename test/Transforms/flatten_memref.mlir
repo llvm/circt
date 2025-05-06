@@ -271,3 +271,57 @@ module {
   }
 }
 
+// -----
+
+// CHECK:   func.func @main(%[[VAL_0:arg0]]: memref<30xf32>) {
+// CHECK:           %[[VAL_1:.*]] = arith.constant 30 : index
+// CHECK:           %[[VAL_2:.*]] = arith.constant 1 : index
+// CHECK:           %[[VAL_3:.*]] = arith.constant 2 : index
+// CHECK:           %[[VAL_4:.*]] = arith.constant 0 : index
+// CHECK:           %[[VAL_5:.*]] = memref.alloc() : memref<30xf32>
+// CHECK:           %[[VAL_6:.*]] = memref.get_global @const_1_30 : memref<2xi64>
+// CHECK:           scf.for %[[VAL_7:.*]] = %[[VAL_4]] to %[[VAL_3]] step %[[VAL_2]] {
+// CHECK:             scf.for %[[VAL_8:.*]] = %[[VAL_4]] to %[[VAL_1]] step %[[VAL_2]] {
+// CHECK:               %[[VAL_9:.*]] = arith.constant 30 : index
+// CHECK:               %[[VAL_10:.*]] = arith.muli %[[VAL_4]], %[[VAL_9]] : index
+// CHECK:               %[[VAL_11:.*]] = arith.addi %[[VAL_10]], %[[VAL_8]] : index
+// CHECK:               %[[VAL_12:.*]] = memref.load %[[VAL_5]]{{\[}}%[[VAL_11]]] : memref<30xf32>
+// CHECK:               %[[VAL_13:.*]] = arith.constant 0 : index
+// CHECK:               %[[VAL_14:.*]] = arith.shli %[[VAL_4]], %[[VAL_13]] : index
+// CHECK:               %[[VAL_15:.*]] = arith.addi %[[VAL_14]], %[[VAL_7]] : index
+// CHECK:               memref.store %[[VAL_12]], %[[VAL_0]]{{\[}}%[[VAL_15]]] : memref<30xf32>
+// CHECK:             }
+// CHECK:           }
+// CHECK:           return
+// CHECK:         }
+
+module {
+  memref.global "private" constant @const_1_30 : memref<2xi64> = dense<[1, 30]>
+  func.func @main(%arg0: memref<30x1xf32>) {
+    %c30 = arith.constant 30 : index
+    %c1 = arith.constant 1 : index
+    %c2 = arith.constant 2 : index
+    %c0 = arith.constant 0 : index
+    %alloc = memref.alloc() : memref<2x5x3xf32>
+    %0 = memref.get_global @const_1_30 : memref<2xi64>
+    %reshape = memref.reshape %alloc(%0) : (memref<2x5x3xf32>, memref<2xi64>) -> memref<1x30xf32>
+    scf.for %arg2 = %c0 to %c2 step %c1 {
+      scf.for %arg3 = %c0 to %c30 step %c1 {
+        %4 = memref.load %reshape[%c0, %arg3] : memref<1x30xf32>
+        memref.store %4, %arg0[%c0, %arg2] : memref<30x1xf32>
+      }
+    }
+    return
+  }
+}
+
+// -----
+ 
+ // CHECK-LABEL:   func @allocas() -> memref<16xi32> {
+ // CHECK:           %[[VAL_0:.*]] = memref.alloca() : memref<16xi32>
+ // CHECK:           return %[[VAL_0]] : memref<16xi32>
+ // CHECK:         }
+ func.func @allocas() -> memref<4x4xi32> {
+   %0 = memref.alloca() : memref<4x4xi32>
+   return %0 : memref<4x4xi32>
+ }

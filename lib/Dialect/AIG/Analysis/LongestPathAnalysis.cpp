@@ -31,6 +31,7 @@
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/PriorityQueue.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -48,13 +49,13 @@ using namespace circt;
 using namespace aig;
 
 static size_t getBitWidth(Value value) {
-  if (auto vecType = value.getType().dyn_cast<seq::ClockType>())
+  if (auto vecType = dyn_cast<seq::ClockType>(value.getType()))
     return 1;
   return hw::getBitWidth(value.getType());
 }
 
 static bool isRootValue(Value value) {
-  if (auto arg = value.dyn_cast<BlockArgument>())
+  if (auto arg = dyn_cast<BlockArgument>(value))
     return true;
   return isa<seq::CompRegOp, seq::FirRegOp, hw::InstanceOp, seq::FirMemReadOp>(
       value.getDefiningOp());
@@ -87,6 +88,10 @@ struct DebugPoint {
 
   int64_t delay;
   StringRef comment;
+  DebugPoint(circt::igraph::InstancePath path, StringAttr name, size_t bitPos,
+             int64_t delay, StringRef comment = "")
+      : path(path), name(name), bitPos(bitPos), delay(delay), comment(comment) {
+  }
 
   // Trait for list of debug points.
   void Profile(llvm::FoldingSetNodeID &ID) const {
@@ -329,12 +334,7 @@ struct DebugNode : Node {
   void populateResults(SmallVectorImpl<ShrinkedEdge> &results) override {
     size_t currentPos = results.size();
     for (auto shrinkedEdge : input->query(0)->getShrinkedEdges()) {
-      DebugPoint point;
-      point.name = name;
-      point.bitPos = bitPos;
-      point.path = path;
-      point.delay = shrinkedEdge.delay;
-      point.comment = comment;
+      DebugPoint point(path, name, bitPos, shrinkedEdge.delay, comment);
       shrinkedEdge.points = getListFactory().add(point, shrinkedEdge.points);
       results.push_back(shrinkedEdge);
     }
@@ -422,7 +422,7 @@ struct InputNode : Node {
   StringRef getName() const { return getNameImpl(value, bitPos); }
 
   static StringRef getNameImpl(Value value, size_t bitPos) {
-    if (auto arg = value.dyn_cast<BlockArgument>()) {
+    if (auto arg = dyn_cast<BlockArgument>(value)) {
       auto op = cast<hw::HWModuleOp>(arg.getParentBlock()->getParentOp());
       return op.getArgName(arg.getArgNumber());
     }
@@ -2004,12 +2004,401 @@ struct PrintLongestPathAnalysisPass
 
 } // namespace
 
+static StringAttr getNameImpl(Value value, size_t bitPos) {
+  if (auto arg = dyn_cast<BlockArgument>(value)) {
+    auto op = cast<hw::HWModuleOp>(arg.getParentBlock()->getParentOp());
+    return op.getArgName(arg.getArgNumber());
+  }
+  return TypeSwitch<Operation *, StringAttr>(value.getDefiningOp())
+      .Case<seq::CompRegOp, seq::FirRegOp>(
+          [](auto op) { return op.getNameAttr(); })
+      .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
+        SmallString<16> str;
+        str += op.getInstanceName();
+        str += ".";
+        str += cast<StringAttr>(
+            op.getResultNamesAttr()[cast<OpResult>(value).getResultNumber()]);
+        return StringAttr::get(op.getContext(), str);
+      })
+      .Case<seq::FirMemReadOp>([&](seq::FirMemReadOp op) {
+        llvm::SmallString<16> str;
+        str += op.getMemory().getDefiningOp<seq::FirMemOp>().getNameAttr();
+        str += "_read_port";
+        return StringAttr::get(value.getContext(), str);
+      })
+      .Default([&](auto op) {
+        llvm::errs() << "Unknown op: " << *op << "\n";
+        return StringAttr::get(value.getContext(), "");
+      });
+}
+
+struct Output {
+  size_t bitPos;
+  circt::igraph::InstancePath path;
+  Value value;
+  StringAttr comment;
+
+  Output(Value value, size_t bitPos, circt::igraph::InstancePath path)
+      : value(value), bitPos(bitPos), path(path) {}
+  Output() = default;
+  void print(llvm::raw_ostream &os) const {
+    os << "Output(";
+    path.print(os);
+    os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos << "]"
+       << ")";
+  }
+};
+
+struct Point {
+  Value value;
+  size_t bitPos;
+  circt::igraph::InstancePath path;
+  int64_t delay;
+  llvm::ImmutableList<DebugPoint> history;
+  Point(Value value, size_t bitPos, circt::igraph::InstancePath path,
+        int64_t delay, llvm::ImmutableList<DebugPoint> history = {})
+      : value(value), bitPos(bitPos), path(path), delay(delay),
+        history(history) {
+    assert(value);
+  }
+  Point() = default;
+  bool operator>(const Point &other) const { return delay > other.delay; }
+
+  void print(llvm::raw_ostream &os) const {
+    os << "Point(";
+    path.print(os);
+    os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos
+       << "] @ " << delay << ")";
+  }
+};
+
+struct Impl {
+  LogicalResult run(mlir::ModuleOp module, StringRef topModuleName);
+
+  struct Runner {
+    Runner(igraph::InstanceGraph *instanceGraph)
+        : instanceGraph(instanceGraph) {
+      debugPointFactory =
+          std::make_unique<llvm::ImmutableListFactory<DebugPoint>>();
+      instancePathCache =
+          std::make_unique<circt::igraph::InstancePathCache>(*instanceGraph);
+    }
+    LogicalResult run();
+    Runner() = delete;
+
+    SmallVector<Output> startingPoints;
+
+    SmallVector<std::pair<Output, Point>> results;
+
+  private:
+    Output currentStartingPoint;
+    DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>, int64_t>
+        visited;
+    llvm::PriorityQueue<Point, std::vector<Point>, std::greater<Point>>
+        worklist;
+
+    LogicalResult run(Output point);
+    LogicalResult visit(const Point &point, mlir::BlockArgument argument);
+    LogicalResult visit(const Point &point, hw::InstanceOp op);
+    LogicalResult visit(const Point &point, hw::WireOp op);
+    LogicalResult visit(const Point &point, comb::ConcatOp op);
+    LogicalResult visit(const Point &point, comb::ExtractOp op);
+    LogicalResult visit(const Point &point, comb::ReplicateOp op);
+    LogicalResult visit(const Point &point, aig::AndInverterOp op);
+    // Pass through.
+    LogicalResult visit(const Point &point, seq::FirRegOp op) {
+      markFanIn(point);
+      return success();
+    }
+    LogicalResult visit(const Point &point, seq::CompRegOp op) {
+      markFanIn(point);
+      return success();
+    }
+    LogicalResult visitDefault(const Point &point, Operation *op);
+
+    LogicalResult addLogicOp(const Point &point, Operation *op);
+    void addEdge(Point from, int64_t delay, Value to);
+    void addEdge(Point from, int64_t delay, Value to, size_t bitPos);
+    void markFanIn(const Point &point);
+    void addToWorklist(Point point);
+    LogicalResult setFanOut(Output point);
+
+    igraph::InstanceGraph *instanceGraph;
+
+    std::unique_ptr<circt::igraph::InstancePathCache> instancePathCache;
+
+    // Thread-local debug point factory.
+    std::unique_ptr<llvm::ImmutableListFactory<DebugPoint>> debugPointFactory;
+  };
+};
+
+LogicalResult Impl::Runner::setFanOut(Output output) {
+
+  currentStartingPoint = output;
+  return TypeSwitch<Operation *, LogicalResult>(output.value.getDefiningOp())
+      .Case<seq::FirRegOp>([&](seq::FirRegOp op) {
+        // TODO: Add dependency to reset line.
+        Point point(op.getNext(), output.bitPos, output.path, 0);
+        addToWorklist(point);
+        return success();
+      })
+      .Default([&](auto) { return failure(); });
+}
+
+void Impl::Runner::addToWorklist(Point point) {
+  auto it = visited.find({point.path, point.value, point.bitPos});
+  if (it != visited.end() && it->second >= point.delay)
+    return;
+  visited[{point.path, point.value, point.bitPos}] = point.delay;
+  worklist.push(point);
+}
+
+void Impl::Runner::addEdge(Point from, int64_t delay, Value to) {
+  from.value = to;
+  from.delay += delay;
+  addToWorklist(from);
+}
+
+void Impl::Runner::addEdge(Point from, int64_t delay, Value to, size_t bitPos) {
+  from.value = to;
+  from.delay += delay;
+  from.bitPos = bitPos;
+  addToWorklist(from);
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, aig::AndInverterOp op) {
+  return addLogicOp(point, op);
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, comb::ExtractOp op) {
+  addEdge(point, 0, op.getInput(), point.bitPos + op.getLowBit());
+  return success();
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, comb::ReplicateOp op) {
+  addEdge(point, point.bitPos % getBitWidth(op.getInput()), op.getInput());
+  return success();
+}
+
+void Impl::Runner::markFanIn(const Point &point) {
+  results.push_back({currentStartingPoint, point});
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, hw::WireOp op) {
+  addEdge(point, 0, op.getInput());
+  return success();
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, hw::InstanceOp op) {
+  auto resultNum = cast<mlir::OpResult>(point.value).getResultNumber();
+  auto moduleName = op.getReferencedModuleNameAttr();
+  auto *node = instanceGraph->lookup(moduleName);
+  if (!node || !node->getModule()) {
+    op.emitError() << "instance " << moduleName << " not found";
+    return failure();
+  }
+
+  auto moduleOp = llvm::dyn_cast<hw::HWModuleOp>(*node->getModule());
+  if (!moduleOp) {
+    markFanIn(point);
+    return success();
+  }
+  DebugPoint debugPoint(point.path, getNameImpl(point.value, point.bitPos),
+                        point.bitPos, point.delay);
+
+  Point newPoint = point;
+  newPoint.history = debugPointFactory->add(debugPoint, newPoint.history);
+  newPoint.path = instancePathCache->prependInstance(op, point.path);
+  newPoint.value =
+      moduleOp.getBodyBlock()->getTerminator()->getOperand(resultNum);
+  return success();
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, comb::ConcatOp op) {
+  // Find bit pos.
+  Point newPoint = point;
+  for (auto operand : llvm::reverse(op.getInputs())) {
+    auto size = getBitWidth(operand);
+    if (newPoint.bitPos >= size) {
+      newPoint.bitPos -= size;
+      continue;
+    }
+    newPoint.value = operand;
+    addToWorklist(newPoint);
+    return success();
+  }
+
+  return failure();
+}
+
+LogicalResult Impl::Runner::addLogicOp(const Point &point, Operation *op) {
+  auto size = op->getNumOperands();
+  // Create edges each operand with cost ceil(log(size)).
+  for (auto operand : op->getOperands())
+    addEdge(point, llvm::Log2_64_Ceil(size), operand);
+  return success();
+}
+
+LogicalResult Impl::Runner::visitDefault(const Point &point, Operation *op) {
+  return success();
+}
+
+LogicalResult Impl::Runner::visit(const Point &point, mlir::BlockArgument arg) {
+  auto path = point.path;
+  // Top module.
+  if (path.size() == 0) {
+    markFanIn(point);
+    return success();
+  }
+
+  auto instance = path.leaf();
+  auto newPoint = point;
+  newPoint.path = path.dropBack();
+  newPoint.value = instance->getOperand(arg.getArgNumber());
+
+  // Record a debug point.
+  DebugPoint debug(newPoint.path, getNameImpl(point.value, point.bitPos),
+                   point.bitPos, point.delay, "input port");
+  newPoint.history = debugPointFactory->add(debug, point.history);
+
+  addToWorklist(newPoint);
+  return success();
+}
+
+LogicalResult Impl::Runner::run(Output top) {
+  assert(worklist.empty());
+  if (failed(setFanOut(top)))
+    return failure();
+
+  while (!worklist.empty()) {
+    auto current = worklist.top();
+    LLVM_DEBUG({
+      llvm::dbgs() << "Visiting: ";
+      current.path.print(llvm::dbgs());
+      llvm::dbgs() << " " << current.value << "[" << current.bitPos << "] @ "
+                   << current.delay << "\n";
+    });
+
+    worklist.pop();
+    auto value = current.value;
+
+    if (auto blockArg = dyn_cast<mlir::BlockArgument>(value)) {
+      if (failed(visit(current, blockArg)))
+        return failure();
+      continue;
+    }
+
+    auto *op = value.getDefiningOp();
+    auto result =
+        TypeSwitch<Operation *, LogicalResult>(op)
+            .Case<hw::InstanceOp, comb::ConcatOp, comb::ExtractOp,
+                  comb::ReplicateOp, aig::AndInverterOp, seq::FirRegOp,
+                  seq::CompRegOp>([&](auto op) { return visit(current, op); })
+            .Default([&](auto op) { return visitDefault(current, op); });
+    if (failed(result))
+      return failure();
+  }
+
+  visited.clear();
+
+  return success();
+}
+
+LogicalResult Impl::Runner::run() {
+  for (auto &point : startingPoints)
+    if (failed(run(point)))
+      return failure();
+  return success();
+}
+
+LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
+  igraph::InstanceGraph instanceGraph(top);
+  igraph::InstancePathCache instancePathCache(instanceGraph);
+  // 1. Enumerate all instance paths and registers
+  auto *topNode =
+      instanceGraph.lookup(StringAttr::get(top.getContext(), topName));
+  if (!topNode || !topNode->getModule() ||
+      !isa<hw::HWModuleOp>(topNode->getModule())) {
+    top.emitError() << "top module not found in instance graph " << topName;
+    return failure();
+  }
+  SmallVector<circt::igraph::InstancePath> instancePaths;
+  SmallVector<Output> allStartPoints;
+  for (auto *node : instanceGraph) {
+    if (!node || !node->getModule())
+      continue;
+    if (auto hwModuleOp = dyn_cast<hw::HWModuleOp>(*node->getModule())) {
+      auto paths = instancePathCache.getAbsolutePaths(hwModuleOp, topNode);
+      hwModuleOp->walk([&](Operation *op) {
+        if (isa<seq::FirRegOp, seq::CompRegOp>(op)) {
+          for (auto result : op->getResults()) {
+            for (auto path : paths) {
+              for (size_t i = 0; i < getBitWidth(result); ++i) {
+                allStartPoints.push_back(Output(result, i, path));
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+  auto topModuleOp = cast<hw::HWModuleOp>(*topNode->getModule());
+
+  std::vector<Runner> runners;
+  for (size_t i = 0, e = top.getContext()->getNumThreads(); i < e; ++i)
+    runners.emplace_back(&instanceGraph);
+
+  // Calculate bucket size with ceiling division to ensure all points are
+  // distributed
+  auto bucketSize =
+      (allStartPoints.size() + runners.size() - 1) / runners.size();
+  for (auto [i, start] : llvm::enumerate(allStartPoints)) {
+    size_t group = std::min(i / bucketSize, runners.size() - 1);
+    runners[group].startingPoints.push_back(start);
+  }
+
+  auto result = mlir::failableParallelForEach(
+      top.getContext(), runners, [&](Runner &runner) { return runner.run(); });
+  SmallVector<std::pair<Output, Point>> results;
+  for (auto &runner : runners)
+    results.append(runner.results.begin(), runner.results.end());
+  llvm::sort(results, [](const auto &a, const auto &b) {
+    if (a.second.delay == b.second.delay)
+      return a.first.value < b.first.value;
+    return a.second.delay > b.second.delay;
+  });
+
+  llvm::errs() << "Top 10 longest paths:\n";
+  for (size_t i = 0; i < std::min<size_t>(10, results.size()); ++i) {
+    llvm::errs() << i + 1 << ": delay= " << results[i].second.delay
+                 << " fanout=";
+    results[i].first.print(llvm::errs());
+    llvm::errs() << " -> fanin=";
+    results[i].second.print(llvm::errs());
+    llvm::errs() << "\n";
+    for (auto point : results[i].second.history) {
+      llvm::errs() << "  " << point.delay << " ";
+      DebugNode::printImpl(llvm::errs(), point.name, point.path, point.bitPos,
+                           point.comment);
+      llvm::errs() << "\n";
+    }
+  }
+
+  return result;
+}
+
 void PrintLongestPathAnalysisPass::runOnOperation() {
   if (topModuleName.empty()) {
     getOperation().emitError()
         << "'top-name' option is required for PrintLongestPathAnalysis";
     return signalPassFailure();
   }
+
+  Impl impl;
+  if (failed(impl.run(getOperation(), topModuleName)))
+    return signalPassFailure();
+
+  return;
 
   auto &symTbl = getAnalysis<mlir::SymbolTable>();
   auto &instanceGraph = getAnalysis<igraph::InstanceGraph>();

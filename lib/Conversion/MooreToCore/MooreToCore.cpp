@@ -18,6 +18,8 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Transforms/Passes.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -193,6 +195,9 @@ static void getValuesToObserve(Region *region,
   region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
       [&](Operation *operation) {
         for (auto value : operation->getOperands()) {
+          if (isa<BlockArgument>(value))
+            value = rewriter.getRemappedValue(value);
+
           if (region->isAncestor(value.getParentRegion()))
             continue;
           if (auto *defOp = value.getDefiningOp();
@@ -243,7 +248,7 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
         op.getKind() == ProcedureKind::Final) {
       Operation *newOp;
       if (op.getKind() == ProcedureKind::Initial)
-        newOp = rewriter.create<llhd::ProcessOp>(loc);
+        newOp = rewriter.create<llhd::ProcessOp>(loc, TypeRange{});
       else
         newOp = rewriter.create<llhd::FinalOp>(loc);
       auto &body = newOp->getRegion(0);
@@ -251,14 +256,14 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
       for (auto returnOp :
            llvm::make_early_inc_range(body.getOps<ReturnOp>())) {
         rewriter.setInsertionPoint(returnOp);
-        rewriter.replaceOpWithNewOp<llhd::HaltOp>(returnOp);
+        rewriter.replaceOpWithNewOp<llhd::HaltOp>(returnOp, ValueRange{});
       }
       rewriter.eraseOp(op);
       return success();
     }
 
     // All other procedures lower to a an `llhd.process`.
-    auto newOp = rewriter.create<llhd::ProcessOp>(loc);
+    auto newOp = rewriter.create<llhd::ProcessOp>(loc, TypeRange{});
 
     // We need to add an empty entry block because it is not allowed in MLIR to
     // branch back to the entry block. Instead we put the logic in the second
@@ -278,8 +283,8 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
     if (op.getKind() == ProcedureKind::AlwaysComb ||
         op.getKind() == ProcedureKind::AlwaysLatch) {
       Block *waitBlock = rewriter.createBlock(&newOp.getBody());
-      rewriter.create<llhd::WaitOp>(loc, observedValues, Value(), ValueRange{},
-                                    block);
+      rewriter.create<llhd::WaitOp>(loc, ValueRange{}, Value(), observedValues,
+                                    ValueRange{}, block);
       block = waitBlock;
     }
 
@@ -337,6 +342,18 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     //     opB
     auto *resumeBlock =
         rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+
+    // If the 'wait_event' op is empty, we can lower it to a 'llhd.wait' op
+    // without any observed values, but since the process will never wake up
+    // from suspension anyway, we can also just terminate it using the
+    // 'llhd.halt' op.
+    if (op.getBody().front().empty()) {
+      // Let the cleanup iteration after the dialect conversion clean up all
+      // remaining unreachable blocks.
+      rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
+      return success();
+    }
+
     auto *waitBlock = rewriter.createBlock(resumeBlock);
     auto *checkBlock = rewriter.createBlock(resumeBlock);
 
@@ -355,8 +372,11 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     SmallVector<Value> valuesBefore;
     rewriter.setInsertionPointToEnd(waitBlock);
     auto clonedOp = cast<WaitEventOp>(rewriter.clone(*op));
+    bool allDetectsAreAnyChange = true;
     for (auto detectOp :
          llvm::make_early_inc_range(clonedOp.getOps<DetectEventOp>())) {
+      if (detectOp.getEdge() != Edge::AnyChange || detectOp.getCondition())
+        allDetectsAreAnyChange = false;
       valuesBefore.push_back(detectOp.getInput());
       rewriter.eraseOp(detectOp);
     }
@@ -378,8 +398,8 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     // Create the `llhd.wait` op that suspends the current process and waits for
     // a change in the interesting values listed in `observeValues`. When a
     // change is detected, execution resumes in the "check" block.
-    auto waitOp = rewriter.create<llhd::WaitOp>(loc, observeValues, Value(),
-                                                ValueRange{}, checkBlock);
+    auto waitOp = rewriter.create<llhd::WaitOp>(
+        loc, ValueRange{}, Value(), observeValues, ValueRange{}, checkBlock);
     rewriter.inlineBlockBefore(&clonedOp.getBody().front(), waitOp);
     rewriter.eraseOp(clonedOp);
 
@@ -446,31 +466,38 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     // value corresponds to the detect op's input.
     SmallVector<Value> triggers;
     for (auto [detectOp, before] : llvm::zip(detectOps, valuesBefore)) {
-      if (!isa<IntType>(before.getType()))
-        return detectOp->emitError() << "requires int operand";
+      if (!allDetectsAreAnyChange) {
+        if (!isa<IntType>(before.getType()))
+          return detectOp->emitError() << "requires int operand";
 
-      rewriter.setInsertionPoint(detectOp);
-      auto trigger =
-          computeTrigger(before, detectOp.getInput(), detectOp.getEdge());
-      if (detectOp.getCondition()) {
-        auto condition = typeConverter->materializeTargetConversion(
-            rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
-        trigger = rewriter.create<comb::AndOp>(loc, trigger, condition, true);
+        rewriter.setInsertionPoint(detectOp);
+        auto trigger =
+            computeTrigger(before, detectOp.getInput(), detectOp.getEdge());
+        if (detectOp.getCondition()) {
+          auto condition = typeConverter->materializeTargetConversion(
+              rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
+          trigger = rewriter.create<comb::AndOp>(loc, trigger, condition, true);
+        }
+        triggers.push_back(trigger);
       }
-      triggers.push_back(trigger);
+
       rewriter.eraseOp(detectOp);
     }
 
-    // If any `detect_event` op detected an event, branch to the "resume" block
-    // which contains any code after the `wait_event` op. If no events were
-    // detected, branch back to the "wait" block to wait for the next change on
-    // the interesting signals.
     rewriter.setInsertionPointToEnd(checkBlock);
-    if (!triggers.empty()) {
+    if (triggers.empty()) {
+      // If there are no triggers to check, we always branch to the resume
+      // block. If there are no detect_event operations in the wait event, the
+      // 'llhd.wait' operation will not have any observed values and thus the
+      // process will hang there forever.
+      rewriter.create<cf::BranchOp>(loc, resumeBlock);
+    } else {
+      // If any `detect_event` op detected an event, branch to the "resume"
+      // block which contains any code after the `wait_event` op. If no events
+      // were detected, branch back to the "wait" block to wait for the next
+      // change on the interesting signals.
       auto triggered = rewriter.createOrFold<comb::OrOp>(loc, triggers, true);
       rewriter.create<cf::CondBranchOp>(loc, triggered, resumeBlock, waitBlock);
-    } else {
-      rewriter.create<cf::BranchOp>(loc, waitBlock);
     }
 
     return success();
@@ -627,27 +654,113 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
   LogicalResult
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: properly handle out-of-bounds accesses
+    // TODO: return X if the domain is four-valued for out-of-bounds accesses
+    // once we support four-valued lowering
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType = adaptor.getInput().getType();
+    int32_t low = adaptor.getLowBit();
 
     if (isa<IntegerType>(inputType)) {
-      rewriter.replaceOpWithNewOp<comb::ExtractOp>(
-          op, resultType, adaptor.getInput(), adaptor.getLowBit());
+      int32_t inputWidth = inputType.getIntOrFloatBitWidth();
+      int32_t resultWidth = resultType.getIntOrFloatBitWidth();
+      int32_t high = low + resultWidth;
+
+      SmallVector<Value> toConcat;
+      if (low < 0)
+        toConcat.push_back(rewriter.create<hw::ConstantOp>(
+            op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
+
+      if (low < inputWidth && high > 0) {
+        int32_t lowIdx = std::max(low, 0);
+        Value middle = rewriter.createOrFold<comb::ExtractOp>(
+            op.getLoc(),
+            rewriter.getIntegerType(
+                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
+            adaptor.getInput(), lowIdx);
+        toConcat.push_back(middle);
+      }
+
+      int32_t diff = high - inputWidth;
+      if (diff > 0) {
+        Value val =
+            rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(diff, 0));
+        toConcat.push_back(val);
+      }
+
+      Value concat =
+          rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
+      rewriter.replaceOp(op, concat);
       return success();
     }
 
     if (auto arrTy = dyn_cast<hw::ArrayType>(inputType)) {
-      int64_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
-      Value idx = rewriter.create<hw::ConstantOp>(
-          op.getLoc(), rewriter.getIntegerType(width), adaptor.getLowBit());
-      if (isa<hw::ArrayType>(resultType)) {
-        rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
-                                                      adaptor.getInput(), idx);
+      int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
+      int32_t inputWidth = arrTy.getNumElements();
+
+      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType)) {
+        int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
+        if (elementWidth < 0)
+          return failure();
+
+        int32_t high = low + resArrTy.getNumElements();
+        int32_t resWidth = resArrTy.getNumElements();
+
+        SmallVector<Value> toConcat;
+        if (low < 0) {
+          Value val = rewriter.create<hw::ConstantOp>(
+              op.getLoc(),
+              APInt(std::min((-low) * elementWidth, resWidth * elementWidth),
+                    0));
+          Value res = rewriter.createOrFold<hw::BitcastOp>(
+              op.getLoc(), hw::ArrayType::get(arrTy.getElementType(), -low),
+              val);
+          toConcat.push_back(res);
+        }
+
+        if (low < inputWidth && high > 0) {
+          int32_t lowIdx = std::max(0, low);
+          Value lowIdxVal = rewriter.create<hw::ConstantOp>(
+              op.getLoc(), rewriter.getIntegerType(width), lowIdx);
+          Value middle = rewriter.createOrFold<hw::ArraySliceOp>(
+              op.getLoc(),
+              hw::ArrayType::get(
+                  arrTy.getElementType(),
+                  std::min(resWidth, std::min(inputWidth, high) - lowIdx)),
+              adaptor.getInput(), lowIdxVal);
+          toConcat.push_back(middle);
+        }
+
+        int32_t diff = high - inputWidth;
+        if (diff > 0) {
+          Value constZero = rewriter.create<hw::ConstantOp>(
+              op.getLoc(), APInt(diff * elementWidth, 0));
+          Value val = rewriter.create<hw::BitcastOp>(
+              op.getLoc(), hw::ArrayType::get(arrTy.getElementType(), diff),
+              constZero);
+          toConcat.push_back(val);
+        }
+
+        Value concat =
+            rewriter.createOrFold<hw::ArrayConcatOp>(op.getLoc(), toConcat);
+        rewriter.replaceOp(op, concat);
         return success();
       }
 
       // Otherwise, it has to be the array's element type
+      if (low < 0 || low >= inputWidth) {
+        int32_t bw = hw::getBitWidth(resultType);
+        if (bw < 0)
+          return failure();
+
+        Value val = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(bw, 0));
+        Value bitcast =
+            rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType, val);
+        rewriter.replaceOp(op, bitcast);
+        return success();
+      }
+
+      Value idx = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), rewriter.getIntegerType(width), adaptor.getLowBit());
       rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
       return success();
     }
@@ -782,6 +895,19 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
     }
 
     return failure();
+  }
+};
+
+struct ArrayCreateOpConversion : public OpConversionPattern<ArrayCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<hw::ArrayCreateOp>(op, resultType,
+                                                   adaptor.getElements());
+    return success();
   }
 };
 
@@ -1346,6 +1472,9 @@ struct ConditionalOpConversion : public OpConversionPattern<ConditionalOp> {
               !memOp.hasEffect<MemoryEffects::Free>())
             return WalkResult::advance();
 
+        if (operation->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
+          return WalkResult::advance();
+
         return WalkResult::interrupt();
       });
       return !result.wasInterrupted();
@@ -1508,10 +1637,15 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalOp<debug::ScopeOp>();
 
   target.addDynamicallyLegalOp<
-      cf::CondBranchOp, cf::BranchOp, scf::IfOp, scf::ForOp, scf::YieldOp,
-      func::CallOp, func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp,
-      hw::InstanceOp, debug::ArrayOp, debug::StructOp, debug::VariableOp>(
+      cf::CondBranchOp, cf::BranchOp, scf::YieldOp, func::CallOp,
+      func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp, hw::InstanceOp,
+      debug::ArrayOp, debug::StructOp, debug::VariableOp>(
       [&](Operation *op) { return converter.isLegal(op); });
+
+  target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
+                               scf::WhileOp, scf::ForallOp>([&](Operation *op) {
+    return converter.isLegal(op) && !op->getParentOfType<llhd::ProcessOp>();
+  });
 
   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
     return converter.isSignatureLegal(op.getFunctionType()) &&
@@ -1659,7 +1793,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
     ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,
-    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
+    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion, ArrayCreateOpConversion,
     YieldOpConversion, OutputOpConversion, StringConstantOpConv,
 
     // Patterns of unary operations.
@@ -1738,6 +1872,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
                                                             typeConverter);
   hw::populateHWModuleLikeTypeConversionPattern(
       hw::HWModuleOp::getOperationName(), patterns, typeConverter);
+  populateSCFToControlFlowConversionPatterns(patterns);
+  populateArithToCombPatterns(patterns, typeConverter);
 }
 
 //===----------------------------------------------------------------------===//

@@ -37,7 +37,8 @@
 #define TOK_LPKEYWORD(SPELLING)
 #endif
 #ifndef TOK_LPKEYWORD_PRIM
-#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS, NUMATTRIBUTES) TOK_LPKEYWORD(SPELLING)
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS, NUMATTRIBUTES)        \
+  TOK_LPKEYWORD(SPELLING)
 #endif
 
 // Markers
@@ -108,6 +109,7 @@ TOK_KEYWORD(class)
 TOK_KEYWORD(cmem)
 TOK_KEYWORD(connect)
 TOK_KEYWORD(const)
+TOK_KEYWORD(contract)
 TOK_KEYWORD(declgroup)
 TOK_KEYWORD(define)
 TOK_KEYWORD(defname)
@@ -150,6 +152,7 @@ TOK_KEYWORD(ref)
 TOK_KEYWORD(reg)
 TOK_KEYWORD(regreset)
 TOK_KEYWORD(reset)
+TOK_KEYWORD(simulation)
 TOK_KEYWORD(skip)
 TOK_KEYWORD(smem)
 TOK_KEYWORD(symbolic)
@@ -165,6 +168,8 @@ TOK_KEYWORD(write)
 // Keywords when followed by an '('.  These turn "foo" into
 // FIRToken::lp_foo enums.
 TOK_LPKEYWORD(printf)
+TOK_LPKEYWORD(fprintf)
+TOK_LPKEYWORD(fflush)
 TOK_LPKEYWORD(stop)
 TOK_LPKEYWORD(assert)
 TOK_LPKEYWORD(assume)

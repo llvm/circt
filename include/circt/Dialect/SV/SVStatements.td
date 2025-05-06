@@ -519,6 +519,24 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   }];
 }
 
+def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
+  let summary = "'$fflush' statement";
+
+  let description = [{
+    The $fflush system task flushes the output buffer of the specified file
+    descriptor. If no file descriptor is specified, all open files are flushed.
+
+    See IEEE 1800-2023 Section 21.3.6.
+  }];
+
+  let arguments = (ins Optional<I32>:$fd);
+  let results = (outs);
+
+  let assemblyFormat = [{
+     (`fd` $fd^)? attr-dict
+  }];
+}
+
 def VerbatimOp : SVOp<"verbatim"> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{
@@ -913,6 +931,22 @@ def MacroDefOp : SVOp<"macro.def",
   }];
 }
 
+def IncludeStyle
+    : I32EnumAttr<
+          "IncludeStyle",
+          "Double-quoted local include, or angle bracketed system include",
+          [I32EnumAttrCase<"Local", 0, "local">,
+           I32EnumAttrCase<"System", 1, "system">]> {
+  let genSpecializedAttr = 0;
+}
+
+def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style">;
+
+def IncludeOp : SVOp<"include"> {
+  let summary = "preprocessor `include directive";
+  let arguments = (ins IncludeStyleAttr:$style, StrAttr:$target);
+  let assemblyFormat = [{ $style $target attr-dict }];
+}
 
 //===----------------------------------------------------------------------===//
 // Function/Call
@@ -1002,6 +1036,16 @@ def FuncOp : SVOp<"func",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                           mlir::OpAsmSetValueNameFn setNameFn);
     SmallVector<hw::PortInfo> getPortList(bool excludeExplicitReturn);
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
   let extraClassDefinition = [{
     hw::ModuleType $cppClass::getHWModuleType() {
@@ -1066,6 +1110,16 @@ class SVFuncCallBase<string mnemonic, list<Trait> traits = []>: SVOp<mnemonic,
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getCalleeAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
     }
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
   }];
 }
 

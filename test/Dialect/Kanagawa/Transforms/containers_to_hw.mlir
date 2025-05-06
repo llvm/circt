@@ -15,7 +15,6 @@ kanagawa.design @D {
 // CHECK:  }
 
 kanagawa.container "MyB" sym @B {
-  %this = kanagawa.this <@D::@B>
   // Test different port names vs. symbol names
   %in = kanagawa.port.input "in_foo" sym @in : i1 {"inputAttr"}
   %out = kanagawa.port.output "out_foo" sym @out : i1 {"outputAttr"}
@@ -26,14 +25,12 @@ kanagawa.container "MyB" sym @B {
 }
 
 kanagawa.container sym @AccessSibling {
-  %this = kanagawa.this <@D::@AccessSibling>
   %p_b_out = kanagawa.port.input "p_b_out_foo" sym @p_b_out : i1
   %p_b_in = kanagawa.port.output "p_b_in_foo" sym @p_b_in : i1
   kanagawa.port.write %p_b_in, %p_b_out.val : !kanagawa.portref<out i1>
   %p_b_out.val = kanagawa.port.read %p_b_out : !kanagawa.portref<in i1>
 }
 kanagawa.container sym @Parent top_level {
-  %this = kanagawa.this <@D::@Parent>
   %a = kanagawa.container.instance @a, <@D::@AccessSibling>
   %a.p_b_out.ref = kanagawa.get_port %a, @p_b_out : !kanagawa.scoperef<@D::@AccessSibling> -> !kanagawa.portref<in i1>
   %b.out.ref.val = kanagawa.port.read %b.out.ref : !kanagawa.portref<out i1>
@@ -63,7 +60,6 @@ kanagawa.design @D {
 // CHECK:  }
 
 kanagawa.container sym @C {
-  %this = kanagawa.this <@D::@C>
   %in = kanagawa.port.input "in_foo" sym @in : i1
   %out = kanagawa.port.output "out_foo" sym @out : i1
   %v = kanagawa.port.read %in : !kanagawa.portref<in i1>
@@ -99,13 +95,11 @@ kanagawa.design @D {
 // CHECK:         }
 
 kanagawa.container sym @Inst {
-  %this = kanagawa.this <@D::@Inst>
   %out = kanagawa.port.output "out" sym @out : i1
   %true = hw.constant 1 : i1
   kanagawa.port.write %out, %true : !kanagawa.portref<out i1>
 }
 kanagawa.container sym @Top {
-  %this = kanagawa.this <@D::@Top>
   %myInst = kanagawa.container.instance @myInst, <@D::@Inst>
   %true = hw.constant 1 : i1
   %out.ref = kanagawa.get_port %myInst, @out : !kanagawa.scoperef<@D::@Inst> -> !kanagawa.portref<out i1>
@@ -124,7 +118,6 @@ kanagawa.design @D {
 // CHECK:   hw.module @D_Top(in %clk : i1, in %clk_0 : i1, out out : i1, out out_0 : i1) {
 // CHECK:     hw.output %clk, %clk_0 : i1, i1
 kanagawa.container sym @Top {
-  %this = kanagawa.this <@D::@Top>
   %clk1 = kanagawa.port.input "clk" sym @clk1 : i1
   %clk2 = kanagawa.port.input "clk" sym @clk2 : i1
   %out1 = kanagawa.port.output "out" sym @out1 : i1
@@ -153,11 +146,9 @@ kanagawa.container sym @Top {
 kanagawa.design @D {
 
 kanagawa.container "Foo" sym @A {
-  %this = kanagawa.this <@D::@A>
 }
 
 kanagawa.container "Foo" sym @B top_level {
-  %this = kanagawa.this <@D::@B>
 }
 }
 
@@ -173,6 +164,5 @@ hw.module.extern @Foo(in %theExternModule : i1)
 
 kanagawa.design @D {
   kanagawa.container "D" sym @D top_level {
-    %this = kanagawa.this <@D::@D>
   }
 }

@@ -275,11 +275,11 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
       return build($_builder, $_state, input, *fieldIndex);
     }]>
   ];
-  
+
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -340,7 +340,7 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -382,7 +382,7 @@ def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -1189,7 +1189,7 @@ def ObjectSubfieldOp : FIRRTLOp<"object.subfield",
 
     static Type inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static Type inferReturnType(ValueRange operands,
                                 mlir::DictionaryAttr attrs,
                                 mlir::OpaqueProperties properties,
@@ -1541,7 +1541,7 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
   let inferTypeDecl = [{
     static FIRRTLType inferReturnType(Type inType , uint32_t fieldIndex,
                                       std::optional<Location> loc);
-    
+
     static FIRRTLType inferReturnType(ValueRange operands,
                                       mlir::DictionaryAttr attrs,
                                       mlir::OpaqueProperties properties,
@@ -1679,6 +1679,53 @@ def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
   let assemblyFormat = [{
     $input `,` $clock attr-dict `:` functional-type(operands, results)
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// Format String Expression operations
+//===----------------------------------------------------------------------===//
+
+def TimeOp : FIRRTLOp<"fstring.time", [HasCustomSSAName, Pure]> {
+
+  let summary = "an operation that represents the current simulation time";
+  let description = [{
+    This operation represents the current simulation time.  It returns a format
+    string type which can only be used as a substitution inside a printf.  This
+    operation is not represented in the FIRRTL spec.
+
+    This operation is the FIRRTL Dialect representation of the special
+    substitution `{{SimulationTime}}`.
+  }];
+
+  let arguments = (ins);
+  let results = (outs FStringType:$result);
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
+  }];
+
+}
+
+def HierarchicalModuleNameOp :
+  FIRRTLOp<"fstring.hierarchicalmodulename", [HasCustomSSAName, Pure]> {
+
+  let summary = "an operation that represents the module name with its full path";
+  let description = [{
+
+    This operation represents the name of the current module with a
+    fully-qualified path in front of it.  It returns a format string type which
+    can only be used as a substitution inside a printf.  This operation is not
+    represented in the FIRRTL spec.
+
+    This operation is the FIRRTL Dialect representation of the special
+    substitution `{{HierarchicalModuleName}}`.
+  }];
+
+  let arguments = (ins);
+  let results = (outs FStringType:$result);
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
+  }];
+
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

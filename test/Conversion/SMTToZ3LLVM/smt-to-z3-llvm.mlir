@@ -178,7 +178,7 @@ func.func @test(%arg0: i32) {
 
     // CHECK-DEBUG: [[SOLVER_STR:%.+]] = llvm.call @Z3_solver_to_string({{.*}}, {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[FMT_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
-    // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[SOLVER_STR]]) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> i32
+    // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[SOLVER_STR]]) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
     // CHECK:   [[CHECK:%.+]] = llvm.call @Z3_solver_check([[CTX]], [[S]]) : (!llvm.ptr, !llvm.ptr) -> i32
     // CHECK:   [[C1:%.+]] = llvm.mlir.constant(1 : i32) : i32
     // CHECK:   [[IS_SAT:%.+]] = llvm.icmp "eq" [[CHECK]], [[C1]] : i32
@@ -189,7 +189,7 @@ func.func @test(%arg0: i32) {
     // CHECK-DEBUG: [[MODEL:%.+]] = llvm.call @Z3_solver_get_model([[CTX0]], {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[MODEL_STR:%.+]] = llvm.call @Z3_model_to_string([[CTX0]], [[MODEL]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[FMT_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
-    // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[MODEL_STR]]) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> i32
+    // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[MODEL_STR]]) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
     // CHECK:   [[C1:%.+]] = llvm.mlir.constant(1 : i32) : i32
     // CHECK:   llvm.br ^[[BB7:.+]]([[C1]] : i32)
     // CHECK: ^[[BB2]]:
@@ -202,7 +202,7 @@ func.func @test(%arg0: i32) {
     // CHECK-DEBUG: [[PROOF:%.+]] = llvm.call @Z3_solver_get_proof([[CTX1]], {{.*}}) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[PROOF_STR:%.+]] = llvm.call @Z3_ast_to_string([[CTX1]], [[PROOF]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
     // CHECK-DEBUG: [[FMT_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
-    // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[PROOF_STR]]) vararg(!llvm.func<i32 (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> i32
+    // CHECK-DEBUG: llvm.call @printf([[FMT_STR]], [[PROOF_STR]]) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
     // CHECK:   [[CNEG1:%.+]] = llvm.mlir.constant(-1 : i32) : i32
     // CHECK:   llvm.br ^[[BB5:.+]]([[CNEG1:%.+]] : i32)
     // CHECK: ^[[BB4]]:

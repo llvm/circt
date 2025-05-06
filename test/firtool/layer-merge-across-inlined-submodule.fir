@@ -9,9 +9,9 @@ FIRRTL version 4.0.0
 ; CHECK-NOT: module Child
 
 ; CHECK: module Top_Verification_Assert
-; CHECK:   assert(p) else $error("before child");
-; CHECK:   assert(p) else $error("in child");
-; CHECK:   assert(p) else $error("after child");
+; CHECK:   assert(Top.p) else $error("before child");
+; CHECK:   assert(Top.p) else $error("in child");
+; CHECK:   assert(Top.p) else $error("after child");
 ; CHECK: endmodule
 
 circuit Top: %[[
@@ -23,24 +23,27 @@ circuit Top: %[[
 
   module Child:
     input p : UInt<1>
+    input e : UInt<1>
     input c : Clock
 
     layerblock Verification:
       layerblock Assert:
-        assert(c, p, p, "in child")
-        
+        assert(c, p, e, "in child")
+
   public module Top:
     input p : UInt<1>
+    input e : UInt<1>
     input c : Clock
 
     layerblock Verification:
       layerblock Assert:
-        assert(c, p, p, "before child")
-    
+        assert(c, p, e, "before child")
+
     inst child of Child
     connect child.p, p
+    connect child.e, e
     connect child.c, c
 
     layerblock Verification:
       layerblock Assert:
-        assert(c, p, p, "after child")
+        assert(c, p, e, "after child")

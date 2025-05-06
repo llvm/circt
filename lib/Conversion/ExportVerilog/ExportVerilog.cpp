@@ -247,8 +247,13 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
-          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
-          SystemFunctionOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp>(op))
+          ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp, SFormatFOp,
+          SystemFunctionOp, STimeOp, TimeOp, UnpackedArrayCreateOp,
+          UnpackedOpenArrayCastOp>(op))
+    return true;
+
+  // These are Verif dialect expressions.
+  if (isa<verif::ContractOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -2135,7 +2140,7 @@ namespace {
 class ExprEmitter : public EmitterBase,
                     public TypeOpVisitor<ExprEmitter, SubExprInfo>,
                     public CombinationalVisitor<ExprEmitter, SubExprInfo>,
-                    public Visitor<ExprEmitter, SubExprInfo> {
+                    public sv::Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
@@ -2176,7 +2181,7 @@ public:
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
   friend class CombinationalVisitor<ExprEmitter, SubExprInfo>;
-  friend class Visitor<ExprEmitter, SubExprInfo>;
+  friend class sv::Visitor<ExprEmitter, SubExprInfo>;
 
   enum SubExprSignRequirement { NoRequirement, RequireSigned, RequireUnsigned };
 
@@ -2209,8 +2214,6 @@ private:
     return visitUnhandledExpr(op);
   }
   SubExprInfo visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
-
-  using Visitor::visitSV;
 
   /// These are flags that control `emitBinary`.
   enum EmitBinaryFlags {
@@ -2307,10 +2310,12 @@ private:
   /// Print an aggregate array or struct constant as the given type.
   void printConstantAggregate(Attribute attr, Type type, Operation *op);
 
+  using sv::Visitor<ExprEmitter, SubExprInfo>::visitSV;
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(SystemFunctionOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(XMROp op);
+  SubExprInfo visitSV(SFormatFOp op);
   SubExprInfo visitSV(XMRRefOp op);
   SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
   SubExprInfo visitSV(VerbatimExprOp op) {
@@ -2347,6 +2352,10 @@ private:
 
   // Sampled value functions
   SubExprInfo visitSV(SampledOp op);
+
+  // Time system functions
+  SubExprInfo visitSV(TimeOp op);
+  SubExprInfo visitSV(STimeOp op);
 
   // Other
   using TypeOpVisitor::visitTypeOp;
@@ -2588,6 +2597,14 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      SubExprSignRequirement signRequirement,
                                      bool isSelfDeterminedUnsignedValue,
                                      bool isAssignmentLikeContext) {
+  // `verif.contract` ops act as no-ops.
+  if (auto result = dyn_cast<OpResult>(exp))
+    if (auto contract = dyn_cast<verif::ContractOp>(result.getOwner()))
+      return emitSubExpr(contract.getInputs()[result.getResultNumber()],
+                         parenthesizeIfLooserThan, signRequirement,
+                         isSelfDeterminedUnsignedValue,
+                         isAssignmentLikeContext);
+
   // If this is a self-determined unsigned value, look through any inline zero
   // extensions.  This occurs on the RHS of a shift operation for example.
   if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {
@@ -3207,6 +3224,44 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   auto info = emitSubExpr(op.getExpression(), LowestPrecedence);
   ps << ")";
   return info;
+}
+
+SubExprInfo ExprEmitter::visitSV(SFormatFOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$sformatf(";
+  ps.scopedBox(PP::ibox0, [&]() {
+    ps.writeQuotedEscaped(op.getFormatString());
+    // TODO: if any of these breaks, it'd be "nice" to break
+    // after the comma, instead of:
+    // $sformatf("...", a + b,
+    //         longexpr_goes
+    //         + here, c);
+    // (without forcing breaking between all elements, like braced list)
+    for (auto operand : op.getSubstitutions()) {
+      ps << "," << PP::space;
+      emitSubExpr(operand, LowestPrecedence);
+    }
+  });
+  ps << ")";
+  return {Symbol, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(TimeOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$time";
+  return {Symbol, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(STimeOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "$stime";
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
@@ -3989,6 +4044,7 @@ private:
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseOp op);
   LogicalResult visitSV(FWriteOp op);
+  LogicalResult visitSV(FFlushOp op);
   LogicalResult visitSV(VerbatimOp op);
   LogicalResult visitSV(MacroRefOp op);
 
@@ -4051,6 +4107,7 @@ private:
   LogicalResult visitSV(FuncCallProceduralOp op);
   LogicalResult visitSV(FuncCallOp op);
   LogicalResult visitSV(ReturnOp op);
+  LogicalResult visitSV(IncludeOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -4440,6 +4497,20 @@ LogicalResult StmtEmitter::visitSV(ReturnOp op) {
   return emitOutputLikeOp(op, ports);
 }
 
+LogicalResult StmtEmitter::visitSV(IncludeOp op) {
+  startStatement();
+  ps << "`include" << PP::nbsp;
+
+  if (op.getStyle() == IncludeStyle::System)
+    ps << "<" << op.getTarget() << ">";
+  else
+    ps << "\"" << op.getTarget() << "\"";
+
+  emitLocationInfo(op.getLoc());
+  setPendingNewline();
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
   startStatement();
 
@@ -4457,6 +4528,25 @@ LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
   assert(state.pendingNewline);
   ps << PP::newline;
 
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(FFlushOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  ps.addCallback({op, true});
+  ps << "$fflush(";
+  if (auto fd = op.getFd())
+    ps.scopedBox(PP::ibox0, [&]() { emitExpression(op.getFd(), ops); });
+
+  ps << ");";
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
@@ -6642,6 +6732,19 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
       file.isVerilog = outputPath.ends_with(".sv");
+
+      // Back-annotate the op with an OutputFileAttr if there wasn't one. If it
+      // was a directory, back-annotate the final file path. This is so output
+      // files are explicit in the final MLIR after export.
+      if (!attr || attr.isDirectory()) {
+        auto excludeFromFileListAttr =
+            BoolAttr::get(op->getContext(), !addToFilelist);
+        auto includeReplicatedOpsAttr =
+            BoolAttr::get(op->getContext(), emitReplicatedOps);
+        auto outputFileAttr = hw::OutputFileAttr::get(
+            destFile, excludeFromFileListAttr, includeReplicatedOpsAttr);
+        op->setAttr("output_file", outputFileAttr);
+      }
     };
 
     // Separate the operation into dedicated output file, or emit into the
@@ -6702,7 +6805,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           collectPorts(op);
           // External modules are _not_ emitted.
         })
-        .Case<VerbatimOp, IfDefOp, MacroDefOp, FuncDPIImportOp>(
+        .Case<VerbatimOp, IfDefOp, MacroDefOp, IncludeOp, FuncDPIImportOp>(
             [&](Operation *op) {
               // Emit into a separate file using the specified file name or
               // replicate the operation in each outputfile.
@@ -6846,6 +6949,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<MacroDefOp, FuncDPIImportOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<FuncOp>([&](auto op) { ModuleEmitter(state).emitFunc(op); })
+      .Case<IncludeOp>([&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Default([&](auto *op) {
         state.encounteredError = true;
         op->emitError("unknown operation (ExportVerilog::emitOperation)");

@@ -17,7 +17,6 @@ circuit PortDelete : %[[
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "PortDelete",
               "module": "PortDelete",
               "path": [
                 {

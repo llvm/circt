@@ -1,16 +1,21 @@
 add_circt_dialect_library(CIRCTVerifTransforms
-  VerifyClockedAssertLike.cpp
-  PrepareForFormal.cpp
+  LowerContracts.cpp
   LowerFormalToHW.cpp
+  LowerSymbolicValues.cpp
+  PrepareForFormal.cpp
+  SimplifyAssumeEq.cpp
+  StripContracts.cpp
+  VerifyClockedAssertLike.cpp
 
   DEPENDS
   CIRCTVerifTransformsIncGen
 
   LINK_LIBS PUBLIC
-  CIRCTVerif
-  CIRCTLTL
   CIRCTHW
+  CIRCTLTL
   CIRCTSupport
+  CIRCTSV
+  CIRCTVerif
   MLIRIR
   MLIRPass
   MLIRTransforms

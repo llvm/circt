@@ -23,9 +23,11 @@
 #include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
@@ -252,7 +254,10 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
   pm.addPass(createLowerFirMemPass());
+  pm.addPass(createLowerVerifSimulationsPass());
   {
     arc::AddTapsOptions opts;
     opts.tapPorts = observePorts;
@@ -456,9 +461,11 @@ static LogicalResult processBuffer(
 
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
-    engineOptions.transformer = mlir::makeOptimizingTransformer(
-        /*optLevel=*/3, /*sizeLevel=*/0,
-        /*targetMachine=*/nullptr);
+    std::function<llvm::Error(llvm::Module *)> transformer =
+        mlir::makeOptimizingTransformer(
+            /*optLevel=*/3, /*sizeLevel=*/0,
+            /*targetMachine=*/nullptr);
+    engineOptions.transformer = transformer;
     engineOptions.sharedLibPaths = sharedLibraries;
 
     auto executionEngine =

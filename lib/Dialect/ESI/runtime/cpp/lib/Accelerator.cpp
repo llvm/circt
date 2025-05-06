@@ -42,6 +42,35 @@ AcceleratorServiceThread *AcceleratorConnection::getServiceThread() {
     serviceThread = std::make_unique<AcceleratorServiceThread>();
   return serviceThread.get();
 }
+void AcceleratorConnection::createEngine(const std::string &engineTypeName,
+                                         AppIDPath idPath,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
+  std::unique_ptr<Engine> engine = ::esi::registry::createEngine(
+      *this, engineTypeName, idPath, details, clients);
+  registerEngine(idPath, std::move(engine), clients);
+}
+
+void AcceleratorConnection::registerEngine(AppIDPath idPath,
+                                           std::unique_ptr<Engine> engine,
+                                           const HWClientDetails &clients) {
+  assert(engine);
+  auto [engineIter, _] = ownedEngines.emplace(idPath, std::move(engine));
+
+  // Engine is now owned by the accelerator connection, so the std::unique_ptr
+  // is no longer valid. Resolve a new one from the map iter.
+  Engine *enginePtr = engineIter->second.get();
+  // Compute our parents idPath path.
+  AppIDPath prefix = std::move(idPath);
+  if (prefix.size() > 0)
+    prefix.pop_back();
+
+  for (const auto &client : clients) {
+    AppIDPath fullClientPath = prefix + client.relPath;
+    for (const auto &channel : client.channelAssignments)
+      clientEngines[fullClientPath].setEngine(channel.first, enginePtr);
+  }
+}
 
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,
@@ -63,9 +92,11 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
 
 Accelerator *
 AcceleratorConnection::takeOwnership(std::unique_ptr<Accelerator> acc) {
-  Accelerator *ret = acc.get();
-  ownedAccelerators.push_back(std::move(acc));
-  return ret;
+  if (ownedAccelerator)
+    throw std::runtime_error(
+        "AcceleratorConnection already owns an accelerator");
+  ownedAccelerator = std::move(acc);
+  return ownedAccelerator.get();
 }
 
 /// Get the path to the currently running executable.
@@ -298,8 +329,9 @@ void AcceleratorServiceThread::Impl::loop() {
   while (!shutdown) {
     // Ideally we'd have some wake notification here, but this sufficies for
     // now.
-    // TODO: investigate better ways to do this.
-    std::this_thread::sleep_for(std::chrono::microseconds(100));
+    // TODO: investigate better ways to do this. For now, just play nice with
+    // the other processes but don't waste time in between polling intervals.
+    std::this_thread::yield();
 
     // Check and gather data from all the read ports we are monitoring. Put the
     // callbacks to be called later so we can release the lock.

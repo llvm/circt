@@ -26,7 +26,7 @@ set(PYTHON_BINDINGS_SOURCES
   SVModule.cpp
   # Headers must be included explicitly so they are installed.
   CIRCTModules.h
-  PybindUtils.h
+  NanobindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
@@ -48,10 +48,12 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIRTG
   CIRCTCAPIRtgTool
   CIRCTCAPISeq
-  CIRCTCAPISMT
   CIRCTCAPISV
   CIRCTCAPIVerif
   CIRCTCAPITransforms
+  MLIRCAPIIndex
+  MLIRCAPISMT
+  MLIRCAPIExportSMTLIB
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -70,7 +72,13 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     ${PYTHON_BINDINGS_LINK_LIBS}
   PRIVATE_LINK_LIBS
     LLVMSupport
+  PYTHON_BINDINGS_LIBRARY
+    nanobind
 )
+
+if (CIRCT_INCLUDE_TESTS)
+  target_compile_definitions(CIRCTBindingsPythonExtension INTERFACE CIRCT_INCLUDE_TESTS)
+endif()
 
 add_dependencies(CIRCTBindingsPythonExtension circt-headers)
 
@@ -82,6 +90,11 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
     __init__.py
+)
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources.Support
+  ADD_TO_PARENT CIRCTBindingsPythonSources
+  SOURCES
     support.py
     rtgtool_support.py
 )
@@ -136,6 +149,15 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/hw.py
   DIALECT_NAME hw)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/IndexOps.td
+  SOURCES
+    dialects/index.py
+  DIALECT_NAME index
+  GEN_ENUM_BINDINGS)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -222,14 +244,6 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
-  TD_FILE dialects/SMTOps.td
-  SOURCES
-    dialects/smt.py
-  DIALECT_NAME smt)
-
-declare_mlir_dialect_python_bindings(
-  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
-  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/EmitOps.td
   SOURCES
     dialects/emit.py
@@ -256,6 +270,7 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonSources.Dialects.smt
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS

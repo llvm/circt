@@ -289,3 +289,20 @@ hw.module @testAnonymous(in %arg0: i1, in %clk: !seq.clock, in %rst: i1, out out
   hw.output %0#0 : i1
 }
 
+
+// -----
+
+// CHECK-LABEL:   hw.module @testNoReset(in 
+// CHECK-SAME:                              %[[VAL_0:.*]] : i1, in %[[VAL_1:.*]] : !seq.clock, out out : i1) {
+// CHECK:           %[[VAL_2:.*]] = seq.compreg sym @stage0_reg0 %[[VAL_0]], %[[VAL_1]] : i1
+// CHECK:           %[[VAL_3:.*]] = seq.compreg sym @stage1_enable %[[VAL_0]], %[[VAL_1]] : i1
+// CHECK:           hw.output %[[VAL_2]] : i1
+// CHECK:         }
+hw.module @testNoReset(in %arg0: i1, in %clk: !seq.clock, out out : i1) {
+  %0:2 = pipeline.scheduled ""(%a0 : i1 = %arg0) clock(%clk) go(%arg0) entryEn(%s0_enable) -> (out : i1) {
+    pipeline.stage ^bb1 regs(%a0 : i1)
+  ^bb1(%a0_0: i1, %s1_enable: i1):
+    pipeline.return %a0_0 : i1
+  }
+  hw.output %0#0 : i1
+}

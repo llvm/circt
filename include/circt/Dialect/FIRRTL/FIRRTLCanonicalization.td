@@ -16,6 +16,7 @@
 include "FIRRTLDeclarations.td"
 include "FIRRTLExpressions.td"
 include "FIRRTLStatements.td"
+include "FIRRTLIntrinsics.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
 
@@ -735,5 +736,12 @@ def CVTUnSigned : Pat<
       (PadPrimOp $x,
         (NativeCodeCall<"$_builder.getI32IntegerAttr(type_cast<SIntType>($0.getType()).getBitWidthOrSentinel())"> $old)))),
   [(UIntType $x), (KnownWidth $old)]>;
+
+def AssertXWhenX : Pattern<(AssertOp $_, $x, $x, $_, $_, $_, $_, $_), []>;
+
+def AssumeXWhenX : Pattern<(AssumeOp $_, $x, $x, $_, $_, $_, $_, $_), []>;
+
+def UnclockedAssumeIntrinsicXWhenX
+    : Pattern<(UnclockedAssumeIntrinsicOp $x, $x, $_, $_, $_), []>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

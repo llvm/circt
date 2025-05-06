@@ -39,34 +39,51 @@ ipx::edit_ip_in_project -upgrade true -name tmp_prj -directory $package_path $pa
 
 set core [ipx::current_core]
 
+ipx::infer_bus_interface ap_clk xilinx.com:signal:clock_rtl:1.0 $core
+ipx::infer_bus_interface ap_resetn xilinx.com:signal:reset_rtl:1.0 $core
+
 # Associate AXI data & AXI-Lite control interfaces
+ipx::associate_bus_interfaces -busif m_axi_gmem -clock ap_clk $core
 ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 
 # Create the address space for CSRs
 set mem_map     [::ipx::add_memory_map "s_axi_control" $core]
 set addr_block  [::ipx::add_address_block "reg0" $mem_map]
 
-set_property range 0x100000 $addr_block
+set_property range 0x1000 $addr_block
 set_property range_resolve_type "immediate" $addr_block
-set_property range_minimum 0x100000 $addr_block
+set_property range_minimum 0x1000 $addr_block
 
-set reg      [::ipx::add_register "EsiMagicNumberLow" $addr_block]
+set reg      [::ipx::add_register "IndirectionMagicNumberLow" $addr_block]
+  set_property address_offset  8  $reg
+  set_property size           32 $reg
+
+set reg      [::ipx::add_register "IndirectionMagicNumberHigh" $addr_block]
+  set_property address_offset 12  $reg
+  set_property size           32 $reg
+
+set reg      [::ipx::add_register "IndirectionVersionNumber" $addr_block]
   set_property address_offset 16  $reg
   set_property size           32 $reg
 
-set reg      [::ipx::add_register "EsiMagicNumberHigh" $addr_block]
-  set_property address_offset 20  $reg
+set reg [::ipx::add_register "IndirectionLocation" $addr_block]
+  set_property address_offset 24 $reg
   set_property size           32 $reg
 
-set reg      [::ipx::add_register "EsiVersionNumber" $addr_block]
-  set_property address_offset 24  $reg
-  set_property size           32 $reg
-
-set reg [::ipx::add_register "EsiManifestLoc" $addr_block]
+set reg [::ipx::add_register "IndirectionRegLow" $addr_block]
   set_property address_offset 32 $reg
-  set_property size 32 $reg
+  set_property size           32 $reg
+
+set reg [::ipx::add_register "IndirectionRegHigh" $addr_block]
+  set_property address_offset 36 $reg
+  set_property size           32 $reg
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
+
+# Associatate the hostmem AXI bus with some register on the control bus.
+# Necessary for cfgen to work.
+ipx::add_register_parameter ASSOCIATED_BUSIF $reg
+set_property value m_axi_gmem [ipx::get_register_parameters ASSOCIATED_BUSIF -of_objects $reg]
 
 set_property xpm_libraries {XPM_CDC XPM_FIFO} $core
 set_property sdx_kernel true $core

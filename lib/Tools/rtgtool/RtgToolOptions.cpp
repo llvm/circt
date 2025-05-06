@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Tools/rtgtool/RtgToolOptions.h"
+#include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Passes.h"
 #include "mlir/Transforms/Passes.h"
 
@@ -19,17 +21,49 @@ using namespace circt::rtg;
 
 void rtg::populateRandomizerPipeline(mlir::PassManager &pm,
                                      const RtgToolOptions &options) {
-  pm.enableVerifier(options.getVerifyPasses());
+  if (options.getVerifyPasses())
+    pm.enableVerifier(options.getVerifyPasses());
 
   if (options.getVerbosePassExecution())
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "rtgtool"));
 
-  pm.addPass(createSimpleCanonicalizerPass());
-  if (options.getOutputFormat() != RtgToolOptions::OutputFormat::MLIR) {
-    // TODO: add elaboration pass here
-    pm.addPass(mlir::createCSEPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+  {
+    // Initial canonicalization of the input IR.
+    auto &anyPm = pm.nestAny();
+    anyPm.addPass(mlir::createCSEPass());
+    anyPm.addPass(createSimpleCanonicalizerPass());
+  }
+
+  if (options.getOutputFormat() == RtgToolOptions::OutputFormat::MLIR)
+    return;
+
+  {
+    ElaborationPassOptions passOptions;
+    passOptions.seed = options.getSeed();
+    pm.addPass(rtg::createElaborationPass(passOptions));
+  }
+  pm.addPass(rtg::createInlineSequencesPass());
+  pm.addPass(rtg::createLowerUniqueLabelsPass());
+  pm.addNestedPass<rtg::TestOp>(rtg::createLinearScanRegisterAllocationPass());
+  {
+    auto &anyPm = pm.nestAny();
+    anyPm.addPass(mlir::createCSEPass());
+    anyPm.addPass(createSimpleCanonicalizerPass());
+  }
+
+  if (options.getOutputFormat() == RtgToolOptions::OutputFormat::ElaboratedMLIR)
+    return;
+
+  {
+    EmitRTGISAAssemblyPassOptions passOptions;
+    SmallVector<std::string> unsupported(options.getUnsupportedInstructions());
+    passOptions.unsupportedInstructions = unsupported;
+    passOptions.unsupportedInstructionsFile =
+        options.getUnsupportedInstructionsFile();
+    passOptions.splitOutput = options.getSplitOutput();
+    passOptions.path = options.getOutputPath();
+    pm.addPass(rtg::createEmitRTGISAAssemblyPass(passOptions));
   }
 }

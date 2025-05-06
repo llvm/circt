@@ -32,6 +32,7 @@ public:
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
+            SFormatFOp,
             // Declarations.
             RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
@@ -39,8 +40,8 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            FWriteOp, SystemFunctionOp, VerbatimOp, MacroRefOp, FuncCallOp,
-            FuncCallProceduralOp, ReturnOp,
+            FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp, MacroRefOp,
+            FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
@@ -63,7 +64,9 @@ public:
             // For statements
             ForOp,
             // Sampled value functiions
-            SampledOp>([&](auto expr) -> ResultType {
+            SampledOp,
+            // Time system functions
+            TimeOp, STimeOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -111,6 +114,7 @@ public:
   HANDLE(MacroRefExprSEOp, Unhandled);
   HANDLE(UnpackedArrayCreateOp, Unhandled);
   HANDLE(UnpackedOpenArrayCastOp, Unhandled);
+  HANDLE(SFormatFOp, Unhandled);
 
   // Control flow.
   HANDLE(OrderedOutputOp, Unhandled);
@@ -131,12 +135,14 @@ public:
   HANDLE(ReleaseOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
+  HANDLE(FFlushOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);
   HANDLE(FuncCallProceduralOp, Unhandled);
   HANDLE(FuncCallOp, Unhandled);
   HANDLE(ReturnOp, Unhandled);
   HANDLE(VerbatimOp, Unhandled);
   HANDLE(MacroRefOp, Unhandled);
+  HANDLE(IncludeOp, Unhandled);
 
   // Type declarations.
   HANDLE(InterfaceOp, Unhandled);
@@ -188,6 +194,10 @@ public:
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);
+
+  // Time System Functions
+  HANDLE(TimeOp, Unhandled);
+  HANDLE(STimeOp, Unhandled);
 #undef HANDLE
 };
 

@@ -5,10 +5,26 @@ func.func @dummy2(%arg0: index) -> () {return}
 func.func @dummy3(%arg0: !rtg.sequence) -> () {return}
 func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rtg.bag<index>) -> () {return}
 func.func @dummy5(%arg0: i1) -> () {return}
+func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
+
+// CHECK-LABEL: @immediates
+rtg.test @immediates() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<2, -1>
+  // CHECK-NEXT: func.call @dummy6([[V0]]) : (!rtg.isa.immediate<2>) -> ()
+  %0 = rtg.constant #rtg.isa.immediate<2, -1>
+  func.call @dummy6(%0) : (!rtg.isa.immediate<2>) -> ()
+
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<2, 1>
+  // CHECK-NEXT: func.call @dummy6([[V1]]) : (!rtg.isa.immediate<2>) -> ()
+  %1 = index.constant 1
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
+  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+}
 
 // Test the set operations and passing a sequence to another one via argument
 // CHECK-LABEL: rtg.test @setOperations
-rtg.test @setOperations : !rtg.dict<> {
+rtg.test @setOperations() {
   // CHECK-NEXT: [[V0:%.+]] = index.constant 2
   // CHECK-NEXT: [[V1:%.+]] = index.constant 3
   // CHECK-NEXT: [[V2:%.+]] = index.constant 4
@@ -30,7 +46,7 @@ rtg.test @setOperations : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @bagOperations
-rtg.test @bagOperations : !rtg.dict<> {
+rtg.test @bagOperations() {
   // CHECK-NEXT: [[V0:%.+]] = index.constant 2
   // CHECK-NEXT: [[V1:%.+]] = index.constant 8
   // CHECK-NEXT: [[V2:%.+]] = index.constant 3
@@ -56,7 +72,7 @@ rtg.test @bagOperations : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @setSize
-rtg.test @setSize : !rtg.dict<> {
+rtg.test @setSize() {
   // CHECK-NEXT: [[C:%.+]] = index.constant 1
   // CHECK-NEXT: func.call @dummy2([[C]])
   // CHECK-NEXT: }
@@ -67,7 +83,7 @@ rtg.test @setSize : !rtg.dict<> {
 }
 
 // CHECK-LABEL: rtg.test @bagSize
-rtg.test @bagSize : !rtg.dict<> {
+rtg.test @bagSize() {
   // CHECK-NEXT: [[C:%.+]] = index.constant 1
   // CHECK-NEXT: func.call @dummy2([[C]])
   // CHECK-NEXT: }
@@ -85,15 +101,13 @@ rtg.test @bagSize : !rtg.dict<> {
 // CHECK-LABEL: @targetTest_target1
 // CHECK: [[V0:%.+]] = index.constant 1
 // CHECK: func.call @dummy2([[V0]]) :
-rtg.test @targetTest : !rtg.dict<num_cpus: index> {
-^bb0(%arg0: index):
-  func.call @dummy2(%arg0) : (index) -> ()
+rtg.test @targetTest(num_cpus = %num_cpus: index) {
+  func.call @dummy2(%num_cpus) : (index) -> ()
 }
 
 // CHECK-NOT: @unmatchedTest
-rtg.test @unmatchedTest : !rtg.dict<num_cpus: !rtg.sequence> {
-^bb0(%arg0: !rtg.sequence):
-  func.call @dummy3(%arg0) : (!rtg.sequence) -> ()
+rtg.test @unmatchedTest(num_cpus = %num_cpus: !rtg.sequence) {
+  func.call @dummy3(%num_cpus) : (!rtg.sequence) -> ()
 }
 
 rtg.target @target0 : !rtg.dict<num_cpus: index> {
@@ -106,78 +120,81 @@ rtg.target @target1 : !rtg.dict<num_cpus: index> {
   rtg.yield %0 : index
 }
 
-// Unused sequences are removed
-// CHECK-NOT: rtg.sequence @unused
-rtg.sequence @unused {}
-
-rtg.sequence @seq0 {
-^bb0(%arg0: index):
+rtg.sequence @seq0(%arg0: index) {
   func.call @dummy2(%arg0) : (index) -> ()
 }
 
-rtg.sequence @seq1 {
-^bb0(%arg0: index):
-  %0 = rtg.sequence_closure @seq0(%arg0 : index)
-  func.call @dummy2(%arg0) : (index) -> ()
-  rtg.invoke_sequence %0
-  func.call @dummy2(%arg0) : (index) -> ()
-}
-
-// CHECK-LABEL: rtg.test @nestedSequences
-rtg.test @nestedSequences : !rtg.dict<> {
-  // CHECK: index.constant 0
-  // CHECK: func.call @dummy2
-  // CHECK: func.call @dummy2
-  // CHECK: func.call @dummy2
+// CHECK-LABEL: rtg.test @sequenceSubstitution
+rtg.test @sequenceSubstitution() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.get_sequence @seq0{{.*}} : !rtg.sequence{{$}}
+  // CHECK-NEXT: [[V1:%.+]] = rtg.randomize_sequence [[V0]]
+  // CHECK-NEXT: rtg.embed_sequence [[V1]]
   %0 = index.constant 0
-  %1 = rtg.sequence_closure @seq1(%0 : index)
-  rtg.invoke_sequence %1
-}
-
-rtg.sequence @seq2 {
-^bb0(%arg0: index):
-  func.call @dummy2(%arg0) : (index) -> ()
+  %1 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+  %2 = rtg.substitute_sequence %1(%0) : !rtg.sequence<index>
+  %3 = rtg.randomize_sequence %2 
+  rtg.embed_sequence %3
 }
 
 // CHECK-LABEL: rtg.test @sameSequenceDifferentArgs
-rtg.test @sameSequenceDifferentArgs : !rtg.dict<> {
-  // CHECK: [[C0:%.+]] = index.constant 0
-  // CHECK: func.call @dummy2([[C0]])
-  // CHECK: [[C1:%.+]] = index.constant 1
-  // CHECK: func.call @dummy2([[C1]])
+rtg.test @sameSequenceDifferentArgs() {
+  // CHECK-NEXT: [[V0:%.*]] = rtg.get_sequence @seq0_1 : !rtg.sequence
+  // CHECK-NEXT: [[V1:%.*]] = rtg.randomize_sequence [[V0]]
+  // CHECK-NEXT: rtg.embed_sequence [[V1]]
+  // CHECK-NEXT: [[V2:%.*]] = rtg.get_sequence @seq0_2 : !rtg.sequence
+  // CHECK-NEXT: [[V3:%.*]] = rtg.randomize_sequence [[V2]]
+  // CHECK-NEXT: rtg.embed_sequence [[V3]]
   %0 = index.constant 0
   %1 = index.constant 1
-  %2 = rtg.sequence_closure @seq2(%0 : index)
-  %3 = rtg.sequence_closure @seq2(%1 : index)
-  rtg.invoke_sequence %2
-  rtg.invoke_sequence %3
+  %2 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+  %3 = rtg.substitute_sequence %2(%0) : !rtg.sequence<index>
+  %4 = rtg.randomize_sequence %3
+  %5 = rtg.get_sequence @seq0 : !rtg.sequence<index>
+  %6 = rtg.substitute_sequence %5(%1) : !rtg.sequence<index>
+  %7 = rtg.randomize_sequence %6
+  rtg.embed_sequence %4
+  rtg.embed_sequence %7
 }
 
-rtg.sequence @seq3 {
-^bb0(%arg0: !rtg.set<index>):
+// CHECK-LABEL: rtg.test @sequenceClosureFixesRandomization
+rtg.test @sequenceClosureFixesRandomization() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.get_sequence @seq3_0 : !rtg.sequence
+  // CHECK-NEXT: [[V1:%.+]] = rtg.randomize_sequence [[V0]]
+  // CHECK-NEXT: rtg.embed_sequence [[V1]]
+  // CHECK-NEXT: [[V2:%.+]] = rtg.get_sequence @seq3_1 : !rtg.sequence
+  // CHECK-NEXT: [[V3:%.+]] = rtg.randomize_sequence [[V2]]
+  // CHECK-NEXT: rtg.embed_sequence [[V3]]
+  // CHECK-NEXT: rtg.embed_sequence [[V1]]
+  %0 = index.constant 0
+  %1 = index.constant 1
+  %2 = rtg.set_create %0, %1 : index
+  %3 = rtg.get_sequence @seq3 : !rtg.sequence<!rtg.set<index>>
+  %4 = rtg.substitute_sequence %3(%2) : !rtg.sequence<!rtg.set<index>>
+  %5 = rtg.randomize_sequence %4
+  %6 = rtg.get_sequence @seq3 : !rtg.sequence<!rtg.set<index>>
+  %7 = rtg.substitute_sequence %6(%2) : !rtg.sequence<!rtg.set<index>>
+  %8 = rtg.randomize_sequence %7
+  rtg.embed_sequence %5
+  rtg.embed_sequence %8
+  rtg.embed_sequence %5
+}
+
+// CHECK: rtg.sequence @seq3_0() {
+// CHECK-NEXT:   %idx0 = index.constant 0
+// CHECK-NEXT:   func.call @dummy2(%idx0) : (index) -> ()
+// CHECK-NEXT: }
+// CHECK: rtg.sequence @seq3_1() {
+// CHECK-NEXT:   %idx1 = index.constant 1
+// CHECK-NEXT:   func.call @dummy2(%idx1) : (index) -> ()
+// CHECK-NEXT: }
+
+rtg.sequence @seq3(%arg0: !rtg.set<index>) {
   %0 = rtg.set_select_random %arg0 : !rtg.set<index> // we can't use a custom seed here because it would render the test useless
   func.call @dummy2(%0) : (index) -> ()
 }
 
-// CHECK-LABEL: rtg.test @sequenceClosureFixesRandomization
-rtg.test @sequenceClosureFixesRandomization : !rtg.dict<> {
-  // CHECK: %idx0 = index.constant 0
-  // CHECK: func.call @dummy2(%idx0
-  // CHECK: %idx1 = index.constant 1
-  // CHECK: func.call @dummy2(%idx1
-  // CHECK: func.call @dummy2(%idx0
-  %0 = index.constant 0
-  %1 = index.constant 1
-  %2 = rtg.set_create %0, %1 : index
-  %3 = rtg.sequence_closure @seq3(%2 : !rtg.set<index>)
-  %4 = rtg.sequence_closure @seq3(%2 : !rtg.set<index>)
-  rtg.invoke_sequence %3
-  rtg.invoke_sequence %4
-  rtg.invoke_sequence %3
-}
-
-// CHECK-LABLE: @indexOps
-rtg.test @indexOps : !rtg.dict<> {
+// CHECK-LABEL: @indexOps
+rtg.test @indexOps() {
   // CHECK: [[C:%.+]] = index.constant 2
   %0 = index.constant 1
 
@@ -217,7 +234,7 @@ rtg.test @indexOps : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @scfIf
-rtg.test @scfIf : !rtg.dict<> {
+rtg.test @scfIf() {
   %0 = index.bool.constant true
   %1 = index.bool.constant false
 
@@ -261,7 +278,7 @@ rtg.test @scfIf : !rtg.dict<> {
 }
 
 // CHECK-LABEL: @scfFor
-rtg.test @scfFor : !rtg.dict<> {
+rtg.test @scfFor() {
   // CHECK-NEXT: [[C0:%.+]] = index.constant 0
   // CHECK-NEXT: func.call @dummy2([[C0]])
   // CHECK-NEXT: [[C1:%.+]] = index.constant 1
@@ -300,16 +317,224 @@ rtg.test @scfFor : !rtg.dict<> {
   func.call @dummy2(%5) : (index) -> ()
 }
 
+// CHECK-LABEL: @fixedRegisters
+rtg.test @fixedRegisters() {
+  // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra
+  // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[SP]], [[IMM]]
+  %ra = rtg.fixed_reg #rtgtest.ra
+  %sp = rtg.fixed_reg #rtgtest.sp
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  rtgtest.rv32i.jalr %ra, %sp, %imm
+}
+
+// CHECK-LABEL: @virtualRegisters
+rtg.test @virtualRegisters() {
+  // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
+  %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  rtgtest.rv32i.jalr %r0, %r1, %imm
+  rtgtest.rv32i.jalr %r0, %r1, %imm
+
+  // CHECK-NEXT: [[R2:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R2]], [[IMM]]
+  // CHECK-NEXT: [[R3:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R3]], [[IMM]]
+  %0 = index.constant 0
+  %1 = index.constant 1
+  %2 = index.constant 2
+  scf.for %i = %0 to %2 step %1 {
+    %r2 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+    rtgtest.rv32i.jalr %r0, %r2, %imm
+  }
+}
+
+// CHECK-LABEL: @labels
+rtg.test @labels() {
+  // CHECK-NEXT: [[L0:%.+]] = rtg.label_unique_decl "label0"
+  // CHECK-NEXT: rtg.label local [[L0]]
+  // CHECK-NEXT: [[L1:%.+]] = rtg.label_decl "label0"
+  // CHECK-NEXT: rtg.label local [[L1]]
+  // CHECK-NEXT: [[L2:%.+]] = rtg.label_decl "label1_0_1"
+  // CHECK-NEXT: rtg.label local [[L2]]
+  %0 = index.constant 0
+  %1 = index.constant 1
+  %l0 = rtg.label_unique_decl "label{{0}}", %0
+  %l1 = rtg.label_decl "label{{0}}", %0
+  %l2 = rtg.label_decl "label{{0}}_{{1}}_{{0}}", %1, %0
+  rtg.label local %l0
+  rtg.label local %l1
+  rtg.label local %l2
+}
+
+// CHECK-LABEL: rtg.test @randomIntegers
+rtg.test @randomIntegers() {
+  %lower = index.constant 5
+  %upper = index.constant 10
+  %0 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=0}
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 5
+  // CHECK-NEXT: func.call @dummy2([[V0]])
+  func.call @dummy2(%0) : (index) -> ()
+
+  %1 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=3}
+  // CHECK-NEXT: [[V1:%.+]] = index.constant 8
+  // CHECK-NEXT: func.call @dummy2([[V1]])
+  func.call @dummy2(%1) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @contexts_contextCpu
+rtg.test @contexts(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
+  // CHECK-NEXT:    [[L0:%.+]] = rtg.label_decl "label0"
+  // CHECK-NEXT:    rtg.label local [[L0]]
+  // CHECK-NEXT:    [[SEQ0:%.+]] = rtg.get_sequence @switchCpuSeq_0 : !rtg.sequence
+  // CHECK-NEXT:    [[SEQ1:%.+]] = rtg.randomize_sequence [[SEQ0]]
+  // CHECK-NEXT:    rtg.embed_sequence [[SEQ1]]
+  // CHECK-NEXT:    [[L1:%.+]] = rtg.label_decl "label1"
+  // CHECK-NEXT:    rtg.label local [[L1]]
+  %0 = rtg.get_sequence @cpuSeq : !rtg.sequence<!rtgtest.cpu>
+  %1 = rtg.substitute_sequence %0(%cpu1) : !rtg.sequence<!rtgtest.cpu>
+  %l0 = rtg.label_decl "label0"
+  rtg.label local %l0
+  rtg.on_context %cpu0, %1 : !rtgtest.cpu
+  %l1 = rtg.label_decl "label1"
+  rtg.label local %l1
+}
+
+rtg.target @contextCpu : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
+  %cpu0 = rtg.constant #rtgtest.cpu<0>
+  %cpu1 = rtg.constant #rtgtest.cpu<1>
+  %0 = rtg.get_sequence @switchCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  %1 = rtg.get_sequence @switchNestedCpuSeq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtgtest.cpu<0> : !rtgtest.cpu -> #rtgtest.cpu<1> : !rtgtest.cpu, %1 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.yield %cpu0, %cpu1 : !rtgtest.cpu, !rtgtest.cpu
+}
+
+// CHECK:  rtg.sequence @cpuSeq_0() {
+// CHECK-NEXT:    [[L2:%.+]] = rtg.label_decl "label2"
+// CHECK-NEXT:    rtg.label local [[L2]]
+// CHECK-NEXT:    [[SEQ2:%.+]] = rtg.get_sequence @switchNestedCpuSeq_0 : !rtg.sequence
+// CHECK-NEXT:    [[SEQ3:%.+]] = rtg.randomize_sequence [[SEQ2]]
+// CHECK-NEXT:    rtg.embed_sequence [[SEQ3]]
+// CHECK-NEXT:    [[L3:%.+]] = rtg.label_decl "label3"
+// CHECK-NEXT:    rtg.label local [[L3]]
+// CHECK-NEXT:  }
+rtg.sequence @cpuSeq(%cpu: !rtgtest.cpu) {
+  %l2 = rtg.label_decl "label2"
+  rtg.label local %l2
+  %0 = rtg.get_sequence @nestedCpuSeq : !rtg.sequence
+  rtg.on_context %cpu, %0 : !rtgtest.cpu
+  %l3 = rtg.label_decl "label3"
+  rtg.label local %l3
+}
+
+// CHECK:  rtg.sequence @nestedCpuSeq_0() {
+// CHECK-NEXT:    [[L6:%.+]] = rtg.label_decl "label4"
+// CHECK-NEXT:    rtg.label local [[L6]]
+// CHECK-NEXT:  }
+rtg.sequence @nestedCpuSeq() {
+  %l4 = rtg.label_decl "label4"
+  rtg.label local %l4
+}
+
+// CHECK:  rtg.sequence @switchCpuSeq_0() {
+// CHECK-NEXT:    [[L8:%.+]] = rtg.label_decl "label5"
+// CHECK-NEXT:    rtg.label local [[L8]]
+// CHECK-NEXT:    [[SEQ5:%.+]] = rtg.get_sequence @cpuSeq_0 : !rtg.sequence
+// CHECK-NEXT:    [[SEQ6:%.+]] = rtg.randomize_sequence [[SEQ5]]
+// CHECK-NEXT:    rtg.embed_sequence [[SEQ6]]
+// CHECK-NEXT:    [[L9:%.+]] = rtg.label_decl "label6"
+// CHECK-NEXT:    rtg.label local [[L9]]
+// CHECK-NEXT:  }
+rtg.sequence @switchCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %seq: !rtg.sequence) {
+  %l5 = rtg.label_decl "label5"
+  rtg.label local %l5
+  %0 = rtg.randomize_sequence %seq
+  rtg.embed_sequence %0
+  %l6 = rtg.label_decl "label6"
+  rtg.label local %l6
+}
+
+// CHECK:  rtg.sequence @switchNestedCpuSeq_0() {
+// CHECK-NEXT:    [[L12:%.+]] = rtg.label_decl "label7"
+// CHECK-NEXT:    rtg.label local [[L12]]
+// CHECK-NEXT:    [[SEQ8:%.+]] = rtg.get_sequence @nestedCpuSeq_0 : !rtg.sequence
+// CHECK-NEXT:    [[SEQ9:%.+]] = rtg.randomize_sequence [[SEQ8]]
+// CHECK-NEXT:    rtg.embed_sequence [[SEQ9]]
+// CHECK-NEXT:    [[L13:%.+]] = rtg.label_decl "label8"
+// CHECK-NEXT:    rtg.label local [[L13]]
+// CHECK-NEXT:  }
+rtg.sequence @switchNestedCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %seq: !rtg.sequence) {
+  %l7 = rtg.label_decl "label7"
+  rtg.label local %l7
+  %0 = rtg.randomize_sequence %seq
+  rtg.embed_sequence %0
+  %l8 = rtg.label_decl "label8"
+  rtg.label local %l8
+}
+
+rtg.sequence @interleaveSequencesSeq0() {
+  rtgtest.rv32i.ebreak
+  rtgtest.rv32i.ebreak
+}
+
+rtg.sequence @interleaveSequencesSeq1() {
+  rtgtest.rv32i.ecall
+  rtgtest.rv32i.ecall
+}
+
+// CHECK-LABEL: @interleaveSequences()
+rtg.test @interleaveSequences() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.get_sequence @interleaveSequencesSeq0_0 : !rtg.sequence
+  // CHECK-NEXT: [[V2:%.+]] = rtg.randomize_sequence [[V0]]
+  // CHECK-NEXT: [[V1:%.+]] = rtg.get_sequence @interleaveSequencesSeq1_0 : !rtg.sequence
+  // CHECK-NEXT: [[V3:%.+]] = rtg.randomize_sequence [[V1]]
+  // CHECK-NEXT: [[V4:%.+]] = rtg.interleave_sequences [[V2]], [[V3]] batch 2
+  // CHECK-NEXT: [[V5:%.+]] = rtg.interleave_sequences [[V4]], [[V3]]
+  // CHECK-NEXT: [[V6:%.+]] = rtg.interleave_sequences [[V5]], [[V2]]
+  // CHECK-NEXT: rtg.embed_sequence [[V6]]
+  %0 = rtg.get_sequence @interleaveSequencesSeq0 : !rtg.sequence
+  %1 = rtg.get_sequence @interleaveSequencesSeq1 : !rtg.sequence
+  %2 = rtg.randomize_sequence %0
+  %3 = rtg.randomize_sequence %1
+  %4 = rtg.interleave_sequences %2, %3 batch 2
+  %5 = rtg.interleave_sequences %4, %3
+  %6 = rtg.interleave_sequences %5, %2
+  rtg.embed_sequence %6
+}
+
+// CHECK-LABEL: rtg.test @arrays
+rtg.test @arrays() {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.array_create : index
+  // CHECK-NEXT: func.call @dummy7([[V0]]) : (!rtg.array<index>) -> ()
+  %0 = rtg.array_create : index
+  func.call @dummy7(%0) : (!rtg.array<index>) -> ()
+
+  // CHECK-NEXT: [[IDX2:%.+]] = index.constant 2
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %idx1 = index.constant 1
+  %idx2 = index.constant 2
+  %1 = rtg.array_create %idx1, %idx2 : index
+  %2 = rtg.array_extract %1[%idx1] : !rtg.array<index>
+  func.call @dummy2(%2) : (index) -> ()
+}
+
 // -----
 
-rtg.test @nestedRegionsNotSupported : !rtg.dict<> {
+rtg.test @nestedRegionsNotSupported() {
   // expected-error @below {{ops with nested regions must be elaborated away}}
   scf.execute_region { scf.yield }
 }
 
 // -----
 
-rtg.test @untypedAttributes : !rtg.dict<> {
+rtg.test @untypedAttributes() {
   // expected-error @below {{only typed attributes supported for constant-like operations}}
   %0 = rtgtest.constant_test index {value = [10 : index]}
 }
@@ -318,9 +543,103 @@ rtg.test @untypedAttributes : !rtg.dict<> {
 
 func.func @dummy(%arg0: index) {return}
 
-rtg.test @untypedAttributes : !rtg.dict<> {
+rtg.test @untypedAttributes() {
   %0 = rtgtest.constant_test index {value = "str"}
   // expected-error @below {{materializer of dialect 'builtin' unable to materialize value for attribute '"str"'}}
   // expected-note @below {{while materializing value for operand#0}}
   func.call @dummy(%0) : (index) -> ()
+}
+
+// -----
+
+func.func @dummy2(%arg0: index) -> () {return}
+
+rtg.test @randomIntegers() {
+  %c5 = index.constant 5
+  // expected-error @below {{cannot select a number from an empty range}}
+  %0 = rtg.random_number_in_range [%c5, %c5)
+  func.call @dummy2(%0) : (index) -> ()
+}
+
+// -----
+
+rtg.sequence @seq0(%seq: !rtg.randomized_sequence) {
+  // expected-error @below {{attempting to place sequence seq1_0 derived from seq1 under context #rtgtest.cpu<0> : !rtgtest.cpu, but it was previously randomized for context 'default'}}
+  rtg.embed_sequence %seq
+}
+rtg.sequence @seq1() { }
+rtg.sequence @seq(%arg0: !rtgtest.cpu, %arg1: !rtgtest.cpu, %seq: !rtg.sequence) {
+  %0 = rtg.randomize_sequence %seq
+  rtg.embed_sequence %0
+}
+
+rtg.target @invalidRandomizationTarget : !rtg.dict<cpu: !rtgtest.cpu> {
+  %0 = rtg.get_sequence @seq : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  rtg.context_switch #rtg.default : !rtgtest.cpu -> #rtgtest.cpu<0>, %0 : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+  %1 = rtg.constant #rtgtest.cpu<0>
+  rtg.yield %1 : !rtgtest.cpu
+}
+
+rtg.test @invalidRandomization(cpu = %cpu: !rtgtest.cpu) {
+  %0 = rtg.get_sequence @seq1 : !rtg.sequence
+  %1 = rtg.randomize_sequence %0
+  %2 = rtg.get_sequence @seq0 : !rtg.sequence<!rtg.randomized_sequence>
+  %3 = rtg.substitute_sequence %2(%1) : !rtg.sequence<!rtg.randomized_sequence>
+  rtg.on_context %cpu, %3 : !rtgtest.cpu
+}
+
+// -----
+
+rtg.sequence @seq() {}
+
+rtg.target @target : !rtg.dict<cpu: !rtgtest.cpu> {
+  %0 = rtg.constant #rtgtest.cpu<0>
+  rtg.yield %0 : !rtgtest.cpu
+}
+
+rtg.test @contextSwitchNotAvailable(cpu = %cpu: !rtgtest.cpu) {
+  %0 = rtg.get_sequence @seq : !rtg.sequence
+  // expected-error @below {{no context transition registered to switch from #rtg.default : !rtgtest.cpu to #rtgtest.cpu<0> : !rtgtest.cpu}}
+  rtg.on_context %cpu, %0 : !rtgtest.cpu
+}
+
+// -----
+
+rtg.test @emptySetSelect() {
+  %0 = rtg.set_create : !rtg.isa.label
+  // expected-error @below {{cannot select from an empty set}}
+  %1 = rtg.set_select_random %0 : !rtg.set<!rtg.isa.label>
+  rtg.label local %1
+}
+
+// -----
+
+rtg.test @emptyBagSelect() {
+  %0 = rtg.bag_create : !rtg.isa.label
+  // expected-error @below {{cannot select from an empty bag}}
+  %1 = rtg.bag_select_random %0 : !rtg.bag<!rtg.isa.label>
+  rtg.label local %1
+}
+
+// -----
+
+func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+
+rtg.test @integerTooBig() {
+  %1 = index.constant 8
+  // expected-error @below {{cannot represent 8 with 2 bits}}
+  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
+  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+}
+
+// -----
+
+func.func @dummy6(%arg0: index) -> () {return}
+
+rtg.test @oobArrayAccess() {
+  %0 = index.constant 0
+  %1 = rtg.array_create : index
+  // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
+  %2 = rtg.array_extract %1[%0] : !rtg.array<index>
+  func.call @dummy6(%2) : (index) -> ()
 }

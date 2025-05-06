@@ -13,25 +13,27 @@ add_circt_tool(circt-bmc circt-bmc.cpp)
 target_link_libraries(circt-bmc
   PRIVATE
   CIRCTBMCTransforms
-  CIRCTSMTToZ3LLVM
-  CIRCTHWToSMT
-  CIRCTCombToSMT
-  CIRCTVerifToSMT
   CIRCTComb
+  CIRCTCombToSMT
+  CIRCTEmitTransforms
   CIRCTHW
+  CIRCTHWToSMT
+  CIRCTOMTransforms
   CIRCTSeq
-  CIRCTSMT
-  CIRCTVerif
+  CIRCTSMTToZ3LLVM
   CIRCTSupport
-  MLIRIR
-  MLIRFuncDialect
+  CIRCTVerif
+  CIRCTVerifToSMT
+  LLVMSupport
   MLIRArithDialect
+  MLIRBuiltinToLLVMIRTranslation
+  MLIRFuncDialect
+  MLIRFuncInlinerExtension
+  MLIRIR
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
+  MLIRSMT
   MLIRTargetLLVMIRExport
-  MLIRFuncInlinerExtension
-  MLIRBuiltinToLLVMIRTranslation
-  LLVMSupport
 
   ${CIRCT_BMC_JIT_DEPS}
 )

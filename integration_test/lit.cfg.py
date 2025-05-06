@@ -213,16 +213,22 @@ if config.z3_path != "":
   config.available_features.add('z3')
 
 # Enable libz3 if it has been detected.
-if config.z3_library != "":
+if config.z3_library not in ("", "Z3_LIBRARIES-NOTFOUND"):
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
 
-# Add mlir-cpu-runner if the execution engine is built.
+# Enable SymbiYosys if it has been detected.
+if config.sby_path != "":
+  tool_dirs.append(config.sby_path)
+  tools.append('sby')
+  config.available_features.add('sby')
+
+# Add mlir-runner if the execution engine is built.
 if config.mlir_enable_execution_engine:
-  config.available_features.add('mlir-cpu-runner')
+  config.available_features.add('mlir-runner')
   config.available_features.add('circt-lec-jit')
   config.available_features.add('circt-bmc-jit')
-  tools.append('mlir-cpu-runner')
+  tools.append('mlir-runner')
 
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:

@@ -30,6 +30,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
@@ -75,6 +76,11 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    allowUnregisteredDialects("allow-unregistered-dialect",
+                              cl::desc("Allow unknown dialects in the input"),
+                              cl::init(false), cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until { UntilAIGLowering, UntilEnd };
 
@@ -100,12 +106,6 @@ static cl::opt<bool>
                      cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
-    allowUnregisteredDialects("allow-unregistered-dialects",
-                              cl::desc("Allow unregistered dialects in the "
-                                       "input file"),
-                              cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool>
     printResourceUsage("print-resource-usage",
                        cl::desc("Print resource usage of AIG operations"),
                        cl::init(false), cl::cat(mainCategory));
@@ -123,9 +123,10 @@ static cl::opt<std::string>
                           cl::desc("Output file for longest path"),
                           cl::init("-"), cl::cat(mainCategory));
 
-static cl::opt<std::string> topModuleName("top-module",
-                                          cl::desc("Top module name"),
-                                          cl::init(""), cl::cat(mainCategory));
+static cl::opt<std::string> topName("top", cl::desc("Top module name"),
+                                    cl::value_desc("name"), cl::init(""),
+                                    cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -144,49 +145,54 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
 }
 
 static void populateSynthesisPipeline(PassManager &pm) {
-  // Add the AIG to Comb at the scope exit if requested.
-  auto addAIGToComb = llvm::make_scope_exit([&]() {
-    if (convertToComb) {
-      auto &mpm = pm.nest<hw::HWModuleOp>();
-      mpm.addPass(circt::createConvertAIGToComb());
-      mpm.addPass(createCSEPass());
+  auto pipeline = [](OpPassManager &mpm) {
+    // Add the AIG to Comb at the scope exit if requested.
+    auto addAIGToComb = llvm::make_scope_exit([&]() {
+      if (convertToComb) {
+        mpm.addPass(circt::createConvertAIGToComb());
+        mpm.addPass(createCSEPass());
+      }
+    });
+    {
+      // Partially legalize Comb to AIG, run CSE and canonicalization.
+      circt::ConvertCombToAIGOptions options;
+      partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp,
+                                 comb::MuxOp, comb::ICmpOp, hw::ArrayGetOp,
+                                 hw::ArraySliceOp, hw::ArrayCreateOp,
+                                 hw::ArrayConcatOp, hw::AggregateConstantOp>(
+          options.additionalLegalOps);
+      mpm.addPass(circt::createConvertCombToAIG(options));
     }
-  });
+    mpm.addPass(createCSEPass());
+    mpm.addPass(createSimpleCanonicalizerPass());
 
-  auto &mpm = pm.nest<hw::HWModuleOp>();
+    // Fully legalize AIG to Comb.
+    mpm.addPass(circt::hw::createHWAggregateToCombPass());
+    mpm.addPass(circt::createConvertCombToAIG());
+    mpm.addPass(createCSEPass());
+    if (untilReached(UntilAIGLowering))
+      return;
+    mpm.addPass(createSimpleCanonicalizerPass());
+    mpm.addPass(createCSEPass());
+    mpm.addPass(aig::createLowerVariadic());
+    // TODO: LowerWordToBits is not scalable for large designs. Change to
+    // conditionally enable the pass once the rest of the pipeline was able to
+    // handle multibit operands properly.
+    if (enableWordToBits)
+      mpm.addPass(aig::createLowerWordToBits());
+    mpm.addPass(createCSEPass());
+    mpm.addPass(createSimpleCanonicalizerPass());
+  };
 
-  {
-    // Partially legalize Comb to AIG, run CSE and canonicalization.
-    circt::ConvertCombToAIGOptions options;
-    partiallyLegalizeCombToAIG<
-        comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp, comb::ICmpOp,
-        hw::ArrayGetOp, hw::ArraySliceOp, hw::ArrayCreateOp, hw::ArrayConcatOp, hw::AggregateConstantOp>(
-        options.additionalLegalOps);
-    mpm.addPass(circt::createConvertCombToAIG(options));
+  if (topName.empty()) {
+    pipeline(pm.nest<hw::HWModuleOp>());
+  } else {
+    pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
   }
-  mpm.addPass(createCSEPass());
-  mpm.addPass(createSimpleCanonicalizerPass());
-
-  // Fully legalize AIG to Comb.
-  mpm.addPass(circt::hw::createHWAggregateToCombPass());
-  mpm.addPass(circt::createConvertCombToAIG());
-  mpm.addPass(createCSEPass());
-  if (untilReached(UntilAIGLowering))
-    return;
-  mpm.addPass(createSimpleCanonicalizerPass());
-  mpm.addPass(createCSEPass());
-  mpm.addPass(aig::createLowerVariadic());
-  // TODO: LowerWordToBits is not scalable for large designs. Change to
-  // conditionally enable the pass once the rest of the pipeline was able to
-  // handle multibit operands properly.
-  if (enableWordToBits)
-    mpm.addPass(aig::createLowerWordToBits());
-  mpm.addPass(createCSEPass());
-  mpm.addPass(createSimpleCanonicalizerPass());
 
   if (printResourceUsage) {
     circt::aig::PrintResourceUsageAnalysisOptions options;
-    options.topModuleName = topModuleName;
+    options.topModuleName = topName;
     options.outputJSONFile = resourceUsageOutputFile;
     options.printSummary = true;
     pm.addPass(circt::aig::createPrintResourceUsageAnalysis(options));
@@ -194,7 +200,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
 
   if (printLongestPath) {
     circt::aig::PrintLongestPathAnalysisOptions options;
-    options.topModuleName = topModuleName;
+    options.topModuleName = topName;
     options.outputJSONFile = longestPathOutputFile;
     options.printSummary = true;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
@@ -202,6 +208,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
   // TODO: Add balancing, rewriting, FRAIG conversion, etc.
   if (untilReached(UntilEnd))
     return;
+  // TODO: Add LUT mapping, etc.
 }
 
 /// This function initializes the various components of the tool and
@@ -285,6 +292,8 @@ int main(int argc, char **argv) {
                   om::OMDialect, sv::SVDialect, verif::VerifDialect,
                   ltl::LTLDialect, debug::DebugDialect, sim::SimDialect>();
   MLIRContext context(registry);
+  if (allowUnregisteredDialects)
+    context.allowUnregisteredDialects();
 
   // Setup of diagnostic handling.
   llvm::SourceMgr sourceMgr;

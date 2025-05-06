@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Dominance.h"
@@ -21,7 +21,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_MEMORYTOBLOCKARGUMENT
-#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -74,7 +74,7 @@ static void getDFClosure(SmallVectorImpl<Block *> &initialSet, Operation *op,
 static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
-    wait.getDestOpsMutable().append(toAppend);
+    wait.getDestOperandsMutable().append(toAppend);
   } else if (auto br = dyn_cast<mlir::cf::BranchOp>(terminator)) {
     br.getDestOperandsMutable().append(toAppend);
   } else if (auto condBr = dyn_cast<mlir::cf::CondBranchOp>(terminator)) {
@@ -247,9 +247,4 @@ void MemoryToBlockArgumentPass::runOnProcess(llhd::ProcessOp operation) {
     op->dropAllReferences();
     op->erase();
   }
-}
-
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::llhd::createMemoryToBlockArgumentPass() {
-  return std::make_unique<MemoryToBlockArgumentPass>();
 }

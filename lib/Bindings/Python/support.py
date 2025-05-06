@@ -88,7 +88,7 @@ def type_to_pytype(t) -> ir.Type:
   if t.__class__ != ir.Type:
     return t
 
-  from .dialects import esi, hw, seq
+  from .dialects import esi, hw, seq, rtg, rtgtest
   try:
     return ir.IntegerType(t)
   except ValueError:
@@ -127,6 +127,42 @@ def type_to_pytype(t) -> ir.Type:
     pass
   try:
     return esi.BundleType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.LabelType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.SetType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.BagType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.SequenceType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.RandomizedSequenceType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.DictType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.ImmediateType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.ArrayType(t)
+  except ValueError:
+    pass
+  try:
+    return rtgtest.IntegerRegisterType(t)
   except ValueError:
     pass
 

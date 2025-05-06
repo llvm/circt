@@ -37,8 +37,14 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
-      "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
+      "firrtl::ContractOp",
+      "firrtl::FModuleOp",
+      "firrtl::LayerBlockOp",
+      "firrtl::MatchOp",
+      "firrtl::WhenOp",
+      "sv::IfDefOp",
+    ]>
+  ]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
@@ -58,61 +64,57 @@ def InstanceOp : HardwareDeclOp<"instance", [
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
-                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
-                       AnnotationArrayAttr:$annotations,
-                       PortAnnotationsAttr:$portAnnotations,
-                       LayerArrayAttr:$layers,
-                       UnitAttr:$lowerToBind,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
+      NameKindAttr:$nameKind, DenseBoolArrayAttr:$portDirections,
+      StrArrayAttr:$portNames, AnnotationArrayAttr:$annotations,
+      PortAnnotationsAttr:$portAnnotations, LayerArrayAttr:$layers,
+      UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
+      OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<AnyType>:$results);
 
   let hasCustomAssemblyFormat = 1;
 
-  let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "::mlir::StringRef":$moduleName,
-                   "::mlir::StringRef":$name,
-                   "::circt::firrtl::NameKindEnum":$nameKind,
-                   "::mlir::ArrayRef<Direction>":$portDirections,
-                   "::mlir::ArrayRef<Attribute>":$portNames,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
-                   CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "::mlir::StringRef":$moduleName,
-                   "::mlir::StringRef":$name,
-                   "::circt::firrtl::NameKindEnum":$nameKind,
-                   "::mlir::ArrayRef<Direction>":$portDirections,
-                   "::mlir::ArrayRef<Attribute>":$portNames,
-                   "ArrayRef<Attribute>":$annotations,
-                   "ArrayRef<Attribute>":$portAnnotations,
-                   "::mlir::ArrayRef<Attribute>":$layers,
-                   "bool":$lowerToBind,
-                   "hw::InnerSymAttr":$innerSym)>,
+  let builders =
+      [OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+           "::mlir::StringRef":$moduleName, "::mlir::StringRef":$name,
+           "::circt::firrtl::NameKindEnum":$nameKind,
+           "::mlir::ArrayRef<Direction>":$portDirections,
+           "::mlir::ArrayRef<Attribute>":$portNames,
+           CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+           CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+           CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
+           CArg<"bool", "false">:$lowerToBind,
+           CArg<"bool", "false">:$doNotPrint,
+           CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+       OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+           "::mlir::StringRef":$moduleName, "::mlir::StringRef":$name,
+           "::circt::firrtl::NameKindEnum":$nameKind,
+           "::mlir::ArrayRef<Direction>":$portDirections,
+           "::mlir::ArrayRef<Attribute>":$portNames,
+           "ArrayRef<Attribute>":$annotations,
+           "ArrayRef<Attribute>":$portAnnotations,
+           "::mlir::ArrayRef<Attribute>":$layers, "bool":$lowerToBind,
+           "bool":$doNotPrint, "hw::InnerSymAttr":$innerSym)>,
 
-    /// Constructor when you have the target module in hand.
-    OpBuilder<(ins "FModuleLike":$module,
-                   "mlir::StringRef":$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+       /// Constructor when you have the target module in hand.
+       OpBuilder<(ins "FModuleLike":$module, "mlir::StringRef":$name,
+           CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+           CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+           CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+           CArg<"bool", "false">:$lowerToBind,
+           CArg<"bool", "false">:$doNotPrint,
+           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
 
-    /// Constructor when you have a port info list in hand.
-    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
-                   "::mlir::StringRef":$moduleName,
-                   "mlir::StringRef":$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$layers,
-                   CArg<"bool","false">:$lowerToBind,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
-  ];
+       /// Constructor when you have a port info list in hand.
+       OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+           "::mlir::StringRef":$moduleName, "mlir::StringRef":$name,
+           CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+           CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+           CArg<"ArrayRef<Attribute>", "{}">:$layers,
+           CArg<"bool", "false">:$lowerToBind,
+           CArg<"bool", "false">:$doNotPrint,
+           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
     /// Return the port direction for the specified result number.
@@ -401,6 +403,14 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
       assert(resultTypes.size() >= 1u && "mismatched number of return types");
       odsState.addTypes(resultTypes);
     }]>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
+                   CArg<"const Properties &","{}">:$properties), [{
+      assert(operands.size() == 1u && "mismatched number of parameters");
+      odsState.addOperands(operands);
+      odsState.useProperties(const_cast<Properties &>(properties));
+      assert(resultTypes.size() >= 1u && "mismatched number of return types");
+      odsState.addTypes(resultTypes);
+    }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                    "::mlir::Value":$clockVal,
                    "::mlir::StringAttr":$name,
@@ -648,6 +658,27 @@ def WireOp : HardwareDeclOp<"wire", [
     (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
     qualified(type($result)) (`,` qualified(type($ref))^)?
   }];
+}
+
+def ContractOp : FIRRTLOp<"contract", [
+  SingleBlock,
+  NoTerminator,
+  AllTypesMatch<["inputs", "outputs"]>,
+]> {
+  let summary = "Contract declaration";
+  let description = [{
+    The `firrtl.contract` operation defines values that adhere to a set of
+    formal assertions and assumptions outlined in the contract's body.
+
+    See the `verif.contract` operation for more details.
+  }];
+  let arguments = (ins Variadic<PassiveType>:$inputs);
+  let results = (outs Variadic<PassiveType>:$outputs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    ($inputs^ `:` type($inputs))? attr-dict-with-keyword $body
+  }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

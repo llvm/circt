@@ -1413,3 +1413,16 @@ firrtl.circuit "InlineBlocks" {
     firrtl.ref.define %o, %c_p : !firrtl.probe<uint<8>, @I::@J>
   }
 }
+
+// -----
+
+// The inliner must not delete modules which are still referenced, even in unknown ops.
+firrtl.circuit "FormalMarkerIsUse" {
+  firrtl.extmodule @FormalMarkerIsUse()
+  firrtl.formal @Test, @Foo {}
+  "some_unknown_dialect.op"() { magic = @Bar } : () -> ()
+  firrtl.module private @Foo() {}
+  firrtl.module private @Bar() {}
+  // CHECK: firrtl.module private @Foo
+  // CHECK: firrtl.module private @Bar
+}

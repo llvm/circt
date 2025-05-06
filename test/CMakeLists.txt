@@ -26,6 +26,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-rtg-test
   circt-capi-rtgtest-test
   circt-as
+  circt-bmc
   circt-dis
   circt-lec
   circt-opt
@@ -46,6 +47,7 @@ endif()
 
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   list(APPEND CIRCT_TEST_DEPENDS circt-verilog)
+  list(APPEND CIRCT_TEST_DEPENDS circt-verilog-lsp-server)
 endif()
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -memory-banking="banking-factor=0" -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -memory-banking="factors=0" -verify-diagnostics
 
 // expected-error@+1 {{banking factor must be greater than 1}}
 func.func @bank_one_dim_unroll0(%arg0: memref<8xf32>, %arg1: memref<8xf32>) -> (memref<8xf32>) {

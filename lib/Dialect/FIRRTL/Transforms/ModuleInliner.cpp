@@ -1455,12 +1455,32 @@ LogicalResult Inliner::run() {
   identifyNLAsTargetingOnlyModules();
 
   // Mark the top module as live, so it doesn't get deleted.
-  for (auto module : circuit.getOps<FModuleLike>()) {
-    if (module.canDiscardOnUseEmpty())
+  for (auto &op : circuit.getOps()) {
+    // Mark public/non-discardable modules as live and add them to the worklist.
+    if (auto module = dyn_cast<FModuleLike>(op)) {
+      if (module.canDiscardOnUseEmpty())
+        continue;
+      liveModules.insert(module);
+      if (isa<FModuleOp>(module))
+        worklist.push_back(cast<FModuleOp>(module));
       continue;
-    liveModules.insert(module);
-    if (isa<FModuleOp>(module))
-      worklist.push_back(cast<FModuleOp>(module));
+    }
+
+    // Ignore symbol uses in NLAs.
+    if (isa<hw::HierPathOp>(op))
+      continue;
+
+    // Mark modules live whose symbols are referenced in other ops.
+    auto symbolUses = SymbolTable::getSymbolUses(&op);
+    if (!symbolUses)
+      continue;
+    for (const auto &use : *symbolUses) {
+      if (auto flat = dyn_cast<FlatSymbolRefAttr>(use.getSymbolRef()))
+        if (auto moduleLike = symbolTable.lookup<FModuleLike>(flat.getAttr()))
+          if (liveModules.insert(moduleLike).second)
+            if (auto module = dyn_cast<FModuleOp>(*moduleLike))
+              worklist.push_back(module);
+    }
   }
 
   // If the module is marked for flattening, flatten it. Otherwise, inline

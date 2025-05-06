@@ -100,6 +100,8 @@ constexpr const char *augmentedGroundTypeClass =
     "sifive.enterprise.grandcentral.AugmentedGroundType"; // not an annotation
 constexpr const char *augmentedBundleTypeClass =
     "sifive.enterprise.grandcentral.AugmentedBundleType"; // not an annotation
+constexpr const char *augmentedVectorTypeClass =
+    "sifive.enterprise.grandcentral.AugmentedVectorType"; // not an annotation
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";
 constexpr const char *dataTapsBlackboxClass =

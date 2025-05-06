@@ -18,7 +18,6 @@
 
 kanagawa.design @foo {
 kanagawa.class sym @C {
-  %this = kanagawa.this <@foo::@C>
   kanagawa.method @getAndSet(%x: ui32) -> ui32 {
     kanagawa.return %x : ui32
   }
@@ -49,7 +48,6 @@ kanagawa.class sym @C {
 // PREP:           [[CALLRES2:%.+]] = kanagawa.call <@foo::@getAndSet>([[STRUCT2]]) : (!hw.struct<x: ui32>) -> ui32
 // PREP:           kanagawa.return [[CALLRES2]] : ui32
 kanagawa.class sym @User {
-  %this = kanagawa.this <@foo::@User>
   kanagawa.instance @c, <@foo::@C>
   kanagawa.method @getAndSetWrapper(%new_value: ui32) -> ui32 {
     %x = kanagawa.call <@foo::@getAndSet>(%new_value): (ui32) -> ui32

@@ -159,19 +159,20 @@ public:
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
     if (wrap) {
-      if (wrap.getChanOutput().getUsers().empty()) {
+      if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
         auto c1 = rewriter.create<hw::ConstantOp>(wrap.getLoc(),
                                                   rewriter.getI1Type(), 1);
         rewriter.replaceOp(wrap, {nullptr, c1});
         return success();
       }
 
-      if (!wrap.getChanOutput().hasOneUse())
+      if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Wrap didn't have exactly one use.");
       if (!(unwrap = dyn_cast<UnwrapValidReadyOp>(
-                wrap.getChanOutput().use_begin()->getOwner())))
+                ChannelType::getSingleConsumer(wrap.getChanOutput())
+                    ->getOwner())))
         return rewriter.notifyMatchFailure(
             wrap, "This conversion only supports wrap-unwrap back-to-back. "
                   "Could not find 'unwrap'.");
@@ -180,7 +181,11 @@ public:
       valid = operands[1];
       ready = unwrap.getReady();
     } else if (unwrap) {
-      wrap = dyn_cast<WrapValidReadyOp>(operands[0].getDefiningOp());
+      Operation *defOp = operands[0].getDefiningOp();
+      if (!defOp)
+        return rewriter.notifyMatchFailure(
+            unwrap, "unwrap input is not defined by an op");
+      wrap = dyn_cast<WrapValidReadyOp>(defOp);
       if (!wrap)
         return rewriter.notifyMatchFailure(
             operands[0].getDefiningOp(),
@@ -193,13 +198,49 @@ public:
       return failure();
     }
 
-    if (!wrap.getChanOutput().hasOneUse())
+    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
       return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Wrap didn't have exactly one use.";
       });
     rewriter.replaceOp(wrap, {nullptr, ready});
     rewriter.replaceOp(unwrap, {data, valid});
+    return success();
+  }
+};
+} // anonymous namespace
+
+namespace {
+/// Eliminate snoop operations in wrap-unwrap pairs.
+struct RemoveSnoopOp : public OpConversionPattern<SnoopValidReadyOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SnoopValidReadyOp op, SnoopValidReadyOpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    Operation *defOp = op.getInput().getDefiningOp();
+    if (!defOp)
+      return rewriter.notifyMatchFailure(op,
+                                         "snoop input is not defined by an op");
+    auto wrap = dyn_cast<WrapValidReadyOp>(defOp);
+    if (!wrap)
+      return rewriter.notifyMatchFailure(
+          defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                 "Could not find 'wrap'.");
+    auto *unwrapOpOperand =
+        ChannelType::getSingleConsumer(wrap.getChanOutput());
+    if (!unwrapOpOperand)
+      return rewriter.notifyMatchFailure(
+          defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                 "Could sole consumer.");
+    auto unwrap = dyn_cast<UnwrapValidReadyOp>(unwrapOpOperand->getOwner());
+    if (!unwrap)
+      return rewriter.notifyMatchFailure(
+          defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                 "Could not find 'unwrap'.");
+    rewriter.replaceOp(
+        op, {wrap.getValid(), unwrap.getReady(), wrap.getRawInput()});
     return success();
   }
 };
@@ -702,6 +743,7 @@ void ESItoHWPass::runOnOperation() {
   pass2Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
   pass2Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
   pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
+  pass2Patterns.insert<RemoveSnoopOp>(ctxt);
   if (failed(
           applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
     signalPassFailure();

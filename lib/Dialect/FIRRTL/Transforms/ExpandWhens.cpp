@@ -531,6 +531,8 @@ public:
   void visitStmt(CoverOp op);
   void visitStmt(ModuleOp op);
   void visitStmt(PrintFOp op);
+  void visitStmt(FPrintFOp op);
+  void visitStmt(FFlushOp op);
   void visitStmt(StopOp op);
   void visitStmt(WhenOp op);
   void visitStmt(LayerBlockOp op);
@@ -637,6 +639,14 @@ void WhenOpVisitor::process(Block &block) {
 }
 
 void WhenOpVisitor::visitStmt(PrintFOp op) {
+  op.getCondMutable().assign(andWithCondition(op, op.getCond()));
+}
+
+void WhenOpVisitor::visitStmt(FPrintFOp op) {
+  op.getCondMutable().assign(andWithCondition(op, op.getCond()));
+}
+
+void WhenOpVisitor::visitStmt(FFlushOp op) {
   op.getCondMutable().assign(andWithCondition(op, op.getCond()));
 }
 

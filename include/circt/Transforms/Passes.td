@@ -127,10 +127,15 @@ def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
   let summary = "Partition the memories used in affine parallel loops into banks";
   let constructor = "circt::createMemoryBankingPass()";
   let options = [
-    Option<"bankingFactor", "banking-factor", "unsigned", /*default=*/"1",
-           "Use this banking factor for all memories being partitioned">,
-    Option<"bankingDimension", "dimension", "unsigned", /*default=*/"0",
-           "The dimension along which to bank the memory. For rank=1, must be 0.">
+    ListOption<"bankingFactorsList", "factors", "unsigned",
+           "Use banking factors to partition all memories that don't have banking attributes."
+           "The elements specified in banking factors should be greater than 1;"
+           "The elements specified in banking factors will be paired with the ones specified in banking dimensions."
+           "In principle, the number of elements in banking factors should be equal to banking dimensions',"
+           "with a single exception case: there is one banking factor with zero banking dimensions.">,
+    ListOption<"bankingDimensionsList", "dimensions", "unsigned",
+           "The dimensions along which to bank the memory. If unspecified and"
+           "there is only one factor, the innermost dimension with size > 1 is used.">
   ];
   let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
 }
@@ -164,6 +169,25 @@ def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
   }];
   let constructor = "circt::createIndexSwitchToIfPass()";
   let dependentDialects = ["mlir::scf::SCFDialect"];
+}
+
+def HierarchicalRunner : Pass<"hierarchical-runner", "::mlir::ModuleOp"> {
+  let summary = "Run passes under hierarchy";
+  let description = [{
+    This pass runs a specified pipeline of passes on the hierarchy of modules
+    starting from a given top-level module. It allows for hierarchical
+    application of transformations, which can be useful for targeting specific
+    parts of a design or for applying different optimizations at different
+    levels of the module hierarchy.
+  }];
+  let options = [
+    Option<"pipelineStr", "pipeline", "std::string", "",
+           "The pipeline to run under hierarchy">,
+    Option<"topName", "top-name", "std::string", "",
+           "The name of the top-level module to run the pass on">,
+    Option<"includeBoundInstances", "include-bound-instances", "bool", "false",
+           "Whether to include bound instances in the hierarchy">
+  ];
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES
