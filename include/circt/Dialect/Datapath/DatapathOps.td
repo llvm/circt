@@ -28,30 +28,32 @@ class DatapathOp<string mnemonic, list<Trait> traits = []> :
 
 //===----------------------------------------------------------------------===//
 
-def CompressOp : DatapathOp<"compress", [Pure]> {
+def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAndResultType]> {
   let summary = "Apply a compressor tree to reduce a set of input bitvectors, "
                 "to be added to targetRows output bitvectors.";
 
-  let arguments = (ins Variadic<HWIntegerType>:$inputs, I32Attr:$targetRows);
+  let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
   let assemblyFormat =
     // "$inputs `to` $targetRows attr-dict `:` qualified(type($inputs))";
-    "$inputs `to` $targetRows attr-dict `:` functional-type($inputs, $results)";
+    // "$inputs `to` $targetRows attr-dict `:` functional-type($inputs, $results)";
+    "$inputs attr-dict `:` functional-type($inputs, $results)";
+    // "$inputs attr-dict `:`  qualified(type($results))";
 
   // let hasFolder = true;
   let hasVerifier = 1;
   // let hasCanonicalizeMethod = true;
 
-  let builders = [
-    OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
-      auto inputType = lhs.front().getType();
-      SmallVector<Type> resultTypes(targetRows, inputType);
-      // for (auto i=0; i< targetRows; ++i) 
-      //   resultTypes.push_back(inputType);
-      return build($_builder, $_state, resultTypes, lhs, targetRows);
-    }]>
-  ];
+  // let builders = [
+  //   OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
+  //     auto inputType = lhs.front().getType();
+  //     SmallVector<Type> resultTypes(targetRows, inputType);
+  //     // for (auto i=0; i< targetRows; ++i) 
+  //     //   resultTypes.push_back(inputType);
+  //     return build($_builder, $_state, resultTypes, lhs, targetRows);
+  //   }]>
+  // ];
 }
 
 #endif // CIRCT_DIALECT_DATAPATH_OPS_TD
