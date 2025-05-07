@@ -20,6 +20,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/ImmutableList.h"
 #include <memory>
 
 namespace mlir {
@@ -58,79 +59,56 @@ private:
   DenseMap<OperationName, DenseMap<size_t, size_t>> operandCounts;
 };*/
 
+struct DebugPoint {
+  circt::igraph::InstancePath path;
+  size_t bitPos;
+  Value value;
+  int64_t delay;
+  StringRef comment;
+  DebugPoint(circt::igraph::InstancePath path, Value value, size_t bitPos,
+             int64_t delay = 0, StringRef comment = "")
+      : path(path), value(value), bitPos(bitPos), delay(delay),
+        comment(comment) {}
+
+  // Trait for list of debug points.
+  void Profile(llvm::FoldingSetNodeID &ID) const {
+    for (auto &inst : path) {
+      ID.AddPointer(inst.getAsOpaquePointer());
+    }
+    ID.AddPointer(value.getAsOpaquePointer());
+    ID.AddInteger(bitPos);
+    ID.AddInteger(delay);
+  }
+};
+
+struct Point {
+  Value value;
+  size_t bitPos;
+  circt::igraph::InstancePath path;
+  int64_t delay = -1;
+  llvm::ImmutableList<DebugPoint> history;
+  Point(Value value, size_t bitPos, circt::igraph::InstancePath path,
+        int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
+      : value(value), bitPos(bitPos), path(path), delay(delay),
+        history(history) {
+    assert(value);
+  }
+  Point() = default;
+  bool operator>(const Point &other) const { return delay > other.delay; }
+  bool operator<(const Point &other) const { return delay < other.delay; }
+
+
+  void print(llvm::raw_ostream &os) const;
+};
+
 class LongestPathAnalysis {
 public:
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
-  /*
-  struct InNode {
-    OpOperand to;
-    size_t bitPos;
-    size_t width;
-  };
-
-  struct OutNode {
-    Value from;
-    size_t bitPos;
-    size_t width;
-  };
-
-  struct Edge {
-    OutNode *from;
-    InNode *to;
-    uint64_t weight;
-
-    LogicalResult verify();
-  };
-
-  struct Path {
-    SmallVector<Edge> edges;
-    uint64_t getWegithSum() const;
-  };
-
-  using WeightType = uint64_t;
-
-  struct ElaboratedObject {
-    struct ElaboratedEdge {
-      ElaboratedObject *node;
-      size_t weight;
-    };
-
-    SmallVector<ElaboratedEdge *> inEdges, outEdges;
-
-    bool isPrimaryInput() const { return inEdges.empty(); }
-    bool isPrimaryOutput() const { return outEdges.empty(); }
-
-    // Represent an elaborated object "path.name[bitPos:bitPos+width]"
-    ArrayAttr path;
-    StringAttr name;
-    size_t bitPos;
-    size_t width;
-
-    Value value; // This must be BlockArgument(port) or register.
-    size_t arrivalTime;
-  };
-
-  struct ArrivalTimeStat {
-    double avg, stddev;
-  };
-
-  ArrivalTimeStat getAverageArrivalTime(Value value) const;
-  ArrivalTimeStat getAverageArrivalTime(Value value, size_t bitPos = 0,
-                                        size_t width = 1) const;
-
-  struct ModuleInfo {
-    DenseMap<OutNode, SmallVector<InNode>> inEdges;
-    DenseMap<InNode, SmallVector<OutNode>> outEdges;
-    SmallVector<Path> internalPaths; // Paths closed within this hierarchy.
-  };
-
-  ModuleInfo *getModuleInfo(hw::HWModuleOp top);
-  DenseMap<StringAttr, std::unique_ptr<ModuleInfo>> moduleInfoCache;
-  DenseMap<StringAttr, std::unique_ptr<ElaboratedInfo>> moduleInfo;
-  */
-
-private:
-  igraph::InstanceGraph *instanceGraph;
+  LogicalResult getResultFor(Value value, size_t bitPos,
+                             circt::igraph::InstancePath path,
+                             SmallVectorImpl<Point> &results);
+  LogicalResult getResultFor(Value value, size_t bitPos,
+                             SmallVectorImpl<Point> &results);
 };
 
 class ResourceUsageAnalysis {

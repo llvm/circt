@@ -249,7 +249,7 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
   SmallVector<InstancePath, 8> extendedPaths;
   for (auto *inst : node->uses()) {
     if (auto module = inst->getParent()->getModule()) {
-      auto instPaths = getAbsolutePaths(module);
+      auto instPaths = getAbsolutePaths(module, top);
       extendedPaths.reserve(instPaths.size());
       for (auto path : instPaths) {
         extendedPaths.push_back(appendInstance(
