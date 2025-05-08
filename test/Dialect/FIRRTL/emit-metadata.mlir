@@ -303,10 +303,13 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // (1) Class-based metadata ----------------------------------------------------
 //
 // CHECK:               firrtl.class @SitestBlackBoxModulesSchema(
-// CHECK-SAME:            in %[[moduleName_in:.+]]: !firrtl.string,
-// CHECK-SAME:            out %moduleName: !firrtl.string
+// CHECK-SAME:            in %[[moduleName_in:[^:]+]]: !firrtl.string,
+// CHECK-SAME:            out %moduleName: !firrtl.string,
+// CHECK-SAME:            in %[[inDut_in:[^:]+]]: !firrtl.bool,
+// CHECK-SAME:            out %inDut: !firrtl.bool
 // CHECK-SAME:          ) {
 // CHECK-NEXT:            firrtl.propassign %moduleName, %[[moduleName_in]]
+// CHECK-NEXT:            firrtl.propassign %inDut, %[[inDut_in]]
 // CHECK:               }
 //
 // CHECK:               firrtl.class @SitestBlackBoxMetadata(
@@ -318,33 +321,48 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-NOT:             !firrtl.class<@SitestBlackBoxModulesSchema(
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "TestBlackbox"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool false
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
 // CHECK-NEXT:            firrtl.propassign %TestBlackbox_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "DUTBlackbox2"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
 // CHECK-NEXT:            firrtl.propassign %DUTBlackbox_0_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "DUTBlackbox1"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
 // CHECK-NEXT:            firrtl.propassign %DUTBlackbox_1_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "LayerBlackboxInDesign"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
 // CHECK-NEXT:            firrtl.propassign %LayerBlackboxInDesign_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "LayerBlackbox"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool false
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
 // CHECK-NEXT:            firrtl.propassign %LayerBlackbox_field, %[[object]]
 //
 // CHECK-NOT:             firrtl.object
