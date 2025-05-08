@@ -59,21 +59,25 @@ rtg.sequence @seqRandomizationAndEmbedding() {
 }
 
 // CHECK-LABEL: @sets
-func.func @sets(%arg0: i32, %arg1: i32) {
+func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
   // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
   // CHECK: [[R:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<i32>
   // CHECK: [[EMPTY:%.+]] = rtg.set_create : i32
   // CHECK: [[DIFF:%.+]] = rtg.set_difference [[SET]], [[EMPTY]] : !rtg.set<i32>
   // CHECK: rtg.set_union [[SET]], [[DIFF]] : !rtg.set<i32>
   // CHECK: rtg.set_size [[SET]] : !rtg.set<i32>
+  // CHECK: rtg.set_cartesian_product [[SET]], [[SET]] : !rtg.set<i32>, !rtg.set<i32>
+  // CHECK: rtg.set_convert_to_bag [[SET]] : !rtg.set<i32>
   %set = rtg.set_create %arg0, %arg1 : i32
   %r = rtg.set_select_random %set : !rtg.set<i32>
   %empty = rtg.set_create : i32
   %diff = rtg.set_difference %set, %empty : !rtg.set<i32>
   %union = rtg.set_union %set, %diff : !rtg.set<i32>
   %size = rtg.set_size %set : !rtg.set<i32>
+  %prod = rtg.set_cartesian_product %set, %set : !rtg.set<i32>, !rtg.set<i32>
+  %bag = rtg.set_convert_to_bag %set : !rtg.set<i32>
 
-  return
+  return %prod : !rtg.set<tuple<i32, i32>>
 }
 
 // CHECK-LABEL: @bags
@@ -85,6 +89,7 @@ rtg.sequence @bags(%arg0: i32, %arg1: i32, %arg2: index) {
   // CHECK: rtg.bag_difference [[BAG]], [[EMPTY]] inf : !rtg.bag<i32>
   // CHECK: rtg.bag_union [[BAG]], [[EMPTY]], [[DIFF]] : !rtg.bag<i32>
   // CHECK: rtg.bag_unique_size [[BAG]] : !rtg.bag<i32>
+  // CHECK: rtg.bag_convert_to_set [[BAG]] : !rtg.bag<i32>
   %bag = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32 {rtg.some_attr}
   %r = rtg.bag_select_random %bag : !rtg.bag<i32> {rtg.some_attr}
   %empty = rtg.bag_create : i32
@@ -92,6 +97,7 @@ rtg.sequence @bags(%arg0: i32, %arg1: i32, %arg2: index) {
   %diff2 = rtg.bag_difference %bag, %empty inf : !rtg.bag<i32>
   %union = rtg.bag_union %bag, %empty, %diff : !rtg.bag<i32>
   %size = rtg.bag_unique_size %bag : !rtg.bag<i32>
+  %set = rtg.bag_convert_to_set %bag : !rtg.bag<i32>
 }
 
 // CHECK-LABEL: rtg.target @empty_target : !rtg.dict<> {
@@ -161,8 +167,24 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
   // CHECK-NEXT: [[V0:%.+]] = rtg.array_create [[ARR]], [[ARR]] : !rtg.array<index>
   // CHECK-NEXT: [[V1:%.+]] = rtg.array_create : index
   // CHECK-NEXT: [[V2:%.+]] = rtg.array_extract [[V0]][[[IDX1]]] : !rtg.array<!rtg.array<index>>
+  // CHECK-NEXT: [[V3:%.+]] = rtg.array_inject [[V2]][[[IDX1]]], [[IDX1]] : !rtg.array<index>
+  // CHECK-NEXT: rtg.array_size [[V3]] : !rtg.array<index>
   %idx1 = index.constant 1
   %0 = rtg.array_create %arr, %arr : !rtg.array<index>
   %1 = rtg.array_create : index
   %2 = rtg.array_extract %0[%idx1] : !rtg.array<!rtg.array<index>>
+  %3 = rtg.array_inject %2[%idx1], %idx1 : !rtg.array<index>
+  %4 = rtg.array_size %3 : !rtg.array<index>
+}
+
+// CHECK-LABEL: rtg.test @tuples
+rtg.test @tuples() {
+  // CHECK-NEXT: [[IDX0:%.+]] = index.constant 0
+  // CHECK-NEXT: [[TRUE:%.+]] = index.bool.constant true
+  // CHECK-NEXT: [[TUPLE:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]] : index, i1
+  // CHECK-NEXT: rtg.tuple_extract [[TUPLE]] at 1 : tuple<index, i1>
+  %idx0 = index.constant 0
+  %true = index.bool.constant true
+  %0 = rtg.tuple_create %idx0, %true : index, i1
+  %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
 }

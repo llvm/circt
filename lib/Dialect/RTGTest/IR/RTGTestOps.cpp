@@ -26,6 +26,16 @@ mlir::OpFoldResult ConstantTestOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// GetHartIdOp
+//===----------------------------------------------------------------------===//
+
+mlir::OpFoldResult GetHartIdOp::fold(FoldAdaptor adaptor) {
+  if (auto cpuAttr = dyn_cast_or_null<CPUAttr>(adaptor.getCpu()))
+    return IntegerAttr::get(IndexType::get(getContext()), cpuAttr.getId());
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

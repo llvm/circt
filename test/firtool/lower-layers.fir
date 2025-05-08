@@ -125,7 +125,7 @@ circuit TestHarness:
   ; CHECK:   `ifndef SYNTHESIS
   ; CHECK:     always @(posedge TestHarness.clock) begin
   ; CHECK:       if ((`PRINTF_COND_) & TestHarness.reset)
-  ; CHECK:         $fwrite(`PRINTF_FD_, "The last PC was: %x", TestHarness.dut.verification.pc_d_probe);
+  ; CHECK:         $fwrite(32'h80000002, "The last PC was: %x", TestHarness.dut.verification.pc_d_probe);
   ; CHECK:     end // always @(posedge)
   ; CHECK:   `endif // not def SYNTHESIS
   ; CHECK: endmodule
@@ -252,3 +252,28 @@ circuit Foo: %[[
   public module Foo:
     inst forceOutOfLayer of ForceOutOfLayer
     inst forceIntoSubmodule of ForceIntoSubmodule
+
+; // -----
+
+; LowerXMR and LowerLayers should work with nested enablelayers.  Just test that
+; this doesn't error.
+
+FIRRTL version 5.1.0
+circuit Foo:
+
+  layer A, bind:
+
+  module Bar enablelayer A:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    connect b, a
+
+  ; CHECK: module Foo(
+  public module Foo enablelayer A:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    inst bar of Bar
+    connect bar.a, a
+    connect b, bar.b

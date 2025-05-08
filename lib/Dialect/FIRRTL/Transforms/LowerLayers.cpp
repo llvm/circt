@@ -329,24 +329,35 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   StringRef circuitName = circuitOp.getName();
   hw::InnerSymbolNamespace ns(moduleOp);
 
-  // A cache of nodes we've created for values which are captured, but cannot
-  // have a symbol attached to them.  This is done to avoid creating the same
-  // node multiple times.
-  DenseMap<Value, NodeOp> nodeCache;
+  // A cache of values to nameable ops that can be used
+  DenseMap<Value, Operation *> nodeCache;
 
-  // Get or create a node within this module.  This is used when we need to
-  // create an XMRDerefOp to an expression.
-  auto getOrCreateNodeOp = [&](Value operand, ImplicitLocOpBuilder &builder,
-                               StringRef nameHint) -> NodeOp {
-    auto it = nodeCache.find(operand);
-    if (it != nodeCache.end())
-      return it->getSecond();
+  // Get or create a node op for a value captured by a layer block.
+  auto getOrCreateNodeOp = [&](Value operand,
+                               ImplicitLocOpBuilder &builder) -> Operation * {
+    // Use the cache hit.
+    auto *nodeOp = nodeCache.lookup(operand);
+    if (nodeOp)
+      return nodeOp;
+
+    // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointAfter(operand.getDefiningOp());
-    return nodeCache
-        .insert({operand,
-                 builder.create<NodeOp>(operand.getLoc(), operand, nameHint)})
-        .first->getSecond();
+    builder.setInsertionPointAfterValue(operand);
+    SmallString<16> nameHint;
+    // Try to generate a "good" name hint to use for the node.
+    if (auto *definingOp = operand.getDefiningOp()) {
+      if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
+        nameHint.append(instanceOp.getName());
+        nameHint.push_back('_');
+        nameHint.append(
+            instanceOp.getPortName(cast<OpResult>(operand).getResultNumber()));
+      } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
+        nameHint.append(opName);
+      }
+    }
+    return nodeOp = builder.create<NodeOp>(
+               operand.getLoc(), operand,
+               nameHint.empty() ? "_layer_probe" : StringRef(nameHint));
   };
 
   // Determine the replacement for an operand within the current region.  Keep a
@@ -404,17 +415,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       auto *definingOp = value.getDefiningOp();
       hw::InnerRefAttr innerRef;
       if (definingOp) {
-        // TODO: Always create a node.  This is a trade-off between
-        // optimizations and dead code.  By adding the node, this allows the
-        // original path to be better optimized, but will leave dead code in the
-        // design.  If the node is not created, then the output is less
-        // optimized.  Err on the side of dead code.  This _should_ be able to
-        // be removed eventually [1].  A node should only be necessary for
-        // operations which cannot have a symbol attached to them, i.e.,
-        // expressions or instance ports.
-        //
-        // [1]: https://github.com/llvm/circt/issues/8426
-        definingOp = getOrCreateNodeOp(value, localBuilder, "_layer_probe");
+        // Always create a node.  This is a trade-off between optimizations and
+        // dead code.  By adding the node, this allows the original path to be
+        // better optimized, but will leave dead code in the design.  If the
+        // node is not created, then the output is less optimized.  Err on the
+        // side of dead code.  This dead node _may_ be eventually inlined by
+        // `ExportVerilog`.  However, this is not guaranteed.
+        definingOp = getOrCreateNodeOp(value, localBuilder);
         innerRef = getInnerRefTo(
             definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
       } else {

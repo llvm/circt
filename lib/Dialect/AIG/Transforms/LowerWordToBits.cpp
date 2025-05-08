@@ -95,7 +95,7 @@ void LowerWordToBitsPass::runOnOperation() {
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   mlir::GreedyRewriteConfig config;
   // Use top-down traversal to reuse bits from `comb.concat`.
-  config.useTopDownTraversal = true;
+  config.setUseTopDownTraversal(true);
 
   if (failed(
           mlir::applyPatternsGreedily(getOperation(), frozenPatterns, config)))

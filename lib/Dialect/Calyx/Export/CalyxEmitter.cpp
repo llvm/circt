@@ -495,11 +495,19 @@ private:
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
           APInt value = op.getValue();
+          auto &stream = isIndented ? indent() : os;
+          bool isNegative = value.isNegative();
+          StringRef base = isNegative ? "b" : "d";
 
-          (isIndented ? indent() : os)
-              << std::to_string(value.getBitWidth()) << apostrophe() << "d";
-          // We currently default to the decimal representation.
-          value.print(os, /*isSigned=*/false);
+          stream << std::to_string(value.getBitWidth()) << apostrophe() << base;
+
+          if (isNegative) {
+            SmallString<8> str;
+            value.toStringUnsigned(str, /*Radix=*/2);
+            stream << str;
+          } else {
+            value.print(stream, /*isSigned=*/false);
+          }
         })
         .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
         .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
@@ -1095,6 +1103,22 @@ void Emitter::emitAssignment(AssignOp op) {
   if (op.getGuard()) {
     emitValue(op.getGuard(), /*isIndented=*/false);
     os << questionMark();
+  }
+  if (auto constantOp =
+          dyn_cast_or_null<calyx::ConstantOp>(op.getSrc().getDefiningOp())) {
+    TypedAttr attr = constantOp.getValueAttr();
+    assert(isa<FloatAttr>(attr) && "must be a floating point constant");
+    auto fltAttr = dyn_cast<FloatAttr>(attr);
+    assert(attr != nullptr && "must be a floating point constant");
+    APFloat value = fltAttr.getValue();
+    if (value.isInfinity() || value.isNaN() || value.isNegative()) {
+      SmallString<8> str;
+      auto intValue = value.bitcastToAPInt();
+      intValue.toStringUnsigned(str, /*Radix=*/2);
+      os << std::to_string(intValue.getBitWidth()) << apostrophe() << "b" << str
+         << semicolonEndL();
+      return;
+    }
   }
   emitValue(op.getSrc(), /*isIndented=*/false);
   os << semicolonEndL();

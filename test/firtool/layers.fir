@@ -38,17 +38,17 @@ circuit Foo: %[[
             assert(clock, cond, enable, "Test")
 
 ; CHECK-LABEL: module Foo_A_B();
-; CHECK:         wire y = Foo.a._layer_probe;
-; CHECK:         wire z = Foo.a._layer_probe;
+; CHECK:         wire y = Foo.a.x_0;
+; CHECK:         wire z = Foo.a.x_0;
 ; CHECK:         always @(posedge Foo.clock) begin
-; CHECK-NEXT:      if (Foo.cond & Foo.a._layer_probe & Foo.enable)
+; CHECK-NEXT:      if (Foo.cond & Foo.a.x_0 & Foo.enable)
 ; CHECK-NEXT:        assert(Foo.cond) else $error("Test");
 ; CHECK-NEXT:    end // always @(posedge)
 ; CHECK-NEXT:  endmodule
 
 ; CHECK-LABEL: module Foo_A();
-; CHECK:         wire x = Foo.in;
-; CHECK-NEXT:    wire _layer_probe = x;
+; CHECK-NEXT:    wire x = Foo.in;
+; CHECK-NEXT:    wire x_0 = x;
 ; CHECK-NEXT:  endmodule
 
 ; CHECK-LABEL: FILE "layers-Foo-A-B.sv"

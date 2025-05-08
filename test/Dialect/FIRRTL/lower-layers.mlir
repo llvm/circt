@@ -119,7 +119,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @CaptureConnect() {
   // CHECK-NEXT:   %a = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[CaptureConnect_a_sym]] %a
+  // CHECK-NEXT:   %a_0 = firrtl.node sym @[[CaptureConnect_a_sym]] %a {name = "a"} : !firrtl.uint<1>
   // CHECK-NEXT:   firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers-Test-A.sv", excludeFromFileList>} @CaptureConnect_A()
   // CHECK-NEXT: }
   firrtl.module @CaptureConnect() {
@@ -153,7 +153,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module private @NestedCapture_A() {
   // CHECK-NEXT:   %x = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[NestedCapture_a_sym]] %x
+  // CHECK-NEXT:   %x_0 = firrtl.node sym @[[NestedCapture_a_sym]] %x {name = "x"}
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @NestedCapture() {
   // CHECK-NEXT:   firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers-Test-A-B.sv", excludeFromFileList>} @NestedCapture_A_B()
@@ -178,7 +178,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @WhenUnderLayer() {
   // CHECK-NEXT:   %x = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[WhenUnderLayer_x_sym]] %x
+  // CHECK-NEXT:   %x_0 = firrtl.node sym @[[WhenUnderLayer_x_sym]] %x {name = "x"}
   // CHECK-NEXT:   firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers-Test-A.sv", excludeFromFileList>} @WhenUnderLayer_A
   // CHECK-NEXT: }
   firrtl.module @WhenUnderLayer() {
@@ -228,7 +228,7 @@ firrtl.circuit "Test" {
 
   // CHECK:      firrtl.module @CaptureWhen2(
   // CHECK-NEXT:   %a = firrtl.wire
-  // CHECK-NEXT:   %_layer_probe = firrtl.node {{.*}} %a
+  // CHECK-NEXT:   %a_0 = firrtl.node {{.*}} %a
   // CHECK-NEXT:   firrtl.instance a
   firrtl.module @CaptureWhen2(in %cond: !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -268,8 +268,8 @@ firrtl.circuit "Test" {
   //
   // CHECK:      firrtl.module @InstancePortCapture() {
   // CHECK-NEXT:   %ext_a, %ext_b = firrtl.instance ext @InstancePortCapture_ext
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b
-  // CHECK-NEXT:   %_layer_probe_0 = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a
+  // CHECK-NEXT:   %ext_b_0 = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b {name = "ext_b"}
+  // CHECK-NEXT:   %ext_a_1 = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a {name = "ext_a"}
   // CHECK-NEXT:   firrtl.instance {{.*}}
   // CHECK-NEXT: }
   firrtl.extmodule @InstancePortCapture_ext(
@@ -428,7 +428,7 @@ firrtl.circuit "Simple" {
 // CHECK-NEXT:   %1 = firrtl.xmr.deref @[[Simple_b_path]]
 // CHECK-NEXT:   %bb = firrtl.node %1
 // CHECK-NEXT:   %cc = firrtl.node %0
-// CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[Simple_A_B_cc_sym]] %cc
+// CHECK-NEXT:   %cc_0 = firrtl.node sym @[[Simple_A_B_cc_sym]] %cc {name = "cc"}
 // CHECK-NEXT: }
 //
 // CHECK: hw.hierpath private @[[Simple_a_path:.+]] [@Simple::@[[Simple_a_sym:.+]]]
@@ -437,14 +437,14 @@ firrtl.circuit "Simple" {
 // CHECK-NEXT:   %0 = firrtl.xmr.deref @[[Simple_a_path]]
 // CHECK-NEXT:   %aa = firrtl.node %0
 // CHECK-NEXT:   %c = firrtl.wire
-// CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[Simple_A_c_sym]] %c
+// CHECK-NEXT:   %c_0 = firrtl.node sym @[[Simple_A_c_sym]] %c {name = "c"}
 // CHECK-NEXT: }
 //
 // CHECK:      firrtl.module @Simple() {
 // CHECK-NEXT:   %a = firrtl.wire
-// CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[Simple_a_sym]] %a
+// CHECK-NEXT:   %a_0 = firrtl.node sym @[[Simple_a_sym]] %a {name = "a"}
 // CHECK-NEXT:   %b = firrtl.wire
-// CHECK-NEXT:   %_layer_probe_0 = firrtl.node sym @[[Simple_b_sym]] %b
+// CHECK-NEXT:   %b_1 = firrtl.node sym @[[Simple_b_sym]] %b {name = "b"}
 // CHECK-NEXT:   firrtl.instance a_b_c {{.*}}
 // CHECK-NEXT:   firrtl.instance a_b {{.*}}
 // CHECK-NEXT:   firrtl.instance a {{.*}}

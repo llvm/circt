@@ -41,7 +41,7 @@ struct ImportedValue {
   /// Indicates where this value originates from. If true, the value is an input
   /// of the original arc. If false the value is exported from a different
   /// split.
-  unsigned isInput : 1;
+  bool isInput : 1;
   /// The original arc's input number, or the result number of the split that
   /// exports this value.
   unsigned index : 15;

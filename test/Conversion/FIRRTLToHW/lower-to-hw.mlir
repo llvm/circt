@@ -350,7 +350,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    printf(clock, reset, "Hi signed %d %0d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
-  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT, @PRINTF_FD_FRAGMENT, @CIRCT_LIB_LOGGING_FRAGMENT]}
+  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT, @CIRCT_LIB_LOGGING_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                                in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
                                in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
@@ -365,47 +365,47 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "No operands and literal: %%\0A"
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "No operands and literal: %%\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Binary: %b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Binary: %b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Decimal: %d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Decimal: %d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hexadecimal: %x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Hexadecimal: %x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "ASCII Character: %c\0A"([[ADD]]) : i5
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "ASCII Character: %c\0A"([[ADD]]) : i5
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
     // CHECK-NEXT:       [[DSIGNED:%.+]] = sv.system "signed"(%d)
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       %PRINTF_FD_ = sv.macro.ref.expr @PRINTF_FD_() : () -> i32
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:       sv.fwrite %PRINTF_FD_, "[%0t]: %d %m"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "[%0t]: %d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
     // CEHCK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CEHCK-NEXT:     %[[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1

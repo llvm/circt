@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
@@ -358,6 +359,55 @@ def SetSizeOp : RTGOp<"set_size", [Pure]> {
   }];
 }
 
+def SetCartesianProductOp : RTGOp<"set_cartesian_product", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "computes the n-ary cartesian product of sets";
+  let description = [{
+    This operation computes a set of tuples from a list of input sets such that
+    each combination of elements from the input sets is present in the result
+    set. More formally, for n input sets it computes
+    `X_1 x ... x X_n = {(x_1, ..., x_n) | x_i \in X_i for i  \in {1, ..., n}}`.
+    At least one input set has to be provided (i.e., `n > 0`).
+
+    For example, given two sets A and B with elements
+    `A = {a0, a1}, B = {b0, b1}` the result set R will be
+    `R = {(a0, b0), (a0, b1), (a1, b0), (a1, b1)}`.
+
+    Note that an RTG set does not provide any guarantees about the order of
+    elements an can thus not be iterated over or indexed into, however, a
+    random element can be selected and subtracted from the set until it is
+    empty. This procedure is determinstic and will yield the same sequence of
+    elements for a fixed seed and RTG version. If more guarantees about the
+    order of elements is necessary, use arrays instead (and compute the
+    cartesian product manually using nested loops).
+  }];
+
+  let arguments = (ins Variadic<SetType>:$inputs);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = "$inputs `:` qualified(type($inputs)) attr-dict";
+}
+
+def SetConvertToBagOp : RTGOp<"set_convert_to_bag", [
+  Pure,
+  TypesMatchWith<"element type of set must match the bag's element type",
+                 "input", "result",
+                 "BagType::get(cast<SetType>($_self).getElementType())">,
+]> {
+  let summary = "convert a set to a bag";
+  let description = [{
+    This operation converts a set to a bag. Each element in the set occurs
+    exactly once in the resulting bag.
+  }];
+
+  let arguments = (ins SetType:$input);
+  let results = (outs BagType:$result);
+
+  let assemblyFormat = "$input `:` qualified(type($input)) attr-dict";
+}
+
 //===- Bag Operations ------------------------------------------------------===//
 
 def BagCreateOp : RTGOp<"bag_create", [Pure, SameVariadicOperandSize]> {
@@ -455,6 +505,24 @@ def BagUniqueSizeOp : RTGOp<"bag_unique_size", [Pure]> {
   }];
 }
 
+def BagConvertToSetOp : RTGOp<"bag_convert_to_set", [
+  Pure,
+  TypesMatchWith<"element type of set must match the bag's element type",
+                 "input", "result",
+                 "SetType::get(cast<BagType>($_self).getElementType())">,
+]> {
+  let summary = "convert a bag to a set";
+  let description = [{
+    This operation converts a bag to a set by dropping all duplicate elements.
+    For example, the bag `{a, a, b}` is converted to `{a, b}`.
+  }];
+
+  let arguments = (ins BagType:$input);
+  let results = (outs SetType:$result);
+
+  let assemblyFormat = "$input `:` qualified(type($input)) attr-dict";
+}
+
 //===- Array Operations -------------------------------------------------===//
 
 def ArrayCreateOp : RTGOp<"array_create", [
@@ -491,6 +559,67 @@ def ArrayExtractOp : RTGOp<"array_extract", [
 
   let assemblyFormat = [{
     $array `[` $index `]` `:` qualified(type($array)) attr-dict
+  }];
+}
+
+def ArrayInjectOp : RTGOp<"array_inject", [
+  Pure,
+  AllTypesMatch<["array", "result"]>,
+  TypesMatchWith<"value type must match array element type",
+                 "array", "value",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "set an element in an array";
+  let description = [{
+    This operation produces a new array of the same type as the input array and
+    sets the element at the given index to the given value. All other values
+    remain the same. An OOB access is (immediate) undefined behavior.
+  }];
+
+  let arguments = (ins ArrayType:$array, Index:$index, AnyType:$value);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $array `[` $index `]` `,` $value `:` qualified(type($array)) attr-dict
+  }];
+}
+
+def ArraySizeOp : RTGOp<"array_size", [Pure]> {
+  let summary = "return the size of an array";
+
+  let arguments = (ins ArrayType:$array);
+  let results = (outs Index:$result);
+
+  let assemblyFormat = "$array `:` qualified(type($array)) attr-dict";
+}
+
+//===- Tuple Operations ---------------------------------------------------===//
+
+def TupleCreateOp : RTGOp<"tuple_create", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "create a tuple";
+
+  let arguments = (ins Variadic<AnyType>:$elements);
+  let results = (outs Builtin_Tuple:$result);
+
+  let assemblyFormat = [{
+    ($elements^ `:` qualified(type($elements)))? attr-dict
+  }];
+}
+
+def TupleExtractOp : RTGOp<"tuple_extract", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "get an element from a tuple";
+
+  let arguments = (ins Builtin_Tuple:$tuple, IndexAttr:$index);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $tuple `at` $index `:` qualified(type($tuple)) attr-dict
   }];
 }
 

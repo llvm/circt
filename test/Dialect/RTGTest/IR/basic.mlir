@@ -2,10 +2,12 @@
 
 // CHECK-LABEL: @cpus
 // CHECK-SAME: !rtgtest.cpu
-rtg.target @cpus : !rtg.dict<cpu: !rtgtest.cpu> {
-  // CHECK: rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
+rtg.target @cpus : !rtg.dict<cpu: !rtgtest.cpu, hartid: index> {
+  // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
   %0 = rtg.constant #rtgtest.cpu<0>
-  rtg.yield %0 : !rtgtest.cpu
+  // CHECK: rtgtest.get_hartid [[V0]]
+  %1 = rtgtest.get_hartid %0
+  rtg.yield %0, %1 : !rtgtest.cpu, index
 }
 
 rtg.test @misc() {

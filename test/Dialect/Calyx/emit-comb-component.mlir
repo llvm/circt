@@ -14,7 +14,7 @@ module attributes {calyx.entrypoint = "main"} {
       calyx.assign %1#0 = %in : i32
       // CHECK: add0.right = 32'd1;
       calyx.assign %1#1 = %0 : i32
-      // CHECK: mux0.cond = 1'd1;
+      // CHECK: mux0.cond = 1'b1;
       calyx.assign %2#0 = %3 : i1
       // CHECK: out = add0.out;
       calyx.assign %out = %1#2 : i32
@@ -27,7 +27,7 @@ module attributes {calyx.entrypoint = "main"} {
     %A.in, %A.out = calyx.instance @A_0 of @A : i32, i32
 
     calyx.wires {
-      // CHECK: done = 1'd1;
+      // CHECK: done = 1'b1;
       calyx.assign %done = %c1_1 : i1
       // CHECK: A_0.in = in;
       calyx.assign %A.in = %in : i32

@@ -28,22 +28,22 @@ circuit PrintTest:
     input a : UInt<8>
 
     ; CHECK: if ((`PRINTF_COND_) & cond) begin
-    ; CHECK: $fwrite(`PRINTF_FD_, "binary: %b %0b %8b\n", a, a, a);
+    ; CHECK: $fwrite(32'h80000002, "binary: %b %0b %8b\n", a, a, a);
     printf(clock, cond, "binary: %b %0b %8b\n", a, a, a)
 
-    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "decimal: %d %0d %3d\n", a, a, a);
+    ; CHECK-NEXT: $fwrite(32'h80000002, "decimal: %d %0d %3d\n", a, a, a);
     printf(clock, cond, "decimal: %d %0d %3d\n", a, a, a)
 
-    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "hexadecimal: %x %0x %2x\n", a, a, a);
+    ; CHECK-NEXT: $fwrite(32'h80000002, "hexadecimal: %x %0x %2x\n", a, a, a);
     printf(clock, cond, "hexadecimal: %x %0x %2x\n", a, a, a)
 
-    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "ASCII character: %c\n", a);
+    ; CHECK-NEXT: $fwrite(32'h80000002, "ASCII character: %c\n", a);
     printf(clock, cond, "ASCII character: %c\n", a)
 
-    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "literals: %%\n");
+    ; CHECK-NEXT: $fwrite(32'h80000002, "literals: %%\n");
     printf(clock, cond, "literals: %%\n")
 
-    ; CHECK-NEXT: $fwrite(`PRINTF_FD_, "[%0t]: %m\n", $time);
+    ; CHECK-NEXT: $fwrite(32'h80000002, "[%0t]: %m\n", $time);
     ; CHECK-NEXT: end
     printf(clock, cond, "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
 
@@ -59,7 +59,7 @@ circuit PrintTest:
     node c = UInt<8>(97)
     fprintf(clock, cond, "{{HierarchicalModuleName}}%c.txt", c, "[{{SimulationTime}}]: static file name (w/ substitution)\n")
 
-    ; CHECK-NEXT: $fflush(`PRINTF_FD_);
+    ; CHECK-NEXT: $fflush(32'h80000002);
     ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0 = __circt_lib_logging::FileDescriptor::get($sformatf("%0t%d.txt",
     ; CHECK-NEXT:                                                                                                      $time,
     ; CHECK-NEXT:                                                                                                      a));

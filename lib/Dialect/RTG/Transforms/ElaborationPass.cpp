@@ -18,6 +18,7 @@
 #include "circt/Dialect/RTG/IR/RTGVisitors.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -93,6 +94,7 @@ struct InterleavedSequenceStorage;
 struct SetStorage;
 struct VirtualRegisterStorage;
 struct UniqueLabelStorage;
+struct TupleStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -111,7 +113,7 @@ using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *>;
+                 LabelValue, ArrayStorage *, TupleStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -385,6 +387,22 @@ struct ArrayStorage {
   const SmallVector<ElaboratorValue> array;
 };
 
+/// Storage object for 'tuple`-typed values.
+struct TupleStorage {
+  TupleStorage(SmallVector<ElaboratorValue> &&values)
+      : hashcode(llvm::hash_combine_range(values.begin(), values.end())),
+        values(std::move(values)) {}
+
+  bool isEqual(const TupleStorage *other) const {
+    return hashcode == other->hashcode && values == other->values;
+  }
+
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
+
+  const SmallVector<ElaboratorValue> values;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -431,6 +449,8 @@ private:
       return internedRandomizedSequences;
     else if constexpr (std::is_same_v<StorageTy, InterleavedSequenceStorage>)
       return internedInterleavedSequences;
+    else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
+      return internedTuples;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -455,6 +475,8 @@ private:
   DenseSet<HashedStorage<InterleavedSequenceStorage>,
            StorageKeyInfo<InterleavedSequenceStorage>>
       internedInterleavedSequences;
+  DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
+      internedTuples;
 };
 
 } // namespace
@@ -532,6 +554,13 @@ static void print(const UniqueLabelStorage *val, llvm::raw_ostream &os) {
 
 static void print(const LabelValue &val, llvm::raw_ostream &os) {
   os << "<label " << val.name << ">";
+}
+
+static void print(const TupleStorage *val, llvm::raw_ostream &os) {
+  os << "<tuple (";
+  llvm::interleaveComma(val->values, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << ")>";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -714,7 +743,7 @@ private:
       elements.push_back(materialized);
     }
 
-    auto res = builder.create<ArrayCreateOp>(loc, val->type, elements);
+    Value res = builder.create<ArrayCreateOp>(loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -817,6 +846,18 @@ private:
     return res;
   }
 
+  Value visit(TupleStorage *val, Location loc,
+              std::queue<RandomizedSequenceStorage *> &elabRequests,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> materialized;
+    materialized.reserve(val->values.size());
+    for (auto v : val->values)
+      materialized.push_back(materialize(v, loc, elabRequests, emitError));
+    Value res = builder.create<TupleCreateOp>(loc, materialized);
+    materializedValues[val] = res;
+    return res;
+  }
+
 private:
   /// Cache values we have already materialized to reuse them later. We start
   /// with an insertion point at the start of the block and cache the (updated)
@@ -884,27 +925,38 @@ public:
     return std::get<ValueTy>(state.at(val));
   }
 
-  FailureOr<DeletionKind> visitConstantLike(Operation *op) {
-    assert(op->hasTrait<OpTrait::ConstantLike>() &&
-           "op is expected to be constant-like");
+  FailureOr<DeletionKind> visitPureOp(Operation *op) {
+    SmallVector<Attribute> operands;
+    for (auto operand : op->getOperands()) {
+      auto evalValue = state[operand];
+      if (std::holds_alternative<TypedAttr>(evalValue))
+        operands.push_back(std::get<TypedAttr>(evalValue));
+      else
+        return visitUnhandledOp(op);
+    }
 
-    SmallVector<OpFoldResult, 1> result;
-    auto foldResult = op->fold(result);
-    (void)foldResult; // Make sure there is a user when assertions are off.
-    assert(succeeded(foldResult) &&
-           "constant folder of a constant-like must always succeed");
-    auto attr = dyn_cast<TypedAttr>(result[0].dyn_cast<Attribute>());
-    if (!attr)
-      return op->emitError(
-          "only typed attributes supported for constant-like operations");
+    SmallVector<OpFoldResult> results;
+    if (failed(op->fold(operands, results)))
+      return visitUnhandledOp(op);
 
-    auto intAttr = dyn_cast<IntegerAttr>(attr);
-    if (intAttr && isa<IndexType>(attr.getType()))
-      state[op->getResult(0)] = size_t(intAttr.getInt());
-    else if (intAttr && intAttr.getType().isSignlessInteger(1))
-      state[op->getResult(0)] = bool(intAttr.getInt());
-    else
-      state[op->getResult(0)] = attr;
+    // We don't support in-place folders.
+    if (results.size() != op->getNumResults())
+      return visitUnhandledOp(op);
+
+    for (auto [res, val] : llvm::zip(results, op->getResults())) {
+      auto attr = llvm::dyn_cast_or_null<TypedAttr>(res.dyn_cast<Attribute>());
+      if (!attr)
+        return op->emitError(
+            "only typed attributes supported for constant-like operations");
+
+      auto intAttr = dyn_cast<IntegerAttr>(attr);
+      if (intAttr && isa<IndexType>(attr.getType()))
+        state[op->getResult(0)] = size_t(intAttr.getInt());
+      else if (intAttr && intAttr.getType().isSignlessInteger(1))
+        state[op->getResult(0)] = bool(intAttr.getInt());
+      else
+        state[op->getResult(0)] = attr;
+    }
 
     return DeletionKind::Delete;
   }
@@ -915,8 +967,9 @@ public:
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
-    if (op->hasTrait<OpTrait::ConstantLike>())
-      return visitConstantLike(op);
+    auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
+    if (op->hasTrait<OpTrait::ConstantLike>() || (memOp && memOp.hasNoEffect()))
+      return visitPureOp(op);
 
     // TODO: we only have this to be able to write tests for this pass without
     // having to add support for more operations for now, so it should be
@@ -927,9 +980,7 @@ public:
     return visitUnhandledOp(op);
   }
 
-  FailureOr<DeletionKind> visitOp(ConstantOp op) {
-    return visitConstantLike(op);
-  }
+  FailureOr<DeletionKind> visitOp(ConstantOp op) { return visitPureOp(op); }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
     SmallVector<ElaboratorValue> replacements;
@@ -1068,6 +1119,52 @@ public:
     return DeletionKind::Delete;
   }
 
+  // {a0,a1} x {b0,b1} x {c0,c1} -> {(a0), (a1)} -> {(a0,b0), (a0,b1), (a1,b0),
+  // (a1,b1)} -> {(a0,b0,c0), (a0,b0,c1), (a0,b1,c0), (a0,b1,c1), (a1,b0,c0),
+  // (a1,b0,c1), (a1,b1,c0), (a1,b1,c1)}
+  FailureOr<DeletionKind> visitOp(SetCartesianProductOp op) {
+    SetVector<ElaboratorValue> result;
+    SmallVector<SmallVector<ElaboratorValue>> tuples;
+    tuples.push_back({});
+
+    for (auto input : op.getInputs()) {
+      auto &set = get<SetStorage *>(input)->set;
+      if (set.empty()) {
+        SetVector<ElaboratorValue> empty;
+        state[op.getResult()] =
+            sharedState.internalizer.internalize<SetStorage>(std::move(empty),
+                                                             op.getType());
+        return DeletionKind::Delete;
+      }
+
+      for (unsigned i = 0, e = tuples.size(); i < e; ++i) {
+        for (auto setEl : set.getArrayRef().drop_back()) {
+          tuples.push_back(tuples[i]);
+          tuples.back().push_back(setEl);
+        }
+        tuples[i].push_back(set.back());
+      }
+    }
+
+    for (auto &tup : tuples)
+      result.insert(
+          sharedState.internalizer.internalize<TupleStorage>(std::move(tup)));
+
+    state[op.getResult()] = sharedState.internalizer.internalize<SetStorage>(
+        std::move(result), op.getType());
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(SetConvertToBagOp op) {
+    auto set = get<SetStorage *>(op.getInput())->set;
+    MapVector<ElaboratorValue, uint64_t> bag;
+    for (auto val : set)
+      bag.insert({val, 1});
+    state[op.getResult()] = sharedState.internalizer.internalize<BagStorage>(
+        std::move(bag), op.getType());
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(BagCreateOp op) {
     MapVector<ElaboratorValue, uint64_t> bag;
     for (auto [val, multiple] :
@@ -1159,8 +1256,18 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(BagConvertToSetOp op) {
+    auto bag = get<BagStorage *>(op.getInput())->bag;
+    SetVector<ElaboratorValue> set;
+    for (auto [k, v] : bag)
+      set.insert(k);
+    state[op.getResult()] = sharedState.internalizer.internalize<SetStorage>(
+        std::move(set), op.getType());
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(FixedRegisterOp op) {
-    return visitConstantLike(op);
+    return visitPureOp(op);
   }
 
   FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {
@@ -1208,6 +1315,26 @@ public:
              << idx << " of an array with " << array.size() << " elements";
 
     state[op.getResult()] = array[idx];
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ArrayInjectOp op) {
+    auto array = get<ArrayStorage *>(op.getArray())->array;
+    size_t idx = get<size_t>(op.getIndex());
+
+    if (array.size() <= idx)
+      return op->emitError("invalid to access index ")
+             << idx << " of an array with " << array.size() << " elements";
+
+    array[idx] = state[op.getValue()];
+    state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
+        op.getResult().getType(), std::move(array));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ArraySizeOp op) {
+    auto array = get<ArrayStorage *>(op.getArray())->array;
+    state[op.getResult()] = array.size();
     return DeletionKind::Delete;
   }
 
@@ -1312,6 +1439,23 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(TupleCreateOp op) {
+    SmallVector<ElaboratorValue> values;
+    values.reserve(op.getElements().size());
+    for (auto el : op.getElements())
+      values.push_back(state[el]);
+
+    state[op.getResult()] =
+        sharedState.internalizer.internalize<TupleStorage>(std::move(values));
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(TupleExtractOp op) {
+    auto *tuple = get<TupleStorage *>(op.getTuple());
+    state[op.getResult()] = tuple->values[op.getIndex().getZExtValue()];
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
     auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();
@@ -1379,6 +1523,54 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(arith::AddIOp op) {
+    if (!isa<IndexType>(op.getType()))
+      return op->emitError("only index operands supported");
+
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs + rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::AndIOp op) {
+    if (!op.getType().isSignlessInteger(1))
+      return op->emitError("only 'i1' operands supported");
+
+    bool lhs = get<bool>(op.getLhs());
+    bool rhs = get<bool>(op.getRhs());
+    state[op.getResult()] = lhs && rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::XOrIOp op) {
+    if (!op.getType().isSignlessInteger(1))
+      return op->emitError("only 'i1' operands supported");
+
+    bool lhs = get<bool>(op.getLhs());
+    bool rhs = get<bool>(op.getRhs());
+    state[op.getResult()] = lhs != rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::OrIOp op) {
+    if (!op.getType().isSignlessInteger(1))
+      return op->emitError("only 'i1' operands supported");
+
+    bool lhs = get<bool>(op.getLhs());
+    bool rhs = get<bool>(op.getRhs());
+    state[op.getResult()] = lhs || rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(arith::SelectOp op) {
+    bool cond = get<bool>(op.getCondition());
+    auto trueVal = state[op.getTrueValue()];
+    auto falseVal = state[op.getFalseValue()];
+    state[op.getResult()] = cond ? trueVal : falseVal;
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(index::AddOp op) {
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
@@ -1419,6 +1611,9 @@ public:
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
         .Case<
+            // Arith ops
+            arith::AddIOp, arith::XOrIOp, arith::AndIOp, arith::OrIOp,
+            arith::SelectOp,
             // Index ops
             index::AddOp, index::CmpOp,
             // SCF ops

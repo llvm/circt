@@ -225,14 +225,23 @@ static cl::opt<bool> withDC("dc", cl::desc("Use the DC flow"), cl::init(false),
 static LoweringOptionsOption loweringOptions(mainCategory);
 
 // --------------------------------------------------------------------------
+// Calyx options
+// --------------------------------------------------------------------------
+static cl::opt<std::string> topLevelFunction("top-level-function",
+                                             cl::desc("Top level function"),
+                                             cl::init(""),
+                                             cl::cat(mainCategory));
+
+// --------------------------------------------------------------------------
 // (Configurable) pass pipelines
 // --------------------------------------------------------------------------
 
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
-  config.useTopDownTraversal = true;
-  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
+  config.setUseTopDownTraversal(true);
+  config.setRegionSimplificationLevel(
+      mlir::GreedySimplifyRegionLevel::Disabled);
   return mlir::createCanonicalizerPass(config);
 }
 
@@ -412,8 +421,9 @@ static LogicalResult doHLSFlowCalyx(
   });
 
   // Lower to Calyx
-  addIRLevel(IRLevel::Core,
-             [&]() { pm.addPass(circt::createSCFToCalyxPass()); });
+  addIRLevel(IRLevel::Core, [&]() {
+    pm.addPass(circt::createSCFToCalyxPass(topLevelFunction));
+  });
 
   // Run Calyx transforms
   addIRLevel(IRLevel::PostCompile, [&]() {

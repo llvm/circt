@@ -31,7 +31,8 @@ static constexpr std::string_view sPortNameAttr = "calyx.port_name";
 } // namespace scfToCalyx
 
 /// Create an SCF to Calyx conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> createSCFToCalyxPass();
+std::unique_ptr<OperationPass<ModuleOp>>
+createSCFToCalyxPass(std::string topLevelFunction = "");
 
 } // namespace circt
 

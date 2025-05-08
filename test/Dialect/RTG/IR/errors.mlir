@@ -138,6 +138,14 @@ rtg.sequence @seq() {
 
 // -----
 
+rtg.sequence @setCartesianProduct() {
+  // expected-error @below {{at least one set must be provided}}
+  // expected-error @below {{failed to infer returned types}}
+  %0 = "rtg.set_cartesian_product"() : () -> (!rtg.set<tuple<index>>)
+}
+
+// -----
+
 rtg.sequence @seq() {
   // expected-error @below {{expected 1 or more operands, but found 0}}
   rtg.bag_union : !rtg.bag<i32>
@@ -203,4 +211,18 @@ rtg.test @test(a = %a: i32, b = %b: index) {
 rtg.test @test(a = %a: i32, b = %b: index) {
   // expected-error @below {{requires all operands to have the same type}}
   "rtg.array_create"(%a, %b) : (i32, index) -> (!rtg.array<index>)
+}
+
+// -----
+
+rtg.test @emptyTuple() {
+  // expected-error @below {{empty tuples not allowed}}
+  %0 = rtg.tuple_create
+}
+
+// -----
+
+rtg.test @tupleExtractOOB(tup = %tup : tuple<index, i1>) {
+  // expected-error @below {{index (2) must be smaller than number of elements in tuple (2)}}
+  rtg.tuple_extract %tup at 2 : tuple<index, i1>
 }

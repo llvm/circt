@@ -367,6 +367,10 @@ public:
     });
 
     if (!writeJson.empty()) {
+      auto &extMemData = getState<ComponentLoweringState>().getExtMemData();
+      if (extMemData.getAsObject()->empty())
+        return success();
+
       if (auto fileLoc = dyn_cast<mlir::FileLineColLoc>(funcOp->getLoc())) {
         std::string filename = fileLoc.getFilename().str();
         std::filesystem::path path(filename);
@@ -381,7 +385,7 @@ public:
         }
         llvm::raw_os_ostream llvmOut(outFile);
         llvm::json::OStream jsonOS(llvmOut, /*IndentSize=*/2);
-        jsonOS.value(getState<ComponentLoweringState>().getExtMemData());
+        jsonOS.value(extMemData);
         jsonOS.flush();
         outFile.close();
       }
@@ -693,6 +697,9 @@ private:
           loc, cast<calyx::IntToFpOpIEEE754>(calyxOp).getSignedIn(), c1);
     }
     op.getResult().replaceAllUsesWith(reg.getOut());
+
+    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), calyxOp.getOut());
+    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), c1);
 
     rewriter.create<calyx::AssignOp>(
         loc, calyxOp.getGo(), c1,
@@ -2574,8 +2581,10 @@ using namespace circt::scftocalyx;
 //===----------------------------------------------------------------------===//
 class SCFToCalyxPass : public circt::impl::SCFToCalyxBase<SCFToCalyxPass> {
 public:
-  SCFToCalyxPass()
-      : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {}
+  SCFToCalyxPass(std::string topLevelFunction)
+      : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {
+    this->topLevelFunctionOpt = topLevelFunction;
+  }
   void runOnOperation() override;
 
   LogicalResult setTopLevelFunction(mlir::ModuleOp moduleOp,
@@ -2684,10 +2693,10 @@ public:
     // will only be established later in the conversion process, so ensure
     // that rewriter optimizations (especially DCE) are disabled.
     GreedyRewriteConfig config;
-    config.enableRegionSimplification =
-        mlir::GreedySimplifyRegionLevel::Disabled;
+    config.setRegionSimplificationLevel(
+        mlir::GreedySimplifyRegionLevel::Disabled);
     if (runOnce)
-      config.maxIterations = 1;
+      config.setMaxIterations(1);
 
     /// Can't return applyPatternsGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,
@@ -3038,8 +3047,9 @@ void SCFToCalyxPass::runOnOperation() {
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<OperationPass<ModuleOp>> createSCFToCalyxPass() {
-  return std::make_unique<SCFToCalyxPass>();
+std::unique_ptr<OperationPass<ModuleOp>>
+createSCFToCalyxPass(std::string topLevelFunction) {
+  return std::make_unique<SCFToCalyxPass>(topLevelFunction);
 }
 
 } // namespace circt
