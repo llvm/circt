@@ -336,9 +336,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   auto getOrCreateNodeOp = [&](Value operand,
                                ImplicitLocOpBuilder &builder) -> Operation * {
     // Use the cache hit.
-    auto it = nameableCache.find(operand);
-    if (it != nameableCache.end())
-      return it->getSecond();
+    auto *nodeOp = nameableCache.lookup(operand);
+    if (nodeOp)
+      return nodeOp;
 
     // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
@@ -355,12 +355,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         nameHint.append(opName);
       }
     }
-    return nameableCache
-        .insert({operand, builder.create<NodeOp>(operand.getLoc(), operand,
-                                                 nameHint.empty()
-                                                     ? "_layer_probe"
-                                                     : StringRef(nameHint))})
-        .first->getSecond();
+    return nodeOp = builder.create<NodeOp>(
+               operand.getLoc(), operand,
+               nameHint.empty() ? "_layer_probe" : StringRef(nameHint));
   };
 
   // Determine the replacement for an operand within the current region.  Keep a
