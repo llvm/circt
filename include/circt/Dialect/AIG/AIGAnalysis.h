@@ -87,7 +87,7 @@ struct Point {
   circt::igraph::InstancePath path;
   int64_t delay = -1;
   llvm::ImmutableList<DebugPoint> history;
-  Point(Value value, size_t bitPos, circt::igraph::InstancePath path,
+  Point(Value value, size_t bitPos, circt::igraph::InstancePath path = {},
         int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
       : value(value), bitPos(bitPos), path(path), delay(delay),
         history(history) {
