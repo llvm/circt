@@ -379,6 +379,8 @@ StringAttr BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 hw::OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
                                                      StringAttr fileNameAttr,
                                                      bool isCover) {
+  // If the original operation has a specified output file that is not a
+  // directory, then just use that.
   auto outputFile = origOp->getAttrOfType<hw::OutputFileAttr>("output_file");
   if (outputFile && !outputFile.isDirectory()) {
     return {outputFile};
@@ -392,16 +394,15 @@ hw::OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = targetDir;
 
-  // If the original operation has a specified output file that is not a
-  // directory, then just use that.
+  /// If the original operation has an output directory, use that.
   if (outputFile)
     outDir = outputFile.getFilename();
   // In order to output into the testbench directory, we need to have a
   // testbench dir annotation, not have a blackbox target directory annotation
   // (or one set to the current directory), have a DUT annotation, and the
-  // module needs to be in or under the effective design.
+  // module must not be instantiated under the DUT.
   else if (!testBenchDir.empty() && targetDir == "." &&
-           !instanceInfo->allInstancesInEffectiveDesign(
+           !instanceInfo->anyInstanceInEffectiveDesign(
                cast<igraph::ModuleOpInterface>(origOp)))
     outDir = testBenchDir;
   else if (isCover)
