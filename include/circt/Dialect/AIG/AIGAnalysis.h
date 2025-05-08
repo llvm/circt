@@ -97,7 +97,6 @@ struct Point {
   bool operator>(const Point &other) const { return delay > other.delay; }
   bool operator<(const Point &other) const { return delay < other.delay; }
 
-
   void print(llvm::raw_ostream &os) const;
 };
 
