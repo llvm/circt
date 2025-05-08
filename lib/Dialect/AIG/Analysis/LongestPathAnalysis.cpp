@@ -189,7 +189,7 @@ struct Impl {
     LogicalResult run();
 
     SmallVector<Point> startingPoints;
-    llvm::PriorityQueue<Point, std::vector<Point>, std::greater<Point>>
+    std::priority_queue<Point, std::vector<Point>, std::greater<Point>>
         savedFanIn;
 
     SmallVector<std::pair<Point, Point>> results;
@@ -202,7 +202,7 @@ struct Impl {
     DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>,
              std::pair<int64_t, bool>>
         visited;
-    llvm::PriorityQueue<Point, std::vector<Point>, std::less<Point>> worklist;
+    std::priority_queue<Point, std::vector<Point>, std::less<Point>> worklist;
 
     using SavedPoint =
         llvm::MapVector<std::tuple<circt::igraph::InstancePath, Value, size_t>,
@@ -212,6 +212,7 @@ struct Impl {
         fromInputPortToFanOut;
     llvm::MapVector<std::tuple<size_t, size_t>, SavedPoint>
         fromOutputPortToFanIn;
+    llvm::MapVector<std::pair<Value, size_t>, SavedPoint> valueCache;
 
     bool useCache(const Point &point);
     LogicalResult run(Point origin, Point start);
@@ -241,7 +242,6 @@ struct Impl {
     void addEdge(Point from, int64_t delay, Value to, size_t bitPos);
     void markFanIn(const Point &point);
     void addToWorklist(Point point);
-    LogicalResult setFanOut(Point point);
 
     igraph::InstanceGraph *instanceGraph;
 
@@ -276,26 +276,39 @@ struct Impl {
     }
     llvm::SetVector<StringAttr> running;
 
+    void notifyStart(StringAttr name) {
+      std::lock_guard<llvm::sys::SmartMutex<true>> lock(mutex);
+      running.insert(name);
+      llvm::errs() << "[Timing] " << name << " started. running=[";
+      for (auto &name : running)
+        llvm::errs() << name << " ";
+      llvm::errs() << "]\n";
+    }
+    void notifyEnd(StringAttr name) {
+      std::lock_guard<llvm::sys::SmartMutex<true>> lock(mutex);
+      running.remove(name);
+
+      llvm::errs() << "[Timing] " << name << " finished. running=[";
+      for (auto &name : running)
+        llvm::errs() << name << " ";
+      llvm::errs() << "]\n";
+    }
+
     llvm::MapVector<StringAttr, std::unique_ptr<Runner>> runners;
   };
 };
 
-LogicalResult Impl::Runner::setFanOut(Point output) {
-  currentStartingPoint = output;
-  return TypeSwitch<Operation *, LogicalResult>(output.value.getDefiningOp())
-      .Case<seq::FirRegOp>([&](seq::FirRegOp op) {
-        // TODO: Add dependency to reset line.
-        Point point(op.getNext(), output.bitPos, output.path, 0);
-        addToWorklist(point);
-        return success();
-      })
-      .Default([&](auto) { return failure(); });
-}
-
 void Impl::Runner::addToWorklist(Point point) {
+  if (auto *op = point.value.getDefiningOp())
+    if (op->hasTrait<mlir::OpTrait::ConstantLike>())
+      return;
   auto it = visited.find({point.path, point.value, point.bitPos});
-  if (it != visited.end() && it->second.first >= point.delay)
+  if (it != visited.end() && it->second.first >= point.delay) {
+    // llvm::errs() << "Skipping " << point.delay << " <= ";
+    // point.print(llvm::errs());
+    // llvm::errs() << " (already visited with " << it->second.first << ")\n";
     return;
+  }
   visited[{point.path, point.value, point.bitPos}] = {point.delay, false};
   worklist.push(point);
 }
@@ -350,43 +363,42 @@ concatList(llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
 }
 
 bool Impl::Runner::useCache(const Point &point) {
-  return false;
-  // auto it = inputCache.find({point.path, point.value, point.bitPos});
-  // if (it == inputCache.end())
-  //   return false;
-  // auto &m = it->second;
-  // for (auto &[key, value] : m) {
-  //   auto history = value.second;
-  //   history = mapList(debugPointFactory.get(), history, [&](DebugPoint p) {
-  //     return DebugPoint(p.path, p.value, p.bitPos, p.delay + point.delay,
-  //                       p.comment);
-  //   });
+  auto it = valueCache.find({point.value, point.bitPos});
+  if (it == valueCache.end())
+    return false;
+  auto &m = it->second;
+  for (auto &[key, value] : m) {
+    auto history = value.second;
+    history = mapList(debugPointFactory.get(), history, [&](DebugPoint p) {
+      p.delay += point.delay;
+      return p;
+    });
 
-  //   Point newPoint(std::get<1>(key), std::get<2>(key), std::get<0>(key),
-  //                  value.first + point.delay, history);
-  //   addToWorklist(newPoint);
-  // }
+    Point newPoint(std::get<1>(key), std::get<2>(key), std::get<0>(key),
+                   value.first + point.delay, history);
+    addToWorklist(newPoint);
+  }
+
   return true;
 }
 
 void Impl::Runner::markFanIn(const Point &point) {
   auto currentHistory = point.history;
-  // while (!currentHistory.isEmpty()) {
-  //   auto head = currentHistory.getHead();
-  //   currentHistory = currentHistory.getTail();
-  //   // auto &m = inputCache[{head.path, head.value, head.bitPos}];
-  //   // if (!m.count({point.path, point.value, point.bitPos})) {
-  //   //   m[{point.path, point.value, point.bitPos}] = {
-  //   //       point.delay - head.delay,
-  //   //       mapList(debugPointFactory.get(), currentHistory, [&](DebugPoint
-  //   p)
-  //   //       {
-  //   //         return DebugPoint(p.path, p.value, p.bitPos, p.delay -
-  //   //         head.delay,
-  //   //                           p.comment);
-  //   //       })};
-  //   // }
-  // }
+  while (!currentHistory.isEmpty()) {
+    auto head = currentHistory.getHead();
+    currentHistory = currentHistory.getTail();
+    if (!head.value)
+      continue;
+    auto &m = valueCache[{head.value, head.bitPos}];
+    if (!m.count({point.path, point.value, point.bitPos})) {
+      m[{point.path, point.value, point.bitPos}] = {
+          point.delay - head.delay,
+          mapList(debugPointFactory.get(), currentHistory, [&](DebugPoint p) {
+            return DebugPoint(p.path, p.value, p.bitPos, p.delay - head.delay,
+                              p.comment);
+          })};
+    }
+  }
   if (point.delay > longestPath.delay) {
     longestPath = point;
   }
@@ -466,6 +478,8 @@ LogicalResult Impl::Runner::visit(const Point &point, hw::InstanceOp op) {
                           delay + point.delay, newHistory));
 
     } else {
+
+      assert((isa<seq::FirRegOp, hw::InstanceOp>(start.getDefiningOp())));
       addToWorklist(
           Point(start, startBitPos, newPath, delay + point.delay, newHistory));
     }
@@ -534,11 +548,18 @@ LogicalResult Impl::Runner::run(Point origin, Point start) {
   assert(worklist.empty());
   currentStartingPoint = origin;
   addToWorklist(start);
-  size_t sz = 0;
+  size_t sz1 = 0, sz2 = 0;
   while (!worklist.empty()) {
-    sz++;
-
     auto current = worklist.top();
+    sz1++;
+    if (sz1 % 1000000 == 0) {
+      std::lock_guard<llvm::sys::SmartMutex<true>> lock(ctx->mutex);
+      llvm::errs() << "[Timing] " << module.getModuleNameAttr() << " "
+                   << sz1 / 1000 << "k " << sz2 / 1000 << "k\n";
+
+      current.print(llvm::errs());
+      llvm::errs() << "\n";
+    }
     LLVM_DEBUG({
       llvm::dbgs() << "Visiting: ";
       current.path.print(llvm::dbgs());
@@ -553,6 +574,7 @@ LogicalResult Impl::Runner::run(Point origin, Point start) {
     if (maxDelay > current.delay ||
         (maxDelay == current.delay && maxDelayVisited))
       continue;
+    sz2++;
     maxDelayVisited = true;
 
     if (auto blockArg = dyn_cast<mlir::BlockArgument>(value)) {
@@ -586,7 +608,7 @@ LogicalResult Impl::Runner::run(Point origin, Point start) {
 LogicalResult Impl::Runner::run() {
   // Show elapsed time.
   auto start = std::chrono::steady_clock::now();
-  llvm::errs() << "[Timing] Running " << module.getModuleNameAttr() << "\n";
+  ctx->notifyStart(module.getModuleNameAttr());
   size_t e = startingPoints.size();
   size_t reportSize = (e + 19) / 20;
   size_t index = 0;
@@ -619,7 +641,6 @@ LogicalResult Impl::Runner::run() {
           auto newHistory =
               mapList(debugPointFactory.get(), history, [&](DebugPoint p) {
                 p.path = newPath;
-                p.delay = p.delay;
                 return p;
               });
           if (failed(run(Point(start, startBitPos, newPath),
@@ -680,6 +701,7 @@ LogicalResult Impl::Runner::run() {
       llvm::errs() << "\n";
     }
   }
+  ctx->notifyEnd(module.getModuleNameAttr());
 
   done.store(true);
   return success();
@@ -720,9 +742,6 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
     if (!isa_and_nonnull<hw::HWModuleOp>(op) || !visited.insert(op))
       continue;
 
-    ctx.runners[op.getModuleNameAttr()] = std::make_unique<Runner>(
-        cast<hw::HWModuleOp>(*op), &instanceGraph, &ctx);
-
     for (auto *child : *node) {
       auto childOp = child->getInstance();
       if (!childOp || childOp->hasAttr("doNotPrint"))
@@ -731,6 +750,16 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
       worklist.push_back(child->getTarget());
     }
   }
+
+  SmallVector<hw::HWModuleOp> underHierarchy;
+  for (auto *node : llvm::post_order(topNode))
+    if (node && node->getModule())
+      if (auto hwMod = dyn_cast<hw::HWModuleOp>(*node->getModule())) {
+        if (visited.contains(hwMod))
+          ctx.runners.insert(
+              {hwMod.getModuleNameAttr(),
+               std::make_unique<Runner>(hwMod, &instanceGraph, &ctx)});
+      }
 
   // std::vector<Runner> runners;
   // for (size_t i = 0, e = top.getContext()->getNumThreads(); i < e;
@@ -751,9 +780,9 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
 
   // NOTE: Reverse order to perform bottom-up traversal.
 
-  auto result = mlir::failableParallelForEach(
-      top.getContext(), llvm::reverse(ctx.runners),
-      [&](auto &it) { return it.second->run(); });
+  auto result =
+      mlir::failableParallelForEach(top.getContext(), ctx.runners,
+                                    [&](auto &it) { return it.second->run(); });
   // for (auto &runner : runners)
   //   runner.run();
 

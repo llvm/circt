@@ -17,6 +17,7 @@
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -174,7 +175,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
       return;
     mpm.addPass(createSimpleCanonicalizerPass());
     mpm.addPass(createCSEPass());
-    mpm.addPass(aig::createLowerVariadic());
+    // mpm.addPass(aig::createLowerVariadic());
     // TODO: LowerWordToBits is not scalable for large designs. Change to
     // conditionally enable the pass once the rest of the pipeline was able to
     // handle multibit operands properly.
