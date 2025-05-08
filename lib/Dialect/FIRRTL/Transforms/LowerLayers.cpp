@@ -342,7 +342,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointAfter(operand.getDefiningOp());
+    builder.setInsertionPointAfterValue(operand);
     SmallString<16> nameHint;
     // Try to generate a "good" name hint to use for the node.
     if (auto *definingOp = operand.getDefiningOp()) {
