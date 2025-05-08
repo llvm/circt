@@ -330,13 +330,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   hw::InnerSymbolNamespace ns(moduleOp);
 
   // A cache of values to nameable ops that can be used
-  DenseMap<Value, Operation *> nameableCache;
+  DenseMap<Value, Operation *> nodeCache;
 
   // Get or create a node op for a value captured by a layer block.
   auto getOrCreateNodeOp = [&](Value operand,
                                ImplicitLocOpBuilder &builder) -> Operation * {
     // Use the cache hit.
-    auto *nodeOp = nameableCache.lookup(operand);
+    auto *nodeOp = nodeCache.lookup(operand);
     if (nodeOp)
       return nodeOp;
 
