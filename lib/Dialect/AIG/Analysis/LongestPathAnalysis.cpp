@@ -160,6 +160,12 @@ struct Impl {
     Object(circt::igraph::InstancePath path, Value value, size_t bitPos)
         : instancePath(path), value(value), bitPos(bitPos) {}
     Object() = default;
+    void print(llvm::raw_ostream &os) const {
+      os << "Object(";
+      instancePath.print(os);
+      os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos
+         << "])";
+    }
   };
 
   struct LocalGraph {
@@ -230,18 +236,19 @@ struct Impl {
 
     llvm::MapVector<std::pair<BlockArgument, size_t>, SavedPoint>
         fromInputPortToFanOut;
+    llvm::MapVector<std::tuple<size_t, size_t>, SavedPoint>
+        fromOutputPortToFanIn;
 
   private:
     DataflowPath currentStartingPoint;
     DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>,
              std::pair<int64_t, bool>>
         visited;
-    llvm::MapVector<std::tuple<size_t, size_t>, SavedPoint>
-        fromOutputPortToFanIn;
 
     // llvm::DenseMap<std::pair<Value, size_t>, SmallVector<DataflowPath>>
     //     valueCache;
 
+  public:
     llvm::DenseMap<std::tuple<igraph::InstancePath, Value, size_t>,
                    SmallVector<DataflowPath>>
         closedResults;
@@ -321,7 +328,7 @@ struct Impl {
   };
 
   struct Context {
-    Context(size_t numAll) : numAll(numAll){};
+    Context(size_t numAll) : numAll(numAll) {};
     llvm::sys::SmartMutex<true> mutex;
     std::atomic<size_t> numAllProcessed = 0;
     const size_t numAll;
@@ -684,19 +691,36 @@ ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
   if (failed(run(value, bitPos, results)))
     return {};
 
+  size_t before = results.size();
   // Take only maximum for each path destination.
-  llvm::sort(results, std::greater<DataflowPath>());
-  results.erase(std::unique(results.begin(), results.end(),
-                            [](const DataflowPath &a, const DataflowPath &b) {
-                              return a.instancePath == b.instancePath &&
-                                     a.value == b.value && a.bitPos == b.bitPos;
-                            }),
-                results.end());
-  llvm::errs() << "Found " << results.size() << " paths\n";
-
-  for (auto &path : results) {
-    assert((isa<BlockArgument, seq::FirRegOp>(path.value)));
+  DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>, size_t>
+      saved;
+  for (auto [i, path] : llvm::enumerate(results)) {
+    auto &slot = saved[{path.instancePath, path.value, path.bitPos}];
+    if (slot == 0) {
+      slot = i + 1;
+      continue;
+    }
+    if (results[slot - 1].delay < path.delay)
+      results[slot - 1] = path;
   }
+
+  results.resize(saved.size());
+  LLVM_DEBUG({
+    llvm::errs() << value << "[" << bitPos << "] " << "Found " << results.size()
+                 << " ( " << before << " before) paths\n";
+
+    llvm::errs() << "====Paths:\n";
+    for (auto &path : results) {
+      path.print(llvm::errs());
+      llvm::errs() << "\n";
+    }
+    llvm::errs() << "====\n";
+  });
+
+  // for (auto &path : results) {
+  //   assert((isa<BlockArgument, seq::FirRegOp>(path.value)));
+  // }
 
   auto insertedResult =
       cachedResults.try_emplace({{}, value, bitPos}, std::move(results));
@@ -951,8 +975,13 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
 
   SmallVector<std::pair<Object, DataflowPath>> results;
   // TODO: Sort in multithread and merge instead of sorting here.
-  for (auto &[key, runner] : ctx.runners)
-    results.append(runner->results.begin(), runner->results.end());
+  for (auto &[key, runner] : ctx.runners) {
+    for (auto &[point, state] : runner->closedResults) {
+      auto [path, start, startBitPos] = point;
+      for (auto dataFlow : state)
+        results.emplace_back(Object(path, start, startBitPos), dataFlow);
+    }
+  }
 
   for (auto [key, value] : ctx.runners[topNode->getModule().getModuleNameAttr()]
                                ->fromInputPortToFanOut) {
@@ -974,7 +1003,7 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
   for (size_t i = 0; i < std::min<size_t>(100, results.size()); ++i) {
     llvm::errs() << i + 1 << ": delay= " << results[i].second.delay
                  << " fanout=";
-    // results[i].first.print(llvm::errs());
+    results[i].first.print(llvm::errs());
     llvm::errs() << " -> fanin=";
     results[i].second.print(llvm::errs());
     llvm::errs() << "\n";
