@@ -735,6 +735,14 @@ module Expressions;
   bit [31:0] arr2 [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
+  // CHECK: [[STR_HELLO:%.+]] = moore.string_constant "Hello" : i40
+  // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i40 -> !moore.string
+  // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
+  string s = "Hello";
+  // CHECK: [[STR_WORLD:%.+]] = moore.string_constant "World" : i40
+  // CHECK: [[CONV_WORLD:%.+]] = moore.conversion [[STR_WORLD]] : !moore.i40 -> !moore.string
+  // CHECK: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
+  string s1 = "World";
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1168,6 +1176,31 @@ module Expressions;
     // CHECK: [[TMP4:%.+]] = moore.read %arr2
     // CHECK: moore.uarray_cmp ne [[TMP3]], [[TMP4]] : <2 x i32> -> i1
     x = arr1 != arr2;
+
+    // CHECK: [[TMP5:%.+]] = moore.read %s
+    // CHECK: [[TMP6:%.+]] = moore.read %s1
+    // CHECK: moore.string_cmp eq [[TMP5]], [[TMP6]] : string -> i1
+    x = s == s1;
+    // CHECK: [[TMP7:%.+]] = moore.read %s
+    // CHECK: [[TMP8:%.+]] = moore.read %s1
+    // CHECK: moore.string_cmp ne [[TMP7]], [[TMP8]] : string -> i1
+    x = s != s1;
+    // CHECK: [[TMP9:%.+]] = moore.read %s
+    // CHECK: [[TMP10:%.+]] = moore.read %s1
+    // CHECK: moore.string_cmp gt [[TMP9]], [[TMP10]] : string -> i1
+    x = s > s1;
+    // CHECK: [[TMP11:%.+]] = moore.read %s
+    // CHECK: [[TMP12:%.+]] = moore.read %s1
+    // CHECK: moore.string_cmp ge [[TMP11]], [[TMP12]] : string -> i1
+    x = s >= s1;
+    // CHECK: [[TMP13:%.+]] = moore.read %s
+    // CHECK: [[TMP14:%.+]] = moore.read %s1
+    // CHECK: moore.string_cmp lt [[TMP13]], [[TMP14]] : string -> i1
+    x = s < s1;
+    // CHECK: [[TMP15:%.+]] = moore.read %s
+    // CHECK: [[TMP16:%.+]] = moore.read %s1
+    // CHECK: moore.string_cmp le [[TMP15]], [[TMP16]] : string -> i1
+    x = s <= s1;
 
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b

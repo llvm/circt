@@ -922,18 +922,6 @@ endpackage
   }
 
   if (state.usedPrintf) {
-    b.create<sv::MacroDeclOp>("PRINTF_FD");
-    b.create<sv::MacroDeclOp>("PRINTF_FD_");
-    b.create<emit::FragmentOp>("PRINTF_FD_FRAGMENT", [&] {
-      b.create<sv::VerbatimOp>(
-          "\n// Users can define 'PRINTF_FD' to add a specified fd to "
-          "prints.");
-      emitGuard("PRINTF_FD_", [&]() {
-        emitGuardedDefine("PRINTF_FD", "PRINTF_FD_", "(`PRINTF_FD)",
-                          "32'h80000002");
-      });
-    });
-
     b.create<sv::MacroDeclOp>("PRINTF_COND");
     b.create<sv::MacroDeclOp>("PRINTF_COND_");
     b.create<emit::FragmentOp>("PRINTF_COND_FRAGMENT", [&] {
@@ -2655,13 +2643,12 @@ LogicalResult FIRRTLLowering::lowerStatementWithFd(
       }
 
       addIfProceduralBlock(ifCond, [&]() {
-        // Create a value specified by `PRINTF_FD` for printf, or the file
-        // descriptor opened using $fopen for fprintf.
+        // `fd`represents a file decriptor. Use the stdout or the one opened
+        // using $fopen.
         Value fd;
         if (fileDescriptor.isDefaultFd()) {
-          fd = builder.create<sv::MacroRefExprOp>(builder.getIntegerType(32),
-                                                  "PRINTF_FD_");
-          circuitState.addFragment(theModule, "PRINTF_FD_FRAGMENT");
+          // Emit the sv.fwrite, writing to stderr by default.
+          fd = builder.create<hw::ConstantOp>(APInt(32, 0x80000002));
         } else {
           // Call the library function to get the FD.
           auto fdOrError = callFileDescriptorLib(fileDescriptor);

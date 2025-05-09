@@ -347,3 +347,38 @@ circuit BlackBoxLCA: %[[
     layerblock B:
       inst bar of Bar
       connect bar.a, a
+
+; // -----
+
+; When a black box module is instantiated under both the design and the
+; testbench, the black box must be placed in the design (the testbench can refer
+; to modules in the design, but the design must not depend on the testbench).
+
+FIRRTL version 4.0.0
+
+circuit TestHarness: %[[
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~TestHarness|BlackBox",
+    "name": "BlackBox.sv",
+    "text": "module BlackBox();\nendmodule"
+  },
+  {
+    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
+    "target": "~TestHarness|Component"
+  },
+  {
+    "class": "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+    "dirname": "testbench"
+  }
+]]
+  ;; CHECK: FILE ".{{/|\\}}BlackBox.sv"
+  extmodule BlackBox:
+    defname = BlackBox
+
+  public module Component:
+    inst black_box of BlackBox
+  
+  public module TestHarness:
+    inst component of Component
+    inst black_box of BlackBox

@@ -122,6 +122,11 @@ moore.module @Expressions(
   // CHECK-SAME: in [[ARRAY2:%[^:]+]] : !moore.uarray<2 x uarray<4 x i8>>
   in %array2: !moore.uarray<2 x uarray<4 x i8>>,
 
+  // CHECK-SAME: in %s1 : !moore.string
+  in %s1 : !moore.string,
+  // CHECK-SAME: in %s2 : !moore.string
+  in %s2 : !moore.string,
+
   // CHECK-SAME: in [[REF_A:%[^:]+]] : !moore.ref<i32>
   in %refA: !moore.ref<i32>,
   // CHECK-SAME: in [[REF_B:%[^:]+]] : !moore.ref<i32>
@@ -310,6 +315,18 @@ moore.module @Expressions(
   moore.string_constant "Test" : i128
   // CHECK: moore.string_constant "" : i128
   moore.string_constant "" : i128
+  // CHECK: moore.string_cmp eq %s1, %s2 : string -> i1
+  moore.string_cmp eq %s1, %s2 : string -> i1
+  // CHECK: moore.string_cmp ne %s1, %s2 : string -> i1
+  moore.string_cmp ne %s1, %s2 : string -> i1
+  // CHECK: moore.string_cmp lt %s1, %s2 : string -> i1
+  moore.string_cmp lt %s1, %s2 : string -> i1
+  // CHECK: moore.string_cmp le %s1, %s2 : string -> i1
+  moore.string_cmp le %s1, %s2 : string -> i1
+  // CHECK: moore.string_cmp gt %s1, %s2 : string -> i1
+  moore.string_cmp gt %s1, %s2 : string -> i1
+  // CHECK: moore.string_cmp ge %s1, %s2 : string -> i1
+  moore.string_cmp ge %s1, %s2 : string -> i1
 
   moore.output
 }

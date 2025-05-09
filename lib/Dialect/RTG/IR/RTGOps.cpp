@@ -268,6 +268,28 @@ LogicalResult SetCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// SetCartesianProductOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SetCartesianProductOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (operands.empty()) {
+    if (loc)
+      return mlir::emitError(*loc) << "at least one set must be provided";
+    return failure();
+  }
+
+  SmallVector<Type> elementTypes;
+  for (auto operand : operands)
+    elementTypes.push_back(cast<SetType>(operand.getType()).getElementType());
+  inferredReturnTypes.push_back(
+      SetType::get(TupleType::get(context, elementTypes)));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // BagCreateOp
 //===----------------------------------------------------------------------===//
 
@@ -336,6 +358,52 @@ LogicalResult BagCreateOp::verify() {
     if (getElements()[0].getType() != getBag().getType().getElementType())
       return emitOpError() << "operand types must match bag element type";
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TupleCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TupleCreateOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (operands.empty()) {
+    if (loc)
+      return mlir::emitError(*loc) << "empty tuples not allowed";
+    return failure();
+  }
+
+  SmallVector<Type> elementTypes;
+  for (auto operand : operands)
+    elementTypes.push_back(operand.getType());
+  inferredReturnTypes.push_back(TupleType::get(context, elementTypes));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TupleExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TupleExtractOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  assert(operands.size() == 1 && "must have exactly one operand");
+
+  auto tupleTy = dyn_cast<TupleType>(operands[0].getType());
+  size_t idx = properties.as<Properties *>()->getIndex().getInt();
+  if (!tupleTy || tupleTy.getTypes().size() <= idx) {
+    if (loc)
+      return mlir::emitError(*loc)
+             << "index (" << idx
+             << ") must be smaller than number of elements in tuple ("
+             << tupleTy.getTypes().size() << ")";
+    return failure();
+  }
+
+  inferredReturnTypes.push_back(tupleTy.getTypes()[idx]);
   return success();
 }
 

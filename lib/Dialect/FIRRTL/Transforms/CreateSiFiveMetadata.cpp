@@ -165,7 +165,7 @@ struct ObjectModelIR {
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
-    Type classFieldTypes[] = {StringType::get(context)};
+    Type classFieldTypes[] = {StringType::get(context), BoolType::get(context)};
     blackBoxModulesSchemaClass =
         builderOM.create<ClassOp>("SitestBlackBoxModulesSchema",
                                   blackBoxModulesParamNames, classFieldTypes);
@@ -174,7 +174,7 @@ struct ObjectModelIR {
         builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);
   }
 
-  void addBlackBoxModule(FExtModuleOp module) {
+  void addBlackBoxModule(FExtModuleOp module, bool inDut) {
     if (!blackBoxModulesSchemaClass)
       addBlackBoxModulesSchema();
     StringRef defName = *module.getDefname();
@@ -183,11 +183,14 @@ struct ObjectModelIR {
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         module.getLoc(), blackBoxMetadataClass.getBodyBlock());
     auto modEntry = builderOM.create<StringConstantOp>(module.getDefnameAttr());
+    auto inDutAttr = builderOM.create<BoolConstantOp>(inDut);
     auto object = builderOM.create<ObjectOp>(blackBoxModulesSchemaClass,
                                              module.getModuleNameAttr());
 
-    auto inPort = builderOM.create<ObjectSubfieldOp>(object, 0);
-    builderOM.create<PropAssignOp>(inPort, modEntry);
+    auto inPortModuleName = builderOM.create<ObjectSubfieldOp>(object, 0);
+    builderOM.create<PropAssignOp>(inPortModuleName, modEntry);
+    auto inPortInDut = builderOM.create<ObjectSubfieldOp>(object, 2);
+    builderOM.create<PropAssignOp>(inPortInDut, inDutAttr);
     auto portIndex = blackBoxMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
@@ -460,7 +463,7 @@ struct ObjectModelIR {
       "readLatency",   "hierarchy",  "inDut",          "extraPorts",
       "preExtInstName"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
-  StringRef blackBoxModulesParamNames[1] = {"moduleName"};
+  StringRef blackBoxModulesParamNames[2] = {"moduleName", "inDut"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
 }; // namespace
 
@@ -832,12 +835,14 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
       continue;
 
     // Record the defname of the module.
+    bool inDut = false;
     if (instanceInfo->anyInstanceInEffectiveDesign(extModule)) {
+      inDut = true;
       dutModules.push_back(*extModule.getDefname());
     } else {
       testModules.push_back(*extModule.getDefname());
     }
-    omir.addBlackBoxModule(extModule);
+    omir.addBlackBoxModule(extModule, inDut);
   }
 
   // This is a helper to create the verbatim output operation.

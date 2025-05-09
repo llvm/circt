@@ -196,7 +196,7 @@ void AffinePloopUnparallelizePass::runOnOperation() {
   RewritePatternSet patterns(ctx);
   patterns.add<AffinePloopUnparallelize>(ctx);
   GreedyRewriteConfig config;
-  config.strictMode = GreedyRewriteStrictness::ExistingOps;
+  config.setStrictness(GreedyRewriteStrictness::ExistingOps);
   if (failed(
           applyPatternsGreedily(getOperation(), std::move(patterns), config))) {
     signalPassFailure();

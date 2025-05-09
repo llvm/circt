@@ -40,6 +40,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.ImmediateType):
     from .resources import Immediate
     return Immediate(type.width, value)
+  if isinstance(type, ir.TupleType):
+    from .tuples import Tuple
+    return Tuple(value)
   assert False, "Unsupported value"
 
 

@@ -35,6 +35,9 @@ public:
                "Connection string to use for accelerator communication")
         ->required();
     add_flag("--debug", debug, "Enable debug logging");
+#ifdef ESI_RUNTIME_TRACE
+    add_flag("--trace", trace, "Enable trace logging");
+#endif
     add_flag("-v,--verbose", verbose, "Enable verbose (info) logging");
     require_subcommand(0, 1);
   }
@@ -42,7 +45,9 @@ public:
   /// Run the parser.
   int esiParse(int argc, const char **argv) {
     CLI11_PARSE(*this, argc, argv);
-    if (debug)
+    if (trace)
+      ctxt = Context::withLogger<ConsoleLogger>(Logger::Level::Trace);
+    else if (debug)
       ctxt = Context::withLogger<ConsoleLogger>(Logger::Level::Debug);
     else if (verbose)
       ctxt = Context::withLogger<ConsoleLogger>(Logger::Level::Info);
@@ -62,8 +67,9 @@ protected:
 
   std::string backend;
   std::string connStr;
-  bool debug;
-  bool verbose;
+  bool trace = false;
+  bool debug = false;
+  bool verbose = false;
 };
 
 } // namespace esi

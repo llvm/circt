@@ -619,8 +619,12 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     if (!result.value()->isFullyEvaluated())
       return list;
 
-    // Append each EvaluatorValue from the sublist.
+    // Extract this sublist and ensure it's done evaluating.
     evaluator::ListValue *subList = extractList(result.value().get());
+    if (!subList->isFullyEvaluated())
+      return list;
+
+    // Append each EvaluatorValue from the sublist.
     for (auto subValue : subList->getElements())
       values.push_back(subValue);
   }

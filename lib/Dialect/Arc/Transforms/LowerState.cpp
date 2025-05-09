@@ -1189,7 +1189,18 @@ void LowerStatePass::runOnOperation() {
       return signalPassFailure();
     moduleOp.erase();
   }
+
+  SymbolTable symbolTable(op);
   for (auto extModuleOp :
-       llvm::make_early_inc_range(op.getOps<HWModuleExternOp>()))
+       llvm::make_early_inc_range(op.getOps<HWModuleExternOp>())) {
+    // Make sure that we're not leaving behind a dangling reference to this
+    // module
+    auto uses = symbolTable.getSymbolUses(extModuleOp, op);
+    if (!uses->empty()) {
+      extModuleOp->emitError("Failed to remove external module because it is "
+                             "still referenced/instantiated");
+      return signalPassFailure();
+    }
     extModuleOp.erase();
+  }
 }

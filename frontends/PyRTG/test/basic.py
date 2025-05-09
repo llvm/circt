@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool
+from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, Tuple
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
 # MLIR-NEXT: [[C0:%.+]] = index.constant 0
@@ -53,7 +53,10 @@ class Tgt1:
 # MLIR-NEXT: [[ARR2:%.+]] = rtg.array_create [[IDX0]], [[IDX1]], [[IDX2]] : index
 # MLIR-NEXT: [[ARR3:%.+]] = rtg.array_create [[IDX10]], [[IDX11]], [[IDX12]] : index
 # MLIR-NEXT: [[ARR4:%.+]] = rtg.array_create [[ARR2]], [[ARR3]] : !rtg.array<index>
-# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>
+# MLIR-NEXT: [[ARR5:%.+]] = rtg.array_create [[IDX2]], [[IDX1]] : index
+# MLIR-NEXT: [[ARR6:%.+]] = rtg.array_inject [[ARR5]][[[IDX1]]], [[IDX3]] : !rtg.array<index>
+# MLIR-NEXT: [[SIZE:%.+]] = rtg.array_size [[ARR6]] : !rtg.array<index>
+# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>, index
 
 
 @target
@@ -75,6 +78,11 @@ class Tgt4:
                       for x in range(3)], Integer.type())
         for y in range(2)
     ], Array.type(Integer.type()))
+
+  @entry
+  def arr3():
+    return Array.create([Integer(2), Integer(1)],
+                        Integer.type()).set(1, Integer(3)).size()
 
 
 # MLIR-LABEL: rtg.sequence @seq0
@@ -98,6 +106,11 @@ def seq0(set: Set):
 @sequence()
 def seq1():
   Label.declare("s1").place()
+
+
+@sequence(Set.type(Tuple.type(Integer.type(), Bool.type())))
+def seq2(set):
+  pass
 
 
 # MLIR-LABEL: rtg.test @test0
@@ -380,3 +393,29 @@ def int_consumer(b):
 @test(("a", Integer.type()), ("b", Integer.type()))
 def test8_random_integer(a, b):
   int_consumer(Integer.random(a, b))
+
+
+# MLIR-LABEL: rtg.test @test90_tuples
+# MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
+# MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : tuple<index, i1>
+
+
+@test(("a", Integer.type()), ("b", Bool.type()),
+      ("tup", Tuple.type(Integer.type(), Bool.type())))
+def test90_tuples(a, b, tup):
+  tup = Tuple.create(a, b)
+  consumer(tup[1])
+
+
+# MLIR-LABEL: rtg.test @test91_sets
+# MLIR-NEXT: rtg.set_cartesian_product %a, %b : !rtg.set<index>, !rtg.set<i1>
+# MLIR: rtg.bag_convert_to_set %c : !rtg.bag<index>
+# MLIR: rtg.set_convert_to_bag %a : !rtg.set<index>
+
+
+@test(("a", Set.type(Integer.type())), ("b", Set.type(Bool.type())),
+      ("c", Bag.type(Integer.type())))
+def test91_sets(a, b, c):
+  seq2(Set.cartesian_product(a, b))
+  int_consumer(c.to_set().get_random())
+  int_consumer(a.to_bag().get_random())

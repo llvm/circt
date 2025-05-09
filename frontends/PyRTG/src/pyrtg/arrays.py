@@ -10,6 +10,8 @@ from .index import index
 from .core import Value
 from .integers import Integer
 
+from typing import Union
+
 
 class Array(Value):
   """
@@ -36,6 +38,10 @@ class Array(Value):
     return rtg.ArrayCreateOp(rtg.ArrayType.get(element_type), elements)
 
   def __getitem__(self, i) -> Value:
+    """
+    Access an element in the array at the specified index (read-only).
+    """
+
     assert isinstance(i, (int, Integer)), "slicing not supported yet"
 
     idx = i
@@ -43,6 +49,21 @@ class Array(Value):
       idx = index.ConstantOp(i)
 
     return rtg.ArrayExtractOp(self._value, idx)
+
+  def set(self, index: Union[int, Integer], value: Value) -> Array:
+    """
+    Set an element at the specified index in the array.
+    """
+
+    index = index if isinstance(index, Integer) else Integer(index)
+    return rtg.ArrayInjectOp(self._value, index, value)
+
+  def size(self) -> Integer:
+    """
+    Get the number of elements in the array.
+    """
+
+    return rtg.ArraySizeOp(self._value)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value

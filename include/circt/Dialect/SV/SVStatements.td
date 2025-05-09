@@ -12,6 +12,7 @@
 
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
@@ -43,10 +44,9 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
 }
 
 def IfDefOp : SVOp<"ifdef", [
-    SingleBlock,
-    NoTerminator,
     NoRegionArguments,
     NonProceduralOp,
+    GraphRegionNoTerminator,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "'ifdef MACRO' block";

@@ -5,3 +5,4 @@
 // CHECK: Generic Options
 // CHECK: hlstool Options
 // CHECK: --lowering-options=
+// CHECK: --top-level-function=

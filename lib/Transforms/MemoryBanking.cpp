@@ -936,7 +936,7 @@ LogicalResult MemoryBankingPass::applyMemoryBanking(Operation *operation,
   patterns.add<BankReturnPattern>(ctx, memoryToBanks);
 
   GreedyRewriteConfig config;
-  config.strictMode = GreedyRewriteStrictness::ExistingOps;
+  config.setStrictness(GreedyRewriteStrictness::ExistingOps);
   if (failed(applyPatternsGreedily(operation, std::move(patterns), config))) {
     return failure();
   }

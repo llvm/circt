@@ -789,11 +789,12 @@ void ArcCanonicalizerPass::runOnOperation() {
   DenseMap<StringAttr, StringAttr> arcMapping;
 
   mlir::GreedyRewriteConfig config;
-  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
-  config.maxIterations = 10;
-  config.useTopDownTraversal = true;
+  config.setRegionSimplificationLevel(
+      mlir::GreedySimplifyRegionLevel::Disabled);
+  config.setMaxIterations(10);
+  config.setUseTopDownTraversal(true);
   ArcListener listener(&cache);
-  config.listener = &listener;
+  config.setListener(&listener);
 
   PatternStatistics statistics;
   RewritePatternSet symbolPatterns(&getContext());

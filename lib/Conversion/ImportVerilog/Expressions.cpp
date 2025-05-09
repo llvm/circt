@@ -293,12 +293,18 @@ struct RvalueExprVisitor {
       if (isa<moore::UnpackedArrayType>(lhs.getType()))
         return builder.create<moore::UArrayCmpOp>(
             loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
+      else if (isa<moore::StringType>(lhs.getType()))
+        return builder.create<moore::StringCmpOp>(
+            loc, moore::StringCmpPredicate::eq, lhs, rhs);
       else
         return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
       if (isa<moore::UnpackedArrayType>(lhs.getType()))
         return builder.create<moore::UArrayCmpOp>(
             loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
+      else if (isa<moore::StringType>(lhs.getType()))
+        return builder.create<moore::StringCmpOp>(
+            loc, moore::StringCmpPredicate::ne, lhs, rhs);
       else
         return createBinary<moore::NeOp>(lhs, rhs);
     case BinaryOperator::CaseEquality:
@@ -313,21 +319,33 @@ struct RvalueExprVisitor {
     case BinaryOperator::GreaterThanEqual:
       if (expr.left().type->isSigned())
         return createBinary<moore::SgeOp>(lhs, rhs);
+      else if (isa<moore::StringType>(lhs.getType()))
+        return builder.create<moore::StringCmpOp>(
+            loc, moore::StringCmpPredicate::ge, lhs, rhs);
       else
         return createBinary<moore::UgeOp>(lhs, rhs);
     case BinaryOperator::GreaterThan:
       if (expr.left().type->isSigned())
         return createBinary<moore::SgtOp>(lhs, rhs);
+      else if (isa<moore::StringType>(lhs.getType()))
+        return builder.create<moore::StringCmpOp>(
+            loc, moore::StringCmpPredicate::gt, lhs, rhs);
       else
         return createBinary<moore::UgtOp>(lhs, rhs);
     case BinaryOperator::LessThanEqual:
       if (expr.left().type->isSigned())
         return createBinary<moore::SleOp>(lhs, rhs);
+      else if (isa<moore::StringType>(lhs.getType()))
+        return builder.create<moore::StringCmpOp>(
+            loc, moore::StringCmpPredicate::le, lhs, rhs);
       else
         return createBinary<moore::UleOp>(lhs, rhs);
     case BinaryOperator::LessThan:
       if (expr.left().type->isSigned())
         return createBinary<moore::SltOp>(lhs, rhs);
+      else if (isa<moore::StringType>(lhs.getType()))
+        return builder.create<moore::StringCmpOp>(
+            loc, moore::StringCmpPredicate::lt, lhs, rhs);
       else
         return createBinary<moore::UltOp>(lhs, rhs);
 

@@ -1904,7 +1904,8 @@ struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   LogicalResult
   matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldsOp>(op, adaptor.getOperands());
+    rewriter.replaceOpWithNewOp<ClassFieldsOp>(op, adaptor.getOperands(),
+                                               adaptor.getFieldLocsAttr());
     return success();
   }
 };

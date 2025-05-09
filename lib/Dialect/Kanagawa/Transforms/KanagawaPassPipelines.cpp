@@ -20,8 +20,9 @@ using namespace kanagawa;
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
-  config.useTopDownTraversal = true;
-  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
+  config.setUseTopDownTraversal(true);
+  config.setRegionSimplificationLevel(
+      mlir::GreedySimplifyRegionLevel::Disabled);
   return mlir::createCanonicalizerPass(config);
 }
 

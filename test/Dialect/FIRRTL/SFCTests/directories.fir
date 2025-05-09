@@ -135,17 +135,20 @@ circuit TestHarness:
 ; SITEST_NODUT:     FILE "testbench.sitest.json"
 ; SITEST_NODUT-NOT: FILE
 
-; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%basepath: !om.basepath, %moduleName_in: !om.string) -> (moduleName: !om.string) {
-; MLIR_OUT:    om.class.fields %moduleName_in : !om.string
+; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%basepath: !om.basepath, %moduleName_in: !om.string, %inDut_in: i1) -> (moduleName: !om.string, inDut: i1) {
+; MLIR_OUT:    om.class.fields %moduleName_in, %inDut_in : !om.string, i1
 ; MLIR_OUT:  }
 
 ; MLIR_OUT:  om.class @SitestBlackBoxMetadata(%basepath: !om.basepath) -> [[V1:.+]]: !om.class.type<@SitestBlackBoxModulesSchema>, [[V2:.+]]: !om.class.type<@SitestBlackBoxModulesSchema>, [[V3:.+]]: !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT-DAG:    [[STR1:%.+]] = om.constant "Foo_BlackBox" : !om.string
-; MLIR_OUT-DAG:    [[OBJ1:%.+]] = om.object @SitestBlackBoxModulesSchema(%basepath, [[STR1]]) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT-DAG:    [[DUT1:%.+]] = om.constant true
+; MLIR_OUT-DAG:    [[OBJ1:%.+]] = om.object @SitestBlackBoxModulesSchema(%basepath, [[STR1]], [[DUT1]]) : (!om.basepath, !om.string, i1) -> !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT-DAG:    [[STR2:%.+]] = om.constant "Bar_BlackBox" : !om.string
-; MLIR_OUT-DAG:    [[OBJ2:%.+]] = om.object @SitestBlackBoxModulesSchema(%basepath, [[STR2]]) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT-DAG:    [[DUT2:%.+]] = om.constant true
+; MLIR_OUT-DAG:    [[OBJ2:%.+]] = om.object @SitestBlackBoxModulesSchema(%basepath, [[STR2]], [[DUT2]]) : (!om.basepath, !om.string, i1) -> !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT-DAG:    [[STR3:%.+]] = om.constant "Baz_BlackBox" : !om.string
-; MLIR_OUT-DAG:    [[OBJ3:%.+]] = om.object @SitestBlackBoxModulesSchema(%basepath, [[STR3]]) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT-DAG:    [[DUT3:%.+]] = om.constant true
+; MLIR_OUT-DAG:    [[OBJ3:%.+]] = om.object @SitestBlackBoxModulesSchema(%basepath, [[STR3]], [[DUT3]]) : (!om.basepath, !om.string, i1) -> !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:    om.class.fields [[OBJ1]], [[OBJ2]], [[OBJ3]] : !om.class.type<@SitestBlackBoxModulesSchema>, !om.class.type<@SitestBlackBoxModulesSchema>, !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:  }
 

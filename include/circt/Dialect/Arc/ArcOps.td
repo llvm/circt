@@ -138,7 +138,7 @@ def StateOp : ArcOp<"state", [
     CPred<[{getInitials().empty() ||
               llvm::equal(getInitials().getType(), getResults().getType())}]>>
 ]> {
-  let summary = "State transfer arc";
+  let summary = "Instantiates a state element with input from a transfer arc";
 
   let arguments = (ins
     FlatSymbolRefAttr:$arc,

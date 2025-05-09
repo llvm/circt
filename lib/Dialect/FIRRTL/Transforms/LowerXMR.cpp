@@ -330,9 +330,6 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
         if (result.wasInterrupted())
           return signalPassFailure();
 
-        // Clear any enabled layers.
-        module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));
-
         // Since we walk operations pre-order and not along dataflow edges,
         // ref.sub may not be resolvable when we encounter them (they're not
         // just unification). This can happen when refs go through an output

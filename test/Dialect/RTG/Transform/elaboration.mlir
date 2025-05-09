@@ -7,6 +7,11 @@ func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rt
 func.func @dummy5(%arg0: i1) -> () {return}
 func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
 func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
+func.func @dummy8(%arg0: tuple<index, index>) -> () {return}
+func.func @dummy9(%arg0: !rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> () {return}
+func.func @dummy10(%arg0: !rtg.set<tuple<index>>) -> () {return}
+func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
+func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates() {
@@ -30,7 +35,6 @@ rtg.test @setOperations() {
   // CHECK-NEXT: [[V2:%.+]] = index.constant 4
   // CHECK-NEXT: [[V3:%.+]] = rtg.set_create [[V1]], [[V2]] : index
   // CHECK-NEXT: func.call @dummy1([[V0]], [[V1]], [[V3]]) :
-  // CHECK-NEXT: }
   %0 = index.constant 2
   %1 = index.constant 3
   %2 = index.constant 4
@@ -43,6 +47,57 @@ rtg.test @setOperations() {
   %diff = rtg.set_difference %set, %new_set : !rtg.set<index>
   %5 = rtg.set_select_random %diff : !rtg.set<index> {rtg.elaboration_custom_seed = 2}
   func.call @dummy1(%4, %5, %diff) : (index, index, !rtg.set<index>) -> ()
+
+  // CHECK-NEXT: [[V4:%.+]] = index.constant 1 
+  // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V4]] x [[V2]], [[V4]] x [[V0]]) : index 
+  // CHECK-NEXT: func.call @dummy12([[V5]]) : (!rtg.bag<index>)
+  %6 = rtg.set_convert_to_bag %set1 : !rtg.set<index>
+  func.call @dummy12(%6) : (!rtg.bag<index>) -> ()
+}
+
+// CHECK-LABEL: rtg.test @setCartesianProduct
+rtg.test @setCartesianProduct() {
+  %idx0 = index.constant 0
+  %idx1 = index.constant 1
+  %0 = rtg.set_create %idx0, %idx1 : index
+  %true = index.bool.constant true
+  %false = index.bool.constant false
+  %1 = rtg.set_create %true, %false : i1
+  %s0 = rtg.fixed_reg #rtgtest.s0
+  %s1 = rtg.fixed_reg #rtgtest.s1
+  %2 = rtg.set_create %s0, %s1 : !rtgtest.ireg
+
+  // CHECK-DAG: [[IDX1:%.+]] = index.constant 1
+  // CHECK-DAG: [[FALSE:%.+]] = index.bool.constant false
+  // CHECK-DAG: [[S1:%.+]] = rtg.fixed_reg #rtgtest.s1 : !rtgtest.ireg
+  // CHECK-DAG: [[T1:%.+]] = rtg.tuple_create [[IDX1]], [[FALSE]], [[S1]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[IDX0:%.+]] = index.constant 0
+  // CHECK-DAG: [[T2:%.+]] = rtg.tuple_create [[IDX0]], [[FALSE]], [[S1]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[TRUE:%.+]] = index.bool.constant true
+  // CHECK-DAG: [[T3:%.+]] = rtg.tuple_create [[IDX1]], [[TRUE]], [[S1]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[T4:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]], [[S1]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[S0:%.+]] = rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
+  // CHECK-DAG: [[T5:%.+]] = rtg.tuple_create [[IDX1]], [[FALSE]], [[S0]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[T6:%.+]] = rtg.tuple_create [[IDX0]], [[FALSE]], [[S0]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[T7:%.+]] = rtg.tuple_create [[IDX1]], [[TRUE]], [[S0]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[T8:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]], [[S0]] : index, i1, !rtgtest.ireg
+  // CHECK-DAG: [[SET:%.+]] = rtg.set_create [[T1]], [[T2]], [[T3]], [[T4]], [[T5]], [[T6]], [[T7]], [[T8]] : tuple<index, i1, !rtgtest.ireg>
+  // CHECK-NEXT: func.call @dummy9([[SET]]) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  %3 = rtg.set_cartesian_product %0, %1, %2 : !rtg.set<index>, !rtg.set<i1>, !rtg.set<!rtgtest.ireg>
+  func.call @dummy9(%3) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  
+  // CHECK-NEXT: [[EMPTY:%.+]] = rtg.set_create  : tuple<index, i1, !rtgtest.ireg>
+  // CHECK-NEXT: func.call @dummy9([[EMPTY]]) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  %4 = rtg.set_create : !rtgtest.ireg
+  %5 = rtg.set_cartesian_product %0, %1, %4 : !rtg.set<index>, !rtg.set<i1>, !rtg.set<!rtgtest.ireg>
+  func.call @dummy9(%5) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+
+  // CHECK-NEXT: [[T9:%.+]] = rtg.tuple_create [[IDX1]] : index
+  // CHECK-NEXT: [[T10:%.+]] = rtg.tuple_create [[IDX0]] : index
+  // CHECK-NEXT: [[SET2:%.+]] = rtg.set_create [[T9]], [[T10]] : tuple<index>
+  // CHECK-NEXT: func.call @dummy10([[SET2]]) : (!rtg.set<tuple<index>>) -> ()
+  %6 = rtg.set_cartesian_product %0 : !rtg.set<index>
+  func.call @dummy10(%6) : (!rtg.set<tuple<index>>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @bagOperations
@@ -69,6 +124,11 @@ rtg.test @bagOperations() {
   %diff2 = rtg.bag_difference %bag, %new_bag inf : !rtg.bag<index>
   %4 = rtg.bag_select_random %diff2 : !rtg.bag<index> {rtg.elaboration_custom_seed = 5}
   func.call @dummy4(%3, %4, %diff, %diff2) : (index, index, !rtg.bag<index>, !rtg.bag<index>) -> ()
+
+  // CHECK-NEXT: [[SET:%.+]] = rtg.set_create [[V0]], [[V2]] :
+  // CHECK-NEXT: func.call @dummy11([[SET]])
+  %5 = rtg.bag_convert_to_set %bag0 : !rtg.bag<index>
+  func.call @dummy11(%5) : (!rtg.set<index>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @setSize
@@ -479,6 +539,11 @@ rtg.sequence @switchNestedCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %s
   rtg.label local %l8
 }
 
+rtg.target @singleCoreTarget : !rtg.dict<single_core: !rtgtest.cpu> {
+  %2 = rtg.constant #rtgtest.cpu<0>
+  rtg.yield %2 : !rtgtest.cpu
+}
+
 rtg.sequence @interleaveSequencesSeq0() {
   rtgtest.rv32i.ebreak
   rtgtest.rv32i.ebreak
@@ -523,6 +588,55 @@ rtg.test @arrays() {
   %1 = rtg.array_create %idx1, %idx2 : index
   %2 = rtg.array_extract %1[%idx1] : !rtg.array<index>
   func.call @dummy2(%2) : (index) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %3 = rtg.array_inject %1[%idx1], %idx2 : !rtg.array<index>
+  %4 = rtg.array_extract %3[%idx1] : !rtg.array<index>
+  func.call @dummy2(%4) : (index) -> ()
+
+  // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
+  %5 = rtg.array_size %3 : !rtg.array<index>
+  func.call @dummy2(%5) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @arithOps
+rtg.test @arithOps() {
+  // CHECK-NEXT: [[V0:%.+]] = index.constant 6
+  // CHECK-NEXT: func.call @dummy2([[V0]])
+
+  %0 = arith.constant 3 : index
+  %1 = arith.constant true
+  %2 = arith.addi %0, %0 : index
+  %3 = arith.andi %1, %1 : i1
+  %4 = arith.xori %3, %1 : i1
+  %5 = arith.ori %4, %1 : i1
+  %6 = arith.select %5, %2, %0 : index
+  func.call @dummy2(%6) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @tuples
+rtg.test @tuples() {
+  %idx0 = index.constant 0
+  %idx1 = index.constant 1
+  %0 = rtg.tuple_create %idx1, %idx0 : index, index
+  %1 = rtg.tuple_extract %0 at 1 : tuple<index, index>
+
+  // CHECK-NEXT: %idx1 = index.constant 1
+  // CHECK-NEXT: %idx0 = index.constant 0
+  // CHECK-NEXT: [[V0:%.+]] = rtg.tuple_create %idx1, %idx0 : index, index
+  // CHECK-NEXT: func.call @dummy8([[V0]])
+  func.call @dummy8(%0) : (tuple<index, index>) -> ()
+
+  // CHECK-NEXT: func.call @dummy2(%idx0)
+  func.call @dummy2(%1) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @useFolders_singleCoreTarget
+rtg.test @useFolders(single_core = %single_core: !rtgtest.cpu) {
+  // CHECK-NEXT: index.constant 0
+  // CHECK-NEXT: call @dummy2
+  %0 = rtgtest.get_hartid %single_core
+  func.call @dummy2(%0) : (index) -> ()
 }
 
 // -----
@@ -642,4 +756,48 @@ rtg.test @oobArrayAccess() {
   // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
   %2 = rtg.array_extract %1[%0] : !rtg.array<index>
   func.call @dummy6(%2) : (index) -> ()
+}
+
+// -----
+
+func.func @dummy6(%arg0: !rtg.array<index>) -> () {return}
+
+rtg.test @oobArrayAccess() {
+  %0 = index.constant 0
+  %1 = rtg.array_create : index
+  // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
+  %2 = rtg.array_inject %1[%0], %0 : !rtg.array<index>
+  func.call @dummy6(%2) : (!rtg.array<index>) -> ()
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only index operands supported}}
+  %1 = arith.addi %0, %0 : i32
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only 'i1' operands supported}}
+  %1 = arith.andi %0, %0 : i32
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only 'i1' operands supported}}
+  %1 = arith.xori %0, %0 : i32
+}
+
+// -----
+
+rtg.test @arith_invalid_type() {
+  %0 = arith.constant 3 : i32
+  // expected-error @below {{only 'i1' operands supported}}
+  %1 = arith.ori %0, %0 : i32
 }

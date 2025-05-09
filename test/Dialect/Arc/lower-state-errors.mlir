@@ -9,3 +9,10 @@ hw.module @CombLoop(in %a: i42, out z: i42) {
   // expected-remark @below {{computing new phase here}}
   hw.output %0 : i42
 }
+
+// -----
+
+// expected-error @+1 {{Failed to remove external module because it is still referenced/instantiated}}
+hw.module.extern @myModule()
+
+hw.instance "alligator" @myModule() -> ()

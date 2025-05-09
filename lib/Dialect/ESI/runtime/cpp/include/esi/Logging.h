@@ -35,15 +35,19 @@ namespace esi {
 class Logger {
 public:
   enum class Level {
-    Debug,   // Everything and the kitchen sink, possibly including _all_
-             // messages written and read.
-    Info,    // General information, like connecting to an accelerator.
+    Trace, // Trace is even more detailed than debug and requires a compiler
+           // flag to be enabled when the runtime is built. Allows clients to do
+           // things like log every single message or interaction.
+    Debug, // Information useful when trying to debug an application.
+    Info,  // General information, like connecting to an accelerator.
     Warning, // May indicate a problem.
     Error,   // Many errors will be followed by exceptions which may get caught.
   };
-  Logger(bool debugEnabled) : debugEnabled(debugEnabled) {}
+  Logger(bool debugEnabled, bool traceEnabled)
+      : debugEnabled(debugEnabled), traceEnabled(traceEnabled) {}
   virtual ~Logger() = default;
   bool getDebugEnabled() { return debugEnabled; }
+  bool getTraceEnabled() { return traceEnabled; }
 
   /// Report a log message.
   /// Arguments:
@@ -95,6 +99,35 @@ public:
       debugImpl(debugFunc);
   }
 
+  /// Log a trace message. If tracing is not enabled, this is a no-op. Since it
+  /// is inlined, the compiler will hopefully optimize it away creating a
+  /// zero-overhead call. This means that clients are free to go crazy with
+  /// trace messages.
+  inline void trace(const std::string &subsystem, const std::string &msg,
+                    const std::map<std::string, std::any> *details = nullptr) {
+#ifdef ESI_RUNTIME_TRACE
+    if (traceEnabled)
+      log(Level::Trace, subsystem, msg, details);
+#endif
+  }
+  /// Log a trace message using a callback. Same as above, users can go hog-wild
+  /// calling this.
+  inline void
+  trace(std::function<
+        void(std::string &subsystem, std::string &msg,
+             std::unique_ptr<std::map<std::string, std::any>> &details)>
+            traceFunc) {
+#ifdef ESI_RUNTIME_TRACE
+    if (!traceEnabled)
+      return;
+    std::string subsystem;
+    std::string msg;
+    std::unique_ptr<std::map<std::string, std::any>> details = nullptr;
+    traceFunc(subsystem, msg, details);
+    log(Level::Trace, subsystem, msg, details.get());
+#endif
+  }
+
 protected:
   /// Overrideable version of debug. Only gets called if debug is enabled.
   virtual void debugImpl(const std::string &subsystem, const std::string &msg,
@@ -118,6 +151,9 @@ protected:
 
   /// Enable or disable debug messages.
   bool debugEnabled = false;
+
+  /// Enable or disable trace messages.
+  bool traceEnabled;
 };
 
 /// A thread-safe logger which calls functions implemented by subclasses. Only
@@ -147,8 +183,8 @@ public:
   /// Create a stream logger that logs to the given output stream and error
   /// output stream.
   StreamLogger(Level minLevel, std::ostream &out, std::ostream &error)
-      : TSLogger(minLevel == Level::Debug), minLevel(minLevel), outStream(out),
-        errorStream(error) {}
+      : TSLogger(minLevel <= Level::Debug, minLevel <= Level::Trace),
+        minLevel(minLevel), outStream(out), errorStream(error) {}
   /// Create a stream logger that logs to stdout, stderr.
   StreamLogger(Level minLevel);
   void logImpl(Level level, const std::string &subsystem,
@@ -182,7 +218,7 @@ private:
 /// A logger that does nothing.
 class NullLogger : public Logger {
 public:
-  NullLogger() : Logger(false) {}
+  NullLogger() : Logger(false, false) {}
   void log(Level, const std::string &, const std::string &,
            const std::map<std::string, std::any> *) override {}
 };

@@ -31,8 +31,8 @@ void TSLogger::log(Level level, const std::string &subsystem,
 }
 
 StreamLogger::StreamLogger(Level minLevel)
-    : TSLogger(minLevel == Level::Debug), minLevel(minLevel),
-      outStream(std::cout), errorStream(std::cerr) {}
+    : TSLogger(minLevel <= Level::Debug, minLevel <= Level::Trace),
+      minLevel(minLevel), outStream(std::cout), errorStream(std::cerr) {}
 
 void StreamLogger::logImpl(Level level, const std::string &subsystem,
                            const std::string &msg,
@@ -59,6 +59,10 @@ void StreamLogger::logImpl(Level level, const std::string &subsystem,
     os << "[  DEBUG] ";
     indentSpaces = 8;
     break;
+  case Level::Trace:
+    os << "[  TRACE] ";
+    indentSpaces = 8;
+    break;
   }
 
   if (!subsystem.empty()) {
@@ -76,7 +80,8 @@ void StreamLogger::logImpl(Level level, const std::string &subsystem,
 }
 
 ConsoleLogger::ConsoleLogger(Level minLevel)
-    : TSLogger(minLevel == Level::Debug), minLevel(minLevel) {}
+    : TSLogger(minLevel <= Level::Debug, minLevel <= Level::Trace),
+      minLevel(minLevel) {}
 
 void ConsoleLogger::logImpl(Level level, const std::string &subsystem,
                             const std::string &msg,
@@ -101,6 +106,10 @@ void ConsoleLogger::logImpl(Level level, const std::string &subsystem,
     break;
   case Level::Debug:
     fmt::print(os, fmt::fg(fmt::color::beige), "[  DEBUG] ");
+    indentSpaces = 8;
+    break;
+  case Level::Trace:
+    fmt::print(os, fmt::fg(fmt::color::burly_wood), "[  TRACE] ");
     indentSpaces = 8;
     break;
   }
