@@ -445,7 +445,7 @@ struct ModuleVisitor : public BaseVisitor {
 
     Value initial;
     if (const auto *init = varNode.getInitializer()) {
-      initial = context.convertRvalueExpression(*init, loweredType);
+      initial = context.convertRvalueExpression(*init, loweredType, true);
       if (!initial)
         return failure();
     }
