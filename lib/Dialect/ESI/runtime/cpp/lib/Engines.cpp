@@ -201,19 +201,41 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
   if (bufferData[bufferSize - 1] == 0)
     return false;
 
+  Logger &logger = engine->conn.getLogger();
+
   // If it has, copy the data out. If the consumer (callback) reports that it
   // has accepted the data, re-use the buffer.
   MessageData data(bufferData, bufferSize - 1);
-  engine->conn.getLogger().debug(
+  logger.trace(
       [this, data](std::string &subsystem, std::string &msg,
                    std::unique_ptr<std::map<std::string, std::any>> &details) {
         subsystem = "OneItemBuffersToHost";
-        msg = identifier() + " got message contents 0x" + data.toHex();
+        msg = "recieved message";
+        details = std::make_unique<std::map<std::string, std::any>>();
+        (*details)["channel"] = identifier();
+        (*details)["data_size"] = data.getSize();
+        (*details)["message_data"] = data.toHex();
       });
   if (callback(std::move(data))) {
     writeBufferPtr();
+    logger.trace(
+        [this](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "OneItemBuffersToHost";
+          msg = "callback accepted data";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = identifier();
+        });
     return true;
   }
+  logger.trace(
+      [this](std::string &subsystem, std::string &msg,
+             std::unique_ptr<std::map<std::string, std::any>> &details) {
+        subsystem = "OneItemBuffersToHost";
+        msg = "callback rejected data";
+        details = std::make_unique<std::map<std::string, std::any>>();
+        (*details)["channel"] = identifier();
+      });
   return false;
 }
 
@@ -377,12 +399,23 @@ void OneItemBuffersFromHostWritePort::write(const MessageData &data) {
 }
 
 bool OneItemBuffersFromHostWritePort::tryWrite(const MessageData &data) {
+  Logger &logger = engine->conn.getLogger();
+
   // Check to see if there's an outstanding write.
   completion_buffer->flush();
   uint8_t *completion =
       reinterpret_cast<uint8_t *>(completion_buffer->getPtr());
-  if (*completion == 0)
+  if (*completion == 0) {
+    logger.trace(
+        [this](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "OneItemBuffersFromHost";
+          msg = identifier() + " write failed: buffer not ready";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = identifier();
+        });
     return false;
+  }
 
   // If the buffer is empty, use it.
   std::lock_guard<std::mutex> lock(bufferMutex);
@@ -399,6 +432,17 @@ bool OneItemBuffersFromHostWritePort::tryWrite(const MessageData &data) {
   engine->mmio->write(
       CompletionPtrOffset,
       reinterpret_cast<uint64_t>(completion_buffer->getDevicePtr()));
+
+  logger.trace(
+      [this, data](std::string &subsystem, std::string &msg,
+                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+        subsystem = "OneItemBuffersFromHost";
+        msg = "initiated transfer of message";
+        details = std::make_unique<std::map<std::string, std::any>>();
+        (*details)["channel"] = identifier();
+        (*details)["data_size"] = data.getSize();
+        (*details)["message_data"] = data.toHex();
+      });
   return true;
 }
 
