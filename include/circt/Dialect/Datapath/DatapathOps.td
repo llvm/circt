@@ -35,13 +35,8 @@ def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAnd
   let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  let assemblyFormat =
-    // "$inputs `to` $targetRows attr-dict `:` qualified(type($inputs))";
-    // "$inputs `to` $targetRows attr-dict `:` functional-type($inputs, $results)";
-    "$inputs attr-dict `:` functional-type($inputs, $results)";
-    // "$inputs attr-dict `:`  qualified(type($results))";
-
   // let hasFolder = true;
+  let hasCustomAssemblyFormat = true;
   let hasVerifier = 1;
   let hasCanonicalizer = true;
 
