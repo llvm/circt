@@ -192,4 +192,53 @@ def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
   }];
 }
 
+
+
+// Deal with HiZ types
+
+def ReadHiZOp
+ : HWOp<"hiZ.sample", [Pure, HiZTypeConstraint<"result", "input">]> {
+  let summary = "Get the value of a high impediance type (hiZ).";
+  let description = [{
+    Extract the value of a high impedance typed value.  This converts a hiZ
+    bus into a type usable in data-flow logic.  This operation doesn't make 
+    guarantees about the value at runtime.  It is possible to read an undriven
+    bus.  This behavior is resolved by simulation or physics.
+  }];
+
+  let arguments = (ins HiZType:$input);
+  let results = (outs HWValueType:$result);
+  let assemblyFormat = "$input attr-dict `:` qualified(type($result))";
+}
+
+def DriveHiZOp
+ : HWOp<"hiZ.drive",
+        [Pure, HiZTypeConstraint<"value", "input">]> {
+  let summary = "Drive a value on a high impediance type (hiZ).";
+  let description = [{
+    Conditionally drive a value on a high impedance bus.  This converts a value
+    to hiZ type and asserts that value on the bus.  This operation doesn't make 
+    guarantees about the bus at runtime.  It is possible for multiple drivers
+    to drive the bus.  This behavior is resolved by simulation or physics.
+  }];
+
+  let arguments = (ins HiZType:$input, HWValueType: $value, I1:$cond);
+  let results = (outs);
+  let assemblyFormat = "$input `,` $value `,` $cond attr-dict `:` qualified(type($value))";
+}
+
+def CreateHiZOp
+ : HWOp<"hiZ.create", [DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Create a new HiZ bus";
+  let description = [{
+    High impedance busses must come from somewhere.  Thw two options are as
+    module inputs and by declaration.  This operation is the declaration of a
+    new bus.
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs HiZType:$result);
+  let assemblyFormat = "custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($result))";
+ }
+
 #endif // CIRCT_DIALECT_HW_HWMISCOPS_TD

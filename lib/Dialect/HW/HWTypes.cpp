@@ -739,6 +739,23 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 //===----------------------------------------------------------------------===//
+// HiZType
+//===----------------------------------------------------------------------===//
+
+LogicalResult HiZType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              Type innerType) {
+  if (!isHWValueType(innerType))
+    return emitError() << "invalid element for hw.hiZ type " << innerType;
+  return success();
+}
+
+Type circt::hw::getHiZElementType(mlir::Type type) {
+  if (auto hiZ = dyn_cast_or_null<HiZType>(type))
+    return hiZ.getElementType();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TypeAliasType
 //===----------------------------------------------------------------------===//
 
