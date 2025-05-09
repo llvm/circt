@@ -917,9 +917,15 @@ def MacroDefOp : SVOp<"macro.def",
   let results = (outs);
 
   let builders = [
-    OpBuilder<(ins "StringRef":$macroName, "StringRef":$format_string),
-                "build($_builder, $_state, macroName, format_string,"
-                "odsBuilder.getArrayAttr({}));">
+    OpBuilder<(ins "FlatSymbolRefAttr":$macroName), [{
+      auto formatString = StringAttr::get($_builder.getContext());
+      auto symbols = $_builder.getArrayAttr({});
+      build($_builder, $_state, macroName, formatString, symbols);
+    }]>,
+    OpBuilder<(ins "StringRef":$macroName, "StringRef":$formatString), [{
+      auto symbols = $_builder.getArrayAttr({});
+      build($_builder, $_state, macroName, formatString, symbols);
+    }]>
   ];
 
   let assemblyFormat = [{
