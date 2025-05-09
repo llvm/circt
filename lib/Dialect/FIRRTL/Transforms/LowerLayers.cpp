@@ -177,8 +177,8 @@ namespace {
 /// layer used under each module. As we do this, we build a table of these info
 /// objects for quick lookup later.
 struct BindFileInfo {
-  /// The path of the bind file.
-  StringAttr path;
+  /// The filename of the bind file _without_ a directory.
+  StringAttr filename;
   /// Where to insert bind statements into the bind file.
   Block *body;
 };
@@ -807,12 +807,13 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
   // Build the full output path using the filename of the bindfile and the
   // output directory of the layer, if any.
   auto dir = layer->getAttrOfType<hw::OutputFileAttr>("output_file");
+  StringAttr filename = StringAttr::get(&getContext(), bindFileName);
   StringAttr path;
   if (dir)
     path = StringAttr::get(&getContext(),
                            Twine(dir.getDirectory()) + bindFileName);
   else
-    path = StringAttr::get(&getContext(), bindFileName);
+    path = filename;
 
   // Declare the macro for the include guard.
   b.create<sv::MacroDeclOp>(loc, macroSymbolAttr, ArrayAttr{}, macroNameAttr);
@@ -835,7 +836,7 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
     // If the parent is bound-in, we enable it by including the bindfile.
     // The parent bindfile will enable all ancestors.
     if (parent.getConvention() == LayerConvention::Bind) {
-      auto target = bindFiles[module][parent].path;
+      auto target = bindFiles[module][parent].filename;
       b.create<sv::IncludeOp>(loc, IncludeStyle::Local, target);
       break;
     }
@@ -853,12 +854,13 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
     auto files = bindFiles[child];
     auto lookup = files.find(layer);
     if (lookup != files.end())
-      b.create<sv::IncludeOp>(loc, IncludeStyle::Local, lookup->second.path);
+      b.create<sv::IncludeOp>(loc, IncludeStyle::Local,
+                              lookup->second.filename);
   }
 
   // Save the bind file information for later.
   auto &info = bindFiles[module][layer];
-  info.path = path;
+  info.filename = filename;
   info.body = includeGuard.getElseBlock();
 }
 
