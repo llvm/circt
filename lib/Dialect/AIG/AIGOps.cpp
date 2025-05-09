@@ -39,6 +39,7 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
 
   bool invertedConstFound = false;
   bool flippedFound = false;
+  unsigned knownZero = 0;
 
   for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
     bool newInverted = inverted;
@@ -50,6 +51,15 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
         constValue &= constOp.getValue();
       }
       continue;
+    }
+
+    if (auto concat = value.getDefiningOp<comb::ConcatOp>()) {
+      if (auto c = concat.getInputs().front().getDefiningOp<hw::ConstantOp>()) {
+        if ((!inverted && c.getValue().isZero()) ||
+            (inverted && c.getValue().isAllOnes())) {
+          knownZero = std::max(knownZero, c.getValue().getBitWidth());
+        }
+      }
     }
 
     if (auto andInverterOp = value.getDefiningOp<aig::AndInverterOp>()) {
@@ -77,6 +87,20 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   // If the constant is zero, we can just replace with zero.
   if (constValue.isZero()) {
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, constValue);
+    return success();
+  }
+
+  if (knownZero != 0) {
+    auto c = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(knownZero, 0));
+    SmallVector<Value> newOperands;
+    for (auto v : uniqueValues) {
+      newOperands.push_back(rewriter.create<comb::ExtractOp>(
+          op->getLoc(), v, 0, v.getType().getIntOrFloatBitWidth() - knownZero));
+    }
+
+    auto inverter = rewriter.create<aig::AndInverterOp>(
+        op->getLoc(), newOperands, uniqueInverts);
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, ArrayRef<Value>{c, inverter});
     return success();
   }
 

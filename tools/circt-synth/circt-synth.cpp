@@ -154,6 +154,8 @@ static void populateSynthesisPipeline(PassManager &pm) {
         mpm.addPass(createCSEPass());
       }
     });
+    mpm.addPass(circt::comb::createCombIntRangeNarrowing());
+
     {
       // Partially legalize Comb to AIG, run CSE and canonicalization.
       circt::ConvertCombToAIGOptions options;
@@ -164,12 +166,17 @@ static void populateSynthesisPipeline(PassManager &pm) {
           options.additionalLegalOps);
       mpm.addPass(circt::createConvertCombToAIG(options));
     }
+    mpm.addPass(comb::createCombIntRangeNarrowing());
     mpm.addPass(createCSEPass());
     mpm.addPass(createSimpleCanonicalizerPass());
 
     // Fully legalize AIG to Comb.
     mpm.addPass(circt::hw::createHWAggregateToCombPass());
-    mpm.addPass(circt::createConvertCombToAIG());
+    // Partially legalize Comb to AIG, run CSE and canonicalization.
+    circt::ConvertCombToAIGOptions options;
+    // partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp>(
+    //     options.additionalLegalOps);
+    mpm.addPass(circt::createConvertCombToAIG(options));
     mpm.addPass(createCSEPass());
     if (untilReached(UntilAIGLowering))
       return;

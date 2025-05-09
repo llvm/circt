@@ -32,33 +32,6 @@ class InstanceGraph;
 };
 namespace aig {
 
-/*
-class StaticTimingAnalysis {
-public:
-  StaticTimingAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
-
-private:
-  struct ElaboratedRegister {
-    circt::igraph::InstancePath path;
-    Value value; // This must be a register.
-    size_t bitPos;
-    StringAttr name;
-  };
-
-  struct PortNode {
-    StringAttr name;
-    size_t bitPos;
-  };
-    // static timing analysis <=> find longest path between two objects
-    // where cost is the number of AndInverter gates in the path.
-
-  using LocalGraph =
-      DenseMap<BitRef, SmallVector<std::pair<OpOperand, size_t>>>;
-
-  DenseMap<OperationName, size_t> opCounts;
-  DenseMap<OperationName, DenseMap<size_t, size_t>> operandCounts;
-};*/
-
 struct DebugPoint {
   circt::igraph::InstancePath path;
   size_t bitPos;
@@ -81,21 +54,37 @@ struct DebugPoint {
   }
 };
 
-struct Point {
+// A class represents a path in the dataflow graph.
+// The destination is: `instancePath.value[bitPos]` at time `delay` going
+// through `history`.
+struct DataflowPath {
   Value value;
   size_t bitPos;
-  circt::igraph::InstancePath path;
+  circt::igraph::InstancePath instancePath;
   int64_t delay = -1;
   llvm::ImmutableList<DebugPoint> history;
-  Point(Value value, size_t bitPos, circt::igraph::InstancePath path = {},
-        int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
-      : value(value), bitPos(bitPos), path(path), delay(delay),
+  DataflowPath(Value value, size_t bitPos,
+               circt::igraph::InstancePath path = {}, int64_t delay = 0,
+               llvm::ImmutableList<DebugPoint> history = {})
+      : value(value), bitPos(bitPos), instancePath(path), delay(delay),
         history(history) {
     assert(value);
   }
-  Point() = default;
-  bool operator>(const Point &other) const { return delay > other.delay; }
-  bool operator<(const Point &other) const { return delay < other.delay; }
+
+  DataflowPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
+               int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
+      : value(value), bitPos(bitPos), instancePath(path), delay(delay),
+        history(history) {
+    assert(value);
+  }
+
+  DataflowPath() = default;
+  bool operator>(const DataflowPath &other) const {
+    return delay > other.delay;
+  }
+  bool operator<(const DataflowPath &other) const {
+    return delay < other.delay;
+  }
 
   void print(llvm::raw_ostream &os) const;
 };
@@ -105,9 +94,9 @@ public:
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
   LogicalResult getResultFor(Value value, size_t bitPos,
                              circt::igraph::InstancePath path,
-                             SmallVectorImpl<Point> &results);
+                             SmallVectorImpl<DataflowPath> &results);
   LogicalResult getResultFor(Value value, size_t bitPos,
-                             SmallVectorImpl<Point> &results);
+                             SmallVectorImpl<DataflowPath> &results);
 };
 
 class ResourceUsageAnalysis {

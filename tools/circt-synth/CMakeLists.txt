@@ -6,6 +6,7 @@ target_link_libraries(circt-synth
   CIRCTAIGTransforms
   CIRCTAIGAnalysis
   CIRCTComb
+  CIRCTCombTransforms
   CIRCTCombToAIG
   CIRCTDebug
   CIRCTEmit
