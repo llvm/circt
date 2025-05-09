@@ -32,6 +32,12 @@ if(ESI_STATIC_RUNTIME)
   message("-- Building ESI runtime as a static library.")
 endif()
 
+option(ESI_RUNTIME_TRACE "Enable ESI trace-level logging." OFF)
+if (ESI_RUNTIME_TRACE)
+  message("-- ESI runtime trace-level logging enabled.")
+  add_compile_definitions(ESI_RUNTIME_TRACE)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")

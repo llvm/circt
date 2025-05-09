@@ -174,9 +174,11 @@ namespace {
 /// Cosim client implementation of a write channel port.
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
+  WriteCosimChannelPort(AcceleratorConnection &conn,
+                        ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
                         const Type *type, std::string name)
-      : WriteChannelPort(type), rpcClient(rpcClient), desc(desc), name(name) {}
+      : WriteChannelPort(type), conn(conn), rpcClient(rpcClient), desc(desc),
+        name(name) {}
   ~WriteCosimChannelPort() = default;
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
@@ -192,6 +194,19 @@ public:
 
   /// Send a write message to the server.
   void write(const MessageData &data) override {
+    // Add trace logging before sending the message.
+    conn.getLogger().trace(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_write";
+          msg = "Writing message to channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = name;
+          (*details)["data_size"] = data.getSize();
+          (*details)["message_data"] = data.toHex();
+        });
+
     ClientContext context;
     AddressedMessage msg;
     msg.set_channel_name(name);
@@ -211,6 +226,7 @@ public:
   }
 
 protected:
+  AcceleratorConnection &conn;
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.
   ChannelDesc desc;
@@ -264,10 +280,32 @@ public:
     const std::string &messageString = incomingMessage.data();
     MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
                      messageString.size());
+
+    // Add trace logging for the received message.
+    conn.getLogger().trace(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_read";
+          msg = "Received message from channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = name;
+          (*details)["data_size"] = data.getSize();
+          (*details)["message_data"] = data.toHex();
+        });
+
     while (!callback(data))
       // Blocking here could cause deadlocks in specific situations.
       // TODO: Implement a way to handle this better.
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // Log the message consumption.
+    conn.getLogger().trace(
+        [this](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_read";
+          msg = "Message from channel '" + name + "' consumed";
+        });
 
     // Initiate the next read.
     StartRead(&incomingMessage);
@@ -340,7 +378,8 @@ public:
 
     // Get ports, create the function, then connect to it.
     cmdArgPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), cmdArg, cmdType, "__cosim_mmio_read_write.arg");
+        conn, rpcClient->stub.get(), cmdArg, cmdType,
+        "__cosim_mmio_read_write.arg");
     cmdRespPort = std::make_unique<ReadCosimChannelPort>(
         conn, rpcClient->stub.get(), cmdResp, i64Type,
         "__cosim_mmio_read_write.result");
@@ -367,7 +406,7 @@ public:
     std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();
     uint64_t ret = *result.get().as<uint64_t>();
-    conn.getLogger().debug(
+    conn.getLogger().trace(
         [addr, ret](std::string &subsystem, std::string &msg,
                     std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "cosim_mmio";
@@ -377,7 +416,7 @@ public:
   }
 
   void write(uint32_t addr, uint64_t data) override {
-    conn.getLogger().debug(
+    conn.getLogger().trace(
         [addr,
          data](std::string &subsystem, std::string &msg,
                std::unique_ptr<std::map<std::string, std::any>> &details) {
@@ -461,7 +500,7 @@ public:
     // Get ports. Unfortunately, we can't model this as a callback since there
     // will sometimes be multiple responses per request.
     readRespPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), readResp, readRespType,
+        conn, rpcClient->stub.get(), readResp, readRespType,
         "__cosim_hostmem_read_resp.data");
     readReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, rpcClient->stub.get(), readArg, readReqType,
@@ -485,7 +524,7 @@ public:
 
     // Get ports, create the function, then connect to it.
     writeRespPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), writeResp, writeRespType,
+        conn, rpcClient->stub.get(), writeResp, writeRespType,
         "__cosim_hostmem_write.result");
     writeReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, rpcClient->stub.get(), writeArg, writeReqType,
@@ -505,10 +544,10 @@ public:
   // location specified. TODO: check that the memory has been mapped.
   bool serviceRead(const MessageData &reqBytes) {
     const HostMemReadReq *req = reqBytes.as<HostMemReadReq>();
-    acc.getLogger().debug(
+    acc.getLogger().trace(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "HostMem";
+          subsystem = "hostmem";
           msg = "Read request: addr=0x" + toHex(req->address) +
                 " len=" + std::to_string(req->length) +
                 " tag=" + std::to_string(req->tag);
@@ -517,7 +556,7 @@ public:
     uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
     for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
       HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
-      acc.getLogger().debug(
+      acc.getLogger().trace(
           [&](std::string &subsystem, std::string &msg,
               std::unique_ptr<std::map<std::string, std::any>> &details) {
             subsystem = "HostMem";
@@ -533,10 +572,10 @@ public:
   // location specified. TODO: check that the memory has been mapped.
   MessageData serviceWrite(const MessageData &reqBytes) {
     const HostMemWriteReq *req = reqBytes.as<HostMemWriteReq>();
-    acc.getLogger().debug(
+    acc.getLogger().trace(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "HostMem";
+          subsystem = "hostmem";
           msg = "Write request: addr=0x" + toHex(req->address) + " data=0x" +
                 toHex(req->data) +
                 " valid_bytes=" + std::to_string(req->valid_bytes) +
@@ -664,7 +703,7 @@ CosimEngine::createPort(AppIDPath idPath, const std::string &channelName,
   std::string fullChannelName = idPath.toStr() + "." + channelName;
   if (BundlePort::isWrite(dir))
     port = std::make_unique<WriteCosimChannelPort>(
-        conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
+        conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
   else
     port = std::make_unique<ReadCosimChannelPort>(
         conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
