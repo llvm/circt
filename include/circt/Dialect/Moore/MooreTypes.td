@@ -457,4 +457,8 @@ def UnionRefType : SpecificRefType<UnionType>;
 def UnpackedUnionRefType : SpecificRefType<UnpackedUnionType>;
 def AnyUnionRefType : SpecificRefType<AnyUnionType>;
 
+def TimeType : MooreTypeDef<"Time"> {
+  let mnemonic = "time";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES
