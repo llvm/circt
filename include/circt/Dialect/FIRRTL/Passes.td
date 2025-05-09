@@ -791,7 +791,7 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
     pass, all layer blocks and layers are removed.
   }];
   let constructor = "circt::firrtl::createLowerLayersPass()";
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["sv::SVDialect", "emit::EmitDialect"];
 }
 
 def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {

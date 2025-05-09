@@ -46,12 +46,6 @@ circuit Foo: %[[
   ; CHECK: );
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench{{[/\]}}layers-Foo-Verification.sv"
-  ; CHECK: `ifndef layers_Foo_Verification
-  ; CHECK: `define layers_Foo_Verification
-  ; CHECK: bind Bar Bar_Verification verification ();
-  ; CHECK: `endif // layers_Foo_Verification
-
   ; CHECK: FILE "testbench{{[/\]}}VerificationHelper.sv"
   ; CHECK: module VerificationHelper();
   ; CHECK:   wire w = 1'h0;
@@ -61,7 +55,14 @@ circuit Foo: %[[
   ; CHECK: module Bar_Verification();
   ; CHECK:   wire c = 1'h0;
   ; CHECK:   wire c_probe = c;
+  ; CHECK:   VerificationHelper helper ();
   ; CHECK: endmodule
+
+  ; CHECK FILE "testbench{{[/\]}}layers-Bar-Verification.sv"
+  ; CHECK: `ifndef layers_Bar_Verification
+  ; CHECK:   `define layers_Bar_Verification
+  ; CHECK:   bind Bar Bar_Verification verification ();
+  ; CHECK: `endif // not def layers_Bar_Verification
 
   ; CHECK: FILE "testbench{{[/\]}}Foo.sv"
   ; CHECK: module Foo();
@@ -70,6 +71,12 @@ circuit Foo: %[[
   ; CHECK:   .a (d)
   ; CHECK:   );
   ; CHECK: endmodule
+
+  ; CHECK: FILE "testbench{{[/\]}}layers-Foo-Verification.sv"
+  ; CHECK: `ifndef layers_Foo_Verification
+  ; CHECK:   `define layers_Foo_Verification
+  ; CHECK:   `include "testbench{{[/\]}}layers-Bar-Verification.sv"
+  ; CHECK: `endif // not def layers_Foo_Verification
 
 ; // -----
 
@@ -157,12 +164,18 @@ circuit TestHarness:
     layerblock Verification:
       printf(clock, reset, "The last PC was: %x", read(dut.trace))
 
+; CHECK: FILE "layers-DUT-Verification.sv
+; CHECK: `ifndef layers_DUT_Verification
+; CHECK:   `define layers_DUT_Verification
+; CHECK:   bind DUT DUT_Verification verification ();
+; CHECK: `endif // not def layers_DUT_Verification
+
 ; CHECK: FILE "layers-TestHarness-Verification.sv"
 ; CHECK: `ifndef layers_TestHarness_Verification
-; CHECK: `define layers_TestHarness_Verification
-; CHECK: bind DUT DUT_Verification verification ();
-; CHECK: bind TestHarness TestHarness_Verification verification ();
-; CHECK: `endif // layers_TestHarness_Verification
+; CHECK:   `define layers_TestHarness_Verification
+; CHECK:   `include "layers-DUT-Verification.sv"
+; CHECK:   bind TestHarness TestHarness_Verification verification ();
+; CHECK: `endif // not def layers_TestHarness_Verification
 
 ; // -----
 
@@ -277,3 +290,25 @@ circuit Foo:
     inst bar of Bar
     connect bar.a, a
     connect b, bar.b
+
+; // -----
+
+; Check that when bindfiles include eachother, the include directive uses a path
+; relative to the output directory (or absolute).
+
+FIRRTL version 5.1.0
+circuit Foo:
+
+  layer A, bind, "A":
+  layer B, bind, "B":
+
+  public module Bar:
+
+  public module Foo:
+    inst bar of Bar
+
+; CHECK: FILE "A{{[/\]}}layers-Foo-A.sv"
+; CHECK: `include "A{{[/\]}}layers-Bar-A.sv"
+
+; CHECK: FILE "B{{[/\]}}layers-Foo-B.sv"
+; CHECK: `include "B{{[/\]}}layers-Bar-B.sv"
