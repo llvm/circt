@@ -173,10 +173,10 @@ class LowerLayersPass
       return hw::OutputFileAttr::getFromDirectoryAndFilename(
           &getContext(), file.getDirectory(),
           fileNameForLayer(circuitName, layerName),
-          /*excludeFromFileList=*/true);
+          /*excludeFromFileList=*/false);
     return hw::OutputFileAttr::getFromFilename(
         &getContext(), fileNameForLayer(circuitName, layerName),
-        /*excludeFromFileList=*/true);
+        /*excludeFromFileList=*/false);
   }
 
   /// Safely build a new module with a given namehint.  This handles geting a
