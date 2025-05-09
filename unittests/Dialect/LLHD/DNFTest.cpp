@@ -38,8 +38,22 @@ static std::string str(const DNF &dnf) {
   return buffer;
 }
 
+static std::string str(const BetterDNF &dnf) {
+  std::string buffer;
+  llvm::raw_string_ostream(buffer) << dnf;
+  return buffer;
+}
+
+static std::string str(const TruthTable &table) {
+  std::string buffer;
+  llvm::raw_string_ostream(buffer) << table;
+  return buffer;
+}
+
 /// Compare a DNF against a string.
 static bool operator==(const DNF &a, StringRef b) { return str(a) == b; }
+
+static bool operator==(const TruthTable &a, StringRef b) { return str(a) == b; }
 
 } // namespace llhd
 } // namespace circt
@@ -195,6 +209,72 @@ TEST(DNFTest, Regression) {
   check(DNF(AndTerm::posEdge(d)));
   check(DNF(AndTerm::posEdge(d)) | DNF(e));
   check(DNF(AndTerm::posEdge(d)) | DNF(AndTerm::posEdge(e)));
+}
+
+TEST(BetterDNF, Printing) {
+  auto F = TruthTable::getConst(3, false);
+  auto T = TruthTable::getConst(3, true);
+  auto p = TruthTable::getPoison();
+  auto x = TruthTable::getTerm(3, 0);
+  auto a1 = TruthTable::getTerm(3, 1);
+  auto a2 = TruthTable::getTerm(3, 2);
+
+  // Basic operations.
+  ASSERT_EQ(a1, "a1");
+  ASSERT_EQ(~a1, "!a1");
+  ASSERT_EQ(a1 & a2, "a1&a2");
+  ASSERT_EQ(a1 | a2, "a1 | a2");
+  ASSERT_EQ(a1 ^ a2, "a1&!a2 | !a1&a2");
+
+  // Unknown marker semantics.
+  ASSERT_EQ(x, "x");
+  ASSERT_EQ(~x, "x");
+  ASSERT_EQ(x & x, "x");
+  ASSERT_EQ(x | x, "x");
+  ASSERT_EQ(x ^ x, "x");
+
+  // Identities.
+  ASSERT_EQ(a1 & F, "false");
+  ASSERT_EQ(a1 & T, "a1");
+  ASSERT_EQ(a1 | F, "a1");
+  ASSERT_EQ(a1 | T, "true");
+  ASSERT_EQ(a1 & ~a1, "false");
+  ASSERT_EQ(a1 | ~a1, "true");
+  ASSERT_EQ(a1 | a1, "a1");
+  ASSERT_EQ(a1 & a1, "a1");
+  ASSERT_EQ(a1 ^ a1, "false");
+  ASSERT_EQ(a1 ^ ~a1, "true");
+
+  // Basic operations involving unknown markers.
+  ASSERT_EQ(x & a1, "x&a1");
+  ASSERT_EQ((x & a1) & a2, "x&a1&a2");
+  ASSERT_EQ((x & a1) & (x & a2), "x&a1&a2");
+  ASSERT_EQ(~(x & a1), "!a1 | x");
+  ASSERT_EQ(x ^ a1, "x");
+  ASSERT_EQ((x & a1) ^ a1, "x&a1");
+  ASSERT_EQ((x & a1) ^ (x & a1), "x&a1");
+
+  // Identities involving unknown markers.
+  ASSERT_EQ((x & a1) & ~a1, "false");
+  ASSERT_EQ((x & ~a1) & a1, "false");
+  ASSERT_EQ((x & ~a1) & (x & a1), "false");
+  ASSERT_EQ((x & a1) | a1, "a1");
+
+  // Poison.
+  ASSERT_EQ(p, "poison");
+  ASSERT_EQ(~p, "poison");
+  ASSERT_EQ(p & x, "poison");
+  ASSERT_EQ(x & p, "poison");
+  ASSERT_EQ(p | x, "poison");
+  ASSERT_EQ(x | p, "poison");
+  ASSERT_EQ(p ^ x, "poison");
+  ASSERT_EQ(x ^ p, "poison");
+  ASSERT_EQ(p & a1, "poison");
+  ASSERT_EQ(p | a1, "poison");
+  ASSERT_EQ(p ^ a1, "poison");
+  ASSERT_EQ(a1 & p, "poison");
+  ASSERT_EQ(a1 | p, "poison");
+  ASSERT_EQ(a1 ^ p, "poison");
 }
 
 } // namespace

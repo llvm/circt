@@ -7,7 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 #include <bitset>
@@ -282,6 +285,389 @@ struct DNF {
   /// Print this DNF to `os`, followed by a list of the concrete values used.
   void printWithValues(llvm::raw_ostream &os) const;
 };
+
+/// A single AND operation of a DNF.
+struct BetterDNFTerm {
+  /// A mask with two bits for each possible term that may be present. Even bits
+  /// indicate a term is present, odd bits indicate a term's negation is
+  /// present.
+  uint32_t andTerms = 0;
+
+  bool isTrue() const { return andTerms == 0; }
+  bool isFalse() const {
+    // If any term has both the even and odd bits set, the term is false.
+    return (andTerms & 0x55555555UL) & (andTerms >> 1);
+  }
+
+  bool operator==(BetterDNFTerm other) const {
+    return andTerms == other.andTerms;
+  }
+  bool operator!=(BetterDNFTerm other) const { return !(*this == other); }
+};
+
+/// A boolean function expressed in canonical disjunctive normal form. Supports
+/// functions with up to 32 terms.
+struct BetterDNF {
+  SmallVector<BetterDNFTerm, 2> orTerms;
+
+  bool isPoison() const { return orTerms.size() == 1 && orTerms[0].isFalse(); }
+  bool isTrue() const { return orTerms.size() == 1 && orTerms[0].isTrue(); }
+  bool isFalse() const { return orTerms.empty(); }
+
+  void print(llvm::raw_ostream &os) const {}
+};
+
+/// A boolean function expressed as a truth table. The first term is treated as
+/// a special "unknown" value marker with special semantics.
+struct TruthTable {
+  APInt bits;
+
+  unsigned getNumTerms() const {
+    if (isPoison())
+      return 0;
+    return llvm::countr_zero(bits.getBitWidth());
+  }
+
+  static TruthTable getPoison() { return TruthTable{APInt::getZero(0)}; }
+  bool isPoison() const { return bits.getBitWidth() == 0; }
+
+  bool isTrue() const { return bits.isAllOnes(); }
+  bool isFalse() const { return bits.isZero(); }
+
+  /// Create a boolean expression with a constant true or false value.
+  static TruthTable getConst(unsigned numTerms, bool value) {
+    assert(numTerms <= 16 && "excessive truth table");
+    return TruthTable{value ? APInt::getAllOnes(1 << numTerms)
+                            : APInt::getZero(1 << numTerms)};
+  }
+
+  /// Create a boolean expression consisting of a single term.
+  static TruthTable getTerm(unsigned numTerms, unsigned term) {
+    assert(numTerms <= 16 && "excessive truth table");
+    assert(term < numTerms);
+    return TruthTable{getTermMask(1 << numTerms, term)};
+  }
+
+  TruthTable operator~() const {
+    if (isPoison())
+      return getPoison();
+    auto z = *this;
+    z.bits.flipAllBits();
+    z.fixupUnknown();
+    return z;
+  }
+
+  TruthTable operator&(const TruthTable &other) const {
+    if (isPoison() || other.isPoison())
+      return getPoison();
+    auto z = *this;
+    z.bits &= other.bits;
+    return z;
+  }
+
+  TruthTable operator|(const TruthTable &other) const {
+    if (isPoison() || other.isPoison())
+      return getPoison();
+    auto z = *this;
+    z.bits |= other.bits;
+    return z;
+  }
+
+  TruthTable operator^(const TruthTable &other) const {
+    if (isPoison() || other.isPoison())
+      return getPoison();
+    if (isTrue())
+      return ~other;
+    if (isFalse())
+      return other;
+    if (other.isTrue())
+      return ~*this;
+    if (other.isFalse())
+      return *this;
+    return (*this & ~other) | (~*this & other);
+  }
+
+  TruthTable &invert() { return *this = ~*this; }
+
+  TruthTable &operator|=(const TruthTable &other) {
+    return *this = *this | other;
+  }
+
+  TruthTable &operator&=(const TruthTable &other) {
+    return *this = *this & other;
+  }
+
+  TruthTable &operator^=(const TruthTable &other) {
+    return *this = *this ^ other;
+  }
+
+  bool operator==(const TruthTable &other) const { return bits == other.bits; }
+  bool operator!=(const TruthTable &other) const { return !(*this == other); }
+
+  /// Convert the truth table into its canonical disjunctive normal form.
+  BetterDNF canonicalize() const {
+    // Handle the trivial cases.
+    if (isPoison())
+      return BetterDNF{{BetterDNFTerm{UINT32_MAX}}};
+    if (isTrue())
+      return BetterDNF{{BetterDNFTerm{0}}};
+    if (isFalse())
+      return BetterDNF{{}};
+
+    // Otherwise add terms to the DNF iteratively until there are no more ones
+    // remaining in the truth table.
+    unsigned numTerms = getNumTerms();
+    BetterDNF dnf;
+    auto remainingBits = bits;
+    while (!remainingBits.isZero()) {
+      // Find the index of the next 1 in the truth table. Coincidentally, the
+      // binary digits of this index correspond to the assignment of 0s and 1s
+      // to the expression terms at this row of the truth table.
+      unsigned nextIdx = remainingBits.countTrailingZeros();
+
+      // We want to generate a DNF with the fewest terms possible. To do so,
+      // iterate over all possible combinations of which expression terms to
+      // add. We do this by iterating the `keeps` variable through all possible
+      // bit combinations where each bit corresponds to an expression term being
+      // present or not. 0b0000 would not add any terms, 0b0011 would add the
+      // terms `t0&t1`, 0b1111 would add the terms `t0&t1&t2&t3`. The fewer
+      // terms we add, the more 1s in the truth table are covered. We try to
+      // find the largest number of such 1s that are a subset of our truth
+      // table, and we remember the exact combination of kept terms for it.
+      unsigned bestKeeps = -1;
+      auto bestMask = APInt::getZero(bits.getBitWidth());
+      for (unsigned keeps = 0; keeps < bits.getBitWidth(); ++keeps) {
+        auto mask = APInt::getAllOnes(bits.getBitWidth());
+        for (unsigned termIdx = 0; termIdx < numTerms; ++termIdx)
+          if (keeps & (1 << termIdx))
+            mask &= (nextIdx & (1 << termIdx)) ? getTermMask(termIdx)
+                                               : ~getTermMask(termIdx);
+        if ((bits & mask) == mask &&
+            llvm::popcount(keeps) < llvm::popcount(bestKeeps)) {
+          bestKeeps = keeps;
+          bestMask = mask;
+        }
+      }
+
+      // At this point, `bestKeeps` corresponds to a bit mask indicating which
+      // of the expression terms to incorporate in the AND operation we are
+      // about to add to the DNF. `bestMask` corresponds to the 1s in the truth
+      // table covered by these terms. Now populate an AND operation with these
+      // terms.
+      BetterDNFTerm orTerm;
+      for (unsigned termIdx = 0; termIdx < numTerms; ++termIdx) {
+        if (~bestKeeps & (1 << termIdx))
+          continue;
+        bool invert = (~nextIdx & (1 << termIdx));
+        orTerm.andTerms |= (1 << (termIdx * 2 + invert));
+      }
+      dnf.orTerms.push_back(orTerm);
+
+      // Clear the bits that we have covered with this term. This causes the
+      // next iteration to work towards covering the next 1 in the truth table
+      // that has not been covered by any term thus far.
+      remainingBits &= ~bestMask;
+    }
+    return dnf;
+  }
+
+private:
+  /// Return a mask that has a 1 in all truth table rows where `term` is 1,
+  /// and a 0 otherwise. This is equivalent to the truth table of a boolean
+  /// expression consisting of a single term.
+  static APInt getTermMask(unsigned bitWidth, unsigned term) {
+    return APInt::getSplat(bitWidth,
+                           APInt::getHighBitsSet(2 << term, 1 << term));
+  }
+  APInt getTermMask(unsigned term) const {
+    return getTermMask(bits.getBitWidth(), term);
+  }
+
+  // Adjust any `!x` terms to be `x` terms.
+  void fixupUnknown() {
+    auto mask = bits ^ (bits << 1);
+    mask &= getTermMask(0);
+    bits |= mask;
+    mask.lshrInPlace(1);
+    mask.flipAllBits();
+    bits &= mask;
+  }
+};
+
+static inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                            const BetterDNFTerm &term) {
+  if (term.isTrue()) {
+    os << "(true)";
+  } else if (term.isFalse()) {
+    os << "(false)";
+  } else {
+    bool needsSeparator = false;
+    uint64_t rest = term.andTerms;
+    while (rest != 0) {
+      auto bit = llvm::countr_zero(rest);
+      rest &= ~(1UL << bit);
+      auto termIdx = bit >> 1;
+      auto negative = bit & 1;
+      if (needsSeparator)
+        os << "&";
+      if (negative)
+        os << "!";
+      if (termIdx == 0)
+        os << "x";
+      else
+        os << "a" << termIdx;
+      needsSeparator = true;
+    }
+  }
+  return os;
+}
+
+static inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                            const BetterDNF &dnf) {
+  if (dnf.isPoison())
+    os << "poison";
+  else if (dnf.isTrue())
+    os << "true";
+  else if (dnf.isFalse())
+    os << "false";
+  else
+    llvm::interleave(dnf.orTerms, os, " | ");
+  return os;
+}
+
+static inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                            const TruthTable &table) {
+  return os << table.canonicalize();
+}
+
+struct BetterValueEntry {
+  Value value;
+
+  BetterValueEntry() = default;
+  BetterValueEntry(Value value) : value(value) {}
+
+  bool isPoison() const { return *this == getPoison(); }
+  bool isUnknown() const { return *this == getUnknown(); }
+  static BetterValueEntry getPoison() {
+    return Value::getFromOpaquePointer((void *)(1));
+  }
+  static BetterValueEntry getUnknown() { return Value(); }
+
+  void merge(BetterValueEntry other) {
+    if (isPoison() || other.isPoison()) {
+      *this = getPoison();
+      return;
+    }
+    if (value == other.value)
+      return;
+    if (!isUnknown() && !other.isUnknown()) {
+      auto result = dyn_cast<OpResult>(value);
+      auto otherResult = dyn_cast<OpResult>(other.value);
+      if (result && otherResult &&
+          result.getResultNumber() == otherResult.getResultNumber() &&
+          mlir::OperationEquivalence::isEquivalentTo(
+              result.getOwner(), otherResult.getOwner(),
+              mlir::OperationEquivalence::Flags::IgnoreLocations))
+        return;
+    }
+    *this = getUnknown();
+  }
+
+  bool operator==(BetterValueEntry other) const { return value == other.value; }
+  bool operator!=(BetterValueEntry other) const { return value != other.value; }
+};
+
+struct BetterValueTable {
+  SmallVector<std::pair<TruthTable, BetterValueEntry>, 1> entries;
+
+  BetterValueTable() = default;
+  BetterValueTable(TruthTable condition, BetterValueEntry entry)
+      : entries({{condition, entry}}) {}
+
+  void addCondition(TruthTable condition) {
+    for (auto &entry : entries)
+      entry.first &= condition;
+    minimize();
+  }
+
+  void merge(const BetterValueTable &other) {
+    entries.append(other.entries.begin(), other.entries.end());
+    minimize();
+  }
+
+  void minimize() {
+    if (entries.empty())
+      return;
+    auto seenBits = APInt::getZero(entries[0].first.bits.getBitWidth());
+
+    for (unsigned idx = 0; idx < entries.size(); ++idx) {
+      // Remove entries where the condition is trivially false.
+      auto &condition = entries[idx].first;
+      if (condition.isFalse()) {
+        if (idx != entries.size() - 1)
+          std::swap(entries[idx], entries.back());
+        entries.pop_back();
+        --idx;
+        continue;
+      }
+
+      // Check if the condition of this entry overlaps with an earlier one.
+      auto bits = condition.bits;
+      if ((seenBits & bits).isZero()) {
+        seenBits |= bits;
+        continue;
+      }
+
+      // Find the earliest entry in the table that overlaps.
+      unsigned mergeIdx = 0;
+      for (; mergeIdx < entries.size(); ++mergeIdx)
+        if (!(entries[mergeIdx].first.bits & bits).isZero())
+          break;
+      assert(mergeIdx < idx && "should have found an overlapping entry");
+      bits |= entries[mergeIdx].first.bits;
+
+      // Merge all overlapping entries into this first one.
+      for (unsigned otherIdx = mergeIdx + 1; otherIdx <= idx; ++otherIdx) {
+        auto &otherBits = entries[otherIdx].first.bits;
+        if ((otherBits & bits).isZero())
+          continue;
+        bits |= otherBits;
+        entries[mergeIdx].first |= entries[otherIdx].first;
+        entries[mergeIdx].second.merge(entries[otherIdx].second);
+        if (otherIdx != entries.size() - 1)
+          std::swap(entries[otherIdx], entries.back());
+        entries.pop_back();
+        --otherIdx;
+        --idx;
+      }
+    }
+  }
+};
+
+static inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                            const BetterValueEntry &entry) {
+  if (entry.isPoison())
+    os << "poison";
+  else if (entry.isUnknown())
+    os << "x";
+  else
+    entry.value.printAsOperand(os, mlir::OpPrintingFlags());
+  return os;
+}
+
+static inline llvm::raw_ostream &
+operator<<(llvm::raw_ostream &os,
+           const std::pair<TruthTable, BetterValueEntry> &pair) {
+  return os << pair.first << " -> " << pair.second;
+}
+
+static inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                            const BetterValueTable &table) {
+  os << "ValueTable(";
+  llvm::interleaveComma(table.entries, os);
+  os << ")";
+  return os;
+}
 
 } // namespace llhd
 } // namespace circt

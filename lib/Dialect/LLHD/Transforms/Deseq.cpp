@@ -269,13 +269,12 @@ struct ClockInfo {
   /// The value acting as the clock, causing the register to be set to a value
   /// in `valueTable` when triggered.
   Value clock;
-  /// The edge which causes the update. Guaranteed to be `Pos` or `Neg`.
-  Edge edge;
-  /// The table of values that the register will assume when triggered by the
-  /// clock. This may contain a single unconditional value, or may list a
-  /// concrete list of values which are assumed under certain conditions. This
-  /// can be used to infer the use of a register with or without an enable line.
-  ValueTable valueTable;
+  /// The value the register is set to when the clock is triggered.
+  Value value;
+  /// Whether the clock is sensitive to a rising or falling edge.
+  bool risingEdge;
+  /// The optional value acting as an enable.
+  Value enable;
 
   /// Check if this clock info is null.
   operator bool() const { return bool(clock); }
@@ -387,12 +386,21 @@ struct Deseq {
   void deseq();
 
   bool analyzeProcess();
-  bool analyzeTriggers();
+  Value tracePastValue(Value pastValue);
+
   bool matchDrives();
   bool matchDrive(DriveInfo &drive);
+  bool matchDriveClock(
+      DriveInfo &drive,
+      ArrayRef<std::pair<BetterDNFTerm, BetterValueEntry>> valueTable);
+  bool matchDriveClockAndReset(
+      DriveInfo &drive,
+      ArrayRef<std::pair<BetterDNFTerm, BetterValueEntry>> valueTable);
   bool isValidResetValue(Value value);
+
   void implementRegisters();
   void implementRegister(DriveInfo &drive);
+
   Value specializeValue(Value value, FixedValues fixedValues);
   ValueRange specializeProcess(FixedValues fixedValues);
 
@@ -415,20 +423,66 @@ struct Deseq {
   void propagate(comb::XorOp op);
   void propagate(comb::MuxOp op);
 
+  TruthTable computeBoolean(Value value);
+  BetterValueTable computeValue(Value value);
+  TruthTable computeBoolean(OpResult value);
+  BetterValueTable computeValue(OpResult value);
+  TruthTable computeBoolean(BlockArgument value);
+  BetterValueTable computeValue(BlockArgument arg);
+  TruthTable computeBlockCondition(Block *block);
+  TruthTable computeSuccessorCondition(BlockOperand &operand);
+  TruthTable computeSuccessorBoolean(BlockOperand &operand, unsigned argIdx);
+  BetterValueTable computeSuccessorValue(BlockOperand &operand,
+                                         unsigned argIdx);
+
+  TruthTable getPoisonBoolean() const { return TruthTable::getPoison(); }
+
+  TruthTable getUnknownBoolean() const {
+    return TruthTable::getTerm(observedValues.size() * 2 + 1, 0);
+  }
+
+  TruthTable getConstBoolean(bool value) const {
+    return TruthTable::getConst(observedValues.size() * 2 + 1, value);
+  }
+
+  TruthTable getPastTrigger(unsigned triggerIndex) const {
+    return TruthTable::getTerm(observedValues.size() * 2 + 1,
+                               triggerIndex * 2 + 1);
+  }
+
+  TruthTable getPresentTrigger(unsigned triggerIndex) const {
+    return TruthTable::getTerm(observedValues.size() * 2 + 1,
+                               triggerIndex * 2 + 2);
+  }
+
+  BetterValueTable getUnknownValue() const {
+    return BetterValueTable(getConstBoolean(true),
+                            BetterValueEntry::getUnknown());
+  }
+
+  BetterValueTable getPoisonValue() const {
+    return BetterValueTable(getConstBoolean(true),
+                            BetterValueEntry::getPoison());
+  }
+
+  BetterValueTable getKnownValue(Value value) const {
+    return BetterValueTable(getConstBoolean(true), value);
+  }
+
   /// The process we are desequentializing.
   ProcessOp process;
   /// The single wait op of the process.
   WaitOp wait;
   /// The boolean values observed by the wait.
-  SmallSetVector<Value, 2> observedBooleans;
+  SmallSetVector<Value, 2> observedValues;
+  /// The values carried from the past into the present as destination operands
+  /// of the wait op. These values are guaranteed to also be contained in
+  /// `observedValues`.
+  SmallVector<Value, 2> pastValues;
   /// The conditional drive operations fed by this process.
   SmallVector<DriveInfo> driveInfos;
   /// The triggers that cause the process to update its results.
-  SmallSetVector<Value, 2> triggers;
-  /// The values carried from the past into the present as destination operands
-  /// of the wait op. These values are guaranteed to also be contained in
-  /// `triggers` and `observedBooleans`.
-  SmallVector<Value, 2> pastValues;
+  SmallSetVector<Value, 2> triggers; // TODO: merge with observedValues
   /// Specializations of the process for different trigger values.
   SmallDenseMap<FixedValues, ValueRange, 2> specializedProcesses;
   /// An `llhd.constant_time` op created to represent an epsilon delay.
@@ -440,15 +494,25 @@ struct Deseq {
   SmallSetVector<PointerUnion<Operation *, Block *>, 4> dirtyNodes;
   /// The DNF expression computed for an `i1` value in the IR.
   DenseMap<Value, DNF> booleanLattice;
+  DenseMap<Value, TruthTable> booleanLattice2;
   /// The value table computed for a value in the IR. This essentially lists
   /// what values an SSA value assumes under certain conditions.
   DenseMap<Value, ValueTable> valueLattice;
+  DenseMap<Value, BetterValueTable> valueLattice2;
   /// The condition under which control flow reaches a block. The block
   /// immediately following the wait op has this set to true; any further
   /// conditional branches will refine the condition of successor blocks.
   DenseMap<Block *, DNF> blockConditionLattice;
+  DenseMap<Block *, TruthTable> blockConditionLattice2;
   /// The conditions and values transferred from a block to its successors.
   DenseMap<Block *, SuccessorValues> successorLattice;
+  DenseMap<BlockOperand *, DNF> successorConditionLattice;
+  DenseMap<BlockOperand *, TruthTable> successorConditionLattice2;
+  DenseMap<std::tuple<BlockOperand *, unsigned>, DNF> successorBooleanLattice;
+  DenseMap<std::tuple<BlockOperand *, unsigned>, TruthTable>
+      successorBooleanLattice2;
+  DenseMap<std::tuple<BlockOperand *, unsigned>, BetterValueTable>
+      successorValueLattice2;
 };
 } // namespace
 
@@ -462,19 +526,14 @@ void Deseq::deseq() {
   LLVM_DEBUG({
     llvm::dbgs() << "Desequentializing " << process.getLoc() << "\n";
     llvm::dbgs() << "- Feeds " << driveInfos.size() << " conditional drives\n";
-  });
-
-  // Perform a data flow analysis to find SSA values corresponding to a detected
-  // rising or falling edge, and which values are driven under which conditions.
-  propagate();
-
-  // Check which values are used as triggers.
-  if (!analyzeTriggers())
-    return;
-  LLVM_DEBUG({
-    llvm::dbgs() << "- " << triggers.size() << " potential triggers:\n";
-    for (auto trigger : triggers)
-      llvm::dbgs() << "  - " << trigger << "\n";
+    llvm::dbgs() << "- " << observedValues.size() << " potential triggers:\n";
+    for (auto [index, observedValue] : llvm::enumerate(observedValues)) {
+      llvm::dbgs() << "  - ";
+      observedValue.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << ": past " << getPastTrigger(index);
+      llvm::dbgs() << ", present " << getPresentTrigger(index);
+      llvm::dbgs() << "\n";
+    }
   });
 
   // For each drive fed by this process determine the exact triggers that cause
@@ -533,9 +592,6 @@ bool Deseq::analyzeProcess() {
                << "Skipping " << process.getLoc() << ": has no wait\n");
     return false;
   }
-  for (auto value : wait.getObserved())
-    if (value.getType().isSignlessInteger(1))
-      observedBooleans.insert(value);
 
   // Ensure that all process results lead to conditional drive operations.
   SmallPtrSet<Operation *, 8> seenDrives;
@@ -571,7 +627,133 @@ bool Deseq::analyzeProcess() {
     driveInfos.push_back(DriveInfo(driveOp));
   }
 
+  // Ensure the observed values are all booleans.
+  for (auto value : wait.getObserved()) {
+    if (!value.getType().isSignlessInteger(1)) {
+      LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
+                              << ": observes non-i1 value\n");
+      return false;
+    }
+    observedValues.insert(value);
+  }
+
+  // We only support 1 or 2 observed values, since we map to registers with a
+  // clock and an optional async reset.
+  if (observedValues.empty() || observedValues.size() > 2) {
+    LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc() << ": observes "
+                            << observedValues.size() << " values\n");
+    return false;
+  }
+
+  // Seed the drive value analysis with the observed values.
+  for (auto [index, observedValue] : llvm::enumerate(observedValues))
+    booleanLattice2.insert({observedValue, getPresentTrigger(index)});
+
+  // Ensure the wait op destination operands, i.e. the values passed from the
+  // past into the present, are the observed values.
+  for (auto [operand, blockArg] :
+       llvm::zip(wait.getDestOperands(), wait.getDest()->getArguments())) {
+    if (!operand.getType().isSignlessInteger(1)) {
+      LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
+                              << ": uses non-i1 past value\n");
+      return false;
+    }
+    auto observedValue = tracePastValue(operand);
+    if (!observedValue)
+      return false;
+    pastValues.push_back(observedValue);
+    unsigned index = std::distance(observedValues.begin(),
+                                   llvm::find(observedValues, observedValue));
+    booleanLattice2.insert({blockArg, getPastTrigger(index)});
+  }
+
   return true;
+}
+
+/// Trace a value passed from the past into the present as a destination operand
+/// of the wait op back to a single observed value. Returns a null value if the
+/// value does not trace back to a single, unique observed value.
+Value Deseq::tracePastValue(Value pastValue) {
+  // Use a worklist to look through branches and a few common IR patterns to
+  // find the concrete value used as a destination operand.
+  SmallVector<Value> worklist;
+  SmallPtrSet<Value, 8> seen;
+  worklist.push_back(pastValue);
+  seen.insert(pastValue);
+
+  SmallPtrSet<Block *, 2> predSeen;
+  SmallSetVector<BlockOperand *, 4> predWorklist;
+  SmallPtrSet<Value, 2> distinctValues;
+  while (!worklist.empty()) {
+    auto value = worklist.pop_back_val();
+    auto arg = dyn_cast<BlockArgument>(value);
+
+    // If this is one of the observed values, we're done. Otherwise trace
+    // block arguments backwards to their predecessors.
+    if (observedValues.contains(value) || !arg) {
+      distinctValues.insert(value);
+      continue;
+    }
+
+    // Collect the predecessor block operands to process.
+    predSeen.clear();
+    predWorklist.clear();
+    for (auto *predecessor : arg.getOwner()->getPredecessors())
+      if (predSeen.insert(predecessor).second)
+        for (auto &operand : predecessor->getTerminator()->getBlockOperands())
+          if (operand.get() == arg.getOwner())
+            predWorklist.insert(&operand);
+
+    // Handle the predecessors. This essentially is a loop over all block
+    // arguments in terminator ops that branch to arg's block.
+    unsigned argIdx = arg.getArgNumber();
+    for (auto *blockOperand : predWorklist) {
+      auto *op = blockOperand->getOwner();
+      if (auto branchOp = dyn_cast<cf::BranchOp>(op)) {
+        // Handle unconditional branches.
+        auto operand = branchOp.getDestOperands()[argIdx];
+        if (seen.insert(operand).second)
+          worklist.push_back(operand);
+      } else if (auto condBranchOp = dyn_cast<cf::CondBranchOp>(op)) {
+        // Handle conditional branches.
+        unsigned destIdx = blockOperand->getOperandNumber();
+        auto operand = destIdx == 0
+                           ? condBranchOp.getTrueDestOperands()[argIdx]
+                           : condBranchOp.getFalseDestOperands()[argIdx];
+
+        // Undo the `cond_br a, bb(a), bb(a)` to `cond_br a, bb(1), bb(0)`
+        // canonicalization.
+        if ((matchPattern(operand, m_One()) && destIdx == 0) ||
+            (matchPattern(operand, m_Zero()) && destIdx == 1))
+          operand = condBranchOp.getCondition();
+
+        if (seen.insert(operand).second)
+          worklist.push_back(operand);
+      } else {
+        LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
+                                << ": unsupported terminator " << op->getName()
+                                << " while tracing past value\n");
+        return Value{};
+      }
+    }
+  }
+
+  // Ensure that we have one distinct value being passed from the past into
+  // the present, and that the value is observed.
+  if (distinctValues.size() != 1) {
+    LLVM_DEBUG(
+        llvm::dbgs()
+        << "Skipping " << process.getLoc()
+        << ": multiple past values passed for the same block argument\n");
+    return Value{};
+  }
+  auto distinctValue = *distinctValues.begin();
+  if (!observedValues.contains(distinctValue)) {
+    LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
+                            << ": unobserved past value\n");
+    return Value{};
+  }
+  return distinctValue;
 }
 
 //===----------------------------------------------------------------------===//
@@ -662,7 +844,7 @@ void Deseq::propagate() {
       process->getRegions(), [&](auto *opOperand) {
         auto value = opOperand->get();
         if (auto *defOp = value.getDefiningOp();
-            defOp && !observedBooleans.contains(value)) {
+            defOp && !observedValues.contains(value)) {
           if (opsAboveSeen.insert(defOp).second)
             propagate(defOp);
         } else {
@@ -910,77 +1092,348 @@ void Deseq::propagate(comb::MuxOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Trigger Analysis
+// Data Flow Analysis (Updated)
 //===----------------------------------------------------------------------===//
 
-/// After propagating values across the lattice, determine which values may be
-/// involved in trigger detection.
-bool Deseq::analyzeTriggers() {
-  for (auto operand : wait.getDestOperands()) {
-    // Only i1 values can be triggers.
-    if (!operand.getType().isSignlessInteger(1)) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "- Aborting: " << operand.getType() << " trigger ";
-        operand.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-        llvm::dbgs() << "\n";
-      });
-      return false;
-    }
+TruthTable Deseq::computeBoolean(Value value) {
+  assert(value.getType().isSignlessInteger(1));
 
-    // Data flow analysis must have produced a single value for this past
-    // operand.
-    auto dnf = booleanLattice.lookup(operand);
-    Value value;
-    AndTerm::Use use;
-    if (auto single = dnf.getSingleTerm()) {
-      std::tie(value, use) = *single;
-    } else {
-      LLVM_DEBUG({
-        llvm::dbgs() << "- Aborting: trigger ";
-        operand.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-        llvm::dbgs() << " with multiple values " << dnf << "\n";
-      });
-      return false;
-    }
-    if (use != AndTerm::Id) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "- Aborting: trigger ";
-        operand.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-        llvm::dbgs() << " is inverted: " << dnf << "\n";
-      });
-      return false;
-    }
+  // If this value is a result of the process we're analyzing, jump to the
+  // corresponding yield operand of the wait op.
+  if (value.getDefiningOp() == process)
+    return computeBoolean(
+        wait.getYieldOperands()[cast<OpResult>(value).getResultNumber()]);
 
-    // We can only reason about past values defined outside the process.
-    if (process.getBody().isAncestor(value.getParentRegion())) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "- Aborting: trigger ";
-        operand.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-        llvm::dbgs() << " defined inside the process\n";
-      });
-      return false;
-    }
+  // Check if we have already computed this value. Otherwise insert an unknown
+  // value to break recursions. This will be overwritten by a concrete value
+  // later.
+  if (auto it = booleanLattice2.find(value); it != booleanLattice2.end())
+    return it->second;
+  booleanLattice2[value] = getUnknownBoolean();
 
-    // We can only reason about past values if they cause the process to resume
-    // when they change.
-    if (!observedBooleans.contains(value)) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "- Aborting: unobserved trigger ";
-        value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-        llvm::dbgs() << "\n";
-      });
-      return false;
-    }
+  // Actually compute the value.
+  TruthTable result =
+      TypeSwitch<Value, TruthTable>(value).Case<OpResult, BlockArgument>(
+          [&](auto value) { return computeBoolean(value); });
 
-    triggers.insert(value);
-    pastValues.push_back(value);
+  // Memoize the result.
+  LLVM_DEBUG({
+    llvm::dbgs() << "- Boolean ";
+    value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+    llvm::dbgs() << ": " << result << "\n";
+  });
+  booleanLattice2[value] = result;
+  return result;
+}
+
+BetterValueTable Deseq::computeValue(Value value) {
+  // If this value is a result of the process we're analyzing, jump to the
+  // corresponding yield operand of the wait op.
+  if (value.getDefiningOp() == process)
+    return computeValue(
+        wait.getYieldOperands()[cast<OpResult>(value).getResultNumber()]);
+
+  // Check if we have already computed this value. Otherwise insert an unknown
+  // value to break recursions. This will be overwritten by a concrete value
+  // later.
+  if (auto it = valueLattice2.find(value); it != valueLattice2.end())
+    return it->second;
+  valueLattice2[value] = getUnknownValue();
+
+  // Actually compute the value.
+  BetterValueTable result =
+      TypeSwitch<Value, BetterValueTable>(value).Case<OpResult, BlockArgument>(
+          [&](auto value) { return computeValue(value); });
+
+  // Memoize the result.
+  LLVM_DEBUG({
+    llvm::dbgs() << "- Value ";
+    value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+    llvm::dbgs() << ": " << result << "\n";
+  });
+  valueLattice2[value] = result;
+  return result;
+}
+
+TruthTable Deseq::computeBoolean(OpResult value) {
+  assert(value.getType().isSignlessInteger(1));
+  auto *op = value.getOwner();
+
+  // Handle constants.
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op))
+    return getConstBoolean(constOp.getValue().isOne());
+
+  // Handle `comb.or`.
+  if (auto orOp = dyn_cast<comb::OrOp>(op)) {
+    auto result = getConstBoolean(false);
+    for (auto operand : orOp.getInputs()) {
+      result |= computeBoolean(operand);
+      if (result.isTrue())
+        break;
+    }
+    return result;
   }
 
-  if (triggers.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "- Aborting: no triggers\n");
-    return false;
+  // Handle `comb.and`.
+  if (auto andOp = dyn_cast<comb::AndOp>(op)) {
+    auto result = getConstBoolean(true);
+    for (auto operand : andOp.getInputs()) {
+      result &= computeBoolean(operand);
+      if (result.isFalse())
+        break;
+    }
+    return result;
   }
-  return true;
+
+  // Handle `comb.xor`.
+  if (auto xorOp = dyn_cast<comb::XorOp>(op)) {
+    auto result = getConstBoolean(false);
+    for (auto operand : xorOp.getInputs())
+      result ^= computeBoolean(operand);
+    return result;
+  }
+
+  // Otherwise check if the operation depends on any of the triggers. If it
+  // does, create a poison value since we don't really know how the trigger
+  // affects this boolean. If it doesn't, create an unknown value.
+  if (llvm::any_of(op->getOperands(), [&](auto operand) {
+        // TODO: This should probably also check non-i1 values to see if they
+        // depend on the triggers. Maybe once we merge boolean and value tables?
+        if (!operand.getType().isSignlessInteger(1))
+          return false;
+        auto result = computeBoolean(operand);
+        return result.isPoison() || result != getUnknownBoolean();
+      }))
+    return getPoisonBoolean();
+  return getUnknownBoolean();
+}
+
+BetterValueTable Deseq::computeValue(OpResult value) {
+  // // Handle constants.
+  // Attribute attr;
+  // if (matchPattern(value, m_Constant(&attr)))
+  //   return getConstValue(attr);
+
+  // TODO: Support comb.mux and arith.select?
+  // TODO: Reject values that depend on the triggers.
+  return getKnownValue(value);
+}
+
+TruthTable Deseq::computeBoolean(BlockArgument arg) {
+  auto *block = arg.getOwner();
+
+  // If this isn't a block in the process, simply return an unknown value.
+  if (block->getParentOp() != process)
+    return getUnknownBoolean();
+
+  // Otherwise iterate over all predecessors and compute the boolean values
+  // being passed to this block argument by each.
+  auto result = getConstBoolean(false);
+  SmallPtrSet<Block *, 4> seen;
+  for (auto *predecessor : block->getPredecessors()) {
+    if (!seen.insert(predecessor).second)
+      continue;
+    for (auto &operand : predecessor->getTerminator()->getBlockOperands()) {
+      if (operand.get() != block)
+        continue;
+      auto value = computeSuccessorBoolean(operand, arg.getArgNumber());
+      if (value.isFalse())
+        continue;
+      auto condition = computeSuccessorCondition(operand);
+      result |= value & condition;
+      if (result.isTrue())
+        break;
+    }
+    if (result.isTrue())
+      break;
+  }
+  return result;
+}
+
+BetterValueTable Deseq::computeValue(BlockArgument arg) {
+  auto *block = arg.getOwner();
+
+  // If this isn't a block in the process, simply return the value itself.
+  if (block->getParentOp() != process)
+    return getKnownValue(arg);
+
+  // Otherwise iterate over all predecessors and compute the boolean values
+  // being passed to this block argument by each.
+  auto result = BetterValueTable();
+  SmallPtrSet<Block *, 4> seen;
+  for (auto *predecessor : block->getPredecessors()) {
+    if (!seen.insert(predecessor).second)
+      continue;
+    for (auto &operand : predecessor->getTerminator()->getBlockOperands()) {
+      if (operand.get() != block)
+        continue;
+      auto condition = computeSuccessorCondition(operand);
+      if (condition.isFalse())
+        continue;
+      auto value = computeSuccessorValue(operand, arg.getArgNumber());
+      value.addCondition(condition);
+      result.merge(value);
+    }
+  }
+  return result;
+}
+
+TruthTable Deseq::computeBlockCondition(Block *block) {
+  // Return a memoized result if one exists. Otherwise insert a default result
+  // as recursion breaker.
+  if (auto it = blockConditionLattice2.find(block);
+      it != blockConditionLattice2.end())
+    return it->second;
+  blockConditionLattice2[block] = getUnknownBoolean();
+
+  // Actually compute the block condition by combining all incoming control flow
+  // conditions.
+  auto result = getConstBoolean(false);
+  SmallPtrSet<Block *, 4> seen;
+  for (auto *predecessor : block->getPredecessors()) {
+    if (!seen.insert(predecessor).second)
+      continue;
+    for (auto &operand : predecessor->getTerminator()->getBlockOperands()) {
+      if (operand.get() != block)
+        continue;
+      result |= computeSuccessorCondition(operand);
+      if (result.isTrue())
+        break;
+    }
+    if (result.isTrue())
+      break;
+  }
+
+  // Memoize the result.
+  LLVM_DEBUG({
+    llvm::dbgs() << "- Block condition ";
+    block->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << ": " << result << "\n";
+  });
+  blockConditionLattice2[block] = result;
+  return result;
+}
+
+TruthTable Deseq::computeSuccessorCondition(BlockOperand &blockOperand) {
+  // The wait operation of the process is the origin point of the analysis. We
+  // want to know under which conditions drives happen once the wait resumes.
+  // Therefore the branch from the wait to its destination block is expected to
+  // happen.
+  auto *op = blockOperand.getOwner();
+  if (op == wait)
+    return getConstBoolean(true);
+
+  // Return a memoized result if one exists. Otherwise insert a default result
+  // as recursion breaker.
+  if (auto it = successorConditionLattice2.find(&blockOperand);
+      it != successorConditionLattice2.end())
+    return it->second;
+  successorConditionLattice2[&blockOperand] = getUnknownBoolean();
+
+  // Actually compute the condition under which control flows along the given
+  // block operand.
+  auto destIdx = blockOperand.getOperandNumber();
+  auto blockCondition = computeBlockCondition(op->getBlock());
+  auto result = getUnknownBoolean();
+  if (auto branchOp = dyn_cast<cf::BranchOp>(op)) {
+    result = blockCondition;
+  } else if (auto condBranchOp = dyn_cast<cf::CondBranchOp>(op)) {
+    auto branchCondition = computeBoolean(condBranchOp.getCondition());
+    if (destIdx == 0)
+      result = blockCondition & branchCondition;
+    else
+      result = blockCondition & ~branchCondition;
+  } else {
+    op->emitOpError("not supported in desequentialization");
+    result = getPoisonBoolean();
+  }
+
+  // Memoize the result.
+  LLVM_DEBUG({
+    llvm::dbgs() << "- Successor condition ";
+    op->getBlock()->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << "#succ" << destIdx << " -> ";
+    blockOperand.get()->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << " = " << result << "\n";
+  });
+  successorConditionLattice2[&blockOperand] = result;
+  return result;
+}
+
+TruthTable Deseq::computeSuccessorBoolean(BlockOperand &blockOperand,
+                                          unsigned argIdx) {
+  // Return a memoized result if one exists. Otherwise insert a default result
+  // as recursion breaker.
+  if (auto it = successorBooleanLattice2.find({&blockOperand, argIdx});
+      it != successorBooleanLattice2.end())
+    return it->second;
+  successorBooleanLattice2[{&blockOperand, argIdx}] = getUnknownBoolean();
+
+  // Actually compute the boolean destination operand for the given destination
+  // block.
+  auto *op = blockOperand.getOwner();
+  auto destIdx = blockOperand.getOperandNumber();
+  auto result = getUnknownBoolean();
+  if (auto branchOp = dyn_cast<cf::BranchOp>(op)) {
+    result = computeBoolean(branchOp.getDestOperands()[argIdx]);
+  } else if (auto condBranchOp = dyn_cast<cf::CondBranchOp>(op)) {
+    if (destIdx == 0)
+      result = computeBoolean(condBranchOp.getTrueDestOperands()[argIdx]);
+    else
+      result = computeBoolean(condBranchOp.getFalseDestOperands()[argIdx]);
+  } else {
+    op->emitOpError("not supported in desequentialization");
+    result = getPoisonBoolean();
+  }
+
+  // Memoize the result.
+  LLVM_DEBUG({
+    llvm::dbgs() << "- Successor boolean ";
+    op->getBlock()->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << "#succ" << destIdx << " -> ";
+    blockOperand.get()->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << "#arg" << argIdx << " = " << result << "\n";
+  });
+  successorBooleanLattice2[{&blockOperand, argIdx}] = result;
+  return result;
+}
+
+BetterValueTable Deseq::computeSuccessorValue(BlockOperand &blockOperand,
+                                              unsigned argIdx) {
+  // Return a memoized result if one exists. Otherwise insert a default result
+  // as recursion breaker.
+  if (auto it = successorValueLattice2.find({&blockOperand, argIdx});
+      it != successorValueLattice2.end())
+    return it->second;
+  successorValueLattice2[{&blockOperand, argIdx}] = getUnknownValue();
+
+  // Actually compute the boolean destination operand for the given destination
+  // block.
+  auto *op = blockOperand.getOwner();
+  auto destIdx = blockOperand.getOperandNumber();
+  auto result = getUnknownValue();
+  if (auto branchOp = dyn_cast<cf::BranchOp>(op)) {
+    result = computeValue(branchOp.getDestOperands()[argIdx]);
+  } else if (auto condBranchOp = dyn_cast<cf::CondBranchOp>(op)) {
+    if (destIdx == 0)
+      result = computeValue(condBranchOp.getTrueDestOperands()[argIdx]);
+    else
+      result = computeValue(condBranchOp.getFalseDestOperands()[argIdx]);
+  } else {
+    op->emitOpError("not supported in desequentialization");
+    result = getPoisonValue();
+  }
+
+  // Memoize the result.
+  LLVM_DEBUG({
+    llvm::dbgs() << "- Successor value ";
+    op->getBlock()->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << "#succ" << destIdx << " -> ";
+    blockOperand.get()->printAsOperand(llvm::dbgs());
+    llvm::dbgs() << "#arg" << argIdx << " = " << result << "\n";
+  });
+  successorValueLattice2[{&blockOperand, argIdx}] = result;
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -998,331 +1451,221 @@ bool Deseq::matchDrives() {
 }
 
 /// For a given drive op, determine if its drive condition and driven value as
-/// determined by the data flow analysis is implementable by a register op.
-/// This function first analyzes the drive condition and extracts concrete
-/// posedge or negedge triggers from it. It then analyzes the value driven under
-/// each condition and ensures that there is a clear precedence between
-/// triggers, for example, to disambiguate a clock from an overriding reset.
-/// This function then distills out a single clock and a single optional reset
-/// for the drive and stores the information in the given `DriveInfo`. Returns
-/// false if no single clock and no single optional reset could be extracted.
+/// determined by the data flow analysis is implementable by a register op. The
+/// results are stored in the clock and reset info of the given `DriveInfo`.
+/// Returns false if the drive cannot be implemented as a register.
 bool Deseq::matchDrive(DriveInfo &drive) {
   LLVM_DEBUG(llvm::dbgs() << "- Analyzing " << drive.op << "\n");
 
   // Determine under which condition the drive is enabled.
-  auto condition = booleanLattice.lookup(drive.op.getEnable());
-  if (condition.isNull()) {
+  auto condition = computeBoolean(drive.op.getEnable());
+  if (condition.isPoison()) {
     LLVM_DEBUG(llvm::dbgs()
-               << "- Aborting: null condition on " << drive.op << "\n");
+               << "- Aborting: poison condition on " << drive.op << "\n");
     return false;
   }
 
   // Determine which value is driven under which conditions.
-  auto valueTable = valueLattice.lookup(drive.op.getValue());
-  valueTable.addCondition(condition);
+  auto initialValueTable = computeValue(drive.op.getValue());
+  initialValueTable.addCondition(condition);
   LLVM_DEBUG({
     llvm::dbgs() << "  - Condition: " << condition << "\n";
-    llvm::dbgs() << "  - Value: " << valueTable << "\n";
+    llvm::dbgs() << "  - Value: " << initialValueTable << "\n";
   });
 
-  // Determine to which edges the drive is sensitive, and ensure that each value
-  // is only triggered by a single edge.
-  SmallMapVector<Value, Edge, 2> edges;
-  for (auto &entry : valueTable.entries) {
-    for (auto &orTerm : entry.condition.orTerms) {
-      bool edgeSeen = false;
-      for (auto &andTerm : orTerm.andTerms) {
-        // We only care about values sampled in the past to determine an edge.
-        if (!andTerm.hasAnyUses(AndTerm::PastUses))
-          continue;
-
-        // We only allow a few triggers.
-        if (!triggers.contains(andTerm.value)) {
-          LLVM_DEBUG({
-            llvm::dbgs() << "- Aborting: past sample of ";
-            andTerm.value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-            llvm::dbgs() << " which is not a trigger\n";
-          });
-          return false;
-        }
-
-        // Determine whether we're sampling a pos or neg edge.
-        auto edge = Edge::None;
-        if (andTerm.uses == AndTerm::PosEdgeUses) {
-          edge = Edge::Pos;
-        } else if (andTerm.uses == AndTerm::NegEdgeUses) {
-          edge = Edge::Neg;
-        } else {
-          LLVM_DEBUG({
-            llvm::dbgs() << "- Aborting: sampling of ";
-            andTerm.value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-            llvm::dbgs() << " is neither not a pos/neg edge\n";
-          });
-          return false;
-        }
-
-        // Registers can only react to a single edge. They cannot check for a
-        // conjunction of edges.
-        if (edgeSeen) {
-          LLVM_DEBUG(llvm::dbgs() << "- Aborting: AND of multiple edges\n");
-          return false;
-        }
-        edgeSeen = true;
-
-        // Ensure that we don't sample both a pos and a neg edge.
-        auto &existingEdge = edges[andTerm.value];
-        if (existingEdge != Edge::None && existingEdge != edge) {
-          LLVM_DEBUG({
-            llvm::dbgs() << "- Aborting: ";
-            andTerm.value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-            llvm::dbgs() << " used both as pos and neg edge trigger\n";
-          });
-          return false;
-        }
-        existingEdge = edge;
-      }
-
-      if (!edgeSeen) {
-        LLVM_DEBUG(llvm::dbgs() << "- Aborting: triggered by non-edge\n");
-        return false;
-      }
-    }
-  }
-  LLVM_DEBUG({
-    for (auto [value, edge] : edges) {
-      llvm::dbgs() << "  - Triggered by ";
-      value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << (edge == Edge::Pos ? " posedge\n" : " negedge\n");
-    }
-  });
-
-  // Detect if one of the triggers is a reset. Resets add a particular pattern
-  // into the table of drive values, which looks like this:
-  // - pos: /rst | rst&... -> const, !rst&... -> ...
-  // - neg: \rst | !rst&... -> const, rst&... -> ...
-  SmallVector<AndTerm, 2> resetEntries;
-  SmallPtrSet<Value, 2> resetTriggers;
-  SmallVector<ResetInfo, 2> resetInfos;
-
-  if (edges.size() > 1) {
-    for (auto [value, edge] : edges) {
-      auto resetEdge =
-          edge == Edge::Pos ? AndTerm::posEdge(value) : AndTerm::negEdge(value);
-      auto resetActive = AndTerm(
-          value, 1 << (edge == Edge::Pos ? AndTerm::Id : AndTerm::NotId));
-      auto resetInactive = AndTerm(
-          value, 1 << (edge == Edge::Pos ? AndTerm::NotId : AndTerm::Id));
-
-      // Find the single table entry with an edge on the reset.
-      unsigned singleResetEntry = -1;
-      for (auto [index, entry] : llvm::enumerate(valueTable.entries)) {
-        if (!entry.condition.contains(OrTerm(resetEdge)))
-          continue;
-        // If we have multiple entries with the reset edge as trigger, abort.
-        if (singleResetEntry != unsigned(-1)) {
-          singleResetEntry = -1;
-          break;
-        }
-        singleResetEntry = index;
-      }
-      if (singleResetEntry == unsigned(-1))
-        continue;
-
-      // The reset value must be a constant. Unfortunately, we don't fold all
-      // possible aggregates down to a single constant materializer in the IR.
-      // To deal with this, we merely limit reset values to be static: as long
-      // as they are derived through side-effect-free operations that only
-      // depend on constants, we admit a value as a reset.
-      //
-      // Technically also non-constants can be reset values. However, since
-      // async resets are level sensitive (even though Verilog describes them as
-      // edge sensitive), the reset value would have to be part of the wait op's
-      // observed values. We don't check for that.
-      auto resetValue = valueTable.entries[singleResetEntry].value;
-      if (!isValidResetValue(resetValue))
-        continue;
-
-      // Ensure that all other entries besides the reset entry contain the
-      // inactive reset value as an AND term.
-      auto allGated = llvm::all_of(
-          llvm::enumerate(valueTable.entries), [&](auto indexAndEntry) {
-            // Skip the reset entry.
-            if (indexAndEntry.index() == singleResetEntry)
-              return true;
-            // All other entries must contain the inactive reset.
-            return llvm::all_of(
-                indexAndEntry.value().condition.orTerms,
-                [&](auto &orTerm) { return orTerm.contains(resetInactive); });
-          });
-      if (!allGated)
-        continue;
-
-      // Keep track of the reset.
-      resetEntries.push_back(resetEdge);
-      resetEntries.push_back(resetActive);
-      resetInfos.push_back({value, resetValue, edge == Edge::Pos});
-      resetTriggers.insert(value);
-    }
-  }
-
-  // Remove the resets from the edge triggers.
-  for (auto &resetInfo : resetInfos)
-    edges.erase(resetInfo.reset);
-
-  // Remove the conditions in the drive value table corresponding to the reset
-  // being active. This information has been absorbed into `resetInfos`.
-  llvm::erase_if(valueTable.entries, [&](auto &entry) {
-    llvm::erase_if(entry.condition.orTerms, [&](auto &orTerm) {
-      for (auto &andTerm : orTerm.andTerms)
-        if (llvm::is_contained(resetEntries, andTerm))
-          return true;
+  // Convert the value table from having DNF conditions to having DNFTerm
+  // conditions. This effectively spreads OR operations in the conditions across
+  // multiple table entries.
+  SmallVector<std::pair<BetterDNFTerm, BetterValueEntry>> valueTable;
+  for (auto &[condition, value] : initialValueTable.entries) {
+    auto dnf = condition.canonicalize();
+    if (dnf.isPoison() || value.isPoison()) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Aborting: poison in " << initialValueTable << "\n");
       return false;
-    });
-    return entry.condition.isFalse();
-  });
-
-  // Assume the resets are inactive by removing them from the remaining AND
-  // terms in the drive value table.
-  for (auto &entry : valueTable.entries) {
-    for (auto &orTerm : entry.condition.orTerms) {
-      llvm::erase_if(orTerm.andTerms, [&](auto &andTerm) {
-        return resetTriggers.contains(andTerm.value);
-      });
     }
+    for (auto &orTerm : dnf.orTerms)
+      valueTable.push_back({orTerm, value});
   }
 
-  // Group the value table entries by the remaining triggers.
-  SmallVector<ClockInfo, 2> clockInfos;
-
-  for (auto [clock, edge] : edges) {
-    auto clockEdge =
-        edge == Edge::Pos ? AndTerm::posEdge(clock) : AndTerm::negEdge(clock);
-    ValueTable clockValueTable;
-
-    for (auto &entry : valueTable.entries) {
-      auto condition = entry.condition;
-
-      // Remove OR terms in the condition that don't mention this clock as
-      // trigger. Also remove the explicit mention of the clock edge from the
-      // condition, since this is now implied by the fact that we are grouping
-      // the driven values by the clock.
-      llvm::erase_if(condition.orTerms, [&](auto &orTerm) {
-        bool clockEdgeFound = false;
-        llvm::erase_if(orTerm.andTerms, [&](auto &andTerm) {
-          if (andTerm == clockEdge) {
-            clockEdgeFound = true;
-            return true;
-          }
-          return false;
-        });
-        return !clockEdgeFound;
-      });
-
-      // Check if the condition has become trivially true.
-      if (llvm::any_of(condition.orTerms,
-                       [](auto &orTerm) { return orTerm.isTrue(); }))
-        condition = DNF(true);
-
-      // If the condition is not trivially false, add an entry to the table.
-      if (!condition.isFalse())
-        clockValueTable.entries.push_back({condition, entry.value});
-    }
-
-    // Keep track of the clocks.
-    clockInfos.push_back({clock, edge, std::move(clockValueTable)});
+  // At this point we should have at most three entries in the value table,
+  // corresponding to the reset, clock, and clock under reset. Everything else
+  // we have no chance of representing as a register op.
+  if (valueTable.size() > 3) {
+    LLVM_DEBUG(llvm::dbgs() << "- Aborting: value table has "
+                            << valueTable.size() << " distinct conditions\n");
+    return false;
   }
 
-  // Handle the degenerate case where the clock changes a register to the same
-  // value as the reset. We detect the clock as a reset in this case, leading to
-  // zero clocks and two resets. Handle this by promoting one of the resets to a
-  // clock.
-  if (resetInfos.size() == 2 && clockInfos.empty()) {
-    // Guess a sensible clock. Prefer posedge clocks and zero-valued resets.
-    // Prefer the first trigger in the wait op's observed value list as the
-    // clock.
-    unsigned clockIdx = 0;
-    if (resetInfos[0].activeHigh && !resetInfos[1].activeHigh)
-      clockIdx = 0;
-    else if (!resetInfos[0].activeHigh && resetInfos[1].activeHigh)
-      clockIdx = 1;
-    else if (matchPattern(resetInfos[1].value, m_Zero()))
-      clockIdx = 0;
-    else if (matchPattern(resetInfos[0].value, m_Zero()))
-      clockIdx = 1;
-    else if (resetInfos[0].reset == triggers[0])
-      clockIdx = 0;
-    else if (resetInfos[1].reset == triggers[0])
-      clockIdx = 1;
+  // If we have two triggers, one of them must be the reset.
+  if (observedValues.size() == 2)
+    return matchDriveClockAndReset(drive, valueTable);
 
-    // Move the clock from `resetInfos` over into the `clockInfos` list.
-    auto &info = resetInfos[clockIdx];
+  // Otherwise we only have a single trigger, which is the clock.
+  assert(observedValues.size() == 1);
+  return matchDriveClock(drive, valueTable);
+}
+
+/// Assuming there is one trigger, detect the clock scheme represented by a
+/// value table and store the results in `drive.clock`.
+bool Deseq::matchDriveClock(
+    DriveInfo &drive,
+    ArrayRef<std::pair<BetterDNFTerm, BetterValueEntry>> valueTable) {
+  // We need exactly one entry in the value table to represent a register
+  // without reset.
+  if (valueTable.size() != 1) {
+    LLVM_DEBUG(llvm::dbgs() << "- Aborting: single trigger value table has "
+                            << valueTable.size() << " entries\n");
+    return false;
+  }
+
+  // Try the posedge and negedge variants of clocking.
+  for (unsigned variant = 0; variant < (1 << 1); ++variant) {
+    bool negClock = (variant >> 0) & 1;
+
+    // Assemble the conditions in the value table corresponding to a clock edge
+    // with and without an additional enable condition. The enable condition is
+    // represented as an additional unknown AND term. The bit patterns here
+    // follow from how we assign indices to past and present triggers, and how
+    // the DNF's even bits represent positive terms and odd bits represent
+    // inverted terms.
+    uint32_t clockEdge = (negClock ? 0b1001 : 0b0110) << 2;
+    auto clockWithoutEnable = BetterDNFTerm{clockEdge};
+    auto clockWithEnable = BetterDNFTerm{clockEdge | 0b01};
+
+    // Check if the single value table entry matches this clock.
+    if (valueTable[0].first == clockWithEnable)
+      drive.clock.enable = drive.op.getEnable();
+    else if (valueTable[0].first != clockWithoutEnable)
+      continue;
+
+    // Populate the clock info and return.
+    drive.clock.clock = observedValues[0];
+    drive.clock.risingEdge = !negClock;
+    drive.clock.value = drive.op.getValue();
+    if (!valueTable[0].second.isUnknown())
+      drive.clock.value = valueTable[0].second.value;
+
     LLVM_DEBUG({
-      llvm::dbgs() << "  - Two resets, no clock: promoting ";
-      info.reset.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " to clock\n";
-    });
-    clockInfos.push_back({info.reset, info.activeHigh ? Edge::Pos : Edge::Neg,
-                          ValueTable(info.value)});
-    resetInfos.erase(resetInfos.begin() + clockIdx);
-  }
-
-  // Dump out some debugging information about the detected resets and clocks.
-  LLVM_DEBUG({
-    for (auto &resetInfo : resetInfos) {
-      llvm::dbgs() << "  - Reset ";
-      resetInfo.reset.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " (active " << (resetInfo.activeHigh ? "high" : "low")
-                   << "): ";
-      resetInfo.value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
+                   << "edge clock ";
+      drive.clock.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " -> " << valueTable[0].second;
+      if (drive.clock.enable)
+        llvm::dbgs() << " (with enable)";
       llvm::dbgs() << "\n";
-    }
-    for (auto &clockInfo : clockInfos) {
-      llvm::dbgs() << "  - Clock ";
-      clockInfo.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " ("
-                   << (clockInfo.edge == Edge::Pos ? "posedge" : "negedge")
-                   << "): " << clockInfo.valueTable << "\n";
-    }
-  });
-
-  // Ensure that the clock and reset is available outside the process.
-  for (auto &clockInfo : clockInfos) {
-    if (clockInfo.clock.getParentRegion()->isProperAncestor(&process.getBody()))
-      continue;
-    LLVM_DEBUG({
-      llvm::dbgs() << "- Aborting: clock ";
-      clockInfo.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " not available outside the process\n";
     });
+    return true;
+  }
+
+  // If we arrive here, none of the patterns we tried matched.
+  LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown clock scheme\n");
+  return false;
+}
+
+/// Assuming there are two triggers, detect the clock and reset scheme
+/// represented by a value table and store the results in `drive.reset` and
+/// `drive.clock`.
+bool Deseq::matchDriveClockAndReset(
+    DriveInfo &drive,
+    ArrayRef<std::pair<BetterDNFTerm, BetterValueEntry>> valueTable) {
+  // We need exactly three entries in the value table to represent a register
+  // with reset.
+  if (valueTable.size() != 3) {
+    LLVM_DEBUG(llvm::dbgs() << "- Aborting: two trigger value table has "
+                            << valueTable.size() << " entries\n");
     return false;
   }
-  for (auto &resetInfo : resetInfos) {
-    if (resetInfo.reset.getParentRegion()->isProperAncestor(&process.getBody()))
+
+  // Resets take precedence over the clock, which shows up as `/rst` and
+  // `/clk&rst` entries in the value table. We simply try all variant until we
+  // find the one that fits.
+  for (unsigned variant = 0; variant < (1 << 3); ++variant) {
+    bool negClock = (variant >> 0) & 1;
+    bool negReset = (variant >> 1) & 1;
+    unsigned clockIdx = (variant >> 2) & 1;
+    unsigned resetIdx = 1 - clockIdx;
+
+    // Assemble the conditions in the value table corresponding to a clock edge
+    // and reset edge, alongside the reset being active and inactive. The bit
+    // patterns here follow from how we assign indices to past and present
+    // triggers, and how the DNF's even bits represent positive terms and odd
+    // bits represent inverted terms.
+    uint32_t clockEdge = (negClock ? 0b1001 : 0b0110) << (clockIdx * 4 + 2);
+    uint32_t resetEdge = (negReset ? 0b1001 : 0b0110) << (resetIdx * 4 + 2);
+    uint32_t resetOn = (negReset ? 0b1000 : 0b0100) << (resetIdx * 4 + 2);
+    uint32_t resetOff = (negReset ? 0b0100 : 0b1000) << (resetIdx * 4 + 2);
+
+    // Combine the above bit masks into conditions for the reset edge, clock
+    // edge with reset active, and clock edge with reset inactive and optional
+    // enable condition.
+    auto reset = BetterDNFTerm{resetEdge};
+    auto clockWhileReset = BetterDNFTerm{clockEdge | resetOn};
+    auto clockWithoutEnable = BetterDNFTerm{clockEdge | resetOff};
+    auto clockWithEnable = BetterDNFTerm{clockEdge | resetOff | 0b01};
+
+    // Find the entries corresponding to the above conditions.
+    auto resetIt = llvm::find_if(
+        valueTable, [&](auto &pair) { return pair.first == reset; });
+    if (resetIt == valueTable.end())
       continue;
-    LLVM_DEBUG({
-      llvm::dbgs() << "- Aborting: reset ";
-      resetInfo.reset.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " not available outside the process\n";
+
+    auto clockWhileResetIt = llvm::find_if(
+        valueTable, [&](auto &pair) { return pair.first == clockWhileReset; });
+    if (clockWhileResetIt == valueTable.end())
+      continue;
+
+    auto clockIt = llvm::find_if(valueTable, [&](auto &pair) {
+      return pair.first == clockWithoutEnable || pair.first == clockWithEnable;
     });
-    return false;
+    if (clockIt == valueTable.end())
+      continue;
+
+    // Ensure that `/rst` and `/clk&rst` set the register to the same reset
+    // value. Otherwise the reset doesn't have clear precedence over the
+    // clock, and we can't turn this drive into a register.
+    if (clockWhileResetIt->second != resetIt->second ||
+        resetIt->second.isUnknown()) {
+      LLVM_DEBUG(llvm::dbgs() << "- Aborting: inconsistent reset value\n");
+      return false;
+    }
+    if (!isValidResetValue(resetIt->second.value)) {
+      LLVM_DEBUG(llvm::dbgs() << "- Aborting: non-static reset value\n");
+      return false;
+    }
+
+    // Populate the reset and clock info, and return.
+    drive.reset.reset = observedValues[resetIdx];
+    drive.reset.value = resetIt->second.value;
+    drive.reset.activeHigh = !negReset;
+
+    drive.clock.clock = observedValues[clockIdx];
+    drive.clock.risingEdge = !negClock;
+    if (clockIt->first == clockWithEnable)
+      drive.clock.enable = drive.op.getEnable();
+    drive.clock.value = drive.op.getValue();
+    if (!clockIt->second.isUnknown())
+      drive.clock.value = clockIt->second.value;
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
+                   << "edge clock ";
+      drive.clock.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " -> " << clockIt->second;
+      if (drive.clock.enable)
+        llvm::dbgs() << " (with enable)";
+      llvm::dbgs() << "\n";
+      llvm::dbgs() << "  - Matched active-" << (negReset ? "low" : "high")
+                   << " reset ";
+      drive.reset.reset.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      llvm::dbgs() << " -> " << resetIt->second << "\n";
+    });
+    return true;
   }
 
-  // The registers we can lower to only support a single clock, and a single
-  // optional reset.
-  if (clockInfos.size() != 1) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Aborting: " << clockInfos.size() << " clocks\n");
-    return false;
-  }
-  if (resetInfos.size() > 1) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Aborting: " << resetInfos.size() << " resets\n");
-    return false;
-  }
-  drive.clock = clockInfos[0];
-  drive.reset = resetInfos.empty() ? ResetInfo{} : resetInfos[0];
-
-  return true;
+  // If we arrive here, none of the patterns we tried matched.
+  LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown reset scheme\n");
+  return false;
 }
 
 /// Check if a value is constant or only derived from constant values through
@@ -1400,7 +1743,7 @@ void Deseq::implementRegister(DriveInfo &drive) {
   // Materialize the clock as a `!seq.clock` value. Insert an inverter for
   // negedge clocks.
   Value clock = builder.create<seq::ToClockOp>(loc, drive.clock.clock);
-  if (drive.clock.edge == Edge::Neg)
+  if (!drive.clock.risingEdge)
     clock = builder.create<seq::ClockInverterOp>(loc, clock);
 
   // Handle the optional reset.
@@ -1423,55 +1766,42 @@ void Deseq::implementRegister(DriveInfo &drive) {
     // constant, move the constant outside the process.
     if (!resetValue.getParentRegion()->isProperAncestor(&process.getBody())) {
       if (auto *defOp = resetValue.getDefiningOp();
-          defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
+          defOp && defOp->hasTrait<OpTrait::ConstantLike>())
         defOp->moveBefore(process);
-      } else {
+      else
         resetValue = specializeValue(
             drive.op.getValue(),
-            FixedValues{{drive.clock.clock, drive.clock.edge == Edge::Neg,
-                         drive.clock.edge == Edge::Neg},
+            FixedValues{{drive.clock.clock, !drive.clock.risingEdge,
+                         !drive.clock.risingEdge},
                         {drive.reset.reset, !drive.reset.activeHigh,
                          drive.reset.activeHigh}});
-      }
     }
   }
 
   // Determine the enable condition. If we have determined that the register
   // is trivially enabled, don't add an enable. If the enable condition is a
   // simple boolean value available outside the process, use it directly.
-  Value enable = drive.op.getEnable();
-  if (drive.clock.valueTable.entries.size() == 1) {
-    if (drive.clock.valueTable.entries[0].condition.isTrue())
-      enable = {};
-    else if (auto singleTerm =
-                 drive.clock.valueTable.entries[0].condition.getSingleTerm();
-             singleTerm && singleTerm->second == AndTerm::Id &&
-             singleTerm->first.getParentRegion()->isProperAncestor(
-                 &process.getBody())) {
-      enable = singleTerm->first;
-    }
-  }
+  Value enable = drive.clock.enable;
+  if (enable && !enable.getParentRegion()->isProperAncestor(&process.getBody()))
+    enable = drive.op.getEnable();
 
   // Determine the value. If the value is trivially available outside the
   // process, use it directly. If it is a constant, move the constant outside
   // the process.
-  Value value = drive.op.getValue();
-  if (drive.clock.valueTable.entries.size() == 1) {
-    auto tryValue = drive.clock.valueTable.entries[0].value;
-    if (tryValue.getParentRegion()->isProperAncestor(&process.getBody())) {
-      value = tryValue;
-    } else if (auto *defOp = tryValue.getDefiningOp();
-               defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
+  Value value = drive.clock.value;
+  if (!value.getParentRegion()->isProperAncestor(&process.getBody())) {
+    if (auto *defOp = value.getDefiningOp();
+        defOp && defOp->hasTrait<OpTrait::ConstantLike>())
       defOp->moveBefore(process);
-      value = tryValue;
-    }
+    else
+      value = drive.op.getEnable();
   }
 
   // Specialize the process for the clock trigger, which will produce the
   // enable and the value for regular clock edges.
   FixedValues fixedValues;
-  fixedValues.push_back({drive.clock.clock, drive.clock.edge == Edge::Neg,
-                         drive.clock.edge == Edge::Pos});
+  fixedValues.push_back(
+      {drive.clock.clock, !drive.clock.risingEdge, drive.clock.risingEdge});
   if (drive.reset)
     fixedValues.push_back(
         {drive.reset.reset, !drive.reset.activeHigh, !drive.reset.activeHigh});
