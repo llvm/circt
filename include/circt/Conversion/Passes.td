@@ -549,6 +549,13 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createConvertHWToLLVMPass()";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+  let options =
+    [Option<"arrayGetOOBSymbol", "array-get-oob-sym", "std::string", "",
+            "If empty (default), out-of-bounds array accesses are silently"
+            "replaced by the array's first entry. If a symbol name is specified"
+            ", an external handler function with the given symbol is called"
+            "instead.">
+    ];
 }
 
 //===----------------------------------------------------------------------===//
