@@ -75,7 +75,7 @@ circuit Foo: %[[
   ; CHECK: FILE "testbench{{[/\]}}layers-Foo-Verification.sv"
   ; CHECK: `ifndef layers_Foo_Verification
   ; CHECK:   `define layers_Foo_Verification
-  ; CHECK:   `include "testbench{{[/\]}}layers-Bar-Verification.sv"
+  ; CHECK:   `include "layers-Bar-Verification.sv"
   ; CHECK: `endif // not def layers_Foo_Verification
 
 ; // -----
@@ -308,7 +308,7 @@ circuit Foo:
     inst bar of Bar
 
 ; CHECK: FILE "A{{[/\]}}layers-Foo-A.sv"
-; CHECK: `include "A{{[/\]}}layers-Bar-A.sv"
+; CHECK: `include "layers-Bar-A.sv"
 
 ; CHECK: FILE "B{{[/\]}}layers-Foo-B.sv"
-; CHECK: `include "B{{[/\]}}layers-Bar-B.sv"
+; CHECK: `include "layers-Bar-B.sv"
