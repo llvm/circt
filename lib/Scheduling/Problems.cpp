@@ -83,8 +83,7 @@ Problem::PropertyStringVector Problem::getProperties(OperatorType opr) {
 
 Problem::PropertyStringVector Problem::getProperties() { return {}; }
 
-Problem::PropertyStringVector
-Problem::getProperties(ResourceType rsrc) {
+Problem::PropertyStringVector Problem::getProperties(ResourceType rsrc) {
   return {};
 }
 
