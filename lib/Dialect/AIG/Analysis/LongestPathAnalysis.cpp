@@ -35,6 +35,7 @@
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/PriorityQueue.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -72,6 +73,17 @@ static bool isRootValue(Value value) {
       value.getDefiningOp());
 }
 
+static void printImpl(llvm::raw_ostream &os, StringAttr name,
+                      circt::igraph::InstancePath path, size_t bitPos,
+                      StringRef comment) {
+  std::string pathString;
+  llvm::raw_string_ostream osPath(pathString);
+  path.print(osPath);
+  os << "DebugNode(" << pathString << "." << name.getValue() << "[" << bitPos
+     << "])";
+  if (!comment.empty())
+    os << " // " << comment;
+}
 namespace circt {
 namespace aig {
 #define GEN_PASS_DEF_PRINTLONGESTPATHANALYSIS
@@ -165,6 +177,33 @@ struct Impl {
       instancePath.print(os);
       os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos
          << "])";
+    }
+  };
+  struct PathResult {
+    Object fanout;
+    DataflowPath fanin;
+    hw::HWModuleOp root;
+    PathResult(Object fanout, DataflowPath fanin, hw::HWModuleOp root)
+        : fanout(fanout), fanin(fanin), root(root) {}
+
+    void print(llvm::raw_ostream &os) const {
+      os << "PathResult(";
+      os << "root=" << root->getName() << ", ";
+      os << "fanout=";
+      fanout.print(os);
+      os << " -> ";
+      os << "fanin=";
+      fanin.print(os);
+      if (!fanin.history.isEmpty()) {
+        os << " history=[";
+        llvm::interleaveComma(fanin.history, os, [&](DebugPoint p) {
+          os << p.delay << "@";
+          printImpl(os, getNameImpl(p.value, p.bitPos), p.path, p.bitPos,
+                    p.comment);
+        });
+        os << "]";
+      }
+      os << ")";
     }
   };
 
@@ -504,15 +543,17 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, hw::InstanceOp op,
                                  mapList(debugPointFactory.get(), history,
                                          [&](DebugPoint p) {
                                            p.path = newPath;
+                                           p.delay += point.delay;
                                            return p;
                                          }),
                                  point.history);
 
     if (auto arg = dyn_cast<BlockArgument>(start)) {
-      // If this is a input port, add the operand of instance to the worklist.
       for (auto path :
            getOrCompute(op->getOperand(arg.getArgNumber()), startBitPos)) {
         path.delay += point.delay;
+        path.history =
+            concatList(debugPointFactory.get(), newHistory, path.history);
         results.push_back(path);
       }
     } else {
@@ -891,18 +932,6 @@ LogicalResult Impl::Runner::run() {
   return success();
 }
 
-static void printImpl(llvm::raw_ostream &os, StringAttr name,
-                      circt::igraph::InstancePath path, size_t bitPos,
-                      StringRef comment) {
-  std::string pathString;
-  llvm::raw_string_ostream osPath(pathString);
-  path.print(osPath);
-  os << "DebugNode(" << pathString << "." << name.getValue() << "[" << bitPos
-     << "])";
-  if (!comment.empty())
-    os << " // " << comment;
-}
-
 LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
   igraph::InstanceGraph instanceGraph(top);
   igraph::InstancePathCache instancePathCache(instanceGraph);
@@ -973,13 +1002,14 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
   if (failed(result))
     return failure();
 
-  SmallVector<std::pair<Object, DataflowPath>> results;
+  SmallVector<PathResult> results;
   // TODO: Sort in multithread and merge instead of sorting here.
   for (auto &[key, runner] : ctx.runners) {
     for (auto &[point, state] : runner->closedResults) {
       auto [path, start, startBitPos] = point;
       for (auto dataFlow : state)
-        results.emplace_back(Object(path, start, startBitPos), dataFlow);
+        results.emplace_back(Object(path, start, startBitPos), dataFlow,
+                             runner->module);
     }
   }
 
@@ -989,30 +1019,22 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
     for (auto [point, state] : value) {
       auto [path, start, startBitPos] = point;
       auto [delay, history] = state;
-      results.emplace_back(Object(path, start, startBitPos),
-                           DataflowPath(arg, argBitPos, {}, delay, history));
+      results.emplace_back(
+          Object(path, start, startBitPos),
+          DataflowPath(arg, argBitPos, {}, delay, history),
+          ctx.runners[topNode->getModule().getModuleNameAttr()]->module);
     }
   }
 
-  llvm::sort(results, [](const std::pair<Object, DataflowPath> &a,
-                         const std::pair<Object, DataflowPath> &b) {
-    return a.second.delay > b.second.delay;
+  llvm::sort(results, [](const auto &a, const auto &b) {
+    return a.fanin.delay > b.fanin.delay;
   });
+
   llvm::errs() << "Found " << results.size() << " paths\n";
   llvm::errs() << "Top 10 longest paths:\n";
   for (size_t i = 0; i < std::min<size_t>(100, results.size()); ++i) {
-    llvm::errs() << i + 1 << ": delay= " << results[i].second.delay
-                 << " fanout=";
-    results[i].first.print(llvm::errs());
-    llvm::errs() << " -> fanin=";
-    results[i].second.print(llvm::errs());
+    results[i].print(llvm::errs());
     llvm::errs() << "\n";
-    for (auto point : results[i].second.history) {
-      llvm::errs() << "  " << point.delay << " ";
-      printImpl(llvm::errs(), getNameImpl(point.value, point.bitPos),
-                point.path, point.bitPos, point.comment);
-      llvm::errs() << "\n";
-    }
   }
 
   return success();

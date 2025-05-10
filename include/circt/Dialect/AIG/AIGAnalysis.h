@@ -89,6 +89,7 @@ struct DataflowPath {
   void print(llvm::raw_ostream &os) const;
 };
 
+
 class LongestPathAnalysis {
 public:
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
