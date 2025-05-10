@@ -502,8 +502,7 @@ public:
   }
   void setLimit(ResourceType rsrc, unsigned val) { limit[rsrc] = val; }
 
-  virtual PropertyStringVector
-  getProperties(ResourceType rsrc) override;
+  virtual PropertyStringVector getProperties(ResourceType rsrc) override;
 
 protected:
   /// If \p op is limited, it has a non-zero latency.
