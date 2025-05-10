@@ -9,6 +9,8 @@ ssp.instance @adder_chain of "ChainingProblem" {
     operator_type @_0 [latency<0>, incDelay<2.34>, outDelay<2.34>]
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
   }
+  resource {
+  }
   graph {
     %0 = operation<@_0>() [t<0>, z<0.0>]
     %1 = operation<@_0>(%0) [t<0>, z<2.34>]
@@ -27,6 +29,8 @@ ssp.instance @multi_cycle of "ChainingProblem" {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
     operator_type @_3 [latency<3>, incDelay<2.5>, outDelay<3.75>]
   }
+  resource {
+  }
   graph {
     %0 = operation<@_0>() [t<0>, z<0.0>]
     %1 = operation<@_0>(%0) [t<0>, z<2.34>]
@@ -43,6 +47,8 @@ ssp.instance @mco_outgoing_delays of "ChainingProblem" {
   library {
     operator_type @_2 [latency<2>, incDelay<0.1>, outDelay<0.1>]
     operator_type @_3 [latency<3>, incDelay<5.0>, outDelay<0.1>]
+  }
+  resource {
   }
   // SIMPLEX: graph
   graph {

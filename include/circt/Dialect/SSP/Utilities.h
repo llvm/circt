@@ -31,6 +31,7 @@ namespace circt {
 namespace ssp {
 
 using OperatorType = scheduling::Problem::OperatorType;
+using ResourceType = scheduling::Problem::ResourceType;
 using Dependence = scheduling::Problem::Dependence;
 
 //===----------------------------------------------------------------------===//
@@ -67,6 +68,21 @@ void loadOperatorTypeProperties(ProblemT &prob, OperatorType opr,
 }
 
 template <typename ProblemT>
+void loadResourceTypeProperties(ProblemT &, ResourceType, ArrayAttr) {}
+template <typename ProblemT, typename ResourceTypePropertyT,
+          typename... ResourceTypePropertyTs>
+void loadResourceTypeProperties(ProblemT &prob, ResourceType rsrc,
+                                ArrayAttr props) {
+  if (!props)
+    return;
+  for (auto prop : props) {
+    TypeSwitch<Attribute>(prop)
+        .Case<ResourceTypePropertyT, ResourceTypePropertyTs...>(
+            [&](auto p) { p.setInProblem(prob, rsrc); });
+  }
+}
+
+template <typename ProblemT>
 void loadDependenceProperties(ProblemT &, Dependence, ArrayAttr) {}
 template <typename ProblemT, typename DependencePropertyT,
           typename... DependencePropertyTs>
@@ -98,12 +114,13 @@ void loadInstanceProperties(ProblemT &prob, ArrayAttr props) {
 /// given attribute classes. The registered name is returned. The template
 /// instantiation fails if properties are incompatible with \p ProblemT.
 template <typename ProblemT, typename... OperatorTypePropertyTs>
-OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
-                              SmallDenseMap<StringAttr, unsigned> &oprIds) {
+typename ProblemT::OperatorType loadOperatorType(
+    ProblemT &prob, OperatorTypeOp oprOp,
+    SmallDenseMap<typename ProblemT::OperatorType, unsigned> &oprIds) {
   OperatorType opr = oprOp.getNameAttr();
   unsigned &id = oprIds[opr];
   if (id > 0)
-    opr = StringAttr::get(opr.getContext(),
+    opr = StringAttr::get(oprOp.getContext(),
                           opr.getValue() + Twine('_') + Twine(id));
   ++id;
   assert(!prob.hasOperatorType(opr));
@@ -111,6 +128,27 @@ OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
   loadOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
       prob, opr, oprOp.getSspPropertiesAttr());
   return opr;
+}
+
+/// Load the resource type represented by \p rsrcOp into \p prob under a unique
+/// name informed by \p rsrcIds, and attempt to set its properties from the
+/// given attribute classes. The registered name is returned. The template
+/// instantiation fails if properties are incompatible with \p ProblemT.
+template <typename ProblemT, typename... ResourceTypePropertyTs>
+typename ProblemT::ResourceType loadResourceType(
+    ProblemT &prob, ResourceTypeOp rsrcOp,
+    SmallDenseMap<typename ProblemT::ResourceType, unsigned> &rsrcIds) {
+  ResourceType rsrc = rsrcOp.getNameAttr();
+  unsigned &id = rsrcIds[rsrc];
+  if (id > 0)
+    rsrc = StringAttr::get(rsrcOp.getContext(),
+                           rsrc.getValue() + Twine('_') + Twine(id));
+  ++id;
+  assert(!prob.hasResourceType(rsrc));
+  prob.insertResourceType(rsrc);
+  loadResourceTypeProperties<ProblemT, ResourceTypePropertyTs...>(
+      prob, rsrc, rsrcOp.getSspPropertiesAttr());
+  return rsrc;
 }
 
 /// Construct an instance of \p ProblemT from \p instOp, and attempt to set
@@ -135,11 +173,13 @@ OperatorType loadOperatorType(ProblemT &prob, OperatorTypeOp oprOp,
 ///   std::make_tuple(InitiationIntervalAttr()));
 /// ```
 template <typename ProblemT, typename... OperationPropertyTs,
-          typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
+          typename... OperatorTypePropertyTs,
+          typename... ResourceTypePropertyTs, typename... DependencePropertyTs,
           typename... InstancePropertyTs>
 ProblemT loadProblem(InstanceOp instOp,
                      std::tuple<OperationPropertyTs...> opProps,
                      std::tuple<OperatorTypePropertyTs...> oprProps,
+                     std::tuple<ResourceTypePropertyTs...> rsrcProps,
                      std::tuple<DependencePropertyTs...> depProps,
                      std::tuple<InstancePropertyTs...> instProps) {
   ProblemT prob(instOp);
@@ -165,6 +205,24 @@ ProblemT loadProblem(InstanceOp instOp,
   });
   if (auto libName = libraryOp.getSymNameAttr())
     prob.setLibraryName(libName);
+
+  // Use IDs to disambiguate resource types with the same name defined in
+  // different resource libraries.
+  SmallDenseMap<ResourceType, unsigned> resourceTypeIds;
+  // Map `ResourceTypeOp`s to their (possibly uniqued) name in the problem
+  // instance.
+  SmallDenseMap<Operation *, ResourceType> resourceTypes;
+
+  // Register all resource types in the instance's resource library.
+  auto rsrcLibraryOp = instOp.getResourceLibrary();
+  rsrcLibraryOp.walk([&](ResourceTypeOp rsrcOp) {
+    resourceTypes[rsrcOp] =
+        loadResourceType<ProblemT, ResourceTypePropertyTs...>(prob, rsrcOp,
+                                                              resourceTypeIds);
+  });
+
+  if (auto rsrcLibName = rsrcLibraryOp.getSymNameAttr())
+    prob.setRsrcLibraryName(rsrcLibName);
 
   // Register all operations first, in order to retain their original order.
   auto graphOp = instOp.getDependenceGraph();
@@ -200,12 +258,52 @@ ProblemT loadProblem(InstanceOp instOp,
 
     // Load the operator type from `oprOp` if needed.
     auto &opr = operatorTypes[oprOp];
-    if (!opr)
+    if (!opr.getAttr())
       opr = loadOperatorType<ProblemT, OperatorTypePropertyTs...>(
           prob, cast<OperatorTypeOp>(oprOp), operatorTypeIds);
 
     // Update `opOp`'s property (may be a no-op if `opr` wasn't renamed).
     prob.setLinkedOperatorType(opOp, opr);
+
+    // Nothing else to check if no linked resource type is set for `opOp`,
+    // because the operation doesn't carry a `LinkedResourceTypeAttr`, or that
+    // class is not part of the `OperationPropertyTs` to load.
+    if (!prob.getLinkedResourceTypes(opOp).has_value())
+      return;
+
+    // Otherwise, inspect the corresponding attribute to make sure the resource
+    // type is available.
+    SmallVector<ResourceType> loadedRsrcs;
+    for (auto attr : opOp.getLinkedResourceTypesAttr().getValue()) {
+      SymbolRefAttr rsrcRef = dyn_cast<SymbolRefAttr>(attr);
+      assert(rsrcRef &&
+             "expected SymbolRefAttr inside LinkedResourceTypesAttr");
+
+      Operation *rsrcOp;
+      // 1) Look in the instance's resource library.
+      rsrcOp = SymbolTable::lookupSymbolIn(rsrcLibraryOp, rsrcRef);
+      // 2) Try to resolve a nested reference to the instance's resource
+      // library.
+      if (!rsrcOp)
+        rsrcOp = SymbolTable::lookupSymbolIn(instOp, rsrcRef);
+      // 3) Look outside of the instance.
+      if (!rsrcOp)
+        rsrcOp = SymbolTable::lookupNearestSymbolFrom(instOp->getParentOp(),
+                                                      rsrcRef);
+
+      assert(rsrcOp && isa<ResourceTypeOp>(rsrcOp)); // checked by verifier
+
+      // Load the resource type from `rsrcOp` if needed.
+      auto &rsrc = resourceTypes[rsrcOp];
+      if (!rsrc.getAttr())
+        rsrc = loadResourceType<ProblemT, ResourceTypePropertyTs...>(
+            prob, cast<ResourceTypeOp>(rsrcOp), resourceTypeIds);
+
+      loadedRsrcs.push_back(rsrc);
+    }
+
+    // Update `opOp`'s property (may be a no-op if `rsrc` wasn't renamed).
+    prob.setLinkedResourceTypes(opOp, loadedRsrcs);
   });
 
   // Then walk them again, and load auxiliary dependences as well as any
@@ -265,6 +363,19 @@ ArrayAttr saveOperatorTypeProperties(ProblemT &prob, OperatorType opr,
   return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
 }
 
+template <typename ProblemT, typename... ResourceTypePropertyTs>
+ArrayAttr saveResourceTypeProperties(ProblemT &prob, ResourceType rsrc,
+                                     ImplicitLocOpBuilder &b) {
+  SmallVector<Attribute> props;
+  Attribute prop;
+  // Fold expression: Expands to a `getFromProblem` and a conditional
+  // `push_back` call for each of the `ResourceTypePropertyTs`.
+  ((prop = ResourceTypePropertyTs::getFromProblem(prob, rsrc, b.getContext()),
+    prop ? props.push_back(prop) : (void)prop),
+   ...);
+  return props.empty() ? ArrayAttr() : b.getArrayAttr(props);
+}
+
 template <typename ProblemT, typename... DependencePropertyTs>
 ArrayAttr saveDependenceProperties(ProblemT &prob, Dependence dep,
                                    ImplicitLocOpBuilder &b) {
@@ -314,11 +425,13 @@ ArrayAttr saveInstanceProperties(ProblemT &prob, ImplicitLocOpBuilder &b) {
 ///   builder);
 /// ```
 template <typename ProblemT, typename... OperationPropertyTs,
-          typename... OperatorTypePropertyTs, typename... DependencePropertyTs,
+          typename... OperatorTypePropertyTs,
+          typename... ResourceTypePropertyTs, typename... DependencePropertyTs,
           typename... InstancePropertyTs>
 InstanceOp
 saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
             std::tuple<OperatorTypePropertyTs...> oprProps,
+            std::tuple<ResourceTypePropertyTs...> rsrcProps,
             std::tuple<DependencePropertyTs...> depProps,
             std::tuple<InstancePropertyTs...> instProps, OpBuilder &builder) {
   ImplicitLocOpBuilder b(builder.getUnknownLoc(), builder);
@@ -339,8 +452,22 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
 
   for (auto opr : prob.getOperatorTypes())
     b.create<OperatorTypeOp>(
-        opr, saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
-                 prob, opr, b));
+        opr.getAttr(),
+        saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
+            prob, opr, b));
+
+  // Emit resource types.
+  b.setInsertionPointToEnd(instOp.getBodyBlock());
+  auto rsrcLibraryOp = b.create<ResourceLibraryOp>();
+  if (auto rsrcLibName = prob.getRsrcLibraryName())
+    rsrcLibraryOp.setSymNameAttr(rsrcLibName);
+  b.setInsertionPointToStart(rsrcLibraryOp.getBodyBlock());
+
+  for (auto rsrc : prob.getResourceTypes())
+    b.create<ResourceTypeOp>(
+        rsrc.getAttr(),
+        saveResourceTypeProperties<ProblemT, ResourceTypePropertyTs...>(
+            prob, rsrc, b));
 
   // Determine which operations act as source ops for auxiliary dependences, and
   // therefore need a name. Also, honor names provided by the client.
@@ -437,6 +564,7 @@ template <typename ProblemT>
 ProblemT loadProblem(InstanceOp instOp) {
   return loadProblem<ProblemT>(instOp, Default<ProblemT>::operationProperties,
                                Default<ProblemT>::operatorTypeProperties,
+                               Default<ProblemT>::resourceTypeProperties,
                                Default<ProblemT>::dependenceProperties,
                                Default<ProblemT>::instanceProperties);
 }
@@ -450,6 +578,7 @@ template <typename ProblemT>
 InstanceOp saveProblem(ProblemT &prob, OpBuilder &builder) {
   return saveProblem<ProblemT>(prob, Default<ProblemT>::operationProperties,
                                Default<ProblemT>::operatorTypeProperties,
+                               Default<ProblemT>::resourceTypeProperties,
                                Default<ProblemT>::dependenceProperties,
                                Default<ProblemT>::instanceProperties, builder);
 }
@@ -460,9 +589,10 @@ InstanceOp saveProblem(ProblemT &prob, OpBuilder &builder) {
 
 template <>
 struct Default<scheduling::Problem> {
-  static constexpr auto operationProperties =
-      std::make_tuple(LinkedOperatorTypeAttr(), StartTimeAttr());
+  static constexpr auto operationProperties = std::make_tuple(
+      LinkedOperatorTypeAttr(), LinkedResourceTypesAttr(), StartTimeAttr());
   static constexpr auto operatorTypeProperties = std::make_tuple(LatencyAttr());
+  static constexpr auto resourceTypeProperties = std::make_tuple();
   static constexpr auto dependenceProperties = std::make_tuple();
   static constexpr auto instanceProperties = std::make_tuple();
 };
@@ -473,6 +603,8 @@ struct Default<scheduling::CyclicProblem> {
       Default<scheduling::Problem>::operationProperties;
   static constexpr auto operatorTypeProperties =
       Default<scheduling::Problem>::operatorTypeProperties;
+  static constexpr auto resourceTypeProperties =
+      Default<scheduling::Problem>::resourceTypeProperties;
   static constexpr auto dependenceProperties =
       std::tuple_cat(Default<scheduling::Problem>::dependenceProperties,
                      std::make_tuple(DistanceAttr()));
@@ -489,6 +621,8 @@ struct Default<scheduling::ChainingProblem> {
   static constexpr auto operatorTypeProperties =
       std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
                      std::make_tuple(IncomingDelayAttr(), OutgoingDelayAttr()));
+  static constexpr auto resourceTypeProperties =
+      Default<scheduling::Problem>::resourceTypeProperties;
   static constexpr auto dependenceProperties =
       Default<scheduling::Problem>::dependenceProperties;
   static constexpr auto instanceProperties =
@@ -500,8 +634,8 @@ struct Default<scheduling::SharedOperatorsProblem> {
   static constexpr auto operationProperties =
       Default<scheduling::Problem>::operationProperties;
   static constexpr auto operatorTypeProperties =
-      std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
-                     std::make_tuple(LimitAttr()));
+      Default<scheduling::Problem>::operatorTypeProperties;
+  static constexpr auto resourceTypeProperties = std::make_tuple(LimitAttr());
   static constexpr auto dependenceProperties =
       Default<scheduling::Problem>::dependenceProperties;
   static constexpr auto instanceProperties =
@@ -514,6 +648,8 @@ struct Default<scheduling::ModuloProblem> {
       Default<scheduling::Problem>::operationProperties;
   static constexpr auto operatorTypeProperties =
       Default<scheduling::SharedOperatorsProblem>::operatorTypeProperties;
+  static constexpr auto resourceTypeProperties =
+      Default<scheduling::SharedOperatorsProblem>::resourceTypeProperties;
   static constexpr auto dependenceProperties =
       Default<scheduling::CyclicProblem>::dependenceProperties;
   static constexpr auto instanceProperties =
@@ -526,6 +662,8 @@ struct Default<scheduling::ChainingCyclicProblem> {
       Default<scheduling::ChainingProblem>::operationProperties;
   static constexpr auto operatorTypeProperties =
       Default<scheduling::ChainingProblem>::operatorTypeProperties;
+  static constexpr auto resourceTypeProperties =
+      Default<scheduling::ChainingProblem>::resourceTypeProperties;
   static constexpr auto dependenceProperties =
       Default<scheduling::CyclicProblem>::dependenceProperties;
   static constexpr auto instanceProperties =

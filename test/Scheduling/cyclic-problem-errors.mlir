@@ -3,6 +3,7 @@
 // expected-error@+1 {{Invalid initiation interval}}
 ssp.instance @no_II of "CyclicProblem" {
   library {}
+  resource {}
   graph {}
 }
 
@@ -13,6 +14,7 @@ ssp.instance @backedge_violated of "CyclicProblem" [II<2>] {
   library {
     operator_type @_1 [latency<1>]
   }
+  resource {}
   graph {
     %0 = operation<@_1>(@op2 [dist<1>]) [t<0>]
     %1 = operation<@_1>(%0) [t<1>]

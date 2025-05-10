@@ -72,7 +72,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   Problem problem(pipeline);
 
   DenseMap<SymbolRefAttr, Problem::OperatorType> operatorTypes;
-  SmallDenseMap<StringAttr, unsigned> oprIds;
+  SmallDenseMap<ssp::OperatorType, unsigned> oprIds;
 
   // Set operation operator types.
   auto returnOp =

@@ -5,6 +5,8 @@ ssp.instance @invalid_delay of "ChainingProblem" {
   library {
     operator_type @inv [latency<0>, incDelay<2.34>, outDelay<2.34>]
   }
+  resource {
+  }
   graph {
     operation<@inv>()
   }
