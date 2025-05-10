@@ -142,24 +142,6 @@ void DataflowPath::print(llvm::raw_ostream &os) const {
      << delay << ")";
 }
 
-// struct Output {
-//   size_t bitPos;
-//   circt::igraph::InstancePath path;
-//   Value value;
-//   StringAttr comment;
-//
-//   Output(Value value, size_t bitPos, circt::igraph::InstancePath path)
-//       : value(value), bitPos(bitPos), path(path) {}
-//   Output() = default;
-//   void print(llvm::raw_ostream &os) const {
-//     os << "Output(";
-//     path.print(os);
-//     os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos <<
-//     "]"
-//        << ")";
-//   }
-// };
-
 struct Impl {
   LogicalResult run(mlir::ModuleOp module, StringRef topModuleName);
 
@@ -205,28 +187,6 @@ struct Impl {
       }
       os << ")";
     }
-  };
-
-  struct LocalGraph {
-    LocalGraph(hw::HWModuleOp module, Context *ctx)
-        : instanceGraph(instanceGraph), ctx(ctx) {}
-    LocalGraph() = delete;
-    LogicalResult run() {
-      module->walk([&](Operation *op) {
-        if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-        }
-      });
-      return success();
-    }
-
-  private:
-    Context *ctx;
-    ThreadWorker worker;
-    igraph::InstanceGraph *instanceGraph;
-    hw::HWModuleOp module;
-
-    DenseMap<Operation *, SmallVector<std::pair<OpOperand, size_t>>> localGraph;
-    SmallVector<DataflowPath> startingPoints;
   };
 
   struct Runner {
@@ -797,9 +757,6 @@ LogicalResult Impl::Runner::run() {
   auto start = std::chrono::steady_clock::now();
   ctx->notifyStart(module.getModuleNameAttr());
   size_t e = startingPoints.size();
-  size_t reportSize = (e + 19) / 20;
-  size_t index = 0;
-
   auto result = module->walk([&](Operation *op) {
     if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
       for (size_t i = 0, e = getBitWidth(reg); i < e; ++i) {
