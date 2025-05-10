@@ -75,12 +75,13 @@ static bool isRootValue(Value value) {
 
 static void printImpl(llvm::raw_ostream &os, StringAttr name,
                       circt::igraph::InstancePath path, size_t bitPos,
-                      StringRef comment) {
+                      int64_t delay, StringRef comment) {
   std::string pathString;
   llvm::raw_string_ostream osPath(pathString);
   path.print(osPath);
-  os << "Point(" << pathString << "." << name.getValue() << "[" << bitPos
+  os << "Object(" << pathString << "." << name.getValue() << "[" << bitPos
      << "]";
+  os << ", delay=" << delay;
   if (!comment.empty())
     os << ", comment=\"" << comment << "\"";
   os << ")";
@@ -137,10 +138,10 @@ static StringAttr getNameImpl(Value value, size_t bitPos) {
 }
 
 void DataflowPath::print(llvm::raw_ostream &os) const {
-  os << "Point(";
+  os << "Object(";
   instancePath.print(os);
-  os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos << "] @ "
-     << delay << ")";
+  os << "." << getNameImpl(value, bitPos).getValue() << "[" << bitPos
+     << "], delay=" << delay << ")";
 }
 
 struct Impl {
@@ -175,15 +176,14 @@ struct Impl {
       os << "root=" << root.getModuleNameAttr() << ", ";
       os << "fanout=";
       fanout.print(os);
-      os << " -> ";
+      os << ", ";
       os << "fanin=";
       fanin.print(os);
       if (!fanin.history.isEmpty()) {
-        os << " history=[";
+        os << ", history=[";
         llvm::interleaveComma(fanin.history, os, [&](DebugPoint p) {
-          os << p.delay << "@";
           printImpl(os, getNameImpl(p.value, p.bitPos), p.path, p.bitPos,
-                    p.comment);
+                    p.delay, p.comment);
         });
         os << "]";
       }
@@ -727,14 +727,6 @@ LogicalResult Impl::Runner::run() {
                   p.delay += result.delay;
                   return p;
                 });
-            for (auto &p : newHistory) {
-              llvm::errs() << "History: " << result.delay << " + " << p.delay
-                           << " = " << (result.delay + p.delay) << " ";
-              llvm::errs() << p.delay << "@";
-              printImpl(llvm::errs(), getNameImpl(p.value, p.bitPos), p.path,
-                        p.bitPos, p.comment);
-              llvm::errs() << "\n";
-            }
             if (auto newPort = dyn_cast<BlockArgument>(result.value)) {
               auto &slot =
                   fromInputPortToFanOut[{newPort, result.bitPos}]
@@ -882,8 +874,9 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
     }
   }
 
-  for (auto [key, value] : ctx.runners[topNode->getModule().getModuleNameAttr()]
-                               ->fromInputPortToFanOut) {
+  for (auto &[key, value] :
+       ctx.runners[topNode->getModule().getModuleNameAttr()]
+           ->fromInputPortToFanOut) {
     auto [arg, argBitPos] = key;
     for (auto [point, state] : value) {
       auto [path, start, startBitPos] = point;
