@@ -329,7 +329,6 @@ public:
   virtual PropertyStringVector getProperties();
 
   virtual PropertyStringVector getResourceProperties(ResourceType rsrc);
-  virtual PropertyStringVector getResourceProperties();
   //===--------------------------------------------------------------------===//
   // Property-specific validators
   //===--------------------------------------------------------------------===//

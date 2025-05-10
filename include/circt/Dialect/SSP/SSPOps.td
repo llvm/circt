@@ -293,7 +293,7 @@ def OperationOp : SSPOp<"operation",
     // Find the attribute modeling the `linkedOperatorType` property
     ::circt::ssp::LinkedOperatorTypeAttr getLinkedOperatorTypeAttr();
 
-    // Find the attribute modeling the `linkedResourceType` property
+    // Find the attribute modeling the `linkedResourceTypes` property
     ::circt::ssp::LinkedResourceTypesAttr getLinkedResourceTypesAttr();
   }];
 

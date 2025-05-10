@@ -88,8 +88,6 @@ Problem::getResourceProperties(ResourceType rsrc) {
   return {};
 }
 
-Problem::PropertyStringVector Problem::getResourceProperties() { return {}; }
-
 LogicalResult Problem::checkLinkedOperatorType(Operation *op) {
   if (!getLinkedOperatorType(op))
     return op->emitError("Operation is not linked to an operator type");
@@ -101,7 +99,8 @@ LogicalResult Problem::checkLinkedOperatorType(Operation *op) {
 LogicalResult Problem::checkLatency(Operation *op) {
   auto maybeOpr = getLinkedOperatorType(op);
   if (!maybeOpr)
-    return success();
+    return getContainingOp()->emitError()
+           << "Operation is missing a linked operator type";
 
   if (!getLatency(*maybeOpr))
     return getContainingOp()->emitError()
@@ -351,15 +350,15 @@ LogicalResult SharedOperatorsProblem::checkLatency(Operation *op) {
   if (!maybeRsrcs)
     return success();
 
-  auto maybeOpr = getLinkedOperatorType(op);
-  if (!maybeOpr)
-    return success();
+  // `linkedOprType` is not null since it must have been checked by the base
+  // class' `checkLatency`.
+  OperatorType linkedOprType = *getLinkedOperatorType(op);
 
   for (auto rsrc : *maybeRsrcs) {
     auto limit = getLimit(rsrc);
-    if (limit && *limit > 0 && *getLatency(*maybeOpr) == 0)
+    if (limit && *limit > 0 && *getLatency(linkedOprType) == 0)
       return getContainingOp()->emitError()
-             << "Operator type '" << maybeOpr->getValue()
+             << "Operator type '" << linkedOprType.getValue()
              << "' using limited resource '" << rsrc.getValue()
              << "' has zero latency.";
   }
