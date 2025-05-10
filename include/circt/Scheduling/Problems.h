@@ -328,7 +328,7 @@ public:
   virtual PropertyStringVector getProperties(OperatorType opr);
   virtual PropertyStringVector getProperties();
 
-  virtual PropertyStringVector getResourceProperties(ResourceType rsrc);
+  virtual PropertyStringVector getProperties(ResourceType rsrc);
   //===--------------------------------------------------------------------===//
   // Property-specific validators
   //===--------------------------------------------------------------------===//
@@ -503,7 +503,7 @@ public:
   void setLimit(ResourceType rsrc, unsigned val) { limit[rsrc] = val; }
 
   virtual PropertyStringVector
-  getResourceProperties(ResourceType rsrc) override;
+  getProperties(ResourceType rsrc) override;
 
 protected:
   /// If \p op is limited, it has a non-zero latency.

@@ -84,7 +84,7 @@ Problem::PropertyStringVector Problem::getProperties(OperatorType opr) {
 Problem::PropertyStringVector Problem::getProperties() { return {}; }
 
 Problem::PropertyStringVector
-Problem::getResourceProperties(ResourceType rsrc) {
+Problem::getProperties(ResourceType rsrc) {
   return {};
 }
 
@@ -335,8 +335,8 @@ LogicalResult ChainingProblem::verify() {
 //===----------------------------------------------------------------------===//
 
 Problem::PropertyStringVector
-SharedOperatorsProblem::getResourceProperties(ResourceType rsrc) {
-  auto psv = Problem::getResourceProperties(rsrc);
+SharedOperatorsProblem::getProperties(ResourceType rsrc) {
+  auto psv = Problem::getProperties(rsrc);
   if (auto limit = getLimit(rsrc))
     psv.emplace_back("limit", std::to_string(*limit));
   return psv;
