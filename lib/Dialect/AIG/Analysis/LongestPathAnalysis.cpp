@@ -79,10 +79,11 @@ static void printImpl(llvm::raw_ostream &os, StringAttr name,
   std::string pathString;
   llvm::raw_string_ostream osPath(pathString);
   path.print(osPath);
-  os << "DebugNode(" << pathString << "." << name.getValue() << "[" << bitPos
-     << "])";
+  os << "Point(" << pathString << "." << name.getValue() << "[" << bitPos
+     << "]";
   if (!comment.empty())
-    os << " // " << comment;
+    os << ", comment=\"" << comment << "\"";
+  os << ")";
 }
 namespace circt {
 namespace aig {
@@ -575,13 +576,7 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, // Start.
                                   mlir::BlockArgument arg,
                                   SmallVectorImpl<DataflowPath> &results) {
   auto path = point.instancePath;
-  assert(arg.getOwner() == module.getBodyBlock());
-  assert(path.size() == 0);
-  //  // Top module.
-  //  if (path.size() == 0) {
-  //    markFanIn(point);
-  //    return success();
-  //  }
+  assert(arg.getOwner() == module.getBodyBlock() && path.size() == 0);
 
   // Record a debug point.
   DebugPoint debug(path, point.value, point.bitPos, point.delay, "input port");
@@ -590,95 +585,12 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, // Start.
 
   DataflowPath newPoint = point;
   newPoint.history = newHistory;
-  newPoint.instancePath = path;
 
-  // All the dataflow path must be updated within the module.
-  // if (searchingOutput) {
-  results.push_back(point);
-  // } else {
-  //   fromInputPortToFanOut[{arg, point.bitPos}].insert(
-  //       {{currentStartingPoint.instancePath, currentStartingPoint.value,
-  //         currentStartingPoint.bitPos},
-  //        {point.delay, newHistory}});
-  // }
-  // addToWorklist(newPoint);
+  results.push_back(newPoint);
   return success();
 }
 
-// LogicalResult Impl::Runner::run(Point origin, Point start,
-// SmallVectorImpl<Point> &results) {
-//   // llvm::dbgs() << "Running ";
-//   // origin.print(llvm::dbgs());
-//   // llvm::dbgs() << " start= ";
-//   // start.print(llvm::dbgs());
-//   // llvm::dbgs() << "\n";
-//   assert(worklist.empty());
-//   currentStartingPoint = origin;
-//   addToWorklist(start);
-//   size_t sz1 = 0, sz2 = 0;
-//   while (!worklist.empty()) {
-//     auto current = worklist.top();
-//     sz1++;
-//     if (false && sz1 % 1000000 == 0) {
-//       std::lock_guard<llvm::sys::SmartMutex<true>> lock(ctx->mutex);
-//       llvm::errs() << "[Timing] " << module.getModuleNameAttr() << " "
-//                    << sz1 / 1000 << "k " << sz2 / 1000 << "k\n";
-//
-//       current.print(llvm::errs());
-//       llvm::errs() << "\n";
-//     }
-//     LLVM_DEBUG({
-//       llvm::dbgs() << "Visiting: ";
-//       current.path.print(llvm::dbgs());
-//       llvm::dbgs() << " " << current.value << "[" << current.bitPos << "] @ "
-//                    << current.delay << "\n";
-//     });
-//
-//     worklist.pop();
-//     if (!worklist.empty())
-//       assert(current.delay >= worklist.top().delay);
-//     auto value = current.value;
-//     auto &[maxDelay, maxDelayVisited] =
-//         visited[{current.path, value, current.bitPos}];
-//     if (maxDelay > current.delay ||
-//         (maxDelay == current.delay && maxDelayVisited))
-//       continue;
-//     sz2++;
-//
-//     maxDelayVisited = true;
-//
-//     if (auto blockArg = dyn_cast<mlir::BlockArgument>(value)) {
-//       if (failed(visit(current, blockArg, results)))
-//         return failure();
-//       continue;
-//     }
-//
-//     auto *op = value.getDefiningOp();
-//     auto result =
-//         TypeSwitch<Operation *, LogicalResult>(op)
-//             .Case<hw::InstanceOp, comb::ConcatOp, comb::ExtractOp,
-//                   comb::ReplicateOp, aig::AndInverterOp, comb::AndOp,
-//                   comb::OrOp, comb::XorOp, seq::FirRegOp, seq::CompRegOp>(
-//                 [&](auto op) { return visit(current, op); })
-//             .Default([&](auto op) { return visitDefault(current, op); });
-//     if (failed(result))
-//       return failure();
-//   }
-//
-//   visited.clear();
-//
-//   while (!savedFanIn.empty()) {
-//     auto point = savedFanIn.top();
-//     savedFanIn.pop();
-//     if (savedFanIn.size() <= 4)
-//       results.push_back({currentStartingPoint, point});
-//   }
-//
-//   return success();
-// }
-
 static void uniqifyPaths(SmallVectorImpl<DataflowPath> &results) {
-  size_t before = results.size();
   // Take only maximum for each path destination.
   DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>, size_t>
       saved;
@@ -697,9 +609,10 @@ static void uniqifyPaths(SmallVectorImpl<DataflowPath> &results) {
 
 ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
   if (ec.contains({value, bitPos})) {
-    auto equivalentClass = ec.findLeader({value, bitPos});
-    if (*equivalentClass != std::pair(value, bitPos)) {
-      auto root = ecMap.at(*equivalentClass);
+    auto leader = ec.findLeader({value, bitPos});
+    // If this is not the leader, then use the leader.
+    if (*leader != std::pair(value, bitPos)) {
+      auto root = ecMap.at(*leader);
       return getOrCompute(root.first, root.second);
     }
   }
@@ -814,6 +727,14 @@ LogicalResult Impl::Runner::run() {
                   p.delay += result.delay;
                   return p;
                 });
+            for (auto &p : newHistory) {
+              llvm::errs() << "History: " << result.delay << " + " << p.delay
+                           << " = " << (result.delay + p.delay) << " ";
+              llvm::errs() << p.delay << "@";
+              printImpl(llvm::errs(), getNameImpl(p.value, p.bitPos), p.path,
+                        p.bitPos, p.comment);
+              llvm::errs() << "\n";
+            }
             if (auto newPort = dyn_cast<BlockArgument>(result.value)) {
               auto &slot =
                   fromInputPortToFanOut[{newPort, result.bitPos}]

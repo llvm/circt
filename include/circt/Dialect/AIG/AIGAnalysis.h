@@ -94,11 +94,14 @@ class LongestPathTracker;
 class LongestPathAnalysis {
 public:
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
-  void getResultFor(Value value, size_t bitPos,
-                    circt::igraph::InstancePath path,
-                    SmallVectorImpl<DataflowPath> &results);
-  void getResultFor(Value value, size_t bitPos,
-                    SmallVectorImpl<DataflowPath> &results);
+  void getResultsFor(Value value, size_t bitPos,
+                     SmallVectorImpl<DataflowPath> &results);
+
+  // Return paths from the given value/bitPos in the given instance path, under
+  // module hierarchy `top`.
+  void getResultsFor(Value value, size_t bitPos,
+                     circt::igraph::InstancePath path,
+                     SmallVectorImpl<DataflowPath> &results);
   DenseMap<StringAttr, std::unique_ptr<LongestPathTracker>> trackers;
 };
 
