@@ -161,6 +161,7 @@ struct Impl {
          << "])";
     }
   };
+
   struct PathResult {
     Object fanout;
     DataflowPath fanin;
@@ -221,9 +222,7 @@ struct Impl {
     ArrayRef<DataflowPath> getOrCompute(Value value, size_t bitPos);
 
     // A map from the value point to the longest paths.
-    DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>,
-             SmallVector<DataflowPath>>
-        cachedResults;
+    DenseMap<std::pair<Value, size_t>, SmallVector<DataflowPath>> cachedResults;
 
     SmallVector<std::pair<Object, DataflowPath>> results;
     Context *ctx;
@@ -678,23 +677,7 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, // Start.
 //   return success();
 // }
 
-ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
-  if (ec.contains({value, bitPos})) {
-    auto equivalentClass = ec.findLeader({value, bitPos});
-    if (*equivalentClass != std::pair(value, bitPos)) {
-      auto root = ecMap.at(*equivalentClass);
-      return getOrCompute(root.first, root.second);
-    }
-  }
-
-  auto it = cachedResults.find({{}, value, bitPos});
-  if (it != cachedResults.end())
-    return it->second;
-
-  SmallVector<DataflowPath> results;
-  if (failed(run(value, bitPos, results)))
-    return {};
-
+static void uniqifyPaths(SmallVectorImpl<DataflowPath> &results) {
   size_t before = results.size();
   // Take only maximum for each path destination.
   DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>, size_t>
@@ -710,10 +693,29 @@ ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
   }
 
   results.resize(saved.size());
+}
+
+ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
+  if (ec.contains({value, bitPos})) {
+    auto equivalentClass = ec.findLeader({value, bitPos});
+    if (*equivalentClass != std::pair(value, bitPos)) {
+      auto root = ecMap.at(*equivalentClass);
+      return getOrCompute(root.first, root.second);
+    }
+  }
+
+  auto it = cachedResults.find({value, bitPos});
+  if (it != cachedResults.end())
+    return it->second;
+
+  SmallVector<DataflowPath> results;
+  if (failed(run(value, bitPos, results)))
+    return {};
+
+  uniqifyPaths(results);
   LLVM_DEBUG({
     llvm::errs() << value << "[" << bitPos << "] " << "Found " << results.size()
-                 << " ( " << before << " before) paths\n";
-
+                 << " paths\n";
     llvm::errs() << "====Paths:\n";
     for (auto &path : results) {
       path.print(llvm::errs());
@@ -722,12 +724,8 @@ ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
     llvm::errs() << "====\n";
   });
 
-  // for (auto &path : results) {
-  //   assert((isa<BlockArgument, seq::FirRegOp>(path.value)));
-  // }
-
   auto insertedResult =
-      cachedResults.try_emplace({{}, value, bitPos}, std::move(results));
+      cachedResults.try_emplace({value, bitPos}, std::move(results));
   assert(insertedResult.second);
   return insertedResult.first->second;
 }
@@ -858,19 +856,6 @@ LogicalResult Impl::Runner::run() {
   });
   if (result.wasInterrupted())
     return failure();
-
-  //  for (auto &point : startingPoints) {
-  //    index++;
-  //    if (failed(run(point)))
-  //      return failure();
-  //
-  //    if (reportSize == index) {
-  //      ctx->add(index, point, longestPath);
-  //      index = 0;
-  //    }
-  //  }
-  //  ctx->add(index, {}, longestPath);
-  //
 
   auto end = std::chrono::steady_clock::now();
   {
