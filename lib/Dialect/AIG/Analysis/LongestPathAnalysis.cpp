@@ -1,5 +1,4 @@
-//===- ResourceUsageAnalysis.cpp - resource usage analysis ---------*- C++
-//-*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -43,6 +42,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/Mutex.h"
 #include <memory>
 #include <mlir/IR/Value.h>
@@ -168,9 +168,9 @@ struct Impl {
     PathResult(Object fanout, DataflowPath fanin, hw::HWModuleOp root)
         : fanout(fanout), fanin(fanin), root(root) {}
 
-    void print(llvm::raw_ostream &os) const {
+    void print(llvm::raw_ostream &os) {
       os << "PathResult(";
-      os << "root=" << root->getName() << ", ";
+      os << "root=" << root.getModuleNameAttr() << ", ";
       os << "fanout=";
       fanout.print(os);
       os << " -> ";
@@ -251,6 +251,9 @@ struct Impl {
     llvm::DenseMap<std::tuple<igraph::InstancePath, Value, size_t>,
                    SmallVector<DataflowPath>>
         closedResults;
+
+    void insertPathForFanout(igraph::InstancePath path, Value value,
+                             size_t bitPos, const DataflowPath &dataflowPath);
 
     LogicalResult run(Value value, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results);
@@ -793,14 +796,16 @@ LogicalResult Impl::Runner::run() {
       // Wait other threads to finish this.
       it->second->waitForDone();
 
-      for (const auto &[key, value] : it->second->fromInputPortToFanOut) {
-        auto [arg, argBitPos] = key;
-        for (auto [point, state] : value) {
-          auto [path, start, startBitPos] = point;
-          assert(isa<BlockArgument>(start) ||
-                 isa<seq::FirRegOp>(start.getDefiningOp()));
+      for (const auto &[object, dataflowPath] :
+           it->second->fromInputPortToFanOut) {
+        auto [arg, argBitPos] = object;
+        for (auto [point, state] : dataflowPath) {
+          auto [instancePath, fanout, fanoutBitPos] = point;
+          assert(isa<BlockArgument>(fanout) ||
+                 isa<seq::FirRegOp>(fanout.getDefiningOp()));
           auto [delay, history] = state;
-          auto newPath = instancePathCache->prependInstance(instance, path);
+          auto newPath =
+              instancePathCache->prependInstance(instance, instancePath);
 
           for (auto &result : getOrCompute(
                    instance.getOperand(arg.getArgNumber()), argBitPos)) {
@@ -811,15 +816,16 @@ LogicalResult Impl::Runner::run() {
                   p.delay += result.delay;
                   return p;
                 });
-            if (auto arg = dyn_cast<BlockArgument>(start)) {
-              auto &slot = fromInputPortToFanOut[{arg, startBitPos}]
-                                                [{newPath, start, startBitPos}];
+            if (auto newPort = dyn_cast<BlockArgument>(result.value)) {
+              auto &slot =
+                  fromInputPortToFanOut[{newPort, result.bitPos}]
+                                       [{newPath, fanout, fanoutBitPos}];
               if (slot.first >= result.delay + delay)
                 continue;
               slot = {result.delay + delay, newHistory};
             } else {
-              closedResults[{newPath, start, startBitPos}].emplace_back(
-                  newPath, start, startBitPos, result.delay + delay,
+              closedResults[{newPath, fanout, fanoutBitPos}].emplace_back(
+                  newPath, result.value, result.bitPos, result.delay + delay,
                   concatList(debugPointFactory.get(), newHistory,
                              result.history));
             }

@@ -89,15 +89,15 @@ struct DataflowPath {
   void print(llvm::raw_ostream &os) const;
 };
 
+class LongestPathTracker;
 
 class LongestPathAnalysis {
 public:
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
-  LogicalResult getResultFor(Value value, size_t bitPos,
-                             circt::igraph::InstancePath path,
-                             SmallVectorImpl<DataflowPath> &results);
-  LogicalResult getResultFor(Value value, size_t bitPos,
-                             SmallVectorImpl<DataflowPath> &results);
+  ArrayRef<DataflowPath> getResultFor(Value value, size_t bitPos,
+                                      circt::igraph::InstancePath path);
+  ArrayRef<DataflowPath> getResultFor(Value value, size_t bitPos);
+  DenseMap<StringAttr, std::unique_ptr<LongestPathTracker>> trackers;
 };
 
 class ResourceUsageAnalysis {
