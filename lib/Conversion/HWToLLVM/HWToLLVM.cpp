@@ -140,13 +140,21 @@ namespace {
 /// Pattern: array_get(input, index) =>
 ///   load(gep(store(input, alloca), zext(index)))
 struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
-  using ConvertOpToLLVMPattern<hw::ArrayGetOp>::ConvertOpToLLVMPattern;
+
+  explicit ArrayGetOpConversion(const LLVMTypeConverter &typeConverter,
+                                Namespace &globals,
+                                StringAttr arrayGetOOBSymName,
+                                PatternBenefit benefit = 1)
+      : ConvertOpToLLVMPattern<hw::ArrayGetOp>(typeConverter, benefit),
+        globals(globals), arrayGetOOBSymName(arrayGetOOBSymName) {}
 
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Value arrPtr;
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+
     if (auto load = adaptor.getInput().getDefiningOp<LLVM::LoadOp>()) {
       // In this case the array was loaded from an existing address, so we can
       // just grab that address instead of reallocating the array on the stack.
@@ -156,27 +164,120 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
           op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(1));
       arrPtr = rewriter.create<LLVM::AllocaOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
-          adaptor.getInput().getType(), oneC,
+          op->getLoc(), ptrType, adaptor.getInput().getType(), oneC,
           /*alignment=*/4);
       rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
     }
 
-    auto arrTy = typeConverter->convertType(op.getInput().getType());
+    auto arrTy = llvm::cast<LLVM::LLVMArrayType>(
+        typeConverter->convertType(op.getInput().getType()));
+
     auto elemTy = typeConverter->convertType(op.getResult().getType());
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
 
-    // During the ongoing migration to opaque types, use the constructor that
-    // accepts an element type when the array pointer type is opaque, and
-    // otherwise use the typed pointer constructor.
-    auto gep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), arrTy,
-        arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
+    auto gep =
+        rewriter.create<LLVM::GEPOp>(op->getLoc(), ptrType, arrTy, arrPtr,
+                                     ArrayRef<LLVM::GEPArg>{0, zextIndex});
+
+    auto indexBitWidth = hw::getBitWidth(op.getIndex().getType());
+    assert(indexBitWidth >= 0 && indexBitWidth < 64 &&
+           "Illegal index bit width");
+    if ((UINT64_C(1) << indexBitWidth) <= arrTy.getNumElements()) {
+      // The array spans the entire index range, so
+      // access directly without bounds check.
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
+      return success();
+    }
+
+    // Check if the dynamic index is within bounds.
+    auto opLoc = op.getLoc();
+    auto sizeCst = rewriter.create<LLVM::ConstantOp>(opLoc, zextIndex.getType(),
+                                                     arrTy.getNumElements());
+    auto isOOB = rewriter.create<LLVM::ICmpOp>(opLoc, LLVM::ICmpPredicate::uge,
+                                               zextIndex, sizeCst.getResult());
+
+    if (!arrayGetOOBSymName) {
+      // We've got no OOB handler: Redirect any OOB access to the array's base
+      // address.
+      auto safePtr = rewriter.create<LLVM::SelectOp>(opLoc, isOOB, arrPtr, gep);
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, safePtr);
+      return success();
+    }
+
+    // We do have an OOB handler: Call it if necessary.
+    auto originalBlock = op->getBlock();
+    auto moduleOp = originalBlock->getParent()->getParentOfType<ModuleOp>();
+    declareOOBHandler(moduleOp);
+
+    // Split the control flow and create an unlikely branch to the handler.
+    auto continueBlock =
+        rewriter.splitBlock(rewriter.getInsertionBlock(), op->getIterator());
+    auto ptrArg = continueBlock->addArgument(ptrType, opLoc);
+    auto callHandlerBlock = rewriter.createBlock(continueBlock);
+    rewriter.setInsertionPointToEnd(originalBlock);
+
+    auto condBrOp = rewriter.create<LLVM::CondBrOp>(
+        opLoc, isOOB.getResult(), callHandlerBlock, mlir::ValueRange(),
+        continueBlock, mlir::ValueRange{gep});
+    condBrOp.setBranchWeights(ArrayRef<int32_t>{0, INT32_MAX});
+
+    // Create the arguments and call to the handler function
+    rewriter.setInsertionPointToStart(callHandlerBlock);
+
+    auto sizeCst64 = rewriter.createOrFold<LLVM::ZExtOp>(
+        opLoc, rewriter.getI64Type(), sizeCst);
+    auto index64 = rewriter.createOrFold<LLVM::ZExtOp>(
+        opLoc, rewriter.getI64Type(), zextIndex);
+    auto elementBitsCst = rewriter.create<LLVM::ConstantOp>(
+        opLoc, rewriter.getI32Type(),
+        arrTy.getElementType().getIntOrFloatBitWidth());
+
+    auto callOp = rewriter.create<LLVM::CallOp>(
+        opLoc, getOOBHandlerFuncType(rewriter), arrayGetOOBSymName,
+        mlir::ValueRange{arrPtr, sizeCst64, elementBitsCst, gep.getResult(),
+                         index64});
+    rewriter.create<LLVM::BrOp>(opLoc, mlir::ValueRange{callOp.getResult()},
+                                continueBlock);
+
+    // Perform the (hopefully now valid) access
+    rewriter.setInsertionPointToStart(continueBlock);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, ptrArg);
 
     return success();
   }
+
+protected:
+  LLVM::LLVMFunctionType getOOBHandlerFuncType(OpBuilder &builder) const {
+    // Handler Signature:
+    // void* symName(void* base, uint64_t size,
+    //   uint32_t eltBits, void* oobAddr, uint64_t oobIdx)
+    auto ptrType = LLVM::LLVMPointerType::get(builder.getContext());
+    return LLVM::LLVMFunctionType::get(ptrType, {ptrType, builder.getI64Type(),
+                                                 builder.getI32Type(), ptrType,
+                                                 builder.getI64Type()});
+  }
+
+  void declareOOBHandler(ModuleOp module) const {
+    assert(!!arrayGetOOBSymName && "No handler symbol provided.");
+    if (globals.contains(arrayGetOOBSymName))
+      return;
+    globals.add(arrayGetOOBSymName);
+
+    // We naughtily bypass the ConversionPatternRewriter here.
+    // This is to prevent a potential rollback of the function op after
+    // we've added it to the namespace.
+    OpBuilder builder(module);
+    builder.setInsertionPointToStart(module.getBody());
+    auto fnType = getOOBHandlerFuncType(builder);
+    builder.create<LLVM::LLVMFuncOp>(module.getLoc(), arrayGetOOBSymName,
+                                     fnType, LLVM::Linkage::External,
+                                     /*dsoLocal=*/false, LLVM::CConv::C);
+  }
+
+  Namespace &globals;
+  StringAttr arrayGetOOBSymName;
 };
+
 } // namespace
 
 namespace {
@@ -637,7 +738,8 @@ void circt::populateHWToLLVMConversionPatterns(
     LLVMTypeConverter &converter, RewritePatternSet &patterns,
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp>
-        &constAggregateGlobalsMap) {
+        &constAggregateGlobalsMap,
+    StringRef arrayGetOOBSymName) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
@@ -651,9 +753,14 @@ void circt::populateHWToLLVMConversionPatterns(
   patterns.add<BitcastOpConversion>(converter);
 
   // Extraction operation conversion patterns.
-  patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, StructExplodeOpConversion,
-               StructExtractOpConversion, StructInjectOpConversion>(converter);
+  patterns.add<ArraySliceOpConversion, ArrayConcatOpConversion,
+               StructExplodeOpConversion, StructExtractOpConversion,
+               StructInjectOpConversion>(converter);
+  patterns.add<ArrayGetOpConversion>(
+      converter, globals,
+      arrayGetOOBSymName.empty()
+          ? StringAttr{}
+          : StringAttr::get(&converter.getContext(), arrayGetOOBSymName));
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
@@ -679,7 +786,8 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   // Setup the conversion.
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap);
+                                     constAggregateGlobalsMap,
+                                     arrayGetOOBSymbol.getValue());
 
   // Apply the partial conversion.
   if (failed(
