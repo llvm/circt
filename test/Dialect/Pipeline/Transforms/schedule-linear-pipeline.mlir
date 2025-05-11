@@ -1,7 +1,10 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(any(pipeline-schedule-linear))' %s | FileCheck %s
-
-// CHECK-LABEL:   hw.module @pipeline(
-// CHECK-SAME:          in %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i32, in %[[GO:.*]] : i1, in %[[CLOCK:.*]] : !seq.clock, in %[[RESET:.*]] : i1, out out : i32) {
+// RUN: circt-opt --pass-pipeline='builtin.module(any(pipeline-schedule-linear))' %s | FileCheck %s 
+// RUN: circt-opt --pass-pipeline='builtin.module(any(pipeline-schedule-linear{problem-type="cyclic" cycle-time=1}))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(any(pipeline-schedule-linear{problem-type="modulo" init-interval=1}))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(any(pipeline-schedule-linear{problem-type="shared_operators" init-interval=4}))' %s | FileCheck %s
+ 
+// CHECK-LABEL:    hw.module @pipeline(
+// CHECK-SAME:      in %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i32, in %[[GO:.*]] : i1, in %[[CLOCK:.*]] : !seq.clock, in %[[RESET:.*]] : i1, out out : i32) {
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_7:.*]] : i32 = %[[VAL_0]], %[[VAL_8:.*]] : i32 = %[[VAL_1]]) clock(%[[CLOCK]]) reset(%[[RESET]]) go(%[[GO]]) entryEn(%[[VAL_9:.*]]) -> (out : i32) {
 // CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] {ssp.operator_type = @add1} : i32
 // CHECK:             %[[VAL_11:.*]] = comb.add %[[VAL_8]], %[[VAL_7]] {ssp.operator_type = @add1} : i32
@@ -44,3 +47,6 @@ module {
     hw.output %0#0 : i32
   }
 }
+
+
+

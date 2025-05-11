@@ -15,17 +15,23 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/Pipeline/PipelineOps.h"
 #include "circt/Dialect/Pipeline/PipelinePasses.h"
+#include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Dialect/SSP/SSPOps.h"
 #include "circt/Dialect/SSP/Utilities.h"
 #include "circt/Scheduling/Algorithms.h"
+#include "circt/Scheduling/Problems.h"
 #include "circt/Scheduling/Utilities.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/Support/raw_ostream.h"
+#include <optional>
+#include <type_traits>
 
 #define DEBUG_TYPE "pipeline-schedule-linear"
 
 namespace circt {
 namespace pipeline {
+#define GEN_PASS_DECL_SCHEDULELINEARPIPELINE
 #define GEN_PASS_DEF_SCHEDULELINEARPIPELINE
 #include "circt/Dialect/Pipeline/PipelinePasses.h.inc"
 } // namespace pipeline
@@ -45,7 +51,11 @@ public:
   void runOnOperation() override;
 
 private:
-  LogicalResult schedulePipeline(UnscheduledPipelineOp pipeline);
+  template <typename ProblemTy>
+  LogicalResult
+  schedulePipeline(UnscheduledPipelineOp pipeline,
+                   std::optional<float> cycleTime = std::nullopt,
+                   std::optional<int> initiationInterval = std::nullopt);
 };
 
 } // end anonymous namespace
@@ -55,8 +65,10 @@ static bool ignoreOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>();
 }
 
-LogicalResult
-ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
+template <typename ProblemTy>
+LogicalResult ScheduleLinearPipelinePass::schedulePipeline(
+    UnscheduledPipelineOp pipeline, std::optional<float> cycleTime,
+    std::optional<int> initiationInterval) {
   // Get operator library for the pipeline - assume it's placed in the top level
   // module.
   auto opLibAttr = pipeline->getAttrOfType<FlatSymbolRefAttr>("operator_lib");
@@ -69,9 +81,9 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
            << opLibAttr << "' not found";
 
   // Load operator info from attribute.
-  Problem problem(pipeline);
+  ProblemTy problem(pipeline);
 
-  DenseMap<SymbolRefAttr, Problem::OperatorType> operatorTypes;
+  DenseMap<SymbolRefAttr, typename ProblemTy::OperatorType> operatorTypes;
   SmallDenseMap<StringAttr, unsigned> oprIds;
 
   // Set operation operator types.
@@ -82,13 +94,20 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
     if (ignoreOp(&op))
       continue;
 
-    Problem::OperatorType operatorType;
+    typename ProblemTy::OperatorType operatorType;
     bool isReturnOp = &op == returnOp.getOperation();
     if (isReturnOp) {
       // Construct an operator type for the return op (not an externally defined
       // operator type since it is intrinsic to this pass).
       operatorType = problem.getOrInsertOperatorType("return");
       problem.setLatency(operatorType, 0);
+
+      // set delay to 0 for return op in chaining related problems
+      if constexpr (std::is_same_v<ProblemTy, ChainingProblem> ||
+                    std::is_same_v<ProblemTy, ChainingCyclicProblem>) {
+        problem.setIncomingDelay(operatorType, 0);
+        problem.setOutgoingDelay(operatorType, 0);
+      }
     } else {
       // Lookup operator info.
       auto operatorTypeAttr =
@@ -106,12 +125,43 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
           return op.emitError() << "Operator type '" << operatorTypeAttr
                                 << "' not found in operator library.";
 
-        auto insertRes = operatorTypes.try_emplace(
-            operatorTypeAttr, ssp::loadOperatorType<Problem, ssp::LatencyAttr>(
-                                  problem, opTypeOp, oprIds));
-        operatorTypeIt = insertRes.first;
+        if constexpr (std::is_same_v<ProblemTy, Problem> ||
+                      std::is_same_v<ProblemTy, CyclicProblem>) {
+          auto insertRes = operatorTypes.try_emplace(
+              operatorTypeAttr,
+              ssp::loadOperatorType<ProblemTy, ssp::LatencyAttr>(
+                  problem, opTypeOp, oprIds));
+          operatorTypeIt = insertRes.first;
+        }
+
+        else if constexpr (std::is_same_v<ProblemTy, SharedOperatorsProblem> ||
+                           std::is_same_v<ProblemTy, ModuloProblem>) {
+          auto insertRes = operatorTypes.try_emplace(
+              operatorTypeAttr,
+              ssp::loadOperatorType<ProblemTy, ssp::LatencyAttr,
+                                    ssp::LimitAttr>(problem, opTypeOp, oprIds));
+          operatorTypeIt = insertRes.first;
+        }
+
+        else if constexpr (std::is_same_v<ProblemTy, ChainingProblem> ||
+                           std::is_same_v<ProblemTy, ChainingCyclicProblem>) {
+          auto insertRes = operatorTypes.try_emplace(
+              operatorTypeAttr,
+              ssp::loadOperatorType<ProblemTy, ssp::LatencyAttr,
+                                    ssp::IncomingDelayAttr,
+                                    ssp::OutgoingDelayAttr>(problem, opTypeOp,
+                                                            oprIds));
+          operatorTypeIt = insertRes.first;
+        }
       }
       operatorType = operatorTypeIt->second;
+    }
+
+    // set initiation interval for relevant problems
+    if constexpr (std::is_same_v<ProblemTy, CyclicProblem> ||
+                  std::is_same_v<ProblemTy, ModuloProblem> ||
+                  std::is_same_v<ProblemTy, ChainingCyclicProblem>) {
+      problem.setInitiationInterval(initiationInterval.value());
     }
 
     problem.insertOperation(&op);
@@ -130,7 +180,21 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 
   // Solve!
   assert(succeeded(problem.check()));
-  if (failed(scheduling::scheduleSimplex(problem, returnOp.getOperation())))
+
+  LogicalResult result = failure();
+  if constexpr (std::is_same_v<ProblemTy, Problem> ||
+                std::is_same_v<ProblemTy, CyclicProblem> ||
+                std::is_same_v<ProblemTy, SharedOperatorsProblem> ||
+                std::is_same_v<ProblemTy, ModuloProblem>) {
+    result = scheduling::scheduleSimplex(problem, returnOp.getOperation());
+  }
+  if constexpr (std::is_same_v<ProblemTy, ChainingProblem> ||
+                std::is_same_v<ProblemTy, ChainingCyclicProblem>) {
+    result = scheduling::scheduleSimplex(problem, returnOp.getOperation(),
+                                         cycleTime.value());
+  }
+
+  if (failed(result))
     return pipeline.emitError("Failed to schedule pipeline.");
 
   assert(succeeded(problem.verify()));
@@ -214,8 +278,32 @@ void ScheduleLinearPipelinePass::runOnOperation() {
   for (auto &region : getOperation()->getRegions()) {
     for (auto pipeline :
          llvm::make_early_inc_range(region.getOps<UnscheduledPipelineOp>())) {
-      if (failed(schedulePipeline(pipeline)))
+
+      if (this->problemType == "base") {
+        if (failed(schedulePipeline<Problem>(pipeline)))
+          return signalPassFailure();
+      } else if (this->problemType == "cyclic") {
+        if (failed(schedulePipeline<CyclicProblem>(pipeline, std::nullopt,
+                                                   this->initInterval)))
+          return signalPassFailure();
+      } else if (this->problemType == "shared_operators") {
+        if (failed(schedulePipeline<SharedOperatorsProblem>(pipeline)))
+          return signalPassFailure();
+      } else if (this->problemType == "modulo") {
+        if (failed(schedulePipeline<ModuloProblem>(pipeline, std::nullopt,
+                                                   this->initInterval)))
+          return signalPassFailure();
+      } else if (this->problemType == "chaining") {
+        if (failed(
+                schedulePipeline<ChainingProblem>(pipeline, this->cycleTime)))
+          return signalPassFailure();
+      } else if (this->problemType == "cyclic_chaining") {
+        if (failed(schedulePipeline<ChainingCyclicProblem>(pipeline,
+                                                           this->cycleTime)))
+          return signalPassFailure();
+      } else {
         return signalPassFailure();
+      }
     }
   }
 }

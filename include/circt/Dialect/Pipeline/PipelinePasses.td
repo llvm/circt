@@ -32,6 +32,20 @@ def ScheduleLinearPipeline : Pass<"pipeline-schedule-linear"> {
   }];
   let dependentDialects = ["hw::HWDialect", "seq::SeqDialect"];
   let constructor = "circt::pipeline::createScheduleLinearPipelinePass()";
+
+  let options = [
+    Option<"problemType", "problem-type", "std::string",
+           /*default=*/"\"base\"",
+           "Select between base problem and chaining problem ">,
+
+    Option<"cycleTime", "cycle-time", "float",
+           /*default=*/"1.0",
+           "Cycle time, only applicable when chaining problem is selected ">,
+
+    Option<"initInterval", "init-interval", "int",
+        /*default=*/"1",
+        "II">,  
+  ];
 }
 
 
