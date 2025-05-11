@@ -218,17 +218,17 @@ public:
   LogicalResult schedule() override;
 };
 
-// This class solves acyclic, resource-constrained `SharedOperatorsProblem` with
+// This class solves acyclic, resource-constrained `SharedResourcesProblem` with
 // a simplified version of the iterative heuristic presented in [2].
-class SharedOperatorsSimplexScheduler : public SimplexSchedulerBase {
+class SharedResourcesSimplexScheduler : public SimplexSchedulerBase {
 private:
-  SharedOperatorsProblem &prob;
+  SharedResourcesProblem &prob;
 
 protected:
   Problem &getProblem() override { return prob; }
 
 public:
-  SharedOperatorsSimplexScheduler(SharedOperatorsProblem &prob,
+  SharedResourcesSimplexScheduler(SharedResourcesProblem &prob,
                                   Operation *lastOp)
       : SimplexSchedulerBase(lastOp), prob(prob) {}
   LogicalResult schedule() override;
@@ -870,10 +870,10 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedOperatorsSimplexScheduler
+// SharedResourcesSimplexScheduler
 //===----------------------------------------------------------------------===//
 
-static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
+static bool isLimited(Operation *op, SharedResourcesProblem &prob) {
   auto maybeRsrcs = prob.getLinkedResourceTypes(op);
   if (!maybeRsrcs)
     return false;
@@ -882,7 +882,7 @@ static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
   });
 }
 
-LogicalResult SharedOperatorsSimplexScheduler::schedule() {
+LogicalResult SharedResourcesSimplexScheduler::schedule() {
   if (failed(checkLastOp()))
     return failure();
 
@@ -1384,9 +1384,9 @@ LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
   return simplex.schedule();
 }
 
-LogicalResult scheduling::scheduleSimplex(SharedOperatorsProblem &prob,
+LogicalResult scheduling::scheduleSimplex(SharedResourcesProblem &prob,
                                           Operation *lastOp) {
-  SharedOperatorsSimplexScheduler simplex(prob, lastOp);
+  SharedResourcesSimplexScheduler simplex(prob, lastOp);
   return simplex.schedule();
 }
 

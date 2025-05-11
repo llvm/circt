@@ -3,7 +3,7 @@
 // RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=cpsat | FileCheck %s -check-prefixes=CHECK,CPSAT %} 
 
 // CHECK-LABEL: full_load
-ssp.instance @full_load of "SharedOperatorsProblem" {
+ssp.instance @full_load of "SharedResourcesProblem" {
   library {
     operator_type @L1_3 [latency<3>]
     operator_type @_1 [latency<1>]
@@ -25,7 +25,7 @@ ssp.instance @full_load of "SharedOperatorsProblem" {
 }
 
 // CHECK-LABEL: partial_load
-ssp.instance @partial_load of "SharedOperatorsProblem" {
+ssp.instance @partial_load of "SharedResourcesProblem" {
   library {
     operator_type @L3_3 [latency<3>]
     operator_type @_1 [latency<1>]
@@ -47,7 +47,7 @@ ssp.instance @partial_load of "SharedOperatorsProblem" {
 }
 
 // CHECK-LABEL: multiple
-ssp.instance @multiple of "SharedOperatorsProblem" {
+ssp.instance @multiple of "SharedResourcesProblem" {
   library {
     operator_type @L3_2 [latency<3>]
     operator_type @L1_1 [latency<1>]
@@ -71,7 +71,7 @@ ssp.instance @multiple of "SharedOperatorsProblem" {
 }
 
 // CHECK-LABEL: if_else
-ssp.instance @if_else_exclusive of "SharedOperatorsProblem" {
+ssp.instance @if_else_exclusive of "SharedResourcesProblem" {
   library {
     operator_type @ThenOperator [latency<2>]
     operator_type @ElseOperator [latency<3>]

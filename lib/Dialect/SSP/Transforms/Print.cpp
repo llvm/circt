@@ -55,8 +55,8 @@ void PrintPass::runOnOperation() {
       printInstance<CyclicProblem>(instOp, os);
     else if (probName == "ChainingProblem")
       printInstance<ChainingProblem>(instOp, os);
-    else if (probName == "SharedOperatorsProblem")
-      printInstance<SharedOperatorsProblem>(instOp, os);
+    else if (probName == "SharedResourcesProblem")
+      printInstance<SharedResourcesProblem>(instOp, os);
     else if (probName == "ModuloProblem")
       printInstance<ModuloProblem>(instOp, os);
     else if (probName == "ChainingCyclicProblem")
