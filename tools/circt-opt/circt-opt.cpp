@@ -24,6 +24,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -48,6 +49,7 @@ int main(int argc, char **argv) {
 
   // Register MLIR stuff
   registry.insert<mlir::affine::AffineDialect>();
+  registry.insert<mlir::math::MathDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();

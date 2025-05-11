@@ -20,4 +20,5 @@ add_circt_conversion_library(CIRCTSCFToCalyx
   MLIRTransforms
   MLIRAffineToStandard
   MLIRSCFDialect
+  MLIRMathDialect
 )

@@ -21,6 +21,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
@@ -336,22 +337,23 @@ public:
     funcOp.walk([&](Operation *_op) {
       opBuiltSuccessfully &=
           TypeSwitch<mlir::Operation *, bool>(_op)
-              .template Case<
-                  arith::ConstantOp, ReturnOp, BranchOpInterface,
-                  /// SCF
-                  scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
-                  scf::ParallelOp, scf::ReduceOp, scf::ExecuteRegionOp,
-                  /// memref
-                  memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                  memref::StoreOp, memref::GetGlobalOp,
-                  /// standard arithmetic
-                  AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
-                  XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp, MulIOp, DivUIOp,
-                  DivSIOp, RemUIOp, RemSIOp,
-                  /// floating point
-                  AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp, DivFOp,
-                  /// others
-                  SelectOp, IndexCastOp, BitcastOp, CallOp>(
+              .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
+                             /// SCF
+                             scf::YieldOp, scf::WhileOp, scf::ForOp, scf::IfOp,
+                             scf::ParallelOp, scf::ReduceOp,
+                             scf::ExecuteRegionOp,
+                             /// memref
+                             memref::AllocOp, memref::AllocaOp, memref::LoadOp,
+                             memref::StoreOp, memref::GetGlobalOp,
+                             /// standard arithmetic
+                             AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
+                             AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
+                             MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
+                             /// floating point
+                             AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp,
+                             DivFOp, math::SqrtOp,
+                             /// others
+                             SelectOp, IndexCastOp, BitcastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -417,6 +419,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, FPToSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SIToFPOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, DivFOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, math::SqrtOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -613,8 +616,14 @@ private:
                                                             group);
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, opPipe.getLeft(), op.getLhs());
-    rewriter.create<calyx::AssignOp>(loc, opPipe.getRight(), op.getRhs());
+    if constexpr (std::is_same_v<TSrcOp, math::SqrtOp>)
+      // According to the Hardfloat library: "If sqrtOp is 1, the operation is
+      // the square root of a, and operand b is ignored."
+      rewriter.create<calyx::AssignOp>(loc, opPipe.getLeft(), op.getOperand());
+    else {
+      rewriter.create<calyx::AssignOp>(loc, opPipe.getLeft(), op.getLhs());
+      rewriter.create<calyx::AssignOp>(loc, opPipe.getRight(), op.getRhs());
+    }
     // Write the output to this register.
     rewriter.create<calyx::AssignOp>(loc, reg.getIn(), out);
     // The write enable port is high when the pipeline is done.
@@ -1213,6 +1222,24 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                          /*exceptionalFlags=*/five, /*done=*/one});
   return buildLibraryBinaryPipeOp<calyx::DivSqrtOpIEEE754>(
       rewriter, divf, divFOp, divFOp.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     math::SqrtOp sqrt) const {
+  Location loc = sqrt.getLoc();
+  IntegerType one = rewriter.getI1Type(), three = rewriter.getIntegerType(3),
+              five = rewriter.getIntegerType(5),
+              width = rewriter.getIntegerType(
+                  sqrt.getType().getIntOrFloatBitWidth());
+  auto sqrtOp = getState<ComponentLoweringState>()
+                    .getNewLibraryOpInstance<calyx::DivSqrtOpIEEE754>(
+                        rewriter, loc,
+                        {/*clk=*/one, /*reset=*/one, /*go=*/one,
+                         /*control=*/one, /*sqrtOp=*/one, /*left=*/width,
+                         /*right=*/width, /*roundingMode=*/three, /*out=*/width,
+                         /*exceptionalFlags=*/five, /*done=*/one});
+  return buildLibraryBinaryPipeOp<calyx::DivSqrtOpIEEE754>(
+      rewriter, sqrt, sqrtOp, sqrtOp.getOut());
 }
 
 template <typename TAllocOp>
@@ -2644,12 +2671,12 @@ public:
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithDialect>();
-    target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
-                      ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
-                      CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
-                      RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp,
-                      BitcastOp, FuncOp, ExtSIOp, CallOp, AddFOp, SubFOp,
-                      MulFOp, CmpFOp, FPToSIOp, SIToFPOp, DivFOp>();
+    target.addLegalOp<
+        AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
+        XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp, MulIOp,
+        DivUIOp, DivSIOp, RemUIOp, RemSIOp, ReturnOp, arith::ConstantOp,
+        IndexCastOp, BitcastOp, FuncOp, ExtSIOp, CallOp, AddFOp, SubFOp, MulFOp,
+        CmpFOp, FPToSIOp, SIToFPOp, DivFOp, math::SqrtOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
