@@ -938,18 +938,26 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     assert(maybeRsrcs && "Limited operation must have linked resource types");
 
     auto &rsrcs = *maybeRsrcs;
-    assert(rsrcs.size() == 1 &&
-           "Multi-resource operations are not yet supported by this scheduler");
+    for (auto rsrc : rsrcs) {
+      assert(prob.getLimit(rsrc).value_or(0) > 0 &&
+             "All resources must have non-zero limits");
+    }
 
     auto rsrc = rsrcs[0];
     unsigned limit = prob.getLimit(rsrc).value_or(0);
     assert(limit > 0);
 
     // Find the first time step (beginning at the current start time in the
-    // partial schedule) in which an operator instance is available.
+    // partial schedule) in which all required resources are available for the
+    // operation.
     unsigned startTimeVar = startTimeVariables[op];
     unsigned candTime = getStartTime(startTimeVar);
-    while (reservationTable[rsrc].lookup(candTime) == limit)
+
+    while (std::any_of(rsrcs.begin(), rsrcs.end(),
+                       [&](Problem::ResourceType rsrc) {
+                         return reservationTable[rsrc].lookup(candTime) ==
+                                prob.getLimit(rsrc).value_or(0);
+                       }))
       ++candTime;
 
     // Fix the start time. As explained above, this cannot make the problem
@@ -958,8 +966,9 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     assert(succeeded(fixed));
     (void)fixed;
 
-    // Record the operator use.
-    ++reservationTable[rsrc][candTime];
+    // Record the resource uses.
+    for (auto rsrc : rsrcs)
+      ++reservationTable[rsrc][candTime];
 
     LLVM_DEBUG(dbgs() << "After scheduling " << startTimeVar
                       << " to t=" << candTime << ":\n";

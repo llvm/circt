@@ -69,3 +69,26 @@ ssp.instance @multiple of "SharedOperatorsProblem" {
     operation<@_1> @last(%5) [t<11>]
   }
 }
+
+// CHECK-LABEL: if_else
+ssp.instance @if_else_exclusive of "SharedOperatorsProblem" {
+  library {
+    operator_type @ThenOperator [latency<2>]
+    operator_type @ElseOperator [latency<3>]
+    operator_type @_1 [latency<2>]
+  }
+  resource {
+    resource_type @adder_then_br [limit<1>]
+    resource_type @mem_port_then_br [limit<1>]
+    resource_type @adder_else_br [limit<1>]
+    resource_type @mem_port_else_br [limit<1>]
+  }
+  graph {
+    %0 = operation<@ThenOperator> @compute_then_br() uses[@adder_then_br, @mem_port_then_br] [t<0>]
+    %1 = operation<@ElseOperator> @compute_else_br() uses[@adder_else_br, @mem_port_else_br] [t<0>]
+    %2 = operation<@_1>(%0, %1) [t<4>]
+    // SIMPLEX: @last(%{{.*}}) [t<5>]
+    // CPSAT: @last(%{{.*}}) [t<5>]
+    operation<@_1> @last(%2) [t<7>]
+  }
+}
