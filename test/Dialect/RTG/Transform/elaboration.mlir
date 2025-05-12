@@ -639,6 +639,12 @@ rtg.test @useFolders(single_core = %single_core: !rtgtest.cpu) {
   func.call @dummy2(%0) : (index) -> ()
 }
 
+// CHECK-LABEL: rtg.test @comments
+rtg.test @comments() {
+  // CHECK-NEXT: rtg.comment "this is a comment"
+  rtg.comment "this is a comment"
+}
+
 // -----
 
 rtg.test @nestedRegionsNotSupported() {
