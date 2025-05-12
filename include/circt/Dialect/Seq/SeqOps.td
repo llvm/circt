@@ -117,6 +117,7 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     custom<OptionalImmutableTypeMatch>(ref(type($data)), ref($initialValue), type($initialValue))
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,

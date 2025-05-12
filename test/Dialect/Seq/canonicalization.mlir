@@ -296,3 +296,14 @@ hw.module @clock_inv(in %clock : !seq.clock, out clock_true : !seq.clock, out cl
   hw.output %clk_inv_low, %clk_inv_high, %clk_orig : !seq.clock, !seq.clock, !seq.clock
 
 }
+
+// CHECK-LABEL: @CompRegClockEnabled(
+hw.module @CompRegClockEnabled(in %clock: !seq.clock, in %d: i42, in %x: i42, in %en: i1, out q0: i42, out q1: i42) {
+  // CHECK-NEXT: seq.compreg.ce %d, %clock, %en
+  // CHECK-NEXT: seq.compreg.ce %d, %clock, %en
+  %0 = comb.mux %en, %d, %x : i42
+  %1 = seq.compreg.ce %0, %clock, %en : i42
+  %2 = arith.select %en, %d, %x : i42
+  %3 = seq.compreg.ce %2, %clock, %en : i42
+  hw.output %1, %3 : i42, i42
+}
