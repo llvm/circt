@@ -71,6 +71,10 @@ circtRtgToolOptionsSetSplitOutput(CirctRtgToolOptions options, bool enable);
 MLIR_CAPI_EXPORTED void
 circtRtgToolOptionsSetOutputPath(CirctRtgToolOptions options, const char *path);
 
+MLIR_CAPI_EXPORTED void
+circtRtgToolOptionsSetMemoriesAsImmediates(CirctRtgToolOptions options,
+                                           bool enable);
+
 //===----------------------------------------------------------------------===//
 // Pipeline Population API.
 //===----------------------------------------------------------------------===//
