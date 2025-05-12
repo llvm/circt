@@ -63,14 +63,6 @@ struct DataflowPath {
   circt::igraph::InstancePath instancePath;
   int64_t delay = -1;
   llvm::ImmutableList<DebugPoint> history;
-  DataflowPath(Value value, size_t bitPos,
-               circt::igraph::InstancePath path = {}, int64_t delay = 0,
-               llvm::ImmutableList<DebugPoint> history = {})
-      : value(value), bitPos(bitPos), instancePath(path), delay(delay),
-        history(history) {
-    assert(value);
-  }
-
   DataflowPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
                int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
       : value(value), bitPos(bitPos), instancePath(path), delay(delay),
@@ -89,20 +81,25 @@ struct DataflowPath {
   void print(llvm::raw_ostream &os) const;
 };
 
-class LongestPathTracker;
-
 class LongestPathAnalysis {
 public:
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
-  void getResultsFor(Value value, size_t bitPos,
-                     SmallVectorImpl<DataflowPath> &results);
+
+  // Return all paths for the given fanin.
+  LogicalResult getResultsForFF(Value value, size_t bitPos,
+                                SmallVectorImpl<DataflowPath> &results);
+
+  // Return all paths from the given value/bits.
+  LogicalResult getResultsFor(Value value, size_t bitPos,
+                              SmallVectorImpl<DataflowPath> &results);
 
   // Return paths from the given value/bitPos in the given instance path, under
-  // module hierarchy `top`.
-  void getResultsFor(Value value, size_t bitPos,
-                     circt::igraph::InstancePath path,
-                     SmallVectorImpl<DataflowPath> &results);
-  DenseMap<StringAttr, std::unique_ptr<LongestPathTracker>> trackers;
+  // module hierarchy `moduleOp`.
+  LogicalResult getResultsFor(circt::igraph::InstancePath path, Value value,
+                              size_t bitPos,
+                              SmallVectorImpl<DataflowPath> &results);
+  struct Impl;
+  std::unique_ptr<Impl> impl;
 };
 
 class ResourceUsageAnalysis {

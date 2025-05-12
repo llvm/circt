@@ -43,6 +43,7 @@
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/Mutex.h"
@@ -88,6 +89,23 @@ static void printImpl(llvm::raw_ostream &os, StringAttr name,
   if (!comment.empty())
     os << ", comment=\"" << comment << "\"";
   os << ")";
+}
+
+static void uniqifyPaths(SmallVectorImpl<DataflowPath> &results) {
+  // Take only maximum for each path destination.
+  DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>, size_t>
+      saved;
+  for (auto [i, path] : llvm::enumerate(results)) {
+    auto &slot = saved[{path.instancePath, path.value, path.bitPos}];
+    if (slot == 0) {
+      slot = i + 1;
+      continue;
+    }
+    if (results[slot - 1].delay < path.delay)
+      results[slot - 1] = path;
+  }
+
+  results.resize(saved.size());
 }
 namespace circt {
 namespace aig {
@@ -184,11 +202,17 @@ struct llvm::DenseMapInfo<Object> {
   static bool isEqual(const Object &a, const Object &b) { return a == b; }
 };
 
-struct Impl {
+struct LongestPathAnalysis::Impl {
+  Impl(){};
   LogicalResult run(mlir::ModuleOp module, StringRef topModuleName);
 
-  struct ThreadWorker {};
+  LogicalResult getResultsFor(circt::igraph::InstancePath path, Value value,
+                              size_t bitPos,
+                              SmallVectorImpl<DataflowPath> &results);
+
   struct Context;
+
+  int64_t getMaxArrivalTime(Value value, size_t bitPos) const;
 
   struct PathResult {
     Object fanout;
@@ -247,6 +271,9 @@ struct Impl {
                         std::greater<DataflowPath>>
         savedFanIn;
     ArrayRef<DataflowPath> getOrCompute(Value value, size_t bitPos);
+    ArrayRef<DataflowPath> lookupPaths(Value value, size_t bitPos) const {
+      return cachedResults.at({value, bitPos});
+    }
 
     // A map from the value point to the longest paths.
     DenseMap<std::pair<Value, size_t>, SmallVector<DataflowPath>> cachedResults;
@@ -317,6 +344,8 @@ struct Impl {
                         SmallVectorImpl<DataflowPath> &results);
     LogicalResult visit(const DataflowPath &point, comb::OrOp op,
                         SmallVectorImpl<DataflowPath> &results);
+    LogicalResult visit(const DataflowPath &point, comb::MuxOp op,
+                        SmallVectorImpl<DataflowPath> &results);
 
     // Pass through.
     LogicalResult visit(const DataflowPath &point, seq::FirRegOp op,
@@ -370,27 +399,7 @@ struct Impl {
   };
 
   struct Context {
-    Context(size_t numAll) : numAll(numAll) {};
     llvm::sys::SmartMutex<true> mutex;
-    std::atomic<size_t> numAllProcessed = 0;
-    const size_t numAll;
-    void add(size_t t, std::optional<DataflowPath> point,
-             DataflowPath longest) {
-      std::lock_guard<llvm::sys::SmartMutex<true>> lock(mutex);
-      numAllProcessed += t;
-      llvm::errs() << "[Timing] Processed " << numAllProcessed << "/" << numAll
-                   << "(" << double(numAllProcessed) * 100 / numAll << "%) ";
-
-      if (point) {
-        llvm::errs() << "Current: ";
-        point->print(llvm::errs());
-      }
-      if (longest.delay == -1)
-        return;
-      llvm::errs() << " Longest: ";
-      longest.print(llvm::errs());
-      llvm::errs() << "\n";
-    }
     llvm::SetVector<StringAttr> running;
 
     void notifyStart(StringAttr name) {
@@ -421,10 +430,16 @@ struct Impl {
 
     llvm::MapVector<StringAttr, std::unique_ptr<Runner>> runners;
   };
+  Context ctx;
 };
 
-void Impl::Runner::addEdge(Value to, size_t bitPos, int64_t delay,
-                           SmallVectorImpl<DataflowPath> &results) {
+LongestPathAnalysis::LongestPathAnalysis(Operation *moduleOp,
+                                         mlir::AnalysisManager &am)
+    : impl(std::make_unique<Impl>()) {}
+
+void LongestPathAnalysis::Impl::Runner::addEdge(
+    Value to, size_t bitPos, int64_t delay,
+    SmallVectorImpl<DataflowPath> &results) {
   for (auto &point : getOrCompute(to, bitPos)) {
     auto newPoint = point;
     newPoint.delay += delay;
@@ -432,38 +447,51 @@ void Impl::Runner::addEdge(Value to, size_t bitPos, int64_t delay,
   }
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point,
-                                  aig::AndInverterOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, aig::AndInverterOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   return addLogicOp(point, op, results);
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, comb::AndOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::AndOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   return addLogicOp(point, op, results);
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, comb::OrOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::OrOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   return addLogicOp(point, op, results);
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, comb::XorOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::XorOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   return addLogicOp(point, op, results);
 }
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::MuxOp op,
+    SmallVectorImpl<DataflowPath> &results) {
+  addEdge(op.getCond(), 0, 1, results);
+  addEdge(op.getTrueValue(), point.bitPos, 1, results);
+  addEdge(op.getFalseValue(), point.bitPos, 1, results);
+  uniqifyPaths(results);
+  return success();
+}
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, comb::ExtractOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::ExtractOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   assert(getBitWidth(op.getInput()) > point.bitPos + op.getLowBit());
   markEquivalent(point.value, point.bitPos, op.getInput(),
                  point.bitPos + op.getLowBit(), results);
   return success();
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point,
-                                  comb::ReplicateOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::ReplicateOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   markEquivalent(point.value, point.bitPos, op.getInput(),
                  point.bitPos % getBitWidth(op.getInput()), results);
   return success();
@@ -490,20 +518,22 @@ concatList(llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
       lhs.getHead(), concatList(debugPointFactory, lhs.getTail(), rhs));
 }
 
-void Impl::Runner::markFanIn(const DataflowPath &point,
-                             SmallVectorImpl<DataflowPath> &results) {
+void LongestPathAnalysis::Impl::Runner::markFanIn(
+    const DataflowPath &point, SmallVectorImpl<DataflowPath> &results) {
   results.push_back(point);
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, hw::WireOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, hw::WireOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   markEquivalent(point.value, point.bitPos, op.getInput(), point.bitPos,
                  results);
   return success();
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, hw::InstanceOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, hw::InstanceOp op,
+    SmallVectorImpl<DataflowPath> &results) {
   auto resultNum = cast<mlir::OpResult>(point.value).getResultNumber();
   auto moduleName = op.getReferencedModuleNameAttr();
   auto *node = instanceGraph->lookup(moduleName);
@@ -568,17 +598,18 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, hw::InstanceOp op,
     } else {
       assert((isa<seq::FirRegOp, hw::InstanceOp>(start.getDefiningOp())));
 
-      results.push_back(DataflowPath(start, startBitPos, newPath,
-                                     delay + point.delay, newHistory));
+      results.emplace_back(newPath, start, startBitPos, delay + point.delay,
+                           newHistory);
     }
   }
 
   return success();
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, comb::ConcatOp op,
-                                  SmallVectorImpl<DataflowPath> &results) {
-  // Find bit pos.
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, comb::ConcatOp op,
+    SmallVectorImpl<DataflowPath> &results) {
+  // Find the exact bit pos in the concat.
   DataflowPath newPoint = point;
   for (auto operand : llvm::reverse(op.getInputs())) {
     auto size = getBitWidth(operand);
@@ -590,37 +621,43 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, comb::ConcatOp op,
                    results);
     return success();
   }
-  assert(false);
+
+  llvm::report_fatal_error("Should not reach here");
   return failure();
 }
 
-LogicalResult Impl::Runner::addLogicOp(const DataflowPath &point, Operation *op,
-                                       SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::addLogicOp(
+    const DataflowPath &point, Operation *op,
+    SmallVectorImpl<DataflowPath> &results) {
   auto size = op->getNumOperands();
   // Create edges each operand with cost ceil(log(size)).
   for (auto operand : op->getOperands())
-    addEdge(operand, point.bitPos, llvm::Log2_64_Ceil(size), results);
+    addEdge(operand, point.bitPos, std::max(1u, llvm::Log2_64_Ceil(size)),
+            results);
 
-  llvm::sort(results, std::greater<DataflowPath>());
-  results.erase(std::unique(results.begin(), results.end(),
-                            [](const DataflowPath &a, const DataflowPath &b) {
-                              return a.instancePath == b.instancePath &&
-                                     a.value == b.value && a.bitPos == b.bitPos;
-                            }),
-                results.end());
+  uniqifyPaths(results);
+  // llvm::sort(results, std::greater<DataflowPath>());
+  // results.erase(std::unique(results.begin(), results.end(),
+  //                           [](const DataflowPath &a, const DataflowPath &b)
+  //                           {
+  //                             return a.instancePath == b.instancePath &&
+  //                                    a.value == b.value && a.bitPos ==
+  //                                    b.bitPos;
+  //                           }),
+  //               results.end());
 
   return success();
 }
 
-LogicalResult
-Impl::Runner::visitDefault(const DataflowPath &point, Operation *op,
-                           SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visitDefault(
+    const DataflowPath &point, Operation *op,
+    SmallVectorImpl<DataflowPath> &results) {
   return success();
 }
 
-LogicalResult Impl::Runner::visit(const DataflowPath &point, // Start.
-                                  mlir::BlockArgument arg,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LongestPathAnalysis::Impl::Runner::visit(
+    const DataflowPath &point, // Start.
+    mlir::BlockArgument arg, SmallVectorImpl<DataflowPath> &results) {
   auto path = point.instancePath;
   assert(arg.getOwner() == module.getBodyBlock() && path.size() == 0);
 
@@ -636,24 +673,8 @@ LogicalResult Impl::Runner::visit(const DataflowPath &point, // Start.
   return success();
 }
 
-static void uniqifyPaths(SmallVectorImpl<DataflowPath> &results) {
-  // Take only maximum for each path destination.
-  DenseMap<std::tuple<circt::igraph::InstancePath, Value, size_t>, size_t>
-      saved;
-  for (auto [i, path] : llvm::enumerate(results)) {
-    auto &slot = saved[{path.instancePath, path.value, path.bitPos}];
-    if (slot == 0) {
-      slot = i + 1;
-      continue;
-    }
-    if (results[slot - 1].delay < path.delay)
-      results[slot - 1] = path;
-  }
-
-  results.resize(saved.size());
-}
-
-ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
+ArrayRef<DataflowPath>
+LongestPathAnalysis::Impl::Runner::getOrCompute(Value value, size_t bitPos) {
   if (ec.contains({value, bitPos})) {
     auto leader = ec.findLeader({value, bitPos});
     // If this is not the leader, then use the leader.
@@ -689,14 +710,15 @@ ArrayRef<DataflowPath> Impl::Runner::getOrCompute(Value value, size_t bitPos) {
   return insertedResult.first->second;
 }
 
-LogicalResult Impl::Runner::run(Value value, size_t bitPos,
-                                SmallVectorImpl<DataflowPath> &results) {
+LogicalResult
+LongestPathAnalysis::Impl::Runner::run(Value value, size_t bitPos,
+                                       SmallVectorImpl<DataflowPath> &results) {
   LLVM_DEBUG({
     llvm::dbgs() << "Visiting: ";
     llvm::dbgs() << " " << value << "[" << bitPos << "]\n";
   });
 
-  DataflowPath point(value, bitPos, {});
+  DataflowPath point({}, value, bitPos);
   if (auto blockArg = dyn_cast<mlir::BlockArgument>(value))
     return visit(point, blockArg, results);
 
@@ -705,14 +727,14 @@ LogicalResult Impl::Runner::run(Value value, size_t bitPos,
       TypeSwitch<Operation *, LogicalResult>(op)
           .Case<hw::InstanceOp, comb::ConcatOp, comb::ExtractOp,
                 comb::ReplicateOp, aig::AndInverterOp, comb::AndOp, comb::OrOp,
-                comb::XorOp, seq::FirRegOp, seq::CompRegOp>(
+                comb::MuxOp, comb::XorOp, seq::FirRegOp, seq::CompRegOp>(
               [&](auto op) { return visit(point, op, results); })
           .Default([&](auto op) { return visitDefault(point, op, results); });
 
   return result;
 }
 
-LogicalResult Impl::Runner::run() {
+LogicalResult LongestPathAnalysis::Impl::Runner::run() {
   // Show elapsed time.
   auto start = std::chrono::steady_clock::now();
   ctx->notifyStart(module.getModuleNameAttr());
@@ -793,18 +815,13 @@ LogicalResult Impl::Runner::run() {
           for (const auto &result : getOrCompute(operand.get(), i)) {
             saveInputPort(result.instancePath, result.value, result.bitPos,
                           result.delay, result.history, recordOutput);
-            // auto &resultSlot = recordOutput[{result.instancePath,
-            // result.value,
-            //                                  result.bitPos}];
-            // if (resultSlot.first >= result.delay)
-            //   continue;
-            // resultSlot = {result.delay, result.history};
           }
         }
       }
     }
     return WalkResult::advance();
   });
+
   if (result.wasInterrupted())
     return failure();
 
@@ -831,7 +848,38 @@ LogicalResult Impl::Runner::run() {
   return success();
 }
 
-LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
+LogicalResult
+LongestPathAnalysis::getResultsFor(circt::igraph::InstancePath path,
+                                   Value value, size_t bitPos,
+                                   SmallVectorImpl<DataflowPath> &results) {
+  auto instance = path.leaf();
+  auto *it = impl->ctx.runners.find(
+      cast<StringAttr>(instance.getReferencedModuleNamesAttr()[0]));
+  if (it == impl->ctx.runners.end())
+    return failure();
+
+  auto *runner = it->second.get();
+
+  for (auto &path : it->second->getOrCompute(value, bitPos)) {
+    if (isa<BlockArgument>(path.value)) {
+    } else {
+      results.push_back(path);
+    }
+  }
+  // for (auto instance : path) {
+  //   auto inst = instance.getReferencedModuleNames();
+  //   if (inst.size() != 1) {
+  //     llvm::errs() << "Instance choice is not supported";
+  //     return failure();
+  //   }
+
+  //   runners[instance->getModule().getModuleNameAttr()]->waitForDone();
+  // }
+  return getResultsFor({}, value, bitPos, results);
+}
+
+LogicalResult LongestPathAnalysis::Impl::run(mlir::ModuleOp top,
+                                             StringRef topName) {
   igraph::InstanceGraph instanceGraph(top);
   igraph::InstancePathCache instancePathCache(instanceGraph);
   // 1. Enumerate all instance paths and registers
@@ -846,7 +894,6 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
   SmallVector<igraph::InstanceGraphNode *> worklist;
   llvm::SetVector<Operation *> visited;
   worklist.push_back(topNode);
-  Context ctx(1);
   while (!worklist.empty()) {
     auto *node = worklist.pop_back_val();
     assert(node && "node should not be null");
@@ -872,31 +919,9 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
               {hwMod.getModuleNameAttr(),
                std::make_unique<Runner>(hwMod, &instanceGraph, &ctx)});
       }
-
-  // std::vector<Runner> runners;
-  // for (size_t i = 0, e = top.getContext()->getNumThreads(); i < e;
-  // ++i)
-  //   runners.emplace_back(&instanceGraph, &ctx);
-
-  // Calculate bucket size with ceiling division to ensure all points
-  // are distributed auto bucketSize =
-  //     (allStartPoints.size() + runners.size() - 1) / runners.size();
-  // for (auto [i, start] : llvm::enumerate(allStartPoints)) {
-  //   size_t group = std::min(i / bucketSize, runners.size() - 1);
-  //   runners[group].startingPoints.push_back(start);
-  // }
-  // for (auto [i, start] : llvm::enumerate(allStartPoints)) {
-  //   // size_t group = std::min(i / bucketSize, runners.size() - 1);
-  //   runners[i % runners.size()].startingPoints.push_back(start);
-  // }
-
-  // NOTE: Reverse order to perform bottom-up traversal.
-
   auto result =
       mlir::failableParallelForEach(top.getContext(), ctx.runners,
                                     [&](auto &it) { return it.second->run(); });
-  // for (auto &runner : runners)
-  //   runner.run();
 
   if (failed(result))
     return failure();
@@ -921,7 +946,7 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
       auto [delay, history] = state;
       results.emplace_back(
           Object(path, start, startBitPos),
-          DataflowPath(arg, argBitPos, {}, delay, history),
+          DataflowPath({}, arg, argBitPos, delay, history),
           ctx.runners[topNode->getModule().getModuleNameAttr()]->module);
     }
   }
@@ -932,7 +957,7 @@ LogicalResult Impl::run(mlir::ModuleOp top, StringRef topName) {
 
   llvm::errs() << "Found " << results.size() << " paths\n";
   llvm::errs() << "Top 10 longest paths:\n";
-  for (size_t i = 0; i < std::min<size_t>(100, results.size()); ++i) {
+  for (size_t i = 0; i < std::min<size_t>(10000, results.size()); ++i) {
     results[i].print(llvm::errs());
     llvm::errs() << "\n";
   }
@@ -947,7 +972,7 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  Impl impl;
+  LongestPathAnalysis::Impl impl;
   if (failed(impl.run(getOperation(), topModuleName)))
     return signalPassFailure();
 }

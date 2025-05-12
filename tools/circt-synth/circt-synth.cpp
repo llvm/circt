@@ -174,8 +174,8 @@ static void populateSynthesisPipeline(PassManager &pm) {
     mpm.addPass(circt::hw::createHWAggregateToCombPass());
     // Partially legalize Comb to AIG, run CSE and canonicalization.
     circt::ConvertCombToAIGOptions options;
-    // partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp>(
-    //     options.additionalLegalOps);
+    // partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp,
+    //                            comb::MuxOp>(options.additionalLegalOps);
     mpm.addPass(circt::createConvertCombToAIG(options));
     mpm.addPass(createCSEPass());
     if (untilReached(UntilAIGLowering))
