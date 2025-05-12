@@ -35,6 +35,8 @@ def CombDialect : Dialect {
 class CombOp<string mnemonic, list<Trait> traits = []> :
     Op<CombDialect, mnemonic, traits>;
 
+def NonCombSemanticPreservingRegion : NativeOpTrait<"NonCombSemanticPreservingRegion">;
+
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Comb/Combinational.td"
 
