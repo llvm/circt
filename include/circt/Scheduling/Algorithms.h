@@ -54,25 +54,22 @@ LogicalResult scheduleSimplex(SharedOperatorsProblem &prob, Operation *lastOp);
 LogicalResult scheduleSimplex(ModuloProblem &prob, Operation *lastOp);
 
 /// Solve the acyclic, chaining-enabled problem using linear programming and a
-/// handwritten implementation of the simplex algorithm. This approach strictly
-/// adheres to the given maximum \p cycleTime. The objective is to minimize the
-/// start time of the given \p lastOp. Fails if the dependence graph contains
-/// cycles, or individual operator types have delays larger than \p cycleTime,
-/// or \p prob does not include \p lastOp.
-LogicalResult scheduleSimplex(ChainingProblem &prob, Operation *lastOp,
-                              float cycleTime);
+/// handwritten implementation of the simplex algorithm. The objective is to
+/// minimize the start time of the given \p lastOp. Fails if the dependence
+/// graph contains cycles, or individual operator types have delays larger than
+/// \p cycleTime, or \p prob does not include \p lastOp.
+LogicalResult scheduleSimplex(ChainingProblem &prob, Operation *lastOp);
 
 /// Solve the resource-free cyclic, chaining-enabled problem using a linear
 /// programming-based and a handwritten implementation of the simplex algorithm.
 /// This approach is an hybrid approach of the ChainingProblem simplex scheduler
 /// and the CyclicProblem simplex scheduler. The objectives include determining
 /// the smallest feasible initiation interval, and to minimize the start time of
-/// a given \p lastOp. Fails if the dependence graph contains cycles that does
+/// a given \p lastOp. Fails if the dependence graph contains   cycles that does
 /// not include at least one edge with a non-zero distance, individual operator
 /// types have delays larger than \p cycleTime, or \p prob does not include
 /// \p lastOp.
-LogicalResult scheduleSimplex(ChainingCyclicProblem &prob, Operation *lastOp,
-                              float cycleTime);
+LogicalResult scheduleSimplex(ChainingCyclicProblem &prob, Operation *lastOp);
 
 /// Solve the basic problem using linear programming and an external LP solver.
 /// The objective is to minimize the start time of the given \p lastOp. Fails if
