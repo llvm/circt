@@ -352,6 +352,140 @@ static APInt getMaxSignedValue(unsigned bitWidth) {
   return bitWidth > 0 ? APInt::getSignedMaxValue(bitWidth) : APInt();
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
+static Value coerceSource(PatternRewriter &rewriter, Location &loc,
+                          FIRRTLBaseType targetType, FIRRTLBaseType sourceType,
+                          Value source) {
+  if (sourceType == targetType)
+    return source;
+
+  auto srcType = sourceType.getAnonymousType();
+  auto tgtType = targetType.getAnonymousType();
+  if (srcType == tgtType)
+    return source;
+
+  auto srcBundleType = dyn_cast<BundleType>(srcType);
+  auto tgtBundleType = dyn_cast<BundleType>(tgtType);
+  if (srcBundleType && tgtBundleType) {
+    auto n = tgtBundleType.getNumElements();
+    SmallVector<Value> elems;
+    elems.reserve(n);
+    for (unsigned i = 0; i < n; ++i) {
+      auto srcElemType = srcBundleType.getElementType(i);
+      auto tgtElemType = tgtBundleType.getElementType(i);
+      auto srcElem = rewriter.create<SubfieldOp>(loc, source, i);
+      auto elem =
+          coerceSource(rewriter, loc, tgtElemType, srcElemType, srcElem);
+      elems.push_back(elem);
+    }
+    return rewriter.create<BundleCreateOp>(loc, tgtBundleType, elems);
+  }
+
+  auto srcVectorType = dyn_cast<FVectorType>(srcType);
+  auto tgtVectorType = dyn_cast<FVectorType>(tgtType);
+  if (srcVectorType && tgtVectorType) {
+    auto srcElemType = srcVectorType.getElementType();
+    auto tgtElemType = tgtVectorType.getElementType();
+    auto n = tgtVectorType.getNumElements();
+    SmallVector<Value> elems;
+    elems.reserve(n);
+    for (unsigned i = 0; i < n; ++i) {
+      auto srcElem = rewriter.create<SubindexOp>(loc, source, i);
+      auto elem =
+          coerceSource(rewriter, loc, tgtElemType, srcElemType, srcElem);
+      elems.push_back(elem);
+    }
+    return rewriter.create<VectorCreateOp>(loc, tgtVectorType, elems);
+  }
+
+  auto srcIntType = dyn_cast<IntType>(srcType);
+  auto tgtIntType = dyn_cast<IntType>(tgtType);
+  if (srcIntType && tgtIntType) {
+    auto srcWidth = srcIntType.getBitWidthOrSentinel();
+    auto tgtWidth = tgtIntType.getBitWidthOrSentinel();
+    if (tgtWidth < srcWidth) {
+      auto delta = srcWidth - tgtWidth;
+      Value value = rewriter.create<TailPrimOp>(loc, source, delta);
+      if (tgtIntType.isSigned())
+        value = rewriter.create<AsSIntPrimOp>(loc, value);
+      return value;
+    }
+
+    if (tgtWidth > srcWidth)
+      source = rewriter.create<PadPrimOp>(loc, source, tgtWidth);
+    if (tgtIntType.isSigned() && !srcIntType.isSigned())
+      return rewriter.create<AsSIntPrimOp>(loc, source);
+    if (!tgtIntType.isSigned() && srcIntType.isSigned())
+      return rewriter.create<AsUIntPrimOp>(loc, source);
+    return source;
+  }
+
+  return nullptr;
+}
+
+/// Emit a coercion from a value to a target type. Returns nullptr if the
+/// coercion is not possible. The resulting value is a non-aliasing source
+/// value. As such, we can only emit coercions for passive types.
+static Value coerceSource(PatternRewriter &rewriter, Location loc,
+                          Type targetType, Value source) {
+  Type sourceType = source.getType();
+
+  // If the types are syntactically equal, no action is needed.
+  if (sourceType == targetType)
+    return source;
+
+  // If either of the types are not FIRRTL base types, we cannot coerce.
+  auto sourceFType = type_cast<FIRRTLBaseType>(sourceType);
+  auto targetFType = type_cast<FIRRTLBaseType>(targetType);
+  if (!sourceFType || !targetFType)
+    return nullptr;
+
+  // After type_cast resolves type-aliases, the underlying types may be the
+  // same. If they are, no action is needed.
+  if (sourceFType == targetFType)
+    return source;
+
+  // One last shot at avoiding coercion: recursively unfold type-aliases and
+  // check again for syntactic equality. If they are, no action is needed.
+  if (sourceFType.getAnonymousType() == targetFType.getAnonymousType())
+    return source;
+
+  // OK, some coercion is necessary. Check if it's possible.
+
+  // Give up if either side contains const. Eventually, const will be removed
+  // from the compiler.
+  if (sourceFType.containsConst() || targetFType.containsConst())
+    return nullptr;
+
+  // We can only coerce when all the involved widths are known. We can usually
+  // truncate or extend the source value to match the destination, but if either
+  // src or dst has an uninferred width, we don't know which way to go.
+  if (sourceFType.hasUninferredWidth() || targetFType.hasUninferredWidth())
+    return nullptr;
+
+  // Similar story for resets...
+  if (sourceFType.hasUninferredReset() || targetFType.hasUninferredReset())
+    return nullptr;
+
+  // Give up if the target is not passive. If we have to coerce the source
+  // value, the coercion ops will produce a nonaliasing source value, which
+  // prevents us from properly coercing to a correct non-passive value.
+  if (!targetFType.isPassive() || targetFType.containsAnalog())
+    return nullptr;
+
+  // After the earlier recursive checks, we can defer to equivalence checking.
+  if (!areTypesEquivalent(targetFType, sourceFType))
+    return nullptr;
+
+  auto result = coerceSource(rewriter, loc, targetFType, sourceFType, source);
+
+  // Final sanity check: ensure the result will make matchingconnect happy.
+  if (result)
+    assert(areAnonymousTypesEquivalent(targetType, result.getType()));
+
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // Fold Hooks
 //===----------------------------------------------------------------------===//
@@ -2269,14 +2403,15 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   if (!isDefinedByOneConstantOp(reg.getResetSignal()))
     return failure();
 
-  auto resetValue = reg.getResetValue();
-  if (reg.getType(0) != resetValue.getType())
+  auto value =
+      coerceSource(rewriter, reg.getLoc(), reg.getType(0), reg.getResetValue());
+  if (!value)
     return failure();
 
   // Ignore 'passthrough'.
   (void)dropWrite(rewriter, reg->getResult(0), {});
   replaceOpWithNewOpAndCopyName<NodeOp>(
-      rewriter, reg, resetValue, reg.getNameAttr(), reg.getNameKind(),
+      rewriter, reg, value, reg.getNameAttr(), reg.getNameKind(),
       reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
   return success();
 }
