@@ -11,10 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -307,19 +309,9 @@ LogicalResult FIFOOp::verify() {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
   if (auto name = getName())
     setNameFn(getResult(), *name);
 }
-
-LogicalResult CompRegOp::verify() {
-  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
-    return emitOpError(
-        "either reset and resetValue or neither must be specified");
-  return success();
-}
-
-std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
 
 template <typename TOp>
 LogicalResult verifyResets(TOp op) {
@@ -333,10 +325,17 @@ LogicalResult verifyResets(TOp op) {
   return success();
 }
 
+std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
+
+LogicalResult CompRegOp::verify() { return verifyResets(*this); }
+
+//===----------------------------------------------------------------------===//
+// CompRegClockEnabledOp
+//===----------------------------------------------------------------------===//
+
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
   if (auto name = getName())
     setNameFn(getResult(), *name);
 }
@@ -345,10 +344,21 @@ std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
   return 0;
 }
 
-LogicalResult CompRegClockEnabledOp::verify() {
-  if (failed(verifyResets(*this)))
-    return failure();
-  return success();
+LogicalResult CompRegClockEnabledOp::verify() { return verifyResets(*this); }
+
+LogicalResult CompRegClockEnabledOp::canonicalize(CompRegClockEnabledOp op,
+                                                  PatternRewriter &rewriter) {
+  // reg(comb.mux(en, d, ?), en) -> reg(d, en)
+  // reg(arith.select(en, d, ?), en) -> reg(d, en)
+  auto *inputOp = op.getInput().getDefiningOp();
+  if (isa_and_nonnull<comb::MuxOp, arith::SelectOp>(inputOp) &&
+      inputOp->getOperand(0) == op.getClockEnable()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getInputMutable().assign(inputOp->getOperand(1)); });
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
