@@ -30,3 +30,5 @@ rtg.test @test0() {
   %1 = rtg.randomize_sequence %0
   rtg.embed_sequence %1
 }
+
+rtg.target @singleton : !rtg.dict<> {}
