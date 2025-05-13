@@ -337,6 +337,50 @@ private:
   std::string symbol;
 };
 
+/// Service for retrieving telemetry data from the accelerator.
+class TelemetryService : public Service {
+public:
+  static constexpr std::string_view StdName = "esi.service.std.telemetry";
+
+  TelemetryService(AppIDPath id, AcceleratorConnection &,
+                   ServiceImplDetails details, HWClientDetails clients);
+
+  virtual std::string getServiceSymbol() const override;
+  virtual BundlePort *getPort(AppIDPath id,
+                              const BundleType *type) const override;
+
+  /// A telemetry port which gets attached to a service port.
+  class Telemetry : public ServicePort {
+    friend class TelemetryService;
+    Telemetry(AppID id, const BundleType *type, PortMap channels);
+
+  public:
+    static Telemetry *get(AppID id, BundleType *type, WriteChannelPort &get,
+                          ReadChannelPort &data);
+
+    void connect();
+    std::future<MessageData> read();
+
+    virtual std::optional<std::string> toString() const override {
+      const esi::Type *dataType =
+          dynamic_cast<const ChannelType *>(type->findChannel("data").first)
+              ->getInner();
+      return "telemetry " + dataType->getID();
+    }
+
+  private:
+    WriteChannelPort *get_req;
+    ReadChannelPort *data;
+  };
+
+  const std::map<AppIDPath, Telemetry *> &getTelemetryPorts() {
+    return telemetryPorts;
+  }
+
+private:
+  mutable std::map<AppIDPath, Telemetry *> telemetryPorts;
+};
+
 /// Registry of services which can be instantiated directly by the Accelerator
 /// class if the backend doesn't do anything special with a service.
 class ServiceRegistry {

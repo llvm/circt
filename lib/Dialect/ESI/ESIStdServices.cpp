@@ -184,3 +184,17 @@ void HostMemServiceDeclOp::getPortList(
   ports.push_back(writePortInfo());
   ports.push_back(readPortInfo());
 }
+
+void TelemetryServiceDeclOp::getPortList(
+    SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "report")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "get"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 1))},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
+          /*resettable=*/UnitAttr())});
+}

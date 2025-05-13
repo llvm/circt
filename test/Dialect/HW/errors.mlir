@@ -528,3 +528,8 @@ hw.module @elementTypeError() {
   // expected-error @below {{'hw.aggregate_constant' op typed attr doesn't match the return type '!seq.clock'}}
   %0 = hw.aggregate_constant [32: i16] : !hw.array<1x!seq.clock>
 }
+
+// -----
+
+// expected-error @+1 {{inner reference must have exactly one nested reference}}
+#innerRef = #hw.innerNameRef<@innerRef>
