@@ -21,6 +21,7 @@
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester -v cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
+# RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
 # Now test the ToHost DMA engine.
 # RUN: %PYTHON% %s %t cosim_dma 2>&1
@@ -39,6 +40,29 @@ import typing
 import sys
 
 # CHECK: [CONNECT] connecting to backend
+
+# TELEMETRY: ********************************
+# TELEMETRY: * Telemetry
+# TELEMETRY: ********************************
+
+# TELEMETRY: tohostdmatest[32].totalWrites: 0
+# TELEMETRY: tohostdmatest[64].totalWrites: 0
+# TELEMETRY: tohostdmatest[96].totalWrites: 0
+# TELEMETRY: tohostdmatest[128].totalWrites: 0
+# TELEMETRY: tohostdmatest[256].totalWrites: 0
+# TELEMETRY: tohostdmatest[384].totalWrites: 0
+# TELEMETRY: tohostdmatest[504].totalWrites: 0
+# TELEMETRY: tohostdmatest[512].totalWrites: 0
+# TELEMETRY: tohostdmatest[513].totalWrites: 0
+# TELEMETRY: writemem[32].timesWritten: 0
+# TELEMETRY: writemem[64].timesWritten: 0
+# TELEMETRY: writemem[96].timesWritten: 0
+# TELEMETRY: writemem[128].timesWritten: 0
+# TELEMETRY: writemem[256].timesWritten: 0
+# TELEMETRY: writemem[384].timesWritten: 0
+# TELEMETRY: writemem[504].timesWritten: 0
+# TELEMETRY: writemem[512].timesWritten: 0
+# TELEMETRY: writemem[513].timesWritten: 0
 
 
 class PrintfExample(Module):
@@ -183,6 +207,13 @@ def WriteMem(width: int) -> typing.Type['WriteMem']:
       hostmem_write_resp = esi.HostMem.write(appid=AppID("WriteMem_hostwrite"),
                                              req=hostmem_write_req)
 
+      written = Counter(64)(clk=ports.clk,
+                            rst=ports.rst,
+                            clear=Bits(1)(0),
+                            increment=hostmem_write_valid & hostmem_write_ready)
+      esi.Telemetry.report_signal(ports.clk, ports.rst,
+                                  esi.AppID("timesWritten"), written.out)
+
   return WriteMem
 
 
@@ -244,6 +275,14 @@ def ToHostDMATest(width: int):
           cycle_counter.out, count_valid)
       out_xact.assign(out_channel_ready & count_valid)
       ChannelService.to_host(name=AppID("out"), chan=out_channel)
+
+      total_write_counter = Counter(64)(clk=ports.clk,
+                                        rst=ports.rst,
+                                        clear=Bits(1)(0),
+                                        increment=write_cntr_incr)
+      esi.Telemetry.report_signal(ports.clk, ports.rst,
+                                  esi.AppID("totalWrites"),
+                                  total_write_counter.out)
 
   return ToHostDMATest
 

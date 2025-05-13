@@ -7,8 +7,8 @@ from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
 from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
-from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
-                      _FromCirctValue, UIntSignal)
+from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
+                      Signal, _FromCirctValue, UIntSignal)
 from .support import clog2, optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
@@ -18,6 +18,7 @@ from .types import (Any, Bits, Bundle, BundledChannel, Channel,
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
 
+import inspect
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, cast
 import typing
@@ -850,6 +851,42 @@ class _CallService(ServiceDecl):
 
 
 CallService = _CallService()
+
+
+class _Telemetry(ServiceDecl):
+  """ESI standard service to report telemetry data."""
+
+  report = Bundle([
+      BundledChannel("get", ChannelDirection.TO, Bits(0)),
+      BundledChannel("data", ChannelDirection.FROM, Any())
+  ])
+
+  def __init__(self):
+    super().__init__(self.__class__)
+
+  def report_signal(self, clk: ClockSignal, rst: BitsSignal, name: AppID,
+                    data: Signal) -> None:
+    """Report a value to the telemetry service. 'data' is the value to report."""
+    bundle_type = Bundle([
+        BundledChannel("get", ChannelDirection.TO, Bits(1)),
+        BundledChannel("data", ChannelDirection.FROM, data.type)
+    ])
+
+    report_bundle = self.report(name, bundle_type)
+    get_valid_wire = Wire(Bits(1))
+    data_channel, data_ready = Channel(data.type).wrap(data, get_valid_wire)
+    data_channel = data_channel.buffer(clk, rst, stages=1)
+    get_chan = report_bundle.unpack(data=data_channel)['get']
+    get_chan = get_chan.buffer(clk, rst, stages=1)
+    _, get_valid = get_chan.unwrap(data_ready)
+    get_valid_wire.assign(get_valid)
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.TelemetryServiceDeclOp(sym_name)
+
+
+Telemetry = _Telemetry()
 
 
 def package(sys: System):

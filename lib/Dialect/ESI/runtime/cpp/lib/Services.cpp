@@ -266,6 +266,61 @@ void CallService::Callback::connect(
   }
 }
 
+TelemetryService::TelemetryService(AppIDPath idPath,
+                                   AcceleratorConnection &conn,
+                                   ServiceImplDetails details,
+                                   HWClientDetails clients)
+    : Service(conn) {}
+
+std::string TelemetryService::getServiceSymbol() const {
+  return std::string(TelemetryService::StdName);
+}
+
+BundlePort *TelemetryService::getPort(AppIDPath id,
+                                      const BundleType *type) const {
+  auto *port = new Telemetry(id.back(), type,
+                             conn.getEngineMapFor(id).requestPorts(id, type));
+  telemetryPorts.insert(std::make_pair(id, port));
+  return port;
+}
+
+TelemetryService::Telemetry::Telemetry(AppID id, const BundleType *type,
+                                       PortMap channels)
+    : ServicePort(id, type, channels) {}
+
+TelemetryService::Telemetry *
+TelemetryService::Telemetry::get(AppID id, BundleType *type,
+                                 WriteChannelPort &get, ReadChannelPort &data) {
+  return new Telemetry(id, type, {{"get", get}, {"data", data}});
+}
+
+/// Connect to a particular telemetry port. The bundle should have two channels
+/// -- get and data. Get should have type 'i0' and data can be anything.
+void TelemetryService::Telemetry::connect() {
+  if (channels.size() != 2)
+    throw std::runtime_error("TelemetryService must have exactly two channels");
+  get_req = &getRawWrite("get");
+  // TODO: There are problems with DMA'ing i0. As a workaround, sometimes i1 is
+  // used. When these issues are fixed, re-enable this check. There may also be
+  // a problem with the void type.
+  // if (!dynamic_cast<const VoidType *>(get_req->getType()))
+  //   throw std::runtime_error("TelemetryService get channel must be void");
+  get_req->connect();
+  data = &getRawRead("data");
+  data->connect();
+}
+
+std::future<MessageData> TelemetryService::Telemetry::read() {
+  if (!get_req)
+    throw std::runtime_error("TelemetryService get channel not connected");
+  // TODO: This is a hack to get around the fact that we can't send a void
+  // message. We need to send something, so we send a single byte whose value
+  // doesn't matter.
+  std::vector<uint8_t> empty = {1};
+  get_req->write(MessageData(empty));
+  return data->readAsync();
+}
+
 Service *ServiceRegistry::createService(AcceleratorConnection *acc,
                                         Service::Type svcType, AppIDPath id,
                                         std::string implName,
@@ -276,6 +331,8 @@ Service *ServiceRegistry::createService(AcceleratorConnection *acc,
     return new FuncService(id, *acc, details, clients);
   if (svcType == typeid(CallService))
     return new CallService(*acc, id, details);
+  if (svcType == typeid(TelemetryService))
+    return new TelemetryService(id, *acc, details, clients);
   if (svcType == typeid(CustomService))
     return new CustomService(id, *acc, details, clients);
   return nullptr;
@@ -291,5 +348,7 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
     return typeid(MMIO);
   if (svcName == HostMem::StdName)
     return typeid(HostMem);
+  if (svcName == TelemetryService::StdName)
+    return typeid(TelemetryService);
   return typeid(CustomService);
 }

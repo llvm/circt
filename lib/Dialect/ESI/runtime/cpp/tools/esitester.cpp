@@ -226,6 +226,16 @@ void hostmemTest(Accelerator *acc,
       dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
     region.flush();
 
+    auto telemetryPortIter = writeMemPorts.find(AppID("timesWritten"));
+    if (telemetryPortIter == writeMemPorts.end())
+      throw std::runtime_error("hostmem test failed. No telemetry child found");
+    services::TelemetryService::Telemetry *telemetry =
+        telemetryPortIter->second
+            .getAs<services::TelemetryService::Telemetry>();
+    telemetry->connect();
+    uint64_t writeCount = *telemetry->read().get().as<uint64_t>();
+    std::cout << "Write count: " << writeCount << std::endl;
+
     // Command the accelerator to write to 'devicePtr', the pointer which the
     // device should use for 'dataPtr'.
     writeMem->write(0, reinterpret_cast<uint64_t>(devicePtr));
@@ -237,6 +247,9 @@ void hostmemTest(Accelerator *acc,
     }
     if (!check(true))
       throw std::runtime_error("hostmem write test failed");
+
+    writeCount = *telemetry->read().get().as<uint64_t>();
+    std::cout << "Write count: " << writeCount << std::endl;
 
     // Check that the accelerator didn't write too far.
     size_t widthInBytes = width / 8;

@@ -26,6 +26,7 @@ using namespace esi;
 
 void printInfo(std::ostream &os, AcceleratorConnection &acc);
 void printHier(std::ostream &os, AcceleratorConnection &acc);
+void printTelemetry(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
   CliParser cli("esiquery");
@@ -36,6 +37,8 @@ int main(int argc, const char *argv[]) {
   CLI::App *infoSub =
       cli.add_subcommand("info", "Print ESI system information");
   CLI::App *hierSub = cli.add_subcommand("hier", "Print ESI system hierarchy");
+  CLI::App *telemetrySub =
+      cli.add_subcommand("telemetry", "Print ESI system telemetry information");
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -53,6 +56,8 @@ int main(int argc, const char *argv[]) {
       printInfo(std::cout, *acc);
     else if (*hierSub)
       printHier(std::cout, *acc);
+    else if (*telemetrySub)
+      printTelemetry(std::cout, *acc);
     return 0;
   } catch (std::exception &e) {
     ctxt.getLogger().error("esiquery", e.what());
@@ -123,5 +128,32 @@ void printHier(std::ostream &os, AcceleratorConnection &acc) {
   os << "* Design hierarchy" << std::endl;
   os << "********************************" << std::endl;
   os << std::endl;
-  printInstance(os, design);
+  printInstance(os, design, /*indent=*/"");
+}
+
+void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
+  Manifest manifest(acc.getCtxt(),
+                    acc.getService<services::SysInfo>()->getJsonManifest());
+  auto accel = manifest.buildAccelerator(acc);
+  acc.getServiceThread()->addPoll(*accel);
+
+  auto telemetry = acc.getService<services::TelemetryService>();
+  if (!telemetry) {
+    os << "No telemetry service found" << std::endl;
+    return;
+  }
+  os << "********************************" << std::endl;
+  os << "* Telemetry" << std::endl;
+  os << "********************************" << std::endl;
+  os << std::endl;
+
+  const std::map<AppIDPath, services::TelemetryService::Telemetry *>
+      &telemetryPorts = telemetry->getTelemetryPorts();
+  for (const auto &[id, port] : telemetryPorts) {
+    port->connect();
+    os << id << ": ";
+    os.flush();
+    uint64_t value = *port->read().get().as<uint64_t>();
+    os << value << std::endl;
+  }
 }

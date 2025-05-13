@@ -249,3 +249,9 @@ hw.module @HostmemRW(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channe
 
   hw.output %readData, %ackTag: !esi.channel<!hw.struct<tag: ui8, data: i64>>, !esi.channel<ui8>
 }
+
+esi.service.std.telemetry @telemetry
+hw.module @TelemetryTest1(in %clk : !seq.clock, in %rst : i1, in %value: !esi.channel<ui64>) {
+  %telemetryBundle = esi.service.req <@telemetry::@report> (#esi.appid<"telemetry">) : !esi.bundle<[!esi.channel<i1> to "get", !esi.channel<ui64> from "data"]>
+  esi.bundle.unpack %value from %telemetryBundle : !esi.bundle<[!esi.channel<i1> to "get", !esi.channel<ui64> from "data"]>
+}

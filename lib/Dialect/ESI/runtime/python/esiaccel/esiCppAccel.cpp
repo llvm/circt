@@ -57,6 +57,10 @@ struct polymorphic_type_hook<Service> {
       type = &typeid(HostMem);
       return p;
     }
+    if (auto p = dynamic_cast<const TelemetryService *>(svc)) {
+      type = &typeid(TelemetryService);
+      return p;
+    }
     return svc;
   }
 };
