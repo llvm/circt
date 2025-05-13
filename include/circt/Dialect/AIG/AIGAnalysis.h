@@ -83,21 +83,23 @@ struct DataflowPath {
 
 class LongestPathAnalysis {
 public:
+  // Entry points for analysis. 
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
 
   // Return all paths for the given fanin.
-  LogicalResult getResultsForFF(Value value, size_t bitPos,
-                                SmallVectorImpl<DataflowPath> &results);
+  LogicalResult getResults(Value value, size_t bitPos,
+                           SmallVectorImpl<DataflowPath> &results);
 
   // Return all paths from the given value/bits.
-  LogicalResult getResultsFor(Value value, size_t bitPos,
-                              SmallVectorImpl<DataflowPath> &results);
+  LogicalResult getResults(Operation *topModule, Value value, size_t bitPos,
+                           SmallVectorImpl<DataflowPath> &results);
 
   // Return paths from the given value/bitPos in the given instance path, under
   // module hierarchy `moduleOp`.
-  LogicalResult getResultsFor(circt::igraph::InstancePath path, Value value,
-                              size_t bitPos,
-                              SmallVectorImpl<DataflowPath> &results);
+  LogicalResult getResults(Operation *topModule,
+                           circt::igraph::InstancePath path, Value value,
+                           size_t bitPos,
+                           SmallVectorImpl<DataflowPath> &results);
   struct Impl;
   std::unique_ptr<Impl> impl;
 };
