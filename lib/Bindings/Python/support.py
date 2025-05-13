@@ -169,6 +169,10 @@ def type_to_pytype(t) -> ir.Type:
     return rtgtest.IntegerRegisterType(t)
   except ValueError:
     pass
+  try:
+    return rtgtest.CPUType(t)
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
