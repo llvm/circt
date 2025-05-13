@@ -144,6 +144,21 @@ uint32_t rtgImmediateTypeGetWidth(MlirType type) {
   return cast<ImmediateType>(unwrap(type)).getWidth();
 }
 
+// MemoryBlockType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAMemoryBlock(MlirType type) {
+  return isa<MemoryBlockType>(unwrap(type));
+}
+
+MlirType rtgMemoryBlockTypeGet(MlirContext ctxt, uint32_t addressWidth) {
+  return wrap(MemoryBlockType::get(unwrap(ctxt), addressWidth));
+}
+
+uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type) {
+  return cast<MemoryBlockType>(unwrap(type)).getAddressWidth();
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

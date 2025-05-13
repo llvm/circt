@@ -789,3 +789,31 @@ def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
 
   let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
 }
+
+//===- ISA Memory Block Operations ----------------------------------------===//
+
+def MemoryBlockDeclareOp : RTGISAOp<"memory_block_declare", [
+  HasParent<"rtg::TargetOp">,
+]> {
+  let summary = "declare a memory block with the provided properties";
+  let description = [{
+    This operation declares a memory block to be allocated with the provided
+    properties. It is only allowed to declare new memory blocks in the
+    `rtg.target` operations and must be passed as argument to the `rtg.test`.
+    This is because the available memory blocks are specified by the hardware
+    design. This specification is fixed from the start and thus a test should
+    not be able to declare new memory blocks on-the-fly. However, tests are
+    allowed to allocate memory regions from these memory blocks.
+
+    The 'baseAddress' attribute specifies the first memory address (lowest
+    address representing a valid access to the memory) and the 'endAddress'
+    represents the last address (highest address that is valid to access the
+    memory).
+  }];
+
+  let arguments = (ins APIntAttr:$baseAddress, APIntAttr:$endAddress);
+  let results = (outs MemoryBlockType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
