@@ -29,15 +29,10 @@ class AnalysisManager;
 namespace circt {
 namespace igraph {
 class InstanceGraph;
-};
+}
 namespace aig {
 
 struct DebugPoint {
-  circt::igraph::InstancePath path;
-  size_t bitPos;
-  Value value;
-  int64_t delay;
-  StringRef comment;
   DebugPoint(circt::igraph::InstancePath path, Value value, size_t bitPos,
              int64_t delay = 0, StringRef comment = "")
       : path(path), value(value), bitPos(bitPos), delay(delay),
@@ -52,6 +47,14 @@ struct DebugPoint {
     ID.AddInteger(bitPos);
     ID.AddInteger(delay);
   }
+
+  void print(llvm::raw_ostream &os) const;
+
+  circt::igraph::InstancePath path;
+  Value value;
+  size_t bitPos;
+  int64_t delay;
+  StringRef comment;
 };
 
 // A class represents a path in the dataflow graph.

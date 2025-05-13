@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/AIG/AIGOps.h"
-#include "circt/Dialect//Comb/CombOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -100,7 +100,8 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
 
     auto inverter = rewriter.create<aig::AndInverterOp>(
         op->getLoc(), newOperands, uniqueInverts);
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, ArrayRef<Value>{c, inverter});
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op,
+                                                ArrayRef<Value>{c, inverter});
     return success();
   }
 
