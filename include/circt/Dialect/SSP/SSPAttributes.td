@@ -48,7 +48,53 @@ def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
   "LinkedOperatorType", "::mlir::SymbolRefAttr", "::circt::scheduling::Problem"> {
   let mnemonic = "opr";
   let unwrapValue = [{ getValue().getLeafReference() }];
-  let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value) }];
+  let wrapValue = [{ ::mlir::FlatSymbolRefAttr::get(ctx, value.getAttr()) }];
+}
+def LinkedResourceTypesProp : OperationProperty<SSPDialect,
+  "LinkedResourceTypes", "::mlir::ArrayAttr", "::circt::scheduling::Problem"> {
+  let mnemonic = "rsrcs";
+  let extraClassDeclaration = [{
+    static SmallVector<::circt::scheduling::Problem::ResourceType>
+    arrayAttrToResourceTypes(::mlir::ArrayAttr attr) {
+      SmallVector<::circt::scheduling::Problem::ResourceType> result;
+      for (auto a : attr.getAsRange<::mlir::SymbolRefAttr>())
+        result.push_back(::circt::scheduling::Problem::ResourceType(a.getLeafReference()));
+      return result;
+    }
+
+    static ::mlir::ArrayAttr
+    resourceTypesToArrayAttr(::mlir::MLIRContext *ctx,
+                              ::llvm::ArrayRef<::circt::scheduling::Problem::ResourceType> rsrcs) {
+      SmallVector<::mlir::Attribute> attrs;
+      for (auto r : rsrcs) {
+        auto value = r.getAttr().getValue();
+        auto strAttr = mlir::StringAttr::get(ctx, value);
+        attrs.push_back(::mlir::FlatSymbolRefAttr::get(strAttr));
+      }
+      return ::mlir::ArrayAttr::get(ctx, attrs);
+    }
+
+    void setInProblem(::circt::scheduling::Problem &prob, ::mlir::Operation *op) {
+      SmallVector<::circt::scheduling::Problem::ResourceType> result;
+      for (auto a : getValue().getAsRange<::mlir::SymbolRefAttr>()) {
+        auto attr = a.getLeafReference();
+        result.push_back(::circt::scheduling::Problem::ResourceType(attr));
+      }
+      prob.setLinkedResourceTypes(op, result);
+    }
+
+    static ::mlir::Attribute getFromProblem(::circt::scheduling::Problem &prob,
+                                            ::mlir::Operation *op,
+                                            ::mlir::MLIRContext *context) {
+      if (auto optValue = prob.getLinkedResourceTypes(op)) {
+        const SmallVector<::circt::scheduling::Problem::ResourceType> &vec = *optValue;
+        return LinkedResourceTypesAttr::get(context, resourceTypesToArrayAttr(context, vec));
+      }
+      return {};
+    }
+  }];
+  let unwrapValue = [{ arrayAttrToResourceTypes(getValue()) }];
+  let wrapValue = [{ resourceTypesToArrayAttr(context, value) }];
 }
 def StartTimeProp : OperationProperty<SSPDialect,
   "StartTime", "unsigned", "::circt::scheduling::Problem"> {
@@ -89,7 +135,7 @@ in {
 }
 
 // SharedOperatorsProblem
-def LimitProp : OperatorTypeProperty<SSPDialect,
+def LimitProp : ResourceTypeProperty<SSPDialect,
   "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
   let mnemonic = "limit";
 }

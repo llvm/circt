@@ -16,6 +16,7 @@ ssp.instance @self_arc of "CyclicProblem" {
     operator_type @unit [latency<1>]
     operator_type @_3 [latency<3>]
   }
+  resource {}
   graph {
     %0 = operation<@unit>()
     %1 = operation<@_3> @self(%0, %0, @self [dist<1>])
@@ -42,6 +43,7 @@ ssp.instance @mco_outgoing_delays of "ChainingProblem" {
     operator_type @mul [latency<3>, incDelay<5.000000e+00 : f32>, outDelay<1.000000e-01 : f32>]
     operator_type @ret [latency<0>, incDelay<0.000000e+00 : f32>, outDelay<0.000000e+00 : f32>]
   }
+  resource {}
   graph {
     %0 = operation<@add>()
     %1 = operation<@mul>(%0, %0)
