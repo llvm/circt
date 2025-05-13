@@ -90,12 +90,6 @@ public:
   LogicalResult getResults(Value value, size_t bitPos,
                            SmallVectorImpl<DataflowPath> &results);
 
-  // Return paths from the given value/bitPos in the given instance path, under
-  // module hierarchy `moduleOp`.
-  LogicalResult getResults(Operation *topModule,
-                           circt::igraph::InstancePath path, Value value,
-                           size_t bitPos,
-                           SmallVectorImpl<DataflowPath> &results);
   struct Impl;
   std::unique_ptr<Impl> impl;
 };
