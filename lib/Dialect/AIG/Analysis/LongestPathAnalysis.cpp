@@ -405,6 +405,9 @@ struct LongestPathAnalysis::Impl {
 
   LogicalResult initializeAndRun(mlir::ModuleOp module,
                                  StringRef topModuleName = "");
+  LogicalResult initializeAndRun(hw::HWModuleOp module);
+
+  void getPrecomputedResults() {}
 
   // Return all paths for the given fanin.
   LogicalResult getResults(Value value, size_t bitPos,
@@ -422,11 +425,6 @@ struct LongestPathAnalysis::Impl {
                            SmallVectorImpl<DataflowPath> &results);
 
   int64_t getMaxArrivalTime(Value value, size_t bitPos) const;
-
-  void getPreComputedResults(Operation *topModule,
-                             circt::igraph::InstancePath path, Value value,
-                             size_t bitPos,
-                             SmallVectorImpl<PathResult> &results) {}
 
   struct PathResult {
     Object fanout;

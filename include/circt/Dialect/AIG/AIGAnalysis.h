@@ -83,15 +83,11 @@ struct DataflowPath {
 
 class LongestPathAnalysis {
 public:
-  // Entry points for analysis. 
+  // Entry points for analysis.
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
 
   // Return all paths for the given fanin.
   LogicalResult getResults(Value value, size_t bitPos,
-                           SmallVectorImpl<DataflowPath> &results);
-
-  // Return all paths from the given value/bits.
-  LogicalResult getResults(Operation *topModule, Value value, size_t bitPos,
                            SmallVectorImpl<DataflowPath> &results);
 
   // Return paths from the given value/bitPos in the given instance path, under
