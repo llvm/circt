@@ -225,8 +225,11 @@ Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
   if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) ||
       p.parseGreater())
     return Attribute();
-  if (attr.getNestedReferences().size() != 1)
+  if (attr.getNestedReferences().size() != 1) {
+    p.emitError(p.getNameLoc(),
+                "inner reference must have exactly one nested reference");
     return Attribute();
+  }
   return InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference());
 }
 
