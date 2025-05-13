@@ -572,18 +572,23 @@ LogicalResult LocalVisitor::visit(const DataflowPath &point, hw::InstanceOp op,
                                   SmallVectorImpl<DataflowPath> &results) {
   auto resultNum = cast<mlir::OpResult>(point.value).getResultNumber();
   auto moduleName = op.getReferencedModuleNameAttr();
+
+  // If this is local, then we are done.
   if (!ctx->instanceGraph) {
     markFanIn(point, results);
     return success();
   }
 
+  // If an instance graph is available, then we can look up the module. It's an
+  // error when the module is not found.
   auto *node = ctx->instanceGraph->lookup(moduleName);
   if (!node || !node->getModule()) {
     op.emitError() << "module " << moduleName << " not found";
     return failure();
   }
 
-  // Consider black box results as fanin.
+  // Otherwise, if the module is not a HWModuleOp, then we should treat it as a
+  // black box.
   if (!isa<hw::HWModuleOp>(node->getModule())) {
     markFanIn(point, results);
     return success();
@@ -840,7 +845,8 @@ LogicalResult LocalVisitor::initializeAndRun() {
   if (result.wasInterrupted())
     return failure();
 
-  cachedResults.clear();
+  if (ctx->storeFlipFlopLongestPath)
+    cachedResults.clear();
   done.store(true);
   return success();
 }
