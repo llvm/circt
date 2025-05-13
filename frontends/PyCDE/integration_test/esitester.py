@@ -16,10 +16,12 @@
 # REQUIRES: esi-runtime, esi-cosim, rtl-sim, esitester
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
-# Run pure cosim since we don't yet have a FromHost DMA engine.
+
+# Test cosim without DMA.
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester -v cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
+
 # Now test the ToHost DMA engine.
 # RUN: %PYTHON% %s %t cosim_dma 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env hostmem
@@ -171,11 +173,12 @@ def WriteMem(width: int) -> typing.Type['WriteMem']:
                                      clear=Bits(1)(0),
                                      increment=Bits(1)(1))
 
-      hostmem_write_req, _ = esi.HostMem.wrap_write_req(
+      hostmem_write_valid = mmio_xact.reg(ports.clk, ports.rst)
+      hostmem_write_req, hostmem_write_ready = esi.HostMem.wrap_write_req(
           write_loc,
           cycle_counter.out.as_bits(),
           tag.out,
-          valid=mmio_xact.reg(ports.clk, ports.rst))
+          valid=hostmem_write_valid)
 
       hostmem_write_resp = esi.HostMem.write(appid=AppID("WriteMem_hostwrite"),
                                              req=hostmem_write_req)
@@ -305,7 +308,7 @@ class EsiTesterTop(Module):
   @generator
   def construct(ports):
     PrintfExample(clk=ports.clk, rst=ports.rst)
-    for width in [32, 64, 96, 128, 256, 384, 504, 512]:
+    for width in [32, 64, 96, 128, 256, 384, 504, 512, 513]:
       ReadMem(width)(appid=esi.AppID("readmem", width),
                      clk=ports.clk,
                      rst=ports.rst)
