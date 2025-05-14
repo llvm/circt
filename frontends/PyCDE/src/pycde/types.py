@@ -508,7 +508,7 @@ class Bits(BitVectorType):
 
 
 # A single bit is common enough to provide an alias to save 4 key strokes.
-bit = Bits(1)
+Bit = Bits(1)
 
 
 class SInt(BitVectorType):

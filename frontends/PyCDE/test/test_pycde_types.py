@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import dim, types, Input, Output, generator, System, Module
-from pycde.types import bit, Bits, List, StructType, TypeAlias, UInt
+from pycde.types import Bit, Bits, List, StructType, TypeAlias, UInt
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
@@ -49,7 +49,7 @@ TypeAlias.declare_aliases(m)
 TypeAlias.declare_aliases(m)
 m.print()
 
-assert bit == Bits(1)
+assert Bit == Bits(1)
 
 
 class ExStruct(Struct):

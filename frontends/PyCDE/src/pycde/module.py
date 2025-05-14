@@ -748,7 +748,7 @@ class ImportedModSpec(ModuleBuilder):
     return hw_module
 
 
-def import_hw_module(hw_module: hw.HWModuleOp):
+def import_hw_module(sys, hw_module: hw.HWModuleOp):
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
   operates just like an external PyCDE module.
 
@@ -768,8 +768,14 @@ def import_hw_module(hw_module: hw.HWModuleOp):
   modattrs["BuilderType"] = ImportedModSpec
   modattrs["hw_module"] = hw_module
 
+  modattrs["add_metadata"] = staticmethod(
+      lambda meta, sys=sys: add_metadata(sys, name, meta))
+
   # Use the name and ports to construct a class object like what externmodule
   # would wrap.
   cls = type(name, (Module,), modattrs)
+
+  def add_metadata(sys, symbol: str, meta: Optional[Metadata]):
+    return cls._builder.add_metadata(sys, symbol, meta)
 
   return cls
