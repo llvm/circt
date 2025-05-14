@@ -48,6 +48,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Mutex.h"
 #include <cstdint>
 #include <functional>
@@ -175,8 +176,8 @@ struct PrintLongestPathAnalysisPass
     : public impl::PrintLongestPathAnalysisBase<PrintLongestPathAnalysisPass> {
   using PrintLongestPathAnalysisBase::outputJSONFile;
   using PrintLongestPathAnalysisBase::PrintLongestPathAnalysisBase;
+  using PrintLongestPathAnalysisBase::showTopKPercent;
   using PrintLongestPathAnalysisBase::topModuleName;
-  using PrintLongestPathAnalysisBase::showSize;
   void runOnOperation() override;
 };
 
@@ -982,6 +983,7 @@ void LongestPathAnalysis::Impl::getResultsForFF(
     }
   }
   std::sort(results.begin(), results.end(), [](PathResult &a, PathResult &b) {
+    return a.fanin.delay > b.fanin.delay;
     // Implement sorting. Make sure they are sorted by names as well
     // when tie off.
     if (a.fanin.delay != b.fanin.delay)
@@ -1088,12 +1090,15 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
   SmallVector<PathResult> results;
   impl.getResultsForFF(results);
 
-  if (showSize == 0)
+  llvm::errs() << "Found " << results.size() << " paths\n";
+  if (showTopKPercent == 0)
     return;
 
-  llvm::errs() << "Found " << results.size() << " paths\n";
-  llvm::errs() << "Top 10 longest paths:\n";
-  for (size_t i = 0; i < std::min<size_t>(10000, results.size()); ++i) {
+  size_t topK = llvm::divideCeil(results.size(), 100) *
+                std::max(0, showTopKPercent.getValue());
+  llvm::errs() << "Showing top " << topK << " paths\n";
+  for (size_t i = 0; i < std::min<size_t>(topK, results.size()); ++i) {
+    llvm::errs() << "Path #" << i << ": ";
     results[i].print(llvm::errs());
     llvm::errs() << "\n";
   }

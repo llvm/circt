@@ -210,7 +210,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
     circt::aig::PrintLongestPathAnalysisOptions options;
     options.topModuleName = topName;
     options.outputJSONFile = longestPathOutputFile;
-    options.printSummary = true;
+    options.showTopKPercent = 5;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
   // TODO: Add balancing, rewriting, FRAIG conversion, etc.

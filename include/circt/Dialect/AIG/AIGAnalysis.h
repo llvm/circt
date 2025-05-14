@@ -57,9 +57,20 @@ struct DebugPoint {
   StringRef comment;
 };
 
+// int compareInstancePath(const circt::igraph::InstancePath &a,
+//                         const circt::igraph::InstancePath &b) {
+//   if (a.size() != b.size())
+//     return a.size() < b.size() ? -1 : 1;
+//   for (size_t i = 0, e = a.size(); i < e; ++i) {
+//     if (a[i].getInstanceName() != b[i].getInstanceName())
+//       return a[i].getInstanceName().compare(b[i].getInstanceName());
+//   }
+//   return 0;
+// }
+
 // A class represents a path in the dataflow graph.
-// The destination is: `instancePath.value[bitPos]` at time `delay` going
-// through `history`.
+// The destination is: `instancePath.value[bitPos]` at time `delay`
+// going through `history`.
 struct DataflowPath {
   Value value;
   size_t bitPos;
@@ -97,6 +108,16 @@ struct Object {
     return instancePath == other.instancePath && value == other.value &&
            bitPos == other.bitPos;
   }
+  // bool operator<(const Object &other) const {
+  //   auto order = compareInstancePath(instancePath, other.instancePath);
+  //   if (order != 0)
+  //     return order < 0;
+  //   if (value.getAsOpaquePointer() < other.value.getAsOpaquePointer())
+  //     return true;
+  //   if (value.getAsOpaquePointer() > other.value.getAsOpaquePointer())
+  //     return false;
+  //   return bitPos < other.bitPos;
+  // }
 };
 
 struct PathResult {
