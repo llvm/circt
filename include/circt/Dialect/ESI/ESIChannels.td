@@ -497,13 +497,17 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$stages,
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $clk `,` $rst `,` $input attr-dict
+      `:` qualified(type($input)) `->` qualified(type($output))
+  }];
   let hasVerifier = 1;
 }
 
 def PipelineStageOp : ESI_Physical_Op<"stage", [
     Pure,
-    DeclareOpInterfaceMethods<ChannelOpInterface>
+    DeclareOpInterfaceMethods<ChannelOpInterface>,
+    AllTypesMatch<["input", "output"]>,
   ]> {
   let summary = "An elastic buffer stage.";
   let description = [{
@@ -515,7 +519,10 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
 
   let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input);
   let results = (outs ChannelType:$output);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $clk `,` $rst `,` $input attr-dict
+      `:` qualified(type($input))
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -562,6 +569,7 @@ def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
   let assemblyFormat = [{
     $clk `,` $rst `,` $toHost`,` $id attr-dict `:` qualified(type($toHost))
   }];
+  let hasVerifier = 1;
 }
 
 def CosimFromHostEndpointOp : ESI_Physical_Op<"cosim.from_host", []> {
@@ -583,6 +591,7 @@ def CosimFromHostEndpointOp : ESI_Physical_Op<"cosim.from_host", []> {
   let assemblyFormat = [{
     $clk `,` $rst `,` $id attr-dict `:` qualified(type($fromHost))
   }];
+  let hasVerifier = 1;
 }
 
 def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
