@@ -166,6 +166,14 @@ def type_to_pytype(t) -> ir.Type:
   except ValueError:
     pass
   try:
+    return rtg.MemoryType(t)
+  except ValueError:
+    pass
+  try:
+    return rtg.MemoryBlockType(t)
+  except ValueError:
+    pass
+  try:
     return rtgtest.IntegerRegisterType(t)
   except ValueError:
     pass

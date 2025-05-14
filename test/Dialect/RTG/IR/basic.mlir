@@ -192,10 +192,19 @@ rtg.test @tuples() {
   %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
 }
 
-// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>>
-rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>> {
+// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memory_block<32>, mem_size: index>
+rtg.target @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memory_block<32>, mem_size: index> {
   // CHECK: rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
   %0 = rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
+
+  // CHECK: [[IDX8:%.+]] = index.constant 8
+  // CHECK: [[V1:%.+]] = rtg.isa.memory_alloc %0, [[IDX8]], [[IDX8]] : !rtg.isa.memory_block<32>
+  // CHECK: [[V2:%.+]] = rtg.isa.memory_base_address [[V1]] : !rtg.isa.memory<32>
+  // CHECK: [[V3:%.+]] = rtg.isa.memory_size [[V1]] : !rtg.isa.memory<32>
+  %idx8 = index.constant 8
+  %1 = rtg.isa.memory_alloc %0, %idx8, %idx8 : !rtg.isa.memory_block<32>
+  %2 = rtg.isa.memory_base_address %1 : !rtg.isa.memory<32>
+  %3 = rtg.isa.memory_size %1 : !rtg.isa.memory<32>
   
-  rtg.yield %0 : !rtg.isa.memory_block<32>
+  rtg.yield %2, %0, %3 : !rtg.isa.immediate<32>, !rtg.isa.memory_block<32>, index
 }
