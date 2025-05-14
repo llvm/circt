@@ -1,11 +1,32 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s
 
-from pyrtg import test, sequence, Integer, CPUCore
+from pyrtg import test, sequence, Integer, CPUCore, Sequence, target, entry
 
 
 @sequence(Integer.type())
 def consumer(arg):
   pass
+
+
+@sequence(CPUCore.type(), CPUCore.type(), Sequence.type())
+def switch(from_ctxt, to_ctxt, seq):
+  pass
+
+
+# MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<cpu: !rtgtest.cpu>
+# MLIR-NEXT: [[V0:%.+]] = rtg.constant #rtgtest.cpu<0> : !rtgtest.cpu
+# MLIR-NEXT: [[V1:%.+]] = rtg.get_sequence @switch : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+# MLIR-NEXT: rtg.context_switch #rtg.any_context : !rtgtest.cpu -> #rtgtest.cpu<0> : !rtgtest.cpu, [[V1]] : !rtg.sequence<!rtgtest.cpu, !rtgtest.cpu, !rtg.sequence>
+# MLIR-NEXT: rtg.yield [[V0]] : !rtgtest.cpu
+
+
+@target
+class Tgt0:
+
+  @entry
+  def cpu():
+    CPUCore.register_switch(CPUCore.any(), CPUCore(0), switch)
+    return CPUCore(0)
 
 
 # CHECK-LABEL: rtg.test @test0_context_args

@@ -1433,7 +1433,28 @@ public:
     }
 
     // Switch to the desired context.
+    // First, check if a context switch is registered that has the concrete
+    // context as source and target.
     auto *iter = testState.contextSwitches.find({from, to});
+
+    // Try with 'any' context as target and the concrete context as source.
+    if (iter == testState.contextSwitches.end())
+      iter = testState.contextSwitches.find(
+          {from, AnyContextAttr::get(op->getContext(), to.getType())});
+
+    // Try with 'any' context as source and the concrete context as target.
+    if (iter == testState.contextSwitches.end())
+      iter = testState.contextSwitches.find(
+          {AnyContextAttr::get(op->getContext(), from.getType()), to});
+
+    // Try with 'any' context for both the source and the target.
+    if (iter == testState.contextSwitches.end())
+      iter = testState.contextSwitches.find(
+          {AnyContextAttr::get(op->getContext(), from.getType()),
+           AnyContextAttr::get(op->getContext(), to.getType())});
+
+    // Otherwise, fail with an error because we couldn't find a user
+    // specification on how to switch between the requested contexts.
     // NOTE: we could think about supporting context switching via intermediate
     // context, i.e., treat it as a transitive relation.
     if (iter == testState.contextSwitches.end())
