@@ -84,14 +84,62 @@ struct DataflowPath {
   void print(llvm::raw_ostream &os) const;
 };
 
+struct Object {
+  circt::igraph::InstancePath instancePath;
+  Value value;
+  size_t bitPos;
+  Object(circt::igraph::InstancePath path, Value value, size_t bitPos)
+      : instancePath(path), value(value), bitPos(bitPos) {}
+  Object() = default;
+  void print(llvm::raw_ostream &os) const;
+
+  bool operator==(const Object &other) const {
+    return instancePath == other.instancePath && value == other.value &&
+           bitPos == other.bitPos;
+  }
+};
+
+struct PathResult {
+  Object fanout;
+  DataflowPath fanin;
+  hw::HWModuleOp root;
+  PathResult(Object fanout, DataflowPath fanin, hw::HWModuleOp root)
+      : fanout(fanout), fanin(fanin), root(root) {}
+  PathResult(){};
+
+  void print(llvm::raw_ostream &os) {
+    os << "PathResult(";
+    os << "root=" << root.getModuleNameAttr() << ", ";
+    os << "fanout=";
+    fanout.print(os);
+    os << ", ";
+    os << "fanin=";
+    fanin.print(os);
+    if (!fanin.history.isEmpty()) {
+      os << ", history=[";
+      llvm::interleaveComma(fanin.history, os,
+                            [&](DebugPoint p) { p.print(os); });
+      os << "]";
+    }
+    os << ")";
+  }
+
+  bool operator<(const PathResult &other) const {
+    return fanin.delay < other.fanin.delay;
+  }
+};
+
 class LongestPathAnalysis {
 public:
   // Entry points for analysis.
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
 
-  // Return all paths for the given fanin.
+  // Return all paths for the given values.
   LogicalResult getResults(Value value, size_t bitPos,
-                           SmallVectorImpl<DataflowPath> &results);
+                           SmallVectorImpl<PathResult> &results);
+
+  // Paths to FFs are precomputed efficiently, return results.
+  ArrayRef<PathResult> getResultsForFF();
 
   struct Impl;
   std::unique_ptr<Impl> impl;
