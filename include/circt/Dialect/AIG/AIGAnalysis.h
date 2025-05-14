@@ -156,7 +156,11 @@ public:
                            SmallVectorImpl<PathResult> &results);
 
   // Paths to FFs are precomputed efficiently, return results.
-  ArrayRef<PathResult> getResultsForFF();
+  void getResultsForFF(SmallVectorImpl<PathResult> &results);
+
+  static StringRef getTopModuleNameAttrName() {
+    return "aig.longest-path-analysis-top";
+  }
 
   struct Impl;
   std::unique_ptr<Impl> impl;

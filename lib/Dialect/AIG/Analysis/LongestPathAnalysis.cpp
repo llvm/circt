@@ -177,7 +177,6 @@ struct PrintLongestPathAnalysisPass
   using PrintLongestPathAnalysisBase::outputFile;
   using PrintLongestPathAnalysisBase::PrintLongestPathAnalysisBase;
   using PrintLongestPathAnalysisBase::showTopKPercent;
-  using PrintLongestPathAnalysisBase::topModuleName;
   void runOnOperation() override;
 };
 
@@ -332,6 +331,7 @@ public:
   void setTopLevel() { this->topLevel = true; }
 
   bool isTopLevel() const { return topLevel; }
+  const auto &getFromInputPortToFanOut() const { return fromInputPortToFanOut; }
 
 private:
   void saveInputPort(circt::igraph::InstancePath instancePath, Value value,
@@ -376,15 +376,19 @@ private:
                       SmallVectorImpl<DataflowPath> &results);
   LogicalResult visit(comb::MuxOp op, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results);
+  LogicalResult addLogicOp(Operation *op, size_t bitPos,
+                           SmallVectorImpl<DataflowPath> &results);
 
-  LogicalResult visit(seq::FirRegOp op, size_t bitPos,
+  // Constants.
+  LogicalResult visit(hw::ConstantOp op, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results) {
-    markFanIn(op, bitPos, results);
     return success();
   }
 
-  LogicalResult visit(hw::ConstantOp op, size_t bitPos,
+  // FanIn.
+  LogicalResult visit(seq::FirRegOp op, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results) {
+    markFanIn(op, bitPos, results);
     return success();
   }
 
@@ -394,11 +398,9 @@ private:
     return success();
   }
 
-  LogicalResult visitDefault(Value value, size_t bitPos, Operation *op,
+  LogicalResult visitDefault(Operation *op, size_t bitPos,
                              SmallVectorImpl<DataflowPath> &results);
 
-  LogicalResult addLogicOp(Operation *op, size_t bitPos,
-                           SmallVectorImpl<DataflowPath> &results);
   LogicalResult addEdge(Value to, size_t toBitPos, int64_t delay,
                         SmallVectorImpl<DataflowPath> &results);
 
@@ -407,8 +409,9 @@ private:
   llvm::EquivalenceClasses<std::pair<Value, size_t>> ec;
   DenseMap<std::pair<Value, size_t>, std::pair<Value, size_t>> ecMap;
 
-  void markEquivalent(Value from, size_t fromBitPos, Value to, size_t toBitPos,
-                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult markEquivalent(Value from, size_t fromBitPos, Value to,
+                               size_t toBitPos,
+                               SmallVectorImpl<DataflowPath> &results);
 
   void markFanIn(Value value, size_t bitPos,
                  SmallVectorImpl<DataflowPath> &results);
@@ -460,9 +463,10 @@ LogicalResult LocalVisitor::markFanOut(Value fanout, Value start) {
   return success();
 }
 
-void LocalVisitor::markEquivalent(Value from, size_t fromBitPos, Value to,
-                                  size_t toBitPos,
-                                  SmallVectorImpl<DataflowPath> &results) {
+LogicalResult
+LocalVisitor::markEquivalent(Value from, size_t fromBitPos, Value to,
+                             size_t toBitPos,
+                             SmallVectorImpl<DataflowPath> &results) {
   auto leader = ec.getOrInsertLeaderValue({to, toBitPos});
   auto &slot = ecMap[leader];
   if (!slot.first)
@@ -470,7 +474,7 @@ void LocalVisitor::markEquivalent(Value from, size_t fromBitPos, Value to,
 
   auto newLeader = ec.unionSets({to, toBitPos}, {from, fromBitPos});
   assert(leader == *newLeader);
-  (void)visitValue(to, toBitPos, results);
+  return visitValue(to, toBitPos, results);
 }
 
 void DebugPoint::print(llvm::raw_ostream &os) const {
@@ -488,8 +492,7 @@ struct LongestPathAnalysis::Impl {
        bool storeFlipFlopLongestPath)
       : module(module), ctx(instanceGraph, storeFlipFlopLongestPath) {}
 
-  LogicalResult initializeAndRun(mlir::ModuleOp module,
-                                 StringRef topModuleName = "");
+  LogicalResult initializeAndRun(mlir::ModuleOp module);
   LogicalResult initializeAndRun(hw::HWModuleOp module);
 
   void getResultsForFF(SmallVectorImpl<PathResult> &results);
@@ -517,7 +520,17 @@ private:
 
 LongestPathAnalysis::LongestPathAnalysis(Operation *moduleOp,
                                          mlir::AnalysisManager &am)
-    : impl(std::make_unique<Impl>(moduleOp, am)) {}
+    : impl(std::make_unique<Impl>(moduleOp, am)) {
+  if (auto module = dyn_cast<mlir::ModuleOp>(moduleOp)) {
+    if (failed(impl->initializeAndRun(module)))
+      llvm::report_fatal_error("Failed to run longest path analysis");
+  } else if (auto hwMod = dyn_cast<hw::HWModuleOp>(moduleOp)) {
+    if (failed(impl->initializeAndRun(hwMod)))
+      llvm::report_fatal_error("Failed to run longest path analysis");
+  } else {
+    llvm::report_fatal_error("Analysis scheduled on invalid operation");
+  }
+}
 
 LogicalResult LocalVisitor::addEdge(Value to, size_t bitPos, int64_t delay,
                                     SmallVectorImpl<DataflowPath> &results) {
@@ -562,43 +575,38 @@ LogicalResult LocalVisitor::visit(comb::MuxOp op, size_t bitPos,
   return success();
 }
 
-LogicalResult LocalVisitor::visit(Value value, size_t bitPos,
-                                  comb::ExtractOp op,
+LogicalResult LocalVisitor::visit(comb::ExtractOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  assert(getBitWidth(op.getInput()) > point.bitPos + op.getLowBit());
-  markEquivalent(point.value, point.bitPos, op.getInput(),
-                 point.bitPos + op.getLowBit(), results);
-  return success();
+  assert(getBitWidth(op.getInput()) > bitPos + op.getLowBit());
+  return markEquivalent(op, bitPos, op.getInput(), bitPos + op.getLowBit(),
+                        results);
 }
 
-LogicalResult LocalVisitor::visit(Value value, size_t bitPos,
-                                  comb::ReplicateOp op,
+LogicalResult LocalVisitor::visit(comb::ReplicateOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  markEquivalent(point.value, point.bitPos, op.getInput(),
-                 point.bitPos % getBitWidth(op.getInput()), results);
-  return success();
+  return markEquivalent(op, bitPos, op.getInput(),
+                        bitPos % getBitWidth(op.getInput()), results);
 }
 
 void LocalVisitor::markFanIn(Value value, size_t bitPos,
                              SmallVectorImpl<DataflowPath> &results) {
-  results.push_back(point);
+  results.emplace_back(circt::igraph::InstancePath(), value, bitPos);
 }
 
-LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::WireOp op,
+LogicalResult LocalVisitor::visit(hw::WireOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  markEquivalent(point.value, point.bitPos, op.getInput(), point.bitPos,
-                 results);
-  return success();
+  return markEquivalent(op, bitPos, op.getInput(), bitPos, results);
 }
 
-LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::InstanceOp op,
+LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
+                                  size_t resultNum,
                                   SmallVectorImpl<DataflowPath> &results) {
-  auto resultNum = cast<mlir::OpResult>(point.value).getResultNumber();
   auto moduleName = op.getReferencedModuleNameAttr();
+  auto value = op->getResult(resultNum);
 
   // If this is local, then we are done.
   if (!ctx->instanceGraph) {
-    markFanIn(point, results);
+    markFanIn(value, bitPos, results);
     return success();
   }
 
@@ -613,24 +621,20 @@ LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::InstanceOp op,
   // Otherwise, if the module is not a HWModuleOp, then we should treat it as a
   // black box.
   if (!isa<hw::HWModuleOp>(node->getModule())) {
-    markFanIn(point, results);
+    markFanIn(value, bitPos, results);
     return success();
   }
 
-  DebugPoint debugPoint(point.instancePath, point.value, point.bitPos,
-                        point.delay, "output port");
+  DebugPoint debugPoint({}, value, bitPos, 0, "output port");
 
   auto *localvisitor = ctx->getAndWaitLocalVisitor(moduleName);
-  auto *fanInIt =
-      localvisitor->fromOutputPortToFanIn.find({resultNum, point.bitPos});
+  auto *fanInIt = localvisitor->fromOutputPortToFanIn.find({resultNum, bitPos});
 
   // It means output is constant, so it's ok.
   if (fanInIt == localvisitor->fromOutputPortToFanIn.end())
     return success();
 
   const auto &fanins = fanInIt->second;
-
-  assert(point.instancePath.empty() && "must be empty?");
   // Concat History.
   for (auto &[faninPoint, delayAndHistory] : fanins) {
     auto [path, start, startBitPos] = faninPoint;
@@ -638,22 +642,19 @@ LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::InstanceOp op,
     auto newPath = instancePathCache->prependInstance(op, path);
 
     // Update the history.
-    auto newHistory = concatList(debugPointFactory.get(),
-                                 mapList(debugPointFactory.get(), history,
-                                         [&](DebugPoint p) {
-                                           p.path = newPath;
-                                           p.delay += point.delay;
-                                           return p;
-                                         }),
-                                 point.history);
-
+    auto newHistory =
+        mapList(debugPointFactory.get(), history, [&](DebugPoint p) {
+          p.path = newPath;
+          return p;
+        });
+    newHistory = debugPointFactory->add(debugPoint, newHistory);
     if (auto arg = dyn_cast<BlockArgument>(start)) {
       auto result =
           getOrComputeResults(op->getOperand(arg.getArgNumber()), startBitPos);
       if (failed(result))
         return failure();
       for (auto path : *result) {
-        path.delay += point.delay;
+        path.delay += delay;
         path.history =
             concatList(debugPointFactory.get(), newHistory, path.history);
         results.push_back(path);
@@ -661,27 +662,24 @@ LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::InstanceOp op,
     } else {
       assert((isa<seq::FirRegOp, hw::InstanceOp>(start.getDefiningOp())));
 
-      results.emplace_back(newPath, start, startBitPos, delay + point.delay,
-                           newHistory);
+      results.emplace_back(newPath, start, startBitPos, delay, newHistory);
     }
   }
 
   return success();
 }
 
-LogicalResult LocalVisitor::visit(Value value, size_t bitPos, comb::ConcatOp op,
+LogicalResult LocalVisitor::visit(comb::ConcatOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
   // Find the exact bit pos in the concat.
-  DataflowPath newPoint = point;
+  size_t newBitPos = bitPos;
   for (auto operand : llvm::reverse(op.getInputs())) {
     auto size = getBitWidth(operand);
-    if (newPoint.bitPos >= size) {
-      newPoint.bitPos -= size;
+    if (newBitPos >= size) {
+      newBitPos -= size;
       continue;
     }
-    markEquivalent(point.value, point.bitPos, operand, newPoint.bitPos,
-                   results);
-    return success();
+    return markEquivalent(op, bitPos, operand, newBitPos, results);
   }
 
   llvm::report_fatal_error("Should not reach here");
@@ -694,7 +692,7 @@ LogicalResult LocalVisitor::addLogicOp(Operation *op, size_t bitPos,
   auto cost = std::max(1u, llvm::Log2_64_Ceil(size));
   // Create edges each operand with cost ceil(log(size)).
   for (auto operand : op->getOperands())
-    if (failed(addEdge(operand, point.bitPos, cost, results)))
+    if (failed(addEdge(operand, bitPos, cost, results)))
       return failure();
 
   deduplicatePaths(results);
@@ -711,17 +709,14 @@ LocalVisitor::visitDefault(Operation *op, size_t bitPos,
 LogicalResult LocalVisitor::visit(mlir::BlockArgument arg,
                                   size_t bitPos, // Start.
                                   SmallVectorImpl<DataflowPath> &results) {
-  auto path = point.instancePath;
-  assert(arg.getOwner() == module.getBodyBlock() && path.size() == 0);
+  assert(arg.getOwner() == module.getBodyBlock());
 
   // Record a debug point.
-  DebugPoint debug(path, point.value, point.bitPos, point.delay, "input port");
-  auto newHistory = debugPointFactory->add(debug, point.history);
+  DebugPoint debug({}, arg, bitPos, 0, "input port");
+  auto newHistory = debugPointFactory->add(debug, {});
   assert(arg.getParentBlock() == module.getBodyBlock());
 
-  DataflowPath newPoint = point;
-  newPoint.history = newHistory;
-
+  DataflowPath newPoint({}, arg, bitPos, 0, newHistory);
   results.push_back(newPoint);
   return success();
 }
@@ -773,17 +768,20 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
 
   DataflowPath point({}, value, bitPos);
   if (auto blockArg = dyn_cast<mlir::BlockArgument>(value))
-    return visit(point, blockArg, results);
+    return visit(blockArg, bitPos, results);
 
   auto *op = value.getDefiningOp();
   auto result =
       TypeSwitch<Operation *, LogicalResult>(op)
-          .Case<hw::InstanceOp, comb::ConcatOp, comb::ExtractOp,
-                comb::ReplicateOp, aig::AndInverterOp, comb::AndOp, comb::OrOp,
-                comb::MuxOp, comb::XorOp, seq::FirRegOp, seq::CompRegOp,
-                hw::ConstantOp, hw::WireOp>(
-              [&](auto op) { return visit(point, op, results); })
-          .Default([&](auto op) { return visitDefault(point, op, results); });
+          .Case<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
+                aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::MuxOp,
+                comb::XorOp, seq::FirRegOp, seq::CompRegOp, hw::ConstantOp,
+                hw::WireOp>([&](auto op) { return visit(op, bitPos, results); })
+          .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
+            return visit(op, bitPos, cast<OpResult>(value).getResultNumber(),
+                         results);
+          })
+          .Default([&](auto op) { return visitDefault(op, bitPos, results); });
 
   return result;
 }
@@ -968,7 +966,7 @@ void LongestPathAnalysis::Impl::getResultsForFF(
   for (auto *topNode : topNodes) {
     for (auto &[key, value] :
          ctx.localvisitors[topNode->getModule().getModuleNameAttr()]
-             ->fromInputPortToFanOut) {
+             ->getFromInputPortToFanOut()) {
       auto [arg, argBitPos] = key;
       for (auto [point, state] : value) {
         auto [path, start, startBitPos] = point;
@@ -1001,17 +999,35 @@ void LongestPathAnalysis::Impl::getResultsForFF(
   });
 }
 
-LogicalResult LongestPathAnalysis::Impl::initializeAndRun(mlir::ModuleOp top,
-                                                          StringRef topName) {
+LogicalResult
+LongestPathAnalysis::Impl::initializeAndRun(hw::HWModuleOp module) {
+  auto it =
+      ctx.localvisitors.insert({module.getModuleNameAttr(),
+                                std::make_unique<LocalVisitor>(module, &ctx)});
+  assert(it.second);
+  return it.first->second->initializeAndRun();
+}
+
+LogicalResult
+LongestPathAnalysis::Impl::initializeAndRun(mlir::ModuleOp module) {
+  StringRef topName;
+  if (auto topNameAttr = module->getAttrOfType<FlatSymbolRefAttr>(
+          getTopModuleNameAttrName())) {
+    topName = topNameAttr.getAttr().getValue();
+    llvm::errs() << "Using top module " << topName
+                 << " from module attribute\n";
+  }
+
   topNodes.clear();
   llvm::SetVector<Operation *> visited;
   auto *instanceGraph = ctx.instanceGraph;
   if (!topName.empty()) {
     auto *topNode =
-        instanceGraph->lookup(StringAttr::get(top.getContext(), topName));
+        instanceGraph->lookup(StringAttr::get(module.getContext(), topName));
     if (!topNode || !topNode->getModule() ||
         !isa<hw::HWModuleOp>(topNode->getModule())) {
-      top.emitError() << "top module not found in instance graph " << topName;
+      module.emitError() << "top module not found in instance graph "
+                         << topName;
       return failure();
     }
     topNodes.push_back(topNode);
@@ -1057,7 +1073,7 @@ LogicalResult LongestPathAnalysis::Impl::initializeAndRun(mlir::ModuleOp top,
   }
 
   auto result = mlir::failableParallelForEach(
-      top.getContext(), ctx.localvisitors,
+      module.getContext(), ctx.localvisitors,
       [&](auto &it) { return it.second->initializeAndRun(); });
 
   if (failed(result))
@@ -1066,28 +1082,16 @@ LogicalResult LongestPathAnalysis::Impl::initializeAndRun(mlir::ModuleOp top,
   return success();
 }
 
+void LongestPathAnalysis::getResultsForFF(
+    SmallVectorImpl<PathResult> &results) {
+  impl->getResultsForFF(results);
+}
+
 void PrintLongestPathAnalysisPass::runOnOperation() {
-  if (topModuleName.empty()) {
-    getOperation().emitError()
-        << "'top-name' option is required for PrintLongestPathAnalysis";
-    return signalPassFailure();
-  }
-
   auto &sym = getAnalysis<mlir::SymbolTable>();
-  auto top = sym.lookup<hw::HWModuleOp>(topModuleName);
-  if (!top) {
-    getOperation().emitError()
-        << "top module '" << topModuleName << "' not found";
-    return signalPassFailure();
-  }
-
-  auto &instanceGraph = getAnalysis<circt::igraph::InstanceGraph>();
-  LongestPathAnalysis::Impl impl(getOperation(), &instanceGraph, true);
-  if (failed(impl.initializeAndRun(getOperation(), topModuleName)))
-    return signalPassFailure();
-
+  auto &analysis = getAnalysis<circt::aig::LongestPathAnalysis>();
   SmallVector<PathResult> results;
-  impl.getResultsForFF(results);
+  analysis.getResultsForFF(results);
 
   llvm::errs() << "Found " << results.size() << " paths\n";
   if (showTopKPercent == 0)

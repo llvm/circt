@@ -13,6 +13,7 @@
 
 #include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/CombToAIG.h"
+#include "circt/Dialect/AIG/AIGAnalysis.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -208,7 +209,6 @@ static void populateSynthesisPipeline(PassManager &pm) {
 
   if (printLongestPath) {
     circt::aig::PrintLongestPathAnalysisOptions options;
-    options.topModuleName = topName;
     options.outputFile = longestPathOutputFile;
     options.showTopKPercent = 5;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
@@ -256,6 +256,12 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-synth"));
   populateSynthesisPipeline(pm);
+
+  // Set a top module name for the longest path analysis.
+  module.get()->setAttr(
+      circt::aig::LongestPathAnalysis::getTopModuleNameAttrName(),
+      FlatSymbolRefAttr::get(&context, topName));
+
   if (failed(pm.run(module.get())))
     return failure();
 
