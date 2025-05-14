@@ -34,8 +34,8 @@ def PrintLongestPathAnalysis : Pass<"aig-print-longest-path-analysis", "mlir::Mo
   let options = [
     Option<"outputJSONFile", "json-file", "std::string", "", "Output JSON file">,
     Option<"topModuleName", "top-name", "std::string", "", "Top module name">,
-    Option<"printSummary", "print-summary", "bool", "true", "Print summary in stderr">,
     Option<"test", "test", "bool", "false", "Emit longest paths to the diagnostics.">
+    Option<"showSize", "show-size", "int", "1000", "The size of the longest paths to show.">
   ];
 }
 

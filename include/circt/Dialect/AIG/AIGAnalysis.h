@@ -123,10 +123,6 @@ struct PathResult {
     }
     os << ")";
   }
-
-  bool operator<(const PathResult &other) const {
-    return fanin.delay < other.fanin.delay;
-  }
 };
 
 class LongestPathAnalysis {
