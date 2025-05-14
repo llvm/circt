@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .core import Value
-from .circt import ir
+from .base import ir
 from .index import index
 from .rtg import rtg
 from .integers import Integer

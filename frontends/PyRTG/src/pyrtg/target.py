@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .core import CodeGenRoot, Value
-from .circt import ir
+from .base import ir
 from .rtg import rtg
 
 

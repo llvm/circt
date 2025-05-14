@@ -2,7 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .support import wrap_opviews_with_values
-from .base.dialects import rtg
+from .circt import ir, support, dialects
 
-wrap_opviews_with_values(rtg, rtg.__name__)
+import sys
+
+sys.modules[__name__ + '.dialects'] = dialects

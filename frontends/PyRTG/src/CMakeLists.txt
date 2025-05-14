@@ -11,29 +11,41 @@ include(AddMLIRPython)
 add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=pyrtg.circt.")
 
 declare_mlir_python_sources(PyRTGSources
-  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/pyrtg"
   SOURCES
-  pyrtg/__init__.py
-  pyrtg/arrays.py
-  pyrtg/bags.py
-  pyrtg/contexts.py
-  pyrtg/control_flow.py
-  pyrtg/core.py
-  pyrtg/index.py
-  pyrtg/integers.py
-  pyrtg/labels.py
-  pyrtg/memories.py
-  pyrtg/rtg.py
-  pyrtg/sequences.py
-  pyrtg/sets.py
-  pyrtg/support.py
-  pyrtg/target.py
-  pyrtg/tests.py
-  pyrtg/resources.py
-  pyrtg/rtgtest.py
-  pyrtg/scf.py
-  pyrtg/tuples.py
-  rtgtool/rtgtool.py
+    __init__.py
+    base.py
+    contexts.py
+    resources.py
+    rtgtest.py
+    support.py
+)
+
+declare_mlir_python_sources(PyRTGSources.Core
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/pyrtg"
+  ADD_TO_PARENT PyRTGSources
+  SOURCES
+    arrays.py
+    bags.py
+    control_flow.py
+    core.py
+    index.py
+    integers.py
+    labels.py
+    memories.py
+    rtg.py
+    sequences.py
+    sets.py
+    target.py
+    tests.py
+    scf.py
+    tuples.py
+)
+
+declare_mlir_python_sources(PyRTGToolSources
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rtgtool"
+  SOURCES
+    rtgtool.py
 )
 
 ################################################################################
@@ -65,12 +77,19 @@ add_mlir_python_modules(PyRTG_CIRCTPythonModules
 )
 
 add_mlir_python_modules(PyRTG
-  ROOT_PREFIX "${PYRTG_PYTHON_PACKAGE_DIR}/"
-  INSTALL_PREFIX "python_packages/"
+  ROOT_PREFIX "${PYRTG_PYTHON_PACKAGE_DIR}/pyrtg"
+  INSTALL_PREFIX "python_packages/pyrtg"
   DECLARED_SOURCES
     PyRTGSources
   COMMON_CAPI_LINK_LIBS
     PyRTG_CIRCTPythonCAPI
+)
+
+add_mlir_python_modules(PyRTGTool
+  ROOT_PREFIX "${PYRTG_PYTHON_PACKAGE_DIR}/rtgtool"
+  INSTALL_PREFIX "python_packages/pyrtg/rtgtool"
+  DECLARED_SOURCES
+    PyRTGToolSources
 )
 
 install(TARGETS PyRTG_CIRCTPythonCAPI
@@ -80,5 +99,9 @@ install(TARGETS PyRTG_CIRCTPythonCAPI
     PRE_INCLUDE_REGEXES ".*zlib.*"
   COMPONENT PyRTG
 )
+
+add_dependencies(PyRTGTool PyRTG)
+add_dependencies(install-PyRTGTool install-PyRTG)
+
 add_dependencies(PyRTG PyRTG_CIRCTPythonModules)
 add_dependencies(install-PyRTG install-PyRTG_CIRCTPythonModules)
