@@ -220,7 +220,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
       auto req = b.create<esi::RequestConnectionOp>(
           loc, readPortInfo.type, readPortInfo.port,
-          esi::AppIDAttr::get(ctx, b.getStringAttr("load"), {}));
+          esi::AppIDAttr::get(ctx, b.getStringAttr("load"), resIdx));
       auto reqUnpack = b.create<esi::UnpackBundleOp>(
           loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
@@ -233,7 +233,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     for (unsigned i = 0; i < memType.storePorts; ++i) {
       auto req = b.create<esi::RequestConnectionOp>(
           loc, writePortInfo.type, writePortInfo.port,
-          esi::AppIDAttr::get(ctx, b.getStringAttr("store"), {}));
+          esi::AppIDAttr::get(ctx, b.getStringAttr("store"), resIdx));
       auto reqUnpack = b.create<esi::UnpackBundleOp>(
           loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
