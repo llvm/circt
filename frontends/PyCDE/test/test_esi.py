@@ -176,7 +176,7 @@ print(Bundle1.resp)
 
 
 # CHECK-LABEL:  hw.module @SendBundleTest(in %clk : !seq.clock, in %rst : i1, in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     [[B0:%.+]] = esi.buffer %clk, %rst, %s1_in {stages = 4 : i64} : i32
+# CHECK-NEXT:     [[B0:%.+]] = esi.buffer %clk, %rst, %s1_in {stages = 4 : i64} : !esi.channel<i32> -> !esi.channel<i32>
 # CHECK-NEXT:     %bundle, %resp = esi.bundle.pack [[B0]] : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
 # CHECK-NEXT:     hw.output %bundle, %resp : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.channel<i1>
 @unittestmodule()
