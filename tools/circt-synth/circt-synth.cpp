@@ -209,7 +209,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
   if (printLongestPath) {
     circt::aig::PrintLongestPathAnalysisOptions options;
     options.topModuleName = topName;
-    options.outputJSONFile = longestPathOutputFile;
+    options.outputFile = longestPathOutputFile;
     options.showTopKPercent = 5;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }

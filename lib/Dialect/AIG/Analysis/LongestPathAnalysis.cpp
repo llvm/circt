@@ -174,7 +174,7 @@ using namespace aig;
 namespace {
 struct PrintLongestPathAnalysisPass
     : public impl::PrintLongestPathAnalysisBase<PrintLongestPathAnalysisPass> {
-  using PrintLongestPathAnalysisBase::outputJSONFile;
+  using PrintLongestPathAnalysisBase::outputFile;
   using PrintLongestPathAnalysisBase::PrintLongestPathAnalysisBase;
   using PrintLongestPathAnalysisBase::showTopKPercent;
   using PrintLongestPathAnalysisBase::topModuleName;
@@ -244,7 +244,7 @@ struct llvm::DenseMapInfo<Object> {
   static bool isEqual(const Object &a, const Object &b) { return a == b; }
 };
 
-struct LocalVisitor;
+class LocalVisitor;
 struct Context {
   llvm::sys::SmartMutex<true> mutex;
   llvm::SetVector<StringAttr> running;
@@ -282,7 +282,8 @@ struct Context {
   llvm::MapVector<StringAttr, std::unique_ptr<LocalVisitor>> localvisitors;
 };
 
-struct LocalVisitor {
+class LocalVisitor {
+public:
   LocalVisitor(hw::HWModuleOp module, Context *ctx) : module(module), ctx(ctx) {
     debugPointFactory =
         std::make_unique<llvm::ImmutableListFactory<DebugPoint>>();
@@ -326,6 +327,13 @@ struct LocalVisitor {
       llvm::MapVector<Object,
                       std::pair<int64_t, llvm::ImmutableList<DebugPoint>>>;
 
+  void getResultsForFF(SmallVectorImpl<PathResult> &results);
+
+  void setTopLevel() { this->topLevel = true; }
+
+  bool isTopLevel() const { return topLevel; }
+
+private:
   void saveInputPort(circt::igraph::InstancePath instancePath, Value value,
                      size_t bitPos, int64_t delay,
                      llvm::ImmutableList<DebugPoint> history,
@@ -340,54 +348,56 @@ struct LocalVisitor {
       fromInputPortToFanOut;
   llvm::MapVector<std::tuple<size_t, size_t>, SavedPoint> fromOutputPortToFanIn;
 
-public:
-  void getResultsForFF(SmallVectorImpl<PathResult> &results);
-
-  LogicalResult run(Value value, size_t bitPos,
-                    SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, mlir::BlockArgument argument,
+  LogicalResult visitValue(Value value, size_t bitPos,
+                           SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(mlir::BlockArgument argument, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, hw::InstanceOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, hw::WireOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::ConcatOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::ExtractOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::ReplicateOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, aig::AndInverterOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::AndOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::XorOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::OrOp op,
-                      SmallVectorImpl<DataflowPath> &results);
-  LogicalResult visit(const DataflowPath &point, comb::MuxOp op,
+  LogicalResult visit(hw::InstanceOp op, size_t bitPos, size_t resultNum,
                       SmallVectorImpl<DataflowPath> &results);
 
-  // Pass through.
-  LogicalResult visit(const DataflowPath &point, seq::FirRegOp op,
+  // Data-movement ops.
+  LogicalResult visit(hw::WireOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::ConcatOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::ExtractOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::ReplicateOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+
+  // Bit-logical ops.
+  LogicalResult visit(aig::AndInverterOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::AndOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::XorOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::OrOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+  LogicalResult visit(comb::MuxOp op, size_t bitPos,
+                      SmallVectorImpl<DataflowPath> &results);
+
+  LogicalResult visit(seq::FirRegOp op, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results) {
-    markFanIn(point, results);
+    markFanIn(op, bitPos, results);
     return success();
   }
 
-  LogicalResult visit(const DataflowPath &point, hw::ConstantOp op,
+  LogicalResult visit(hw::ConstantOp op, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results) {
     return success();
   }
-  LogicalResult visit(const DataflowPath &point, seq::CompRegOp op,
+
+  LogicalResult visit(seq::CompRegOp op, size_t bitPos,
                       SmallVectorImpl<DataflowPath> &results) {
-    markFanIn(point, results);
+    markFanIn(op, bitPos, results);
     return success();
   }
-  LogicalResult visitDefault(const DataflowPath &point, Operation *op,
+
+  LogicalResult visitDefault(Value value, size_t bitPos, Operation *op,
                              SmallVectorImpl<DataflowPath> &results);
 
-  LogicalResult addLogicOp(const DataflowPath &point, Operation *op,
+  LogicalResult addLogicOp(Operation *op, size_t bitPos,
                            SmallVectorImpl<DataflowPath> &results);
   LogicalResult addEdge(Value to, size_t toBitPos, int64_t delay,
                         SmallVectorImpl<DataflowPath> &results);
@@ -400,24 +410,11 @@ public:
   void markEquivalent(Value from, size_t fromBitPos, Value to, size_t toBitPos,
                       SmallVectorImpl<DataflowPath> &results);
 
-  void markFanIn(const DataflowPath &point,
+  void markFanIn(Value value, size_t bitPos,
                  SmallVectorImpl<DataflowPath> &results);
-
-  void setTopLevel() { this->topLevel = true; }
-
-  bool isTopLevel() const { return topLevel; }
-
-  llvm::ImmutableListFactory<DebugPoint> *getDebugPointFactory() {
-    return debugPointFactory.get();
-  }
-
-  circt::igraph::InstancePathCache *getInstancePathCache() {
-    return instancePathCache.get();
-  }
 
   LogicalResult markFanOut(Value fanout, Value start);
 
-private:
   hw::HWModuleOp module;
   Context *ctx;
 
@@ -473,7 +470,7 @@ void LocalVisitor::markEquivalent(Value from, size_t fromBitPos, Value to,
 
   auto newLeader = ec.unionSets({to, toBitPos}, {from, fromBitPos});
   assert(leader == *newLeader);
-  (void)run(to, toBitPos, results);
+  (void)visitValue(to, toBitPos, results);
 }
 
 void DebugPoint::print(llvm::raw_ostream &os) const {
@@ -535,37 +532,38 @@ LogicalResult LocalVisitor::addEdge(Value to, size_t bitPos, int64_t delay,
   return success();
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point,
-                                  aig::AndInverterOp op,
+LogicalResult LocalVisitor::visit(aig::AndInverterOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  return addLogicOp(point, op, results);
+  return addLogicOp(op, bitPos, results);
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::AndOp op,
+LogicalResult LocalVisitor::visit(comb::AndOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  return addLogicOp(point, op, results);
+  return addLogicOp(op, bitPos, results);
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::OrOp op,
+LogicalResult LocalVisitor::visit(comb::OrOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  return addLogicOp(point, op, results);
+  return addLogicOp(op, bitPos, results);
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::XorOp op,
+LogicalResult LocalVisitor::visit(comb::XorOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
-  return addLogicOp(point, op, results);
+  return addLogicOp(op, bitPos, results);
 }
-LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::MuxOp op,
+
+LogicalResult LocalVisitor::visit(comb::MuxOp op, size_t bitPos,
                                   SmallVectorImpl<DataflowPath> &results) {
   if (failed(addEdge(op.getCond(), 0, 1, results)) ||
-      failed(addEdge(op.getTrueValue(), point.bitPos, 1, results)) ||
-      failed(addEdge(op.getFalseValue(), point.bitPos, 1, results)))
+      failed(addEdge(op.getTrueValue(), bitPos, 1, results)) ||
+      failed(addEdge(op.getFalseValue(), bitPos, 1, results)))
     return failure();
   deduplicatePaths(results);
   return success();
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::ExtractOp op,
+LogicalResult LocalVisitor::visit(Value value, size_t bitPos,
+                                  comb::ExtractOp op,
                                   SmallVectorImpl<DataflowPath> &results) {
   assert(getBitWidth(op.getInput()) > point.bitPos + op.getLowBit());
   markEquivalent(point.value, point.bitPos, op.getInput(),
@@ -573,7 +571,7 @@ LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::ExtractOp op,
   return success();
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point,
+LogicalResult LocalVisitor::visit(Value value, size_t bitPos,
                                   comb::ReplicateOp op,
                                   SmallVectorImpl<DataflowPath> &results) {
   markEquivalent(point.value, point.bitPos, op.getInput(),
@@ -581,19 +579,19 @@ LogicalResult LocalVisitor::visit(const DataflowPath &point,
   return success();
 }
 
-void LocalVisitor::markFanIn(const DataflowPath &point,
+void LocalVisitor::markFanIn(Value value, size_t bitPos,
                              SmallVectorImpl<DataflowPath> &results) {
   results.push_back(point);
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, hw::WireOp op,
+LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::WireOp op,
                                   SmallVectorImpl<DataflowPath> &results) {
   markEquivalent(point.value, point.bitPos, op.getInput(), point.bitPos,
                  results);
   return success();
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, hw::InstanceOp op,
+LogicalResult LocalVisitor::visit(Value value, size_t bitPos, hw::InstanceOp op,
                                   SmallVectorImpl<DataflowPath> &results) {
   auto resultNum = cast<mlir::OpResult>(point.value).getResultNumber();
   auto moduleName = op.getReferencedModuleNameAttr();
@@ -671,7 +669,7 @@ LogicalResult LocalVisitor::visit(const DataflowPath &point, hw::InstanceOp op,
   return success();
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::ConcatOp op,
+LogicalResult LocalVisitor::visit(Value value, size_t bitPos, comb::ConcatOp op,
                                   SmallVectorImpl<DataflowPath> &results) {
   // Find the exact bit pos in the concat.
   DataflowPath newPoint = point;
@@ -690,7 +688,7 @@ LogicalResult LocalVisitor::visit(const DataflowPath &point, comb::ConcatOp op,
   return failure();
 }
 
-LogicalResult LocalVisitor::addLogicOp(const DataflowPath &point, Operation *op,
+LogicalResult LocalVisitor::addLogicOp(Operation *op, size_t bitPos,
                                        SmallVectorImpl<DataflowPath> &results) {
   auto size = op->getNumOperands();
   auto cost = std::max(1u, llvm::Log2_64_Ceil(size));
@@ -704,14 +702,14 @@ LogicalResult LocalVisitor::addLogicOp(const DataflowPath &point, Operation *op,
 }
 
 LogicalResult
-LocalVisitor::visitDefault(const DataflowPath &point, Operation *op,
+LocalVisitor::visitDefault(Operation *op, size_t bitPos,
                            SmallVectorImpl<DataflowPath> &results) {
   // llvm::errs() << "Unknown op: " << *op << "\n";
   return success();
 }
 
-LogicalResult LocalVisitor::visit(const DataflowPath &point, // Start.
-                                  mlir::BlockArgument arg,
+LogicalResult LocalVisitor::visit(mlir::BlockArgument arg,
+                                  size_t bitPos, // Start.
                                   SmallVectorImpl<DataflowPath> &results) {
   auto path = point.instancePath;
   assert(arg.getOwner() == module.getBodyBlock() && path.size() == 0);
@@ -744,9 +742,10 @@ LocalVisitor::getOrComputeResults(Value value, size_t bitPos) {
     return ArrayRef<DataflowPath>(it->second);
 
   SmallVector<DataflowPath> results;
-  if (failed(run(value, bitPos, results)))
+  if (failed(visitValue(value, bitPos, results)))
     return {};
 
+  // Unique the results.
   deduplicatePaths(results);
   LLVM_DEBUG({
     llvm::errs() << value << "[" << bitPos << "] " << "Found " << results.size()
@@ -765,8 +764,8 @@ LocalVisitor::getOrComputeResults(Value value, size_t bitPos) {
   return ArrayRef<DataflowPath>(insertedResult.first->second);
 }
 
-LogicalResult LocalVisitor::run(Value value, size_t bitPos,
-                                SmallVectorImpl<DataflowPath> &results) {
+LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
+                                       SmallVectorImpl<DataflowPath> &results) {
   LLVM_DEBUG({
     llvm::dbgs() << "Visiting: ";
     llvm::dbgs() << " " << value << "[" << bitPos << "]\n";
