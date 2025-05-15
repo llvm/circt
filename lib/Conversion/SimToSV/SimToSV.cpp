@@ -93,10 +93,10 @@ public:
     auto i1ty = rewriter.getIntegerType(1);
     auto type = op.getResult().getType();
 
-    auto regv = rewriter.create<sv::RegOp>(loc, type,
-                                           rewriter.getStringAttr("_pargs_v_"));
-    auto regf = rewriter.create<sv::RegOp>(loc, i1ty,
-                                           rewriter.getStringAttr("_pargs_f"));
+    auto wirev = rewriter.create<sv::WireOp>(
+        loc, type, rewriter.getStringAttr("_pargs_v"));
+    auto wiref = rewriter.create<sv::WireOp>(
+        loc, i1ty, rewriter.getStringAttr("_pargs_f"));
 
     state.usedSynthesisMacro = true;
     rewriter.create<sv::IfDefOp>(
@@ -104,7 +104,7 @@ public:
         [&]() {
           auto cstFalse = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
           auto cstZ = rewriter.create<sv::ConstantZOp>(loc, type);
-          auto assignZ = rewriter.create<sv::AssignOp>(loc, regv, cstZ);
+          auto assignZ = rewriter.create<sv::AssignOp>(loc, wirev, cstZ);
           circt::sv::setSVAttributes(
               assignZ,
               sv::SVAttributeAttr::get(
@@ -112,29 +112,33 @@ public:
                   "This dummy assignment exists to avoid undriven lint "
                   "warnings (e.g., Verilator UNDRIVEN).",
                   /*emitAsComment=*/true));
-          rewriter.create<sv::AssignOp>(loc, regf, cstFalse);
+          rewriter.create<sv::AssignOp>(loc, wiref, cstFalse);
         },
         [&]() {
+          auto i32ty = rewriter.getIntegerType(32);
+          auto regf = rewriter.create<sv::RegOp>(
+              loc, i32ty, rewriter.getStringAttr("_found"));
+          auto regv = rewriter.create<sv::RegOp>(
+              loc, type, rewriter.getStringAttr("_value"));
           rewriter.create<sv::InitialOp>(loc, [&] {
-            auto zero32 = rewriter.create<hw::ConstantOp>(loc, APInt(32, 0));
-            auto tmpResultType = rewriter.getIntegerType(32);
             auto str =
                 rewriter.create<sv::ConstantStrOp>(loc, op.getFormatString());
             auto call = rewriter.create<sv::SystemFunctionOp>(
-                loc, tmpResultType, "value$plusargs",
-                ArrayRef<Value>{str, regv});
-            auto test = rewriter.create<comb::ICmpOp>(
-                loc, comb::ICmpPredicate::ne, call, zero32, true);
-            rewriter.create<sv::BPAssignOp>(loc, regf, test);
+                loc, i32ty, "value$plusargs", ArrayRef<Value>{str, regv});
+            rewriter.create<sv::BPAssignOp>(loc, regf, call);
           });
+          Value readRegF = rewriter.create<sv::ReadInOutOp>(loc, regf);
+          Value readRegV = rewriter.create<sv::ReadInOutOp>(loc, regv);
+          auto cstTrue = rewriter.create<hw::ConstantOp>(loc, i32ty, 1);
+          // Squash any X coming from the regf to 0.
+          auto cmp = rewriter.create<comb::ICmpOp>(
+              loc, comb::ICmpPredicate::ceq, readRegF, cstTrue);
+          rewriter.create<sv::AssignOp>(loc, wiref, cmp);
+          rewriter.create<sv::AssignOp>(loc, wirev, readRegV);
         });
 
-    Value readf = rewriter.create<sv::ReadInOutOp>(loc, regf);
-    Value readv = rewriter.create<sv::ReadInOutOp>(loc, regv);
-
-    auto cstTrue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
-    readf = rewriter.create<comb::ICmpOp>(loc, comb::ICmpPredicate::ceq, readf,
-                                          cstTrue);
+    Value readf = rewriter.create<sv::ReadInOutOp>(loc, wiref);
+    Value readv = rewriter.create<sv::ReadInOutOp>(loc, wirev);
 
     rewriter.replaceOp(op, {readf, readv});
     return success();
