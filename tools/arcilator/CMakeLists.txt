@@ -1,8 +1,7 @@
 if(ARCILATOR_JIT_ENABLED)
   add_compile_definitions(ARCILATOR_ENABLE_JIT)
-  add_subdirectory(jit-env)
   set(ARCILATOR_JIT_LLVM_COMPONENTS native)
-  set(ARCILATOR_JIT_DEPS MLIRExecutionEngine arc-jit-env)
+  set(ARCILATOR_JIT_DEPS MLIRExecutionEngine)
 endif()
 
 set(LLVM_LINK_COMPONENTS Support ${ARCILATOR_JIT_LLVM_COMPONENTS})
@@ -57,9 +56,3 @@ configure_file(arcilator-runtime.h
   ${CIRCT_TOOLS_DIR}/arcilator-runtime.h)
 add_custom_target(arcilator-runtime-header SOURCES
   ${CIRCT_TOOLS_DIR}/arcilator-runtime.h)
-
-if(ARCILATOR_JIT_ENABLED)
-  target_include_directories(arcilator PRIVATE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/jit-env>
-  )
-endif()
