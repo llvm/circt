@@ -14,6 +14,7 @@
 #define CIRCT_CONVERSION_IMPORTVERILOG_H
 
 #include "circt/Support/LLVM.h"
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
