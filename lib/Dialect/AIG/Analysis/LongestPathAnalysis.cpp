@@ -1110,7 +1110,7 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
   }
 }
 
-bool LongestPathAnalysis::isAnalysisAvailable(hw::HWModuleOp module) const {
+bool LongestPathAnalysis::isAnalysisAvaiable(hw::HWModuleOp module) const {
   return impl->isAnalysisAvailable(module);
 }
 
@@ -1133,7 +1133,7 @@ int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) const {
   size_t bitWidth = getBitWidth(value);
   if (bitWidth == 0)
     return 0;
-  int64_t totalDelay = 0;
+  int64_t totalDelay = 0; 
   for (size_t i = 0; i < bitWidth; ++i) {
     results.clear();
     auto result = getResults(value, i, results);

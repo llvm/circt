@@ -162,7 +162,7 @@ void LowerVariadicGlobalPass::runOnOperation() {
   mlir::failableParallelForEach(ctx, hwMods, [&](auto &hwMod) {
     auto module = hwMod.module;
     auto &cost = hwMod.cost;
-    for (auto arg : module.getBodyBlock()->getBlockArguments())
+    for (auto arg : module.getBodyBlock()->getArguments())
       cost[arg] = longestPath.getAverageMaxDelay(arg);
     hwMod.module->walk([&](Operation *op) {
       if (auto instance = dyn_cast<hw::InstanceOp>(op))
@@ -173,10 +173,10 @@ void LowerVariadicGlobalPass::runOnOperation() {
     });
   });
 
-  mlir::failableParallelForEach(ctx, hwMods, [&](auto &hwMod) {
+  mlir::failableParallelForEach(ctx, hwMods, [&](auto &hwMod) -> LogicalResult {
     auto module = hwMod.module;
     auto &cost = hwMod.cost;
-    mlir::sortTopologically(module.getBodyBlock(), [](Value v, Operation *op) {
+    mlir::sortTopologically(module.getBodyBlock(), [&](Value v, Operation *op) {
       return cost.count(v);
     });
     auto setMaximum = [&](Operation *op, int64_t additionalCost = 0) {
@@ -200,24 +200,32 @@ void LowerVariadicGlobalPass::runOnOperation() {
         }
 
         // Lower.
+        class Compare {
+        public:
+          bool operator()(const std::tuple<int64_t, Value, bool> &lhs,
+                          const std::tuple<int64_t, Value, bool> &rhs) const {
+            return std::get<0>(lhs) > std::get<0>(rhs);
+          }
+        };
         llvm::PriorityQueue<std::tuple<int64_t, Value, bool>,
-                            std::vector<std::tuple<int64_t, Value, bool>>>
+                            std::vector<std::tuple<int64_t, Value, bool>>,
+                            Compare>
             queue;
         for (auto operand : andInverter->getOperands())
           queue.push({operand, cost[operand]});
         while (queue.size() > 1) {
-          auto lhs = queue.top();
+          auto [lhsCost, lhs, lhsInvert] = queue.top();
           queue.pop();
-          auto rhs = queue.top();
+          auto [rhsCost, rhs, rhsInvert] = queue.top();
           queue.pop();
-          auto newOp = builder.create<AndInverterOp>(andInverter->getLoc(),
-                                                     lhs.first, rhs.first);
-          cost[newOp] = std::max(lhs.second, rhs.second) + 1;
+          auto newOp = builder.create<AndInverterOp>(andInverter->getLoc(), lhs,
+                                                     rhs, lhsInvert, rhsInvert);
+          cost[newOp] = std::max(lhsCost, rhsCost) + 1;
           queue.push({newOp, cost[newOp]});
         }
-
-        return failure();
+        andInverter->replaceAllUsesWith(std::get<1>(queue.top()));
       }
     }
+    return success();
   });
 }
