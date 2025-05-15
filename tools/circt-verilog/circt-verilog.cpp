@@ -444,9 +444,10 @@ static LogicalResult executeWithSources(MLIRContext *context,
     PassManager pm(context);
     pm.enableVerifier(true);
     pm.enableTiming(ts);
-    pm.addInstrumentation(
-        std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
-            "circt-verilog"));
+    if (opts.verbosePassExecutions)
+      pm.addInstrumentation(
+          std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
+              "circt-verilog"));
     if (failed(applyPassManagerCLOptions(pm)))
       return failure();
     populatePasses(pm);
