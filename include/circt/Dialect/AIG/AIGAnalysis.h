@@ -155,12 +155,15 @@ public:
   LogicalResult getResults(Value value, size_t bitPos,
                            SmallVectorImpl<PathResult> &results);
 
+  int64_t getAverageMaxDelay(Value value);
+
   // Paths to FFs are precomputed efficiently, return results.
   void getResultsForFF(SmallVectorImpl<PathResult> &results);
 
   static StringRef getTopModuleNameAttrName() {
     return "aig.longest-path-analysis-top";
   }
+  bool isAnalysisAvaiable(hw::HWModuleOp module) const;
 
   struct Impl;
   std::unique_ptr<Impl> impl;

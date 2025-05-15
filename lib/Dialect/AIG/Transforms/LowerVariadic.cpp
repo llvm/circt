@@ -11,16 +11,23 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/AIG/AIGAnalysis.h"
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/PriorityQueue.h"
+#include <mlir/Analysis/TopologicalSortUtils.h>
 
 #define DEBUG_TYPE "aig-lower-variadic"
 
 namespace circt {
 namespace aig {
 #define GEN_PASS_DEF_LOWERVARIADIC
+#define GEN_PASS_DEF_LOWERVARIADICGLOBAL
 #include "circt/Dialect/AIG/AIGPasses.h.inc"
 } // namespace aig
 } // namespace circt
@@ -119,6 +126,10 @@ namespace {
 struct LowerVariadicPass : public impl::LowerVariadicBase<LowerVariadicPass> {
   void runOnOperation() override;
 };
+struct LowerVariadicGlobalPass
+    : public impl::LowerVariadicGlobalBase<LowerVariadicGlobalPass> {
+  void runOnOperation() override;
+};
 } // namespace
 
 void LowerVariadicPass::runOnOperation() {
@@ -128,4 +139,85 @@ void LowerVariadicPass::runOnOperation() {
 
   if (failed(mlir::applyPatternsGreedily(getOperation(), frozen)))
     return signalPassFailure();
+}
+
+void LowerVariadicGlobalPass::runOnOperation() {
+  auto &longestPath = getAnalysis<circt::aig::LongestPathAnalysis>();
+
+  auto module = getOperation();
+  auto *ctx = &getContext();
+  struct LocalState {
+    hw::HWModuleOp module;
+    LocalState(hw::HWModuleOp module) : module(module) {}
+    DenseMap<Value, int64_t> cost;
+  };
+  SmallVector<LocalState> hwMods;
+  for (auto hwMod : module.getOps<hw::HWModuleOp>()) {
+    if (!longestPath.isAnalysisAvaiable(hwMod))
+      continue;
+    hwMods.emplace_back(hwMod);
+  }
+
+  // 1. Compute cost for all values in the module.
+  mlir::failableParallelForEach(ctx, hwMods, [&](auto &hwMod) {
+    auto module = hwMod.module;
+    auto &cost = hwMod.cost;
+    for (auto arg : module.getBodyBlock()->getBlockArguments())
+      cost[arg] = longestPath.getAverageMaxDelay(arg);
+    hwMod.module->walk([&](Operation *op) {
+      if (auto instance = dyn_cast<hw::InstanceOp>(op))
+        for (auto result : instance.getResults())
+          cost[result] = longestPath.getAverageMaxDelay(result);
+      if (auto reg = dyn_cast<seq::FirRegOp>(op))
+        cost[reg] = 0;
+    });
+  });
+
+  mlir::failableParallelForEach(ctx, hwMods, [&](auto &hwMod) {
+    auto module = hwMod.module;
+    auto &cost = hwMod.cost;
+    mlir::sortTopologically(module.getBodyBlock(), [](Value v, Operation *op) {
+      return cost.count(v);
+    });
+    auto setMaximum = [&](Operation *op, int64_t additionalCost = 0) {
+      int64_t result = 0;
+      for (auto operand : op->getOperands())
+        result = std::max(result, cost[operand]);
+      for (auto r : op->getResults())
+        cost[r] = result + additionalCost;
+    };
+    OpBuilder builder(module.getBodyBlock());
+    for (auto &op : *module.getBodyBlock()) {
+      if (isa<comb::ExtractOp, comb::ReplicateOp, hw::WireOp, comb::ConcatOp>(
+              op)) {
+        setMaximum(op);
+        continue;
+      }
+      if (auto andInverter = dyn_cast<AndInverterOp>(op)) {
+        if (andInverter.getInputs().size() <= 2) {
+          setMaximum(op, 1);
+          continue;
+        }
+
+        // Lower.
+        llvm::PriorityQueue<std::tuple<int64_t, Value, bool>,
+                            std::vector<std::tuple<int64_t, Value, bool>>>
+            queue;
+        for (auto operand : andInverter->getOperands())
+          queue.push({operand, cost[operand]});
+        while (queue.size() > 1) {
+          auto lhs = queue.top();
+          queue.pop();
+          auto rhs = queue.top();
+          queue.pop();
+          auto newOp = builder.create<AndInverterOp>(andInverter->getLoc(),
+                                                     lhs.first, rhs.first);
+          cost[newOp] = std::max(lhs.second, rhs.second) + 1;
+          queue.push({newOp, cost[newOp]});
+        }
+
+        return failure();
+      }
+    }
+  });
 }

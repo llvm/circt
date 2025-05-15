@@ -494,8 +494,11 @@ struct LongestPathAnalysis::Impl {
 
   LogicalResult initializeAndRun(mlir::ModuleOp module);
   LogicalResult initializeAndRun(hw::HWModuleOp module);
+  bool isAnalysisAvailable(hw::HWModuleOp module) const;
 
   void getResultsForFF(SmallVectorImpl<PathResult> &results);
+
+  int64_t getAverageMaxDelay(Value value) const;
 
   // Return all paths for the given value across module boundaries.
   LogicalResult
@@ -1105,4 +1108,42 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
     results[i].print(llvm::errs());
     llvm::errs() << "\n";
   }
+}
+
+bool LongestPathAnalysis::isAnalysisAvailable(hw::HWModuleOp module) const {
+  return impl->isAnalysisAvailable(module);
+}
+
+int64_t LongestPathAnalysis::getAverageMaxDelay(Value value) {
+  return impl->getAverageMaxDelay(value);
+}
+
+bool LongestPathAnalysis::Impl::isAnalysisAvailable(
+    hw::HWModuleOp module) const {
+  return ctx.localvisitors.find(module.getModuleNameAttr()) !=
+         ctx.localvisitors.end();
+}
+
+int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) const {
+  auto parentHWModule =
+      value.getParentRegion()->getParentOfType<hw::HWModuleOp>();
+  if (!parentHWModule)
+    return 0;
+  SmallVector<PathResult> results;
+  size_t bitWidth = getBitWidth(value);
+  if (bitWidth == 0)
+    return 0;
+  int64_t totalDelay = 0;
+  for (size_t i = 0; i < bitWidth; ++i) {
+    results.clear();
+    auto result = getResults(value, i, results);
+    if (failed(result))
+      return 0;
+
+    int64_t maxDelay = 0;
+    for (auto &path : results)
+      maxDelay = std::max(maxDelay, path.fanin.delay);
+    totalDelay += maxDelay;
+  }
+  return llvm::divideCeil(totalDelay, bitWidth);
 }

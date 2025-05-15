@@ -15,6 +15,10 @@ def LowerVariadic : Pass<"aig-lower-variadic", "hw::HWModuleOp"> {
   let summary = "Lower variadic AndInverter operations to binary AndInverter";
 }
 
+def LowerVariadicGlobal : Pass<"aig-lower-variadic-global", "mlir::ModuleOp"> {
+  let summary = "Lower variadic AndInverter operations to binary AndInverter";
+}
+
 def LowerWordToBits : Pass<"aig-lower-word-to-bits", "hw::HWModuleOp"> {
   let summary = "Lower multi-bit AndInverter to single-bit ones";
   let dependentDialects = ["comb::CombDialect"];
