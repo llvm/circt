@@ -12,11 +12,13 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
+#include "mlir/IR/Attributes.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
 namespace circt {
@@ -75,7 +77,20 @@ private:
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLowering {
 public:
+  /// A map sending registers to their paths.
+  using PathTable = DenseMap<seq::FirRegOp, hw::HierPathOp>;
+
+  /// When a register is buried under an ifdef op, the initialization code at
+  /// the footer of the HW module will refer to the register using a
+  /// hierarchical path op. This function creates any necessary hier paths and
+  /// returns a map from buried registers to their hier path ops. HierPathOps
+  /// creation needs to be serialized to keep the symbol creation deterministic,
+  /// so this is done as a pre-pass on the entire MLIR module. The result should
+  /// be passed in to each invocation of FirRefLowering.
+  static PathTable createPaths(mlir::ModuleOp top);
+
   FirRegLowering(TypeConverter &typeConverter, hw::HWModuleOp module,
+                 const PathTable &pathTable,
                  bool disableRegRandomization = false,
                  bool emitSeparateAlwaysBlocks = false);
 
@@ -85,8 +100,25 @@ public:
   unsigned numSubaccessRestored = 0;
 
 private:
+  /// The conditions under which a register is defined.
+  struct RegCondition {
+    enum Kind {
+      /// The register is under an ifdef "then" branch.
+      IfDefThen,
+      /// The register is under an ifdef "else" branch.
+      IfDefElse,
+    };
+    RegCondition(Kind kind, sv::MacroIdentAttr macro) : data(macro, kind) {}
+    Kind getKind() const { return data.getInt(); }
+    sv::MacroIdentAttr getMacro() const {
+      return cast<sv::MacroIdentAttr>(data.getPointer());
+    }
+    llvm::PointerIntPair<Attribute, 1, Kind> data;
+  };
+
   struct RegLowerInfo {
     sv::RegOp reg;
+    hw::HierPathOp path;
     IntegerAttr preset;
     Value asyncResetSignal;
     Value asyncResetValue;
@@ -94,7 +126,10 @@ private:
     size_t width;
   };
 
-  RegLowerInfo lower(seq::FirRegOp reg);
+  void lowerUnderIfDef(sv::IfDefOp ifDefOp);
+  void lowerInBlock(Block *block);
+  void lowerReg(seq::FirRegOp reg);
+  void createInitialBlock();
 
   void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
   void initializeRegisterElements(Location loc, OpBuilder &builder, Value reg,
@@ -115,6 +150,12 @@ private:
                     const std::function<void()> &trueSide,
                     const std::function<void()> &falseSide);
 
+  SmallVector<Value> createRandomizationVector(OpBuilder &builder,
+                                               Location loc);
+  void createRandomInitialization(ImplicitLocOpBuilder &builder);
+  void createPresetInitialization(ImplicitLocOpBuilder &builder);
+  void createAsyncResetInitialization(ImplicitLocOpBuilder &builder);
+
   hw::ConstantOp getOrCreateConstant(Location loc, const APInt &value) {
     OpBuilder builder(module.getBody());
     auto &constant = constantCache[value];
@@ -127,6 +168,10 @@ private:
     return constant;
   }
 
+  /// Recreate the ifdefs under which `reg` was defined. Leave the builder with
+  /// its insertion point inside the created ifdef guards.
+  void buildRegConditions(OpBuilder &b, sv::RegOp reg);
+
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
                                    sv::ResetType, sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
@@ -137,8 +182,23 @@ private:
 
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
+
+  /// The ambient ifdef conditions we have encountered while lowering.
+  std::vector<RegCondition> conditions;
+
+  /// A list of registers discovered, bucketed by initialization style.
+  SmallVector<RegLowerInfo> randomInitRegs, presetInitRegs;
+
+  /// A map from RegOps to the ifdef conditions under which they are defined.
+  /// We only bother recording a list of conditions if there is at least one.
+  DenseMap<sv::RegOp, std::vector<RegCondition>> regConditionTable;
+
+  /// A map from async reset signal to the registers that use it.
+  llvm::MapVector<Value, SmallVector<RegLowerInfo>> asyncResets;
+
   std::unique_ptr<ReachableMuxes> reachableMuxes;
 
+  const PathTable &pathTable;
   TypeConverter &typeConverter;
   hw::HWModuleOp module;
 
