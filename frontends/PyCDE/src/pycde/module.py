@@ -565,9 +565,8 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         try:
           circt_inputs[name] = port.type(signal).value
         except Exception as e:
-          raise PortError(
-              f"Input port '{name}' could not be converted to type "
-              f"{port.type}: {e}")
+          raise PortError(f"Input port '{name}' could not be converted to type "
+                          f"{port.type}: {e}")
 
     missing = list(
         filter(lambda name: name not in circt_inputs, port_input_lookup.keys()))
