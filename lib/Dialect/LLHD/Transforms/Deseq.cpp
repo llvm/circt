@@ -159,6 +159,7 @@ void Deseq::deseq() {
   // only particular kinds of `llhd.drv` ops.
   if (!analyzeProcess())
     return;
+#if 0
   LLVM_DEBUG({
     llvm::dbgs() << "Desequentializing " << process.getLoc() << "\n";
     llvm::dbgs() << "- Feeds " << driveInfos.size() << " conditional drives\n";
@@ -171,6 +172,7 @@ void Deseq::deseq() {
       llvm::dbgs() << "\n";
     }
   });
+#endif
 
   // For each drive fed by this process determine the exact triggers that cause
   // them to drive a new value, and ensure that the behavior can be represented
@@ -794,23 +796,27 @@ bool Deseq::matchDrives() {
 /// results are stored in the clock and reset info of the given `DriveInfo`.
 /// Returns false if the drive cannot be implemented as a register.
 bool Deseq::matchDrive(DriveInfo &drive) {
+#ifdef DESEQ_DETAILED_TRACE
   LLVM_DEBUG(llvm::dbgs() << "- Analyzing " << drive.op << "\n");
+#endif
 
   // Determine under which condition the drive is enabled.
   auto condition = computeBoolean(drive.op.getEnable());
   if (condition.isPoison()) {
     LLVM_DEBUG(llvm::dbgs()
-               << "- Aborting: poison condition on " << drive.op << "\n");
+               << "- Aborting " << drive.op.getLoc() << ": poison condition\n");
     return false;
   }
 
   // Determine which value is driven under which conditions.
   auto initialValueTable = computeValue(drive.op.getValue());
   initialValueTable.addCondition(condition);
+#ifdef DESEQ_DETAILED_TRACE
   LLVM_DEBUG({
     llvm::dbgs() << "  - Condition: " << condition << "\n";
     llvm::dbgs() << "  - Value: " << initialValueTable << "\n";
   });
+#endif
 
   // Convert the value table from having DNF conditions to having DNFTerm
   // conditions. This effectively spreads OR operations in the conditions across
@@ -819,8 +825,8 @@ bool Deseq::matchDrive(DriveInfo &drive) {
   for (auto &[condition, value] : initialValueTable.entries) {
     auto dnf = condition.canonicalize();
     if (dnf.isPoison() || value.isPoison()) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "- Aborting: poison in " << initialValueTable << "\n");
+      LLVM_DEBUG(llvm::dbgs() << "- Aborting " << drive.op.getLoc()
+                              << ": poison in " << initialValueTable << "\n");
       return false;
     }
     for (auto &orTerm : dnf.orTerms)
@@ -831,8 +837,9 @@ bool Deseq::matchDrive(DriveInfo &drive) {
   // corresponding to the reset, clock, and clock under reset. Everything else
   // we have no chance of representing as a register op.
   if (valueTable.size() > 3) {
-    LLVM_DEBUG(llvm::dbgs() << "- Aborting: value table has "
-                            << valueTable.size() << " distinct conditions\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Aborting " << drive.op.getLoc() << ": value table has "
+               << valueTable.size() << " distinct conditions\n");
     return false;
   }
 
@@ -852,7 +859,8 @@ bool Deseq::matchDriveClock(
   // We need exactly one entry in the value table to represent a register
   // without reset.
   if (valueTable.size() != 1) {
-    LLVM_DEBUG(llvm::dbgs() << "- Aborting: single trigger value table has "
+    LLVM_DEBUG(llvm::dbgs() << "- Aborting " << drive.op.getLoc()
+                            << ": single trigger value table has "
                             << valueTable.size() << " entries\n");
     return false;
   }
@@ -884,6 +892,7 @@ bool Deseq::matchDriveClock(
     if (!valueTable[0].second.isUnknown())
       drive.clock.value = valueTable[0].second.value;
 
+#ifdef DESEQ_DETAILED_TRACE
     LLVM_DEBUG({
       llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
                    << "edge clock ";
@@ -893,11 +902,13 @@ bool Deseq::matchDriveClock(
         llvm::dbgs() << " (with enable)";
       llvm::dbgs() << "\n";
     });
+#endif
     return true;
   }
 
   // If we arrive here, none of the patterns we tried matched.
-  LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown clock scheme\n");
+  LLVM_DEBUG(llvm::dbgs() << "- Aborting " << drive.op.getLoc()
+                          << ": unknown clock scheme\n");
   return false;
 }
 
@@ -909,7 +920,8 @@ bool Deseq::matchDriveClockAndReset(
   // We need exactly three entries in the value table to represent a register
   // with reset.
   if (valueTable.size() != 3) {
-    LLVM_DEBUG(llvm::dbgs() << "- Aborting: two trigger value table has "
+    LLVM_DEBUG(llvm::dbgs() << "- Aborting " << drive.op.getLoc()
+                            << ": two trigger value table has "
                             << valueTable.size() << " entries\n");
     return false;
   }
@@ -963,11 +975,17 @@ bool Deseq::matchDriveClockAndReset(
     // clock, and we can't turn this drive into a register.
     if (clockWhileResetIt->second != resetIt->second ||
         resetIt->second.isUnknown()) {
-      LLVM_DEBUG(llvm::dbgs() << "- Aborting: inconsistent reset value\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Aborting " << drive.op.getLoc()
+                 << ": inconsistent reset values " << resetIt->second
+                 << " (reset) and " << clockWhileResetIt->second
+                 << " (clock while reset)\n");
       return false;
     }
     if (!isValidResetValue(resetIt->second.value)) {
-      LLVM_DEBUG(llvm::dbgs() << "- Aborting: non-static reset value\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Aborting " << drive.op.getLoc()
+                 << ": non-static reset value " << resetIt->second << "\n");
       return false;
     }
 
@@ -984,6 +1002,7 @@ bool Deseq::matchDriveClockAndReset(
     if (!clockIt->second.isUnknown())
       drive.clock.value = clockIt->second.value;
 
+#ifdef DESEQ_DETAILED_TRACE
     LLVM_DEBUG({
       llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
                    << "edge clock ";
@@ -997,11 +1016,13 @@ bool Deseq::matchDriveClockAndReset(
       drive.reset.reset.printAsOperand(llvm::dbgs(), OpPrintingFlags());
       llvm::dbgs() << " -> " << resetIt->second << "\n";
     });
+#endif
     return true;
   }
 
   // If we arrive here, none of the patterns we tried matched.
-  LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown reset scheme\n");
+  LLVM_DEBUG(llvm::dbgs() << "- Aborting " << drive.op.getLoc()
+                          << ": unknown reset scheme\n");
   return false;
 }
 
@@ -1026,10 +1047,50 @@ bool Deseq::isValidResetValue(Value value) {
     auto item = worklist.pop_back_val();
     auto &isStatic = staticOps[item.op];
     if (item.it == item.op->operand_begin()) {
+      // Constant-like operations are considered static.
       if (item.op->hasTrait<OpTrait::ConstantLike>()) {
         isStatic = true;
         continue;
       }
+
+      // Signals are considered static if only static values are driven. This is
+      // a bit hacky, but real-world Verilog inputs will often have reset value
+      // constants funneled through a signal.
+      if (isa<SignalOp>(item.op)) {
+        // If any of the users are neither probes nor drives, give up.
+        if (!llvm::all_of(item.op->getUsers(),
+                          [&](auto *user) { return isa<PrbOp, DrvOp>(user); }))
+          continue;
+
+        // I all drives drive static values, consider the signal static.
+        bool allStatic = true;
+        if (llvm::all_of(item.op->getUsers(), [&](auto *user) {
+              if (!isa<DrvOp>(user))
+                return true;
+              auto it = staticOps.find(user);
+              if (it == staticOps.end())
+                return false;
+              allStatic &= it->second;
+              return true;
+            })) {
+          isStatic = allStatic;
+          continue;
+        }
+
+        // Otherwise push the drives onto the worklist.
+        worklist.push_back(item);
+        for (auto *user : item.op->getUsers())
+          if (isa<DrvOp>(user) && !staticOps.contains(user))
+            worklist.push_back({user, user->operand_begin()});
+        continue;
+      }
+      if (isa<DrvOp>(item.op)) {
+        ++item.it; // skip the signal
+        worklist.push_back(item);
+        continue;
+      }
+
+      // Operations with side effects are considered not static.
       if (!isMemoryEffectFree(item.op))
         continue;
     }
@@ -1214,6 +1275,7 @@ ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
       it != specializedProcesses.end())
     return it->second;
 
+#ifdef DESEQ_DETAILED_TRACE
   LLVM_DEBUG({
     llvm::dbgs() << "- Specializing process for:\n";
     for (auto fixedValue : fixedValues) {
@@ -1223,6 +1285,7 @@ ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
                    << "\n";
     }
   });
+#endif
 
   // Create an `scf.execute_region` with this process specialized to compute
   // the result for the given fixed values. The triggers will be absorbed into
