@@ -35,7 +35,9 @@ class FIFO:
                                clk.value,
                                rst.value,
                                depth,
-                               rdLatency=rd_latency)
+                               rdLatency=rd_latency,
+                               almostFullThreshold=depth,
+                               almostEmptyThreshold=0)
     self._output = _FromCirctValue(self.fifo.output)
 
   def push(self, data: Signal, en: BitsSignal):

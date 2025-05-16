@@ -10,7 +10,7 @@ from pycde.module import generator
 # CHECK-LABEL: hw.module @SimpleFIFOTest(in %clk : !seq.clock, in %rst : i1)
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      [[R0:%.+]] = hwarith.constant 0 : ui32
-# CHECK-NEXT:      %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 16   in [[R0]] rdEn %false wrEn %false clk %clk rst %rst : ui32
+# CHECK-NEXT:      %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 16 almost_full 16 almost_empty 0 in [[R0]] rdEn %false wrEn %false clk %clk rst %rst : ui32
 
 
 @unittestmodule(run_passes=False)
@@ -31,10 +31,10 @@ class SimpleFIFOTest(Module):
 # CHECK-LABEL: hw.module @SimpleFIFOTestRd1(in %clk : !seq.clock, in %rst : i1)
 # CHECK-NEXT:      %false = hw.constant false
 # CHECK-NEXT:      [[R0:%.+]] = hwarith.constant 0 : ui32
-# CHECK-NEXT:      %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 16 rd_latency 1  in [[R0]] rdEn %false wrEn %false clk %clk rst %rst : ui32
+# CHECK-NEXT:      %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 16 rd_latency 1 almost_full 16 almost_empty 0 in [[R0]] rdEn %false wrEn %false clk %clk rst %rst : ui32
 
 
-@unittestmodule(run_passes=False)
+@unittestmodule(run_passes=True)
 class SimpleFIFOTestRd1(Module):
   clk = Clock()
   rst = Reset()
