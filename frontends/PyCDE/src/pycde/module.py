@@ -554,13 +554,20 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       elif signal is None:
         if len(self.generators) > 0:
           raise PortError(
-              f"Port {name} cannot be None (disconnected ports only allowed "
+              f"Port '{name}' cannot be None (disconnected ports only allowed "
               "on extern mods.")
+        if port.type.bitwidth < 0:
+          raise PortError(f"Port '{name}' cannot be None.")
         circt_inputs[name] = create_const_zero(port.type).value
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
-        circt_inputs[name] = port.type(signal).value
+        try:
+          circt_inputs[name] = port.type(signal).value
+        except Exception as e:
+          raise PortError(
+              f"Input port '{name}' could not be converted to type "
+              f"{port.type}: {e}")
 
     missing = list(
         filter(lambda name: name not in circt_inputs, port_input_lookup.keys()))
