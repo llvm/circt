@@ -228,24 +228,27 @@ class TypeAlias(Type):
     if TypeAlias.RegisteredAliases is None:
       return
 
+    guard_name = "__PYCDE_TYPES__"
+    type_scope_attr = ir.StringAttr.get(TypeAlias.TYPE_SCOPE)
     type_scopes = list()
     for op in mod.body.operations:
-      if isinstance(op, hw.TypeScopeOp):
+      if isinstance(op, hw.TypeScopeOp) and op.sym_name == type_scope_attr:
         type_scopes.append(op)
         continue
       if isinstance(op, sv.IfDefOp):
         if len(op.elseRegion.blocks) == 0:
           continue
-        for ifdef_op in op.elseRegion.blocks[0]:
-          if isinstance(ifdef_op, hw.TypeScopeOp):
-            type_scopes.append(ifdef_op)
+        for else_block_op in op.elseRegion.blocks[0]:
+          if isinstance(
+              else_block_op,
+              hw.TypeScopeOp) and else_block_op.sym_name == type_scope_attr:
+            type_scopes.append(else_block_op)
 
     assert len(type_scopes) <= 1
     if len(type_scopes) == 1:
       type_scope = type_scopes[0]
     else:
       with ir.InsertionPoint.at_block_begin(mod.body):
-        guard_name = "__PYCDE_TYPES__"
         sv.VerbatimOp(ir.StringAttr.get("`ifndef " + guard_name), [],
                       symbols=ir.ArrayAttr.get([]))
         sv.VerbatimOp(ir.StringAttr.get("`define " + guard_name), [],
