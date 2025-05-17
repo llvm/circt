@@ -116,8 +116,9 @@ class LoopbackCoercedCall(Module):
 
 
 # CHECK-LABEL:  hw.module @LoopbackCall(in %clk : !seq.clock, in %rst : i1) attributes {output_file = #hw.output_file<"LoopbackCall.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
-# CHECK-NEXT:     %arg = esi.bundle.unpack %chanOutput from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+# CHECK-NEXT:     [[R2:%.+]] = esi.buffer %clk, %rst, %chanOutput {stages = 1 : i64} : !esi.channel<i16> -> !esi.channel<i16, FIFO>
+# CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
+# CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid : i16
@@ -136,7 +137,8 @@ class LoopbackCall(Module):
 
   @generator
   def construct(self):
-    loopback = Wire(types.channel(types.i16))
+    loopback_src = Wire(types.channel(types.i16))
+    loopback = loopback_src.buffer(self.clk, self.rst, 1, ChannelSignaling.FIFO)
     args = esi.FuncService.get_call_chans(name=AppID("loopback"),
                                           arg_type=Bits(24),
                                           result=loopback)
@@ -144,9 +146,9 @@ class LoopbackCall(Module):
     ready = Wire(types.i1)
     wide_data, valid = args.unwrap(ready)
     data = wide_data[0:16]
-    data_chan, data_ready = loopback.type.wrap(data, valid)
+    data_chan, data_ready = loopback_src.type.wrap(data, valid)
     ready.assign(data_ready)
-    loopback.assign(data_chan)
+    loopback_src.assign(data_chan)
 
 
 class Producer(Module):
