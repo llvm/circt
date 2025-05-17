@@ -102,10 +102,22 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     SmallVector<Value, 8> toServerValues;
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::to) {
+        ChannelType fromHostType = ch.type;
+        if (fromHostType.getSignaling() == ChannelSignaling::FIFO)
+          fromHostType = b.getType<ChannelType>(fromHostType.getInner(),
+                                                ChannelSignaling::ValidReady,
+                                                fromHostType.getDataDelay());
         auto cosim = b.create<CosimFromHostEndpointOp>(
-            loc, ch.type, clk, rst,
+            loc, fromHostType, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
-        toServerValues.push_back(cosim.getFromHost());
+        mlir::TypedValue<ChannelType> fromHost = cosim.getFromHost();
+        if (fromHostType.getSignaling() == ChannelSignaling::FIFO)
+          fromHost = b.create<ChannelBufferOp>(
+                          loc, ch.type, clk, rst, fromHost,
+                          /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
+                          /*name=*/StringAttr())
+                         .getOutput();
+        toServerValues.push_back(fromHost);
         channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
     }
@@ -118,8 +130,20 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     size_t chanIdx = 0;
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::from) {
+        Value fromChannel = pack.getFromChannels()[chanIdx++];
+        auto chType = cast<ChannelType>(fromChannel.getType());
+        if (chType.getSignaling() == ChannelSignaling::FIFO) {
+          auto cosimType = b.getType<ChannelType>(chType.getInner(),
+                                                  ChannelSignaling::ValidReady,
+                                                  chType.getDataDelay());
+          fromChannel = b.create<ChannelBufferOp>(
+                             loc, cosimType, clk, rst, fromChannel,
+                             /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
+                             /*name=*/StringAttr())
+                            .getOutput();
+        }
         auto cosim = b.create<CosimToHostEndpointOp>(
-            loc, clk, rst, pack.getFromChannels()[chanIdx++],
+            loc, clk, rst, fromChannel,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
