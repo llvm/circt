@@ -22,11 +22,14 @@
 # RUN: esi-cosim.py --source %t -- esitester -v cosim env wait | FileCheck %s
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
+# RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/esitester.py cosim env | FileCheck %s
 
-# Now test the ToHost DMA engine.
+# Now test the DMA engines.
 # RUN: %PYTHON% %s %t cosim_dma 2>&1
 # RUN: esi-cosim.py --source %t -- esitester cosim env hostmem
 # RUN: esi-cosim.py --source %t -- esitester cosim env dma -w -r
+# RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
+# RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/esitester.py cosim env | FileCheck %s
 
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator, modparams
@@ -91,9 +94,9 @@ class PrintfExample(Module):
 def ReadMem(width: int):
 
   class ReadMem(Module):
-    """Module which reads host memory at a certain address as given by writes to
-    MMIO register 0x8. Stores the read value and responds to all MMIO reads with
-    the stored value."""
+    f"""Module which reads {width} bits of host memory at a certain address as
+    given by writes to MMIO register 0x8. Stores the read value and responds to
+    all MMIO reads with the stored value."""
 
     clk = Clock()
     rst = Reset()
@@ -158,8 +161,8 @@ def ReadMem(width: int):
 def WriteMem(width: int) -> typing.Type['WriteMem']:
 
   class WriteMem(Module):
-    """Writes a cycle count to host memory at address 0 in MMIO upon each MMIO
-    transaction."""
+    f"""Writes a cycle count of {width} bits to host memory at address 0 in MMIO
+    upon each MMIO transaction."""
     clk = Clock()
     rst = Reset()
 

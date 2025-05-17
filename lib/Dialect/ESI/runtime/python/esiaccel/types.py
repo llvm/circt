@@ -366,6 +366,8 @@ class BundlePort:
     # TODO: add a proper registration mechanism for service ports.
     if isinstance(cpp_port, cpp.Function):
       return super().__new__(FunctionPort)
+    if isinstance(cpp_port, cpp.Callback):
+      return super().__new__(CallbackPort)
     if isinstance(cpp_port, cpp.MMIORegion):
       return super().__new__(MMIORegion)
     if isinstance(cpp_port, cpp.Telemetry):
@@ -459,6 +461,37 @@ class FunctionPort(BundlePort):
 
   def __call__(self, *args: Any, **kwds: Any) -> Future:
     return self.call(*args, **kwds)
+
+
+class CallbackPort(BundlePort):
+  """Callback ports are the inverse of function ports -- instead of calls to the
+  accelerator, they get called from the accelerator. Specify the function which
+  you'd like the accelerator to call when you call `connect`."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.arg_type = self.read_port("arg").type
+    self.result_type = self.write_port("result").type
+    self.connected = False
+
+  def connect(self, cb: Callable[[Any], Any]):
+
+    def type_convert_wrapper(cb: Callable[[Any], Any],
+                             msg: bytearray) -> Optional[bytearray]:
+      try:
+        (obj, leftover) = self.arg_type.deserialize(msg)
+        if len(leftover) != 0:
+          raise ValueError(f"leftover bytes: {leftover}")
+        result = cb(obj)
+        if result is None:
+          return None
+        return self.result_type.serialize(result)
+      except Exception as e:
+        traceback.print_exception(e)
+        return None
+
+    self.cpp_port.connect(lambda x: type_convert_wrapper(cb=cb, msg=x))
+    self.connected = True
 
 
 class TelemetryPort(BundlePort):
