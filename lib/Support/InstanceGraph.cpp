@@ -226,13 +226,21 @@ static InstancePath empty{};
 
 ArrayRef<InstancePath>
 InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
-  return getAbsolutePaths(op, instanceGraph.getTopLevelNode());
+  return getPaths(op, instanceGraph.getTopLevelNode(), absolutePathsCache);
+}
+
+ArrayRef<InstancePath>
+InstancePathCache::getRelativePaths(ModuleOpInterface op,
+                                    InstanceGraphNode *top) {
+  if (top == instanceGraph.getTopLevelNode())
+    return getAbsolutePaths(op);
+  return getPaths(op, top, relativePathsCache[top]);
 }
 
 // NOLINTBEGIN(misc-no-recursion)
-ArrayRef<InstancePath>
-InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
-                                    InstanceGraphNode *top) {
+ArrayRef<InstancePath> InstancePathCache::getPaths(ModuleOpInterface op,
+                                                   InstanceGraphNode *top,
+                                                   PathsCache &cache) {
   InstanceGraphNode *node = instanceGraph[op];
 
   if (node == top) {
@@ -240,8 +248,8 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
   }
 
   // Fast path: hit the cache.
-  auto cached = absolutePathsCache.find(op);
-  if (cached != absolutePathsCache.end())
+  auto cached = cache.find(op);
+  if (cached != cache.end())
     return cached->second;
 
   // For each instance, collect the instance paths to its parent and append the
@@ -249,13 +257,15 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
   SmallVector<InstancePath, 8> extendedPaths;
   for (auto *inst : node->uses()) {
     if (auto module = inst->getParent()->getModule()) {
-      auto instPaths = getAbsolutePaths(module);
+      auto instPaths = getPaths(module, top, cache);
       extendedPaths.reserve(instPaths.size());
       for (auto path : instPaths) {
         extendedPaths.push_back(appendInstance(
             path, cast<InstanceOpInterface>(*inst->getInstance())));
       }
-    } else {
+    } else if (inst->getParent() == top) {
+      // Special case when `inst` is a top-level instance and
+      // `inst->getParent()` is a pseudo top-level node.
       extendedPaths.emplace_back(empty);
     }
   }
@@ -267,7 +277,7 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
     std::copy(extendedPaths.begin(), extendedPaths.end(), paths);
     pathList = ArrayRef<InstancePath>(paths, extendedPaths.size());
   }
-  absolutePathsCache.insert({op, pathList});
+  cache.insert({op, pathList});
   return pathList;
 }
 // NOLINTEND(misc-no-recursion)
@@ -331,29 +341,33 @@ void InstancePathCache::replaceInstance(InstanceOpInterface oldOp,
     return llvm::any_of(
         paths, [&](InstancePath p) { return llvm::is_contained(p, oldOp); });
   };
-
-  for (auto &iter : absolutePathsCache) {
-    if (!instanceExists(iter.getSecond()))
-      continue;
-    SmallVector<InstancePath, 8> updatedPaths;
-    for (auto path : iter.getSecond()) {
-      const auto *iter = llvm::find(path, oldOp);
-      if (iter == path.end()) {
-        // path does not contain the oldOp, just copy it as is.
-        updatedPaths.push_back(path);
+  auto updateCache = [&](PathsCache &cache) {
+    for (auto &iter : cache) {
+      if (!instanceExists(iter.getSecond()))
         continue;
+      SmallVector<InstancePath, 8> updatedPaths;
+      for (auto path : iter.getSecond()) {
+        const auto *iter = llvm::find(path, oldOp);
+        if (iter == path.end()) {
+          // path does not contain the oldOp, just copy it as is.
+          updatedPaths.push_back(path);
+          continue;
+        }
+        auto *newPath = allocator.Allocate<InstanceOpInterface>(path.size());
+        llvm::copy(path, newPath);
+        newPath[iter - path.begin()] = newOp;
+        updatedPaths.push_back(InstancePath(ArrayRef(newPath, path.size())));
       }
-      auto *newPath = allocator.Allocate<InstanceOpInterface>(path.size());
-      llvm::copy(path, newPath);
-      newPath[iter - path.begin()] = newOp;
-      updatedPaths.push_back(InstancePath(ArrayRef(newPath, path.size())));
+      // Move the list of paths into the bump allocator for later quick
+      // retrieval.
+      auto *paths = allocator.Allocate<InstancePath>(updatedPaths.size());
+      llvm::copy(updatedPaths, paths);
+      iter.getSecond() = ArrayRef<InstancePath>(paths, updatedPaths.size());
     }
-    // Move the list of paths into the bump allocator for later quick
-    // retrieval.
-    auto *paths = allocator.Allocate<InstancePath>(updatedPaths.size());
-    llvm::copy(updatedPaths, paths);
-    iter.getSecond() = ArrayRef<InstancePath>(paths, updatedPaths.size());
-  }
+  };
+  updateCache(absolutePathsCache);
+  for (auto &iter : relativePathsCache)
+    updateCache(iter.getSecond());
 }
 
 #include "circt/Support/InstanceGraphInterface.cpp.inc"
