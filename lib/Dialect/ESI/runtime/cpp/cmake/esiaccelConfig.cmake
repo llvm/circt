@@ -10,6 +10,6 @@ if(WIN32)
   )
 else()
   set_target_properties(esiaccel::ESICppRuntime PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../lib/ESICppRuntime.so"
+    IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../python/esiaccel/libESICppRuntime.so"
   )
 endif()
