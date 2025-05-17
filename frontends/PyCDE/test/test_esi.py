@@ -94,9 +94,25 @@ class LoopbackInOutTop(Module):
 
 
 CallBundle = Bundle([
-    BundledChannel("result", ChannelDirection.FROM, Bits(16)),
-    BundledChannel("arg", ChannelDirection.TO, Bits(24))
+    BundledChannel("renamed_result", ChannelDirection.FROM, Bits(16)),
+    BundledChannel("args", ChannelDirection.TO, Bits(24))
 ])
+
+
+# CHECK-LABEL: hw.module @LoopbackCoercedCall(in %clk : !seq.clock, in %rst : i1, out call : !esi.bundle<[!esi.channel<i16> from "renamed_result", !esi.channel<i24> to "args"]>)
+# CHECK:         [[REQ:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback_coerced">) : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+# CHECK:         %arg = esi.bundle.unpack %renamed_result from [[REQ]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+# CHECK:         %bundle, %renamed_result = esi.bundle.pack %arg : !esi.bundle<[!esi.channel<i16> from "renamed_result", !esi.channel<i24> to "args"]>
+@unittestmodule()
+class LoopbackCoercedCall(Module):
+  clk = Clock()
+  rst = Reset()
+  call = Output(CallBundle)
+
+  @generator
+  def construct(ports):
+    ports.call = esi.FuncService.get(name=AppID("loopback_coerced"),
+                                     bundle_type=CallBundle)
 
 
 # CHECK-LABEL:  hw.module @LoopbackCall(in %clk : !seq.clock, in %rst : i1) attributes {output_file = #hw.output_file<"LoopbackCall.sv", includeReplicatedOps>} {

@@ -82,7 +82,7 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
     def build(ports):
       System.current().platform = "cosim"
 
-      mmio_read_write = esi.FuncService.get_coerced(
+      mmio_read_write = esi.FuncService.get(
           esi.AppID("__cosim_mmio_read_write"), esi.MMIO.read_write.type)
       wrapper = ESI_Cosim_UserTopWrapper(clk=ports.clk,
                                          rst=ports.rst,

@@ -774,7 +774,7 @@ class _FuncService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def get_coerced(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
+  def get(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
     """Treat any bi-directional bundle as a function by getting a proper
     function bundle with the appropriate types, then renaming the channels to
     match the 'bundle_type'. Returns a bundle signal of type 'bundle_type'."""
@@ -806,19 +806,6 @@ class _FuncService(ServiceDecl):
         **{to_channel_bc.name: arg_channel})
     from_channel.assign(from_chans[from_channel_bc.name])
     return ret_bundle
-
-  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
-    """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
-    'result' channels going FROM the server and TO the server, respectively."""
-    self._materialize_service_decl()
-
-    func_call = _FromCirctValue(
-        raw_esi.RequestConnectionOp(
-            func_type._type,
-            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
-            name._appid).toClient)
-    assert isinstance(func_call, BundleSignal)
-    return func_call
 
   def get_call_chans(self, name: AppID, arg_type: Type,
                      result: Signal) -> ChannelSignal:
