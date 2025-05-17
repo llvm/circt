@@ -321,6 +321,7 @@ public:
   InstanceOpInterface operator[](size_t idx) const { return path[idx]; }
   ArrayRef<InstanceOpInterface>::iterator begin() const { return path.begin(); }
   ArrayRef<InstanceOpInterface>::iterator end() const { return path.end(); }
+  ArrayRef<InstanceOpInterface> getPath() const { return path; }
   size_t size() const { return path.size(); }
   bool empty() const { return path.empty(); }
 
@@ -330,8 +331,9 @@ public:
   void print(llvm::raw_ostream &into) const;
 
 private:
-  // Only the path cache is allowed to create paths.
+  // Either path cache or DenseMapInfo is allowed to create paths.
   friend struct InstancePathCache;
+  friend struct llvm::DenseMapInfo<InstancePath>;
   InstancePath(ArrayRef<InstanceOpInterface> path) : path(path) {}
 
   ArrayRef<InstanceOpInterface> path;
@@ -462,6 +464,31 @@ struct llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>
     auto *instanceRecord = *it.getCurrent();
     auto instanceOp = instanceRecord->getInstance();
     return ("label=" + instanceOp.getInstanceName()).str();
+  }
+};
+
+// DenseMap traits for InstancePath.
+template <>
+struct llvm::DenseMapInfo<circt::igraph::InstancePath> {
+  using ArrayRefInfo =
+      llvm::DenseMapInfo<ArrayRef<circt::igraph::InstanceOpInterface>>;
+  static circt::igraph::InstancePath getEmptyKey() {
+    return circt::igraph::InstancePath(ArrayRefInfo::getEmptyKey());
+  }
+
+  static circt::igraph::InstancePath getTombstoneKey() {
+    return circt::igraph::InstancePath(ArrayRefInfo::getTombstoneKey());
+  }
+
+  static llvm::hash_code getHashValue(circt::igraph::InstancePath path) {
+    auto range =
+        llvm::map_range(path, [](auto op) { return op.getAsOpaquePointer(); });
+    return llvm::hash_combine_range(range.begin(), range.end());
+  }
+
+  static bool isEqual(circt::igraph::InstancePath lhs,
+                      circt::igraph::InstancePath rhs) {
+    return ArrayRefInfo::isEqual(lhs.getPath(), rhs.getPath());
   }
 };
 

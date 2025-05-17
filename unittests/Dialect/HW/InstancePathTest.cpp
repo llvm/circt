@@ -76,4 +76,33 @@ TEST(InstancePathTest, AppendPrependInstance) {
   EXPECT_EQ(kitty, appended[1]);
 }
 
+TEST(InstancePathTest, Hash) {
+  MLIRContext context;
+  ModuleOp circuit = fixtures::createModule(&context);
+  hw::InstanceGraph graph(circuit);
+  igraph::InstancePathCache pathCache(graph);
+  llvm::DenseSet<igraph::InstancePath> tests;
+  // An empty path is *valid*, not the same as an empty key.
+  ASSERT_TRUE(tests.insert({}).second);
+
+  auto top = cast<HWModuleOp>(*circuit.getBody()->begin());
+  auto cat = cast<HWModuleOp>(*circuit.getBody()->rbegin());
+  auto path = pathCache.getAbsolutePaths(cat);
+  // Make sure all paths are inserted.
+  for (auto p : path)
+    ASSERT_TRUE(tests.insert(p).second);
+
+  hw::InstanceOp topCat;
+  top.walk([&](hw::InstanceOp op) {
+    if (op.getReferencedModuleNameAttr() == cat.getModuleNameAttr()) {
+      topCat = op;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+
+  ASSERT_TRUE(topCat);
+  ASSERT_TRUE(tests.contains(pathCache.appendInstance({}, topCat)));
+}
+
 } // namespace
