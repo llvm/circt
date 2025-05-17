@@ -10,7 +10,6 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Support/InstanceGraph.h"
 #include "gtest/gtest.h"
-#include <mlir/Support/LLVM.h>
 
 using namespace mlir;
 using namespace circt;
