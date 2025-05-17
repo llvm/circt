@@ -17,16 +17,18 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp38-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp39-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp310-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp311-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp312-manylinux_x86_64
+          - os: ubuntu-24.04
+            cibw_build: cp313-manylinux_x86_64
           - os: windows-2022
             cibw_build: cp38-win_amd64
           - os: windows-2022
@@ -37,6 +39,8 @@ jobs:
             cibw_build: cp311-win_amd64
           - os: windows-2022
             cibw_build: cp312-win_amd64
+          - os: windows-2022
+            cibw_build: cp313-win_amd64
 
     steps:
       - name: Get CIRCT
@@ -48,7 +52,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
       - name: Install deps with choco (Windows)
         shell: pwsh
@@ -61,10 +65,10 @@ jobs:
         # TODO: cache the binaries produced by vcpkg to save ~1hr of build time:
         #    https://learn.microsoft.com/en-us/vcpkg/consume/binary-caching-github-packages?pivots=windows-runner
         run: |
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib grpc
 
       - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==2.16.2
+        run: python -m pip install cibuildwheel==2.23.3
 
       - name: Build wheels
         if: runner.os != 'Windows'
@@ -80,7 +84,6 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.config.cibw_build }}
           SETUPTOOLS_SCM_DEBUG: True
-          CIRCT_EXTRA_CMAKE_ARGS: -DESI_COSIM=OFF
         run: |
           echo "Building wheel"
           & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
@@ -103,7 +106,7 @@ jobs:
 
   push_wheels:
     name: Push wheels (Tag or Weekly)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     needs: build_wheels
     environment:
       name: pypi
