@@ -9,7 +9,7 @@ from pycde.constructs import Wire
 from pycde.esi import HostMem, MMIO
 from pycde.module import Metadata
 from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
-from pycde.types import (Bits, Bundle, BundledChannel, Channel,
+from pycde.types import (Any, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, UInt, StructType,
                          ClockType)
 from pycde.testing import unittestmodule
@@ -334,3 +334,38 @@ class HostMemReq(Module):
                                               address=u64,
                                               valid=c1)
     _ = HostMem.write(appid=AppID("host_mem_write_req"), req=write_req)
+
+
+def Writer(type):
+
+  class Writer(Module):
+    clk = Clock()
+    rst = Reset()
+    cmd = Input(type)
+
+  return Writer
+
+
+# CHECK:  hw.module @Ram1(in %clk : !seq.clock, in %rst : i1)
+# CHECK:    esi.service.instance #esi.appid<"ram"> svc @ram impl as "sv"(%clk, %rst) : (!seq.clock, i1) -> ()
+# CHECK:    [[WR:%.+]] = esi.service.req <@ram::@write>(#esi.appid<"ram_writer"[0]>) : !esi.bundle<[!esi.channel<!hw.struct<address: i3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
+# CHECK:    %rawOutput, %valid = esi.unwrap.vr %req, %ready : !hw.struct<address: ui3, data: ui32>
+# CHECK:    [[CASTED:%.+]] = hw.bitcast %rawOutput : (!hw.struct<address: ui3, data: ui32>) -> !hw.struct<address: i3, data: i32>
+# CHECK:    %chanOutput, %ready = esi.wrap.vr [[CASTED]], %valid : !hw.struct<address: i3, data: i32>
+# CHECK:    %ack = esi.bundle.unpack %chanOutput from [[WR]] : !esi.bundle<[!esi.channel<!hw.struct<address: i3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
+# CHECK:    %bundle, %req = esi.bundle.pack %ack : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>> from "req", !esi.channel<i0> to "ack"]>
+# CHECK:    hw.instance "Writer" sym @Writer @Writer(clk: %clk: !seq.clock, rst: %rst: i1, cmd: %bundle: !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>> from "req", !esi.channel<i0> to "ack"]>) -> ()
+
+
+@unittestmodule()
+class Ram1(Module):
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def build(ports):
+    ramsvc = esi.DeclareRandomAccessMemory(Bits(32), 8, "ram")
+    ramsvc.implement_as("sv", ports.clk, ports.rst)
+
+    mem_write = ramsvc.get_write(UInt(32))
+    Writer(mem_write.type)(clk=ports.clk, rst=ports.rst, cmd=mem_write)

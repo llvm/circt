@@ -102,6 +102,16 @@ class ServiceDecl(_PyProxy):
         inputs=[x.value for x in inputs]).operation.results
     return [_FromCirctValue(x) for x in impl_results]
 
+  def implement_as(self,
+                   builtin_type: str,
+                   *args: List[Signal],
+                   appid: Optional[AppID] = None):
+    """Implement this service using a CIRCT implementation named
+    'builtin_type'."""
+    if appid is None:
+      appid = AppID(self.name)
+    return self.instantiate_builtin(appid, builtin_type, inputs=args)
+
 
 class _RequestConnection:
   """Indicates a service with a 'from server' port. Call to create a 'from
@@ -355,8 +365,11 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     # pass, the IR can be invalid and the indexers assumes it is valid.
     sys.generate(skip_appid_index=True)
     # Now that the bundles should be assigned, we can cleanup the bundles and
-    # delete the service request op.
+    # delete the service request op reference.
     bundles.cleanup()
+
+    # Verify the generator did not produce invalid IR.
+    sys.mod.operation.verify()
 
     return rc
 
@@ -442,12 +455,11 @@ def DeclareRandomAccessMemory(inner_type: Type,
   them. Memories (as with all ESI services) are not actually instantiated until
   the place where you specify the implementation."""
 
-  @ServiceDecl
-  class DeclareRandomAccessMemory:
+  class DeclareRandomAccessMemory(ServiceDecl):
     __name__ = name
-    address_type = types.int((depth - 1).bit_length())
-    write_struct = types.struct([('address', address_type),
-                                 ('data', inner_type)])
+    address_width = (depth - 1).bit_length()
+    address_type = Bits(address_width)
+    write_struct = StructType([('address', address_type), ('data', inner_type)])
 
     read = Bundle([
         BundledChannel("address", ChannelDirection.FROM, address_type),
@@ -458,6 +470,31 @@ def DeclareRandomAccessMemory(inner_type: Type,
         BundledChannel("ack", ChannelDirection.TO, Bits(0))
     ])
 
+    def __init__(self):
+      super().__init__(self.__class__)
+      self.num_autonamed = 0
+
+    def get_write(self, data_type: Type, appid: Optional[AppID] = None):
+      """Return a request for a write operation with the given data type.
+      Sometimes necessary since the type of an imported RAM may not be
+      correct."""
+      if appid is None:
+        appid = AppID(self.name + "_writer", self.num_autonamed)
+      self.num_autonamed += 1
+      orig_req = self.write(appid)
+      new_arg_type = StructType([
+          ("address", UInt(DeclareRandomAccessMemory.address_width)),
+          ("data", data_type),
+      ])
+      xform_bundle_type = Bundle([
+          BundledChannel("req", ChannelDirection.FROM, new_arg_type),
+          BundledChannel("ack", ChannelDirection.TO, Bits(0))
+      ])
+      req = orig_req.coerce(xform_bundle_type,
+                            from_chan_transform=lambda x: x.bitcast(
+                                DeclareRandomAccessMemory.write_struct))
+      return req
+
     @staticmethod
     def _op(sym_name: ir.StringAttr):
       return raw_esi.RandomAccessMemoryDeclOp(
@@ -467,7 +504,7 @@ def DeclareRandomAccessMemory(inner_type: Type,
   if name is not None:
     DeclareRandomAccessMemory.name = name
     DeclareRandomAccessMemory.__name__ = name
-  return DeclareRandomAccessMemory
+  return DeclareRandomAccessMemory()
 
 
 def _import_ram_decl(sys: "System", ram_op: raw_esi.RandomAccessMemoryDeclOp):
