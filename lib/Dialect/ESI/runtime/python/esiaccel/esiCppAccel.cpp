@@ -21,6 +21,7 @@
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 
+#include <pybind11/functional.h>
 #include <pybind11/stl.h>
 
 using namespace esi;
@@ -326,6 +327,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
           },
           py::return_value_policy::take_ownership)
       .def("connect", &FuncService::Function::connect);
+
+  py::class_<TelemetryService::Telemetry, ServicePort>(m, "Telemetry")
+      .def("connect", &TelemetryService::Telemetry::connect)
+      .def("read", &TelemetryService::Telemetry::read);
 
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.

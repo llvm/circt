@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+import sys
+import traceback
 
 
 def _get_esi_type(cpp_type: cpp.Type):
@@ -366,6 +368,8 @@ class BundlePort:
       return super().__new__(FunctionPort)
     if isinstance(cpp_port, cpp.MMIORegion):
       return super().__new__(MMIORegion)
+    if isinstance(cpp_port, cpp.Telemetry):
+      return super().__new__(TelemetryPort)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -455,3 +459,21 @@ class FunctionPort(BundlePort):
 
   def __call__(self, *args: Any, **kwds: Any) -> Future:
     return self.call(*args, **kwds)
+
+
+class TelemetryPort(BundlePort):
+  """Telemetry ports report an individual piece of information from the
+  acceelerator. The method of accessing telemetry will likely change in the
+  future."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.connected = False
+
+  def connect(self):
+    self.cpp_port.connect()
+    self.connected = True
+
+  def read(self) -> Future:
+    cpp_future = self.cpp_port.read()
+    return MessageFuture(self.cpp_port.type, cpp_future)
