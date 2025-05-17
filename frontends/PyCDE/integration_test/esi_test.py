@@ -2,7 +2,7 @@
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_test.py cosim env
+# RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/esi_test.py cosim env
 
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
@@ -10,7 +10,7 @@ from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
-from pycde.types import (Bits, Channel, UInt)
+from pycde.types import (Bits, Channel, ChannelSignaling, UInt)
 from pycde.behavioral import If, Else, EndIf
 from pycde.handshake import Func
 
@@ -26,7 +26,7 @@ class LoopbackInOutAdd(Module):
 
   @generator
   def construct(ports):
-    loopback = Wire(Channel(UInt(16)))
+    loopback = Wire(Channel(UInt(16), signaling=ChannelSignaling.FIFO))
     args = FuncService.get_call_chans(AppID("add"),
                                       arg_type=UInt(24),
                                       result=loopback)
@@ -34,8 +34,10 @@ class LoopbackInOutAdd(Module):
     ready = Wire(Bits(1))
     data, valid = args.unwrap(ready)
     plus7 = data + LoopbackInOutAdd.add_amt.value
-    data_chan, data_ready = loopback.type.wrap(plus7.as_uint(16), valid)
-    data_chan_buffered = data_chan.buffer(ports.clk, ports.rst, 5)
+    data_chan, data_ready = Channel(UInt(16), ChannelSignaling.ValidReady).wrap(
+        plus7.as_uint(16), valid)
+    data_chan_buffered = data_chan.buffer(ports.clk, ports.rst, 1,
+                                          ChannelSignaling.FIFO)
     ready.assign(data_ready)
     loopback.assign(data_chan_buffered)
 

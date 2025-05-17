@@ -182,10 +182,6 @@ public:
   ~WriteCosimChannelPort() = default;
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
-    if (desc.type() != getType()->getID())
-      throw std::runtime_error("Channel '" + name +
-                               "' has wrong type. Expected " +
-                               getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
@@ -251,10 +247,6 @@ public:
 
   void connectImpl(std::optional<unsigned> bufferSize) override {
     // Sanity checking.
-    if (desc.type() != getType()->getID())
-      throw std::runtime_error("Channel '" + name +
-                               "' has wrong type. Expected " +
-                               getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to client channel");
