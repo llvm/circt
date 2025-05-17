@@ -421,6 +421,8 @@ endif()
 
 option(ESI_COSIM "Enable ESI cosimulation." ON)
 if(ESI_COSIM)
+  message("-- ESI cosim enabled")
+
   # gRPC for cosimulation. Local install required.
   option(GRPC_PATH "Location of gRPC install.")
   if (${GRPC_PATH})
