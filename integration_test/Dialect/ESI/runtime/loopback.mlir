@@ -131,7 +131,8 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-INFO: ********************************
 // QUERY-INFO: * Module information
 // QUERY-INFO: ********************************
-// QUERY-INFO: - LoopbackIP v0.0 : IP which simply echos bytes
+// QUERY-INFO: - LoopbackIP v0.0
+// QUERY-INFO:   IP which simply echos bytes
 // QUERY-INFO:   Constants:
 // QUERY-INFO:     depth: 5
 // QUERY-INFO:   Extra metadata:
@@ -140,14 +141,13 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER: ********************************
 // QUERY-HIER: * Design hierarchy
 // QUERY-HIER: ********************************
-// QUERY-HIER: * Instance:top
+// QUERY-HIER: * Instance: top
 // QUERY-HIER: * Ports:
-// QUERY-HIER:     internal_write:
 // QUERY-HIER:     func1: function i16(i16)
 // QUERY-HIER:     structFunc: function !hw.struct<x: si8, y: si8>(!hw.struct<a: ui16, b: si8>)
 // QUERY-HIER:     arrayFunc: function !hw.array<2xsi8>(!hw.array<1xsi8>)
 // QUERY-HIER: * Children:
-// QUERY-HIER:   * Instance:loopback_inst[0]
+// QUERY-HIER:   * Instance: loopback_inst[0]
 // QUERY-HIER:   * Ports:
 // QUERY-HIER:       loopback_tohw:
 // QUERY-HIER:         recv: !esi.channel<i8>
@@ -157,7 +157,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER:         recv: !esi.channel<i0>
 // QUERY-HIER:       mysvc_send:
 // QUERY-HIER:         send: !esi.channel<i0>
-// QUERY-HIER:   * Instance:loopback_inst[1]
+// QUERY-HIER:   * Instance: loopback_inst[1]
 // QUERY-HIER:   * Ports:
 // QUERY-HIER:       loopback_tohw:
 // QUERY-HIER:         recv: !esi.channel<i8>

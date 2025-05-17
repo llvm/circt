@@ -18,14 +18,15 @@
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
+#include <algorithm>
 #include <iostream>
 #include <map>
 #include <stdexcept>
 
 using namespace esi;
 
-void printInfo(std::ostream &os, AcceleratorConnection &acc);
-void printHier(std::ostream &os, AcceleratorConnection &acc);
+void printInfo(std::ostream &os, AcceleratorConnection &acc, bool details);
+void printHier(std::ostream &os, AcceleratorConnection &acc, bool details);
 void printTelemetry(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
@@ -34,9 +35,15 @@ int main(int argc, const char *argv[]) {
 
   CLI::App *versionSub =
       cli.add_subcommand("version", "Print ESI system version");
+  bool infoDetails = false;
   CLI::App *infoSub =
       cli.add_subcommand("info", "Print ESI system information");
+  infoSub->add_flag("--details", infoDetails,
+                    "Print detailed information about the system");
+  bool hierDetails = false;
   CLI::App *hierSub = cli.add_subcommand("hier", "Print ESI system hierarchy");
+  hierSub->add_flag("--details", hierDetails,
+                    "Print detailed information about the system");
   CLI::App *telemetrySub =
       cli.add_subcommand("telemetry", "Print ESI system telemetry information");
 
@@ -53,9 +60,9 @@ int main(int argc, const char *argv[]) {
     if (*versionSub)
       std::cout << info.getEsiVersion() << std::endl;
     else if (*infoSub)
-      printInfo(std::cout, *acc);
+      printInfo(std::cout, *acc, infoDetails);
     else if (*hierSub)
-      printHier(std::cout, *acc);
+      printHier(std::cout, *acc, hierDetails);
     else if (*telemetrySub)
       printTelemetry(std::cout, *acc);
     return 0;
@@ -65,7 +72,7 @@ int main(int argc, const char *argv[]) {
   }
 }
 
-void printInfo(std::ostream &os, AcceleratorConnection &acc) {
+void printInfo(std::ostream &os, AcceleratorConnection &acc, bool details) {
   std::string jsonManifest =
       acc.getService<services::SysInfo>()->getJsonManifest();
   Manifest m(acc.getCtxt(), jsonManifest);
@@ -77,6 +84,9 @@ void printInfo(std::ostream &os, AcceleratorConnection &acc) {
   for (ModuleInfo mod : m.getModuleInfos())
     os << "- " << mod;
 
+  if (!details)
+    return;
+
   os << std::endl;
   os << "********************************" << std::endl;
   os << "* Type table" << std::endl;
@@ -87,8 +97,15 @@ void printInfo(std::ostream &os, AcceleratorConnection &acc) {
     os << "  " << i++ << ": " << t->getID() << std::endl;
 }
 
-void printPort(std::ostream &os, const BundlePort &port,
-               std::string indent = "") {
+static bool showPort(const BundlePort &port, bool details) {
+  return details ||
+         (!port.getID().name.starts_with("__") && !port.getChannels().empty());
+}
+
+void printPort(std::ostream &os, const BundlePort &port, std::string indent,
+               bool details) {
+  if (!showPort(port, details))
+    return;
   os << indent << "  " << port.getID() << ":";
   if (auto svcPort = dynamic_cast<const services::ServicePort *>(&port))
     if (auto svcPortStr = svcPort->toString()) {
@@ -101,26 +118,37 @@ void printPort(std::ostream &os, const BundlePort &port,
        << std::endl;
 }
 
-void printInstance(std::ostream &os, const HWModule *d,
-                   std::string indent = "") {
-  os << indent << "* Instance:";
-  if (auto inst = dynamic_cast<const Instance *>(d))
+void printInstance(std::ostream &os, const HWModule *d, std::string indent,
+                   bool details) {
+  bool hasPorts =
+      std::any_of(d->getPorts().begin(), d->getPorts().end(),
+                  [&](const std::pair<const AppID, BundlePort &> port) {
+                    return showPort(port.second, details);
+                  });
+  if (!details && !hasPorts && d->getChildren().empty())
+    return;
+  os << indent << "* Instance: ";
+  if (auto inst = dynamic_cast<const Instance *>(d)) {
     os << inst->getID() << std::endl;
-  else
+    if (inst->getInfo() && inst->getInfo()->name)
+      os << indent << "* Module: " << *inst->getInfo()->name << std::endl;
+  } else {
     os << "top" << std::endl;
+  }
+
   os << indent << "* Ports:" << std::endl;
   for (const BundlePort &port : d->getPortsOrdered())
-    printPort(os, port, indent + "  ");
+    printPort(os, port, indent + "  ", details);
   std::vector<const Instance *> children = d->getChildrenOrdered();
   if (!children.empty()) {
     os << indent << "* Children:" << std::endl;
     for (const Instance *child : d->getChildrenOrdered())
-      printInstance(os, child, indent + "  ");
+      printInstance(os, child, indent + "  ", details);
   }
   os << std::endl;
 }
 
-void printHier(std::ostream &os, AcceleratorConnection &acc) {
+void printHier(std::ostream &os, AcceleratorConnection &acc, bool details) {
   Manifest manifest(acc.getCtxt(),
                     acc.getService<services::SysInfo>()->getJsonManifest());
   Accelerator *design = manifest.buildAccelerator(acc);
@@ -128,7 +156,7 @@ void printHier(std::ostream &os, AcceleratorConnection &acc) {
   os << "* Design hierarchy" << std::endl;
   os << "********************************" << std::endl;
   os << std::endl;
-  printInstance(os, design, /*indent=*/"");
+  printInstance(os, design, /*indent=*/"", details);
 }
 
 void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
