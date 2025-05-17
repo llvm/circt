@@ -801,6 +801,25 @@ class Bundle(Type):
       raise ValueError("Bundle must have one channel in each direction.")
     return to_channel_bc, from_channel_bc
 
+  def create_uturn(self) -> typing.Tuple["BundleSignal", "BundleSignal"]:
+    """Creates two bundle signals which talk to each other. The types of them
+    are the inverse of each other, the first one matching this type. E.g.
+    anything which is sent on the TO channel 'foo' on the first channel will be
+    transmitted to the FROM channel 'foo' on the second bundle."""
+
+    b_type = self.inverted()
+    from .constructs import Wire
+    to_channel_wires = {
+        bc.name: Wire(bc.channel)
+        for bc in self.channels
+        if bc.direction == ChannelDirection.TO
+    }
+    a_bundle, a_froms = self.pack(**to_channel_wires)
+    b_bundle, b_froms = b_type.pack(**a_froms.from_channels)
+    for name, wire in to_channel_wires.items():
+      wire.assign(b_froms[name])
+    return a_bundle, b_bundle
+
   # Easy accessor for channel types by name.
   def __getattr__(self, attrname: str):
     for channel in self.channels:

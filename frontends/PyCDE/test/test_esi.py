@@ -387,3 +387,20 @@ class Ram1(Module):
 
     mem_write = ramsvc.get_write(UInt(32))
     Writer(mem_write.type)(clk=ports.clk, rst=ports.rst, cmd=mem_write)
+
+
+# CHECK-LABEL: hw.module @UTurn(in %clk : !seq.clock, in %rst : i1, out out1 : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out out2 : !esi.bundle<[!esi.channel<i32> from "req", !esi.channel<i1> to "resp"]>)
+# CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %req : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
+# CHECK-NEXT:      %bundle_0, %req = esi.bundle.pack %resp : !esi.bundle<[!esi.channel<i32> from "req", !esi.channel<i1> to "resp"]>
+# CHECK-NEXT:      hw.output %bundle, %bundle_0 : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.bundle<[!esi.channel<i32> from "req", !esi.channel<i1> to "resp"]>
+@unittestmodule()
+class UTurn(Module):
+  clk = Clock()
+  rst = Reset()
+
+  out1 = Output(Bundle1)
+  out2 = Output(Bundle1.inverted())
+
+  @generator
+  def build(ports):
+    ports.out1, ports.out2 = Bundle1.create_uturn()
