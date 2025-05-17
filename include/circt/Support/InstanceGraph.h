@@ -343,7 +343,7 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
   return os;
 }
 
-/// A data structure that caches and provides absolute paths to module
+/// A data structure that caches and provides paths to module
 /// instances in the IR.
 struct InstancePathCache {
   /// The instance graph of the IR.
@@ -351,8 +351,12 @@ struct InstancePathCache {
 
   explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
+
+  // Return all absolute paths from the top-level module to the given module.
   ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
-  ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op,
+
+  // Return all relative paths from the given module to the given top node.
+  ArrayRef<InstancePath> getRelativePaths(ModuleOpInterface op,
                                           InstanceGraphNode *top);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
@@ -365,11 +369,18 @@ struct InstancePathCache {
   InstancePath prependInstance(InstanceOpInterface inst, InstancePath path);
 
 private:
+  using PathsCache = DenseMap<Operation *, ArrayRef<InstancePath>>;
+  ArrayRef<InstancePath> getPaths(ModuleOpInterface op, InstanceGraphNode *top,
+                                  PathsCache &cache);
+
   /// An allocator for individual instance paths and entire path lists.
   llvm::BumpPtrAllocator allocator;
 
   /// Cached absolute instance paths.
-  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
+  PathsCache absolutePathsCache;
+
+  /// Cached relative instance paths.
+  DenseMap<InstanceGraphNode *, PathsCache> relativePathsCache;
 };
 
 } // namespace igraph
