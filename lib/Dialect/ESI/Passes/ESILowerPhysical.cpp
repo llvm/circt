@@ -47,36 +47,77 @@ public:
 };
 } // anonymous namespace
 
+/// Since as of now the only construct supported by the StageOp, we convert FIFO
+/// signaling to/from ValidReady signaling. This will be done opposite way when
+/// we implement FIFO-based buffers.
 LogicalResult ChannelBufferLowering::matchAndRewrite(
     ChannelBufferOp buffer, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto loc = buffer.getLoc();
 
-  auto type = buffer.getType();
+  ChannelType inputType = buffer.getInput().getType();
+  Value stageInput = buffer.getInput();
+
+  // FIFO signaling must be converted to ValidReady.
+  if (inputType.getSignaling() == ChannelSignaling::FIFO) {
+    BackedgeBuilder bb(rewriter, loc);
+    Backedge rdEn = bb.get(rewriter.getI1Type());
+    Backedge valid = bb.get(rewriter.getI1Type());
+
+    auto unwrap = rewriter.create<UnwrapFIFOOp>(loc, stageInput, rdEn);
+    auto wrap = rewriter.create<WrapValidReadyOp>(loc, unwrap.getData(), valid);
+    stageInput = wrap.getChanOutput();
+
+    // rdEn = valid && ready
+    rdEn.setValue(rewriter.create<comb::AndOp>(loc, wrap.getReady(), valid));
+    // valid = !empty
+    valid.setValue(rewriter.create<comb::XorOp>(
+        loc, unwrap.getEmpty(),
+        rewriter.create<hw::ConstantOp>(loc, rewriter.getBoolAttr(true))));
+  }
 
   // Expand 'abstract' buffer into 'physical' stages.
   auto stages = buffer.getStagesAttr();
   uint64_t numStages = 1;
-  if (stages) {
+  if (stages)
     // Guaranteed positive by the parser.
     numStages = stages.getValue().getLimitedValue();
-  }
-  Value input = buffer.getInput();
   StringAttr bufferName = buffer.getNameAttr();
+
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
-    auto stage = rewriter.create<PipelineStageOp>(loc, type, buffer.getClk(),
-                                                  buffer.getRst(), input);
+    auto stage = rewriter.create<PipelineStageOp>(loc, buffer.getClk(),
+                                                  buffer.getRst(), stageInput);
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
       stage->setAttr("name", StringAttr::get(rewriter.getContext(), stageName));
     }
-    input = stage;
+    stageInput = stage;
+  }
+
+  ChannelType outputType = buffer.getOutput().getType();
+  Value output = stageInput;
+  // If the output is FIFO, we need to wrap it back into a FIFO from ValidReady.
+  if (outputType.getSignaling() == ChannelSignaling::FIFO) {
+    BackedgeBuilder bb(rewriter, loc);
+    Backedge ready = bb.get(rewriter.getI1Type());
+    Backedge empty = bb.get(rewriter.getI1Type());
+
+    auto unwrap = rewriter.create<UnwrapValidReadyOp>(loc, stageInput, ready);
+    auto wrap = rewriter.create<WrapFIFOOp>(
+        loc, TypeRange{outputType, rewriter.getI1Type()}, unwrap.getRawOutput(),
+        empty);
+
+    ready.setValue(wrap.getRden());
+    empty.setValue(rewriter.create<comb::XorOp>(
+        loc, unwrap.getValid(),
+        rewriter.create<hw::ConstantOp>(loc, rewriter.getBoolAttr(true))));
+    output = wrap.getChanOutput();
   }
 
   // Replace the buffer.
-  rewriter.replaceOp(buffer, input);
+  rewriter.replaceOp(buffer, output);
   return success();
 }
 

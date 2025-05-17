@@ -265,3 +265,21 @@ hw.module @fifoValidReadyOutput(
   %fifo = esi.fifo in %in clk %clk rst %rst depth 12 : !esi.channel<i32, FIFO> -> !esi.channel<i32, ValidReady>
   hw.output %fifo : !esi.channel<i32, ValidReady>
 }
+
+// CHECK-LABEL:  hw.module @testConversion(in %clk : !seq.clock, in %rst : i1) {
+// CHECK-NEXT:     [[R0:%.+]] = esi.stage %clk, %rst, [[R4:%.+]] : !esi.channel<i4>
+// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[R0]], %rden : i4
+// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %rawOutput, [[R1:%.+]] : !esi.channel<i4, FIFO>
+// CHECK-NEXT:     %true = hw.constant true
+// CHECK-NEXT:     [[R1]] = comb.xor %valid, %true : i1
+// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, [[R2:%.+]] : !esi.channel<i4, FIFO>
+// CHECK-NEXT:     %chanOutput_0, %ready = esi.wrap.vr %data, [[R3:%.+]] : i4
+// CHECK-NEXT:     [[R2]] = comb.and %ready, [[R3]] : i1
+// CHECK-NEXT:     %true_1 = hw.constant true
+// CHECK-NEXT:     [[R3]] = comb.xor %empty, %true_1 : i1
+// CHECK-NEXT:     [[R4]] = esi.stage %clk, %rst, %chanOutput_0 : !esi.channel<i4>
+
+hw.module @testConversion(in %clk: !seq.clock, in %rst:i1) {
+  %intsFifo = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, FIFO>
+  %intsVR = esi.buffer %clk, %rst, %intsFifo : !esi.channel<i4, FIFO> -> !esi.channel<i4>
+}
