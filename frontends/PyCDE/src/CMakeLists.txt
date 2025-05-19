@@ -26,7 +26,6 @@ declare_mlir_python_sources(PyCDESources
   pycde/dialects/hwarith.py
   pycde/support.py
   pycde/module.py
-  pycde/behavioral.py
   pycde/constructs.py
   pycde/common.py
   pycde/system.py
