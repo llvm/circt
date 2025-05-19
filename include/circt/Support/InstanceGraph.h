@@ -355,7 +355,7 @@ struct InstancePathCache {
   // Return all absolute paths from the top-level node to the given module.
   ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
 
-  // Return all relative paths from the to the given node.
+  // Return all relative paths from the given node to the given module.
   ArrayRef<InstancePath> getRelativePaths(ModuleOpInterface op,
                                           InstanceGraphNode *node);
 
