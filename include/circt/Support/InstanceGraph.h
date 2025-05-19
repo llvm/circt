@@ -352,12 +352,12 @@ struct InstancePathCache {
   explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
 
-  // Return all absolute paths from the top-level module to the given module.
+  // Return all absolute paths from the top-level node to the given module.
   ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
 
-  // Return all relative paths from the given module to the given top node.
+  // Return all relative paths from the to the given node.
   ArrayRef<InstancePath> getRelativePaths(ModuleOpInterface op,
-                                          InstanceGraphNode *top);
+                                          InstanceGraphNode *node);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(InstanceOpInterface oldOp, InstanceOpInterface newOp);

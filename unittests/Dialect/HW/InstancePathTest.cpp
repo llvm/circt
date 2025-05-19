@@ -49,10 +49,6 @@ TEST(InstancePathTest, RelativePath) {
   auto cat = cast<HWModuleOp>(*circuit.getBody()->rbegin());
   auto alligator = cast<HWModuleOp>(*std::next(circuit.getBody()->begin()));
   auto catToAlligatorPaths = pathCache.getRelativePaths(cat, graph[alligator]);
-  for (auto p : catToAlligatorPaths) {
-    p.print(llvm::errs());
-    llvm::errs() << "\n";
-  }
 
   ASSERT_EQ(1ull, catToAlligatorPaths.size());
 

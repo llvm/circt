@@ -231,10 +231,10 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
 
 ArrayRef<InstancePath>
 InstancePathCache::getRelativePaths(ModuleOpInterface op,
-                                    InstanceGraphNode *top) {
-  if (top == instanceGraph.getTopLevelNode())
+                                    InstanceGraphNode *node) {
+  if (node == instanceGraph.getTopLevelNode())
     return getAbsolutePaths(op);
-  return getPaths(op, top, relativePathsCache[top]);
+  return getPaths(op, node, relativePathsCache[node]);
 }
 
 // NOLINTBEGIN(misc-no-recursion)
