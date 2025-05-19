@@ -40,6 +40,23 @@ TEST(InstancePathTest, Enumerate) {
   ASSERT_EQ(1ull, topPaths.size());
 }
 
+TEST(InstancePathTest, RelativePath) {
+  MLIRContext context;
+  ModuleOp circuit = fixtures::createModule(&context);
+  hw::InstanceGraph graph(circuit);
+  igraph::InstancePathCache pathCache(graph);
+
+  auto cat = cast<HWModuleOp>(*circuit.getBody()->rbegin());
+  auto alligator = cast<HWModuleOp>(*std::next(circuit.getBody()->begin()));
+  auto catToAlligatorPaths = pathCache.getRelativePaths(cat, graph[alligator]);
+
+  ASSERT_EQ(1ull, catToAlligatorPaths.size());
+
+  ASSERT_EQ(2ull, catToAlligatorPaths[0].size());
+  EXPECT_EQ("bear", catToAlligatorPaths[0][0].getInstanceName());
+  EXPECT_EQ("cat", catToAlligatorPaths[0][1].getInstanceName());
+}
+
 TEST(InstancePathTest, AppendPrependInstance) {
   MLIRContext context;
   ModuleOp circuit = fixtures::createModule(&context);
