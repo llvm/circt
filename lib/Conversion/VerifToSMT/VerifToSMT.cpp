@@ -93,8 +93,15 @@ struct LogicEquivalenceCheckingOpConversion
       return success();
     }
 
-    smt::SolverOp solver =
-        rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(), ValueRange{});
+    // Solver will only return a result when it is used to check the returned
+    // value.
+    smt::SolverOp solver;
+    if (op.use_empty())
+      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
+    else
+      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
+                                              ValueRange{});
+
     rewriter.createBlock(&solver.getBodyRegion());
 
     // First, convert the block arguments of the miter bodies.
@@ -150,21 +157,40 @@ struct LogicEquivalenceCheckingOpConversion
     rewriter.create<smt::AssertOp>(loc, toAssert);
 
     // Fifth, check for satisfiablility and report the result back.
-    Value falseVal =
-        rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(false));
-    Value trueVal =
-        rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
-    auto checkOp = rewriter.create<smt::CheckOp>(loc, rewriter.getI1Type());
-    rewriter.createBlock(&checkOp.getSatRegion());
-    rewriter.create<smt::YieldOp>(loc, falseVal);
-    rewriter.createBlock(&checkOp.getUnknownRegion());
-    rewriter.create<smt::YieldOp>(loc, falseVal);
-    rewriter.createBlock(&checkOp.getUnsatRegion());
-    rewriter.create<smt::YieldOp>(loc, trueVal);
-    rewriter.setInsertionPointAfter(checkOp);
-    rewriter.create<smt::YieldOp>(loc, checkOp->getResults());
+    // For unused results, we create a check operation with empty regions.
+    // For used results, we create a check operation with the result type of
+    // the operation and yield the result of the check operation.
+    if (op.use_empty()) {
+      auto checkOp = rewriter.create<smt::CheckOp>(loc, TypeRange{});
+      rewriter.createBlock(&checkOp.getSatRegion());
+      rewriter.create<smt::YieldOp>(loc);
+      rewriter.createBlock(&checkOp.getUnknownRegion());
+      rewriter.create<smt::YieldOp>(loc);
+      rewriter.createBlock(&checkOp.getUnsatRegion());
+      rewriter.create<smt::YieldOp>(loc);
+      rewriter.setInsertionPointAfter(checkOp);
+      rewriter.create<smt::YieldOp>(loc);
 
-    rewriter.replaceOp(op, solver->getResults());
+      // Erase as operation is replaced by an operator without a return value.
+      rewriter.eraseOp(op);
+    } else {
+      Value falseVal =
+          rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(false));
+      Value trueVal =
+          rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+      auto checkOp = rewriter.create<smt::CheckOp>(loc, rewriter.getI1Type());
+      rewriter.createBlock(&checkOp.getSatRegion());
+      rewriter.create<smt::YieldOp>(loc, falseVal);
+      rewriter.createBlock(&checkOp.getUnknownRegion());
+      rewriter.create<smt::YieldOp>(loc, falseVal);
+      rewriter.createBlock(&checkOp.getUnsatRegion());
+      rewriter.create<smt::YieldOp>(loc, trueVal);
+      rewriter.setInsertionPointAfter(checkOp);
+      rewriter.create<smt::YieldOp>(loc, checkOp->getResults());
+
+      rewriter.replaceOp(op, solver->getResults());
+    }
+
     return success();
   }
 };

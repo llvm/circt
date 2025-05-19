@@ -69,16 +69,6 @@ void ConstructLECPass::runOnOperation() {
   // Create necessary function declarations and globals
   OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
   Location loc = getOperation()->getLoc();
-  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
-  auto voidTy = LLVM::LLVMVoidType::get(&getContext());
-
-  // Lookup or declare printf function.
-  auto printfFunc = LLVM::lookupOrCreateFn(builder, getOperation(), "printf",
-                                           ptrTy, voidTy, true);
-  if (failed(printfFunc)) {
-    getOperation()->emitError("failed to lookup or create printf");
-    return signalPassFailure();
-  }
 
   // Lookup the modules.
   auto moduleA = lookupModule(firstModule);
@@ -92,6 +82,19 @@ void ConstructLECPass::runOnOperation() {
     moduleA.emitError("module's IO types don't match second modules: ")
         << moduleA.getModuleType() << " vs " << moduleB.getModuleType();
     return signalPassFailure();
+  }
+
+  mlir::FailureOr<mlir::LLVM::LLVMFuncOp> printfFunc;
+  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+  auto voidTy = LLVM::LLVMVoidType::get(&getContext());
+  if (insertReporting) {
+    // Lookup or declare printf function.
+    printfFunc = LLVM::lookupOrCreateFn(builder, getOperation(), "printf",
+                                        ptrTy, voidTy, true);
+    if (failed(printfFunc)) {
+      getOperation()->emitError("failed to lookup or create printf");
+      return signalPassFailure();
+    }
   }
 
   // Reuse the name of the first module for the entry function, so we don't have
@@ -142,14 +145,16 @@ void ConstructLECPass::runOnOperation() {
 
   // TODO: we should find a more elegant way of reporting the result than
   // already inserting some LLVM here
-  Value eqFormatString =
-      lookupOrCreateStringGlobal(builder, getOperation(), "c1 == c2\n");
-  Value neqFormatString =
-      lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
-  Value formatString = builder.create<LLVM::SelectOp>(
-      loc, areEquivalent, eqFormatString, neqFormatString);
-  builder.create<LLVM::CallOp>(loc, printfFunc.value(),
-                               ValueRange{formatString});
+  if (insertReporting) {
+    Value eqFormatString =
+        lookupOrCreateStringGlobal(builder, getOperation(), "c1 == c2\n");
+    Value neqFormatString =
+        lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
+    Value formatString = builder.create<LLVM::SelectOp>(
+        loc, areEquivalent, eqFormatString, neqFormatString);
+    builder.create<LLVM::CallOp>(loc, printfFunc.value(),
+                                 ValueRange{formatString});
 
-  builder.create<func::ReturnOp>(loc, ValueRange{});
+    builder.create<func::ReturnOp>(loc, ValueRange{});
+  }
 }

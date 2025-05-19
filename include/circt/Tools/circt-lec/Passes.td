@@ -41,6 +41,9 @@ def ConstructLEC : Pass<"construct-lec", "::mlir::ModuleOp"> {
     Option<"insertMainFunc", "insert-main", "bool",
            /*default=*/"false",
            "Whether a main function should be inserted for AOT compilation.">,
+    Option<"insertReporting", "insert-report", "bool",
+           /*default=*/"true",
+           "Whether LLVM code should be inserted to report the result.">,
   ];
 
   let dependentDialects = [
