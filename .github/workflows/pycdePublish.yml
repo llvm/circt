@@ -112,11 +112,6 @@ jobs:
           - cp312-win_amd64
           - cp313-win_amd64
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       # Since we don't use docker on Windows, we need to install the dependencies.
       - name: Build additional c++ deps
         shell: pwsh
