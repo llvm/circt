@@ -11,10 +11,14 @@ hw.module @bound(out out: i8) {
     hw.output %add : i8
 }
 
+// CHECK-LABEL: hw.module.extern @extern
+hw.module.extern @extern()
+
 // CHECK-LABEL: hw.module @top
 hw.module @top(out out: i8) {
     %c1_i8 = hw.constant 1 : i8
     %add = comb.add %c1_i8, %c1_i8 : i8
+    hw.instance "extern" @extern() -> ()
     %0 = hw.instance "child" @child() -> (out: i8)
     // CHECK: hw.output %c2_i8
     hw.output %add : i8

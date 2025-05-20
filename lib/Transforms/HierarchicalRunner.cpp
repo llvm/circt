@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/IR/Operation.h"
@@ -88,7 +89,7 @@ void HierarchicalRunnerPass::runOnOperation() {
     auto *node = worklist.pop_back_val();
     assert(node && "node should not be null");
     auto op = node->getModule();
-    if (!op || !visited.insert(op))
+    if (!isa_and_nonnull<hw::HWModuleOp>(op) || !visited.insert(op))
       continue;
 
     // Ensure an analysis manager has been constructed for each of the nodes.
