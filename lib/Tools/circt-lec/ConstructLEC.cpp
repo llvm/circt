@@ -70,6 +70,9 @@ void ConstructLECPass::runOnOperation() {
   OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
   Location loc = getOperation()->getLoc();
 
+  assert(!(insertMainFunc && (!insertReporting)) &&
+         "cannot insert main without reporting");
+
   // Lookup the modules.
   auto moduleA = lookupModule(firstModule);
   if (!moduleA)
@@ -95,27 +98,27 @@ void ConstructLECPass::runOnOperation() {
       getOperation()->emitError("failed to lookup or create printf");
       return signalPassFailure();
     }
+
+    // Reuse the name of the first module for the entry function, so we don't
+    // have to do any uniquing and the LEC driver also already knows this name.
+    FunctionType functionType = FunctionType::get(&getContext(), {}, {});
+    func::FuncOp entryFunc =
+        builder.create<func::FuncOp>(loc, firstModule, functionType);
+
+    if (insertMainFunc) {
+      OpBuilder::InsertionGuard guard(builder);
+      auto i32Ty = builder.getI32Type();
+      auto mainFunc = builder.create<func::FuncOp>(
+          loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
+      builder.createBlock(&mainFunc.getBody(), {}, {i32Ty, ptrTy}, {loc, loc});
+      builder.create<func::CallOp>(loc, entryFunc, ValueRange{});
+      // TODO: don't use LLVM here
+      Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
+      builder.create<func::ReturnOp>(loc, constZero);
+    }
+
+    builder.createBlock(&entryFunc.getBody());
   }
-
-  // Reuse the name of the first module for the entry function, so we don't have
-  // to do any uniquing and the LEC driver also already knows this name.
-  FunctionType functionType = FunctionType::get(&getContext(), {}, {});
-  func::FuncOp entryFunc =
-      builder.create<func::FuncOp>(loc, firstModule, functionType);
-
-  if (insertMainFunc) {
-    OpBuilder::InsertionGuard guard(builder);
-    auto i32Ty = builder.getI32Type();
-    auto mainFunc = builder.create<func::FuncOp>(
-        loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
-    builder.createBlock(&mainFunc.getBody(), {}, {i32Ty, ptrTy}, {loc, loc});
-    builder.create<func::CallOp>(loc, entryFunc, ValueRange{});
-    // TODO: don't use LLVM here
-    Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
-    builder.create<func::ReturnOp>(loc, constZero);
-  }
-
-  builder.createBlock(&entryFunc.getBody());
 
   auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
   Value areEquivalent = lecOp.getAreEquivalent();
