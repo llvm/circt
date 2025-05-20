@@ -200,17 +200,14 @@ if(NOT MSVC)
   )
 endif()
 add_dependencies(ESIRuntime ESICppRuntime)
-if (WHEEL_BUILD)
-  if (WIN32)
-    set(PYLIBDIR ".")
-  else()
-    set(PYLIBDIR "lib")
-  endif()
+if (WIN32)
+  set(ESIRT_INSTALL_LIBDIR ".")
 else()
-  set(PYLIBDIR "python/esiaccel")
+  set(ESIRT_INSTALL_LIBDIR "lib")
 endif()
+
 install(TARGETS ESICppRuntime
-  DESTINATION ${PYLIBDIR}
+  DESTINATION ${ESIRT_INSTALL_LIBDIR}
   RUNTIME_DEPENDENCIES
     PRE_EXCLUDE_REGEXES .*
     PRE_INCLUDE_REGEXES zlibd zlib libz
@@ -222,7 +219,12 @@ install(FILES ${ESICppRuntimeHeaders}
   COMPONENT ESIRuntime
 )
 
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccelConfig.cmake
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccelConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/cpp/cmake/esiaccelConfig.cmake
+  @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cpp/cmake/esiaccelConfig.cmake
   DESTINATION cmake
   COMPONENT ESIRuntime
 )
@@ -365,7 +367,7 @@ if(Python3_FOUND)
       )
     endif()
     install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
-      DESTINATION ${PYLIBDIR}
+      DESTINATION ${ESIRT_INSTALL_LIBDIR}
       PRE_EXCLUDE_REGEXES .*
       PRE_INCLUDE_REGEXES zlibd zlib
       COMPONENT ESIRuntime
@@ -464,7 +466,7 @@ if(ESI_COSIM)
   add_dependencies(ESIRuntime CosimBackend)
 
   install(TARGETS CosimBackend
-    DESTINATION ${PYLIBDIR}
+    DESTINATION ${ESIRT_INSTALL_LIBDIR}
     COMPONENT ESIRuntime
   )
 
@@ -503,7 +505,7 @@ if (XRT_PATH)
   )
   add_dependencies(ESIRuntime XrtBackend)
   install(TARGETS XrtBackend
-    DESTINATION ${PYLIBDIR}
+    DESTINATION ${ESIRT_INSTALL_LIBDIR}
     COMPONENT ESIRuntime
   )
 endif()
