@@ -539,3 +539,10 @@ hw.module @elementTypeError() {
 %1 = hw.constant 0 : i9
 // expected-error @below {{index bit width equals ceil(log2(length(input))), or 0 or 1 if input contains only one element}}
 hw.array_get %0[%1] : !hw.array<1000xi42>, i9
+
+// -----
+%0 = unrealized_conversion_cast to !hw.array<1000xi42>
+%1 = hw.constant 0 : i9
+%2 = hw.constant 0 : i42
+// expected-error @below {{index bit width equals ceil(log2(length(input))), or 0 or 1 if input contains only one element}}
+hw.array_inject %0[%1], %2 : !hw.array<1000xi42>, i9

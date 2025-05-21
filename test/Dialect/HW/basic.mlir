@@ -145,6 +145,11 @@ hw.module @test1(in %arg0: i3, in %arg1: i1, in %arg2: !hw.array<1000xi8>, out r
 }
 // CHECK-NEXT:  }
 
+func.func @ArrayOps(%a: !hw.array<1000xi42>, %i: i10, %v: i42) {
+  hw.array_inject %a[%i], %v : !hw.array<1000xi42>, i10
+  return
+}
+
 hw.module @UnionOps(in %a: !hw.union<foo: i1, bar: i3>, out x: i3, out z: !hw.union<bar: i3, baz: i8>) {
   %x = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
   %z = hw.union_create "bar", %x : !hw.union<bar: i3, baz: i8>
