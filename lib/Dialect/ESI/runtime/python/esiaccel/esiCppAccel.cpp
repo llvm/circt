@@ -15,8 +15,8 @@
 
 #include "esi/backends/Cosim.h"
 
-#include <sstream>
 #include <ranges>
+#include <sstream>
 
 // pybind11 includes
 #include <pybind11/pybind11.h>
