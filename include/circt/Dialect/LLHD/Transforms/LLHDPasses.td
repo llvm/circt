@@ -111,6 +111,11 @@ def Sig2Reg : Pass<"llhd-sig2reg", "hw::HWModuleOp"> {
 
 def Mem2RegPass : Pass<"llhd-mem2reg"> {
   let summary = "Promotes memory and signal slots into values.";
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "mlir::cf::ControlFlowDialect",
+  ];
 }
 
 def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
