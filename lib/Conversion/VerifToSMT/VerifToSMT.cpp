@@ -157,8 +157,8 @@ struct LogicEquivalenceCheckingOpConversion
     rewriter.create<smt::AssertOp>(loc, toAssert);
 
     // Fifth, check for satisfiablility and report the result back.
-    // For unused results, we create a check operation with empty regions.
-    // For used results, we create a check operation with the result type of
+    // If no operation uses the result of this solver, we leave our check operations empty.
+    // If the result is used, we create a check operation with the result type of
     // the operation and yield the result of the check operation.
     if (op.use_empty()) {
       auto checkOp = rewriter.create<smt::CheckOp>(loc, TypeRange{});
