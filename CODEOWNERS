@@ -5,12 +5,12 @@
 tools/arcilator @fabianschuiki @maerhart
 
 # Calyx
-**/Dialect/Calyx @rachitnigam @cgyurgyik @mikeurbach @andrewb1999
-**/Conversion/CalyxToFSM @mortbopet
-**/Conversion/CalyxToHW @mortbopet @mikeurbach
-**/Conversion/SCFToCalyx @mikeurbach @mortbopet
-**/Conversion/CalyxNative @rachitnigam
-**/Conversion/LoopScheduleToCalyx @andrewb1999 @mikeurbach
+**/Dialect/Calyx @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/CalyxToFSM @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/CalyxToHW @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/SCFToCalyx @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/CalyxNative @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/LoopScheduleToCalyx @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
 
 # Comb
 **/Dialect/Comb @darthscsi
