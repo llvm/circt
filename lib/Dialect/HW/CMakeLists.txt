@@ -23,6 +23,10 @@ set(LLVM_OPTIONAL_SOURCES
   HWReductions.cpp
 )
 
+set(LLVM_TARGET_DEFINITIONS HWCanonicalization.td)
+mlir_tablegen(HWCanonicalization.cpp.inc -gen-rewriters)
+add_public_tablegen_target(CIRCTHWCanonicalizationIncGen)
+
 add_circt_dialect_library(CIRCTHW
   ${CIRCT_HW_Sources}
 
@@ -33,6 +37,7 @@ add_circt_dialect_library(CIRCTHW
   MLIRHWIncGen
   CIRCTHWAttrIncGen
   CIRCTHWEnumsIncGen
+  CIRCTHWCanonicalizationIncGen
 
   LINK_COMPONENTS
   Support

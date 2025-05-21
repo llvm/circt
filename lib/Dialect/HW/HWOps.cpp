@@ -255,6 +255,14 @@ void HWModulePortAccessor::setOutput(StringRef name, Value v) {
 }
 
 //===----------------------------------------------------------------------===//
+// Generated Canonicalization Patterns
+//===----------------------------------------------------------------------===//
+
+namespace {
+#include "HWCanonicalization.cpp.inc"
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -2855,6 +2863,11 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
                                        intTy.getIntOrFloatBitWidth()));
   }
 
+  // array_get(array_inject(_, index, element), index) -> element
+  if (auto inject = getInput().getDefiningOp<ArrayInjectOp>())
+    if (getIndex() == inject.getIndex())
+      return inject.getElement();
+
   auto inputCreate = getInput().getDefiningOp<ArrayCreateOp>();
   if (!inputCreate)
     return {};
@@ -2937,6 +2950,34 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayInjectOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ArrayInjectOp::fold(FoldAdaptor adaptor) {
+  auto inputAttr = dyn_cast_or_null<ArrayAttr>(adaptor.getInput());
+  auto indexAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getIndex());
+  auto elementAttr = adaptor.getElement();
+
+  // inject(constant[xs, y, zs], iy, a) -> constant[x, a, z]
+  if (inputAttr && indexAttr && elementAttr) {
+    if (auto index = indexAttr.getValue().tryZExtValue()) {
+      if (*index < inputAttr.size()) {
+        SmallVector<Attribute> elements(inputAttr.getValue());
+        elements[inputAttr.size() - 1 - *index] = elementAttr;
+        return ArrayAttr::get(getContext(), elements);
+      }
+    }
+  }
+
+  return {};
+}
+
+void ArrayInjectOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                MLIRContext *context) {
+  patterns.add<ArrayInjectToSameIndex>(context);
 }
 
 //===----------------------------------------------------------------------===//
