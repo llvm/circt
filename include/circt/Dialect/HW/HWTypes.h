@@ -138,6 +138,10 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
+/// Return the element type of an HiZType or null if the operand isn't an
+/// HiZ type.
+mlir::Type getHiZElementType(mlir::Type type);
+
 template <typename... BaseTy>
 bool type_isa(Type type) {
   // First check if the type is the requested type.

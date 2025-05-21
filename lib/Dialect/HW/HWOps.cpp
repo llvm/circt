@@ -1128,6 +1128,11 @@ LogicalResult HWModuleOp::verify() {
     return emitOpError("entry block must have")
            << numInputs << " arguments to match module signature";
 
+  // Check there are no HiZ outputs
+  for (auto t : type.getPorts())
+    if (t.dir != ModulePort::Direction::Input && isa<HiZType>(type))
+      return emitOpError("HiZ types may only be inputs");
+
   return success();
 }
 
@@ -1757,6 +1762,13 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
+
+void CreateHiZOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (nameAttr && !nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {

@@ -37,7 +37,9 @@ public:
                        // Cast operation
                        BitcastOp, ParamValueOp,
                        // Enum operations
-                       EnumConstantOp, EnumCmpOp>([&](auto expr) -> ResultType {
+                       EnumConstantOp, EnumCmpOp,
+                       // High impedance
+                       ReadHiZOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -78,6 +80,7 @@ public:
   HANDLE(ArrayConcatOp, Unhandled);
   HANDLE(EnumCmpOp, Unhandled);
   HANDLE(EnumConstantOp, Unhandled);
+  HANDLE(ReadHiZOp, Unhandled);
 #undef HANDLE
 };
 
@@ -90,9 +93,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<OutputOp, InstanceOp, InstanceChoiceOp, TypeScopeOp,
-                       TypedeclOp>([&](auto expr) -> ResultType {
-          return thisCast->visitStmt(expr, args...);
-        })
+                       TypedeclOp, DriveHiZOp, CreateHiZOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitStmt(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -132,6 +136,9 @@ public:
   HANDLE(InstanceChoiceOp, Unhandled);
   HANDLE(TypeScopeOp, Unhandled);
   HANDLE(TypedeclOp, Unhandled);
+  HANDLE(DriveHiZOp, Unhandled);
+  HANDLE(CreateHiZOp, Unhandled);
+
 #undef HANDLE
 };
 
