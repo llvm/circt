@@ -195,7 +195,7 @@ if(NOT MSVC)
   target_link_libraries(ESICppRuntime PRIVATE
     dl
   )
-  target_link_options(ESICppRuntime PRIVATE
+  target_link_options(ESICppRuntime PUBLIC
     -pthread
   )
 endif()
