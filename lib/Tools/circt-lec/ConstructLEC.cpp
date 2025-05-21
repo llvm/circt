@@ -70,8 +70,10 @@ void ConstructLECPass::runOnOperation() {
   OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
   Location loc = getOperation()->getLoc();
 
-  assert(!(insertMainFunc && (!insertReporting)) &&
-         "cannot insert main without reporting");
+  if (insertMainFunc && (!insertReporting)) {
+    emitError(loc, "cannot insert main function without reporting");
+    return signalPassFailure();
+  }
 
   // Lookup the modules.
   auto moduleA = lookupModule(firstModule);

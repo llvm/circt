@@ -93,10 +93,12 @@ struct LogicEquivalenceCheckingOpConversion
       return success();
     }
 
+    auto unusedResult = op.use_empty();
+
     // Solver will only return a result when it is used to check the returned
     // value.
     smt::SolverOp solver;
-    if (op.use_empty())
+    if (unusedResult)
       solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
     else
       solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
@@ -157,10 +159,11 @@ struct LogicEquivalenceCheckingOpConversion
     rewriter.create<smt::AssertOp>(loc, toAssert);
 
     // Fifth, check for satisfiablility and report the result back.
-    // If no operation uses the result of this solver, we leave our check operations empty.
-    // If the result is used, we create a check operation with the result type of
-    // the operation and yield the result of the check operation.
-    if (op.use_empty()) {
+    // If no operation uses the result of this solver, we leave our check
+    // operations empty. If the result is used, we create a check operation with
+    // the result type of the operation and yield the result of the check
+    // operation.
+    if (unusedResult) {
       auto checkOp = rewriter.create<smt::CheckOp>(loc, TypeRange{});
       rewriter.createBlock(&checkOp.getSatRegion());
       rewriter.create<smt::YieldOp>(loc);

@@ -57,3 +57,15 @@ hw.module @modB1() {
 // CHECK1:   llvm.call @printf([[V3]])
 // CHECK1:   return
 // CHECK1: }
+
+// RUN: circt-opt --construct-lec="first-module=modA0 second-module=modB0 insert-main=false insert-report=false" %s | FileCheck %s --check-prefix=CHECK2
+
+// CHECK2:   [[V0:%.+]] = verif.lec first {
+// CHECK2:   ^bb0([[ARG0:%.+]]: i32, [[ARG1:%.+]]: i32):
+// CHECK2:     [[V1:%.+]] = comb.add [[ARG0]], [[ARG1]]
+// CHECK2:     verif.yield [[V1]]
+// CHECK2:   } second {
+// CHECK2:   ^bb0([[ARG0:%.+]]: i32, [[ARG1:%.+]]: i32):
+// CHECK2:     [[V2:%.+]] = comb.mul [[ARG0]], [[ARG1]]
+// CHECK2:     verif.yield [[V2]]
+// CHECK2:   }
