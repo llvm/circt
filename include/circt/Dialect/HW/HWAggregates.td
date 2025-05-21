@@ -149,27 +149,34 @@ def ArraySliceOp : HWOp<"array_slice", [Pure]> {
   }];
 }
 
-class IndexBitWidthConstraint<string index, string input>
-  : PredOpTrait<"Index width should be exactly clog2 (size of array), or either 0 or 1 if the array is a singleton.",
-                   CPred<"isValidIndexBitWidth($" # index # ", $" # input # ")">>;
+class IndexBitWidthConstraint<string index, string input> : PredOpTrait<
+  index # " bit width equals ceil(log2(length(" # input # ")))," #
+  " or 0 or 1 if " # input # " contains only one element",
+  CPred<"isValidIndexBitWidth($" # index # ", $" # input # ")">
+>;
 
-class ArrayElementTypeConstraint<string result, string input>
-  : TypesMatchWith<"Result must be arrays element type",
-                   input, result,
-                   "type_cast<ArrayType>($_self).getElementType()">;
+class ArrayElementTypeConstraint<string result, string input> : TypesMatchWith<
+  "must match array element type",
+  input, result,
+  "type_cast<ArrayType>($_self).getElementType()"
+>;
 
-// hw.array_get does not work with unpacked arrays.
-def ArrayGetOp : HWOp<"array_get",
-    [Pure, IndexBitWidthConstraint<"index", "input">,
-     ArrayElementTypeConstraint<"result", "input">]> {
-  let summary = "Get the value in an array at the specified index";
+def ArrayGetOp : HWOp<"array_get", [
+  ArrayElementTypeConstraint<"result", "input">,
+  IndexBitWidthConstraint<"index", "input">,
+  Pure,
+]> {
+  let summary = "Extract an element from an array";
+  let description = [{
+    Extracts the element at `index` from the given `input` array. The index must
+    be exactly `ceil(log2(length(input)))` bits wide.
+  }];
   let arguments = (ins ArrayType:$input, HWIntegerType:$index);
   let results = (outs HWNonInOutType:$result);
-
   let assemblyFormat = [{
-    $input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))
+    $input `[` $index `]`
+    attr-dict `:` type($input) `,` type($index)
   }];
-
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
