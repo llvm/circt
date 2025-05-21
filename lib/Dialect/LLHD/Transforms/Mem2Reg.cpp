@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
@@ -312,6 +313,9 @@ struct DriveNode : public OpNode {
     assert(isBlockingDrive(op) || isDeltaDrive(op));
   }
 
+  /// Return the drive op.
+  DrvOp getDriveOp() const { return cast<DrvOp>(op); }
+
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
 };
 
@@ -544,10 +548,29 @@ struct Promoter {
 
   void resolveDefinitions();
   void resolveDefinitions(ProbeNode *node);
+  void resolveDefinitions(DriveNode *node);
+  void resolveDefinitionValue(DriveNode *node);
+  void resolveDefinitionCondition(DriveNode *node);
 
   void insertBlockArgs();
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
+
+  void eraseLaterIfUnused(ValueRange values) {
+    for (auto value : values)
+      eraseLaterIfUnused(value);
+  }
+
+  void eraseLaterIfUnused(Value value) {
+    if (value)
+      if (auto *defOp = value.getDefiningOp())
+        eraseLaterIfUnused(defOp);
+  }
+
+  void eraseLaterIfUnused(Operation *op) {
+    if (op)
+      opsToEraseIfUnused.insert(op);
+  }
 
   /// The region we are promoting in.
   Region &region;
@@ -564,6 +587,10 @@ struct Promoter {
   Lattice lattice;
   /// A worklist of lattice nodes used within calls to `propagate*`.
   SmallPtrSet<LatticeNode *, 4> dirtyNodes;
+
+  /// The set of operations that may have become unused through the IR changes
+  /// made during the promotion. We try to clean these up later.
+  SmallDenseSet<Operation *> opsToEraseIfUnused;
 };
 } // namespace
 
@@ -619,6 +646,17 @@ LogicalResult Promoter::promote() {
 
   // Insert the necessary block arguments.
   insertBlockArgs();
+
+  // Erase operations that have become unused.
+  while (!opsToEraseIfUnused.empty()) {
+    auto it = opsToEraseIfUnused.begin();
+    auto *op = *it;
+    opsToEraseIfUnused.erase(it);
+    if (!isOpTriviallyDead(op))
+      continue;
+    eraseLaterIfUnused(op->getOperands());
+    op->erase();
+  }
 
   return success();
 }
@@ -854,11 +892,13 @@ void Promoter::propagateBackward(LatticeNode *node) {
     return;
   }
 
-  // Blocking drives kill the need for a definition to be available, since they
-  // provide a definition themselves.
+  // Blocking unconditional drives to an entire slot kill the need for a
+  // definition to be available, since they provide a definition themselves.
+  // Conditional drives propagate the need for a definition, since they have to
+  // forward an incoming reaching def in case they are disabled.
   if (auto *drive = dyn_cast<DriveNode>(node)) {
     auto needed = drive->valueAfter->neededDefs;
-    if (!isDelayed(drive->slot))
+    if (!isDelayed(drive->slot) && !drive->getDriveOp().getEnable())
       needed.erase(getSlot(drive->slot));
     update(drive->valueBefore, needed);
     return;
@@ -931,6 +971,23 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges) {
   // (B), because it in turn happens earlier.
   if (auto *drive = dyn_cast<DriveNode>(node)) {
     auto reaching = drive->valueBefore->reachingDefs;
+
+    // If the drive is conditional, merge any incoming reaching def into the
+    // reaching def created by the drive. This is necessary since a conditional
+    // drive following an unconditional drive may have to insert a multiplexer
+    // to forward to subsequent probes.
+    if (drive->getDriveOp().getEnable()) {
+      auto *inDef = reaching.lookup(drive->slot);
+      if (inDef) {
+        if (drive->def->value != inDef->value)
+          drive->def->value = {};
+        if (inDef->condition.isAlways() || drive->def->condition.isAlways())
+          drive->def->condition = DriveCondition::always();
+        else if (drive->def->condition != inDef->condition)
+          drive->def->condition = DriveCondition::conditional();
+      }
+    }
+
     reaching[drive->slot] = drive->def;
     if (!isDelayed(drive->slot))
       reaching.erase(delayedSlot(getSlot(drive->slot)));
@@ -1231,11 +1288,9 @@ void Promoter::insertDrives(DriveNode *node) {
   if (!slotOrder.contains(getSlot(node->slot)))
     return;
   LLVM_DEBUG(llvm::dbgs() << "- Removing drive " << *node->op << "\n");
-  auto *delayOp = cast<DrvOp>(node->op).getTime().getDefiningOp();
+  eraseLaterIfUnused(node->op->getOperands());
   node->op->erase();
   node->op = nullptr;
-  if (delayOp && isOpTriviallyDead(delayOp))
-    delayOp->erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1244,9 +1299,12 @@ void Promoter::insertDrives(DriveNode *node) {
 
 /// Forward definitions throughout the IR.
 void Promoter::resolveDefinitions() {
-  for (auto *node : lattice.nodes)
+  for (auto *node : lattice.nodes) {
     if (auto *probe = dyn_cast<ProbeNode>(node))
       resolveDefinitions(probe);
+    else if (auto *drive = dyn_cast<DriveNode>(node))
+      resolveDefinitions(drive);
+  }
 }
 
 /// Replace probes with the corresponding reaching definition.
@@ -1255,10 +1313,92 @@ void Promoter::resolveDefinitions(ProbeNode *node) {
     return;
   auto *def = node->valueBefore->reachingDefs.lookup(blockingSlot(node->slot));
   assert(def && "no definition reaches probe");
+  auto value = def->getValueOrPlaceholder();
+
+  // Replace the probe result with the value.
   LLVM_DEBUG(llvm::dbgs() << "- Replacing " << *node->op << "\n");
-  replaceValueWith(node->op->getResult(0), def->getValueOrPlaceholder());
+  replaceValueWith(node->op->getResult(0), value);
+  eraseLaterIfUnused(node->op->getOperands());
   node->op->erase();
   node->op = nullptr;
+}
+
+/// Mutate reaching definitions for conditional drives.
+void Promoter::resolveDefinitions(DriveNode *node) {
+  if (!slotOrder.contains(getSlot(node->slot)))
+    return;
+
+  // Check whether the drive already has a value and condition set for its
+  // reaching def. Conditional drives will have no value set initially, in which
+  // case either the value is null or it is a placeholder.
+  if (!node->def->value || node->def->valueIsPlaceholder)
+    resolveDefinitionValue(node);
+  if (node->def->condition.isConditional() &&
+      (!node->def->condition.getCondition() ||
+       node->def->conditionIsPlaceholder))
+    resolveDefinitionCondition(node);
+}
+
+void Promoter::resolveDefinitionValue(DriveNode *node) {
+  // Get the slot definition reaching the drive. This is the value the drive has
+  // to update.
+  auto *inDef = node->valueBefore->reachingDefs.lookup(node->slot);
+  assert(inDef && "no definition reaches drive");
+  auto driveOp = node->getDriveOp();
+  LLVM_DEBUG(llvm::dbgs() << "- Injecting value for " << driveOp << "\n");
+
+  // Update the value according to the drive.
+  Value value;
+  if (!driveOp.getEnable()) {
+    value = driveOp.getValue();
+  } else {
+    auto builder = OpBuilder(driveOp);
+    value = builder.createOrFold<comb::MuxOp>(
+        driveOp.getLoc(), driveOp.getEnable(), driveOp.getValue(),
+        inDef->getValueOrPlaceholder());
+  }
+
+  // Track the updated slot value in the drive's reaching def.
+  if (node->def->valueIsPlaceholder) {
+    auto *placeholder = node->def->value.getDefiningOp();
+    assert(isa_and_nonnull<UnrealizedConversionCastOp>(placeholder) &&
+           "placeholder replaced but valueIsPlaceholder still set");
+    replaceValueWith(placeholder->getResult(0), value);
+    placeholder->erase();
+    node->def->valueIsPlaceholder = false;
+  }
+  node->def->value = value;
+}
+
+void Promoter::resolveDefinitionCondition(DriveNode *node) {
+  // Get the slot definition reaching the drive. This contains the condition the
+  // drive has to update.
+  auto *inDef = node->valueBefore->reachingDefs.lookup(node->slot);
+  assert(inDef && "no definition reaches drive");
+  auto driveOp = node->getDriveOp();
+  LLVM_DEBUG(llvm::dbgs() << "- Mutating condition for " << driveOp << "\n");
+  OpBuilder builder(driveOp);
+
+  // Adjust the drive condition by combining the incoming condition with the
+  // enable of this drive op.
+  Value condition;
+  if (inDef->condition.isNever())
+    condition = driveOp.getEnable();
+  else
+    condition =
+        builder.createOrFold<comb::OrOp>(driveOp.getLoc(), driveOp.getEnable(),
+                                         inDef->getConditionOrPlaceholder());
+
+  // Track the updated drive condition in the drive's reaching def.
+  if (node->def->conditionIsPlaceholder) {
+    auto *placeholder = node->def->condition.getCondition().getDefiningOp();
+    assert(isa_and_nonnull<UnrealizedConversionCastOp>(placeholder) &&
+           "placeholder replaced but conditionIsPlaceholder still set");
+    replaceValueWith(placeholder->getResult(0), condition);
+    placeholder->erase();
+    node->def->conditionIsPlaceholder = false;
+  }
+  node->def->condition.setCondition(condition);
 }
 
 //===----------------------------------------------------------------------===//

@@ -493,6 +493,83 @@ hw.module @ConditionalDrives(in %u: i42, in %v: i42, in %q: i1, in %r: i1) {
   }
 }
 
+// See https://github.com/llvm/circt/issues/8494.
+// CHECK-LABEL: @MultipleConditionalDrives
+hw.module @MultipleConditionalDrives(in %u: i42, in %v: i42, in %w: i42, in %q: i1, in %r: i1, in %s: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : i42
+  // Conditional drives following non-conditional drives should create
+  // multiplexers to modify the value forwarded as a reaching definition.
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.mux %q, %v, %u : i42
+    llhd.drv %a, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV2:%.+]] = comb.mux %r, %w, [[DRV1]] : i42
+    llhd.drv %a, %w after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]] after {{%.+}} :
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // Subsequent conditional drives should create multiplexers to combine the
+  // different possible drive values, and they should aggregate drive conditions
+  // with OR gates.
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.mux %r, %v, %u : i42
+    // CHECK-NEXT: [[ENABLE1:%.+]] = comb.or %r, %q : i1
+    llhd.drv %a, %v after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV2:%.+]] = comb.mux %s, %w, [[DRV1]] : i42
+    // CHECK-NEXT: [[ENABLE2:%.+]] = comb.or %s, [[ENABLE1]] : i1
+    llhd.drv %a, %w after %0 if %s : !hw.inout<i42>
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]] after {{%.+}} if [[ENABLE2]] :
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // Probe after chain of conditional drives.
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.mux %q, %u, [[A]] : i42
+    llhd.drv %a, %u after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV2:%.+]] = comb.mux %r, %v, [[DRV1]] : i42
+    // CHECK-NEXT: [[ENABLE2:%.+]] = comb.or %r, %q : i1
+    llhd.drv %a, %v after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV3:%.+]] = comb.mux %s, %w, [[DRV2]] : i42
+    // CHECK-NEXT: [[ENABLE3:%.+]] = comb.or %s, [[ENABLE2]] : i1
+    llhd.drv %a, %w after %0 if %s : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[DRV3]])
+    %1 = llhd.prb %a : !hw.inout<i42>
+    func.call @use_i42(%1) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV3]] after {{%.+}} if [[ENABLE3]] :
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // Probe after unconditional drive followed by chain of conditional drives.
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.mux %q, %v, %u : i42
+    llhd.drv %a, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV2:%.+]] = comb.mux %r, %w, [[DRV1]] : i42
+    llhd.drv %a, %w after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[DRV2]])
+    %1 = llhd.prb %a : !hw.inout<i42>
+    func.call @use_i42(%1) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]] after {{%.+}} :
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 // Delayed and blocking drive interaction.
 // CHECK-LABEL: @DelayedDrives
 hw.module @DelayedDrives(in %u: i42, in %v: i42, in %bool: i1) {
@@ -544,6 +621,25 @@ hw.module @DelayedDrives(in %u: i42, in %v: i42, in %bool: i1) {
     // CHECK-NEXT: llhd.drv %a, [[ABLK]] after [[T]] if [[ABLKCOND]]
     // CHECK-NEXT: [[T:%.+]] = llhd.constant_time <0ns, 1d, 0e>
     // CHECK-NEXT: llhd.drv %a, [[ADEL]] after [[T]] if [[ADELCOND]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @DelayedConditionalDrives
+hw.module @DelayedConditionalDrives(in %u: i42, in %v: i42, in %w: i42, in %q: i1, in %r: i1, in %s: i1) {
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %a = llhd.sig %u : i42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.mux %q, %v, %u : i42
+    llhd.drv %a, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: [[DRV2:%.+]] = comb.mux %r, %w, [[DRV1]] : i42
+    llhd.drv %a, %w after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: llhd.constant_time <0ns, 1d, 0e>
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]] after {{%.+}} :
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
