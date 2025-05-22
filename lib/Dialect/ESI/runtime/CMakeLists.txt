@@ -80,16 +80,14 @@ if(NOT ZLIB_FOUND OR ${ESI_FORCE_ZLIB_BUILD})
   FetchContent_Declare(
     ZLIB
     GIT_REPOSITORY https://github.com/madler/zlib.git
-    GIT_TAG        v1.3.1
+    GIT_TAG        5a82f71ed1dfc0bec044d9702463dbdf84ea3b71
   )
   FetchContent_MakeAvailable(ZLIB)
   set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
   if(ESI_STATIC_RUNTIME AND WIN32)
-    set(ZLIB_LIBRARY zlibstatic)
+    set(ZLIB_LIBRARY ZLIB::ZLIBSTATIC)
   else()
-    # zlib 1.3.1 will name the library zlib(.a/.so) irrespective of the build type.
-    # See https://github.com/madler/zlib/blob/v1.3.1/CMakeLists.txt#L172
-    set(ZLIB_LIBRARY zlib)
+    set(ZLIB_LIBRARY ZLIB::ZLIB)
   endif()
 endif()
 
