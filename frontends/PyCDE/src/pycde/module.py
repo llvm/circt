@@ -663,7 +663,7 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
   @classmethod
   def inputs(cls) -> List[Input]:
     return cls._builder.inputs
-  
+
   @classmethod
   def outputs(cls) -> List[Output]:
     return cls._builder.outputs
