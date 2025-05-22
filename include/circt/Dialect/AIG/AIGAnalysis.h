@@ -130,21 +130,28 @@ public:
   LogicalResult getResults(Value value, size_t bitPos,
                            SmallVectorImpl<DataflowPath> &results) const;
 
+  // Return the maximum delay to the given value for all bit positions.
+  int64_t getMaxDelay(Value value) const;
+
   // Return the average of the maximum delays across all bits of the given
   // value, which is useful approximation for the delay of the value. For each
   // bit position, finds all paths and takes the maximum delay. Then averages
   // these maximum delays across all bits of the value.
   int64_t getAverageMaxDelay(Value value) const;
 
-  // Paths to paths that are closed under the give module. Results are
+  // Return paths that are closed under the given module.  Results are
   // sorted by delay from longest to shortest. Closed paths are typically
-  // register-to-register paths.
+  // register-to-register paths. A closed path is a path that starts and ends at
+  // sequential elements (registers/flip-flops), forming a complete timing path
+  // through combinational logic. The path may cross module boundaries but both
+  // endpoints are sequential elements, not ports.
   LogicalResult getClosedPaths(StringAttr moduleName,
                                SmallVectorImpl<DataflowPath> &results) const;
 
   // Return open paths for the given module. Results are sorted by delay from
   // longest to shortest. Open paths are typically input-to-register or
-  // register-to-output paths.
+  // register-to-output paths. An open path is a timing path that has at least
+  // one endpoint at a module port rather than a sequential element.
   LogicalResult
   getOpenPaths(StringAttr moduleName,
                SmallVectorImpl<std::pair<Object, OpenPath>> &openPathsToFF,

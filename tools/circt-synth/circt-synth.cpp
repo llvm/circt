@@ -103,7 +103,9 @@ static cl::opt<bool>
 
 static cl::opt<std::string>
     outputLongestPaths("output-longest-paths",
-                       cl::desc("Print longest path of AIG operations"),
+                       cl::desc("Output file for longest paths analysis "
+                                "results. The analysis is only run "
+                                "if file name is specified"),
                        cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<std::string> topName("top", cl::desc("Top module name"),

@@ -52,7 +52,12 @@ using namespace aig;
 
 static StringAttr getNameImpl(Value value) {
   if (auto arg = dyn_cast<BlockArgument>(value)) {
-    auto op = cast<hw::HWModuleOp>(arg.getParentBlock()->getParentOp());
+    auto op = dyn_cast<hw::HWModuleOp>(arg.getParentBlock()->getParentOp());
+    if (!op) {
+      // TODO: Handle other operations.
+      return StringAttr::get(value.getContext(), "<unknown-argument>");
+    }
+
     return op.getArgName(arg.getArgNumber());
   }
   return TypeSwitch<Operation *, StringAttr>(value.getDefiningOp())
@@ -178,6 +183,11 @@ LongestPathAnalysis::LongestPathAnalysis(Operation *moduleOp,
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return false;
+}
+
+int64_t LongestPathAnalysis::getMaxDelay(Value value) const {
+  assert(false && "Not implemented");
+  return 0;
 }
 
 int64_t LongestPathAnalysis::getAverageMaxDelay(Value value) const {

@@ -25,7 +25,7 @@ The longest path analysis is by nature very expensive analysis:
 
 To make the analysis tractable, we use several techniques:
 * Redundant Path Elimination: If a path is closed under specific hierarchical context, it's not necessary to propagate it its parents.
-* Graph Parallelism: The analysis is designed to be executed in parallel across instance graph. Each module is analyzed independently, and the results are combined across the hierarchy.
+* Graph Parallelism: The analysis is designed to be executed in parallel across the instance graph. Each module is analyzed independently, and the results are combined across the hierarchy.
 * Early pruning of paths: Paths that are known to be not part of the longest paths are pruned early.
 
 ## Implementation Details
