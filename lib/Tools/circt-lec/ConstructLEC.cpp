@@ -156,7 +156,7 @@ void ConstructLECPass::runOnOperation() {
 
   builder.createBlock(&entryFunc.getBody());
 
-  // Create the miter circuit that return equivalence result.
+  // Create the miter circuit that returns equivalence result.
   auto areEquivalent = constructMiter(builder, loc, moduleA, moduleB);
 
   // TODO: we should find a more elegant way of reporting the result than

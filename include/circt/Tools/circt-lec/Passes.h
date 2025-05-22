@@ -18,7 +18,7 @@
 namespace circt {
 
 namespace lec {
-enum InsertAdditionalModeEnum {
+enum class InsertAdditionalModeEnum {
   /// Don't insert any LLVM code.
   None,
 

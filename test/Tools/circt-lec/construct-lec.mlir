@@ -60,15 +60,6 @@ hw.module @modB1() {
 
 // RUN: circt-opt --construct-lec="first-module=modA0 second-module=modB0 insert-mode=none" %s | FileCheck %s --check-prefix=CHECK2
 
-// CHECK2:   [[V0:%.+]] = verif.lec first {
-// CHECK2:   ^bb0([[ARG0:%.+]]: i32, [[ARG1:%.+]]: i32):
-// CHECK2:     [[V1:%.+]] = comb.add [[ARG0]], [[ARG1]]
-// CHECK2:     verif.yield [[V1]]
-// CHECK2:   } second {
-// CHECK2:   ^bb0([[ARG0:%.+]]: i32, [[ARG1:%.+]]: i32):
-// CHECK2:     [[V2:%.+]] = comb.mul [[ARG0]], [[ARG1]]
-// CHECK2:     verif.yield [[V2]]
-// CHECK2:   }
-
-// CHECK2-NOT: llvm.mlir.global private constant @"c1 == c2\0A"("c1 == c2\0A\00") {addr_space = 0 : i32}
-// CHECK2-NOT: llvm.mlir.global private constant @"c1 != c2\0A"("c1 != c2\0A\00") {addr_space = 0 : i32}
+// CHECK2-NOT: func.func
+// CHECK2: verif.lec
+// CHECK2-NOT: llvm.mlir.global

@@ -13,7 +13,6 @@
 #ifndef CIRCT_TOOLS_CIRCT_LEC_PASSES_TD
 #define CIRCT_TOOLS_CIRCT_LEC_PASSES_TD
 
-include "mlir/IR/EnumAttr.td"
 include "mlir/Pass/PassBase.td"
 include "mlir/Rewrite/PassUtil.td"
 

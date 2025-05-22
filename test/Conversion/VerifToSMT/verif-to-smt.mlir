@@ -102,7 +102,6 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 
   // CHECK: return [[EQ]], [[EQ2]], %true
   return %1, %2, %3 : i1, i1, i1
-  // return %3, %3, %3 : i1, i1, i1
 }
 
 // CHECK-LABEL:  func.func @test_bmc() -> i1 {
