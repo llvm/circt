@@ -58,7 +58,6 @@ endif()
 
 if(ESI_STATIC_RUNTIME)
   set(ZLIB_USE_STATIC_LIBS ON)
-  set(ZLIB_BUILD_STATIC ON)
 endif()
 
 # We need zlib to uncompress the manifest.
@@ -85,9 +84,11 @@ if(NOT ZLIB_FOUND OR ${ESI_FORCE_ZLIB_BUILD})
   )
   FetchContent_MakeAvailable(ZLIB)
   set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
-  if(ESI_STATIC_RUNTIME)
+  if(ESI_STATIC_RUNTIME AND WIN32)
     set(ZLIB_LIBRARY zlibstatic)
   else()
+    # zlib 1.3.1 will name the library zlib(.a/.so) irrespective of the build type.
+    # See https://github.com/madler/zlib/blob/v1.3.1/CMakeLists.txt#L172
     set(ZLIB_LIBRARY zlib)
   endif()
 endif()
