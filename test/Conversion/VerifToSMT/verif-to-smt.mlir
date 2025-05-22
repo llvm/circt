@@ -83,6 +83,23 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
     verif.yield
   }
 
+  %4 = verif.lec first {
+  ^bb0(%arg1: i32):
+    verif.yield %arg1 : i32
+  } second {
+  ^bb0(%arg2: i32):
+    verif.yield %arg2 : i32
+  }
+  // CHECK: smt.solver() : () -> () {
+  // CHECK:   [[V11:%.+]] = smt.declare_fun : !smt.bv<32>
+  // CHECK:   [[EQ3:%.+]] = smt.distinct [[V11]], [[V11]] : !smt.bv<32>
+  // CHECK:   smt.assert [[EQ3]]
+  // CHECK:   smt.check sat {
+  // CHECK:   } unknown {
+  // CHECK:   } unsat {
+  // CHECK:   }
+  // CHECK: }
+
   // CHECK: return [[EQ]], [[EQ2]], %true
   return %1, %2, %3 : i1, i1, i1
 }

@@ -17,6 +17,19 @@
 
 namespace circt {
 
+namespace lec {
+enum class InsertAdditionalModeEnum {
+  /// Don't insert any LLVM code.
+  None,
+
+  /// Insert LLVM code to report the LEC result from an SMT solver.
+  Reporting,
+
+  /// Insert a main function for AOT compilation.
+  Main,
+};
+}
+
 /// Generate the code for registering passes.
 #define GEN_PASS_DECL_CONSTRUCTLEC
 #define GEN_PASS_REGISTRATION

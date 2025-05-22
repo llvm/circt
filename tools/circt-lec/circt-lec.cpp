@@ -41,6 +41,7 @@
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "mlir/Target/SMTLIB/ExportSMTLIB.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -227,6 +228,8 @@ static LogicalResult executeLEC(MLIRContext &context) {
     ConstructLECOptions opts;
     opts.firstModule = firstModuleName;
     opts.secondModule = secondModuleName;
+    if (outputFormat == OutputSMTLIB)
+      opts.insertMode = lec::InsertAdditionalModeEnum::None;
     pm.addPass(createConstructLEC(opts));
   }
   pm.addPass(createConvertHWToSMT());
@@ -254,8 +257,10 @@ static LogicalResult executeLEC(MLIRContext &context) {
 
   if (outputFormat == OutputSMTLIB) {
     auto timer = ts.nest("Print SMT-LIB output");
-    llvm::errs() << "Printing SMT-LIB not yet supported!\n";
-    return failure();
+    if (failed(smt::exportSMTLIB(module.get(), outputFile.value()->os())))
+      return failure();
+    outputFile.value()->keep();
+    return success();
   }
 
   if (outputFormat == OutputLLVM) {
