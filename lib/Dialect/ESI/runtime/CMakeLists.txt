@@ -61,11 +61,21 @@ if(ESI_STATIC_RUNTIME)
 endif()
 
 # We need zlib to uncompress the manifest.
-find_package(ZLIB)
-if(ZLIB_FOUND)
-  set(ZLIB_LIBRARY ZLIB::ZLIB)
-else()
-  message("-- zlib not found, pulling down zlib from git")
+option(ESI_FORCE_ZLIB_BUILD "Force zlib to be built." OFF)
+if(NOT ESI_FORCE_ZLIB_BUILD)
+  find_package(ZLIB)
+  if(ZLIB_FOUND)
+    set(ZLIB_LIBRARY ZLIB::ZLIB)
+  endif()
+endif()
+
+if(NOT ZLIB_FOUND OR ESI_FORCE_ZLIB_BUILD)
+  if(ESI_FORCE_ZLIB_BUILD)
+    message("-- ESI_FORCE_ZLIB_BUILD is set, building zlib")
+  else()
+    message("-- zlib not found, building zlib")
+  endif()
+
   set(ZLIB_BUILD_EXAMPLES OFF)
   FetchContent_Declare(
     ZLIB
