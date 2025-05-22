@@ -33,6 +33,7 @@ add_circt_dialect_library(CIRCTHW
   MLIRHWIncGen
   CIRCTHWAttrIncGen
   CIRCTHWEnumsIncGen
+  CIRCTHWCanonicalizationIncGen
 
   LINK_COMPONENTS
   Support

@@ -1082,6 +1082,44 @@ hw.module @array_get1(in %a0: i3, in %a1: i3, in %a2: i3, out r0: i3) {
   hw.output %r0 : i3
 }
 
+// CHECK-LABEL: @ArrayGetFold2
+func.func @ArrayGetFold2(%arg0: !hw.array<9001xi42>, %arg1: i14, %arg2: i42) -> i42 {
+  %0 = hw.array_inject %arg0[%arg1], %arg2 : !hw.array<9001xi42>, i14
+  %1 = hw.array_get %0[%arg1] : !hw.array<9001xi42>, i14
+  // CHECK-NEXT: return %arg2
+  return %1 : i42
+}
+
+// CHECK-LABEL: @ArrayInjectFold
+func.func @ArrayInjectFold() -> !hw.array<4xi42> {
+  %0 = hw.aggregate_constant [0 : i42, 1 : i42, 2 : i42, 3 : i42] : !hw.array<4xi42>
+  %1 = hw.constant 1 : i2
+  %2 = hw.constant 9001 : i42
+  %3 = hw.array_inject %0[%1], %2 : !hw.array<4xi42>, i2
+  // CHECK-NEXT: [[TMP:%.+]] = hw.aggregate_constant [0 : i42, 1 : i42, 9001 : i42, 3 : i42] : !hw.array<4xi42>
+  // CHECK-NEXT: return [[TMP]]
+  return %3 : !hw.array<4xi42>
+}
+
+// CHECK-LABEL: @ArrayInjectToSameIndex(
+func.func @ArrayInjectToSameIndex(%arg0: !hw.array<9001xi42>, %arg1: i14, %arg2: i42, %arg3: i42) -> !hw.array<9001xi42> {
+  %0 = hw.array_inject %arg0[%arg1], %arg2 : !hw.array<9001xi42>, i14
+  %1 = hw.array_inject %0[%arg1], %arg3 : !hw.array<9001xi42>, i14
+  // CHECK-NEXT: [[TMP:%.+]] = hw.array_inject %arg0[%arg1], %arg3
+  // CHECK-NEXT: return [[TMP]]
+  return %1 : !hw.array<9001xi42>
+}
+
+// CHECK-LABEL: @ArrayInjectToSameIndexRecursion(
+hw.module @ArrayInjectToSameIndexRecursion(in %i: i0, in %e: i1, out z: !hw.array<1xi1>) {
+  %0 = hw.array_inject %1[%i], %e : !hw.array<1xi1>, i0
+  %1 = hw.array_inject %0[%i], %e : !hw.array<1xi1>, i0
+  // CHECK-NEXT: [[TMP1:%.+]] = hw.array_inject [[TMP2:%.+]][%i], %e
+  // CHECK-NEXT: [[TMP2]] = hw.array_inject [[TMP1]][%i], %e
+  // CHECK-NEXT: hw.output [[TMP2]]
+  hw.output %1 : !hw.array<1xi1>
+}
+
 // CHECK-LABEL: hw.module @struct_create
 // CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.struct<a: i2, b: i2, c: i2>
 // CHECK-NEXT:    hw.output %0 : !hw.struct<a: i2, b: i2, c: i2>

@@ -181,6 +181,33 @@ def ArrayGetOp : HWOp<"array_get", [
   let hasCanonicalizeMethod = 1;
 }
 
+def ArrayInjectOp : HWOp<"array_inject", [
+  AllTypesMatch<["input", "result"]>,
+  ArrayElementTypeConstraint<"element", "input">,
+  IndexBitWidthConstraint<"index", "input">,
+  Pure,
+]> {
+  let summary = "Inject an element into an array";
+  let description = [{
+    Takes an `input` array, changes the element at `index` to the given
+    `element` value, and returns the updated array value as a result. The index
+    must be exactly `ceil(log2(length(input)))` bits wide. The element type
+    must match the input array's element type.
+  }];
+  let arguments = (ins
+    ArrayType:$input,
+    HWIntegerType:$index,
+    AnyType:$element
+  );
+  let results = (outs ArrayType:$result);
+  let assemblyFormat = [{
+    $input `[` $index `]` `,` $element
+    attr-dict `:` type($input) `,` type($index)
+  }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Structure Processing Operations
 //===----------------------------------------------------------------------===//

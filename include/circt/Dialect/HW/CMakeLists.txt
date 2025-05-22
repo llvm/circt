@@ -17,6 +17,10 @@ set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTHWTransformsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS HWCanonicalization.td)
+mlir_tablegen(HWCanonicalization.cpp.inc -gen-rewriters)
+add_public_tablegen_target(CIRCTHWCanonicalizationIncGen)
+
 set(LLVM_TARGET_DEFINITIONS HWOpInterfaces.td)
 mlir_tablegen(HWOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(HWOpInterfaces.cpp.inc -gen-op-interface-defs)
