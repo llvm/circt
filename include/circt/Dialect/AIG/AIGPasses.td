@@ -23,7 +23,7 @@ def LowerWordToBits : Pass<"aig-lower-word-to-bits", "hw::HWModuleOp"> {
 def PrintLongestPathAnalysis : Pass<"aig-print-longest-paths-analysis", "mlir::ModuleOp"> {
   let summary = "Print longest paths analysis";
   let options = [
-    Option<"outputFile", "output-file", "std::string", "-", "Output file">,
+    Option<"outputFile", "output-file", "std::string", "\"-\"", "Output file">,
     Option<"test", "test", "bool", "false", "Emit longest paths to the diagnostics.">,
     Option<"showTopKPercent", "show-top-k-percent", "int", "5", "The size of the longest paths to show.">
   ];
