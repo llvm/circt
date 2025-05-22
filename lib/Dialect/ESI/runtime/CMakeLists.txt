@@ -80,6 +80,8 @@ if(NOT ZLIB_FOUND OR ${ESI_FORCE_ZLIB_BUILD})
   FetchContent_Declare(
     ZLIB
     GIT_REPOSITORY https://github.com/madler/zlib.git
+    # latest release is 1.3.1, but that has deprecated CMake features. 
+    # Use a tag on the 'develop' branch.
     GIT_TAG        5a82f71ed1dfc0bec044d9702463dbdf84ea3b71
   )
   FetchContent_MakeAvailable(ZLIB)
