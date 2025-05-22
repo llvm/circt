@@ -662,16 +662,15 @@ public:
     if (errorDiagnosticsFile.empty() || errors.empty())
       return;
 
-    std::error_code ec;
-    llvm::ToolOutputFile file(errorDiagnosticsFile, ec, llvm::sys::fs::OF_None);
-    if (ec) {
-      llvm::errs() << "failed to open error diagnostics file '"
-                   << errorDiagnosticsFile << "': " << ec.message() << "\n";
+    std::string error;
+    auto outputFile = openOutputFile(errorDiagnosticsFile.getValue(), &error);
+    if (!outputFile) {
+      errs() << error;
       return;
     }
 
-    file.os() << llvm::json::Array(errors);
-    file.keep();
+    outputFile->os() << llvm::json::Array(errors);
+    outputFile->keep();
   }
 };
 
