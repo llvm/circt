@@ -8,8 +8,11 @@ FIRRTL version 5.1.0
 ; CHECK-NEXT:     class FileDescriptor;
 ; CHECK-NEXT:       static int global_id [string];
 ; CHECK-NEXT:       static function int get(string name);
-; CHECK-NEXT:         if (global_id.exists(name) == 32'h0)
+; CHECK-NEXT:         if (global_id.exists(name) == 32'h0) begin
 ; CHECK-NEXT:           global_id[name] = $fopen(name);
+; CHECK-NEXT:           if (global_id[name] == 32'h0)
+; CHECK-NEXT:             $error("Failed to open file %s", name);
+; CHECK-NEXT:         end
 ; CHECK-NEXT:         return global_id[name];
 ; CHECK-NEXT:       endfunction
 ; CHECK-NEXT:     endclass
