@@ -572,6 +572,11 @@ struct Promoter {
       opsToEraseIfUnused.insert(op);
   }
 
+  void eraseOp(Operation *op) {
+    opsToEraseIfUnused.erase(op);
+    op->erase();
+  }
+
   /// The region we are promoting in.
   Region &region;
 
@@ -1000,8 +1005,10 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges) {
   if (auto *entry = dyn_cast<BlockEntry>(node)) {
     // Propagate reaching definitions for each inserted probe.
     SmallDenseMap<DefSlot, Def *, 1> reaching;
-    for (auto [slot, insertedProbe] : entry->insertedProbes)
+    for (auto [slot, insertedProbe] : entry->insertedProbes) {
       reaching[blockingSlot(slot)] = insertedProbe;
+      reaching[delayedSlot(slot)] = insertedProbe;
+    }
 
     // Propagate reaching definitions from predecessors, creating new
     // definitions in case of a merge.
@@ -1289,7 +1296,7 @@ void Promoter::insertDrives(DriveNode *node) {
     return;
   LLVM_DEBUG(llvm::dbgs() << "- Removing drive " << *node->op << "\n");
   eraseLaterIfUnused(node->op->getOperands());
-  node->op->erase();
+  eraseOp(node->op);
   node->op = nullptr;
 }
 
@@ -1319,7 +1326,7 @@ void Promoter::resolveDefinitions(ProbeNode *node) {
   LLVM_DEBUG(llvm::dbgs() << "- Replacing " << *node->op << "\n");
   replaceValueWith(node->op->getResult(0), value);
   eraseLaterIfUnused(node->op->getOperands());
-  node->op->erase();
+  eraseOp(node->op);
   node->op = nullptr;
 }
 
@@ -1364,7 +1371,7 @@ void Promoter::resolveDefinitionValue(DriveNode *node) {
     assert(isa_and_nonnull<UnrealizedConversionCastOp>(placeholder) &&
            "placeholder replaced but valueIsPlaceholder still set");
     replaceValueWith(placeholder->getResult(0), value);
-    placeholder->erase();
+    eraseOp(placeholder);
     node->def->valueIsPlaceholder = false;
   }
   node->def->value = value;
@@ -1395,7 +1402,7 @@ void Promoter::resolveDefinitionCondition(DriveNode *node) {
     assert(isa_and_nonnull<UnrealizedConversionCastOp>(placeholder) &&
            "placeholder replaced but conditionIsPlaceholder still set");
     replaceValueWith(placeholder->getResult(0), condition);
-    placeholder->erase();
+    eraseOp(placeholder);
     node->def->conditionIsPlaceholder = false;
   }
   node->def->condition.setCondition(condition);
@@ -1464,7 +1471,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
              "placeholder replaced but valueIsPlaceholder still set");
       auto arg = node->block->addArgument(getStoredType(slot), getLoc(slot));
       replaceValueWith(placeholder->getResult(0), arg);
-      placeholder->erase();
+      eraseOp(placeholder);
       def->value = arg;
       def->valueIsPlaceholder = false;
       break;
@@ -1479,7 +1486,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
       auto conditionArg = node->block->addArgument(
           IntegerType::get(region.getContext(), 1), getLoc(slot));
       replaceValueWith(placeholder->getResult(0), conditionArg);
-      placeholder->erase();
+      eraseOp(placeholder);
       def->condition.setCondition(conditionArg);
       def->conditionIsPlaceholder = false;
       break;
