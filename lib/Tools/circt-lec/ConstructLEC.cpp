@@ -34,6 +34,8 @@ struct ConstructLECPass
   using circt::impl::ConstructLECBase<ConstructLECPass>::ConstructLECBase;
   void runOnOperation() override;
   hw::HWModuleOp lookupModule(StringRef name);
+  Value constructMiter(OpBuilder builder, Location loc, hw::HWModuleOp moduleA,
+                       hw::HWModuleOp moduleB);
 };
 } // namespace
 
@@ -65,63 +67,10 @@ hw::HWModuleOp ConstructLECPass::lookupModule(StringRef name) {
   return cast<hw::HWModuleOp>(expectedModule);
 }
 
-void ConstructLECPass::runOnOperation() {
-  // Create necessary function declarations and globals
-  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
-  Location loc = getOperation()->getLoc();
-
-  if (insertMainFunc && (!insertReporting)) {
-    emitError(loc, "cannot insert main function without reporting");
-    return signalPassFailure();
-  }
-
-  // Lookup the modules.
-  auto moduleA = lookupModule(firstModule);
-  if (!moduleA)
-    return signalPassFailure();
-  auto moduleB = lookupModule(secondModule);
-  if (!moduleB)
-    return signalPassFailure();
-
-  if (moduleA.getModuleType() != moduleB.getModuleType()) {
-    moduleA.emitError("module's IO types don't match second modules: ")
-        << moduleA.getModuleType() << " vs " << moduleB.getModuleType();
-    return signalPassFailure();
-  }
-
-  mlir::FailureOr<mlir::LLVM::LLVMFuncOp> printfFunc;
-  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
-  auto voidTy = LLVM::LLVMVoidType::get(&getContext());
-  if (insertReporting) {
-    // Lookup or declare printf function.
-    printfFunc = LLVM::lookupOrCreateFn(builder, getOperation(), "printf",
-                                        ptrTy, voidTy, true);
-    if (failed(printfFunc)) {
-      getOperation()->emitError("failed to lookup or create printf");
-      return signalPassFailure();
-    }
-
-    // Reuse the name of the first module for the entry function, so we don't
-    // have to do any uniquing and the LEC driver also already knows this name.
-    FunctionType functionType = FunctionType::get(&getContext(), {}, {});
-    func::FuncOp entryFunc =
-        builder.create<func::FuncOp>(loc, firstModule, functionType);
-
-    if (insertMainFunc) {
-      OpBuilder::InsertionGuard guard(builder);
-      auto i32Ty = builder.getI32Type();
-      auto mainFunc = builder.create<func::FuncOp>(
-          loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
-      builder.createBlock(&mainFunc.getBody(), {}, {i32Ty, ptrTy}, {loc, loc});
-      builder.create<func::CallOp>(loc, entryFunc, ValueRange{});
-      // TODO: don't use LLVM here
-      Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
-      builder.create<func::ReturnOp>(loc, constZero);
-    }
-
-    builder.createBlock(&entryFunc.getBody());
-  }
-
+Value ConstructLECPass::constructMiter(OpBuilder builder, Location loc,
+                                       hw::HWModuleOp moduleA,
+                                       hw::HWModuleOp moduleB) {
+  // Create the miter circuit that return equivalence result.
   auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
   Value areEquivalent = lecOp.getAreEquivalent();
   builder.cloneRegionBefore(moduleA.getBody(), lecOp.getFirstCircuit(),
@@ -148,18 +97,78 @@ void ConstructLECPass::runOnOperation() {
   sortTopologically(&lecOp.getFirstCircuit().front());
   sortTopologically(&lecOp.getSecondCircuit().front());
 
+  return areEquivalent;
+}
+
+void ConstructLECPass::runOnOperation() {
+  // Create necessary function declarations and globals
+  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody());
+  Location loc = getOperation()->getLoc();
+
+  // Lookup the modules.
+  auto moduleA = lookupModule(firstModule);
+  if (!moduleA)
+    return signalPassFailure();
+  auto moduleB = lookupModule(secondModule);
+  if (!moduleB)
+    return signalPassFailure();
+
+  if (moduleA.getModuleType() != moduleB.getModuleType()) {
+    moduleA.emitError("module's IO types don't match second modules: ")
+        << moduleA.getModuleType() << " vs " << moduleB.getModuleType();
+    return signalPassFailure();
+  }
+
+  // Only construct the miter with no additional insertions.
+  if (insertMode == lec::InsertAdditionalModeEnum::None) {
+    constructMiter(builder, loc, moduleA, moduleB);
+    return;
+  }
+
+  mlir::FailureOr<mlir::LLVM::LLVMFuncOp> printfFunc;
+  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+  auto voidTy = LLVM::LLVMVoidType::get(&getContext());
+  // Lookup or declare printf function.
+  printfFunc = LLVM::lookupOrCreateFn(builder, getOperation(), "printf", ptrTy,
+                                      voidTy, true);
+  if (failed(printfFunc)) {
+    getOperation()->emitError("failed to lookup or create printf");
+    return signalPassFailure();
+  }
+
+  // Reuse the name of the first module for the entry function, so we don't
+  // have to do any uniquing and the LEC driver also already knows this name.
+  FunctionType functionType = FunctionType::get(&getContext(), {}, {});
+  func::FuncOp entryFunc =
+      builder.create<func::FuncOp>(loc, firstModule, functionType);
+
+  if (insertMode == lec::InsertAdditionalModeEnum::Main) {
+    OpBuilder::InsertionGuard guard(builder);
+    auto i32Ty = builder.getI32Type();
+    auto mainFunc = builder.create<func::FuncOp>(
+        loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
+    builder.createBlock(&mainFunc.getBody(), {}, {i32Ty, ptrTy}, {loc, loc});
+    builder.create<func::CallOp>(loc, entryFunc, ValueRange{});
+    // TODO: don't use LLVM here
+    Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
+    builder.create<func::ReturnOp>(loc, constZero);
+  }
+
+  builder.createBlock(&entryFunc.getBody());
+
+  // Create the miter circuit that return equivalence result.
+  auto areEquivalent = constructMiter(builder, loc, moduleA, moduleB);
+
   // TODO: we should find a more elegant way of reporting the result than
   // already inserting some LLVM here
-  if (insertReporting) {
-    Value eqFormatString =
-        lookupOrCreateStringGlobal(builder, getOperation(), "c1 == c2\n");
-    Value neqFormatString =
-        lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
-    Value formatString = builder.create<LLVM::SelectOp>(
-        loc, areEquivalent, eqFormatString, neqFormatString);
-    builder.create<LLVM::CallOp>(loc, printfFunc.value(),
-                                 ValueRange{formatString});
+  Value eqFormatString =
+      lookupOrCreateStringGlobal(builder, getOperation(), "c1 == c2\n");
+  Value neqFormatString =
+      lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
+  Value formatString = builder.create<LLVM::SelectOp>(
+      loc, areEquivalent, eqFormatString, neqFormatString);
+  builder.create<LLVM::CallOp>(loc, printfFunc.value(),
+                               ValueRange{formatString});
 
-    builder.create<func::ReturnOp>(loc, ValueRange{});
-  }
+  builder.create<func::ReturnOp>(loc, ValueRange{});
 }

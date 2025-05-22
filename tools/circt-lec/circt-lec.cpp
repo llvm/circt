@@ -229,7 +229,7 @@ static LogicalResult executeLEC(MLIRContext &context) {
     opts.firstModule = firstModuleName;
     opts.secondModule = secondModuleName;
     if (outputFormat == OutputSMTLIB)
-      opts.insertReporting = false;
+      opts.insertMode = lec::InsertAdditionalModeEnum::None;
     pm.addPass(createConstructLEC(opts));
   }
   pm.addPass(createConvertHWToSMT());
@@ -257,9 +257,7 @@ static LogicalResult executeLEC(MLIRContext &context) {
 
   if (outputFormat == OutputSMTLIB) {
     auto timer = ts.nest("Print SMT-LIB output");
-    auto smtModule =
-        mlir::smt::exportSMTLIB(module.get(), outputFile.value()->os());
-    if (failed(smtModule))
+    if (failed(smt::exportSMTLIB(module.get(), outputFile.value()->os())))
       return failure();
     outputFile.value()->keep();
     return success();
