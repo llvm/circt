@@ -60,6 +60,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
@@ -211,6 +212,12 @@ static cl::opt<std::string>
               cl::desc("Optional file name to output the HW IR into, in "
                        "addition to the output requested by -o"),
               cl::init(""), cl::value_desc("filename"), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    errorDiagnosticsFile("output-error-diagnostics",
+                         cl::desc("Output error diagnostics to a JSON file"),
+                         cl::init(""), cl::value_desc("filename"),
+                         cl::cat(mainCategory));
 
 static cl::opt<std::string>
     mlirOutFile("output-final-mlir",
@@ -602,6 +609,82 @@ public:
   }
 };
 
+class ErrorDiagnosticDumper : public ScopedDiagnosticHandler {
+  // Mutex to protect concurrent access to the errors vector, though typically
+  // not needed as ErrorDiagnosticDumper usually runs outside of parallel
+  // contexts.
+  llvm::sys::SmartMutex<true> mutex;
+  std::unique_ptr<llvm::ToolOutputFile> outputFile;
+  std::unique_ptr<json::OStream> jsonStream;
+  bool errorEmitted = false;
+
+  void convertLocToJson(Location loc, SmallVector<json::Value> &locs) {
+    if (auto fileLineColLoc = dyn_cast<FileLineColLoc>(loc)) {
+      json::Object obj;
+      obj["file"] = fileLineColLoc.getFilename().getValue();
+      obj["line"] = fileLineColLoc.getLine();
+      obj["column"] = fileLineColLoc.getColumn();
+      locs.push_back(std::move(obj));
+      return;
+    }
+    if (auto fusedLoc = dyn_cast<FusedLoc>(loc)) {
+      for (auto l : fusedLoc.getLocations())
+        convertLocToJson(l, locs);
+      return;
+    }
+    // TODO: Serialize others.
+  }
+
+  json::Value convertToJSON(Diagnostic &d) {
+    json::Object obj;
+    obj["message"] = d.str();
+    SmallVector<json::Value> locs;
+    convertLocToJson(d.getLocation(), locs);
+    obj["location"] = json::Array(locs);
+    assert(d.getSeverity() == mlir::DiagnosticSeverity::Error &&
+           "only errors are expected");
+    return std::move(obj);
+  }
+
+public:
+  ErrorDiagnosticDumper(MLIRContext *ctxt) : ScopedDiagnosticHandler(ctxt) {
+    if (errorDiagnosticsFile.empty())
+      return;
+    std::string error;
+    outputFile = openOutputFile(errorDiagnosticsFile.getValue(), &error);
+    if (!outputFile) {
+      errs() << error;
+      return;
+    }
+
+    jsonStream = std::make_unique<json::OStream>(outputFile->os());
+    jsonStream->arrayBegin();
+
+    // Set a handler that captures errors.
+    setHandler([&](Diagnostic &d) {
+      if (d.getSeverity() == mlir::DiagnosticSeverity::Error) {
+        llvm::sys::SmartScopedLock<true> lock(mutex);
+        auto json = convertToJSON(d);
+        jsonStream->value(json);
+        errorEmitted = true;
+      }
+      return failure();
+    });
+  }
+
+  ~ErrorDiagnosticDumper() {
+    if (errorDiagnosticsFile.empty() || !outputFile)
+      return;
+
+    assert(jsonStream && "jsonStream should have been initialized");
+
+    jsonStream->arrayEnd();
+    jsonStream->flush();
+    if (errorEmitted)
+      outputFile->keep();
+  }
+};
+
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
@@ -616,10 +699,12 @@ static LogicalResult processInputSplit(
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr,
                                                 &context /*, shouldShow */);
     FileLineColLocsAsNotesDiagnosticHandler addLocs(&context);
+    ErrorDiagnosticDumper errorDumper(&context);
     return processBuffer(context, firtoolOptions, ts, sourceMgr, outputFile);
   }
 
   SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  ErrorDiagnosticDumper errorDumper(&context);
   context.printOpOnDiagnostic(false);
   (void)processBuffer(context, firtoolOptions, ts, sourceMgr, outputFile);
   return sourceMgrHandler.verify();
