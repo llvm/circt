@@ -645,5 +645,216 @@ hw.module @DelayedConditionalDrives(in %u: i42, in %v: i42, in %w: i42, in %q: i
   }
 }
 
+// Basic probing of signal projection works.
+// CHECK-LABEL: @BasicProjectionProbe
+hw.module @BasicProjectionProbe(in %u: !hw.array<4xi42>, in %v: i42, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.array<4xi42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.sig.array_get
+    // CHECK-NOT: llhd.drv
+    %1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    llhd.drv %a, %u after %0 : !hw.inout<array<4xi42>>
+    // CHECK-NOT: llhd.prb
+    // CHECK-NEXT: [[TMP:%.+]] = hw.array_get %u[%i]
+    %2 = llhd.prb %1 : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[TMP]])
+    func.call @use_i42(%2) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, %u
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Basic driving of signal projection works.
+// CHECK-LABEL: @BasicProjectionDrive
+hw.module @BasicProjectionDrive(in %u: !hw.array<4xi42>, in %v: i42, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.array<4xi42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<array<4xi42>>
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[A:%.+]] = hw.array_inject %u[%i], %v
+    llhd.drv %1, %v after %0 : !hw.inout<i42>
+    // CHECK-NOT: llhd.prb
+    %2 = llhd.prb %a : !hw.inout<array<4xi42>>
+    // CHECK-NEXT: call @use_array_i42([[A]])
+    func.call @use_array_i42(%2) : (!hw.array<4xi42>) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[A]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Conditional drives of signal projections.
+// CHECK-LABEL: @ConditionalProjectionDrive
+hw.module @ConditionalProjectionDrive(in %u: !hw.array<4xi42>, in %v: i42, in %w: i42, in %i: i2, in %q: i1, in %r: i1, in %s: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.array<4xi42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<array<4xi42>>
+    // CHECK-NEXT: [[TMP:%.+]] = hw.array_get %u[%i]
+    // CHECK-NEXT: [[FIELD1:%.+]] = comb.mux %q, %v, [[TMP]]
+    // CHECK-NEXT: [[DRV1:%.+]] = hw.array_inject %u[%i], [[FIELD1]]
+    llhd.drv %1, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: [[FIELD2:%.+]] = comb.mux %r, %w, [[FIELD1]]
+    // CHECK-NEXT: [[DRV2:%.+]] = hw.array_inject [[DRV1]][%i], [[FIELD2]]
+    llhd.drv %1, %w after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: call @use_array_i42([[DRV2]])
+    // CHECK-NEXT: call @use_i42([[FIELD2]])
+    %2 = llhd.prb %a : !hw.inout<array<4xi42>>
+    %3 = llhd.prb %1 : !hw.inout<i42>
+    func.call @use_array_i42(%2) : (!hw.array<4xi42>) -> ()
+    func.call @use_i42(%3) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]] after {{%.+}} :
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // CHECK-NOT: llhd.sig.array_get
+    %1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    // CHECK-NEXT: [[DRV1:%.+]] = comb.mux %q, %u, [[A]]
+    llhd.drv %a, %u after %0 if %q : !hw.inout<array<4xi42>>
+    // CHECK-NEXT: [[TMP:%.+]] = hw.array_get [[DRV1]][%i]
+    // CHECK-NEXT: [[FIELD2:%.+]] = comb.mux %r, %v, [[TMP]]
+    // CHECK-NEXT: [[DRV2:%.+]] = hw.array_inject [[DRV1]][%i], [[FIELD2]]
+    // CHECK-NEXT: [[ENABLE2:%.+]] = comb.or %r, %q
+    llhd.drv %1, %v after %0 if %r : !hw.inout<i42>
+    // CHECK-NEXT: [[FIELD3:%.+]] = comb.mux %s, %w, [[FIELD2]]
+    // CHECK-NEXT: [[DRV3:%.+]] = hw.array_inject [[DRV2]][%i], [[FIELD3]]
+    // CHECK-NEXT: [[ENABLE3:%.+]] = comb.or %s, [[ENABLE2]]
+    llhd.drv %1, %w after %0 if %s : !hw.inout<i42>
+    // CHECK-NEXT: call @use_array_i42([[DRV3]])
+    // CHECK-NEXT: call @use_i42([[FIELD3]])
+    %2 = llhd.prb %a : !hw.inout<array<4xi42>>
+    %3 = llhd.prb %1 : !hw.inout<i42>
+    func.call @use_array_i42(%2) : (!hw.array<4xi42>) -> ()
+    func.call @use_i42(%3) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV3]] after {{%.+}} if [[ENABLE3]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Delayed drives of signal projections should fall back to probing the current
+// value of the entire slot and injecting into that. This is equivalent to
+// treating all arrays as packed.
+// CHECK-LABEL: @DelayedProjectionDrive
+hw.module @DelayedProjectionDrive(in %u: !hw.array<4xi42>, in %v: i42, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  %a = llhd.sig %u : !hw.array<4xi42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    %1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    // CHECK-NEXT: [[TMP:%.+]] = hw.array_inject [[A]][%i], %v
+    llhd.drv %1, %v after %0 : !hw.inout<i42>
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[TMP]] after {{%.+}}
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @ProjectionThroughBlockArg
+hw.module @ProjectionThroughBlockArg(in %u: !hw.array<4xi42>, in %v: i42, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.array<4xi42>
+  // CHECK: llhd.process
+  llhd.process {
+    %1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    // Pass projection through block argument
+    cf.br ^bb1(%1 : !hw.inout<i42>)
+  ^bb1(%2: !hw.inout<i42>):
+    // CHECK: ^bb1([[ARG:%.+]]: !hw.inout<i42>):
+    // CHECK-NEXT: llhd.prb [[ARG]]
+    %3 = llhd.prb %2 : !hw.inout<i42>
+    // CHECK-NEXT: llhd.drv [[ARG]]
+    llhd.drv %2, %v after %0 : !hw.inout<i42>
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @MultipleArrayGetsSameIndex
+hw.module @MultipleArrayGetsSameIndex(in %u: !hw.array<4xi42>, in %v: i42, in %w: i42, in %i: i2) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.array<4xi42>
+  // CHECK: llhd.process
+  llhd.process {
+    // Two separate array_gets for the same index
+    // CHECK-NOT: llhd.sig.array_get
+    %get1 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    %get2 = llhd.sig.array_get %a[%i] : !hw.inout<array<4xi42>>
+    // Drive both projections with different values
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // CHECK-NEXT: [[DRV1:%.+]] = hw.array_inject [[A]][%i], %v
+    // CHECK-NEXT: [[DRV2:%.+]] = hw.array_inject [[DRV1]][%i], %w
+    llhd.drv %get1, %v after %0 : !hw.inout<i42>
+    llhd.drv %get2, %w after %0 : !hw.inout<i42>
+    // Probe both projections
+    // CHECK-NOT: llhd.prb
+    %prb1 = llhd.prb %get1 : !hw.inout<i42>
+    %prb2 = llhd.prb %get2 : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42(%w)
+    // CHECK-NEXT: call @use_i42(%w)
+    func.call @use_i42(%prb1) : (i42) -> ()
+    func.call @use_i42(%prb2) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[DRV2]] after {{%.+}}
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @NestedArrayGet3D
+hw.module @NestedArrayGet3D(
+  in %u: !hw.array<5xarray<6xarray<7xi42>>>,
+  in %v: i42, in %i: i3, in %j: i3, in %k: i3
+) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.array<5xarray<6xarray<7xi42>>>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+    // Three nested projections
+    %get1 = llhd.sig.array_get %a[%i] : !hw.inout<array<5xarray<6xarray<7xi42>>>>
+    %get2 = llhd.sig.array_get %get1[%j] : !hw.inout<array<6xarray<7xi42>>>
+    %get3 = llhd.sig.array_get %get2[%k] : !hw.inout<array<7xi42>>
+    // Drive the innermost projection
+    // CHECK-NEXT: [[GET3:%.+]] = hw.array_get [[A]][%i]
+    // CHECK-NEXT: [[GET2:%.+]] = hw.array_get [[GET3]][%j]
+    // CHECK-NEXT: [[INJECT1:%.+]] = hw.array_inject [[GET2]][%k], %v
+    // CHECK-NEXT: [[INJECT2:%.+]] = hw.array_inject [[GET3]][%j], [[INJECT1]]
+    // CHECK-NEXT: [[INJECT3:%.+]] = hw.array_inject [[A]][%i], [[INJECT2]]
+    llhd.drv %get3, %v after %0 : !hw.inout<i42>
+    // Probe the innermost projection
+    %prb = llhd.prb %get3 : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42(%v)
+    func.call @use_i42(%prb) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJECT3]] after {{%.+}}
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
+func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
