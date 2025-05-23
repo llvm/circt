@@ -614,7 +614,9 @@ class ErrorDiagnosticDumper : public ScopedDiagnosticHandler {
   // not needed as ErrorDiagnosticDumper usually runs outside of parallel
   // contexts.
   llvm::sys::SmartMutex<true> mutex;
-  llvm::SmallVector<json::Value> errors;
+  std::unique_ptr<llvm::ToolOutputFile> outputFile;
+  std::unique_ptr<json::OStream> jsonStream;
+  bool errorEmitted = false;
 
   void convertLocToJson(Location loc, SmallVector<json::Value> &locs) {
     if (auto fileLineColLoc = dyn_cast<FileLineColLoc>(loc)) {
@@ -648,29 +650,38 @@ public:
   ErrorDiagnosticDumper(MLIRContext *ctxt) : ScopedDiagnosticHandler(ctxt) {
     if (errorDiagnosticsFile.empty())
       return;
+    std::string error;
+    outputFile = openOutputFile(errorDiagnosticsFile.getValue(), &error);
+    if (!outputFile) {
+      errs() << error;
+      return;
+    }
+
+    jsonStream = std::make_unique<json::OStream>(outputFile->os());
+    jsonStream->arrayBegin();
+
     // Set a handler that captures errors.
     setHandler([&](Diagnostic &d) {
       if (d.getSeverity() == mlir::DiagnosticSeverity::Error) {
         llvm::sys::SmartScopedLock<true> lock(mutex);
-        errors.push_back(convertToJSON(d));
+        auto json = convertToJSON(d);
+        jsonStream->value(json);
+        errorEmitted = true;
       }
       return failure();
     });
   }
 
   ~ErrorDiagnosticDumper() {
-    if (errorDiagnosticsFile.empty() || errors.empty())
+    if (errorDiagnosticsFile.empty() || !outputFile)
       return;
 
-    std::string error;
-    auto outputFile = openOutputFile(errorDiagnosticsFile.getValue(), &error);
-    if (!outputFile) {
-      errs() << error;
-      return;
-    }
+    assert(jsonStream && "jsonStream should have been initialized");
 
-    outputFile->os() << llvm::json::Array(errors);
-    outputFile->keep();
+    jsonStream->arrayEnd();
+    jsonStream->flush();
+    if (errorEmitted)
+      outputFile->keep();
   }
 };
 
