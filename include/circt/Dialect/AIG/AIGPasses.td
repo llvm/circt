@@ -20,8 +20,8 @@ def LowerWordToBits : Pass<"aig-lower-word-to-bits", "hw::HWModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
-def PrintLongestPathAnalysis : Pass<"aig-print-longest-paths-analysis", "mlir::ModuleOp"> {
-  let summary = "Print longest paths analysis";
+def PrintLongestPathAnalysis : Pass<"aig-print-longest-path-analysis", "mlir::ModuleOp"> {
+  let summary = "Print longest path analysis";
   let options = [
     Option<"outputFile", "output-file", "std::string", "\"-\"", "Output file">,
     Option<"test", "test", "bool", "false", "Emit longest paths to the diagnostics.">,

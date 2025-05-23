@@ -13,9 +13,9 @@
 
 #include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/CombToAIG.h"
-#include "circt/Dialect/AIG/AIGAnalysis.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
+#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
@@ -102,11 +102,11 @@ static cl::opt<bool>
                   cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<std::string>
-    outputLongestPaths("output-longest-paths",
-                       cl::desc("Output file for longest paths analysis "
-                                "results. The analysis is only run "
-                                "if file name is specified"),
-                       cl::init(""), cl::cat(mainCategory));
+    outputLongestPath("output-longest-path",
+                      cl::desc("Output file for longest path analysis "
+                               "results. The analysis is only run "
+                               "if file name is specified"),
+                      cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<std::string> topName("top", cl::desc("Top module name"),
                                     cl::value_desc("name"), cl::init(""),
@@ -176,9 +176,9 @@ static void populateSynthesisPipeline(PassManager &pm) {
     pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
   }
 
-  if (!outputLongestPaths.empty()) {
+  if (!outputLongestPath.empty()) {
     circt::aig::PrintLongestPathAnalysisOptions options;
-    options.outputFile = outputLongestPaths;
+    options.outputFile = outputLongestPath;
     options.showTopKPercent = 5;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
