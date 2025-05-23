@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTLLHDTransforms
+  CombineDrives.cpp
   Deseq.cpp
   DesequentializationPass.cpp
   DeseqUtils.cpp
