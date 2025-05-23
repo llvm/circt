@@ -286,6 +286,12 @@ void InlineArcsAnalysis::notifyInlinedCallInto(mlir::CallOpInterface callOp,
   --usersPerArc[calledArcName];
   ++statistics.numInlinedArcs;
 
+  for (auto calleeName : callsInArcBody[calledArcName]) {
+    if (!usersPerArc.contains(calleeName))
+      continue;
+    ++usersPerArc[calleeName];
+  }
+
   auto arc = dyn_cast<DefineOp>(region->getParentOp());
   if (!arc)
     return;
@@ -301,8 +307,6 @@ void InlineArcsAnalysis::notifyInlinedCallInto(mlir::CallOpInterface callOp,
   for (auto calleeName : callsInArcBody[calledArcName]) {
     if (!usersPerArc.contains(calleeName))
       continue;
-
-    ++usersPerArc[calleeName];
     callsInArcBody[arcName].push_back(calleeName);
   }
 }
