@@ -129,6 +129,29 @@ MlirStringRef hwModuleTypeGetOutputName(MlirType type, intptr_t index) {
   return wrap(cast<ModuleType>(unwrap(type)).getOutputName(index));
 }
 
+void hwModuleTypeGetPort(MlirType type, intptr_t index, HWModulePort *ret) {
+  auto port = cast<ModuleType>(unwrap(type)).getPorts()[index];
+
+  HWModulePortDirection dir;
+  switch (port.dir) {
+  case ModulePort::Direction::Input:
+    dir = HWModulePortDirection::Input;
+    break;
+  case ModulePort::Direction::Output:
+    dir = HWModulePortDirection::Output;
+    break;
+  case ModulePort::Direction::InOut:
+    dir = HWModulePortDirection::InOut;
+    break;
+  default:
+    llvm_unreachable("unknown ModulePort::Direction");
+  }
+
+  ret->name = wrap(static_cast<Attribute>(port.name));
+  ret->type = wrap(port.type);
+  ret->dir = dir;
+}
+
 bool hwTypeIsAStructType(MlirType type) {
   return isa<StructType>(unwrap(type));
 }
