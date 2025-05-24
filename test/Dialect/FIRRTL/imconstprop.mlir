@@ -931,3 +931,21 @@ firrtl.circuit "PublicTop" {
   firrtl.formal @Test, @PrivateTop1 {}
   "some_unknown_dialect.op"() { magic = @PrivateTop2 } : () -> ()
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "DPICycle"
+firrtl.circuit "DPICycle" {
+    firrtl.module @DPICycle(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+      // CHECK: %[[BAR:.+]] = firrtl.wire : !firrtl.uint<1>
+      // CHECK: %[[DPI:.+]] = firrtl.int.dpi.call "bar"
+      // CHECK: firrtl.matchingconnect %[[BAR]], %[[DPI]] : !firrtl.uint<1>
+      // CHECK: firrtl.matchingconnect %out, %[[BAR]] : !firrtl.uint<1>
+      %bar = firrtl.wire : !firrtl.uint<1>
+      %0 = firrtl.int.dpi.call "foo"(%bar) clock %clock enable %c1_ui1 {name = "foo"} : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %1 = firrtl.int.dpi.call "bar"(%0) clock %clock enable %c1_ui1 {name = "_bar_T"} : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.matchingconnect %bar, %1 : !firrtl.uint<1>
+      firrtl.matchingconnect %out, %bar : !firrtl.uint<1>
+    }
+  }

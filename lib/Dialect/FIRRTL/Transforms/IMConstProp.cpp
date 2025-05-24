@@ -312,6 +312,7 @@ struct IMConstPropPass
   void markBlockExecutable(Block *block);
   void markWireOp(WireOp wireOrReg);
   void markMemOp(MemOp mem);
+  void markDPICallIntrinsicOp(DPICallIntrinsicOp dpi);
 
   void markInvalidValueOp(InvalidValueOp invalid);
   void markAggregateConstantOp(AggregateConstantOp constant);
@@ -516,6 +517,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
         .Case<LayerBlockOp>(
             [&](auto layer) { markBlockExecutable(layer.getBody(0)); })
+        .Case<DPICallIntrinsicOp>(
+            [&](auto dpi) { markDPICallIntrinsicOp(dpi); })
         .Default([&](auto _) {
           if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
                   VerbatimWireOp, SubaccessOp>(op) ||
@@ -583,6 +586,11 @@ void IMConstPropPass::markWireOp(WireOp wire) {
 
 void IMConstPropPass::markMemOp(MemOp mem) {
   for (auto result : mem.getResults())
+    markOverdefined(result);
+}
+
+void IMConstPropPass::markDPICallIntrinsicOp(DPICallIntrinsicOp dpi) {
+  if (auto result = dpi.getResult())
     markOverdefined(result);
 }
 
