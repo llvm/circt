@@ -660,3 +660,29 @@ module {
     return %result : f32
   }
 }
+
+// -----
+
+// Test floating point absolute lowering
+
+// CHECK:      calyx.group @bb0_2 {
+// CHECK-DAG:        calyx.assign %std_slice_0.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.addr0 = %std_slice_0.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_data = %std_and_0.out : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_and_0.left = %c2147483647_i32 : i32
+// CHECK-DAG:        calyx.assign %std_and_0.right = %addf_0_reg.out : i32
+// CHECK-DAG:        calyx.group_done %arg_mem_0.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0: memref<1xf32>, %arg1: f32) {
+    %zero_idx = arith.constant 0 : index
+    %cst = arith.constant -1.1 : f32
+    %sum = arith.addf %cst, %arg1 : f32
+    %abs = math.absf %sum : f32
+    memref.store %abs, %arg0[%zero_idx] : memref<1xf32>
+    return
+  }
+}
