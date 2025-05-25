@@ -324,9 +324,11 @@ def ReadOp : MooreOp<"read", [
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
     "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
-  let arguments = (ins RefType:$dst, UnpackedType:$src);
+  let arguments = (ins RefType:$dst,
+                   UnpackedType:$src,
+                   Optional<TimeType>:$time);
   let assemblyFormat = [{
-    $dst `,` $src attr-dict `:` type($src)
+    $dst `,` $src attr-dict (`after` $time^)? `:` type($src)
   }];
 }
 
@@ -354,7 +356,8 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
   }];
   let arguments = (ins
     Arg<RefType, "", [MemWrite]>:$dst,
-    UnpackedType:$src
+    UnpackedType:$src,
+    Optional<TimeType>:$time
   );
 }
 
@@ -471,6 +474,29 @@ def DetectEventOp : MooreOp<"detect_event", [
   );
   let assemblyFormat = [{
     $edge $input (`if` $condition^)? attr-dict `:` type($input)
+  }];
+}
+
+def TimeUnitAttr : I32EnumAttr<"TimeUnitEnum", "Time unit",
+    [
+      I32EnumAttrCase<"Seconds", 0, "s">,
+      I32EnumAttrCase<"Milliseconds", 1, "ms">,
+      I32EnumAttrCase<"Microseconds", 2, "us">,
+      I32EnumAttrCase<"Nanoseconds", 3, "ns">,
+      I32EnumAttrCase<"Picoseconds", 4, "ps">,
+      I32EnumAttrCase<"Femtoseconds", 5, "fs">,
+    ]> {
+  let cppNamespace = "circt::moore";
+}
+
+def DelayOp : MooreOp<"delay", [
+  Pure
+]> {
+  let summary = "The delay control for a statement";
+  let arguments = (ins AnyType:$value, TimeUnitAttr:$time);
+  let results = (outs TimeType:$result);
+  let assemblyFormat = [{
+    $value $time attr-dict `:` type($value)
   }];
 }
 
