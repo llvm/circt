@@ -198,6 +198,13 @@ static void getValuesToObserve(Region *region,
           if (isa<BlockArgument>(value))
             value = rewriter.getRemappedValue(value);
 
+          // ConcatRef op is also assignment-like, but we have a LowerConcatRef
+          // pass to divide it alone.
+          if (isa<DynExtractRefOp, ExtractRefOp>(operation))
+            continue;
+          if (isa<BlockingAssignOp, NonBlockingAssignOp>(operation))
+            if (operation->getOperand(0) == value)
+              continue;
           if (region->isAncestor(value.getParentRegion()))
             continue;
           if (auto *defOp = value.getDefiningOp();
