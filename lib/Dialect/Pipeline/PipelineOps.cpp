@@ -533,13 +533,35 @@ Block *ScheduledPipelineOp::getLastStage() { return getOrderedStages().back(); }
 
 bool ScheduledPipelineOp::isMaterialized() {
   // We determine materialization as if any pipeline stage has an explicit
-  // input (apart from the stage valid signal).
+  // input (apart from the stage enable signal).
   return llvm::any_of(getStages(), [this](Block &block) {
     // The entry stage doesn't count since it'll always have arguments.
     if (&block == getEntryStage())
       return false;
     return block.getNumArguments() > 1;
   });
+}
+
+// Check whether the value referenced by `use` is defined within the provided
+// `stage`. It is assumed that `use` originates from within `stage`.
+static bool useDefinedInStage(Block *stage, OpOperand &use) {
+  Block *useBlock = use.getOwner()->getBlock();
+  Block *definingBlock = use.get().getParentBlock();
+
+  if (useBlock == definingBlock)
+    return true;
+
+  if (stage == definingBlock)
+    return true;
+
+  Block *currBlock = definingBlock;
+  while (currBlock) {
+    currBlock = currBlock->getParentOp()->getBlock();
+    if (currBlock == stage)
+      return true;
+  }
+
+  return false;
 }
 
 LogicalResult ScheduledPipelineOp::verify() {
@@ -579,38 +601,52 @@ LogicalResult ScheduledPipelineOp::verify() {
   if (hasStall())
     extLikeInputs.insert(getStall());
 
-  // Phase invariant - if any block has arguments apart from the stage valid
-  // argument, we are in register materialized mode. Check that all values
-  // used within a stage are defined within the stage.
+  // Phase invariant - Check that all values used within a stage are valid
+  // based on the materialization mode. This is a walk, since this condition
+  // should also apply to nested operations.
   bool materialized = isMaterialized();
-  if (materialized) {
-    for (auto &stage : stages) {
-      for (auto &op : stage) {
-        for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
-          bool err = false;
-          if (extLikeInputs.contains(operand)) {
-            // This is an external input; legal to reference everywhere.
-            continue;
-          }
-
-          if (auto *definingOp = operand.getDefiningOp()) {
-            // Constants are allowed to be used across stages.
-            if (definingOp->hasTrait<OpTrait::ConstantLike>())
-              continue;
-            err = definingOp->getBlock() != &stage;
-          } else {
-            // This is a block argument;
-            err = !llvm::is_contained(stage.getArguments(), operand);
-          }
-
-          if (err)
-            return op.emitOpError(
-                       "Pipeline is in register materialized mode - operand ")
-                   << index
-                   << " is defined in a different stage, which is illegal.";
+  for (auto &stage : stages) {
+    auto walkRes = stage.walk([&](Operation *op) {
+      // Skip pipeline.src operations in non-materialized mode
+      if (isa<SourceOp>(op)) {
+        if (materialized) {
+          op->emitOpError(
+              "Pipeline is in register materialized mode - pipeline.src "
+              "operations are not allowed");
+          return WalkResult::interrupt();
+        } else {
+          // In non-materialized mode, pipeline.src operations are required, and
+          // is what is implicitly allowing cross-stage referenced by not
+          // reaching the below verification code.
+          return WalkResult::advance();
         }
       }
-    }
+
+      for (auto [index, operand] : llvm::enumerate(op->getOpOperands())) {
+        // External inputs (including clock, reset, stall) are allowed
+        // everywhere
+        if (extLikeInputs.contains(operand.get()))
+          continue;
+
+        // In any materialization mode, values must be defined in the same
+        // stage.
+        if (!useDefinedInStage(&stage, operand)) {
+          auto err = op->emitOpError("operand ")
+                     << index << " is defined in a different stage. ";
+          if (materialized) {
+            err << "Value should have been passed through block arguments";
+          } else {
+            err << "Value should have been passed through a `pipeline.src` op";
+          }
+          return WalkResult::interrupt();
+        }
+      }
+
+      return WalkResult::advance();
+    });
+
+    if (walkRes.wasInterrupted())
+      return failure();
   }
 
   if (auto stallability = getStallability()) {
@@ -1001,9 +1037,9 @@ LogicalResult LatencyOp::verify() {
     return success();
   }
 
-  // Verify that there's at least one result type. Latency ops don't make sense
-  // if they're not delaying anything, and we're not yet prepared to support
-  // side-effectful bodies.
+  // Verify that there's at least one result type. Latency ops don't make
+  // sense if they're not delaying anything, and we're not yet prepared to
+  // support side-effectful bodies.
   if (getNumResults() == 0)
     return emitOpError("expected at least one result type.");
 
