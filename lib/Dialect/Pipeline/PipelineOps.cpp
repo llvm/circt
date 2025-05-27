@@ -614,12 +614,12 @@ LogicalResult ScheduledPipelineOp::verify() {
               "Pipeline is in register materialized mode - pipeline.src "
               "operations are not allowed");
           return WalkResult::interrupt();
-        } else {
-          // In non-materialized mode, pipeline.src operations are required, and
-          // is what is implicitly allowing cross-stage referenced by not
-          // reaching the below verification code.
-          return WalkResult::advance();
         }
+
+        // In non-materialized mode, pipeline.src operations are required, and
+        // is what is implicitly allowing cross-stage referenced by not
+        // reaching the below verification code.
+        return WalkResult::advance();
       }
 
       for (auto [index, operand] : llvm::enumerate(op->getOpOperands())) {
@@ -627,6 +627,13 @@ LogicalResult ScheduledPipelineOp::verify() {
         // everywhere
         if (extLikeInputs.contains(operand.get()))
           continue;
+
+        // Constant-like inputs are allowed everywhere
+        if (auto *definingOp = operand.get().getDefiningOp()) {
+          // Constants are allowed to be used across stages.
+          if (definingOp->hasTrait<OpTrait::ConstantLike>())
+            continue;
+        }
 
         // In any materialization mode, values must be defined in the same
         // stage.
@@ -636,7 +643,8 @@ LogicalResult ScheduledPipelineOp::verify() {
           if (materialized) {
             err << "Value should have been passed through block arguments";
           } else {
-            err << "Value should have been passed through a `pipeline.src` op";
+            err << "Value should have been passed through a `pipeline.src` "
+                   "op";
           }
           return WalkResult::interrupt();
         }
