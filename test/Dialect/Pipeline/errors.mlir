@@ -210,3 +210,16 @@ hw.module @unmaterialized_latency_with_missing_src(in %arg0 : i32, in %arg1 : i3
   }
   hw.output %0 : i32
 }
+
+// -----
+
+hw.module @invalid_pipeline_src(in %arg : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1) {
+  %res, %done = pipeline.scheduled(%a0 : i32 = %arg) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
+     pipeline.stage ^bb1 regs(%a0 : i32)
+   ^bb1(%0 : i32, %s1_enable : i1):
+      // expected-error @below {{'pipeline.src' op Pipeline is in register materialized mode - pipeline.src operations are not allowed}}
+      %a0_bb1 = pipeline.src %a0 : i32
+      pipeline.return %0 : i32
+  }
+  hw.output
+}

@@ -548,12 +548,12 @@ static bool useDefinedInStage(Block *stage, OpOperand &use) {
   Block *useBlock = use.getOwner()->getBlock();
   Block *definingBlock = use.get().getParentBlock();
 
-  if (useBlock == definingBlock)
+  // Common-case checks...
+  if (useBlock == definingBlock || stage == definingBlock)
     return true;
 
-  if (stage == definingBlock)
-    return true;
-
+  // Else, recurse upwards from the defining block to see if we can find the
+  // stage.
   Block *currBlock = definingBlock;
   while (currBlock) {
     currBlock = currBlock->getParentOp()->getBlock();
