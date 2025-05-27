@@ -204,14 +204,10 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
         // reference operands from other stages.
         SourceOp srcOp =
             llvm::dyn_cast_or_null<pipeline::SourceOp>(operand.getOwner());
-        if (!srcOp) {
-          operand.getOwner()->emitError()
-              << "Only pipeline.srcOp's are allowed to reference values "
-                 "outside of this block. Verifiers should have caught this";
-          assert(srcOp && "Only pipeline.srcOp's should be allowed to "
-                          "reference values outside of "
-                          "this block. Verifiers should have caught this");
-        }
+        assert(
+            srcOp &&
+            "Only pipeline.srcOp's should be allowed to reference "
+            "values outside of this block. Verifiers should have caught this");
 
         Value reroutedValue = routeThroughStage(operand.get(), stage);
         if (reroutedValue != operand.get())
