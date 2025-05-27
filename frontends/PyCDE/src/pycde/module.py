@@ -661,11 +661,12 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
     cls._builder.print(out)
 
   @classmethod
-  def inputs(cls) -> List[Tuple[str, Type]]:
-    """Get a dictionary of input port names to signals."""
-    if cls._builder.inputs is None:
-      return []
+  def inputs(cls) -> List[Input]:
     return cls._builder.inputs
+
+  @classmethod
+  def outputs(cls) -> List[Output]:
+    return cls._builder.outputs
 
 
 class modparams:
