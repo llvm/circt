@@ -235,12 +235,12 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       auto ctxt = $_op.getContext();
       auto allPortAttrsArray = $_op.getAllPortAttrs();
       SmallVector<Attribute> attrs;
-      if (!allPortAttrsArray.empty())
+      if (!allPortAttrsArray.empty()) // Copy the existing array for modification
         attrs = SmallVector<Attribute>(allPortAttrsArray);
-      else if (!attr.empty())
+      else if (!attr.empty()) // Create a new array filled with empty dictionaries
         attrs = SmallVector<Attribute>($_op.getNumPorts(), DictionaryAttr::get(ctxt));
-      else
-        return; // Empty array stays empty
+      else // Existing empty array stays empty
+        return;
       attrs[idx] = attr;
       $_op.setAllPortAttrs(attrs);
     }
@@ -249,12 +249,12 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       auto ctxt = $_op.getContext();
       auto allPortAttrsArray = $_op.getAllPortAttrs();
       SmallVector<Attribute> attrs;
-      if (!allPortAttrsArray.empty())
+      if (!allPortAttrsArray.empty()) // Copy the existing array for modification
         attrs = SmallVector<Attribute>(allPortAttrsArray);
-      else if (!!value)
+      else if (value)  // Create a new array filled with empty dictionaries
         attrs = SmallVector<Attribute>($_op.getNumPorts(), DictionaryAttr::get(ctxt));
-      else
-        return; // Empty array stays empty
+      else // Existing empty array stays empty
+        return;
       NamedAttrList pattr(cast<DictionaryAttr>(attrs[idx]));
       Attribute oldValue;
       if (!value)
@@ -271,12 +271,12 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       auto ctxt = $_op.getContext();
       auto allPortAttrsArray = $_op.getAllPortAttrs();
       SmallVector<Attribute> attrs;
-      if (!allPortAttrsArray.empty())
+      if (!allPortAttrsArray.empty()) // Copy the existing array for modification
         attrs = SmallVector<Attribute>(allPortAttrsArray);
-      else if (!newAttrs.empty())
+      else if (!newAttrs.empty()) // Create a new array filled with empty dictionaries
         attrs = SmallVector<Attribute>($_op.getNumPorts(), DictionaryAttr::get(ctxt));
-      else
-        return; // Empty array stays empty
+      else // Existing empty array stays empty
+        return;
       assert(newAttrs.size() == attrs.size());
       for (size_t idx = 0, e = attrs.size(); idx != e; ++idx) {
         NamedAttrList pattr(cast<mlir::DictionaryAttr>(attrs[idx]));
