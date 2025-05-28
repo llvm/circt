@@ -148,8 +148,13 @@ TEST(HWModuleOpTest, SetPortAttr) {
 
   auto top = builder.create<HWModuleOp>(builder.getStringAttr("Top"), ports);
 
+  auto emptyDictAttr = DictionaryAttr::get(&context);
   auto emptyArrayAttr = ArrayAttr::get(&context, ArrayRef<Attribute>());
   EXPECT_EQ(top.getPerPortAttrsAttr(), emptyArrayAttr);
+  EXPECT_TRUE(top.getAllInputAttrs().empty());
+  EXPECT_TRUE(top.getAllOutputAttrs().empty());
+  EXPECT_EQ(top.getInputAttrs(0), emptyDictAttr);
+  EXPECT_EQ(top.getOutputAttrs(0), emptyDictAttr);
 
   auto fooStrAttr = builder.getStringAttr("fooAttr");
   auto bazStrAttr = builder.getStringAttr("bazAttr");
@@ -171,7 +176,6 @@ TEST(HWModuleOpTest, SetPortAttr) {
   auto barAttrs = top.getInputAttrs(1);
   auto bazAttrs = top.getOutputAttrs(0);
 
-  auto emptyDictAttr = DictionaryAttr::get(&context);
   EXPECT_EQ(barAttrs, emptyDictAttr);
 
   ASSERT_TRUE(llvm::isa<DictionaryAttr>(fooAttrs));
@@ -186,6 +190,9 @@ TEST(HWModuleOpTest, SetPortAttr) {
   EXPECT_FALSE(bazDict.contains(fooStrAttr));
   EXPECT_TRUE(bazDict.contains(bazStrAttr));
 
+  EXPECT_FALSE(top.getAllInputAttrs().empty());
+  EXPECT_FALSE(top.getAllOutputAttrs().empty());
+
   top.setPortAttrs(top.getPortIdForInputId(0), emptyDictAttr);
   EXPECT_NE(top.getPerPortAttrsAttr(), emptyArrayAttr);
   EXPECT_TRUE(adaptor.verify(loc).succeeded());
@@ -193,6 +200,9 @@ TEST(HWModuleOpTest, SetPortAttr) {
   top.setPortAttrs(top.getPortIdForOutputId(0), emptyDictAttr);
   EXPECT_EQ(top.getPerPortAttrsAttr(), emptyArrayAttr);
   EXPECT_TRUE(adaptor.verify(loc).succeeded());
+
+  EXPECT_TRUE(top.getAllInputAttrs().empty());
+  EXPECT_TRUE(top.getAllOutputAttrs().empty());
 }
 
 } // namespace

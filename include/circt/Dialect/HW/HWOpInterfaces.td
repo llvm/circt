@@ -214,11 +214,21 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     Attribute getInputAttrs(size_t idx) {
-      return $_op.getAllPortAttrs()[$_op.getPortIdForInputId(idx)];
+      auto allPortAttrs = $_op.getAllPortAttrs();
+      assert(idx < $_op.getNumInputPorts()
+        && "Out of range input port index");
+      if (allPortAttrs.empty())
+        return DictionaryAttr::get($_op.getContext());
+      return allPortAttrs[$_op.getPortIdForInputId(idx)];
     }
 
     Attribute getOutputAttrs(size_t idx) {
-      return $_op.getAllPortAttrs()[$_op.getPortIdForOutputId(idx)];
+      auto allPortAttrs = $_op.getAllPortAttrs();
+      assert(idx < $_op.getNumOutputPorts()
+        && "Out of range output port index");
+      if (allPortAttrs.empty())
+        return DictionaryAttr::get($_op.getContext());
+      return allPortAttrs[$_op.getPortIdForOutputId(idx)];
     }
 
     void setPortAttrs(size_t idx, DictionaryAttr attr) {
