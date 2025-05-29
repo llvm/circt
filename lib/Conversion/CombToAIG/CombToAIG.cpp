@@ -665,6 +665,23 @@ struct CombSubOpConversion : OpConversionPattern<SubOp> {
   }
 };
 
+// Construct a full adder for three 1-bit inputs.
+std::pair<Value, Value> fullAdder(ConversionPatternRewriter &rewriter,
+                                  Location loc, Value a, Value b, Value c) {
+
+  Value sum =
+      rewriter.createOrFold<comb::XorOp>(loc, ArrayRef<Value>{a, b, c}, true);
+
+  auto carry = rewriter.createOrFold<comb::OrOp>(
+      loc,
+      ArrayRef<Value>{rewriter.createOrFold<comb::AndOp>(loc, a, b),
+                      rewriter.createOrFold<comb::AndOp>(loc, b, c),
+                      rewriter.createOrFold<comb::AndOp>(loc, c, a)},
+      true);
+
+  return {sum, carry};
+}
+
 struct CombMulOpConversion : OpConversionPattern<MulOp> {
   using OpConversionPattern<MulOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
@@ -674,39 +691,95 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     if (adaptor.getInputs().size() != 2)
       return failure();
 
-    // FIXME: Currently it's lowered to a really naive implementation that
-    // chains add operations.
+    // Wallace Tree Multiplier
+    Location loc = op.getLoc();
+    Value a = adaptor.getInputs()[0];
+    Value b = adaptor.getInputs()[1];
+    Type resultType = op.getType();
+    unsigned width = resultType.getIntOrFloatBitWidth();
 
-    // a_{n}a_{n-1}...a_0 * b
-    // = sum_{i=0}^{n} a_i * 2^i * b
-    // = sum_{i=0}^{n} (a_i ? b : 0) << i
-    int64_t width = op.getType().getIntOrFloatBitWidth();
-    auto aBits = extractBits(rewriter, adaptor.getInputs()[0]);
-    SmallVector<Value> results;
-    auto rhs = op.getInputs()[1];
-    auto zero = rewriter.create<hw::ConstantOp>(op.getLoc(),
-                                                llvm::APInt::getZero(width));
-    for (int64_t i = 0; i < width; ++i) {
-      auto aBit = aBits[i];
-      auto andBit =
-          rewriter.createOrFold<comb::MuxOp>(op.getLoc(), aBit, rhs, zero);
-      auto upperBits = rewriter.createOrFold<comb::ExtractOp>(
-          op.getLoc(), andBit, 0, width - i);
-      if (i == 0) {
-        results.push_back(upperBits);
-        continue;
-      }
+    // Extract individual bits from operands
+    SmallVector<Value> aBits = extractBits(rewriter, a);
+    SmallVector<Value> bBits = extractBits(rewriter, b);
 
-      auto lowerBits =
-          rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(i));
+    auto falseValue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
 
-      auto shifted = rewriter.createOrFold<comb::ConcatOp>(
-          op.getLoc(), op.getType(), ValueRange{upperBits, lowerBits});
-      results.push_back(shifted);
+    // Generate partial products
+    SmallVector<SmallVector<Value>> partialProducts;
+    for (unsigned i = 0; i < width; ++i) {
+      SmallVector<Value> row(i, falseValue);
+      // Generate partial product bits
+      for (unsigned j = 0; i + j < width; ++j)
+        row.push_back(
+            rewriter.createOrFold<comb::AndOp>(loc, aBits[j], bBits[i]));
+
+      partialProducts.push_back(row);
     }
 
-    rewriter.replaceOpWithNewOp<comb::AddOp>(op, results, true);
+    // Wallace tree reduction
+    rewriter.replaceOp(op, wallaceReduction(falseValue, width, rewriter, loc,
+                                            partialProducts));
     return success();
+  }
+
+private:
+  // Perform Wallace tree reduction on partial products
+  static Value
+  wallaceReduction(Value falseValue, size_t width,
+                   ConversionPatternRewriter &rewriter, Location loc,
+                   SmallVector<SmallVector<Value>> &partialProducts) {
+    // Continue reduction until we have only two rows.
+    while (partialProducts.size() > 2) {
+      SmallVector<SmallVector<Value>> newPartialProducts;
+
+      // Take three rows at a time and reduce to two rows
+      for (unsigned i = 0; i < partialProducts.size(); i += 3) {
+        if (i + 2 < partialProducts.size()) {
+          // We have three rows to reduce
+          auto &row1 = partialProducts[i];
+          auto &row2 = partialProducts[i + 1];
+          auto &row3 = partialProducts[i + 2];
+
+          // Find the maximum length
+          assert(row1.size() == width && row2.size() == width &&
+                 row3.size() == width);
+
+          SmallVector<Value> sumRow, carryRow;
+          carryRow.push_back(falseValue);
+
+          // Process each bit position
+          for (unsigned j = 0; j < width; ++j) {
+            // Full adder logic
+            auto [sum, carry] =
+                fullAdder(rewriter, loc, row1[j], row2[j], row3[j]);
+            sumRow.push_back(sum);
+            if (j + 1 < width)
+              carryRow.push_back(carry);
+          }
+
+          newPartialProducts.push_back(sumRow);
+          newPartialProducts.push_back(carryRow);
+        } else {
+          // Add remaining rows as is
+          newPartialProducts.append(partialProducts.begin() + i,
+                                    partialProducts.end());
+        }
+      }
+
+      partialProducts = newPartialProducts;
+    }
+
+    // Add the final two rows using a ripple carry adder
+    assert(partialProducts.size() == 2);
+    // Use a parallel prefix adder for the final addition
+    // Reverse the order of the bits
+    std::reverse(partialProducts[0].begin(), partialProducts[0].end());
+    std::reverse(partialProducts[1].begin(), partialProducts[1].end());
+    auto lhs = rewriter.create<comb::ConcatOp>(
+        loc, ArrayRef(partialProducts[0]).take_front(width));
+    auto rhs = rewriter.create<comb::ConcatOp>(
+        loc, ArrayRef(partialProducts[1]).take_front(width));
+    return rewriter.create<comb::AddOp>(loc, ArrayRef<Value>{lhs, rhs}, true);
   }
 };
 
