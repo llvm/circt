@@ -45,7 +45,10 @@ StringRef legalizeName(llvm::StringRef name,
 ///
 /// Call \c legalizeName() to obtain a legal version of the name.  If \p
 /// caseInsensitive is true, then the check will be done case insensitively.
-bool isNameValid(llvm::StringRef name, bool caseInsensitiveKeywords);
+/// If \p allowEscapedName is true, IEEE-compliant escaped names are allowed to
+/// pass the check.
+bool isNameValid(llvm::StringRef name, bool caseInsensitiveKeywords,
+                 bool allowEscapedName = false);
 
 } // namespace sv
 } // namespace circt

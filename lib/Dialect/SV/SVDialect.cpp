@@ -158,9 +158,21 @@ StringRef circt::sv::legalizeName(StringRef name,
 /// allowed in SV identifiers.
 ///
 /// Call \c legalizeName() to obtain a legalized version of the name.
-bool circt::sv::isNameValid(StringRef name, bool caseInsensitiveKeywords) {
+bool circt::sv::isNameValid(StringRef name, bool caseInsensitiveKeywords,
+                            bool allowEscapedName) {
   if (name.empty())
     return false;
+  if (allowEscapedName && name.front() == '\\') {
+    // Check if the name is a valid escaped name.
+    if (name.size() < 2)
+      return false;
+    for (size_t i = 1; i < name.size(); ++i) {
+      bool isValidChar = llvm::isPrint(name[i]) && !llvm::isSpace(name[i]);
+      if (!isValidChar)
+        return false;
+    }
+    return true;
+  }
   if (!isValidVerilogCharacterFirst(name.front()))
     return false;
   for (char ch : name) {
