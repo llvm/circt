@@ -21,11 +21,13 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Location.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringSet.h"
+#include <tuple>
 
 using namespace circt;
 using namespace hw;
@@ -512,6 +514,65 @@ LogicalResult ParamValueOp::verify() {
 OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "hw.param.value has no operands");
   return getValueAttr();
+}
+
+void HWModuleOp::appendPorts(ArrayRef<PortInfo> ports,
+                             ArrayRef<Value> outputVals,
+                             SmallVectorImpl<Value> &inputVals) {
+
+  HWModuleOp module = *this;
+  auto *context = module->getContext();
+  auto oldType = module.getHWModuleType();
+  auto *body = module.getBodyBlock();
+
+  ArrayRef<ModulePort> oldPorts = oldType.getPorts();
+
+  unsigned newPortsCount = oldPorts.size() + ports.size();
+
+  SmallVector<ModulePort> newPorts;
+  newPorts.reserve(newPortsCount);
+  newPorts.append(oldPorts.begin(), oldPorts.end());
+
+  SmallVector<Attribute> newResultLocs;
+  if (!outputVals.empty()) {
+    // Update the output op.
+    auto oldResultLocs = module.getResultLocs();
+    if (oldResultLocs.has_value())
+      newResultLocs.append(oldResultLocs->getValue().begin(),
+                           oldResultLocs->getValue().end());
+    auto outputOp = cast<OutputOp>(body->getTerminator());
+    auto oldOperands = outputOp->getOperands();
+
+    SmallVector<Value> newOutputOperands;
+    llvm::append_range(newOutputOperands, oldOperands);
+    llvm::append_range(newOutputOperands, outputVals);
+    outputOp->setOperands(newOutputOperands);
+  }
+  auto oldPortAttrs = module.getAllPortAttrs();
+  SmallVector<Attribute> newPortAttrs(oldPortAttrs);
+  inputVals.reserve(ports.size() - outputVals.size());
+
+  for (auto &portInfo : ports) {
+    assert(!portInfo.isInOut() && "can only handle input or output ports");
+    if (portInfo.isInput())
+      inputVals.push_back(body->addArgument(portInfo.type, portInfo.loc));
+    else if (portInfo.isOutput())
+      newResultLocs.emplace_back(portInfo.loc);
+    newPorts.push_back(portInfo);
+    if (portInfo.attrs) {
+      if (newPortAttrs.empty() || newPortAttrs.size() < newPortsCount)
+        newPortAttrs.append(newPortsCount, {});
+      newPortAttrs[newPorts.size() - 1] = portInfo.attrs;
+    }
+  }
+
+  if (!outputVals.empty())
+    module.setResultLocsAttr(ArrayAttr::get(context, newResultLocs));
+
+  auto newType = ModuleType::get(context, newPorts);
+
+  module.setModuleType(newType);
+  module.setAllPortAttrs(newPortAttrs);
 }
 
 //===----------------------------------------------------------------------===//
