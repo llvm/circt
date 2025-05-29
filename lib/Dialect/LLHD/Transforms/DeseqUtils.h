@@ -155,7 +155,7 @@ struct ValueEntry {
 };
 
 /// A table of SSA values and the conditions under which they appear. This
-/// struct can be used to track the various concrete values and SSA value may
+/// struct can be used to track the various concrete values an SSA value may
 /// assume depending on how control flow reaches it.
 struct ValueTable {
   SmallVector<std::pair<TruthTable, ValueEntry>, 1> entries;

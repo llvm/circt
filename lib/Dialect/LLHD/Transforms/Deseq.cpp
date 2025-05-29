@@ -79,7 +79,7 @@ struct Deseq {
   ProcessOp process;
   /// The single wait op of the process.
   WaitOp wait;
-  /// The boolean values observed by the wait. These trigger the process to and
+  /// The boolean values observed by the wait. These trigger the process and
   /// may cause the described register to update its value.
   SmallSetVector<Value, 2> triggers;
   /// The values carried from the past into the present as destination operands
@@ -906,7 +906,7 @@ bool Deseq::matchDriveClockAndReset(
   }
 
   // Resets take precedence over the clock, which shows up as `/rst` and
-  // `/clk&rst` entries in the value table. We simply try all variant until we
+  // `/clk&rst` entries in the value table. We simply try all variants until we
   // find the one that fits.
   for (unsigned variant = 0; variant < (1 << 3); ++variant) {
     bool negClock = (variant >> 0) & 1;
