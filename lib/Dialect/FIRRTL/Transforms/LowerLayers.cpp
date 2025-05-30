@@ -21,6 +21,7 @@
 #include "circt/Support/Utils.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 
@@ -848,9 +849,13 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
     parent = layer->getParentOfType<LayerOp>();
   }
 
-  // Create IR to include bind files for child modules.
+  // Create IR to include bind files for child modules. If a module is
+  // instantiated more than once, we only need to include the bindfile once.
+  SmallPtrSet<Operation *, 8> seen;
   for (auto *record : *node) {
     auto *child = record->getTarget()->getModule().getOperation();
+    if (!std::get<bool>(seen.insert(child)))
+      continue;
     auto files = bindFiles[child];
     auto lookup = files.find(layer);
     if (lookup != files.end())

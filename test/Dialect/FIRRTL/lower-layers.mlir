@@ -688,3 +688,24 @@ firrtl.circuit "Top" {
   // CHECK-NOT: emit.file "layers-Top-Bound-Inline.sv"
   firrtl.module @Top() {}
 }
+
+// -----
+
+// Check that no duplicate include statements are generated.
+firrtl.circuit "Top" {
+  firrtl.layer @Layer bind {}
+
+  firrtl.module @Component() {
+    firrtl.layerblock @Layer {}
+  }
+
+  // There should only be one include statement.
+  // CHECK:     emit.file "layers-Top-Layer.sv"
+  // CHECK:     sv.include  local "layers-Component-Layer.sv"
+  // CHECK-NOT: sv.include  local "layers-Component-Layer.sv"
+  firrtl.module @Top() {
+    firrtl.instance component1 @Component()
+    firrtl.instance component2 @Component()
+  }
+}
+
