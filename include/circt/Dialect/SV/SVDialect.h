@@ -48,7 +48,7 @@ StringRef legalizeName(llvm::StringRef name,
 /// If \p allowEscapedName is true, IEEE-compliant escaped names are allowed to
 /// pass the check.
 bool isNameValid(llvm::StringRef name, bool caseInsensitiveKeywords,
-                 bool allowEscapedName = false);
+                 bool allowEscapedName = true);
 
 } // namespace sv
 } // namespace circt
