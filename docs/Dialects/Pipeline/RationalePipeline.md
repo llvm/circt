@@ -32,21 +32,24 @@ operations representing a dataflow graph.
 
 ### Phase 2: Scheduled
 
-Uisng e.g. the `pipeline-schedule-linear` pass, a pipeline may be scheduled wrt.
+Using e.g. the `pipeline-schedule-linear` pass, a pipeline may be scheduled wrt.
 an operator library denoting the latency of each operation. The result of a scheduling
 problem is the movement of operations to specific blocks.
 Each block represents a pipeline stage, with `pipeline.stage` operations being
 stage-terminating operations that determine the order of stages.
 
 At this level, the semantics of the pipeline are that **any SSA def-use edge that
-crosses a stage is a pipeline register**.  
-Note that we also intend to add support for attaching multi-cycle latencies to
-SSA values in the future, which will allow for more fine-grained control over
-the registers in the pipeline.  
+crosses a stage is a pipeline register**. To prevent cross-block canonicalization
+to occur post-scheduling, these def-use edges must be expressed using the
+`pipeline.src` operation, which is used to refer a value from within the basic
+block that uses it, but which is defined in _any_ prior, dominating stage (block).  
 Given these relaxed semantics, this level of abstraction is suitable for pipeline
 retiming. Operations may be moved from one stage to another, or new blocks may be
 inserted between existing blocks, without changing the semantics of the pipeline.
 The only requirement is that def-use edges wrt. the order of stages are preserved.
+For expressing semantics about multi-cycle latencies of SSA, please refer to the
+`multicycle operations` segment below.  
+
 
 ```mlir
 %out = pipeline.scheduled(%arg0, %arg1, %go) clock %clk reset %rst : (i32, i32, i1) -> (i32) {
@@ -55,12 +58,18 @@ The only requirement is that def-use edges wrt. the order of stages are preserve
   pipeline.stage ^bb1 enable %go
 
 ^bb1:
-  %add1 = comb.add %add0, %a0 : i32 // %a0 is a block argument fed through a stage.
+  // %add0, %a0 is referenced in this stage via. dominance, w/ pipeline.src
+  // preventing cross-block canonicalization.
+  %add0_bb1 = pipeline.src %add0 : i32
+  %a0_bb1 = pipeline.src %a0 : i32
+  %add1 = comb.add %add0_bb1, %a0_bb1 : i32
   pipeline.stage ^bb2 enable %go
 
 ^bb2:
-  %add2 = comb.add %add1, %add0 : i32 // %add0 crosses multiple stages.
-  pipeline.return %add2 enable %go : i32 // %go crosses multiple stages
+  %add0_bb2 = pipeline.src %add0 : i32
+  %add1_bb2 = pipeline.src %add1 : i32
+  %add2 = comb.add %add1_bb2, %add0_bb2 : i32 // %add0 crosses multiple stages.
+  pipeline.return %add2 enable %go : i32   // %go crosses multiple stages
 }
 ```
 
@@ -145,7 +154,8 @@ pipeline.stage ^bb4
 ^bb4:
 // It is legal to reference %out here. This will also imply a register
 // between stage bb3 and bb4.
-foo.bar %out : i32
+%out_bb4 = pipeline.src %out : i32
+foo.bar %out_bb4 : i32
 ```
 
 which will register materialize to:
@@ -157,14 +167,14 @@ which will register materialize to:
   %dl2 = seq.compreg %dl1 : i32
   pipeline.latency.return %dl2 : i32
 }
-pipeline.stage ^bb2 pass(%out : i32)
+pipeline.stage ^bb2 pass(%out : i32)    // %out is passed through
 
 ^bb2(%out_s2 : i32):
-pipeline.stage ^bb3 pass(%out_s2 : i32)
+pipeline.stage ^bb3 pass(%out_s2 : i32) // %out is passed through
 
 
 ^bb3(%out_s3 : i32):
-pipeline.stage ^bb4 regs(%out_s3 : i32)
+pipeline.stage ^bb4 regs(%out_s3 : i32) // %out is registered
 
 ^bb4(%out_s4 : i32):
 foo.bar %out_s4 : i32

@@ -27,7 +27,8 @@ hw.module @unterminated(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !
     %0 = comb.add %a0, %a1 : i32
 
   ^bb1(%s1_enable : i1):
-    pipeline.stage ^bb2 regs(%0 : i32)
+    %bb1_0 = pipeline.src %0 : i32
+    pipeline.stage ^bb2 regs(%bb1_0 : i32)
 
   ^bb2(%s2_s0 : i32, %s2_enable : i1):
     pipeline.return %s2_s0 : i32
@@ -43,7 +44,7 @@ hw.module @mixed_stages(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !
     pipeline.stage ^bb1
 
   ^bb1(%s1_enable : i1):
-  // expected-error @+1 {{'pipeline.stage' op Pipeline is in register materialized mode - operand 0 is defined in a different stage, which is illegal.}}
+  // expected-error @+1 {{'pipeline.stage' op operand 0 is defined in a different stage. Value should have been passed through block arguments}}
     pipeline.stage ^bb2 regs(%0: i32)
 
   ^bb2(%s2_s0 : i32, %s2_enable : i1):
@@ -100,42 +101,13 @@ hw.module @earlyAccess(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk : !seq.
     }
     pipeline.stage ^bb1
   ^bb1(%s1_enable : i1):
-    // expected-note@+1 {{use was operand 0. The result is available 1 stages later than this use.}}
-    pipeline.return %1 : i32
+    // expected-note@below {{use was operand 0. The result is available 1 stages later than this use.}}
+    %bb1_1 = pipeline.src %1 : i32
+    pipeline.return %bb1_1 : i32
   }
   hw.output %0#0 : i32
 }
 
-// -----
-
-// Test which verifies that the values referenced within the body of a
-// latency operation also adhere to the latency constraints.
-hw.module @earlyAccess2(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk : !seq.clock, in %rst: i1, out out: i32) {
-  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
-    // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
-    %1 = pipeline.latency 2 -> (i32) {
-      %res = comb.add %a0, %a0 : i32
-      pipeline.latency.return %res : i32
-    }
-    pipeline.stage ^bb1
-
-  ^bb1(%s1_enable : i1):
-    %2 = pipeline.latency 2 -> (i32) {
-      %c1_i32 = hw.constant 1 : i32
-      // expected-note@+1 {{use was operand 0. The result is available 1 stages later than this use.}}
-      %res2 = comb.add %1, %c1_i32 : i32
-      pipeline.latency.return %res2 : i32
-    }
-    pipeline.stage ^bb2
-
-  ^bb2(%s2_enable : i1):
-    pipeline.stage ^bb3
-
-  ^bb3(%s3_enable : i1):
-    pipeline.return %2 : i32
-  }
-  hw.output %0#0 : i32
-}
 
 // -----
 
@@ -194,7 +166,8 @@ hw.module @noStallSignalWithStallability(in %arg0 : i32, in %go : i1, in %clk : 
    ^bb2(%s2_enable : i1):
     pipeline.stage ^bb3
    ^bb3(%s3_enable : i1):
-    pipeline.return %a0 : i32
+    %bb3_a0 = pipeline.src %a0 : i32
+    pipeline.return %bb3_a0 : i32
   }
   hw.output %0 : i32
 }
@@ -212,7 +185,41 @@ hw.module @incorrectStallabilitySize(in %arg0 : i32, in %go : i1, in %clk : !seq
    ^bb2(%s2_enable : i1):
     pipeline.stage ^bb3
    ^bb3(%s3_enable : i1):
-    pipeline.return %a0 : i32
+    %a0_bb3 = pipeline.src %a0 : i32
+    pipeline.return %a0_bb3 : i32
   }
   hw.output %0 : i32
+}
+
+// -----
+
+hw.module @unmaterialized_latency_with_missing_src(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
+    %0 = comb.add %a0, %a1 : i32
+    pipeline.stage ^bb1
+   ^bb1(%s1_enable : i1):
+    %1 = pipeline.latency 1 -> (i32) {
+      // expected-error @below {{'comb.add' op operand 0 is defined in a different stage. Value should have been passed through a `pipeline.src` op}}
+      %2 = comb.add %0, %0 : i32
+      pipeline.latency.return %2 : i32
+    }
+    pipeline.stage ^bb2
+  ^bb2(%s2_enable : i1):
+    %bb2_1 = pipeline.src %1 : i32
+    pipeline.return %bb2_1 : i32
+  }
+  hw.output %0 : i32
+}
+
+// -----
+
+hw.module @invalid_pipeline_src(in %arg : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1) {
+  %res, %done = pipeline.scheduled(%a0 : i32 = %arg) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
+     pipeline.stage ^bb1 regs(%a0 : i32)
+   ^bb1(%0 : i32, %s1_enable : i1):
+      // expected-error @below {{'pipeline.src' op Pipeline is in register materialized mode - pipeline.src operations are not allowed}}
+      %a0_bb1 = pipeline.src %a0 : i32
+      pipeline.return %0 : i32
+  }
+  hw.output
 }

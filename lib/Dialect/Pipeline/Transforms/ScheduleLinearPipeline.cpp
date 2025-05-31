@@ -198,10 +198,33 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 
   for (auto [startTime, ops] : stageMap) {
     Block *stage = schedPipeline.getStage(startTime);
+
+    // Caching of SourceOp passthrough values defined in this stage.
+    mlir::DenseMap<Value, Value> sourceOps;
+    auto getOrCreateSourceOp = [&](OpOperand &opOperand) {
+      Value v = opOperand.get();
+      auto it = sourceOps.find(v);
+      if (it == sourceOps.end()) {
+        b.setInsertionPoint(opOperand.getOwner());
+        it = sourceOps
+                 .try_emplace(v, b.create<SourceOp>(v.getLoc(), v).getResult())
+                 .first;
+      }
+      return it->second;
+    };
+
     assert(stage && "Stage not found");
     Operation *stageTerminator = stage->getTerminator();
-    for (auto *op : ops)
+    for (auto *op : ops) {
       op->moveBefore(stageTerminator);
+
+      // If the operation references values defined outside of this stage,
+      // modify their uses to point to the corresponding SourceOp.
+      for (OpOperand &operand : op->getOpOperands()) {
+        if (operand.get().getParentBlock() != stage)
+          operand.set(getOrCreateSourceOp(operand));
+      }
+    }
   }
 
   // Remove the unscheduled pipeline

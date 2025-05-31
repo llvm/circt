@@ -16,32 +16,39 @@
 // CHECK:           operator_type @comb.shrs [latency<1>]
 // CHECK:         }
 
-// CHECK-LABEL:   kanagawa.class sym @SchedulePipeline {
-// CHECK:           kanagawa.method.df @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> i32 {
-// CHECK:             %[[VAL_3:.*]] = kanagawa.sblock.isolated (%[[VAL_4:.*]] : i32 = %[[VAL_1]], %[[VAL_5:.*]] : i32 = %[[VAL_2]]) -> i32 {
-// CHECK:               %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]] = kanagawa.pipeline.header
-// CHECK:               %[[VAL_10:.*]], %[[VAL_11:.*]] = pipeline.scheduled(%[[VAL_12:.*]] : i32 = %[[VAL_4]], %[[VAL_13:.*]] : i32 = %[[VAL_5]]) stall(%[[VAL_9]]) clock(%[[VAL_6]]) reset(%[[VAL_7]]) go(%[[VAL_8]]) entryEn(%[[VAL_14:.*]])  -> (out0 : i32) {
-// CHECK:                 %[[VAL_15:.*]] = comb.mul %[[VAL_12]], %[[VAL_13]] {ssp.operator_type = @comb.mul} : i32
-// CHECK:                 pipeline.stage ^bb1
-// CHECK:               ^bb1(%[[VAL_16:.*]]: i1):
-// CHECK:                 %[[VAL_17:.*]] = comb.add %[[VAL_12]], %[[VAL_13]] {ssp.operator_type = @comb.add} : i32
-// CHECK:                 pipeline.stage ^bb2
-// CHECK:               ^bb2(%[[VAL_18:.*]]: i1):
-// CHECK:                 %[[VAL_19:.*]] = comb.sub %[[VAL_17]], %[[VAL_15]] {ssp.operator_type = @comb.sub} : i32
-// CHECK:                 pipeline.stage ^bb3
-// CHECK:               ^bb3(%[[VAL_20:.*]]: i1):
-// CHECK:                 %[[VAL_21:.*]] = comb.mul %[[VAL_19]], %[[VAL_17]] {ssp.operator_type = @comb.mul} : i32
-// CHECK:                 pipeline.stage ^bb4
-// CHECK:               ^bb4(%[[VAL_22:.*]]: i1):
-// CHECK:                 pipeline.stage ^bb5
-// CHECK:               ^bb5(%[[VAL_23:.*]]: i1):
-// CHECK:                 pipeline.return %[[VAL_21]] : i32
+// CHECK:           kanagawa.class sym @SchedulePipeline {
+// CHECK:             kanagawa.method.df @foo(%[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32)  -> i32 {
+// CHECK:               %[[VAL_2:.*]] = kanagawa.sblock.isolated (%[[VAL_3:.*]] : i32 = %[[VAL_0]], %[[VAL_4:.*]] : i32 = %[[VAL_1]]) -> i32 {
+// CHECK:                 %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]] = kanagawa.pipeline.header
+// CHECK:                 %[[VAL_9:.*]], %[[VAL_10:.*]] = pipeline.scheduled(%[[VAL_11:.*]] : i32 = %[[VAL_3]], %[[VAL_12:.*]] : i32 = %[[VAL_4]]) stall(%[[VAL_8]]) clock(%[[VAL_5]]) reset(%[[VAL_6]]) go(%[[VAL_7]]) entryEn(%[[VAL_13:.*]])  -> (out0 : i32) {
+// CHECK:                   %[[VAL_14:.*]] = comb.mul %[[VAL_11]], %[[VAL_12]] {ssp.operator_type = @comb.mul} : i32
+// CHECK:                   pipeline.stage ^bb1
+// CHECK:                 ^bb1(%[[VAL_15:.*]]: i1):
+// CHECK:                   %[[VAL_16:.*]] = pipeline.src %[[VAL_11]] : i32
+// CHECK:                   %[[VAL_17:.*]] = pipeline.src %[[VAL_12]] : i32
+// CHECK:                   %[[VAL_18:.*]] = comb.add %[[VAL_16]], %[[VAL_17]] {ssp.operator_type = @comb.add} : i32
+// CHECK:                   pipeline.stage ^bb2
+// CHECK:                 ^bb2(%[[VAL_19:.*]]: i1):
+// CHECK:                   %[[VAL_20:.*]] = pipeline.src %[[VAL_18]] : i32
+// CHECK:                   %[[VAL_21:.*]] = pipeline.src %[[VAL_14]] : i32
+// CHECK:                   %[[VAL_22:.*]] = comb.sub %[[VAL_20]], %[[VAL_21]] {ssp.operator_type = @comb.sub} : i32
+// CHECK:                   pipeline.stage ^bb3
+// CHECK:                 ^bb3(%[[VAL_23:.*]]: i1):
+// CHECK:                   %[[VAL_24:.*]] = pipeline.src %[[VAL_22]] : i32
+// CHECK:                   %[[VAL_25:.*]] = pipeline.src %[[VAL_18]] : i32
+// CHECK:                   %[[VAL_26:.*]] = comb.mul %[[VAL_24]], %[[VAL_25]] {ssp.operator_type = @comb.mul} : i32
+// CHECK:                   pipeline.stage ^bb4
+// CHECK:                 ^bb4(%[[VAL_27:.*]]: i1):
+// CHECK:                   pipeline.stage ^bb5
+// CHECK:                 ^bb5(%[[VAL_28:.*]]: i1):
+// CHECK:                   %[[VAL_29:.*]] = pipeline.src %[[VAL_26]] : i32
+// CHECK:                   pipeline.return %[[VAL_29]] : i32
+// CHECK:                 }
+// CHECK:                 kanagawa.sblock.return %[[VAL_30:.*]] : i32
 // CHECK:               }
-// CHECK:               kanagawa.sblock.return %[[VAL_24:.*]] : i32
+// CHECK:               kanagawa.return %[[VAL_2]] : i32
 // CHECK:             }
-// CHECK:             kanagawa.return %[[VAL_3]] : i32
 // CHECK:           }
-// CHECK:         }
 
 kanagawa.design @foo {
 kanagawa.class sym @SchedulePipeline {

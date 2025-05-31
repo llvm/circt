@@ -244,6 +244,26 @@ def ScheduledPipelineOp : PipelineBase<"scheduled"> {
   }];
 }
 
+def SourceOp : Op<Pipeline_Dialect, "src", [
+  TypesMatchWith<"input and result types are equivalent", "input", "output", "$_self">,
+  HasParent<"ScheduledPipelineOp">,
+  ]> {
+  let summary = "Pipeline source operation";
+  let description = [{
+    The `pipeline.src` operation represents a source operation in a scheduled,
+    non-register materialized pipeline.
+    It is used as a canonicalization barrier to prevent cross-block canonicalization
+    of operations that are not allowed to be moved or mutated across pipeline
+    stages (i.e. MLIR blocks).
+
+    To facilitate this, the operation is _not_ marked as `Pure`.
+  }];
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $input `:` type($input) attr-dict
+  }];
+}
 
 def StageOp : Op<Pipeline_Dialect, "stage", [
     AttrSizedOperandSegments,
