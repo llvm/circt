@@ -115,7 +115,8 @@ struct Context {
 
   // Convert an expression AST node to MLIR ops.
   Value convertRvalueExpression(const slang::ast::Expression &expr,
-                                Type requiredType = {});
+                                Type requiredType = {},
+                                bool isAssignmentContextRhs = false);
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   // Traverse the whole AST to collect hierarchical names.
