@@ -24,7 +24,8 @@ hw.module @nonstallable_test1(in %arg0: i32, in %go: i1, in %clock: !seq.clock, 
   ^bb4(%s4_enable: i1):
     pipeline.stage ^bb5
   ^bb5(%s5_enable: i1):
-    pipeline.return %a0 : i32
+    %a0_bb5 = pipeline.src %a0 : i32
+    pipeline.return %a0_bb5 : i32
   }
   hw.output %out, %done : i32, i1
 }

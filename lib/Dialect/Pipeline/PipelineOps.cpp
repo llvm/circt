@@ -533,13 +533,50 @@ Block *ScheduledPipelineOp::getLastStage() { return getOrderedStages().back(); }
 
 bool ScheduledPipelineOp::isMaterialized() {
   // We determine materialization as if any pipeline stage has an explicit
-  // input (apart from the stage valid signal).
+  // input (apart from the stage enable signal).
   return llvm::any_of(getStages(), [this](Block &block) {
     // The entry stage doesn't count since it'll always have arguments.
     if (&block == getEntryStage())
       return false;
     return block.getNumArguments() > 1;
   });
+}
+
+// Returns true if 'current' is nested somewhere within the 'parent' block,
+// or current == parent.
+// `stopAt` is provided as a termination condition for the recursive lookup.
+// Once stopAt is encountered, `isNestedBlock` will return false.
+static bool isNestedBlock(Block *stopAt, Block *parent, Block *current) {
+  while (current) {
+    if (current == stopAt)
+      return false;
+    if (current == parent)
+      return true;
+    current = current->getParentOp()->getBlock();
+  }
+  return false;
+}
+
+// Check whether the value referenced by `use` is defined within the provided
+// `stage`. It is assumed that the OpOperand `use` (i.e. the operation that owns
+// `use`) is defined within `stage`.
+// `stopAt` is provided as a termination condition for the recursive lookup.
+// Once stopAt is encountered, `isNestedBlock` will return false.
+static bool useDefinedInStage(Block *stopAt, Block *stage, OpOperand &use) {
+  Block *useBlock = use.getOwner()->getBlock();
+  Block *definingBlock = use.get().getParentBlock();
+
+  assert(isNestedBlock(stopAt, stage, useBlock) &&
+         "use` must originate from within `stage`");
+
+  // Common-case checks...
+  if (useBlock == definingBlock || stage == definingBlock)
+    return true;
+
+  // Else, recurse upwards from the defining block to see if we can find the
+  // stage.
+  Block *currBlock = definingBlock;
+  return isNestedBlock(stopAt, stage, currBlock);
 }
 
 LogicalResult ScheduledPipelineOp::verify() {
@@ -579,38 +616,61 @@ LogicalResult ScheduledPipelineOp::verify() {
   if (hasStall())
     extLikeInputs.insert(getStall());
 
-  // Phase invariant - if any block has arguments apart from the stage valid
-  // argument, we are in register materialized mode. Check that all values
-  // used within a stage are defined within the stage.
+  // Phase invariant - Check that all values used within a stage are valid
+  // based on the materialization mode. This is a walk, since this condition
+  // should also apply to nested operations.
   bool materialized = isMaterialized();
-  if (materialized) {
-    for (auto &stage : stages) {
-      for (auto &op : stage) {
-        for (auto [index, operand] : llvm::enumerate(op.getOperands())) {
-          bool err = false;
-          if (extLikeInputs.contains(operand)) {
-            // This is an external input; legal to reference everywhere.
+  Block *parentBlock = getOperation()->getBlock();
+  for (auto &stage : stages) {
+    auto walkRes = stage.walk([&](Operation *op) {
+      // Skip pipeline.src operations in non-materialized mode
+      if (isa<SourceOp>(op)) {
+        if (materialized) {
+          op->emitOpError(
+              "Pipeline is in register materialized mode - pipeline.src "
+              "operations are not allowed");
+          return WalkResult::interrupt();
+        }
+
+        // In non-materialized mode, pipeline.src operations are required, and
+        // is what is implicitly allowing cross-stage referenced by not
+        // reaching the below verification code.
+        return WalkResult::advance();
+      }
+
+      for (auto [index, operand] : llvm::enumerate(op->getOpOperands())) {
+        // External inputs (including clock, reset, stall) are allowed
+        // everywhere
+        if (extLikeInputs.contains(operand.get()))
+          continue;
+
+        // Constant-like inputs are allowed everywhere
+        if (auto *definingOp = operand.get().getDefiningOp()) {
+          // Constants are allowed to be used across stages.
+          if (definingOp->hasTrait<OpTrait::ConstantLike>())
             continue;
-          }
+        }
 
-          if (auto *definingOp = operand.getDefiningOp()) {
-            // Constants are allowed to be used across stages.
-            if (definingOp->hasTrait<OpTrait::ConstantLike>())
-              continue;
-            err = definingOp->getBlock() != &stage;
+        // Values must always be defined in the same stage.
+        // Materialization mode defines the actual mitigation method.
+        if (!useDefinedInStage(parentBlock, &stage, operand)) {
+          auto err = op->emitOpError("operand ")
+                     << index << " is defined in a different stage. ";
+          if (materialized) {
+            err << "Value should have been passed through block arguments";
           } else {
-            // This is a block argument;
-            err = !llvm::is_contained(stage.getArguments(), operand);
+            err << "Value should have been passed through a `pipeline.src` "
+                   "op";
           }
-
-          if (err)
-            return op.emitOpError(
-                       "Pipeline is in register materialized mode - operand ")
-                   << index
-                   << " is defined in a different stage, which is illegal.";
+          return WalkResult::interrupt();
         }
       }
-    }
+
+      return WalkResult::advance();
+    });
+
+    if (walkRes.wasInterrupted())
+      return failure();
   }
 
   if (auto stallability = getStallability()) {
@@ -1001,9 +1061,9 @@ LogicalResult LatencyOp::verify() {
     return success();
   }
 
-  // Verify that there's at least one result type. Latency ops don't make sense
-  // if they're not delaying anything, and we're not yet prepared to support
-  // side-effectful bodies.
+  // Verify that there's at least one result type. Latency ops don't make
+  // sense if they're not delaying anything, and we're not yet prepared to
+  // support side-effectful bodies.
   if (getNumResults() == 0)
     return emitOpError("expected at least one result type.");
 
