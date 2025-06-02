@@ -514,7 +514,8 @@ TruthTable Deseq::computeBoolean(OpResult value) {
         if (!operand.getType().isSignlessInteger(1))
           return false;
         auto result = computeBoolean(operand);
-        return result.isPoison() || result != getUnknownBoolean();
+        return result.isPoison() || (result != getUnknownBoolean() &&
+                                     !result.isTrue() && !result.isFalse());
       }))
     return getPoisonBoolean();
   return getUnknownBoolean();

@@ -893,3 +893,32 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
   llhd.drv %mem34, %1#68 after %0 if %1#69 : !hw.inout<i15>
   hw.output
 }
+
+// See https://github.com/llvm/circt/issues/8512
+// CHECK-LABEL: @OpOnConstantInputsMistakenlyPoison(
+hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[REG:%.+]] = seq.compreg.ce {{%.+}}, [[CLK]], {{%.+}} : i42
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = comb.xor bin %5, %true : i1
+    %7 = comb.and bin %6, %clock : i1
+    cf.cond_br %7, ^bb3, ^bb1(%c0_i42, %false : i42, i1)
+  ^bb3:
+    %8 = comb.icmp ne %false, %false : i1
+    %9 = comb.icmp eq %true, %true : i1
+    %10 = comb.xor %8, %9 : i1
+    cf.cond_br %10, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig %c0_i42 : i42
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+}
