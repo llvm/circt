@@ -67,7 +67,6 @@ struct Deseq {
   bool
   matchDriveClockAndReset(DriveInfo &drive,
                           ArrayRef<std::pair<DNFTerm, ValueEntry>> valueTable);
-  bool isValidResetValue(Value value);
 
   void implementRegisters();
   void implementRegister(DriveInfo &drive);
@@ -958,10 +957,6 @@ bool Deseq::matchDriveClockAndReset(
       LLVM_DEBUG(llvm::dbgs() << "- Aborting: inconsistent reset value\n");
       return false;
     }
-    if (!isValidResetValue(resetIt->second.value)) {
-      LLVM_DEBUG(llvm::dbgs() << "- Aborting: non-static reset value\n");
-      return false;
-    }
 
     // Populate the reset and clock info, and return.
     drive.reset.reset = triggers[resetIdx];
@@ -995,56 +990,6 @@ bool Deseq::matchDriveClockAndReset(
   // If we arrive here, none of the patterns we tried matched.
   LLVM_DEBUG(llvm::dbgs() << "- Aborting: unknown reset scheme\n");
   return false;
-}
-
-/// Check if a value is constant or only derived from constant values through
-/// side-effect-free operations. If it is, the value is guaranteed to never
-/// change.
-bool Deseq::isValidResetValue(Value value) {
-  auto result = dyn_cast<OpResult>(value);
-  if (!result)
-    return false;
-  if (auto it = staticOps.find(result.getOwner()); it != staticOps.end())
-    return it->second;
-
-  struct WorklistItem {
-    Operation *op;
-    OperandRange::iterator it;
-  };
-  SmallVector<WorklistItem> worklist;
-  worklist.push_back({result.getOwner(), result.getOwner()->operand_begin()});
-
-  while (!worklist.empty()) {
-    auto item = worklist.pop_back_val();
-    auto &isStatic = staticOps[item.op];
-    if (item.it == item.op->operand_begin()) {
-      if (item.op->hasTrait<OpTrait::ConstantLike>()) {
-        isStatic = true;
-        continue;
-      }
-      if (!isMemoryEffectFree(item.op))
-        continue;
-    }
-    if (item.it == item.op->operand_end()) {
-      isStatic = true;
-      continue;
-    } else {
-      auto result = dyn_cast<OpResult>(*item.it);
-      if (!result)
-        continue;
-      auto it = staticOps.find(result.getOwner());
-      if (it == staticOps.end()) {
-        worklist.push_back(item);
-        worklist.push_back(
-            {result.getOwner(), result.getOwner()->operand_begin()});
-      } else if (it->second) {
-        ++item.it;
-        worklist.push_back(item);
-      }
-    }
-  }
-
-  return staticOps.lookup(result.getOwner());
 }
 
 //===----------------------------------------------------------------------===//
