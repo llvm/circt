@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_TD
 
 include "mlir/IR/DialectBase.td"
+include "mlir/IR/OpBase.td"
 
 //===----------------------------------------------------------------------===//
 // LLHD dialect definition

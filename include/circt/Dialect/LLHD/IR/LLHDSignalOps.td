@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/LLHD/IR/LLHDDialect.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 

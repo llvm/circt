@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/LLHD/IR/LLHDDialect.td"
+include "circt/Dialect/LLHD/IR/LLHDTypes.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 def ConstantTimeOp : LLHDOp<"constant_time",
                                   [ConstantLike, Pure]> {
   let summary = "Introduce a new time constant.";

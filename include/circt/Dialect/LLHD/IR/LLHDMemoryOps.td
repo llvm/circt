@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/LLHD/IR/LLHDDialect.td"
+
 def VarOp : LLHDOp<"var", [
     TypesMatchWith<
       "type of 'init' and underlying type of 'result' have to match.",

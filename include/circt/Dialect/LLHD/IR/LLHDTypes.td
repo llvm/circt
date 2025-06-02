@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD
 
 include "circt/Dialect/LLHD/IR/LLHDDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
