@@ -384,10 +384,7 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 
 // --- Trigger Ops ---
 
-def OnEdgeOp : SimOp<"on_edge", [
-  Pure,
-  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
-]> {
+def OnEdgeOp : SimOp<"on_edge", [Pure]> {
   let summary = "Create a trigger that gets invoked on a clock edge event.";
   let arguments = (ins ClockType:$clock, EventControlAttr:$event);
   let results = (outs EdgeTriggerType:$result);

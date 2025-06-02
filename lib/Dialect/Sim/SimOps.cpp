@@ -397,18 +397,6 @@ LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
   return failure();
 }
 
-// --- OnEdgeOp ---
-
-LogicalResult OnEdgeOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
-    SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto eventAttr = properties.as<OnEdgeOp::Properties *>()->getEvent();
-  inferredReturnTypes.emplace_back(
-      EdgeTriggerType::get(context, eventAttr.getValue()));
-  return success();
-}
-
 // --- TriggeredOp ---
 
 LogicalResult TriggeredOp::verify() {
