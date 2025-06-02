@@ -11,3 +11,12 @@ __all__ = [
     "AcceleratorConnection", "AppID", "Type", "BundleType", "ChannelType",
     "ArrayType", "StructType", "BitsType", "UIntType", "SIntType"
 ]
+
+def get_cmake_dir():
+    """
+    Returns the directory where the CMake files for the ESI runtime are located.
+    """
+    import os
+    from pathlib import Path
+    
+    return os.path.join(os.path.dirname(__file__), "cmake")
