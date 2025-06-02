@@ -542,11 +542,32 @@ bool ScheduledPipelineOp::isMaterialized() {
   });
 }
 
+// Returns true if 'current' is nested somewhere within the 'parent' block,
+// or current == parent.
+// `stopAt` is provided as a termination condition for the recursive lookup.
+// Once stopAt is encountered, `isNestedBlock` will return false.
+static bool isNestedBlock(Block *stopAt, Block *parent, Block *current) {
+  while (current) {
+    if (current == stopAt)
+      return false;
+    if (current == parent)
+      return true;
+    current = current->getParentOp()->getBlock();
+  }
+  return false;
+}
+
 // Check whether the value referenced by `use` is defined within the provided
-// `stage`. It is assumed that `use` originates from within `stage`.
-static bool useDefinedInStage(Block *stage, OpOperand &use) {
+// `stage`. It is assumed that the OpOperand `use` (i.e. the operation that owns
+// `use`) is defined within `stage`.
+// `stopAt` is provided as a termination condition for the recursive lookup.
+// Once stopAt is encountered, `isNestedBlock` will return false.
+static bool useDefinedInStage(Block *stopAt, Block *stage, OpOperand &use) {
   Block *useBlock = use.getOwner()->getBlock();
   Block *definingBlock = use.get().getParentBlock();
+
+  assert(isNestedBlock(stopAt, stage, useBlock) &&
+         "use` must originate from within `stage`");
 
   // Common-case checks...
   if (useBlock == definingBlock || stage == definingBlock)
@@ -555,13 +576,7 @@ static bool useDefinedInStage(Block *stage, OpOperand &use) {
   // Else, recurse upwards from the defining block to see if we can find the
   // stage.
   Block *currBlock = definingBlock;
-  while (currBlock) {
-    currBlock = currBlock->getParentOp()->getBlock();
-    if (currBlock == stage)
-      return true;
-  }
-
-  return false;
+  return isNestedBlock(stopAt, stage, currBlock);
 }
 
 LogicalResult ScheduledPipelineOp::verify() {
@@ -605,6 +620,7 @@ LogicalResult ScheduledPipelineOp::verify() {
   // based on the materialization mode. This is a walk, since this condition
   // should also apply to nested operations.
   bool materialized = isMaterialized();
+  Block *parentBlock = getOperation()->getBlock();
   for (auto &stage : stages) {
     auto walkRes = stage.walk([&](Operation *op) {
       // Skip pipeline.src operations in non-materialized mode
@@ -635,9 +651,9 @@ LogicalResult ScheduledPipelineOp::verify() {
             continue;
         }
 
-        // In any materialization mode, values must be defined in the same
-        // stage.
-        if (!useDefinedInStage(&stage, operand)) {
+        // Values must always be defined in the same stage.
+        // Materialization mode defines the actual mitigation method.
+        if (!useDefinedInStage(parentBlock, &stage, operand)) {
           auto err = op->emitOpError("operand ")
                      << index << " is defined in a different stage. ";
           if (materialized) {

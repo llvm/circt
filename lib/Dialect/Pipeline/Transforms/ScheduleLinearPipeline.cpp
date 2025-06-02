@@ -201,7 +201,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 
     // Caching of SourceOp passthrough values defined in this stage.
     mlir::DenseMap<Value, Value> sourceOps;
-    auto getOrCreateSourceOp = [&](OpOperand &opOperand) {
+    auto getOrCreateSourceOp = [&](OpOperand &opOperand) -> Value {
       Value v = opOperand.get();
       auto it = sourceOps.find(v);
       if (it == sourceOps.end()) {
