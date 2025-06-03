@@ -51,10 +51,10 @@ hw.module @add_64(in %lhs: i64, in %rhs: i64, out out: i64) {
 // ALLOW_ADD-LABEL: @sub
 // ALLOW_ADD-NEXT: %[[NOT_RHS:.+]] = aig.and_inv not %rhs
 // ALLOW_ADD-NEXT: %[[CONST:.+]] = hw.constant 1 : i4
-// ALLOW_ADD-NEXT: %[[ADD:.+]] = comb.add bin %lhs, %[[NOT_RHS]], %[[CONST]]
+// ALLOW_ADD-NEXT: %[[ADD:.+]] = comb.add bin %lhs, %[[NOT_RHS]], %[[CONST]] {sv.namehint = "sub"}
 // ALLOW_ADD-NEXT: hw.output %[[ADD]]
 hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
-  %0 = comb.sub %lhs, %rhs : i4
+  %0 = comb.sub %lhs, %rhs {sv.namehint = "sub"} : i4
   hw.output %0 : i4
 }
 
