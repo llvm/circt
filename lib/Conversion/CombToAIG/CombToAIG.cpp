@@ -671,15 +671,13 @@ struct CombSubOpConversion : OpConversionPattern<SubOp> {
 // Construct a full adder for three 1-bit inputs.
 std::pair<Value, Value> fullAdder(ConversionPatternRewriter &rewriter,
                                   Location loc, Value a, Value b, Value c) {
-
-  Value sum =
-      rewriter.createOrFold<comb::XorOp>(loc, ArrayRef<Value>{a, b, c}, true);
+  auto aXorB = rewriter.createOrFold<comb::XorOp>(loc, a, b, true);
+  Value sum = rewriter.createOrFold<comb::XorOp>(loc, aXorB, c, true);
 
   auto carry = rewriter.createOrFold<comb::OrOp>(
       loc,
-      ArrayRef<Value>{rewriter.createOrFold<comb::AndOp>(loc, a, b),
-                      rewriter.createOrFold<comb::AndOp>(loc, b, c),
-                      rewriter.createOrFold<comb::AndOp>(loc, c, a)},
+      ArrayRef<Value>{rewriter.createOrFold<comb::AndOp>(loc, a, b, true),
+                      rewriter.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
       true);
 
   return {sum, carry};
@@ -739,7 +737,8 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
   }
 
 private:
-  // Perform Wallace tree reduction on partial products
+  // Perform Wallace tree reduction on partial products.
+  // See https://en.wikipedia.org/wiki/Wallace_tree
   static Value
   wallaceReduction(Value falseValue, size_t width,
                    ConversionPatternRewriter &rewriter, Location loc,
