@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Support/UnusedOpPruner.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
@@ -642,27 +643,6 @@ struct Promoter {
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
 
-  void eraseLaterIfUnused(ValueRange values) {
-    for (auto value : values)
-      eraseLaterIfUnused(value);
-  }
-
-  void eraseLaterIfUnused(Value value) {
-    if (value)
-      if (auto *defOp = value.getDefiningOp())
-        eraseLaterIfUnused(defOp);
-  }
-
-  void eraseLaterIfUnused(Operation *op) {
-    if (op)
-      opsToEraseIfUnused.insert(op);
-  }
-
-  void eraseOp(Operation *op) {
-    opsToEraseIfUnused.erase(op);
-    op->erase();
-  }
-
   /// The region we are promoting in.
   Region &region;
 
@@ -682,9 +662,8 @@ struct Promoter {
   /// A worklist of lattice nodes used within calls to `propagate*`.
   SmallPtrSet<LatticeNode *, 4> dirtyNodes;
 
-  /// The set of operations that may have become unused through the IR changes
-  /// made during the promotion. We try to clean these up later.
-  SmallDenseSet<Operation *> opsToEraseIfUnused;
+  /// Helper to clean up unused ops.
+  UnusedOpPruner pruner;
 };
 } // namespace
 
@@ -742,15 +721,7 @@ LogicalResult Promoter::promote() {
   insertBlockArgs();
 
   // Erase operations that have become unused.
-  while (!opsToEraseIfUnused.empty()) {
-    auto it = opsToEraseIfUnused.begin();
-    auto *op = *it;
-    opsToEraseIfUnused.erase(it);
-    if (!isOpTriviallyDead(op))
-      continue;
-    eraseLaterIfUnused(op->getOperands());
-    op->erase();
-  }
+  pruner.eraseNow();
 
   return success();
 }
@@ -1440,8 +1411,7 @@ void Promoter::insertDrives(DriveNode *node) {
   if (!promotable.contains(getSlot(node->slot)))
     return;
   LLVM_DEBUG(llvm::dbgs() << "- Removing drive " << *node->op << "\n");
-  eraseLaterIfUnused(node->op->getOperands());
-  eraseOp(node->op);
+  pruner.eraseNow(node->op);
   node->op = nullptr;
 }
 
@@ -1477,8 +1447,7 @@ void Promoter::resolveDefinitions(ProbeNode *node) {
   // Replace the probe result with the projected value.
   LLVM_DEBUG(llvm::dbgs() << "- Replacing " << *node->op << "\n");
   replaceValueWith(node->op->getResult(0), value);
-  eraseLaterIfUnused(node->op->getOperands());
-  eraseOp(node->op);
+  pruner.eraseNow(node->op);
   node->op = nullptr;
 }
 
@@ -1517,7 +1486,7 @@ void Promoter::resolveDefinitionValue(DriveNode *node) {
   value = unpackProjections(builder, value, projections);
 
   // Update the value according to the drive.
-  eraseLaterIfUnused(value);
+  pruner.eraseLaterIfUnused(value);
   if (!driveOp.getEnable())
     value = driveOp.getValue();
   else
@@ -1533,7 +1502,7 @@ void Promoter::resolveDefinitionValue(DriveNode *node) {
     assert(isa_and_nonnull<UnrealizedConversionCastOp>(placeholder) &&
            "placeholder replaced but valueIsPlaceholder still set");
     replaceValueWith(placeholder->getResult(0), value);
-    eraseOp(placeholder);
+    pruner.eraseNow(placeholder);
     node->def->valueIsPlaceholder = false;
   }
   node->def->value = value;
@@ -1564,7 +1533,7 @@ void Promoter::resolveDefinitionCondition(DriveNode *node) {
     assert(isa_and_nonnull<UnrealizedConversionCastOp>(placeholder) &&
            "placeholder replaced but conditionIsPlaceholder still set");
     replaceValueWith(placeholder->getResult(0), condition);
-    eraseOp(placeholder);
+    pruner.eraseNow(placeholder);
     node->def->conditionIsPlaceholder = false;
   }
   node->def->condition.setCondition(condition);
@@ -1633,7 +1602,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
              "placeholder replaced but valueIsPlaceholder still set");
       auto arg = node->block->addArgument(getStoredType(slot), getLoc(slot));
       replaceValueWith(placeholder->getResult(0), arg);
-      eraseOp(placeholder);
+      pruner.eraseNow(placeholder);
       def->value = arg;
       def->valueIsPlaceholder = false;
       break;
@@ -1648,7 +1617,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
       auto conditionArg = node->block->addArgument(
           IntegerType::get(region.getContext(), 1), getLoc(slot));
       replaceValueWith(placeholder->getResult(0), conditionArg);
-      eraseOp(placeholder);
+      pruner.eraseNow(placeholder);
       def->condition.setCondition(conditionArg);
       def->conditionIsPlaceholder = false;
       break;
