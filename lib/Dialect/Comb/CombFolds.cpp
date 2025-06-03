@@ -1557,6 +1557,9 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
     return getInputs()[0];
 
   auto width = cast<IntegerType>(getType()).getWidth();
+  if (width == 0)
+    return getIntAttr(APInt::getZero(0), getContext());
+
   APInt value(/*numBits=*/width, 1, /*isSigned=*/false);
 
   // mul(x, 0, 1) -> 0 -- annulment

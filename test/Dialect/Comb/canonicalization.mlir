@@ -1660,3 +1660,11 @@ hw.module @cantCombineOppositeNonBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4
             %opposite_xor_or, %opposite_xor_and :
             i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
 }
+
+// CHECK-LABEL: hw.module @mul_0
+hw.module @mul_0(in %arg0: i0, in %arg1: i0, out out: i0) {
+  // CHECK: %[[C0:.+]] = hw.constant 0 : i0
+  // CHECK: hw.output %[[C0]]
+  %0 = comb.mul %arg0, %arg1 : i0
+  hw.output %0 : i0
+}
