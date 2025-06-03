@@ -351,7 +351,7 @@ public:
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
                              /// floating point
                              AddFOp, SubFOp, MulFOp, CmpFOp, FPToSIOp, SIToFPOp,
-                             DivFOp, math::SqrtOp,
+                             DivFOp, math::SqrtOp, math::AbsFOp,
                              /// others
                              SelectOp, IndexCastOp, BitcastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -420,6 +420,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, SIToFPOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, DivFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, math::SqrtOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, math::AbsFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -1240,6 +1241,35 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                          /*exceptionalFlags=*/five, /*done=*/one});
   return buildLibraryBinaryPipeOp<calyx::DivSqrtOpIEEE754>(
       rewriter, sqrt, sqrtOp, sqrtOp.getOut());
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     math::AbsFOp absFOp) const {
+  Location loc = absFOp.getLoc();
+  auto input = absFOp.getOperand();
+
+  unsigned bitwidth = input.getType().getIntOrFloatBitWidth();
+  Type intTy = rewriter.getIntegerType(bitwidth);
+
+  uint64_t signBit = 1ULL << (bitwidth - 1);
+  uint64_t absMask = ~signBit & ((1ULL << bitwidth) - 1); // clear sign bit
+
+  Value maskOp = rewriter.create<arith::ConstantIntOp>(loc, absMask, intTy);
+
+  auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, absFOp);
+  rewriter.setInsertionPointToStart(combGroup.getBodyBlock());
+
+  auto andLibOp = getState<ComponentLoweringState>()
+                      .getNewLibraryOpInstance<calyx::AndLibOp>(
+                          rewriter, loc, {intTy, intTy, intTy});
+  rewriter.create<calyx::AssignOp>(loc, andLibOp.getLeft(), maskOp);
+  rewriter.create<calyx::AssignOp>(loc, andLibOp.getRight(), input);
+
+  getState<ComponentLoweringState>().registerEvaluatingGroup(andLibOp.getOut(),
+                                                             combGroup);
+  rewriter.replaceAllUsesWith(absFOp, andLibOp.getOut());
+
+  return success();
 }
 
 template <typename TAllocOp>
