@@ -62,8 +62,6 @@ struct MemToRegOfVecPass
 
     mod.getBodyBlock()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
-      if (AnnotationSet::removeAnnotations(memOp, excludeMemToRegAnnoClass))
-        return;
 
       auto firMem = memOp.getSummary();
       // Ignore if the memory is candidate for macro replacement.

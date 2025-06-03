@@ -191,18 +191,6 @@ firrtl.circuit "WriteMask" attributes {annotations = [
     // CHECK:           firrtl.when %[[v16]] : !firrtl.uint<1> {
     // CHECK:             firrtl.matchingconnect %[[v14]], %[[v15]] : !firrtl.uint<8>
     // CHECK:           }
-    %mem_read1, %mem_write1 = firrtl.mem Undefined {
-      annotations = [
-        {class = "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec"}
-      ],
-      depth = 8 : i64,
-      name = "mem",
-      portNames = ["read", "write"],
-      readLatency = 0 : i32,
-      writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 2>>,
-        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
-    // CHECK: %mem_read_0, %mem_write_1 = firrtl.mem Undefined {depth = 8 :
   }
 }
 

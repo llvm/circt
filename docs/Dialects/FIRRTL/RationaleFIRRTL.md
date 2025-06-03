@@ -742,9 +742,7 @@ appropriately.
 
 The `AsyncReset` pass runs right after the `MemToRegOfVec`.  It will transform
 the memory registers to async registers if the corresponding annotations are
-present.  Only if a `MemOp` had
-`sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec`, annotation, then it is
-not converted to an async reset register.
+present.
 
 #### `firrtl.mem` Attributes
 
