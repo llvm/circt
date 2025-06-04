@@ -486,12 +486,11 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
-  if (op.getBody().hasOneBlock()) {
+  if (op.getBody().hasOneBlock() && op.getNumResults() == 0) {
     auto &block = op.getBody().front();
     if (block.getOperations().size() == 1 && isa<HaltOp>(block.getTerminator()))
       rewriter.eraseOp(op);
   }
-
   return success();
 }
 
