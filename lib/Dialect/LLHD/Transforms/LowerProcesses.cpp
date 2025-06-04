@@ -11,7 +11,6 @@
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/Debug.h"
 
@@ -56,16 +55,16 @@ void Lowering::lower() {
 
   // Replace the process.
   OpBuilder builder(processOp);
-  auto executeOp = builder.create<scf::ExecuteRegionOp>(
-      processOp.getLoc(), processOp.getResultTypes());
+  auto executeOp = builder.create<CombinationalOp>(processOp.getLoc(),
+                                                   processOp.getResultTypes());
   executeOp.getRegion().takeBody(processOp.getBody());
   processOp.replaceAllUsesWith(executeOp);
   processOp.erase();
   processOp = {};
 
-  // Replace the `llhd.wait` with an `scf.yield`.
+  // Replace the `llhd.wait` with an `llhd.yield`.
   builder.setInsertionPoint(waitOp);
-  builder.create<scf::YieldOp>(waitOp.getLoc(), waitOp.getYieldOperands());
+  builder.create<YieldOp>(waitOp.getLoc(), waitOp.getYieldOperands());
   waitOp.erase();
 
   // Simplify the execute op body region since disconnecting the control flow

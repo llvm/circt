@@ -112,10 +112,10 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   %c0_i42 = hw.constant 0 : i42
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
-  // CHECK: [[ER:%.+]]:2 = scf.execute_region -> (i42, i1) {
+  // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
   // CHECK:   cf.cond_br %en, [[BB:\^.+]](%d, %true : i42, i1), [[BB]](%c0_i42, %false : i42, i1)
   // CHECK: [[BB]]([[RESULT:%.+]]: i42, [[ENABLE:%.+]]: i1):
-  // CHECK:   scf.yield [[RESULT]], [[ENABLE]] : i42, i1
+  // CHECK:   llhd.yield [[RESULT]], [[ENABLE]] : i42, i1
   // CHECK: }
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
@@ -142,10 +142,10 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   %c0_i42 = hw.constant 0 : i42
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
-  // CHECK: [[ER:%.+]]:2 = scf.execute_region -> (i42, i1) {
+  // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
   // CHECK:   cf.cond_br %en, [[BB:\^.+]](%d, %true : i42, i1), [[BB]](%c0_i42, %false : i42, i1)
   // CHECK: [[BB]]([[RESULT:%.+]]: i42, [[ENABLE:%.+]]: i1):
-  // CHECK:   scf.yield [[RESULT]], [[ENABLE]] : i42, i1
+  // CHECK:   llhd.yield [[RESULT]], [[ENABLE]] : i42, i1
   // CHECK: }
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
@@ -377,7 +377,7 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
-  // CHECK: [[ER:%.+]]:2 = scf.execute_region -> (i42, i1) {
+  // CHECK: [[ER:%.+]]:2 = llhd.combinational -> i42, i1 {
   // CHECK:   cf.br ^bb1(%c0_i42, %false : i42, i1)
   // CHECK: ^bb1({{%.+}}: i42, {{%.+}}: i1):
   // CHECK:   cf.br ^bb2
@@ -392,7 +392,7 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   // CHECK:   [[TMP:%.+]] = comb.icmp ult
   // CHECK:   cf.cond_br [[TMP]], ^bb3({{.+}}), ^bb4([[RESULT]], %true : i42, i1)
   // CHECK: ^bb4([[RESULT:%.+]]: i42, [[ENABLE:%.+]]: i1):
-  // CHECK:   scf.yield [[RESULT]], [[ENABLE]] : i42, i1
+  // CHECK:   llhd.yield [[RESULT]], [[ENABLE]] : i42, i1
   // CHECK: }
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
@@ -593,7 +593,7 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
   %mem33 = llhd.sig %c0_i15 : i15
   %mem34 = llhd.sig %c0_i15 : i15
   // CHECK-NOT: llhd.process
-  // CHECK: [[ER:%.+]]:70 = scf.execute_region ->
+  // CHECK: [[ER:%.+]]:70 = llhd.combinational ->
   %1:70 = llhd.process -> i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1 {
     cf.br ^bb1(%clk, %rstn, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false, %c0_i15, %false : i1, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1, i15, i1)
   ^bb1(%2: i1, %3: i1, %4: i15, %5: i1, %6: i15, %7: i1, %8: i15, %9: i1, %10: i15, %11: i1, %12: i15, %13: i1, %14: i15, %15: i1, %16: i15, %17: i1, %18: i15, %19: i1, %20: i15, %21: i1, %22: i15, %23: i1, %24: i15, %25: i1, %26: i15, %27: i1, %28: i15, %29: i1, %30: i15, %31: i1, %32: i15, %33: i1, %34: i15, %35: i1, %36: i15, %37: i1, %38: i15, %39: i1, %40: i15, %41: i1, %42: i15, %43: i1, %44: i15, %45: i1, %46: i15, %47: i1, %48: i15, %49: i1, %50: i15, %51: i1, %52: i15, %53: i1, %54: i15, %55: i1, %56: i15, %57: i1, %58: i15, %59: i1, %60: i15, %61: i1, %62: i15, %63: i1, %64: i15, %65: i1, %66: i15, %67: i1, %68: i15, %69: i1, %70: i15, %71: i1, %72: i15, %73: i1):
