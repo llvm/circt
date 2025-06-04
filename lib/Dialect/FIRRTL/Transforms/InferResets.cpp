@@ -1877,9 +1877,6 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
 
   // Handle reset-less registers.
   if (auto regOp = dyn_cast<RegOp>(op)) {
-    if (AnnotationSet::removeAnnotations(regOp, excludeMemToRegAnnoClass))
-      return;
-
     LLVM_DEBUG(llvm::dbgs() << "- Adding full reset to " << regOp << "\n");
     auto zero = createZeroValue(builder, regOp.getResult().getType());
     auto newRegOp = builder.create<RegResetOp>(
