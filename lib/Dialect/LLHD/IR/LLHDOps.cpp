@@ -495,6 +495,25 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// CombinationalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CombinationalOp::canonicalize(CombinationalOp op,
+                                            PatternRewriter &rewriter) {
+  // Inline the combinational region if it consists of a single block and
+  // contains no side-effecting operations.
+  if (op.getBody().hasOneBlock() && isMemoryEffectFree(op)) {
+    auto &block = op.getBody().front();
+    auto *terminator = block.getTerminator();
+    rewriter.inlineBlockBefore(&block, op, ValueRange{});
+    rewriter.replaceOp(op, terminator->getOperands());
+    rewriter.eraseOp(terminator);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // WaitOp
 //===----------------------------------------------------------------------===//
 
@@ -502,10 +521,10 @@ static LogicalResult verifyYieldResults(Operation *op,
                                         ValueRange yieldOperands) {
   // Determine the result values of the parent.
   auto *parentOp = op->getParentOp();
-  TypeRange resultTypes =
-      TypeSwitch<Operation *, TypeRange>(parentOp)
-          .Case<ProcessOp>([](auto op) { return op.getResultTypes(); })
-          .Case<FinalOp>([](auto) { return TypeRange{}; });
+  TypeRange resultTypes = TypeSwitch<Operation *, TypeRange>(parentOp)
+                              .Case<ProcessOp, CombinationalOp>(
+                                  [](auto op) { return op.getResultTypes(); })
+                              .Case<FinalOp>([](auto) { return TypeRange{}; });
 
   // Check that the number of yield operands matches the process.
   if (yieldOperands.size() != resultTypes.size())
@@ -535,6 +554,14 @@ LogicalResult WaitOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult HaltOp::verify() {
+  return verifyYieldResults(*this, getYieldOperands());
+}
+
+//===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult YieldOp::verify() {
   return verifyYieldResults(*this, getYieldOperands());
 }
 
