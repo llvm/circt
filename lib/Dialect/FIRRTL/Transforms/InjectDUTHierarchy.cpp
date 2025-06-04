@@ -89,6 +89,9 @@ void InjectDUTHierarchy::runOnOperation() {
   /// The name of the new module to create under the DUT.
   StringAttr wrapperName;
 
+  /// If true, then move the MarkDUTAnnotation to the newly created module.
+  bool moveDut = false;
+
   /// Mutable indicator that an error occurred for some reason.  If this is ever
   /// true, then the pass can just signalPassFailure.
   bool error = false;
@@ -117,6 +120,9 @@ void InjectDUTHierarchy::runOnOperation() {
     }
 
     wrapperName = name;
+    if (auto moveDutAnnoAttr = anno.getMember<BoolAttr>("moveDut"))
+      moveDut = moveDutAnnoAttr.getValue();
+
     return true;
   });
 
@@ -155,7 +161,7 @@ void InjectDUTHierarchy::runOnOperation() {
     b.setInsertionPointAfter(dut);
     auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
                                       dut.getConventionAttr(), dut.getPorts(),
-                                      dut.getAnnotations());
+                                      dut.getAnnotationsAttr());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
@@ -165,10 +171,22 @@ void InjectDUTHierarchy::runOnOperation() {
     wrapper = dut;
     dut = newDUT;
 
-    // Finish setting up the wrapper.  It can have no annotations.
+    // Finish setting up the wrapper.  Strip the `MarkDUTAnnotation` if we are
+    // in "moveDut" mode.
     AnnotationSet::removePortAnnotations(wrapper,
                                          [](auto, auto) { return true; });
-    AnnotationSet::removeAnnotations(wrapper, [](auto) { return true; });
+    AnnotationSet::removeAnnotations(wrapper, [&](Annotation anno) {
+      if (anno.isClass(dutAnnoClass))
+        return !moveDut;
+      return true;
+    });
+
+    // Finish setting up the DUT.  Strip the `MarkDUTAnnotation` is we are in
+    // "moveDut" mode.
+    if (moveDut)
+      AnnotationSet::removeAnnotations(dut, [&](Annotation anno) {
+        return anno.isClass(dutAnnoClass) && moveDut;
+      });
   }
 
   // Instantiate the wrapper inside the DUT and wire it up.

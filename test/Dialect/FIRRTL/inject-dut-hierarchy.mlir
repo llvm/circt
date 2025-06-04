@@ -22,6 +22,27 @@ firrtl.circuit "Top" attributes {
 
 // -----
 
+firrtl.circuit "Top" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo", moveDut = true}]
+  } {
+  // CHECK:      firrtl.module private @Foo()
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+  //
+  // CHECK:      firrtl.module private @DUT
+  //
+  // CHECK-NEXT:   firrtl.instance Foo {{.+}} @Foo()
+  // CHECK-NEXT: }
+  firrtl.module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+
+  // CHECK:      firrtl.module @Top
+  // CHECK-NEXT:   firrtl.instance dut @DUT
+  firrtl.module @Top() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
 // CHECK-LABEL: firrtl.circuit "NLARenaming"
 firrtl.circuit "NLARenaming" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]

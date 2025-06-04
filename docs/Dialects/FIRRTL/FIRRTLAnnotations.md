@@ -595,10 +595,11 @@ Example:
 
 ### InjectDUTHierarchyAnnotation
 
-| Property | Type   | Description                                             |
-|----------|--------|---------------------------------------------------------|
-| class    | string | `sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation` |
-| name     | string | The name of the module containing original DUT logic    |
+| Property | Type    | Description                                                                                       |
+|----------|---------|---------------------------------------------------------------------------------------------------|
+| class    | string  | `sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation`                                           |
+| name     | string  | The name of the module containing original DUT logic                                              |
+| moveDut  | boolean | Optional: if true, then treat the newly created module as the DUT. If unset, then treat as false. |
 
 This annotation can be used to add an extra level of hierarchy in the design
 under the DUT (indicated with a `MarkDUTAnnotation`).  All logic in the original
@@ -607,13 +608,19 @@ used in combination with `ExtractBlackBoxAnnotation` (or with passes that add
 these annotations to extract components like clock gates or memories) to not
 intermix the original DUT contents with extracted module instantiations.
 
+If the `moveDut` field is true, then the newly created module with the specified
+`name` will be treated as the design-under-test.  The `MarkDUTAnnotation` will
+be moved to this module.  If this field is false, then the design-under-test
+will not be changed.
+
 This annotation should only appear zero or once.
 
 Example:
 ``` json
 {
   "class": "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
-  "name": "Logic"
+  "name": "Logic",
+  "moveDutAnno": false
 }
 ```
 
