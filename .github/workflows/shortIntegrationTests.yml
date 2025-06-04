@@ -40,8 +40,8 @@ jobs:
         build-shared: [ON]
         build-type: [Release]
         compiler:
-          - cc: clang
-            cxx: clang++
+          - cc: clang-17
+            cxx: clang++-17
 
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
