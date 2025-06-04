@@ -12,9 +12,10 @@
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Analysis/Liveness.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -1008,7 +1009,7 @@ void Deseq::implementRegisters() {
 /// the analyzed clock and reset from the given `DriveInfo` and creates the
 /// necessary ops outside the process represent the behavior as a register. It
 /// also calls `specializeValue` and `specializeProcess` to convert the
-/// sequential `llhd.process` into a purely combinational `scf.execute_region`
+/// sequential `llhd.process` into a purely combinational `llhd.combinational`
 /// that is simplified by assuming that the clock edge occurs.
 void Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
@@ -1128,9 +1129,9 @@ void Deseq::implementRegister(DriveInfo &drive) {
 
 /// Specialize a value by assuming the values listed in `fixedValues` are at a
 /// constant value in the past and the present. The function is guaranteed to
-/// replace results of the process with results of a new combinational
-/// `scf.execute_region` op. All other behavior is purely an optimization; the
-/// function may not make use of the assignments in `fixedValues` at all.
+/// replace results of the process with results of a new combinational op. All
+/// other behavior is purely an optimization; the function may not make use of
+/// the assignments in `fixedValues` at all.
 Value Deseq::specializeValue(Value value, FixedValues fixedValues) {
   auto result = dyn_cast<OpResult>(value);
   if (!result || result.getOwner() != process)
@@ -1140,12 +1141,12 @@ Value Deseq::specializeValue(Value value, FixedValues fixedValues) {
 
 /// Specialize the current process by assuming the values listed in
 /// `fixedValues` are at a constant value in the past and the present. This
-/// function creates a new `scf.execute_region` op with a simplified version
-/// of the process where all uses of the values listed in `fixedValues` are
-/// replaced with their constant counterpart. Since the clock-dependent
-/// behavior of the process has been absorbed into a register, the process can
-/// be replaced with a combinational representation that computes the drive
-/// value and drive condition under the assumption that the clock edge occurs.
+/// function creates a new combinational op with a simplified version of the
+/// process where all uses of the values listed in `fixedValues` are replaced
+/// with their constant counterpart. Since the clock-dependent behavior of the
+/// process has been absorbed into a register, the process can be replaced with
+/// a combinational representation that computes the drive value and drive
+/// condition under the assumption that the clock edge occurs.
 ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
   if (auto it = specializedProcesses.find(fixedValues);
       it != specializedProcesses.end())
@@ -1161,13 +1162,13 @@ ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
     }
   });
 
-  // Create an `scf.execute_region` with this process specialized to compute
+  // Create an `llhd.combinational` op with this process specialized to compute
   // the result for the given fixed values. The triggers will be absorbed into
   // the register operation that consumes the result of this specialized
   // process, such that we can make the process purely combinational.
   OpBuilder builder(process);
-  auto executeOp = builder.create<scf::ExecuteRegionOp>(
-      process.getLoc(), process.getResultTypes());
+  auto executeOp = builder.create<CombinationalOp>(process.getLoc(),
+                                                   process.getResultTypes());
 
   IRMapping mapping;
   SmallVector<std::pair<Block *, Block *>> worklist;
@@ -1222,14 +1223,14 @@ ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
       auto [oldBlock, newBlock] = worklist.pop_back_val();
       builder.setInsertionPointToEnd(newBlock);
       for (auto &oldOp : *oldBlock) {
-        // Convert `llhd.wait` into `scf.yield`.
+        // Convert `llhd.wait` into `llhd.yield`.
         if (auto waitOp = dyn_cast<WaitOp>(oldOp)) {
           if (stopAtWait)
             continue;
           SmallVector<Value> operands;
           for (auto operand : waitOp.getYieldOperands())
             operands.push_back(mapping.lookupOrDefault(operand));
-          builder.create<scf::YieldOp>(waitOp.getLoc(), operands);
+          builder.create<YieldOp>(waitOp.getLoc(), operands);
           continue;
         }
 

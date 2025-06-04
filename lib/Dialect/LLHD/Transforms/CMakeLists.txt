@@ -25,6 +25,5 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRIR
-  MLIRSCFDialect
   MLIRTransformUtils
 )

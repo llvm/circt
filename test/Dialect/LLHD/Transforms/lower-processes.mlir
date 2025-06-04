@@ -2,10 +2,10 @@
 
 // CHECK-LABEL: @Trivial(
 hw.module @Trivial() {
-  // CHECK:      scf.execute_region {
+  // CHECK:      llhd.combinational {
   // CHECK-NEXT:   cf.br ^bb1
   // CHECK-NEXT: ^bb1:
-  // CHECK-NEXT:   scf.yield
+  // CHECK-NEXT:   llhd.yield
   // CHECK-NEXT: }
   llhd.process {
     cf.br ^bb1
@@ -16,12 +16,12 @@ hw.module @Trivial() {
 
 // CHECK-LABEL: @BlockArgs(
 hw.module @BlockArgs(in %a: i42, in %b: i42) {
-  // CHECK:      scf.execute_region {
+  // CHECK:      llhd.combinational {
   // CHECK-NEXT:   cf.br ^bb1
   // CHECK-NEXT: ^bb1:
   // CHECK-NEXT:   cf.br ^bb2
   // CHECK-NEXT: ^bb2:
-  // CHECK-NEXT:   scf.yield
+  // CHECK-NEXT:   llhd.yield
   // CHECK-NEXT: }
   llhd.process {
     cf.br ^bb1
@@ -38,10 +38,10 @@ hw.module @BlockArgs(in %a: i42, in %b: i42) {
 
 // CHECK-LABEL: @SupportYieldOperands(
 hw.module @SupportYieldOperands(in %a: i42) {
-  // CHECK:      scf.execute_region -> i42 {
+  // CHECK:      llhd.combinational -> i42 {
   // CHECK-NEXT:   cf.br ^bb1
   // CHECK-NEXT: ^bb1:
-  // CHECK-NEXT:   scf.yield %a : i42
+  // CHECK-NEXT:   llhd.yield %a : i42
   // CHECK-NEXT: }
   llhd.process -> i42 {
     cf.br ^bb1
@@ -56,7 +56,7 @@ hw.module @SupportSeparateProbesOfSameValue() {
   %a = llhd.sig %c0_i42 : i42
   %0 = llhd.prb %a : !hw.inout<i42>
   %1 = llhd.prb %a : !hw.inout<i42>
-  // CHECK: scf.execute_region
+  // CHECK: llhd.combinational
   llhd.process -> i42 {
     cf.br ^bb1
   ^bb1:
@@ -66,7 +66,7 @@ hw.module @SupportSeparateProbesOfSameValue() {
 
 // CHECK-LABEL: @SupportObservedArrays(
 hw.module @SupportObservedArrays(in %a: i42, in %b: i42) {
-  // CHECK: scf.execute_region
+  // CHECK: llhd.combinational
   %0 = hw.array_create %a, %b : i42
   llhd.process {
     cf.br ^bb1
@@ -78,7 +78,7 @@ hw.module @SupportObservedArrays(in %a: i42, in %b: i42) {
 
 // CHECK-LABEL: @SupportObservedStructs(
 hw.module @SupportObservedStructs(in %a: i42, in %b: i42) {
-  // CHECK: scf.execute_region
+  // CHECK: llhd.combinational
   %0 = hw.struct_create (%a, %b) : !hw.struct<a: i42, b: i42>
   llhd.process {
     cf.br ^bb1
@@ -90,7 +90,7 @@ hw.module @SupportObservedStructs(in %a: i42, in %b: i42) {
 
 // CHECK-LABEL: @SupportObservedConcats(
 hw.module @SupportObservedConcats(in %a: i42, in %b: i42) {
-  // CHECK: scf.execute_region
+  // CHECK: llhd.combinational
   %0 = comb.concat %a, %b : i42, i42
   llhd.process {
     cf.br ^bb1
@@ -102,7 +102,7 @@ hw.module @SupportObservedConcats(in %a: i42, in %b: i42) {
 
 // CHECK-LABEL: @SupportObservedBitcasts(
 hw.module @SupportObservedBitcasts(in %a: i42, in %b: i42) {
-  // CHECK: scf.execute_region
+  // CHECK: llhd.combinational
   %0 = hw.bitcast %a : (i42) -> !hw.array<2xi21>
   %1 = hw.bitcast %b : (i42) -> !hw.array<3xi14>
   llhd.process {
@@ -115,12 +115,12 @@ hw.module @SupportObservedBitcasts(in %a: i42, in %b: i42) {
 
 // CHECK-LABEL: @CommonPattern1(
 hw.module @CommonPattern1(in %a: i42, in %b: i42, in %c: i1) {
-  // CHECK:      scf.execute_region -> i42 {
+  // CHECK:      llhd.combinational -> i42 {
   // CHECK-NEXT:   cf.br ^bb1
   // CHECK-NEXT: ^bb1:
   // CHECK-NEXT:   cf.cond_br %c, ^bb2(%a : i42), ^bb2(%b : i42)
   // CHECK-NEXT: ^bb2([[ARG:%.+]]: i42):
-  // CHECK-NEXT:   scf.yield [[ARG]] : i42
+  // CHECK-NEXT:   llhd.yield [[ARG]] : i42
   // CHECK-NEXT: }
   %0 = llhd.process -> i42 {
     cf.br ^bb2(%a, %b : i42, i42)
