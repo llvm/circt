@@ -14,7 +14,7 @@ jobs:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20240213211952
+      image: ghcr.io/circt/images/circt-ci-build:20250515145637
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -134,7 +134,7 @@ jobs:
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20240213211952
+      image: ghcr.io/circt/images/circt-ci-build:20250515145637
       volumes:
         - /mnt:/__w/circt
     strategy:
