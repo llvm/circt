@@ -166,8 +166,8 @@ bool circt::sv::isNameValid(StringRef name, bool caseInsensitiveKeywords,
     // Check if the name is a valid escaped name.
     if (name.size() < 2)
       return false;
-    for (size_t i = 1; i < name.size(); ++i) {
-      bool isValidChar = llvm::isPrint(name[i]) && !llvm::isSpace(name[i]);
+    for (auto ch: name.drop_front()) {
+      bool isValidChar = llvm::isPrint(ch) && !llvm::isSpace(ch);
       if (!isValidChar)
         return false;
     }
