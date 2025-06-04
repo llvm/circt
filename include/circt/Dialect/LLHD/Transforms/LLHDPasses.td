@@ -177,4 +177,16 @@ def DeseqPass : Pass<"llhd-deseq", "hw::HWModuleOp"> {
   ];
 }
 
+def CombineDrivesPass : Pass<"llhd-combine-drives", "hw::HWModuleOp"> {
+  let summary = "Combine scalar drives into aggregate drives";
+  let description = [{
+    If individual drives cover all of an aggregate signal's fields, merge them
+    into a single drive of the whole aggregate value.
+  }];
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
