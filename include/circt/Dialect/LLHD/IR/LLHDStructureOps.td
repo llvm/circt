@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/LLHD/IR/LLHDDialect.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // ProcessOp
@@ -87,6 +88,48 @@ def FinalOp : LLHDOp<"final", [
 }
 
 //===----------------------------------------------------------------------===//
+// CombinationalOp
+//===----------------------------------------------------------------------===//
+
+def CombinationalOp : LLHDOp<"combinational", [
+  HasParent<"hw::HWModuleOp">,
+  NoRegionArguments,
+  RecursiveMemoryEffects,
+]> {
+  let summary = "A process that runs when any of its operand values change";
+  let description = [{
+    An `llhd.combinational` op encapsulates a region of IR that executes once at
+    the beginning of the simulation, and subsequently whenever any of the values
+    used in its body change. Control flow must eventually end in an `llhd.yield`
+    terminator. The process may have results, in which case the `llhd.yield`
+    terminators must provide a list of values to yield for the process results.
+    Whenever any of the values used in the body change, the process reexecutes
+    in order to compute updated results.
+
+    This op is commonly used to embed a control-flow description of some
+    combinational logic inside the surrounding module's graph region.
+
+    Example:
+    ```mlir
+    hw.module @Foo() {
+      %0, %1 = llhd.combinational -> i42, i9001 {
+        cf.cond_br %2, ^bb1(%3, %4 : i42, i9001), ^bb1(%5, %6 : i42, i9001)
+      ^bb1(%7: i42, %8: i9001):
+        llhd.yield %7, %8 : i42, i9001
+      }
+    }
+    ```
+  }];
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region MinSizedRegion<1>:$body);
+  let assemblyFormat = [{
+    (`->` type($results)^)?
+    attr-dict-with-keyword $body
+  }];
+  let hasCanonicalizeMethod = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // WaitOp
 //===----------------------------------------------------------------------===//
 
@@ -150,6 +193,39 @@ def HaltOp : LLHDOp<"halt", [
   let arguments = (ins
     Variadic<AnyType>:$yieldOperands
   );
+  let assemblyFormat = [{
+    ($yieldOperands^ `:` type($yieldOperands))?
+    attr-dict
+  }];
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+def YieldOp : LLHDOp<"yield", [
+  HasParent<"CombinationalOp">,
+  Pure,
+  ReturnLike,
+  Terminator,
+]> {
+  let summary = "Yield results back from a combinational process";
+  let description = [{
+    The `llhd.yield` terminator terminates control flow in the parent process
+    and yields the `yieldOperands` as the result values of the process.
+
+    Example:
+    ```mlir
+    llhd.combinational {
+      llhd.yield
+    }
+    %2:2 = llhd.combinational -> i42, i9001 {
+      llhd.yield %0, %1 : i42, i9001
+    }
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$yieldOperands);
   let assemblyFormat = [{
     ($yieldOperands^ `:` type($yieldOperands))?
     attr-dict
