@@ -668,6 +668,21 @@ struct CombSubOpConversion : OpConversionPattern<SubOp> {
   }
 };
 
+// Construct a full adder for three 1-bit inputs.
+std::pair<Value, Value> fullAdder(ConversionPatternRewriter &rewriter,
+                                  Location loc, Value a, Value b, Value c) {
+  auto aXorB = rewriter.createOrFold<comb::XorOp>(loc, a, b, true);
+  Value sum = rewriter.createOrFold<comb::XorOp>(loc, aXorB, c, true);
+
+  auto carry = rewriter.createOrFold<comb::OrOp>(
+      loc,
+      ArrayRef<Value>{rewriter.createOrFold<comb::AndOp>(loc, a, b, true),
+                      rewriter.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
+      true);
+
+  return {sum, carry};
+}
+
 struct CombMulOpConversion : OpConversionPattern<MulOp> {
   using OpConversionPattern<MulOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
@@ -677,39 +692,110 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     if (adaptor.getInputs().size() != 2)
       return failure();
 
-    // FIXME: Currently it's lowered to a really naive implementation that
-    // chains add operations.
+    Location loc = op.getLoc();
+    Value a = adaptor.getInputs()[0];
+    Value b = adaptor.getInputs()[1];
+    unsigned width = op.getType().getIntOrFloatBitWidth();
 
-    // a_{n}a_{n-1}...a_0 * b
-    // = sum_{i=0}^{n} a_i * 2^i * b
-    // = sum_{i=0}^{n} (a_i ? b : 0) << i
-    int64_t width = op.getType().getIntOrFloatBitWidth();
-    auto aBits = extractBits(rewriter, adaptor.getInputs()[0]);
-    SmallVector<Value> results;
-    auto rhs = op.getInputs()[1];
-    auto zero = rewriter.create<hw::ConstantOp>(op.getLoc(),
-                                                llvm::APInt::getZero(width));
-    for (int64_t i = 0; i < width; ++i) {
-      auto aBit = aBits[i];
-      auto andBit =
-          rewriter.createOrFold<comb::MuxOp>(op.getLoc(), aBit, rhs, zero);
-      auto upperBits = rewriter.createOrFold<comb::ExtractOp>(
-          op.getLoc(), andBit, 0, width - i);
-      if (i == 0) {
-        results.push_back(upperBits);
-        continue;
-      }
-
-      auto lowerBits =
-          rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(i));
-
-      auto shifted = rewriter.createOrFold<comb::ConcatOp>(
-          op.getLoc(), op.getType(), ValueRange{upperBits, lowerBits});
-      results.push_back(shifted);
+    // Skip a zero width value.
+    if (width == 0) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.getType(), 0);
+      return success();
     }
 
-    replaceOpWithNewOpAndCopyNamehint<comb::AddOp>(rewriter, op, results, true);
+    // Extract individual bits from operands
+    SmallVector<Value> aBits = extractBits(rewriter, a);
+    SmallVector<Value> bBits = extractBits(rewriter, b);
+
+    auto falseValue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
+
+    // Generate partial products
+    SmallVector<SmallVector<Value>> partialProducts;
+    partialProducts.reserve(width);
+    for (unsigned i = 0; i < width; ++i) {
+      SmallVector<Value> row(i, falseValue);
+      row.reserve(width);
+      // Generate partial product bits
+      for (unsigned j = 0; i + j < width; ++j)
+        row.push_back(
+            rewriter.createOrFold<comb::AndOp>(loc, aBits[j], bBits[i]));
+
+      partialProducts.push_back(row);
+    }
+
+    // If the width is 1, we are done.
+    if (width == 1) {
+      rewriter.replaceOp(op, partialProducts[0][0]);
+      return success();
+    }
+
+    // Wallace tree reduction
+    replaceOpAndCopyNamehint(
+        rewriter, op,
+        wallaceReduction(falseValue, width, rewriter, loc, partialProducts));
     return success();
+  }
+
+private:
+  // Perform Wallace tree reduction on partial products.
+  // See https://en.wikipedia.org/wiki/Wallace_tree
+  static Value
+  wallaceReduction(Value falseValue, size_t width,
+                   ConversionPatternRewriter &rewriter, Location loc,
+                   SmallVector<SmallVector<Value>> &partialProducts) {
+    SmallVector<SmallVector<Value>> newPartialProducts;
+    newPartialProducts.reserve(partialProducts.size());
+    // Continue reduction until we have only two rows. The length of
+    // `partialProducts` is reduced by 1/3 in each iteration.
+    while (partialProducts.size() > 2) {
+      newPartialProducts.clear();
+      // Take three rows at a time and reduce to two rows(sum and carry).
+      for (unsigned i = 0; i < partialProducts.size(); i += 3) {
+        if (i + 2 < partialProducts.size()) {
+          // We have three rows to reduce
+          auto &row1 = partialProducts[i];
+          auto &row2 = partialProducts[i + 1];
+          auto &row3 = partialProducts[i + 2];
+
+          assert(row1.size() == width && row2.size() == width &&
+                 row3.size() == width);
+
+          SmallVector<Value> sumRow, carryRow;
+          sumRow.reserve(width);
+          carryRow.reserve(width);
+          carryRow.push_back(falseValue);
+
+          // Process each bit position
+          for (unsigned j = 0; j < width; ++j) {
+            // Full adder logic
+            auto [sum, carry] =
+                fullAdder(rewriter, loc, row1[j], row2[j], row3[j]);
+            sumRow.push_back(sum);
+            if (j + 1 < width)
+              carryRow.push_back(carry);
+          }
+
+          newPartialProducts.push_back(std::move(sumRow));
+          newPartialProducts.push_back(std::move(carryRow));
+        } else {
+          // Add remaining rows as is
+          newPartialProducts.append(partialProducts.begin() + i,
+                                    partialProducts.end());
+        }
+      }
+
+      std::swap(newPartialProducts, partialProducts);
+    }
+
+    assert(partialProducts.size() == 2);
+    // Reverse the order of the bits
+    std::reverse(partialProducts[0].begin(), partialProducts[0].end());
+    std::reverse(partialProducts[1].begin(), partialProducts[1].end());
+    auto lhs = rewriter.create<comb::ConcatOp>(loc, partialProducts[0]);
+    auto rhs = rewriter.create<comb::ConcatOp>(loc, partialProducts[1]);
+
+    // Use comb.add for the final addition.
+    return rewriter.create<comb::AddOp>(loc, ArrayRef<Value>{lhs, rhs}, true);
   }
 };
 
