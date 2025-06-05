@@ -185,6 +185,9 @@ MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableModuleInlining(
     CirctFirtoolFirtoolOptions options, bool value);
 
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetInlineInputOnlyModules(
+    CirctFirtoolFirtoolOptions options, bool value);
+
 MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(
     CirctFirtoolFirtoolOptions options, bool value);

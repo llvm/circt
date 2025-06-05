@@ -271,6 +271,11 @@ void circtFirtoolOptionsSetEtcDisableModuleInlining(
   unwrap(options)->setEtcDisableModuleInlining(value);
 }
 
+void circtFirtoolOptionsSetInlineInputOnlyModules(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setInlineInputOnlyModules(value);
+}
+
 void circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setAddVivadoRAMAddressConflictSynthesisBugWorkaround(value);
