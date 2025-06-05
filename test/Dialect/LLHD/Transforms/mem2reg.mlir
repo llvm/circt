@@ -855,6 +855,45 @@ hw.module @NestedArrayGet3D(
   }
 }
 
+// CHECK-LABEL: @BasicSigExtract
+hw.module @BasicSigExtract(in %u: i42, in %v: i10, in %i: i6, in %q: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : i42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    // CHECK-NOT: llhd.sig.extract
+    %1 = llhd.sig.extract %a from %i : (!hw.inout<i42>) -> !hw.inout<i10>
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[EXT1:%.+]] = hw.constant 0 : i36
+    // CHECK-NEXT: [[EXT2:%.+]] = comb.concat [[EXT1]], %i : i36, i6
+    // CHECK-NEXT: [[EXT3:%.+]] = comb.shru %u, [[EXT2]] : i42
+    // CHECK-NEXT: [[EXT4:%.+]] = comb.extract [[EXT3]] from 0 : (i42) -> i10
+    // CHECK-NEXT: [[MUX:%.+]] = comb.mux %q, %v, [[EXT4]] : i10
+    // CHECK-NEXT: [[INJ1:%.+]] = hw.constant 0 : i36
+    // CHECK-NEXT: [[INJ2:%.+]] = comb.concat [[INJ1]], %i : i36, i6
+    // CHECK-NEXT: [[INJ3:%.+]] = hw.constant 1023 : i42
+    // CHECK-NEXT: [[INJ4:%.+]] = comb.shl [[INJ3]], [[INJ2]] : i42
+    // CHECK-NEXT: [[INJ5:%.+]] = hw.constant -1 : i42
+    // CHECK-NEXT: [[INJ6:%.+]] = comb.xor bin [[INJ4]], [[INJ5]] : i42
+    // CHECK-NEXT: [[INJ7:%.+]] = comb.and %u, [[INJ6]] : i42
+    // CHECK-NEXT: [[INJ8:%.+]] = hw.constant 0 : i32
+    // CHECK-NEXT: [[INJ9:%.+]] = comb.concat [[INJ8]], [[MUX]] : i32, i10
+    // CHECK-NEXT: [[INJ10:%.+]] = comb.shl [[INJ9]], [[INJ2]] : i42
+    // CHECK-NEXT: [[INJ11:%.+]] = comb.or [[INJ7]], [[INJ10]] : i42
+    llhd.drv %1, %v after %0 if %q : !hw.inout<i10>
+    // CHECK-NOT: llhd.prb
+    %2 = llhd.prb %a : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[INJ11]])
+    func.call @use_i42(%2) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ11]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
