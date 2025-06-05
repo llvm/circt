@@ -46,6 +46,10 @@ using llvm::KnownBits;
 /// in neither set is unknown.
 KnownBits computeKnownBits(Value value);
 
+/// Create the ops to zero-extend a value to an integer of equal or larger type.
+Value createZExt(OpBuilder &builder, Location loc, Value value,
+                 unsigned targetWidth);
+
 /// Create a sign extension operation from a value of integer type to an equal
 /// or larger integer type.
 Value createOrFoldSExt(Location loc, Value value, Type destTy,
@@ -66,6 +70,20 @@ void extractBits(OpBuilder &builder, Value val, SmallVectorImpl<Value> &bits);
 Value constructMuxTree(OpBuilder &builder, Location loc,
                        ArrayRef<Value> selectors, ArrayRef<Value> leafNodes,
                        Value outOfBoundsValue);
+
+/// Extract a range of bits from an integer at a dynamic offset.
+Value createDynamicExtract(OpBuilder &builder, Location loc, Value value,
+                           Value offset, unsigned width);
+
+/// Replace a range of bits in an integer at a dynamic offset, and return the
+/// updated integer value. Calls `createInject` if the offset is constant.
+Value createDynamicInject(OpBuilder &builder, Location loc, Value value,
+                          Value offset, Value replacement,
+                          bool twoState = false);
+
+/// Replace a range of bits in an integer and return the updated integer value.
+Value createInject(OpBuilder &builder, Location loc, Value value,
+                   unsigned offset, Value replacement);
 
 } // namespace comb
 } // namespace circt
