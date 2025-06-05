@@ -567,11 +567,18 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                                ProjectionStack &projections) {
   for (auto &projection : llvm::reverse(projections)) {
     projection.into = value;
-    value = TypeSwitch<Operation *, Value>(projection.op)
-                .Case<SigArrayGetOp>([&](auto op) {
-                  return builder.createOrFold<hw::ArrayGetOp>(
-                      op.getLoc(), value, op.getIndex());
-                });
+    value =
+        TypeSwitch<Operation *, Value>(projection.op)
+            .Case<SigArrayGetOp>([&](auto op) {
+              return builder.createOrFold<hw::ArrayGetOp>(op.getLoc(), value,
+                                                          op.getIndex());
+            })
+            .Case<SigExtractOp>([&](auto op) {
+              auto type = cast<hw::InOutType>(op.getType()).getElementType();
+              auto width = type.getIntOrFloatBitWidth();
+              return comb::createDynamicExtract(builder, op.getLoc(), value,
+                                                op.getLowBit(), width);
+            });
   }
   return value;
 }
@@ -595,6 +602,11 @@ static Value packProjections(OpBuilder &builder, Value value,
                 .Case<SigArrayGetOp>([&](auto op) {
                   return builder.createOrFold<hw::ArrayInjectOp>(
                       op.getLoc(), projection.into, op.getIndex(), value);
+                })
+                .Case<SigExtractOp>([&](auto op) {
+                  return comb::createDynamicInject(builder, op.getLoc(),
+                                                   projection.into,
+                                                   op.getLowBit(), value);
                 });
   }
   return value;
@@ -753,7 +765,7 @@ void Promoter::findPromotableSlots() {
           return true;
         // Projection operations are okay as long as they are in the same block
         // as any of their users.
-        if (isa<SigArrayGetOp>(user)) {
+        if (isa<SigArrayGetOp, SigExtractOp>(user)) {
           for (auto *projectionUser : user->getUsers()) {
             if (projectionUser->getBlock() != user->getBlock())
               return false;
