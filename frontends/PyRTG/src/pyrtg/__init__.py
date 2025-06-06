@@ -14,7 +14,7 @@ from .sets import Set
 from .integers import Integer, Bool
 from .bags import Bag
 from .sequences import sequence, Sequence, RandomizedSequence
-from .target import target, entry
+from .configs import config, Param, Config
 from .resources import IntegerRegister, Immediate
 from .arrays import Array
 from .contexts import CPUCore

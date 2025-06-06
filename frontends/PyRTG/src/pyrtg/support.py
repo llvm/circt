@@ -55,6 +55,29 @@ def _FromCirctValue(value: ir.Value) -> Value:
   assert False, "Unsupported value"
 
 
+def _collect_values_recursively(obj, path, args, arg_names, visited):
+  if obj is None or id(obj) in visited:
+    return args, arg_names
+
+  visited.add(id(obj))
+
+  # Base case
+  if isinstance(obj, Value):
+    args.append(obj)
+    arg_names.append(path)
+    return args, arg_names
+
+  # Recursive case
+  try:
+    for attr_name, attr_value in obj.__dict__.items():
+      _collect_values_recursively(attr_value, f"{path}.{attr_name}", args,
+                                  arg_names, visited)
+  except AttributeError:
+    pass
+
+  return args, arg_names
+
+
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """
   Wraps all of a dialect's OpView classes to have their create method return a

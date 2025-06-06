@@ -11,6 +11,8 @@ class CodeGenRoot:
   during codegen.
   """
 
+  _already_generated: bool = False
+
   def _codegen(self):
     assert False, "must be implemented by the subclass"
 
@@ -28,7 +30,8 @@ class Value:
   def get_type(self) -> ir.Type:
     assert False, "must be implemented by subclass"
 
-  def type(*args: ir.Type) -> ir.Type:
+  @staticmethod
+  def ty(*args: ir.Type) -> ir.Type:
     assert False, "must be implemented by subclass"
 
   def _get_ssa_value(self) -> ir.Value:

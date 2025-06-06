@@ -2,14 +2,14 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, target, entry, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, Tuple, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, Tuple, embed_comment, MemoryBlock, Memory
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
 
 
-@target
-class Singleton:
+@config
+class Singleton(Config):
   pass
 
 
@@ -21,12 +21,10 @@ class Singleton:
 # MLIR-NEXT: }
 
 
-@target
-class Tgt0:
+@config
+class Tgt0(Config):
 
-  @entry
-  def entry0():
-    return Set.create(Integer(0), Integer(1))
+  entry0 = Param(loader=lambda: Set.create(Integer(0), Integer(1)))
 
 
 # MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.isa.label>
@@ -36,16 +34,11 @@ class Tgt0:
 # MLIR-NEXT: }
 
 
-@target
-class Tgt1:
+@config
+class Tgt1(Config):
 
-  @entry
-  def entry0():
-    return Integer(0)
-
-  @entry
-  def entry1():
-    return Label.declare("l0")
+  entry0 = Param(loader=lambda: Integer(0))
+  entry1 = Param(loader=lambda: Label.declare("l0"))
 
 
 # MLIR-LABEL: rtg.target @Tgt2
@@ -53,12 +46,11 @@ class Tgt1:
 # MLIR-NEXT: rtg.yield [[V0]] : !rtg.isa.memory_block<32>
 
 
-@target
-class Tgt2:
+@config
+class Tgt2(Config):
 
-  @entry
-  def mem_blk_0():
-    return MemoryBlock.declare(base_address=0, end_address=63, address_width=32)
+  mem_blk = Param(loader=lambda: MemoryBlock.declare(
+      base_address=0, end_address=63, address_width=32))
 
 
 # MLIR-LABEL: rtg.target @Tgt4
@@ -81,30 +73,18 @@ class Tgt2:
 # MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>, index
 
 
-@target
-class Tgt4:
+@config
+class Tgt4(Config):
 
-  @entry
-  def arr0():
-    arr0 = Array.create([Integer(1), Integer(2), Integer(3)], Integer.type())
-    return arr0[2]
-
-  @entry
-  def arr1():
-    return Array.create([], Array.type(Integer.type()))
-
-  @entry
-  def arr2():
-    return Array.create([
-        Array.create([Integer(y * 10 + x)
-                      for x in range(3)], Integer.type())
-        for y in range(2)
-    ], Array.type(Integer.type()))
-
-  @entry
-  def arr3():
-    return Array.create([Integer(2), Integer(1)],
-                        Integer.type()).set(1, Integer(3)).size()
+  arr0 = Param(loader=lambda: Array.create([Integer(
+      1), Integer(2), Integer(3)], Integer.ty())[2])
+  arr1 = Param(loader=lambda: Array.create([], Array.ty(Integer.ty())))
+  arr2 = Param(loader=lambda: Array.create([
+      Array.create([Integer(y * 10 + x) for x in range(3)], Integer.ty()) for y
+      in range(2)
+  ], Array.ty(Integer.ty())))
+  arr3 = Param(loader=lambda: Array.create([Integer(2), Integer(1)], Integer.ty(
+  )).set(1, Integer(3)).size())
 
 
 # MLIR-LABEL: rtg.sequence @seq0
@@ -114,7 +94,7 @@ class Tgt4:
 # MLIR-NEXT: }
 
 
-@sequence(Set.type(Label.type()))
+@sequence(Set.ty(Label.ty()))
 def seq0(set: Set):
   set.get_random().place()
 
@@ -130,7 +110,7 @@ def seq1():
   Label.declare("s1").place()
 
 
-@sequence(Set.type(Tuple.type(Integer.type(), Bool.type())))
+@sequence(Set.ty(Tuple.ty(Integer.ty(), Bool.ty())))
 def seq2(set):
   pass
 
@@ -145,8 +125,8 @@ def seq2(set):
 # ASM: End of test0
 
 
-@test()
-def test0():
+@test(Singleton)
+def test0(config):
   pass
 
 
@@ -169,9 +149,9 @@ def test0():
 # ASM: End of test1_args
 
 
-@test(("entry0", Set.type(Integer.type())))
-def test1_args(set: Set):
-  i = set.get_random()
+@test(Tgt0)
+def test1_args(config):
+  i = config.entry0.get_random()
   Label.declare(r"L_{{0}}", i).place()
 
 
@@ -291,8 +271,8 @@ def test1_args(set: Set):
 # ASM: End of test2_labels
 
 
-@test()
-def test2_labels():
+@test(Singleton)
+def test2_labels(config):
   l0 = Label.declare("l0")
   l1 = Label.declare_unique("l1")
   l2 = Label.declare_unique("l1")
@@ -357,8 +337,8 @@ def test2_labels():
 # MLIR-NEXT: }
 
 
-@test()
-def test3_registers_and_immediates():
+@test(Singleton)
+def test3_registers_and_immediates(config):
   vreg = IntegerRegister.virtual()
   imm12 = Immediate(12, 8)
   rtgtest.ADDI(vreg, IntegerRegister.t0(), imm12)
@@ -375,8 +355,8 @@ def test3_registers_and_immediates():
 # MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
 
 
-@test()
-def test4_integer_to_immediate():
+@test(Singleton)
+def test4_integer_to_immediate(config):
   rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
                Immediate(12, Integer(2)))
 
@@ -389,15 +369,12 @@ def test4_integer_to_immediate():
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32>
 # MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: [[BASE:%.+]] = rtg.isa.memory_base_address [[MEM]] : !rtg.isa.memory<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[BASE]] : !rtg.isa.immediate<32>
 
 
-@test(("mem_blk", MemoryBlock.type(32)))
-def test6_memories(mem_blk):
-  mem = Memory.alloc(mem_blk, size=8, align=4)
+@test(Tgt2)
+def test6_memories(config):
+  mem = Memory.alloc(config.mem_blk, size=8, align=4)
   rtgtest.AUIPC(IntegerRegister.t0(), Immediate(32, mem.size()))
-  rtgtest.AUIPC(IntegerRegister.t0(), mem.base_address())
 
 
 # MLIR-LABEL: rtg.test @test7_bools
@@ -411,35 +388,41 @@ def test6_memories(mem_blk):
 # MLIR: index.cmp uge(%a, %b)
 
 
-@sequence(Bool.type())
+@config
+class TwoIntegers(Config):
+  a = Param(loader=lambda: Integer(0))
+  b = Param(loader=lambda: Integer(1))
+
+
+@sequence(Bool.ty())
 def consumer(b):
   pass
 
 
-@test(("a", Integer.type()), ("b", Integer.type()))
-def test7_bools(a, b):
+@test(TwoIntegers)
+def test7_bools(config):
   consumer(Bool(True))
   consumer(Bool(False))
-  consumer(a == b)
-  consumer(a != b)
-  consumer(a < b)
-  consumer(a > b)
-  consumer(a <= b)
-  consumer(a >= b)
+  consumer(config.a == config.b)
+  consumer(config.a != config.b)
+  consumer(config.a < config.b)
+  consumer(config.a > config.b)
+  consumer(config.a <= config.b)
+  consumer(config.a >= config.b)
 
 
 # MLIR-LABEL: rtg.test @test8_random_integer
 # MLIR-NEXT: rtg.random_number_in_range [%a, %b)
 
 
-@sequence(Integer.type())
+@sequence(Integer.ty())
 def int_consumer(b):
   pass
 
 
-@test(("a", Integer.type()), ("b", Integer.type()))
-def test8_random_integer(a, b):
-  int_consumer(Integer.random(a, b))
+@test(TwoIntegers)
+def test8_random_integer(config):
+  int_consumer(Integer.random(config.a, config.b))
 
 
 # MLIR-LABEL: rtg.test @test90_tuples
@@ -447,10 +430,17 @@ def test8_random_integer(a, b):
 # MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : tuple<index, i1>
 
 
-@test(("a", Integer.type()), ("b", Bool.type()),
-      ("tup", Tuple.type(Integer.type(), Bool.type())))
-def test90_tuples(a, b, tup):
-  tup = Tuple.create(a, b)
+@config
+class Test90Config(Config):
+
+  a = Param(loader=lambda: Integer(0))
+  b = Param(loader=lambda: Bool(True))
+  tup = Param(loader=lambda: Tuple.create(Integer(1), Bool(False)))
+
+
+@test(Test90Config)
+def test90_tuples(config):
+  tup = Tuple.create(config.a, config.b)
   consumer(tup[1])
 
 
@@ -460,9 +450,16 @@ def test90_tuples(a, b, tup):
 # MLIR: rtg.set_convert_to_bag %a : !rtg.set<index>
 
 
-@test(("a", Set.type(Integer.type())), ("b", Set.type(Bool.type())),
-      ("c", Bag.type(Integer.type())))
-def test91_sets(a, b, c):
-  seq2(Set.cartesian_product(a, b))
-  int_consumer(c.to_set().get_random())
-  int_consumer(a.to_bag().get_random())
+@config
+class Test91Config(Config):
+
+  a = Param(loader=lambda: Set.create(Integer(0)))
+  b = Param(loader=lambda: Set.create(Bool(True)))
+  c = Param(loader=lambda: Bag.create((0, Integer(0))))
+
+
+@test(Test91Config)
+def test91_sets(config):
+  seq2(Set.cartesian_product(config.a, config.b))
+  int_consumer(config.c.to_set().get_random())
+  int_consumer(config.a.to_bag().get_random())
