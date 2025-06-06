@@ -184,9 +184,7 @@ void InjectDUTHierarchy::runOnOperation() {
     // Finish setting up the DUT.  Strip the `MarkDUTAnnotation` is we are in
     // "moveDut" mode.
     if (moveDut)
-      AnnotationSet::removeAnnotations(dut, [&](Annotation anno) {
-        return anno.isClass(dutAnnoClass) && moveDut;
-      });
+      AnnotationSet::removeAnnotations(dut, dutAnnoClass);
   }
 
   // Instantiate the wrapper inside the DUT and wire it up.
