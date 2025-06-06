@@ -25,7 +25,8 @@ public:
                    bool verifyPasses, bool verbosePassExecution,
                    const std::vector<std::string> &unsupportedInstructions,
                    const std::string &unsupportedInstructionsFile,
-                   bool splitOutput, const std::string &outputPath)
+                   bool splitOutput, const std::string &outputPath,
+                   bool memoriesAsImmediates)
       : options(circtRtgToolOptionsCreateDefault(seed)) {
     setOutputFormat(outputFormat);
     setVerifyPasses(verifyPasses);
@@ -34,6 +35,7 @@ public:
     setUnsupportedInstructionsFile(unsupportedInstructionsFile);
     setSplitOutput(splitOutput);
     setOutputPath(outputPath);
+    setMemoriesAsImmediates(memoriesAsImmediates);
   }
   ~PyRtgToolOptions() { circtRtgToolOptionsDestroy(options); }
 
@@ -79,6 +81,10 @@ public:
     circtRtgToolOptionsSetOutputPath(options, path.c_str());
   }
 
+  void setMemoriesAsImmediates(bool enable) {
+    circtRtgToolOptionsSetMemoriesAsImmediates(options, enable);
+  }
+
 private:
   CirctRtgToolOptions options;
 };
@@ -96,14 +102,15 @@ void circt::python::populateDialectRTGToolSubmodule(nb::module_ &m) {
   nb::class_<PyRtgToolOptions>(m, "Options")
       .def(nb::init<unsigned, CirctRtgToolOutputFormat, bool, bool,
                     const std::vector<std::string> &, const std::string &, bool,
-                    const std::string &>(),
+                    const std::string &, bool>(),
            nb::arg("seed"),
            nb::arg("output_format") = CIRCT_RTGTOOL_OUTPUT_FORMAT_ASM,
            nb::arg("verify_passes") = true,
            nb::arg("verbose_pass_execution") = false,
            nb::arg("unsupported_instructions") = std::vector<const char *>(),
            nb::arg("unsupported_instructions_file") = "",
-           nb::arg("split_output") = false, nb::arg("output_path") = "")
+           nb::arg("split_output") = false, nb::arg("output_path") = "",
+           nb::arg("memories_as_immediates") = true)
       .def("set_output_format", &PyRtgToolOptions::setOutputFormat,
            "Specify the output format of the tool", nb::arg("format"))
       .def("set_seed", &PyRtgToolOptions::setSeed,
@@ -131,11 +138,15 @@ void circt::python::populateDialectRTGToolSubmodule(nb::module_ &m) {
            nb::arg("filename"))
       .def("set_split_output", &PyRtgToolOptions::setSplitOutput,
            "Determines whether each test should be emitted to a separate file.",
-           nb::arg("filename"))
+           nb::arg("enable"))
       .def("output_path", &PyRtgToolOptions::setOutputPath,
            "The path of a file to be emitted to or a directory if "
            "'split_output' is enabled.",
-           nb::arg("filename"));
+           nb::arg("filename"))
+      .def("set_memories_as_immediates",
+           &PyRtgToolOptions::setMemoriesAsImmediates,
+           "Determines whether memories are lowered to immediates or labels.",
+           nb::arg("enable"));
 
   m.def("populate_randomizer_pipeline",
         [](MlirPassManager pm, const PyRtgToolOptions &options) {

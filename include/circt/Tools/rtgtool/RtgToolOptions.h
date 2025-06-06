@@ -85,6 +85,12 @@ public:
   }
   std::string getOutputPath() const { return outputPath; }
 
+  RtgToolOptions &setMemoriesAsImmediates(bool enable) {
+    memoriesAsImmediates = enable;
+    return *this;
+  }
+  bool getMemoriesAsImmediates() const { return memoriesAsImmediates; }
+
 private:
   OutputFormat outputFormat = OutputFormat::ElaboratedMLIR;
   unsigned seed;
@@ -94,6 +100,7 @@ private:
   std::string unsupportedInstructionsFile;
   bool splitOutput = false;
   std::string outputPath;
+  bool memoriesAsImmediates = true;
 };
 
 /// Populates the passes necessary to lower IR with RTG randomization operations
