@@ -134,6 +134,9 @@ struct Context {
   LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
                                      const slang::ast::Statement &stmt);
 
+  /// Helper function to convert a value to a MLIR I1 value.
+  Value convertToI1(Value value);
+
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);
 
