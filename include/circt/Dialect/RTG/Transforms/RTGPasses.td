@@ -123,9 +123,9 @@ def MemoryAllocationPass : Pass<"rtg-memory-allocation", "rtg::TestOp"> {
   }];
 
   let options = [
-    Option<"useImmediates", "use-immediates", "bool", /*default=*/"true", [{
-        Whether the pass should lower memories to immediates instead of labels.
-      }]>,
+    Option<"useImmediates", "use-immediates", "bool", /*default=*/"true",
+           "Whether the pass should lower memories to immediates instead of "
+           "labels.">,
   ];
 
   let statistics = [
