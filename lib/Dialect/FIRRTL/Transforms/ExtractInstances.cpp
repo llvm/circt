@@ -1153,8 +1153,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     addPortsToClass(classFields, sifiveMetadataClass);
     auto *node = instanceGraph->lookup(sifiveMetadataClass);
     assert(node && node->hasOneUse());
-    ObjectOp metadataObj =
-        dyn_cast_or_null<ObjectOp>((*node->usesBegin())->getInstance());
+    ObjectOp metadataObj = (*node->usesBegin())->getInstance<ObjectOp>();
     assert(metadataObj &&
            "expected the class to be instantiated by an object op");
     builderOM.setInsertionPoint(metadataObj);
