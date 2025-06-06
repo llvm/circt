@@ -209,3 +209,33 @@ hw.module @IgnoreNestedSignalUsers(in %u: i20, in %v: i22) {
     llhd.halt
   }
 }
+
+// Driving a single array element still requires an aggregate to be created.
+// CHECK-LABEL: @RegressionSingleElementArray
+hw.module @RegressionSingleElementArray(in %u: i1) {
+  %c0_i0 = hw.constant 0 : i0
+  %0 = builtin.unrealized_conversion_cast to !hw.array<1xi1>
+  // CHECK: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: %a = llhd.sig
+  // CHECK-NEXT: [[TMP:%.+]] = hw.array_create %u
+  // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T]] :
+  %a = llhd.sig %0 : !hw.array<1xi1>
+  %2 = llhd.sig.array_get %a[%c0_i0] : !hw.inout<array<1xi1>>
+  llhd.drv %2, %u after %1 : !hw.inout<i1>
+}
+
+// Driving a single struct field still requires an aggregate to be created.
+// CHECK-LABEL: @RegressionSingleFieldStruct
+hw.module @RegressionSingleFieldStruct(in %u: i1) {
+  %c0_i0 = hw.constant 0 : i0
+  %0 = builtin.unrealized_conversion_cast to !hw.struct<x: i1>
+  // CHECK: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: %a = llhd.sig
+  // CHECK-NEXT: [[TMP:%.+]] = hw.struct_create (%u)
+  // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T]] :
+  %a = llhd.sig %0 : !hw.struct<x: i1>
+  %2 = llhd.sig.struct_extract %a["x"] : !hw.inout<struct<x: i1>>
+  llhd.drv %2, %u after %1 : !hw.inout<i1>
+}
