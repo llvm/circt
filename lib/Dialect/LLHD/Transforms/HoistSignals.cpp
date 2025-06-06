@@ -10,6 +10,7 @@
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/Support/Debug.h"
 
@@ -619,14 +620,11 @@ struct HoistSignalsPass
 
 void HoistSignalsPass::runOnOperation() {
   SmallVector<Region *> regions;
-  getOperation()->walk<WalkOrder::PreOrder>([&](Operation *op) {
-    if (isa<ProcessOp, FinalOp>(op)) {
-      auto &region = op->getRegion(0);
-      if (!region.empty())
-        regions.push_back(&region);
-      return WalkResult::skip();
-    }
-    return WalkResult::advance();
+  getOperation()->walk([&](Operation *op) {
+    if (isa<ProcessOp, FinalOp, scf::IfOp>(op))
+      for (auto &region : op->getRegions())
+        if (!region.empty())
+          regions.push_back(&region);
   });
   for (auto *region : regions) {
     ProbeHoister(*region).hoist();
