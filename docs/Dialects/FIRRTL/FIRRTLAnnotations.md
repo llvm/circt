@@ -620,7 +620,7 @@ Example:
 {
   "class": "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
   "name": "Logic",
-  "moveDutAnno": false
+  "moveDut": false
 }
 ```
 
