@@ -497,17 +497,60 @@ LogicalResult ContextSwitchOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult TestOp::verifyRegions() {
-  if (!getTarget().entryTypesMatch(getBody()->getArgumentTypes()))
+  if (!getTargetType().entryTypesMatch(getBody()->getArgumentTypes()))
     return emitOpError("argument types must match dict entry types");
+
+  return success();
+}
+
+LogicalResult TestOp::verify() {
+  if (getTemplateName().empty())
+    return emitOpError("template name must not be empty");
+
+  return success();
+}
+
+LogicalResult TestOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (!getTargetAttr())
+    return success();
+
+  auto target =
+      symbolTable.lookupNearestSymbolFrom<TargetOp>(*this, getTargetAttr());
+  if (!target)
+    return emitOpError()
+           << "'" << *getTarget()
+           << "' does not reference a valid 'rtg.target' operation";
+
+  // Check if target is a subtype of test requirements
+  // Since entries are sorted by name, we can do this in a single pass
+  size_t targetIdx = 0;
+  auto targetEntries = target.getTarget().getEntries();
+  for (auto testEntry : getTargetType().getEntries()) {
+    // Find the matching entry in target entries.
+    while (targetIdx < targetEntries.size() &&
+           targetEntries[targetIdx].name.getValue() < testEntry.name.getValue())
+      targetIdx++;
+
+    // Check if we found a matching entry with the same name and type
+    if (targetIdx >= targetEntries.size() ||
+        targetEntries[targetIdx].name != testEntry.name ||
+        targetEntries[targetIdx].type != testEntry.type) {
+      return emitOpError("referenced 'rtg.target' op's type is invalid: "
+                         "missing entry called '")
+             << testEntry.name.getValue() << "' of type " << testEntry.type;
+    }
+  }
 
   return success();
 }
 
 ParseResult TestOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the name as a symbol.
-  if (parser.parseSymbolName(
-          result.getOrAddProperties<TestOp::Properties>().sym_name))
+  StringAttr symNameAttr;
+  if (parser.parseSymbolName(symNameAttr))
     return failure();
+
+  result.getOrAddProperties<TestOp::Properties>().sym_name = symNameAttr;
 
   // Parse the function signature.
   SmallVector<OpAsmParser::Argument> arguments;
@@ -544,7 +587,31 @@ ParseResult TestOp::parse(OpAsmParser &parser, OperationState &result) {
                                    ArrayRef<DictEntry>(entries));
   if (!type)
     return failure();
-  result.getOrAddProperties<TestOp::Properties>().target = TypeAttr::get(type);
+  result.getOrAddProperties<TestOp::Properties>().targetType =
+      TypeAttr::get(type);
+
+  std::string templateName;
+  if (!parser.parseOptionalKeyword("template")) {
+    auto loc = parser.getCurrentLocation();
+    if (parser.parseString(&templateName))
+      return failure();
+
+    if (templateName.empty())
+      return parser.emitError(loc, "template name must not be empty");
+  }
+
+  StringAttr templateNameAttr = symNameAttr;
+  if (!templateName.empty())
+    templateNameAttr = StringAttr::get(result.getContext(), templateName);
+
+  StringAttr targetName;
+  if (!parser.parseOptionalKeyword("target"))
+    if (parser.parseSymbolName(targetName))
+      return failure();
+
+  result.getOrAddProperties<TestOp::Properties>().templateName =
+      templateNameAttr;
+  result.getOrAddProperties<TestOp::Properties>().target = targetName;
 
   auto loc = parser.getCurrentLocation();
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
@@ -574,15 +641,25 @@ void TestOp::print(OpAsmPrinter &p) {
   p << "(";
   SmallString<32> resultNameStr;
   llvm::interleaveComma(
-      llvm::zip(getTarget().getEntries(), getBody()->getArguments()), p,
+      llvm::zip(getTargetType().getEntries(), getBody()->getArguments()), p,
       [&](auto entryAndArg) {
         auto [entry, arg] = entryAndArg;
         p << entry.name.getValue() << " = ";
         p.printRegionArgument(arg);
       });
   p << ")";
+
+  if (getSymNameAttr() != getTemplateNameAttr())
+    p << " template " << getTemplateNameAttr();
+
+  if (getTargetAttr()) {
+    p << " target ";
+    p.printSymbolName(getTargetAttr().getValue());
+  }
+
   p.printOptionalAttrDictWithKeyword(
-      (*this)->getAttrs(), {getSymNameAttrName(), getTargetAttrName()});
+      (*this)->getAttrs(), {getSymNameAttrName(), getTargetTypeAttrName(),
+                            getTargetAttrName(), getTemplateNameAttrName()});
   p << ' ';
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false);
 }
@@ -590,7 +667,7 @@ void TestOp::print(OpAsmPrinter &p) {
 void TestOp::getAsmBlockArgumentNames(Region &region,
                                       OpAsmSetValueNameFn setNameFn) {
   for (auto [entry, arg] :
-       llvm::zip(getTarget().getEntries(), region.getArguments()))
+       llvm::zip(getTargetType().getEntries(), region.getArguments()))
     setNameFn(arg, entry.name.getValue());
 }
 

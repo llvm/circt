@@ -24,9 +24,12 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
     anymore.
   }];
 
-  let options = [
-    Option<"seed", "seed", "unsigned", /*default=*/"",
-      "The seed for any RNG constructs used in the pass.">,
+  let options = [Option<"seed", "seed", "unsigned", /*default=*/"",
+                        "The seed for any RNG constructs used in the pass.">,
+                 Option<
+                     "deleteUnmatchedTests", "delete-unmatched-tests", "bool",
+                     /*default=*/"true",
+                     "Delete tests that could not be matched with a target.">,
   ];
 
   let dependentDialects = ["mlir::index::IndexDialect"];

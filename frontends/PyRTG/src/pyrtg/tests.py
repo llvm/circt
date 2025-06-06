@@ -24,7 +24,7 @@ class Test(CodeGenRoot):
 
   def _codegen(self):
     test = rtg.TestOp(
-        self.name,
+        self.name, self.name,
         ir.TypeAttr.get(
             rtg.DictType.get([
                 (ir.StringAttr.get(name), ty)

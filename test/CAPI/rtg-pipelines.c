@@ -23,6 +23,9 @@ int main(int argc, char **argv) {
                "}\n"
                "rtg.test @test() {\n"
                "  %0 = rtg.get_sequence @seq : !rtg.sequence\n"
+               "}\n"
+               "rtg.target @target : !rtg.dict<> {\n"
+               "  rtg.yield\n"
                "}\n"));
   if (mlirModuleIsNull(moduleOp)) {
     printf("ERROR: Could not parse.\n");
