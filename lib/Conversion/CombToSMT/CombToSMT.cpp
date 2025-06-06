@@ -9,6 +9,7 @@
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/Pass/Pass.h"
@@ -284,8 +285,12 @@ void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
 
 void ConvertCombToSMTPass::runOnOperation() {
   ConversionTarget target(getContext());
+  target.addIllegalDialect<hw::HWDialect>();
+  target.addIllegalOp<seq::FromClockOp>();
+  target.addIllegalOp<seq::ToClockOp>();
   target.addIllegalDialect<comb::CombDialect>();
   target.addLegalDialect<smt::SMTDialect>();
+  target.addLegalDialect<mlir::func::FuncDialect>();
 
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
