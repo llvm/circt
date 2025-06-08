@@ -1479,60 +1479,21 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
   hw.output %4 : i4
 }
 
-// CHECK-LABEL:   "test.acrossBlockCanonicalizationBarrier"() ({
-// CHECK:         ^bb0(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[C:.*]]: i32):
-// CHECK:           %[[ADD1:.*]] = comb.add %[[A]], %[[B]] : i32
-// CHECK:           "terminator"() : () -> ()
-// CHECK:         ^bb1:
-// CHECK:           %[[ADD2:.*]] = comb.add %[[ADD1]], %[[C]] : i32
-// CHECK:           "terminator"(%[[ADD2]]) : (i32) -> ()
-// CHECK:         }) : () -> ()
-"test.acrossBlockCanonicalizationBarrier"() ({
-  ^bb0(%a : i32, %b : i32, %c : i32):
-    %add1 = comb.add %a, %b : i32
-    "terminator"() : () -> ()
+// CHECK-LABEL: @acrossBlockCanonicalizationConstant
+// CHECK-NEXT: %c-1_i32 = hw.constant -1
+// CHECK-NEXT: hw.output %c-1_i32, %c-1_i32 : i32, i32
+hw.module @acrossBlockCanonicalizationConstant(in %arg0: i32, out out0 : i32, out out1 : i32) {
+  %0 = hw.constant 0 : i32
+  %res:2 = scf.execute_region -> (i32, i32) {
+    %1 = hw.constant -1 : i32
+    %2 = comb.or %0, %1, %1 : i32
+    cf.br ^bb1
   ^bb1:
-    // Canonicalization should _not_ pull %add1 into a combined add op when %add1
-    // is defined in another block.
-    %add2 = comb.add %add1, %c : i32
-    "terminator"(%add2) : (i32) -> ()
-}) : () -> ()
-
-// CHECK-LABEL: "test.acrossBlockCanonicalizationBarrierFlattenAndIdem"
-// CHECK: ^bb1:
-// CHECK-NEXT: %[[OUT:.+]] = comb.or %0, %1, %2 : i32
-// CHECK-NEXT: "terminator"(%[[OUT]]) : (i32) -> ()
-"test.acrossBlockCanonicalizationBarrierFlattenAndIdem"() ({
-^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
-  %0 = comb.or %arg0, %arg1 : i32
-  %1 = comb.or %arg1, %arg2 : i32
-  %2 = comb.or %arg0, %arg2 : i32
-  "terminator"() : () -> ()
-^bb1:  // no predecessors
-  // Flatten and unique, but not across blocks.
-  %3 = comb.or %0, %1 : i32
-  %4 = comb.or %1, %2 : i32
-  %5 = comb.or %3, %4, %0, %1, %1, %2 : i32
-
-  "terminator"(%5) : (i32) -> ()
-}) : () -> ()
-
-// CHECK-LABEL: "test.acrossBlockCanonicalizationBarrierIdem"
-// CHECK: ^bb1:
-// CHECK-NEXT: %[[OUT1:.+]] = comb.or %0, %1 : i32
-// CHECK-NEXT: %[[OUT2:.+]] = comb.or %[[OUT1]], %arg0 : i32
-// CHECK-NEXT: "terminator"(%[[OUT1]], %[[OUT2]]) : (i32, i32) -> ()
-"test.acrossBlockCanonicalizationBarrierIdem"() ({
-^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
-  %0 = comb.or %arg0, %arg1 : i32
-  %1 = comb.or %arg1, %arg2 : i32
-  "terminator"() : () -> ()
-^bb1:  // no predecessors
-  %2 = comb.or %0, %1, %1 : i32
-  %3 = comb.or %2, %0, %1, %arg0 : i32
-
-  "terminator"(%2, %3) : (i32, i32) -> ()
-}) : () -> ()
+    %3 = comb.or %2, %0, %1, %arg0 : i32
+    scf.yield %2, %3 : i32, i32
+  }
+  hw.output %res#0, %res#1 : i32, i32
+}
 
 // Check multi-operation idempotent operand deduplication.
 // CHECK-LABEL: @IdemTwoState
