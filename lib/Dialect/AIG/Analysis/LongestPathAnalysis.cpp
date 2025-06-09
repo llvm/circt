@@ -560,7 +560,9 @@ LogicalResult LocalVisitor::markEquivalent(Value from, size_t fromBitPos,
                                            Value to, size_t toBitPos,
                                            SmallVectorImpl<OpenPath> &results) {
   auto leader = ec.getOrInsertLeaderValue({to, toBitPos});
-  (void)leader;
+  auto &slot = ecMap[leader];
+  if (!slot.first)
+    slot = {to, toBitPos};
   // Merge classes, and visit the leader.
   auto newLeader = ec.unionSets({to, toBitPos}, {from, fromBitPos});
   assert(leader == *newLeader);
