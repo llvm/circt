@@ -1763,6 +1763,24 @@ LogicalResult OutputOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// DontTouchOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DontTouchOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto ref = getRef();
+  if (ns.lookup(getRef()))
+    return success();
+  auto diag = emitOpError()
+              << "references non-existent inner symbol '" << ref << "'";
+  auto moduleName = ref.getModule();
+  if (auto *moduleOp = ns.symTable.lookup(moduleName))
+    return diag.attachNote(moduleOp->getLoc())
+           << "the inner symbol should exist in the body of this operation";
+  return diag.attachNote() << "no operation with symbol '@"
+                           << moduleName.getValue() << "' exists";
+}
+
+//===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
 

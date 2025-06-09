@@ -654,7 +654,9 @@ def HierPathOp : HWOp<"hierpath",
     }];
 }
 
-def DontTouchOp : HWOp<"donttouch"> {
+def DontTouchOp : HWOp<"donttouch",
+                       [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+                        HasParent<"ModuleOp">]> {
   let summary = "A user of an inner ref that blocks removal";
   let description = [{
     An operation that marks an InnerRef as having external users.  The operation
