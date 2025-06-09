@@ -19,6 +19,16 @@ class Immediate(Value):
     self._width = width
     self._value = value
 
+  @staticmethod
+  def random(width: int) -> Immediate:
+    """
+    An immediate of the provided width of a random value from 0 to the maximum
+    unsigned number the immediate can hold (all bits set).
+    """
+
+    # Note that the upper limit is exclusive
+    return Immediate(width, Integer.random(0, 2**width))
+
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
       self = rtg.ConstantOp(rtg.ImmediateAttr.get(self._width, self._value))

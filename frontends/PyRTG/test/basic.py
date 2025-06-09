@@ -320,6 +320,8 @@ def test2_labels(config):
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
+# MLIR-NEXT: %idx2097152 = index.constant 2097152
+# MLIR-NEXT: %idx0 = index.constant 0
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
 # MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
 # MLIR-NEXT: [[IMM13:%.+]] = rtg.constant #rtg.isa.immediate<13, 9>
@@ -334,6 +336,9 @@ def test2_labels(config):
 # MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097152)
+# MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
+# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: }
 
 
@@ -346,6 +351,7 @@ def test3_registers_and_immediates(config):
   rtgtest.BEQ(vreg, IntegerRegister.t2(), Immediate(13, 9))
   rtgtest.JAL(vreg, Immediate(21, 16))
   rtgtest.AUIPC(vreg, Immediate(32, 32))
+  rtgtest.JAL(vreg, Immediate.random(21))
 
 
 # MLIR-LABEL: rtg.test @test4_integer_to_immediate()
