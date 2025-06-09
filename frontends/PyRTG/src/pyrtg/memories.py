@@ -5,7 +5,7 @@ from .base import ir
 from .index import index
 from .rtg import rtg
 from .integers import Integer
-from .resources import Immediate
+from .immediates import Immediate
 
 from typing import Union
 

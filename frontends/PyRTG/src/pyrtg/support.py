@@ -41,7 +41,7 @@ def _FromCirctValue(value: ir.Value) -> Value:
     from .contexts import CPUCore
     return CPUCore(value)
   if isinstance(type, rtg.ImmediateType):
-    from .resources import Immediate
+    from .immediates import Immediate
     return Immediate(type.width, value)
   if isinstance(type, ir.TupleType):
     from .tuples import Tuple

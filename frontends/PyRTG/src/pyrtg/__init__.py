@@ -15,7 +15,8 @@ from .integers import Integer, Bool
 from .bags import Bag
 from .sequences import sequence, Sequence, RandomizedSequence
 from .configs import config, Param, Config
-from .resources import IntegerRegister, Immediate
+from .immediates import Immediate
+from .resources import IntegerRegister
 from .arrays import Array
 from .contexts import CPUCore
 from .control_flow import If, Else, EndIf, For, Foreach
