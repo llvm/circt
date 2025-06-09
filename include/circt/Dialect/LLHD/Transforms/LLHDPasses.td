@@ -161,10 +161,7 @@ def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
 }
 
 def LowerProcessesPass : Pass<"llhd-lower-processes", "hw::HWModuleOp"> {
-  let summary = "Convert combinational LLHD processes to SCF execute regions";
-  let dependentDialects = [
-    "mlir::scf::SCFDialect",
-  ];
+  let summary = "Convert process ops to combinational ops where possible";
 }
 
 def DeseqPass : Pass<"llhd-deseq", "hw::HWModuleOp"> {
@@ -172,7 +169,6 @@ def DeseqPass : Pass<"llhd-deseq", "hw::HWModuleOp"> {
   let dependentDialects = [
     "comb::CombDialect",
     "hw::HWDialect",
-    "mlir::scf::SCFDialect",
     "seq::SeqDialect",
   ];
 }
