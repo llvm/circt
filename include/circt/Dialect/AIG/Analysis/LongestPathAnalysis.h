@@ -106,11 +106,18 @@ public:
 
   void print(llvm::raw_ostream &os);
   void setDelay(int64_t delay) { path.delay = delay; }
+  const llvm::ImmutableList<DebugPoint> &getHistory() const {
+    return path.history;
+  }
 
 private:
   Object fanOut;
   OpenPath path;
   hw::HWModuleOp root;
+};
+
+struct LongestPathAnalysisOption {
+  bool traceDebugPoints = false;
 };
 
 // This analysis finds the longest paths in the dataflow graph across modules.
@@ -122,7 +129,8 @@ private:
 class LongestPathAnalysis {
 public:
   // Entry points for analysis.
-  LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am);
+  LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am,
+                      const LongestPathAnalysisOption &option = {});
   ~LongestPathAnalysis();
 
   // Return all longest paths to each Fanin for the given value and bit
