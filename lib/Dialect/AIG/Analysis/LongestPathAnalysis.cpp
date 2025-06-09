@@ -64,6 +64,7 @@
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -267,7 +268,8 @@ class LocalVisitor;
 //===----------------------------------------------------------------------===//
 // Context
 //===----------------------------------------------------------------------===//
-// This class provides a thread-safe interface to access the analysis results.
+/// This class provides a thread-safe interface to access the analysis results.
+
 class Context {
 public:
   Context(igraph::InstanceGraph *instanceGraph,
@@ -460,6 +462,8 @@ private:
 
   // This is set to true when the thread is done.
   std::atomic_bool done;
+  mutable std::condition_variable cv;
+  mutable std::mutex mutex;
 
   // A flag to indicate the module is top-level.
   bool topLevel = false;
@@ -482,8 +486,7 @@ ArrayRef<OpenPath> LocalVisitor::getResults(Value value, size_t bitPos) const {
   if (leader != ec.member_end()) {
     if (*leader != valueAndBitPos) {
       // If this is not the leader, then use the leader.
-      auto root = ecMap.at(*leader);
-      return getResults(root.first, root.second);
+      return getResults(leader->first, leader->second);
     }
   }
 
@@ -505,8 +508,8 @@ void LocalVisitor::putUnclosedResult(const Object &object, int64_t delay,
 
 void LocalVisitor::waitUntilDone() const {
   // Wait for the thread to finish.
-  while (!done.load())
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::unique_lock<std::mutex> lock(mutex);
+  cv.wait(lock, [this] { return done.load(); });
 }
 
 LogicalResult LocalVisitor::markRegFanOut(Value fanOut, Value start,
@@ -557,9 +560,7 @@ LogicalResult LocalVisitor::markEquivalent(Value from, size_t fromBitPos,
                                            Value to, size_t toBitPos,
                                            SmallVectorImpl<OpenPath> &results) {
   auto leader = ec.getOrInsertLeaderValue({to, toBitPos});
-  auto &slot = ecMap[leader];
-  if (!slot.first)
-    slot = {to, toBitPos};
+  (void)leader;
   // Merge classes, and visit the leader.
   auto newLeader = ec.unionSets({to, toBitPos}, {from, fromBitPos});
   assert(leader == *newLeader);
@@ -646,13 +647,9 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
   if (!ctx->instanceGraph)
     return markFanIn(value, bitPos, results);
 
-  // If an instance graph is available, then we can look up the module. It's an
-  // error when the module is not found.
+  // If an instance graph is available, then we can look up the module.
   auto *node = ctx->instanceGraph->lookup(moduleName);
-  if (!node || !node->getModule()) {
-    op.emitError() << "module " << moduleName << " not found";
-    return failure();
-  }
+  assert(node && "module not found");
 
   // Otherwise, if the module is not a HWModuleOp, then we should treat it as a
   // fanIn.
@@ -778,8 +775,7 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputeResults(Value value,
     auto leader = ec.findLeader({value, bitPos});
     // If this is not the leader, then use the leader.
     if (*leader != std::pair(value, bitPos)) {
-      auto root = ecMap.at(*leader);
-      return getOrComputeResults(root.first, root.second);
+      return getOrComputeResults(leader->first, leader->second);
     }
   }
 
@@ -974,7 +970,11 @@ LogicalResult LocalVisitor::initializeAndRun() {
     return WalkResult::advance();
   });
 
-  done.store(true);
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    done.store(true);
+    cv.notify_all();
+  }
   LLVM_DEBUG({ ctx->notifyEnd(module.getModuleNameAttr()); });
   return failure(walkResult.wasInterrupted());
 }
