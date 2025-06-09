@@ -666,9 +666,9 @@ firrtl.circuit "InstOfEquivPublic" attributes {annotations = [{
 // expected-error @below {{module "Test1" not deduplicated with "Test0"}}
 firrtl.circuit "VisibilityDoesNotBlockDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
-      modules = ["~VisibilityDoesNotBlockDedup|Test0", "~VisibilityDoesNotBlockDedup|Test1"]
+      modules = ["~|Test0", "~|Test1"]
     }]} {
-  firrtl.module private @Test0() {
+  firrtl.module @Test0() {
     // expected-note @below {{operation result types don't match, first type is '!firrtl.uint<1>'}}
     %wire = firrtl.wire : !firrtl.uint<1>
   }
