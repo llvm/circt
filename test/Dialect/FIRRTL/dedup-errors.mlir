@@ -643,6 +643,7 @@ firrtl.circuit "InstOfEquivPublic" attributes {annotations = [{
     }]} {
   // expected-note @below {{module is public}}
   firrtl.module public @Test0() { }
+  // expected-note @below {{module is public}}
   firrtl.module public @Test1() { }
   firrtl.module private @Test0Parent() {
     firrtl.instance test0 @Test0()
@@ -654,5 +655,29 @@ firrtl.circuit "InstOfEquivPublic" attributes {annotations = [{
   firrtl.module @InstOfEquivPublic() {
     firrtl.instance test0p @Test0Parent()
     firrtl.instance test1p @Test1Parent()
+  }
+}
+
+// -----
+
+// When comparing two modules, if one is private and the other public, we should
+// not report that as the difference, we should examine the bodies of the 
+// modules.
+// expected-error @below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "VisibilityDoesNotBlockDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~VisibilityDoesNotBlockDedup|Test0", "~VisibilityDoesNotBlockDedup|Test1"]
+    }]} {
+  firrtl.module private @Test0() {
+    // expected-note @below {{operation result types don't match, first type is '!firrtl.uint<1>'}}
+    %wire = firrtl.wire : !firrtl.uint<1>
+  }
+  firrtl.module private @Test1() {
+    // expected-note @below {{second type is '!firrtl.uint<2>'}}
+    %wire = firrtl.wire : !firrtl.uint<2>
+  }
+  firrtl.module @VisibilityDoesNotBlockDedup() {
+    firrtl.instance test0 @Test0()
+    firrtl.instance test1 @Test1()
   }
 }
