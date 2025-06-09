@@ -218,3 +218,14 @@ hw.module @ProcessWithResults(in %arg0: i42, in %arg1: i9001) {
     llhd.halt %arg0, %arg1 : i42, i9001
   }
 }
+
+hw.module @CombinationalProcess(in %arg0: i1, in %arg1: i42, in %arg2: i9001, in %arg3: i42, in %arg4: i9001) {
+  llhd.combinational {
+    llhd.yield
+  }
+  %0:2 = llhd.combinational -> i42, i9001 {
+    cf.cond_br %arg0, ^bb1(%arg1, %arg2 : i42, i9001), ^bb1(%arg3, %arg4 : i42, i9001)
+  ^bb1(%1: i42, %2: i9001):
+    llhd.yield %1, %2 : i42, i9001
+  }
+}
