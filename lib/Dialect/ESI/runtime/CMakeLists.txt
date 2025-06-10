@@ -155,7 +155,7 @@ set(ESIPythonRuntimeSources
 )
 
 IF(MSVC)
-    set(CMAKE_CXX_FLAGS "/EHa")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
