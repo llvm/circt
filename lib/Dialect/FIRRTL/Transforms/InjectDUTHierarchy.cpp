@@ -322,6 +322,12 @@ void InjectDUTHierarchy::runOnOperation() {
     annotations.addAnnotations(newAnnotations);
     annotations.applyToPort(dut, i);
   }
+
+  // Update rwprobe operations' local innerrefs within the module.
+  wrapper.walk([&](RWProbeOp rwp) {
+    rwp.setTargetAttr(hw::InnerRefAttr::get(wrapper.getModuleNameAttr(),
+                                            rwp.getTarget().getName()));
+  });
 }
 
 //===----------------------------------------------------------------------===//

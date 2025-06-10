@@ -180,6 +180,32 @@ firrtl.circuit "Refs" attributes {
 }
 
 // -----
+// https://github.com/llvm/circt/issues/8552
+// Check rwprobes are updated.
+
+// CHECK-LABEL: firrtl.circuit "RWProbe"
+firrtl.circuit "RWProbe" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
+  } {
+
+  firrtl.module private @DUT(
+    in %in: !firrtl.uint<1>, out %out: !firrtl.rwprobe<uint<1>>
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]}
+  {
+    %w = firrtl.wire sym @sym : !firrtl.uint<1>
+    // CHECK: ref.rwprobe <@Foo::@sym>
+    %rwp = firrtl.ref.rwprobe <@DUT::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %out, %rwp : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @RWProbe() {
+    %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.rwprobe<uint<1>>)
+  }
+}
+
+// -----
 
 // CHECK-LABEL: firrtl.circuit "Properties"
 firrtl.circuit "Properties" attributes {
