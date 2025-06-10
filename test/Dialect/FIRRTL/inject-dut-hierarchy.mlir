@@ -1,6 +1,7 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-inject-dut-hier))' -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Top"
+// CHECK-SAME:    {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}
 firrtl.circuit "Top" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {

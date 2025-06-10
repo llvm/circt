@@ -96,9 +96,11 @@ void InjectDUTHierarchy::runOnOperation() {
   /// true, then the pass can just signalPassFailure.
   bool error = false;
 
-  AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
+  // Do not remove the injection annotation as this is necessary to additionally
+  // influence ExtractInstances.
+  for (Annotation anno : AnnotationSet(circuit)) {
     if (!anno.isClass(injectDUTHierarchyAnnoClass))
-      return false;
+      continue;
 
     auto name = anno.getMember<StringAttr>("name");
     if (!name) {
@@ -107,7 +109,7 @@ void InjectDUTHierarchy::runOnOperation() {
              "'sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation' "
              "annotation that did not contain a 'name' field";
       error = true;
-      return false;
+      continue;
     }
 
     if (wrapperName) {
@@ -116,15 +118,13 @@ void InjectDUTHierarchy::runOnOperation() {
              "'sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation' "
              "annotations when at most one is allowed";
       error = true;
-      return false;
+      continue;
     }
 
     wrapperName = name;
     if (auto moveDutAnnoAttr = anno.getMember<BoolAttr>("moveDut"))
       moveDut = moveDutAnnoAttr.getValue();
-
-    return true;
-  });
+  }
 
   if (error)
     return signalPassFailure();
