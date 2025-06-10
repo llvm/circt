@@ -38,9 +38,11 @@ class Test(CodeGenRoot):
         self.name, self.name,
         ir.TypeAttr.get(
             rtg.DictType.get([(ir.StringAttr.get(param.get_name()),
-                               param.get_type()) for param in params_sorted])))
+                               param.get_type()._codegen())
+                              for param in params_sorted])))
     block = ir.Block.create_at_start(
-        test.bodyRegion, [param.get_type() for param in params_sorted])
+        test.bodyRegion,
+        [param.get_type()._codegen() for param in params_sorted])
     new_config = []
     for param, arg in zip(params_sorted, block.arguments):
       new_config.append((param.get_name(), _FromCirctValue(arg)))

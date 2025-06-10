@@ -17,6 +17,18 @@ class CodeGenRoot:
     assert False, "must be implemented by the subclass"
 
 
+class Type:
+  """
+  This is the base class for classes representing types of 'Value's.
+  Those are essentially wrappers around corresponding MLIR types and allow
+  constructing types and querying type properties without having an MLIR
+  context registered.
+  """
+
+  def _codegen(self) -> ir.Type:
+    assert False, "must be implemented by subclass"
+
+
 class Value:
   """
   This class wraps around MLIR SSA values to provide a more Python native
@@ -27,11 +39,7 @@ class Value:
   integer and automatically building a ConstantOp in MLIR).
   """
 
-  def get_type(self) -> ir.Type:
-    assert False, "must be implemented by subclass"
-
-  @staticmethod
-  def ty(*args: ir.Type) -> ir.Type:
+  def get_type(self) -> Type:
     assert False, "must be implemented by subclass"
 
   def _get_ssa_value(self) -> ir.Value:

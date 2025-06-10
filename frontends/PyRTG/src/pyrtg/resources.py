@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .rtg import rtg
 from .rtgtest import rtgtest
-from .core import Value
+from .core import Value, Type
 from .base import ir
 
 
@@ -160,9 +160,17 @@ class IntegerRegister(Value):
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return rtgtest.IntegerRegisterType.get()
+  def get_type(self) -> Type:
+    return IntegerRegisterType()
 
-  @staticmethod
-  def ty(*args) -> ir.Type:
+
+class IntegerRegisterType(Type):
+  """
+  Represents the type of integer registers.
+  """
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, IntegerRegisterType)
+
+  def _codegen(self):
     return rtgtest.IntegerRegisterType.get()

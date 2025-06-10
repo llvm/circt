@@ -94,7 +94,7 @@ class If:
     # the region in its constructor.
     hasElse = self._hasElse or len(else_list) > 0
     new_if = scf.IfOp(self._cond._get_ssa_value(),
-                      [v.get_type() for v in then_list],
+                      [v.get_type()._codegen() for v in then_list],
                       hasElse=hasElse)
     for op in self._op.then_block.operations:
       new_if.operation.regions[0].blocks[0].append(op)

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .rtg import rtg
-from .core import Value
+from .core import Value, Type
 from .base import ir
 from .integers import Integer
 
@@ -37,9 +37,23 @@ class Immediate(Value):
                                   self._value)
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return rtg.ImmediateType.get(self._width)
+  def get_type(self) -> Type:
+    return ImmediateType(self._width)
 
-  @staticmethod
-  def ty(width: int) -> ir.Type:
-    return rtg.ImmediateType.get(width)
+
+class ImmediateType(Type):
+  """
+  Represents the type of immediate values with a specific bit width.
+
+  Fields:
+    width: int - The bit width of the immediate value
+  """
+
+  def __init__(self, width: int):
+    self.width = width
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, ImmediateType) and self.width == other.width
+
+  def _codegen(self) -> ir.Type:
+    return rtg.ImmediateType.get(self.width)

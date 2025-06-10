@@ -5,20 +5,20 @@
 from . import tests
 from . import core
 from .tests import test, embed_comment
-from .labels import Label
+from .labels import Label, LabelType
 from .rtg import rtg
 from .rtgtest import rtgtest
 from .scf import scf
 from .index import index
-from .sets import Set
-from .integers import Integer, Bool
-from .bags import Bag
-from .sequences import sequence, Sequence, RandomizedSequence
+from .sets import Set, SetType
+from .integers import Integer, IntegerType, Bool, BoolType
+from .bags import Bag, BagType
+from .sequences import sequence, Sequence, SequenceType, RandomizedSequence, RandomizedSequenceType
 from .configs import config, Param, Config
-from .immediates import Immediate
-from .resources import IntegerRegister
-from .arrays import Array
-from .contexts import CPUCore
+from .immediates import Immediate, ImmediateType
+from .resources import IntegerRegister, IntegerRegisterType
+from .arrays import Array, ArrayType
+from .contexts import CPUCore, CPUCoreType
 from .control_flow import If, Else, EndIf, For, Foreach
-from .tuples import Tuple
-from .memories import Memory, MemoryBlock
+from .tuples import Tuple, TupleType
+from .memories import Memory, MemoryType, MemoryBlock, MemoryBlockType

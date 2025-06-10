@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
-from .base import ir, support
+from .base import ir
 from .rtg import rtg
-from .core import Value
+from .core import Value, Type
+from .support import _FromCirctType
 
 
 class Set(Value):
@@ -15,7 +16,7 @@ class Set(Value):
   elements at random.
   """
 
-  def __init__(self, value: ir.Value) -> Set:
+  def __init__(self, value: ir.Value):
     """
     Intended for library internal usage only.
     """
@@ -35,11 +36,12 @@ class Set(Value):
     provided.
     """
 
-    assert len(
-        elements) > 0, "use 'create_empty' to create sets with no elements"
-    assert all([e.get_type() == elements[0].get_type() for e in elements
-               ]), "all elements must have the same type"
-    return rtg.SetCreateOp(rtg.SetType.get(elements[0].get_type()), elements)
+    if len(elements) == 0:
+      raise ValueError("use 'create_empty' to create sets with no elements")
+    if not all([e.get_type() == elements[0].get_type() for e in elements]):
+      raise TypeError("all elements must have the same type")
+    return rtg.SetCreateOp(rtg.SetType.get(elements[0].get_type()._codegen()),
+                           elements)
 
   def __add__(self, other: Value) -> Set:
     """
@@ -51,13 +53,13 @@ class Set(Value):
     """
 
     if isinstance(other, Set):
-      assert self.get_type() == other.get_type(
-      ), "sets must be of the same type"
+      if self.get_type() != other.get_type():
+        raise TypeError("sets must be of the same type")
       return rtg.SetUnionOp([self._value, other._value])
 
-    assert support.type_to_pytype(
-        self.get_type()).element_type == other.get_type(
-        ), "type of the provided value must match element type of the set"
+    if self.get_type().element_type != other.get_type():
+      raise TypeError(
+          "type of the provided value must match element type of the set")
     return self + Set.create(other)
 
   def __sub__(self, other: Value) -> Set:
@@ -70,13 +72,13 @@ class Set(Value):
     """
 
     if isinstance(other, Set):
-      assert self.get_type() == other.get_type(
-      ), "sets must be of the same type"
+      if self.get_type() != other.get_type():
+        raise TypeError("sets must be of the same type")
       return rtg.SetDifferenceOp(self._value, other._value)
 
-    assert support.type_to_pytype(
-        self.get_type()).element_type == other.get_type(
-        ), "type of the provided value must match element type of the set"
+    if self.get_type().element_type != other.get_type():
+      raise TypeError(
+          "type of the provided value must match element type of the set")
     return self - Set.create(other)
 
   @staticmethod
@@ -84,11 +86,12 @@ class Set(Value):
     """
     Compute the n-ary cartesian product of the given sets.
     This means, for n input sets it computes
-    `X_1 x ... x X_n = {(x_1, ..., x_n) | x_i \in X_i for i  \in {1, ..., n}}`.
+    `X_1 x ... x X_n = {(x_1, ..., x_n) | x_i in X_i for i  in {1, ..., n}}`.
     At least one input set has to be provided (i.e., `n > 0`).
     """
 
-    assert len(args) > 0, "at least one set must be provided"
+    if len(args) == 0:
+      raise ValueError("at least one set must be provided")
     return rtg.SetCartesianProductOp(args)
 
   def to_bag(self) -> Value:
@@ -120,14 +123,24 @@ class Set(Value):
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return self._value.type
+  def get_type(self) -> Type:
+    return _FromCirctType(self._value.type)
 
-  @staticmethod
-  def ty(*args: ir.Type) -> ir.Type:
-    """
-    Returns the set type for the given element type.
-    """
 
-    assert len(args) == 1, "Set type requires exactly one element type"
-    return rtg.SetType.get(args[0])
+class SetType(Type):
+  """
+  Represents the type of statically typed sets.
+
+  Fields:
+    element_type: Type
+  """
+
+  def __init__(self, element_type: Type):
+    self.element_type = element_type
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other,
+                      SetType) and self.element_type == other.element_type
+
+  def _codegen(self):
+    return rtg.SetType.get(self.element_type._codegen())
