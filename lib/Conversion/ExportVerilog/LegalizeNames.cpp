@@ -255,7 +255,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
     // correspond to the same verilog module with different parameters.
     if (isa<HWModuleExternOp>(op) || isa<HWModuleGeneratedOp>(op)) {
       auto name = getVerilogModuleNameAttr(&op).getValue();
-      if (!sv::isNameValid(name, options.caseInsensitiveKeywords, true))
+      if (!sv::isNameValid(name, options.caseInsensitiveKeywords))
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
       globalNameResolver.insertUsedName(name);
