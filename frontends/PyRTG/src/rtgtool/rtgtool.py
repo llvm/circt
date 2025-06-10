@@ -120,21 +120,18 @@ def frontend_codegen(args: argparse.Namespace) -> ir.Module:
   processing.
   """
 
-  # If we get MLIR direclty, just read the file and parse the MLIR
+  # If we get MLIR directly, just read the file and parse the MLIR
   if args.input_format == InputFormat.MLIR:
     with open(args.file, 'r') as f:
       return ir.Module.parse(f.read())
 
   # Otherwise, codegen the MLIR from the python file
   if args.input_format == InputFormat.PYTHON:
-    file = import_module_from_path(Path(args.file))
+    import_module_from_path(Path(args.file))
 
     module = ir.Module.create()
     with ir.InsertionPoint(module.body):
-      for _, obj in inspect.getmembers(file):
-        if isinstance(obj,
-                      pyrtg.core.CodeGenRoot) and not obj._already_generated:
-          obj._codegen()
+      pyrtg.core.CodeGenRoot._codegen_all_instances()
     return module
 
   assert False, "input format must be one of the above"
