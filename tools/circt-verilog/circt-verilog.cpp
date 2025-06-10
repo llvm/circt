@@ -278,6 +278,9 @@ static void populateMooreTransforms(PassManager &pm) {
     anyPM.addPass(mlir::createCanonicalizerPass());
   }
 
+  // Remove unused symbols.
+  pm.addPass(mlir::createSymbolDCEPass());
+
   {
     // Perform module-specific transformations.
     auto &modulePM = pm.nest<moore::SVModuleOp>();
@@ -287,12 +290,12 @@ static void populateMooreTransforms(PassManager &pm) {
     // control observe a static local variable that never changes, instead of
     // observing a module-wide signal.
     // modulePM.addPass(moore::createSimplifyProceduresPass());
+    modulePM.addPass(mlir::createSROA());
   }
 
   {
     // Perform a final cleanup across all modules/functions.
     auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createSROA());
     anyPM.addPass(mlir::createMem2Reg());
     anyPM.addPass(mlir::createCSEPass());
     anyPM.addPass(mlir::createCanonicalizerPass());
@@ -315,26 +318,18 @@ static void populateMooreToCoreLowering(PassManager &pm) {
 
 /// Convert LLHD dialect IR into core dialect IR
 static void populateLLHDLowering(PassManager &pm) {
-  pm.addPass(createInlinerPass());
-  {
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createSROA());
-  }
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createEarlyCodeMotion());
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createTemporalCodeMotion());
-  {
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
-  }
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createDesequentialization());
-  pm.addPass(llhd::createProcessLowering());
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createSig2Reg());
-  {
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
-  }
+  auto &modulePM = pm.nest<hw::HWModuleOp>();
+  // modulePM.addPass(mlir::createSROA());
+  modulePM.addPass(llhd::createMem2RegPass());
+  modulePM.addPass(llhd::createHoistSignalsPass());
+  modulePM.addPass(llhd::createDeseqPass());
+  modulePM.addPass(llhd::createLowerProcessesPass());
+  modulePM.addPass(mlir::createCSEPass());
+  modulePM.addPass(mlir::createCanonicalizerPass());
+  modulePM.addPass(llhd::createCombineDrivesPass());
+  modulePM.addPass(llhd::createSig2Reg());
+  modulePM.addPass(mlir::createCSEPass());
+  modulePM.addPass(mlir::createCanonicalizerPass());
 }
 
 /// Populate the given pass manager with transformations as configured by the
@@ -531,6 +526,8 @@ int main(int argc, char **argv) {
   });
 
   // Register any pass manager command line options.
+  llhd::registerPasses();
+  moore::registerPasses();
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
