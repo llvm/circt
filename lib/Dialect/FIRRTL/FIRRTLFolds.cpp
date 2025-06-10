@@ -1185,25 +1185,63 @@ void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(FoldAdaptor adaptor) {
-  // cat(x, 0-width) -> x
-  // cat(0-width, x) -> x
-  // Limit to unsigned (result type), as cannot insert cast here.
-  IntType lhsType = getLhs().getType();
-  IntType rhsType = getRhs().getType();
-  if (lhsType.getBitWidthOrSentinel() == 0 && rhsType.isUnsigned())
-    return getRhs();
-  if (rhsType.getBitWidthOrSentinel() == 0 && rhsType.isUnsigned())
-    return getLhs();
+  auto inputs = getInputs();
+  auto inputAdaptors = adaptor.getInputs();
+
+  // If no inputs, return 0-bit value
+  if (inputs.empty())
+    return getIntZerosAttr(getType());
+
+  // If single input and same type, return it
+  if (inputs.size() == 1 && inputs[0].getType() == getType())
+    return inputs[0];
+
+  // Make sure it's safe to fold.
+  if (!hasKnownWidthIntTypes(*this))
+    return {};
+
+  // Filter out zero-width operands
+  SmallVector<Value> nonZeroInputs;
+  SmallVector<Attribute> nonZeroAttributes;
+  bool allConstant = true;
+  for (auto [input, attr] : llvm::zip(inputs, inputAdaptors)) {
+    auto inputType = type_cast<IntType>(input.getType());
+    if (inputType.getBitWidthOrSentinel() != 0) {
+      nonZeroInputs.push_back(input);
+      if (!attr)
+        allConstant = false;
+      if (nonZeroInputs.size() > 1 && !allConstant)
+        return {};
+    }
+  }
+
+  // If all inputs were zero-width, return 0-bit value
+  if (nonZeroInputs.empty())
+    return getIntZerosAttr(getType());
+
+  // If only one non-zero input and it has the same type as result, return it
+  if (nonZeroInputs.size() == 1 && nonZeroInputs[0].getType() == getType())
+    return nonZeroInputs[0];
 
   if (!hasKnownWidthIntTypes(*this))
     return {};
 
-  // Constant fold cat.
-  if (auto lhs = getConstant(adaptor.getLhs()))
-    if (auto rhs = getConstant(adaptor.getRhs()))
-      return getIntAttr(getType(), lhs->concat(*rhs));
+  // Constant fold cat - concatenate all constant operands
+  SmallVector<APInt> constants;
+  for (auto inputAdaptor : inputAdaptors) {
+    if (auto cst = getConstant(inputAdaptor))
+      constants.push_back(*cst);
+    else
+      return {}; // Not all operands are constant
+  }
 
-  return {};
+  assert(!constants.empty());
+  // Concatenate all constants from left to right
+  APInt result = constants[0];
+  for (size_t i = 1; i < constants.size(); ++i)
+    result = result.concat(constants[i]);
+
+  return getIntAttr(getType(), result);
 }
 
 void DShlPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -2850,17 +2888,15 @@ struct FoldUnusedBits : public mlir::RewritePattern {
       Value source = writeOp.getSrc();
       rewriter.setInsertionPoint(writeOp);
 
-      Value catOfSlices;
-      for (auto &[start, end] : ranges) {
+      SmallVector<Value> slices;
+      for (auto &[start, end] : llvm::reverse(ranges)) {
         Value slice = rewriter.createOrFold<BitsPrimOp>(writeOp.getLoc(),
                                                         source, end, start);
-        if (catOfSlices) {
-          catOfSlices = rewriter.createOrFold<CatPrimOp>(writeOp.getLoc(),
-                                                         slice, catOfSlices);
-        } else {
-          catOfSlices = slice;
-        }
+        slices.push_back(slice);
       }
+
+      Value catOfSlices =
+          rewriter.createOrFold<CatPrimOp>(writeOp.getLoc(), slices);
 
       // If the original memory held a signed integer, then the compressed
       // memory will be signed too. Since the catOfSlices is always unsigned,
@@ -3044,6 +3080,7 @@ struct FoldRegMems : public mlir::RewritePattern {
       // register (no mask) or the input (mask bit set).
       Location loc = mem.getLoc();
       unsigned maskGran = info.dataWidth / info.maskBits;
+      SmallVector<Value> chunks;
       for (unsigned i = 0; i < info.maskBits; ++i) {
         unsigned hi = (i + 1) * maskGran - 1;
         unsigned lo = i * maskGran;
@@ -3052,14 +3089,11 @@ struct FoldRegMems : public mlir::RewritePattern {
         auto nextPart = rewriter.createOrFold<BitsPrimOp>(loc, next, hi, lo);
         auto bit = rewriter.createOrFold<BitsPrimOp>(loc, mask, i, i);
         auto chunk = rewriter.create<MuxPrimOp>(loc, bit, dataPart, nextPart);
-
-        if (masked) {
-          masked = rewriter.create<CatPrimOp>(loc, chunk, masked);
-        } else {
-          masked = chunk;
-        }
+        chunks.push_back(chunk);
       }
 
+      std::reverse(chunks.begin(), chunks.end());
+      masked = rewriter.createOrFold<CatPrimOp>(loc, chunks);
       next = rewriter.create<MuxPrimOp>(next.getLoc(), en, masked, next);
     }
     Value typedNext = rewriter.createOrFold<BitCastOp>(next.getLoc(), ty, next);

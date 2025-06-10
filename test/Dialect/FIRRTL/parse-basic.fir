@@ -274,8 +274,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.dshlw %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
     node n6s = dshlw(i8, UInt<4>(7))
 
-    ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
-    node n7 = cat(n5, n6)
+    ; CHECK: firrtl.cat %{{.*}}, %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>, !firrtl.uint<23>) -> !firrtl.uint<58>
+    node n7 = cat(n5, n6, n6)
 
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.const.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
@@ -2118,3 +2118,20 @@ circuit Foo:
     input clock: Clock
     ; expected-error @+1 {{fflush are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
     fflush(clock, UInt<1>(1))
+
+;// -----
+FIRRTL version 5.0.0
+circuit Foo:
+  public module Foo:
+    input a: UInt<1>
+    ; expected-error @+1 {{variadic cat are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    node b = cat(a, a, a)
+
+;// -----
+FIRRTL version 5.1.0
+; CHECK-LABEL: firrtl.circuit "NullaryCat"
+circuit NullaryCat:
+  public module NullaryCat:
+    input a: UInt<1>
+    ; CHECK: firrtl.cat : () -> !firrtl.uint<0>
+    node b = cat()
