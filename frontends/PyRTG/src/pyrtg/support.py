@@ -3,7 +3,9 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .base import support, ir
-from .core import Value
+from .core import Value, Type
+
+from typing import Union
 
 
 def _FromCirctValue(value: ir.Value) -> Value:
@@ -55,6 +57,61 @@ def _FromCirctValue(value: ir.Value) -> Value:
   assert False, "Unsupported value"
 
 
+def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
+  if isinstance(type, Type):
+    return type
+
+  type = support.type_to_pytype(type)
+
+  from .rtg import rtg
+  from .rtgtest import rtgtest
+  if isinstance(type, rtg.ArrayType):
+    from .arrays import ArrayType
+    return ArrayType(_FromCirctType(type.element_type))
+  if isinstance(type, rtg.BagType):
+    from .bags import BagType
+    return BagType(_FromCirctType(type.element_type))
+  if isinstance(type, rtg.SetType):
+    from .sets import SetType
+    return SetType(_FromCirctType(type.element_type))
+  if isinstance(type, rtg.ImmediateType):
+    from .immediates import ImmediateType
+    return ImmediateType(type.width)
+  if isinstance(type, ir.IntegerType) and type.is_signless and type.width == 1:
+    from .integers import BoolType
+    return BoolType()
+  if isinstance(type, ir.IndexType):
+    from .integers import IntegerType
+    return IntegerType()
+  if isinstance(type, rtg.LabelType):
+    from .labels import LabelType
+    return LabelType()
+  if isinstance(type, rtg.SequenceType):
+    from .sequences import SequenceType
+    return SequenceType(
+        [_FromCirctType(type.get_element(i)) for i in range(type.num_elements)])
+  if isinstance(type, rtg.RandomizedSequenceType):
+    from .sequences import RandomizedSequenceType
+    return RandomizedSequenceType()
+  if isinstance(type, rtgtest.IntegerRegisterType):
+    from .resources import IntegerRegisterType
+    return IntegerRegisterType()
+  if isinstance(type, rtgtest.CPUType):
+    from .contexts import CPUCoreType
+    return CPUCoreType()
+  if isinstance(type, ir.TupleType):
+    from .tuples import TupleType
+    return TupleType(
+        [_FromCirctType(type.get_type(i)) for i in range(type.num_types)])
+  if isinstance(type, rtg.MemoryType):
+    from .memories import MemoryType
+    return MemoryType(type.address_width)
+  if isinstance(type, rtg.MemoryBlockType):
+    from .memories import MemoryBlockType
+    return MemoryBlockType(type.address_width)
+  raise ValueError("unsupported type")
+
+
 def _collect_values_recursively(obj, path, args, arg_names, visited):
   if obj is None or id(obj) in visited:
     return args, arg_names
@@ -101,6 +158,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
             from .sequences import SequenceDeclaration
             if isinstance(arg, (Value, SequenceDeclaration)):
               return arg._get_ssa_value()
+            if isinstance(arg, Type):
+              return arg._codegen()
             if isinstance(arg, (list, tuple)):
               return [to_circt(a) for a in arg]
             return arg

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .core import CodeGenRoot
+from .core import CodeGenRoot, Type
 from .base import ir
 from .rtg import rtg
 
@@ -47,7 +47,7 @@ class Param:
       raise AttributeError(
           "either the 'value' or 'loader' argument must be used but not both")
 
-  def get_type(self) -> ir.Type:
+  def get_type(self) -> Type:
     if not hasattr(self, "_value"):
       raise AttributeError(
           "type can only be accesses after the config has been loaded")
@@ -114,6 +114,6 @@ class Config(CodeGenRoot):
       params.sort(key=lambda param: param.get_name())
       rtg.YieldOp([param._value for param in params])
 
-      dict_entries = [(ir.StringAttr.get(param.get_name()), param.get_type())
-                      for param in params]
+      dict_entries = [(ir.StringAttr.get(param.get_name()),
+                       param.get_type()._codegen()) for param in params]
       target_op.target = ir.TypeAttr.get(rtg.DictType.get(dict_entries))

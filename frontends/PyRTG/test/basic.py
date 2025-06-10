@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, rtg, Label, Set, Integer, Bag, rtgtest, Immediate, IntegerRegister, Array, Bool, Tuple, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -77,14 +77,14 @@ class Tgt2(Config):
 class Tgt4(Config):
 
   arr0 = Param(loader=lambda: Array.create([Integer(
-      1), Integer(2), Integer(3)], Integer.ty())[2])
-  arr1 = Param(loader=lambda: Array.create([], Array.ty(Integer.ty())))
+      1), Integer(2), Integer(3)], IntegerType())[2])
+  arr1 = Param(loader=lambda: Array.create([], ArrayType(IntegerType())))
   arr2 = Param(loader=lambda: Array.create([
-      Array.create([Integer(y * 10 + x) for x in range(3)], Integer.ty()) for y
+      Array.create([Integer(y * 10 + x) for x in range(3)], IntegerType()) for y
       in range(2)
-  ], Array.ty(Integer.ty())))
-  arr3 = Param(loader=lambda: Array.create([Integer(2), Integer(1)], Integer.ty(
-  )).set(1, Integer(3)).size())
+  ], ArrayType(IntegerType())))
+  arr3 = Param(loader=lambda: Array.create([Integer(2), Integer(
+      1)], IntegerType()).set(1, Integer(3)).size())
 
 
 # MLIR-LABEL: rtg.sequence @seq0
@@ -94,7 +94,7 @@ class Tgt4(Config):
 # MLIR-NEXT: }
 
 
-@sequence(Set.ty(Label.ty()))
+@sequence([SetType(LabelType())])
 def seq0(set: Set):
   set.get_random().place()
 
@@ -105,12 +105,12 @@ def seq0(set: Set):
 # MLIR-NEXT: }
 
 
-@sequence()
+@sequence([])
 def seq1():
   Label.declare("s1").place()
 
 
-@sequence(Set.ty(Tuple.ty(Integer.ty(), Bool.ty())))
+@sequence([SetType(TupleType([IntegerType(), BoolType()]))])
 def seq2(set):
   pass
 
@@ -400,7 +400,7 @@ class TwoIntegers(Config):
   b = Param(loader=lambda: Integer(1))
 
 
-@sequence(Bool.ty())
+@sequence([BoolType()])
 def consumer(b):
   pass
 
@@ -421,7 +421,7 @@ def test7_bools(config):
 # MLIR-NEXT: rtg.random_number_in_range [%a, %b)
 
 
-@sequence(Integer.ty())
+@sequence([IntegerType()])
 def int_consumer(b):
   pass
 

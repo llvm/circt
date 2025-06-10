@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .rtg import rtg
 from .rtgtest import rtgtest
-from .core import Value
+from .core import Value, Type
 from .base import ir
 from .support import _FromCirctValue, _collect_values_recursively
 from .sequences import Sequence
@@ -83,7 +83,7 @@ class CPUCore(Value):
     while curr.name != 'builtin.module':
       curr = curr.parent
 
-    arg_types = [arg.get_type() for arg in args]
+    arg_types = [arg.get_type()._codegen() for arg in args]
     # TODO: we currently just assume "_context_seq" is a reserved prefix, would
     # be good to do proper name uniquing in the future
     seq_name = "_context_seq_" + _get_next_seq_num()
@@ -146,9 +146,20 @@ class CPUCore(Value):
       self = rtg.ConstantOp(self._value)
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return rtgtest.CPUType.get()
+  def get_type(self) -> Type:
+    return CPUCoreType()
 
-  @staticmethod
-  def ty(*args) -> ir.Type:
+
+class CPUCoreType(Type):
+  """
+  Represents the type of CPU cores in the test environment.
+
+  This type is used for values that represent CPU cores, which can be
+  specified by hardware thread ID or represent all available cores.
+  """
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, CPUCoreType)
+
+  def _codegen(self) -> ir.Type:
     return rtgtest.CPUType.get()

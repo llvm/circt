@@ -1,14 +1,14 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s
 
-from pyrtg import test, sequence, Integer, CPUCore, Sequence, config, Param, Config
+from pyrtg import test, sequence, Integer, IntegerType, CPUCore, CPUCoreType, SequenceType, config, Param, Config
 
 
-@sequence(Integer.ty())
+@sequence([IntegerType()])
 def consumer(arg):
   pass
 
 
-@sequence(CPUCore.ty(), CPUCore.ty(), Sequence.ty())
+@sequence([CPUCoreType(), CPUCoreType(), SequenceType([])])
 def switch(from_ctxt, to_ctxt, seq):
   pass
 

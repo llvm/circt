@@ -1,9 +1,9 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s
 
-from pyrtg import test, sequence, Integer, Array, Bool, If, Else, EndIf, For, Foreach, config, Config, Param
+from pyrtg import test, sequence, Integer, IntegerType, Array, Bool, If, Else, EndIf, For, Foreach, config, Config, Param
 
 
-@sequence(Integer.ty())
+@sequence([IntegerType()])
 def consumer(arg):
   pass
 
@@ -149,7 +149,7 @@ def test2_for(config):
 @config
 class Config2(Config):
 
-  arr0 = Param(loader=lambda: Array.create([Integer(0)], Integer.ty()))
+  arr0 = Param(loader=lambda: Array.create([Integer(0)], IntegerType()))
 
 
 @test(Config2)
@@ -157,6 +157,6 @@ def test2_foreach(config):
   v = Integer(0)
   with Foreach(config.arr0,
                Array.create([Integer(1) for _ in range(3)],
-                            Integer.ty())) as (i, a0, a1):
+                            IntegerType())) as (i, a0, a1):
     v += a0 + a1 + i
   consumer(v)
