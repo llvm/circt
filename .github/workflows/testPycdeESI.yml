@@ -2,6 +2,12 @@ name: Test PyCDE and the ESI runtime
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * *'
+  pull_request:
+    paths:
+      - 'frontends/PyCDE/**'
+      - 'lib/Dialect/ESI/runtime/**'
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -18,7 +24,7 @@ jobs:
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
-      image: ghcr.io/circt/images/pycde-build
+      image: ghcr.io/circt/images/pycde-esi-test:latest
       volumes:
         - /mnt:/__w/circt
     strategy:
@@ -88,6 +94,7 @@ jobs:
       - name: Test PyCDE
         run: |
           ninja -C build check-pycde -j$(nproc)
-      - name: Test Integration PyCDE and ESI runtime
+      # The PyCDE integration tests exercise the ESI runtime.
+      - name: Test PyCDE and ESI runtime integration
         run: |
           ninja -C build check-pycde-integration -j$(nproc)
