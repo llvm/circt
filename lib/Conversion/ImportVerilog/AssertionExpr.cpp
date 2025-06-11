@@ -14,6 +14,9 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
 
+#include <optional>
+#include <utility>
+
 using namespace circt;
 using namespace ImportVerilog;
 
@@ -27,23 +30,24 @@ struct AssertionExprVisitor {
   AssertionExprVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
+  /// Helper to convert a range (min, optional max) to MLIR integer attributes
+  std::pair<mlir::IntegerAttr, mlir::IntegerAttr>
+  convertRangeToAttrs(uint32_t min, std::optional<uint32_t> max = std::nullopt) {
+    auto minAttr = builder.getI64IntegerAttr(min);
+    mlir::IntegerAttr rangeAttr;
+    if (max.has_value()) {
+      rangeAttr = builder.getI64IntegerAttr(max.value() - min);
+    }
+    return {minAttr, rangeAttr};
+  }
+
   /// Add repetition operation to a sequence
   Value createRepetition(Location loc,
                          const slang::ast::SequenceRepetition &repetition,
                          Value &inputSequence) {
     // Extract cycle range
-    // Convert `min`/`max` of type `uint32_t` to the required 64 bit value for
-    // `base`/`more`
-    auto minRepetitions = mlir::IntegerAttr::get(builder.getIntegerType(64),
-                                                 repetition.range.min);
-    mlir::IntegerAttr repetitionRange;
-    // In repetitions, the max value is optional.
-    // The `more` value corresponds to the sequence range.
-    if (repetition.range.max.has_value()) {
-      repetitionRange = mlir::IntegerAttr::get(builder.getIntegerType(64),
-                                               repetition.range.max.value() -
-                                                   repetition.range.min);
-    }
+    auto [minRepetitions, repetitionRange] =
+        convertRangeToAttrs(repetition.range.min, repetition.range.max);
 
     using slang::ast::SequenceRepetition;
 
@@ -132,15 +136,10 @@ struct AssertionExprVisitor {
         return {};
       }
 
-      mlir::IntegerAttr delayRange;
-      if (concatElement.delay.max.has_value()) {
-        delayRange = mlir::IntegerAttr::get(builder.getIntegerType(64),
-                                            concatElement.delay.max.value() -
-                                                concatElement.delay.min);
-      }
+      auto [delayMin, delayRange] =
+          convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
       auto delayedSequence = builder.create<ltl::DelayOp>(
-          loc, sequenceValue,
-          builder.getI64IntegerAttr(concatElement.delay.min), delayRange);
+          loc, sequenceValue, delayMin, delayRange);
       sequenceElements.push_back(delayedSequence);
     }
 
@@ -167,14 +166,8 @@ struct AssertionExprVisitor {
       }
     case UnaryAssertionOperator::Always:
       if (expr.range.has_value()) {
-        auto minRepetitions = mlir::IntegerAttr::get(builder.getIntegerType(64),
-                                                     expr.range.value().min);
-        mlir::IntegerAttr repetitionRange;
-        if (expr.range.value().max.has_value()) {
-          repetitionRange = mlir::IntegerAttr::get(
-              builder.getIntegerType(64),
-              expr.range.value().max.value() - expr.range.value().min);
-        }
+        auto [minRepetitions, repetitionRange] =
+            convertRangeToAttrs(expr.range.value().min, expr.range.value().max);
         return builder.create<ltl::RepeatOp>(loc, value, minRepetitions,
                                              repetitionRange);
       } else {
