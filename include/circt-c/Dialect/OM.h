@@ -70,6 +70,12 @@ MLIR_CAPI_EXPORTED MlirType omMapTypeGetKeyType(MlirType type);
 /// Is the Type a StringType.
 MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
 
+/// Get the TypeID for a StringType.
+MLIR_CAPI_EXPORTED MlirTypeID omStringTypeGetTypeID(void);
+
+/// Get a StringType.
+MLIR_CAPI_EXPORTED MlirType omStringTypeGet(MlirContext ctx);
+
 //===----------------------------------------------------------------------===//
 // Evaluator data structures.
 //===----------------------------------------------------------------------===//
@@ -264,6 +270,10 @@ MLIR_CAPI_EXPORTED intptr_t omListAttrGetNumElements(MlirAttribute attr);
 
 MLIR_CAPI_EXPORTED MlirAttribute omListAttrGetElement(MlirAttribute attr,
                                                       intptr_t pos);
+
+MLIR_CAPI_EXPORTED MlirAttribute omListAttrGet(MlirType elementType,
+                                               intptr_t numElements,
+                                               const MlirAttribute *elements);
 
 //===----------------------------------------------------------------------===//
 // MapAttr API

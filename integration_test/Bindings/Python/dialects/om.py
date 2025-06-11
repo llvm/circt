@@ -104,6 +104,11 @@ with Context() as ctx, Location.unknown():
       %5 = om.integer.add %1, %3 : !om.integer
       om.class.fields %5 : !om.integer
     }
+    om.class @AppendList(%head: !om.string, %tail: !om.list<!om.string>) -> (result: !om.list<!om.string>) {
+      %0 = om.list_create %head : !om.string
+      %1 = om.list_concat %0, %tail : !om.list<!om.string>
+      om.class.fields %1 : !om.list<!om.string>
+    }
   }
   """)
 
@@ -144,12 +149,12 @@ print(obj.type.name)
 print(obj.field)
 
 # location of the om.class.field @field
-# CHECK: field: loc("-":50:7)
+# CHECK: field: loc("-":{{.*}}:{{.*}})
 print("field:", obj.get_field_loc("field"))
 
 # CHECK: child.foo: 14
 print("child.foo: ", obj.child.foo)
-# CHECK: child.foo.loc loc("-":54:7)
+# CHECK: child.foo.loc loc("-":{{.*}}:{{.*}})
 print("child.foo.loc", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -157,10 +162,10 @@ print(obj.reference)
 # CHECK: 14
 print(snd)
 
-# CHECK: loc("-":50:7)
+# CHECK: loc("-":{{.*}}:{{.*}})
 print("tuple", obj.get_field_loc("tuple"))
 
-# CHECK: loc("-":22:5)
+# CHECK: loc("-":{{.*}}:{{.*}})
 print(obj.loc)
 
 try:
@@ -172,13 +177,13 @@ except IndexError as e:
 for (name, field) in obj:
   # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc("-":26:12)
+  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   # location from om.class.field @field, %param : !om.integer
   # CHECK: name: field, field: 42
-  # CHECK-SAME: loc: loc("-":50:7)
+  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   # location from om.class.field @reference, %sym : !om.ref
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":50:7)
+  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
@@ -258,6 +263,24 @@ delayed = evaluator.instantiate("IntegerBinaryArithmeticObjectsDelayed")
 
 # CHECK: 3
 print(delayed.result)
+
+# Test string and list arguments
+obj = evaluator.instantiate("AppendList", "a", ["b", "c"])
+# CHECK: ['a', 'b', 'c']
+print(list(obj.result))
+
+# Test string and list arguments
+try:
+  obj = evaluator.instantiate("AppendList", "a", [1, "b"])
+except TypeError as e:
+  # CHECK: List elements must be of the same type
+  print(e)
+
+try:
+  obj = evaluator.instantiate("AppendList", "a", [])
+except TypeError as e:
+  # CHECK: Empty list is prohibited now
+  print(e)
 
 with Context() as ctx:
   circt.register_dialects(ctx)

@@ -619,6 +619,15 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     if (!result.value()->isFullyEvaluated())
       return list;
 
+    if (evaluator::AttributeValue *attr =
+            llvm::dyn_cast<evaluator::AttributeValue>(result.value().get())) {
+      auto attributes = getEvaluatorValuesFromAttributes(
+          attr->getAttr().getContext(),
+          attr->getAs<om::ListAttr>().getElements().getValue());
+      values.append(attributes.begin(), attributes.end());
+      continue;
+    }
+
     // Extract this sublist and ensure it's done evaluating.
     evaluator::ListValue *subList = extractList(result.value().get());
     if (!subList->isFullyEvaluated())
