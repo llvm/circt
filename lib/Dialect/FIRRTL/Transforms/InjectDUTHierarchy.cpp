@@ -163,7 +163,23 @@ void InjectDUTHierarchy::runOnOperation() {
                                       dut.getConventionAttr(), dut.getPorts(),
                                       dut.getAnnotationsAttr());
 
-    SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
+    // This pass shouldn't create new public modules.  It should only preserve
+    // the existing public modules.  In "moveDut" mode, then the wrapper is the
+    // new DUT and we should move the publicness from the old DUT to the
+    // wrapper.  When not in "moveDut" mode, then the wrapper should be made
+    // private.
+    //
+    // Note: `movedDut=true` violates the FIRRTL ABI unless the user it doing
+    // something clever with module prefixing.  Because this annotation is
+    // already outside the specification, this workflow is allowed even though
+    // it violates the FIRRTL ABI.  The mid-term plan is to remove this pass to
+    // avoid the tech debt that it creates.
+    if (moveDut) {
+      newDUT.setPrivate();
+    } else {
+      newDUT.setVisibility(dut.getVisibility());
+      dut.setPrivate();
+    }
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
 
     // The original DUT module is now the wrapper.  The new module we just

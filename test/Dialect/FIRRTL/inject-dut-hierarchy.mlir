@@ -229,3 +229,49 @@ firrtl.circuit "Properties" attributes {
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUT(in in: !firrtl.integer, out out: !firrtl.integer)
   }
 }
+
+// -----
+
+firrtl.circuit "PublicMoveDutFalse" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = false
+    }
+  ]
+} {
+  // CHECK: firrtl.module private @Foo()
+  // CHECK: firrtl.module @DUT()
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  firrtl.module @PublicMoveDutFalse() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+firrtl.circuit "PublicMoveDutFalse" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = true
+    }
+  ]
+} {
+  // CHECK: firrtl.module @Foo()
+  // CHECK: firrtl.module private @DUT()
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  firrtl.module @PublicMoveDutFalse() {
+    firrtl.instance dut @DUT()
+  }
+}
