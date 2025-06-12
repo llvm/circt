@@ -1,3 +1,3 @@
-# 'aig' Dialect
+# 'comb' Dialect
 
 [include "Dialects/Comb.md"]
