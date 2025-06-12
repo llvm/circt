@@ -1100,6 +1100,105 @@ void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                  patterns::NotGt>(context);
 }
 
+class ReductionCat : public mlir::RewritePattern {
+public:
+  ReductionCat(MLIRContext *context, llvm::StringLiteral name)
+      : RewritePattern(name, 0, context) {}
+  virtual bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
+                              ConstantOp value,
+                              SmallVectorImpl<Value> &remaining) const = 0;
+  virtual bool unit() const = 0;
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cat = op->getOperand(0).getDefiningOp<CatPrimOp>();
+    auto resultType = cast<IntType>(op->getResult(0).getType());
+    if (!cat)
+      return failure();
+    SmallVector<Value> remaining;
+    for (auto operand : cat.getInputs()) {
+      // Remove constant.
+      if (operand.getDefiningOp<ConstantOp>()) {
+        if (handleConstant(rewriter, op, operand.getDefiningOp<ConstantOp>(),
+                           remaining))
+          return success();
+      } else {
+        remaining.push_back(operand);
+      }
+    }
+
+    if (remaining.size() == 0) {
+      // Replace with 1.
+      replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, op, resultType,
+                                                llvm::APInt(1, unit()));
+
+      return success();
+    }
+
+    if (remaining.size() == 1) {
+      // Create orr.
+      rewriter.modifyOpInPlace(op,
+                               [&] { op->setOperand(0, remaining.front()); });
+
+      return success();
+    }
+
+    return failure();
+  }
+};
+
+class OrrCat : public ReductionCat {
+public:
+  OrrCat(MLIRContext *context)
+      : ReductionCat(context, OrRPrimOp::getOperationName()) {}
+  bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
+                      ConstantOp value,
+                      SmallVectorImpl<Value> &remaining) const override {
+    if (!value.getValue().isZero()) {
+      replaceOpWithNewOpAndCopyName<ConstantOp>(
+          rewriter, op, cast<IntType>(op->getResult(0).getType()),
+          llvm::APInt(1, 1));
+      return true;
+    }
+    return false;
+  }
+  bool unit() const override { return false; }
+};
+class AndrCat : public ReductionCat {
+public:
+  AndrCat(MLIRContext *context)
+      : ReductionCat(context, AndRPrimOp::getOperationName()) {}
+  bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
+                      ConstantOp value,
+                      SmallVectorImpl<Value> &remaining) const override {
+    if (!value.getValue().isAllOnes()) {
+      replaceOpWithNewOpAndCopyName<ConstantOp>(
+          rewriter, op, cast<IntType>(op->getResult(0).getType()),
+          llvm::APInt(1, 0));
+      return true;
+    }
+    return false;
+  }
+  bool unit() const override { return true; }
+};
+
+class XorRCat : public ReductionCat {
+public:
+  XorRCat(MLIRContext *context)
+      : ReductionCat(context, XorRPrimOp::getOperationName()) {}
+  bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
+                      ConstantOp value,
+                      SmallVectorImpl<Value> &remaining) const override {
+    if (value.getValue().isZero()) {
+      return false;
+    }
+    remaining.push_back(value);
+    return false;
+  }
+  bool unit() const override { return false; }
+};
+
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
   if (!hasKnownWidthIntTypes(*this))
     return {};
@@ -1125,7 +1224,8 @@ void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
       .insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRPadU,
               patterns::AndRPadS, patterns::AndRCatOneL, patterns::AndRCatOneR,
               patterns::AndRCatZeroL, patterns::AndRCatZeroR,
-              patterns::AndRCatAndR_left, patterns::AndRCatAndR_right>(context);
+              patterns::AndRCatAndR_left, patterns::AndRCatAndR_right, AndrCat>(
+          context);
 }
 
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1146,53 +1246,6 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
 
   return {};
 }
-
-class OrrCat : public mlir::RewritePattern {
-public:
-  OrrCat(MLIRContext *context)
-      : RewritePattern(OrRPrimOp::getOperationName(), 0, context) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op,
-                  mlir::PatternRewriter &rewriter) const override {
-    auto orr = cast<OrRPrimOp>(op);
-    auto cat = orr.getInput().getDefiningOp<CatPrimOp>();
-    if (!cat)
-      return failure();
-    SmallVector<Value> remaining;
-    for (auto operand : cat.getInputs()) {
-      // Remove constant.
-      if (operand.getDefiningOp<ConstantOp>()) {
-        // Exist one -> reduce to 1
-        const auto &value = operand.getDefiningOp<ConstantOp>().getValue();
-        if (value.isZero()) {
-          continue;
-        }
-        // Replace with 1.
-        replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, cat, orr.getType(),
-                                                  llvm::APInt(1, 1));
-        return success();
-      }
-      remaining.push_back(operand);
-    }
-
-    if (remaining.size() == 0) {
-      // Replace with 1.
-      replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, cat, orr.getType(),
-                                                llvm::APInt(1, 0));
-
-      return success();
-    }
-
-    if (remaining.size() == 1) {
-      // Create orr.
-      replaceOpWithNewOpAndCopyName<OrRPrimOp>(rewriter, cat, remaining[0]);
-      return success();
-    }
-
-    return failure();
-  }
-};
 
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
@@ -1221,10 +1274,11 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRPadU,
-                 patterns::XorRCatZeroH, patterns::XorRCatZeroL,
-                 patterns::XorRCatXorR_left, patterns::XorRCatXorR_right>(
-      context);
+  results
+      .insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRPadU,
+              patterns::XorRCatZeroH, patterns::XorRCatZeroL,
+              patterns::XorRCatXorR_left, patterns::XorRCatXorR_right, XorRCat>(
+          context);
 }
 
 //===----------------------------------------------------------------------===//
