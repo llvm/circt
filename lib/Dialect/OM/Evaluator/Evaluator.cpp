@@ -957,6 +957,8 @@ circt::om::evaluator::AttributeValue::get(Attribute attr, LocationAttr loc) {
   if (!loc)
     loc = UnknownLoc::get(context);
 
+  // Special handling for ListType to create proper ListValue objects instead of
+  // AttributeValue objects.
   if (auto listType = dyn_cast<circt::om::ListType>(type)) {
     SmallVector<EvaluatorValuePtr> elements;
     auto listAttr = cast<om::ListAttr>(attr);
@@ -976,6 +978,9 @@ circt::om::evaluator::AttributeValue::get(Type type, LocationAttr loc) {
   auto *context = type.getContext();
   if (!loc)
     loc = UnknownLoc::get(context);
+
+  // Special handling for ListType to create proper ListValue objects instead of
+  // AttributeValue objects.
   if (auto listType = dyn_cast<circt::om::ListType>(type))
     return std::make_shared<evaluator::ListValue>(listType, loc);
   // Create the AttributeValue with the private tag
