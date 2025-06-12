@@ -445,11 +445,34 @@ static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
   if (auto *attr = std::get_if<nb::str>(&value)) {
     auto str = nb::cast<std::string>(*attr);
     auto strRef = mlirStringRefCreate(str.data(), str.length());
-    return mlirStringAttrGet(ctx, strRef);
+    auto omStringType = omStringTypeGet(ctx);
+    return mlirStringAttrTypedGet(omStringType, strRef);
   }
 
   if (auto *attr = std::get_if<nb::bool_>(&value)) {
     return mlirBoolAttrGet(ctx, nb::cast<bool>(*attr));
+  }
+
+  // For a python list try constructing OM list attribute. The element
+  // type must be uniform.
+  if (auto *attr = std::get_if<nb::list>(&value)) {
+    if (attr->size() == 0)
+      throw nb::type_error("Empty list is prohibited now");
+
+    std::vector<MlirAttribute> attrs;
+    attrs.reserve(attr->size());
+    std::optional<MlirType> elemenType;
+    for (auto v : *attr) {
+      attrs.push_back(
+          omPythonValueToPrimitive(nb::cast<PythonPrimitive>(v), ctx));
+      if (!elemenType)
+        elemenType = mlirAttributeGetType(attrs.back());
+      else if (!mlirTypeEqual(*elemenType,
+                              mlirAttributeGetType(attrs.back()))) {
+        throw nb::type_error("List elements must be of the same type");
+      }
+    }
+    return omListAttrGet(*elemenType, attrs.size(), attrs.data());
   }
 
   throw nb::type_error("Unexpected OM primitive value");
