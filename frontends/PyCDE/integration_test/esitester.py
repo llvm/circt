@@ -282,7 +282,8 @@ def ToHostDMATest(width: int):
       total_write_counter = Counter(64)(clk=ports.clk,
                                         rst=ports.rst,
                                         clear=Bits(1)(0),
-                                        increment=write_cntr_incr)
+                                        increment=write_cntr_incr,
+                                        instance_name="total_write_counter")
       esi.Telemetry.report_signal(ports.clk, ports.rst,
                                   esi.AppID("totalWrites"),
                                   total_write_counter.out)
@@ -353,16 +354,20 @@ class EsiTesterTop(Module):
     for width in [32, 64, 96, 128, 256, 384, 504, 512, 513]:
       ReadMem(width)(appid=esi.AppID("readmem", width),
                      clk=ports.clk,
-                     rst=ports.rst)
+                     rst=ports.rst,
+                     instance_name=f"readmem_{width}")
       WriteMem(width)(appid=esi.AppID("writemem", width),
                       clk=ports.clk,
-                      rst=ports.rst)
+                      rst=ports.rst,
+                      instance_name=f"writemem_{width}")
       ToHostDMATest(width)(appid=esi.AppID("tohostdmatest", width),
                            clk=ports.clk,
-                           rst=ports.rst)
+                           rst=ports.rst,
+                           instance_name=f"tohostdmatest_{width}")
       FromHostDMATest(width)(appid=esi.AppID("fromhostdmatest", width),
                              clk=ports.clk,
-                             rst=ports.rst)
+                             rst=ports.rst,
+                             instance_name=f"fromhostdmatest_{width}")
 
 
 if __name__ == "__main__":

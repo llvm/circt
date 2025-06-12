@@ -165,7 +165,7 @@ void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
   auto accel = manifest.buildAccelerator(acc);
   acc.getServiceThread()->addPoll(*accel);
 
-  auto telemetry = acc.getService<services::TelemetryService>();
+  auto *telemetry = acc.getService<services::TelemetryService>();
   if (!telemetry) {
     os << "No telemetry service found" << std::endl;
     return;
@@ -175,7 +175,7 @@ void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
   os << "********************************" << std::endl;
   os << std::endl;
 
-  const std::map<AppIDPath, services::TelemetryService::Telemetry *>
+  const std::map<AppIDPath, services::TelemetryService::Metric *>
       &telemetryPorts = telemetry->getTelemetryPorts();
   for (const auto &[id, port] : telemetryPorts) {
     port->connect();

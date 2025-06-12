@@ -61,20 +61,30 @@ MMIO::MMIO(AcceleratorConnection &conn, const AppIDPath &idPath,
     auto offsetIter = client.implOptions.find("offset");
     if (offsetIter == client.implOptions.end())
       throw std::runtime_error("MMIO client missing 'offset' option");
-    Constant offset = std::any_cast<Constant>(offsetIter->second);
-    uint64_t offsetVal = std::any_cast<uint64_t>(offset.value);
-    if (offsetVal >= 1ull << 32)
+    const Constant *offset = std::any_cast<Constant>(&offsetIter->second);
+    if (!offset)
+      throw std::runtime_error(
+          "MMIO client 'offset' option must be a constant");
+    const uint64_t *offsetVal = std::any_cast<uint64_t>(&offset->value);
+    if (!offsetVal)
+      throw std::runtime_error(
+          "MMIO client 'offset' option must be an integer");
+    if (*offsetVal >= 1ull << 32)
       throw std::runtime_error("MMIO client offset mustn't exceed 32 bits");
 
     auto sizeIter = client.implOptions.find("size");
     if (sizeIter == client.implOptions.end())
       throw std::runtime_error("MMIO client missing 'size' option");
-    Constant size = std::any_cast<Constant>(sizeIter->second);
-    uint64_t sizeVal = std::any_cast<uint64_t>(size.value);
-    if (sizeVal >= 1ull << 32)
+    const Constant *size = std::any_cast<Constant>(&sizeIter->second);
+    if (!size)
+      throw std::runtime_error("MMIO client 'size' option must be a constant");
+    const uint64_t *sizeVal = std::any_cast<uint64_t>(&size->value);
+    if (!sizeVal)
+      throw std::runtime_error("MMIO client 'size' option must be an integer");
+    if (*sizeVal >= 1ull << 32)
       throw std::runtime_error("MMIO client size mustn't exceed 32 bits");
-    AppIDPath absPath = idParent + client.relPath;
-    regions[absPath] = RegionDescriptor{(uint32_t)offsetVal, (uint32_t)sizeVal};
+    regions[client.relPath] = RegionDescriptor{
+        static_cast<uint32_t>(*offsetVal), static_cast<uint32_t>(*sizeVal)};
   }
 }
 
@@ -279,55 +289,117 @@ TelemetryService::TelemetryService(AppIDPath idPath,
                                    AcceleratorConnection &conn,
                                    ServiceImplDetails details,
                                    HWClientDetails clients)
-    : Service(conn) {}
+    : Service(conn), id(idPath), mmio(nullptr) {
+  // Compute our parents idPath path.
+  AppIDPath prefix = std::move(idPath);
+  if (prefix.size() > 0)
+    prefix.pop_back();
+  for (const HWClientDetail &client : clients) {
+    if (client.implOptions.contains("type") &&
+        std::any_cast<std::string>(client.implOptions.at("type")) != "mmio")
+      continue; // Not an MMIO assignment.
+    AppIDPath fullClientPath = prefix + client.relPath;
+    auto offsetIter = client.implOptions.find("offset");
+    if (offsetIter == client.implOptions.end()) {
+      conn.getLogger().warning("Telemetry",
+                               "mmio client " + fullClientPath.toStr() +
+                                   " missing 'offset' option, skipping");
+      continue;
+    }
+    const Constant *offset = std::any_cast<Constant>(&offsetIter->second);
+    if (offset == nullptr) {
+      conn.getLogger().warning(
+          "Telemetry", "mmio client " + fullClientPath.toStr() +
+                           " 'offset' option must be a constant, skipping");
+      continue;
+    }
+    const uint64_t *offsetVal = std::any_cast<uint64_t>(&offset->value);
+    if (offsetVal == nullptr) {
+      conn.getLogger().warning(
+          "Telemetry", "mmio client " + fullClientPath.toStr() +
+                           " 'offset' option must be an integer, skipping");
+      continue;
+    }
+    portAddressAssignments.emplace(fullClientPath, *offsetVal);
+  }
+}
 
 std::string TelemetryService::getServiceSymbol() const {
   return std::string(TelemetryService::StdName);
 }
 
+MMIO::MMIORegion *TelemetryService::getMMIORegion() const {
+  if (!mmio) {
+    AppIDPath lastPath;
+    AppIDPath mmioPath = id;
+    mmioPath.pop_back();
+    mmioPath.push_back(AppID("__telemetry_mmio"));
+    auto port = conn.getAccelerator().resolvePort(mmioPath, lastPath);
+    if (!port)
+      throw std::runtime_error("TelemetryService: could not resolve port " +
+                               id.toStr() + ". Got as far as " +
+                               lastPath.toStr());
+    mmio = dynamic_cast<MMIO::MMIORegion *>(port);
+    if (!mmio)
+      throw std::runtime_error("TelemetryService: port " + id.toStr() +
+                               " is not a MMIO region");
+  }
+  return mmio;
+}
+
 BundlePort *TelemetryService::getPort(AppIDPath id,
                                       const BundleType *type) const {
-  auto *port = new Telemetry(id.back(), type,
-                             conn.getEngineMapFor(id).requestPorts(id, type));
+  auto offsetIter = portAddressAssignments.find(id);
+  auto *port = new Metric(id.back(), type, {}, this,
+                          offsetIter != portAddressAssignments.end()
+                              ? std::optional<uint64_t>(offsetIter->second)
+                              : std::nullopt);
   telemetryPorts.insert(std::make_pair(id, port));
   return port;
 }
 
-TelemetryService::Telemetry::Telemetry(AppID id, const BundleType *type,
-                                       PortMap channels)
-    : ServicePort(id, type, channels) {}
-
-TelemetryService::Telemetry *
-TelemetryService::Telemetry::get(AppID id, BundleType *type,
-                                 WriteChannelPort &get, ReadChannelPort &data) {
-  return new Telemetry(id, type, {{"get", get}, {"data", data}});
+Service *TelemetryService::getChildService(Service::Type service, AppIDPath id,
+                                           std::string implName,
+                                           ServiceImplDetails details,
+                                           HWClientDetails clients) {
+  TelemetryService *child = new TelemetryService(id, conn, details, clients);
+  children.push_back(child);
+  return child;
 }
 
-/// Connect to a particular telemetry port. The bundle should have two channels
-/// -- get and data. Get should have type 'i0' and data can be anything.
-void TelemetryService::Telemetry::connect() {
-  if (channels.size() != 2)
-    throw std::runtime_error("TelemetryService must have exactly two channels");
-  get_req = &getRawWrite("get");
-  // TODO: There are problems with DMA'ing i0. As a workaround, sometimes i1 is
-  // used. When these issues are fixed, re-enable this check. There may also be
-  // a problem with the void type.
-  // if (!dynamic_cast<const VoidType *>(get_req->getType()))
-  //   throw std::runtime_error("TelemetryService get channel must be void");
-  get_req->connect();
-  data = &getRawRead("data");
-  data->connect();
+TelemetryService::Metric::Metric(AppID id, const BundleType *type,
+                                 PortMap channels,
+                                 const TelemetryService *telemetryService,
+                                 std::optional<uint64_t> offset)
+    : ServicePort(id, type, channels), telemetryService(telemetryService),
+      mmio(nullptr), offset(offset) {}
+
+/// Connect to a particular telemetry port. Offset should be non-nullopt.
+void TelemetryService::Metric::connect() {
+  if (!offset.has_value())
+    throw std::runtime_error("Telemetry offset not found for " + id.toString());
+  mmio = telemetryService->getMMIORegion();
+  assert(mmio && "TelemetryService: MMIO region not found");
 }
 
-std::future<MessageData> TelemetryService::Telemetry::read() {
-  if (!get_req)
-    throw std::runtime_error("TelemetryService get channel not connected");
-  // TODO: This is a hack to get around the fact that we can't send a void
-  // message. We need to send something, so we send a single byte whose value
-  // doesn't matter.
-  std::vector<uint8_t> empty = {1};
-  get_req->write(MessageData(empty));
-  return data->readAsync();
+std::future<MessageData> TelemetryService::Metric::read() {
+  return std::async(std::launch::async, [this]() {
+    uint64_t data = readInt();
+    return MessageData::from(data);
+  });
+}
+
+uint64_t TelemetryService::Metric::readInt() {
+  assert(offset.has_value() &&
+         "Telemetry offset must be set. Checked in connect().");
+  return mmio->read(*offset);
+}
+
+void TelemetryService::getTelemetryPorts(std::map<AppIDPath, Metric *> &ports) {
+  for (const auto &entry : telemetryPorts)
+    ports[entry.first] = entry.second;
+  for (TelemetryService *child : children)
+    child->getTelemetryPorts(ports);
 }
 
 Service *ServiceRegistry::createService(AcceleratorConnection *acc,
