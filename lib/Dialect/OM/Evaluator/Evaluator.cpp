@@ -36,7 +36,7 @@ circt::om::getEvaluatorValuesFromAttributes(MLIRContext *context,
   SmallVector<evaluator::EvaluatorValuePtr> values;
   values.reserve(attributes.size());
   for (auto attr : attributes)
-    values.push_back(std::make_shared<evaluator::AttributeValue>(attr));
+    values.push_back(evaluator::AttributeValue::get(cast<TypedAttr>(attr)));
   return values;
 }
 
@@ -132,8 +132,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                   // Create a partially evaluated AttributeValue of
                   // om::IntegerType in case we need to delay evaluation.
                   evaluator::EvaluatorValuePtr result =
-                      std::make_shared<evaluator::AttributeValue>(
-                          op.getResult().getType(), loc);
+                      evaluator::AttributeValue::get(op.getResult().getType(),
+                                                     loc);
                   return success(result);
                 })
                 .Case<ObjectFieldOp>([&](auto op) {
@@ -411,8 +411,8 @@ FailureOr<circt::om::evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateConstant(ConstantOp op,
                                        ActualParameters actualParams,
                                        Location loc) {
-  return success(std::make_shared<circt::om::evaluator::AttributeValue>(
-      op.getValue(), loc));
+  // For list constants, create ListValue.
+  return success(om::evaluator::AttributeValue::get(op.getValue(), loc));
 }
 
 // Evaluator dispatch function for integer binary arithmetic.
@@ -618,15 +618,6 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
       return result;
     if (!result.value()->isFullyEvaluated())
       return list;
-
-    if (evaluator::AttributeValue *attr =
-            llvm::dyn_cast<evaluator::AttributeValue>(result.value().get())) {
-      auto attributes = getEvaluatorValuesFromAttributes(
-          attr->getAttr().getContext(),
-          attr->getAs<om::ListAttr>().getElements().getValue());
-      values.append(attributes.begin(), attributes.end());
-      continue;
-    }
 
     // Extract this sublist and ensure it's done evaluating.
     evaluator::ListValue *subList = extractList(result.value().get());
@@ -957,4 +948,37 @@ LogicalResult circt::om::evaluator::AttributeValue::finalizeImpl() {
     return mlir::emitError(
         getLoc(), "cannot finalize AttributeValue that is not fully evaluated");
   return success();
+}
+
+std::shared_ptr<evaluator::EvaluatorValue>
+circt::om::evaluator::AttributeValue::get(Attribute attr, LocationAttr loc) {
+  auto type = cast<TypedAttr>(attr).getType();
+  auto *context = type.getContext();
+  if (!loc)
+    loc = UnknownLoc::get(context);
+
+  if (auto listType = dyn_cast<circt::om::ListType>(type)) {
+    SmallVector<EvaluatorValuePtr> elements;
+    auto listAttr = cast<om::ListAttr>(attr);
+    auto values = getEvaluatorValuesFromAttributes(
+        listAttr.getContext(), listAttr.getElements().getValue());
+    elements.append(values.begin(), values.end());
+    auto list = std::make_shared<evaluator::ListValue>(listType, elements, loc);
+    return list;
+  }
+
+  return std::shared_ptr<AttributeValue>(
+      new AttributeValue(PrivateTag{}, attr, loc));
+}
+
+std::shared_ptr<evaluator::EvaluatorValue>
+circt::om::evaluator::AttributeValue::get(Type type, LocationAttr loc) {
+  auto *context = type.getContext();
+  if (!loc)
+    loc = UnknownLoc::get(context);
+  if (auto listType = dyn_cast<circt::om::ListType>(type))
+    return std::make_shared<evaluator::ListValue>(listType, loc);
+  // Create the AttributeValue with the private tag
+  return std::shared_ptr<AttributeValue>(
+      new AttributeValue(PrivateTag{}, type, loc));
 }

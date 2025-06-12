@@ -312,7 +312,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
 
   auto result = evaluator.instantiate(
       builder.getStringAttr("MyClass"),
-      {std::make_shared<evaluator::AttributeValue>(circt::om::IntegerAttr::get(
+      {evaluator::AttributeValue::get(circt::om::IntegerAttr::get(
           &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));
@@ -376,7 +376,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   auto result = evaluator.instantiate(
       builder.getStringAttr("MyClass"),
-      {std::make_shared<evaluator::AttributeValue>(circt::om::IntegerAttr::get(
+      {evaluator::AttributeValue::get(circt::om::IntegerAttr::get(
           &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));

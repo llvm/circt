@@ -266,7 +266,7 @@ MlirAttribute omEvaluatorValueGetPrimitive(OMEvaluatorValue evaluatorValue) {
 /// Get the Primitive from an EvaluatorValue, which must contain a Primitive.
 OMEvaluatorValue omEvaluatorValueFromPrimitive(MlirAttribute primitive) {
   // Assert the Attribute is non-null, and return it.
-  return wrap(std::make_shared<evaluator::AttributeValue>(unwrap(primitive)));
+  return wrap(evaluator::AttributeValue::get(unwrap(primitive)));
 }
 
 /// Query if the EvaluatorValue is a List.

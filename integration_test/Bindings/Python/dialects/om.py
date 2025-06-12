@@ -187,8 +187,10 @@ for (name, field) in obj:
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
+print("Check list")
+# CHECK: Check list
 # CHECK: ['X', 'Y']
-print(obj.list)
+print(list(obj.list))
 for child in obj.nest.list_child:
   # CHECK: 14
   # CHECK-NEXT: 15
