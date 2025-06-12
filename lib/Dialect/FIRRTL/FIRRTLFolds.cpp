@@ -52,8 +52,9 @@ static Value moveNameHint(OpResult old, Value passthrough) {
   assert(op && "passthrough must be an operation");
   Operation *oldOp = old.getOwner();
   auto name = oldOp->getAttrOfType<StringAttr>("name");
-  if (name && !name.getValue().empty())
+  if (name && !name.getValue().empty() && !isa<RegOp, RegResetOp>(op)) {
     op->setAttr("name", name);
+  }
   return passthrough;
 }
 
@@ -92,7 +93,7 @@ static void updateName(PatternRewriter &rewriter, Operation *op,
                        StringAttr name) {
   // Should never rename InstanceOp
   assert(!isa<InstanceOp>(op));
-  if (!name || name.getValue().empty())
+  if (!name || name.getValue().empty() || isa<RegOp, RegResetOp>(op))
     return;
   auto newName = name.getValue(); // old name is interesting
   auto newOpName = op->getAttrOfType<StringAttr>("name");
@@ -1373,9 +1374,7 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 namespace {
 
-/// Canonicalize cat operations that are only used by bits operations.
-/// This pattern flattens cat trees and replaces bits operations with direct
-/// references to the original values when possible.
+/// Canonicalize a cat tree into single cat operation.
 class FlattenCat : public mlir::RewritePattern {
 public:
   FlattenCat(MLIRContext *context)
@@ -1389,7 +1388,7 @@ public:
         cat.getType().getBitWidthOrSentinel() == 0)
       return failure();
 
-    // If this is not a root, skip.
+    // If this is not a root of concat tree, skip.
     if (cat->hasOneUse() && isa<CatPrimOp>(*cat->getUsers().begin()))
       return failure();
 
@@ -1404,6 +1403,7 @@ public:
     while (!worklist.empty()) {
       auto value = worklist.pop_back_val();
       auto catOp = value.getDefiningOp<CatPrimOp>();
+      // Make sure not to flatten if the cat is used by other ops.
       if (!catOp || !catOp->hasOneUse()) {
         operands.push_back(value);
         continue;
@@ -1426,6 +1426,7 @@ public:
   }
 };
 
+// Fold successive constants cat(x, y, 1, 10, z) -> cat(x, y, 110, z)
 class CatOfConstant : public mlir::RewritePattern {
 public:
   CatOfConstant(MLIRContext *context)
@@ -1454,19 +1455,23 @@ public:
           break;
         value = value.concat(nextCst.getValue());
       }
-      if (j - i == 1) {
+
+      if (j == i + 1) {
+        // Not folded.
         operands.push_back(cst);
       } else {
+        // Folded.
         operands.push_back(rewriter.create<ConstantOp>(cat.getLoc(), value));
       }
+
       i = j - 1;
     }
 
     if (operands.size() == cat->getNumOperands())
       return failure();
 
-    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
-                                             operands);
+    // replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
+    //                                          operands);
 
     return success();
   }
