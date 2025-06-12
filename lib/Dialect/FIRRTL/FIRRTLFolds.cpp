@@ -1254,10 +1254,69 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::DShrOfConstant>(context);
 }
 
+namespace {
+
+/// Canonicalize cat operations that are only used by bits operations.
+/// This pattern flattens cat trees and replaces bits operations with direct
+/// references to the original values when possible.
+class FlattenCat : public mlir::RewritePattern {
+public:
+  FlattenCat(MLIRContext *context)
+      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cat = cast<CatPrimOp>(op);
+    if (!hasKnownWidthIntTypes(cat))
+      return failure();
+
+    // If this is not a root, skip.
+    if (cat->hasOneUse() && isa<CatPrimOp>(*cat->getUsers().begin()))
+      return failure();
+
+    // Try flattening the cat tree.
+    SmallVector<Value> operands;
+    SmallVector<CatPrimOp> worklist{cat};
+    bool flattened = false;
+    while (!worklist.empty()) {
+      auto cat = worklist.pop_back_val();
+      if (cat->getNumOperands() == 0)
+        continue;
+      if (isa<SIntType>(cat.getOperand(0).getType())) {
+        operands.push_back(cat->getOperand(0));
+        continue;
+      }
+      for (auto operand : cat.getInputs()) {
+        if (auto catOp = operand.getDefiningOp<CatPrimOp>();
+            catOp && catOp->hasOneUse()) {
+          flattened = true;
+          worklist.push_back(catOp);
+        } else {
+          operands.push_back(operand);
+        }
+      }
+    }
+
+    if (operands.size() == 1) {
+      rewriter.replaceOp(op, operands[0]);
+      return success();
+    }
+
+    if (!flattened)
+      return failure();
+    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
+                                             operands);
+    return success();
+  }
+};
+
+} // namespace
+
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::CatBitsBits, patterns::CatDoubleConst,
-                 patterns::CatCast>(context);
+                 patterns::CatCast, FlattenCat>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
@@ -1291,11 +1350,42 @@ OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+struct BitsOfCat : public mlir::RewritePattern {
+  BitsOfCat(MLIRContext *context)
+      : RewritePattern(BitsPrimOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto bits = cast<BitsPrimOp>(op);
+    auto cat = bits.getInput().getDefiningOp<CatPrimOp>();
+    if (!cat)
+      return failure();
+    int32_t bitPos = bits.getLo();
+    auto resultWidth = type_cast<UIntType>(bits.getType()).getWidthOrSentinel();
+    if (resultWidth < 0)
+      return failure();
+    for (auto operand : llvm::reverse(cat.getInputs())) {
+      auto operandWidth =
+          type_cast<IntType>(operand.getType()).getWidthOrSentinel();
+      if (operandWidth < 0)
+        return failure();
+      if (bitPos < operandWidth && bitPos + resultWidth <= operandWidth) {
+        rewriter.replaceOpWithNewOp<BitsPrimOp>(
+            op, operand, bitPos + resultWidth - 1, bitPos);
+        return success();
+      }
+      bitPos -= operandWidth;
+    }
+    return success();
+  }
+};
+
 void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results
       .insert<patterns::BitsOfBits, patterns::BitsOfMux, patterns::BitsOfAsUInt,
-              patterns::BitsOfAnd, patterns::BitsOfPad>(context);
+              patterns::BitsOfAnd, patterns::BitsOfPad, BitsOfCat>(context);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
