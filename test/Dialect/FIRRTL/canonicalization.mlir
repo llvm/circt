@@ -3618,4 +3618,21 @@ firrtl.module private @LayerBlocks() {
   // CHECK-NOT: firrtl.layerblock @A
   firrtl.layerblock @A {}
 }
+
+// CHECK-LABEL: firrtl.module @name_prop
+firrtl.module @name_prop(in %clock: !firrtl.clock, in %next: !firrtl.uint<8>, out %out_b: !firrtl.uint<8>) {
+  // CHECK: %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
+  %reg = firrtl.reg droppable_name %clock : !firrtl.clock, !firrtl.uint<8>
+  // CHECK-NOT: firrtl.node
+  firrtl.connect %reg, %next : !firrtl.uint<8>, !firrtl.uint<8>
+  %n = firrtl.node %reg : !firrtl.uint<8>
+  firrtl.connect %out_b, %n : !firrtl.uint<8>, !firrtl.uint<8>
+
+  // CHECK: %m = firrtl.wire
+  %wire = firrtl.wire droppable_name : !firrtl.uint<8>
+  // CHECK-NOT: firrtl.node
+  firrtl.connect %wire, %reg : !firrtl.uint<8>, !firrtl.uint<8>
+  %m = firrtl.node %wire : !firrtl.uint<8>
+  firrtl.connect %out_b, %m : !firrtl.uint<8>, !firrtl.uint<8>
+}
 }
