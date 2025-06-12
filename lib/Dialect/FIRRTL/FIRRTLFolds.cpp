@@ -1155,7 +1155,12 @@ public:
       return success();
     }
 
-    // Multiple operands remain - cannot optimize further
+    // Multiple operands remain - optimize only when cat has a single use.
+    if (catOp->hasOneUse() &&
+        nonConstantOperands.size() < catOp->getNumOperands()) {
+      replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, catOp,
+                                               nonConstantOperands);
+    }
     return failure();
   }
 };
@@ -1167,13 +1172,13 @@ public:
   bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
                       ConstantOp value,
                       SmallVectorImpl<Value> &remaining) const override {
-    if (!value.getValue().isZero()) {
-      replaceOpWithNewOpAndCopyName<ConstantOp>(
-          rewriter, op, cast<IntType>(op->getResult(0).getType()),
-          llvm::APInt(1, 1));
-      return true;
-    }
-    return false;
+    if (value.getValue().isZero())
+      return false;
+
+    replaceOpWithNewOpAndCopyName<ConstantOp>(
+        rewriter, op, cast<IntType>(op->getResult(0).getType()),
+        llvm::APInt(1, 1));
+    return true;
   }
   bool getIdentityValue() const override { return false; }
 };
@@ -1184,13 +1189,13 @@ public:
   bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
                       ConstantOp value,
                       SmallVectorImpl<Value> &remaining) const override {
-    if (!value.getValue().isAllOnes()) {
-      replaceOpWithNewOpAndCopyName<ConstantOp>(
-          rewriter, op, cast<IntType>(op->getResult(0).getType()),
-          llvm::APInt(1, 0));
-      return true;
-    }
-    return false;
+    if (value.getValue().isAllOnes())
+      return false;
+
+    replaceOpWithNewOpAndCopyName<ConstantOp>(
+        rewriter, op, cast<IntType>(op->getResult(0).getType()),
+        llvm::APInt(1, 0));
+    return true;
   }
   bool getIdentityValue() const override { return true; }
 };
@@ -1202,9 +1207,8 @@ public:
   bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
                       ConstantOp value,
                       SmallVectorImpl<Value> &remaining) const override {
-    if (value.getValue().isZero()) {
+    if (value.getValue().isZero())
       return false;
-    }
     remaining.push_back(value);
     return false;
   }
@@ -1381,7 +1385,8 @@ public:
   matchAndRewrite(Operation *op,
                   mlir::PatternRewriter &rewriter) const override {
     auto cat = cast<CatPrimOp>(op);
-    if (!hasKnownWidthIntTypes(cat))
+    if (!hasKnownWidthIntTypes(cat) ||
+        cat.getType().getBitWidthOrSentinel() == 0)
       return failure();
 
     // If this is not a root, skip.
@@ -1390,7 +1395,12 @@ public:
 
     // Try flattening the cat tree.
     SmallVector<Value> operands;
-    SmallVector<Value> worklist{cat};
+    SmallVector<Value> worklist;
+    auto pushOperands = [&worklist](CatPrimOp op) {
+      for (auto operand : llvm::reverse(op.getInputs()))
+        worklist.push_back(operand);
+    };
+    pushOperands(cat);
     while (!worklist.empty()) {
       auto value = worklist.pop_back_val();
       auto catOp = value.getDefiningOp<CatPrimOp>();
@@ -1399,8 +1409,7 @@ public:
         continue;
       }
 
-      for (auto operand : llvm::reverse(catOp.getInputs()))
-        worklist.push_back(operand);
+      pushOperands(catOp);
     }
 
     if (operands.size() == 1) {
@@ -1522,10 +1531,13 @@ struct BitsOfCat : public mlir::RewritePattern {
           type_cast<IntType>(operand.getType()).getWidthOrSentinel();
       if (operandWidth < 0)
         return failure();
-      if (bitPos < operandWidth && bitPos + resultWidth <= operandWidth) {
-        rewriter.replaceOpWithNewOp<BitsPrimOp>(
-            op, operand, bitPos + resultWidth - 1, bitPos);
-        return success();
+      if (bitPos < operandWidth) {
+        if (bitPos + resultWidth <= operandWidth) {
+          rewriter.replaceOpWithNewOp<BitsPrimOp>(
+              op, operand, bitPos + resultWidth - 1, bitPos);
+          return success();
+        }
+        return failure();
       }
       bitPos -= operandWidth;
     }

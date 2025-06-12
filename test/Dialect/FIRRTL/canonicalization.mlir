@@ -3658,6 +3658,7 @@ firrtl.module @BitsOfCat(in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
                          out %out3: !firrtl.uint<3>, out %out4: !firrtl.uint<8>) {
 
   %cat = firrtl.cat %a, %b, %c, %d : (!firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<16>
+  // CHECK: %[[CAT:.+]] = firrtl.cat %a, %b, %c, %d : (!firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<16>
 
   // Test extraction from single operand (bits 15:14 should come from %a)
   // CHECK: firrtl.bits %a 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
@@ -3675,7 +3676,7 @@ firrtl.module @BitsOfCat(in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
   firrtl.matchingconnect %out3, %2 : !firrtl.uint<3>
 
   // Test extraction spanning multiple operands (should not be optimized)
-  // CHECK: firrtl.bits %cat 11 to 4 : (!firrtl.uint<16>) -> !firrtl.uint<8>
+  // CHECK: firrtl.bits %[[CAT]] 11 to 4 : (!firrtl.uint<16>) -> !firrtl.uint<8>
   %3 = firrtl.bits %cat 11 to 4 : (!firrtl.uint<16>) -> !firrtl.uint<8>
   firrtl.matchingconnect %out4, %3 : !firrtl.uint<8>
 }
