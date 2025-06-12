@@ -432,18 +432,6 @@ def OrRasUInt : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// orr(cat(0,x)) -> orr(x)
-def OrRCatZeroH : Pat <
-  (OrRPrimOp:$old (CatPrimOp (variadic $c, $x))),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (ZeroConstantOp $c)]>;
-
-/// orr(cat(x,0)) -> orr(x)
-def OrRCatZeroL : Pat <
-  (OrRPrimOp:$old (CatPrimOp (variadic $x, $c))),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (ZeroConstantOp $c)]>;
-
 /// orr(pad(x,n)) -> orr(x)
 def OrRPadU : Pat <
   (OrRPrimOp:$old (PadPrimOp:$pad $x, $n)),

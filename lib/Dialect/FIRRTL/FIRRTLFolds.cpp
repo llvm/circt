@@ -1147,11 +1147,58 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+class OrrCat : public mlir::RewritePattern {
+public:
+  OrrCat(MLIRContext *context)
+      : RewritePattern(OrRPrimOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto orr = cast<OrRPrimOp>(op);
+    auto cat = orr.getInput().getDefiningOp<CatPrimOp>();
+    if (!cat)
+      return failure();
+    SmallVector<Value> remaining;
+    for (auto operand : cat.getInputs()) {
+      // Remove constant.
+      if (operand.getDefiningOp<ConstantOp>()) {
+        // Exist one -> reduce to 1
+        const auto &value = operand.getDefiningOp<ConstantOp>().getValue();
+        if (value.isZero()) {
+          continue;
+        }
+        // Replace with 1.
+        replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, cat, orr.getType(),
+                                                  llvm::APInt(1, 1));
+        return success();
+      }
+      remaining.push_back(operand);
+    }
+
+    if (remaining.size() == 0) {
+      // Replace with 1.
+      replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, cat, orr.getType(),
+                                                llvm::APInt(1, 0));
+
+      return success();
+    }
+
+    if (remaining.size() == 1) {
+      // Create orr.
+      replaceOpWithNewOpAndCopyName<OrRPrimOp>(rewriter, cat, remaining[0]);
+      return success();
+    }
+
+    return failure();
+  }
+};
+
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRPadU,
-                 patterns::OrRCatZeroH, patterns::OrRCatZeroL,
-                 patterns::OrRCatOrR_left, patterns::OrRCatOrR_right>(context);
+                 patterns::OrRCatOrR_left, patterns::OrRCatOrR_right, OrrCat>(
+      context);
 }
 
 OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1278,7 +1325,6 @@ public:
     // Try flattening the cat tree.
     SmallVector<Value> operands;
     SmallVector<Value> worklist{cat};
-    bool flattened = false;
     while (!worklist.empty()) {
       auto value = worklist.pop_back_val();
       auto catOp = value.getDefiningOp<CatPrimOp>();
