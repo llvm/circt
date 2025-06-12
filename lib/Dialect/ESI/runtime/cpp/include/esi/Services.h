@@ -25,10 +25,21 @@
 #include "esi/Ports.h"
 
 #include <cstdint>
+#include <list>
 
 namespace esi {
 class AcceleratorConnection;
 class Engine;
+namespace services {
+class Service;
+}
+
+// While building the design, keep around a std::map of active services indexed
+// by the service name. When a new service is encountered during descent, add it
+// to the table (perhaps overwriting one). Modifications to the table only apply
+// to the current branch, so copy this and update it at each level of the tree.
+using ServiceTable = std::map<std::string, services::Service *>;
+
 namespace services {
 
 /// Add a custom interface to a service client at a particular point in the
@@ -348,18 +359,23 @@ public:
   virtual std::string getServiceSymbol() const override;
   virtual BundlePort *getPort(AppIDPath id,
                               const BundleType *type) const override;
+  virtual Service *getChildService(Service::Type service, AppIDPath id = {},
+                                   std::string implName = {},
+                                   ServiceImplDetails details = {},
+                                   HWClientDetails clients = {}) override;
+  MMIO::MMIORegion *getMMIORegion() const;
 
   /// A telemetry port which gets attached to a service port.
-  class Telemetry : public ServicePort {
+  class Metric : public ServicePort {
     friend class TelemetryService;
-    Telemetry(AppID id, const BundleType *type, PortMap channels);
+    Metric(AppID id, const BundleType *type, PortMap channels,
+           const TelemetryService *telemetryService,
+           std::optional<uint64_t> offset);
 
   public:
-    static Telemetry *get(AppID id, BundleType *type, WriteChannelPort &get,
-                          ReadChannelPort &data);
-
     void connect();
     std::future<MessageData> read();
+    uint64_t readInt();
 
     virtual std::optional<std::string> toString() const override {
       const esi::Type *dataType =
@@ -369,16 +385,24 @@ public:
     }
 
   private:
-    WriteChannelPort *get_req;
-    ReadChannelPort *data;
+    const TelemetryService *telemetryService;
+    MMIO::MMIORegion *mmio;
+    std::optional<uint64_t> offset;
   };
 
-  const std::map<AppIDPath, Telemetry *> &getTelemetryPorts() {
-    return telemetryPorts;
+  std::map<AppIDPath, Metric *> getTelemetryPorts() {
+    std::map<AppIDPath, Metric *> ports;
+    getTelemetryPorts(ports);
+    return ports;
   }
+  void getTelemetryPorts(std::map<AppIDPath, Metric *> &ports);
 
 private:
-  mutable std::map<AppIDPath, Telemetry *> telemetryPorts;
+  AppIDPath id;
+  mutable MMIO::MMIORegion *mmio;
+  std::map<AppIDPath, uint64_t> portAddressAssignments;
+  mutable std::map<AppIDPath, Metric *> telemetryPorts;
+  std::list<TelemetryService *> children;
 };
 
 /// Registry of services which can be instantiated directly by the Accelerator

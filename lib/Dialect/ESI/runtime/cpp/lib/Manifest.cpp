@@ -20,7 +20,6 @@
 #include <sstream>
 
 using namespace ::esi;
-using ServiceTable = AcceleratorConnection::ServiceTable;
 
 // This is a proxy class to the manifest JSON. It is used to avoid having to
 // include the JSON parser in the header. Forward references don't work since

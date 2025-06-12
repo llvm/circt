@@ -350,9 +350,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
         });
       });
 
-  py::class_<TelemetryService::Telemetry, ServicePort>(m, "Telemetry")
-      .def("connect", &TelemetryService::Telemetry::connect)
-      .def("read", &TelemetryService::Telemetry::read);
+  py::class_<TelemetryService::Metric, ServicePort>(m, "Metric")
+      .def("connect", &TelemetryService::Metric::connect)
+      .def("read", &TelemetryService::Metric::read)
+      .def("readInt", &TelemetryService::Metric::readInt);
 
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.

@@ -50,6 +50,11 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
     @generator
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
+      esi.TelemetryMMIO(esi.Telemetry,
+                        appid=esi.AppID("__telemetry"),
+                        clk=ports.clk,
+                        rst=ports.rst)
+
       if emulate_dma:
         ChannelEngineService(OneItemBuffersToHost, OneItemBuffersFromHost)(
             None,

@@ -42,6 +42,12 @@ struct AppID {
     return name == other.name && idx == other.idx;
   }
   bool operator!=(const AppID &other) const { return !(*this == other); }
+
+  std::string toString() const {
+    if (idx.has_value())
+      return name + "[" + std::to_string(idx.value()) + "]";
+    return name;
+  }
 };
 bool operator<(const AppID &a, const AppID &b);
 

@@ -229,11 +229,10 @@ void hostmemTest(Accelerator *acc,
     auto telemetryPortIter = writeMemPorts.find(AppID("timesWritten"));
     if (telemetryPortIter == writeMemPorts.end())
       throw std::runtime_error("hostmem test failed. No telemetry child found");
-    services::TelemetryService::Telemetry *telemetry =
-        telemetryPortIter->second
-            .getAs<services::TelemetryService::Telemetry>();
+    services::TelemetryService::Metric *telemetry =
+        telemetryPortIter->second.getAs<services::TelemetryService::Metric>();
     telemetry->connect();
-    uint64_t writeCount = *telemetry->read().get().as<uint64_t>();
+    uint64_t writeCount = telemetry->readInt();
     std::cout << "Write count: " << writeCount << std::endl;
 
     // Command the accelerator to write to 'devicePtr', the pointer which the
