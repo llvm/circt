@@ -1277,25 +1277,18 @@ public:
 
     // Try flattening the cat tree.
     SmallVector<Value> operands;
-    SmallVector<CatPrimOp> worklist{cat};
+    SmallVector<Value> worklist{cat};
     bool flattened = false;
     while (!worklist.empty()) {
-      auto cat = worklist.pop_back_val();
-      if (cat->getNumOperands() == 0)
-        continue;
-      if (isa<SIntType>(cat.getOperand(0).getType())) {
-        operands.push_back(cat->getOperand(0));
+      auto value = worklist.pop_back_val();
+      auto catOp = value.getDefiningOp<CatPrimOp>();
+      if (!catOp || !catOp->hasOneUse()) {
+        operands.push_back(value);
         continue;
       }
-      for (auto operand : cat.getInputs()) {
-        if (auto catOp = operand.getDefiningOp<CatPrimOp>();
-            catOp && catOp->hasOneUse()) {
-          flattened = true;
-          worklist.push_back(catOp);
-        } else {
-          operands.push_back(operand);
-        }
-      }
+
+      for (auto operand : llvm::reverse(catOp.getInputs()))
+        worklist.push_back(operand);
     }
 
     if (operands.size() == 1) {
@@ -1303,10 +1296,57 @@ public:
       return success();
     }
 
-    if (!flattened)
+    if (operands.size() == cat->getNumOperands())
       return failure();
+
     replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
                                              operands);
+    return success();
+  }
+};
+
+class CatOfConstant : public mlir::RewritePattern {
+public:
+  CatOfConstant(MLIRContext *context)
+      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto cat = cast<CatPrimOp>(op);
+    if (!hasKnownWidthIntTypes(cat))
+      return failure();
+
+    SmallVector<Value> operands;
+
+    for (size_t i = 0; i < cat->getNumOperands(); ++i) {
+      auto cst = cat.getInputs()[i].getDefiningOp<ConstantOp>();
+      if (!cst) {
+        operands.push_back(cat.getInputs()[i]);
+        continue;
+      }
+      APSInt value = cst.getValue();
+      size_t j = i + 1;
+      for (; j < cat->getNumOperands(); ++j) {
+        auto nextCst = cat.getInputs()[j].getDefiningOp<ConstantOp>();
+        if (!nextCst)
+          break;
+        value = value.concat(nextCst.getValue());
+      }
+      if (j - i == 1) {
+        operands.push_back(cst);
+      } else {
+        operands.push_back(rewriter.create<ConstantOp>(cat.getLoc(), value));
+      }
+      i = j - 1;
+    }
+
+    if (operands.size() == cat->getNumOperands())
+      return failure();
+
+    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
+                                             operands);
+
     return success();
   }
 };
@@ -1316,7 +1356,7 @@ public:
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::CatBitsBits, patterns::CatDoubleConst,
-                 patterns::CatCast, FlattenCat>(context);
+                 patterns::CatCast, FlattenCat, CatOfConstant>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
@@ -1377,7 +1417,7 @@ struct BitsOfCat : public mlir::RewritePattern {
       }
       bitPos -= operandWidth;
     }
-    return success();
+    return failure();
   }
 };
 
