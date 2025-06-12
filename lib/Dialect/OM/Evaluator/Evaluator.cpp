@@ -625,7 +625,7 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
       return list;
 
     // Append each EvaluatorValue from the sublist.
-    for (auto subValue : subList->getElements())
+    for (const auto &subValue : subList->getElements())
       values.push_back(subValue);
   }
 
