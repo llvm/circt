@@ -1102,48 +1102,60 @@ void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 class ReductionCat : public mlir::RewritePattern {
 public:
-  ReductionCat(MLIRContext *context, llvm::StringLiteral name)
-      : RewritePattern(name, 0, context) {}
+  ReductionCat(MLIRContext *context, llvm::StringLiteral opName)
+      : RewritePattern(opName, 0, context) {}
+
+  /// Handle a constant operand in the cat operation.
+  /// Returns true if the entire reduction can be replaced with a constant.
+  /// May add non-zero constants to the remaining operands list.
   virtual bool handleConstant(mlir::PatternRewriter &rewriter, Operation *op,
-                              ConstantOp value,
+                              ConstantOp constantOp,
                               SmallVectorImpl<Value> &remaining) const = 0;
-  virtual bool unit() const = 0;
+
+  /// Return the unit value for this reduction operation:
+  /// - OrR: false (0) - OR with 0 is identity
+  /// - AndR: true (1) - AND with 1 is identity
+  /// - XorR: false (0) - XOR with 0 is identity
+  virtual bool getIdentityValue() const = 0;
 
   LogicalResult
   matchAndRewrite(Operation *op,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cat = op->getOperand(0).getDefiningOp<CatPrimOp>();
-    auto resultType = cast<IntType>(op->getResult(0).getType());
-    if (!cat)
+    // Check if the operand is a cat operation
+    auto catOp = op->getOperand(0).getDefiningOp<CatPrimOp>();
+    if (!catOp)
       return failure();
-    SmallVector<Value> remaining;
-    for (auto operand : cat.getInputs()) {
-      // Remove constant.
-      if (operand.getDefiningOp<ConstantOp>()) {
-        if (handleConstant(rewriter, op, operand.getDefiningOp<ConstantOp>(),
-                           remaining))
+
+    auto resultType = cast<IntType>(op->getResult(0).getType());
+    SmallVector<Value> nonConstantOperands;
+
+    // Process each operand of the cat operation
+    for (auto operand : catOp.getInputs()) {
+      if (auto constantOp = operand.getDefiningOp<ConstantOp>()) {
+        // Handle constant operands - may short-circuit the entire operation
+        if (handleConstant(rewriter, op, constantOp, nonConstantOperands))
           return success();
       } else {
-        remaining.push_back(operand);
+        // Keep non-constant operands for further processing
+        nonConstantOperands.push_back(operand);
       }
     }
 
-    if (remaining.size() == 0) {
-      // Replace with 1.
+    // If no operands remain, replace with identity value
+    if (nonConstantOperands.empty()) {
       replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, op, resultType,
-                                                llvm::APInt(1, unit()));
-
+                                                APInt(1, getIdentityValue()));
       return success();
     }
 
-    if (remaining.size() == 1) {
-      // Create orr.
-      rewriter.modifyOpInPlace(op,
-                               [&] { op->setOperand(0, remaining.front()); });
-
+    // If only one operand remains, apply reduction directly to it
+    if (nonConstantOperands.size() == 1) {
+      rewriter.modifyOpInPlace(
+          op, [&] { op->setOperand(0, nonConstantOperands.front()); });
       return success();
     }
 
+    // Multiple operands remain - cannot optimize further
     return failure();
   }
 };
@@ -1163,7 +1175,7 @@ public:
     }
     return false;
   }
-  bool unit() const override { return false; }
+  bool getIdentityValue() const override { return false; }
 };
 class AndrCat : public ReductionCat {
 public:
@@ -1180,7 +1192,7 @@ public:
     }
     return false;
   }
-  bool unit() const override { return true; }
+  bool getIdentityValue() const override { return true; }
 };
 
 class XorRCat : public ReductionCat {
@@ -1196,7 +1208,7 @@ public:
     remaining.push_back(value);
     return false;
   }
-  bool unit() const override { return false; }
+  bool getIdentityValue() const override { return false; }
 };
 
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
