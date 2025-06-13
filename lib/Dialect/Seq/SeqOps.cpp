@@ -622,6 +622,52 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     return success();
   }
 
+  // Canonicalize registers with mux-based constant drivers.
+  // This pattern matches registers where the next value is a mux with one
+  // branch being the register itself (creating a self-loop) and the other
+  // branch being a constant. In such cases, the register effectively holds a
+  // constant value and can be replaced with that constant.
+  if (auto nextMux = op.getNext().getDefiningOp<comb::MuxOp>()) {
+    // Reject optimization if register has preset attribute (for simplicity)
+    if (op.getPresetAttr())
+      return failure();
+
+    Attribute value;
+    Value replacedValue;
+
+    // Check if true branch is self-loop and false branch is constant
+    if (nextMux.getTrueValue() == op.getResult() &&
+        matchPattern(nextMux.getFalseValue(), m_Constant(&value))) {
+      replacedValue = nextMux.getFalseValue();
+    }
+    // Check if false branch is self-loop and true branch is constant
+    else if (nextMux.getFalseValue() == op.getResult() &&
+             matchPattern(nextMux.getTrueValue(), m_Constant(&value))) {
+      replacedValue = nextMux.getTrueValue();
+    }
+
+    if (!replacedValue)
+      return failure();
+
+    // Verify reset value compatibility: if register has reset, it must be
+    // a constant that matches the mux constant
+    if (op.getResetValue()) {
+      Attribute resetConst;
+      if (matchPattern(op.getResetValue(), m_Constant(&resetConst))) {
+        if (resetConst != value)
+          return failure();
+      } else {
+        // Non-constant reset value prevents optimization
+        return failure();
+      }
+    }
+
+    assert(replacedValue);
+    // Apply the optimization if all conditions are met
+    rewriter.replaceOp(op, replacedValue);
+    return success();
+  }
+
   // For reset-less 1d array registers, replace an uninitialized element with
   // constant zero. For example, let `r` be a 2xi1 register and its next value
   // be `{foo, r[0]}`. `r[0]` is connected to itself so will never be

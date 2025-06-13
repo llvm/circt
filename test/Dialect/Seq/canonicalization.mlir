@@ -307,3 +307,77 @@ hw.module @CompRegClockEnabled(in %clock: !seq.clock, in %d: i42, in %x: i42, in
   %3 = seq.compreg.ce %2, %clock, %en : i42
   hw.output %1, %3 : i42, i42
 }
+
+// CHECK-LABEL: @FirRegMuxConstant
+hw.module @FirRegMuxConstant(in %clk : !seq.clock, in %cond : i1, in %in : i32) {
+  %c42_i32 = hw.constant 42 : i32
+  %c0_i32 = hw.constant 0 : i32
+  %c5_i32 = hw.constant 5 : i32
+
+  // Register with mux where true branch is register itself and false branch is constant
+  // Should be replaced with the constant
+  %mux1 = comb.mux %cond, %reg1, %c42_i32 : i32
+  %reg1 = seq.firreg %mux1 clock %clk : i32
+  hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+  // CHECK: hw.instance "reg1" @Observe(x: %c42_i32: i32) -> ()
+
+  // Register with mux where false branch is register itself and true branch is constant
+  // Should be replaced with the constant
+  %mux2 = comb.mux %cond, %c0_i32, %reg2 : i32
+  %reg2 = seq.firreg %mux2 clock %clk : i32
+  hw.instance "reg2" @Observe(x: %reg2: i32) -> ()
+  // CHECK: hw.instance "reg2" @Observe(x: %c0_i32: i32) -> ()
+
+  // Register with mux where neither branch is the register itself
+  // Should not be optimized
+  %mux3 = comb.mux %cond, %in, %c5_i32 : i32
+  %reg3 = seq.firreg %mux3 clock %clk : i32
+  hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+  // CHECK: %reg3 = seq.firreg
+  // CHECK: hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+}
+
+// CHECK-LABEL: @FirRegMuxConstantWithPreset
+hw.module @FirRegMuxConstantWithPreset(in %clk : !seq.clock, in %cond : i1) {
+  %c42_i32 = hw.constant 42 : i32
+  %c0_i32 = hw.constant 0 : i32
+
+  // Register with preset should not be optimized
+  %mux1 = comb.mux %cond, %reg1, %c42_i32 : i32
+  %reg1 = seq.firreg %mux1 clock %clk preset 42: i32
+  // CHECK: hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+  hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+}
+
+// CHECK-LABEL: @FirRegMuxConstantWithReset
+hw.module @FirRegMuxConstantWithReset(in %clk : !seq.clock, in %cond : i1, in %rst : i1) {
+  %c42_i32 = hw.constant 42 : i32
+  %c0_i32 = hw.constant 0 : i32
+  %c5_i32 = hw.constant 5 : i32
+
+  // Register with constant reset value that matches the mux constant - should be optimized
+  %mux1 = comb.mux %cond, %reg1, %c42_i32 : i32
+  %reg1 = seq.firreg %mux1 clock %clk reset sync %rst, %c42_i32 : i32
+  hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+  // CHECK: hw.instance "reg1" @Observe(x: %c42_i32: i32) -> ()
+
+  // Register with constant reset value that doesn't match the mux constant - should not be optimized
+  %mux2 = comb.mux %cond, %reg2, %c42_i32 : i32
+  %reg2 = seq.firreg %mux2 clock %clk reset sync %rst, %c0_i32 : i32
+  hw.instance "reg2" @Observe(x: %reg2: i32) -> ()
+  // CHECK: %reg2 = seq.firreg
+  // CHECK: hw.instance "reg2" @Observe(x: %reg2: i32) -> ()
+
+  // Register with non-constant reset value - should not be optimized
+  %mux3 = comb.mux %cond, %reg3, %c42_i32 : i32
+  %reg3 = seq.firreg %mux3 clock %clk reset sync %rst, %c5_i32 : i32
+  hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+  // CHECK: %reg3 = seq.firreg
+  // CHECK: hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+
+  // Register with async reset - constant reset value that matches - should be optimized
+  %mux4 = comb.mux %cond, %reg4, %c0_i32 : i32
+  %reg4 = seq.firreg %mux4 clock %clk reset async %rst, %c0_i32 : i32
+  hw.instance "reg4" @Observe(x: %reg4: i32) -> ()
+  // CHECK: hw.instance "reg4" @Observe(x: %c0_i32: i32) -> ()
+}
