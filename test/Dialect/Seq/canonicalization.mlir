@@ -336,7 +336,7 @@ hw.module @FirMemCanonicalization(in %addr : i4, in %clock : !seq.clock, in %dat
   %mem_with_symbol = seq.firmem sym @memSym 0, 1, undefined, undefined : <16 x 32>
   seq.firmem.write_port %mem_with_symbol[%addr] = %data, clock %clock enable %true : <16 x 32>
 
-  // Test 4: Mixed read/write memory should be preserved
+  // Mixed read/write memory should be preserved
   // CHECK: %mixed_mem = seq.firmem
   // CHECK-NEXT: %[[MIXED_READ:.*]] = seq.firmem.read_port %mixed_mem
   // CHECK-NEXT: seq.firmem.write_port %mixed_mem
@@ -344,7 +344,7 @@ hw.module @FirMemCanonicalization(in %addr : i4, in %clock : !seq.clock, in %dat
   %mixed_read = seq.firmem.read_port %mixed_mem[%addr], clock %clock enable %true : <16 x 32>
   seq.firmem.write_port %mixed_mem[%addr] = %data, clock %clock enable %true : <16 x 32>
 
-  // Test 5: Memory with read-write port (read-only case)
+  // Memory with read-write port (read-only case)
   // CHECK-NOT: %rw_read_only_mem
   // CHECK-NOT: seq.firmem.read_write_port {{.*}} %rw_read_only_mem
   %rw_read_only_mem = seq.firmem 0, 1, undefined, undefined : <16 x 32>
