@@ -780,3 +780,59 @@ firrtl.circuit "PrefixedClockGate" attributes {
     firrtl.instance foo @Foo()
   }
 }
+
+//===----------------------------------------------------------------------===//
+// General extraction with the moveDut parameter set
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "MoveDutSet" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Logic",
+      moveDut = true
+    }
+  ]
+} {
+  firrtl.extmodule @Foo_bbox() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+        filename = "BlackBoxes.txt",
+        prefix = "",
+        dest = "Extracted"
+      }
+    ],
+    defname = "blackbox"
+  }
+  firrtl.module @Logic() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance foo_bbox @Foo_bbox()
+  }
+  firrtl.module @Foo() {
+    firrtl.instance logic @Logic()
+  }
+  firrtl.module @MoveDutSet() {
+    firrtl.instance foo @Foo()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "MoveDutSet"
+//
+// CHECK:       firrtl.module @Logic()
+// CHECK-NOT:   firrtl.module
+// CHECK-NOT:     firrtl.instance foo_bbox @Foo_bbox
+// CHECK-NOT:     firrtl.instance {{.*}} @Extracted
+//
+// CHECK:       firrtl.module private @Extracted()
+// CHECK-NOT:   firrtl.module
+// CHECK:         firrtl.instance foo_bbox @Foo_bbox
+//
+// CHECK:       firrtl.module @Foo()
+// CHECK-NOT:   firrtl.module
+// CHECK:         firrtl.instance {{.*}} @Extracted

@@ -96,9 +96,11 @@ void InjectDUTHierarchy::runOnOperation() {
   /// true, then the pass can just signalPassFailure.
   bool error = false;
 
-  AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
+  // Do not remove the injection annotation as this is necessary to additionally
+  // influence ExtractInstances.
+  for (Annotation anno : AnnotationSet(circuit)) {
     if (!anno.isClass(injectDUTHierarchyAnnoClass))
-      return false;
+      continue;
 
     auto name = anno.getMember<StringAttr>("name");
     if (!name) {
@@ -107,7 +109,7 @@ void InjectDUTHierarchy::runOnOperation() {
              "'sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation' "
              "annotation that did not contain a 'name' field";
       error = true;
-      return false;
+      continue;
     }
 
     if (wrapperName) {
@@ -116,15 +118,13 @@ void InjectDUTHierarchy::runOnOperation() {
              "'sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation' "
              "annotations when at most one is allowed";
       error = true;
-      return false;
+      continue;
     }
 
     wrapperName = name;
     if (auto moveDutAnnoAttr = anno.getMember<BoolAttr>("moveDut"))
       moveDut = moveDutAnnoAttr.getValue();
-
-    return true;
-  });
+  }
 
   if (error)
     return signalPassFailure();
@@ -163,7 +163,23 @@ void InjectDUTHierarchy::runOnOperation() {
                                       dut.getConventionAttr(), dut.getPorts(),
                                       dut.getAnnotationsAttr());
 
-    SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
+    // This pass shouldn't create new public modules.  It should only preserve
+    // the existing public modules.  In "moveDut" mode, then the wrapper is the
+    // new DUT and we should move the publicness from the old DUT to the
+    // wrapper.  When not in "moveDut" mode, then the wrapper should be made
+    // private.
+    //
+    // Note: `movedDut=true` violates the FIRRTL ABI unless the user it doing
+    // something clever with module prefixing.  Because this annotation is
+    // already outside the specification, this workflow is allowed even though
+    // it violates the FIRRTL ABI.  The mid-term plan is to remove this pass to
+    // avoid the tech debt that it creates.
+    if (moveDut) {
+      newDUT.setPrivate();
+    } else {
+      newDUT.setVisibility(dut.getVisibility());
+      dut.setPrivate();
+    }
     dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
 
     // The original DUT module is now the wrapper.  The new module we just
@@ -322,6 +338,12 @@ void InjectDUTHierarchy::runOnOperation() {
     annotations.addAnnotations(newAnnotations);
     annotations.applyToPort(dut, i);
   }
+
+  // Update rwprobe operations' local innerrefs within the module.
+  wrapper.walk([&](RWProbeOp rwp) {
+    rwp.setTargetAttr(hw::InnerRefAttr::get(wrapper.getModuleNameAttr(),
+                                            rwp.getTarget().getName()));
+  });
 }
 
 //===----------------------------------------------------------------------===//

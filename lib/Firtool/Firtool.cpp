@@ -60,6 +60,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       opt.shouldSelectDefaultInstanceChoice()));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
+  // This pass is _not_ idempotent.  It preserves its controlling annotation for
+  // use by ExtractInstances.  This pass should be run before ExtractInstances.
+  //
+  // TODO: This pass should be deleted.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
   if (!opt.shouldDisableOptimization()) {
@@ -182,6 +186,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       opt.shouldReplaceSequentialMemories(),
       opt.getReplaceSequentialMemoriesFile()));
 
+  // This pass must be run after InjectDUTHierarchy.
+  //
+  // TODO: This pass should be deleted along with InjectDUTHierarchy.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for

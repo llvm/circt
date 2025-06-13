@@ -130,20 +130,6 @@ private:
 
 /// Values which can be directly representable by MLIR attributes.
 struct AttributeValue : EvaluatorValue {
-  AttributeValue(Attribute attr)
-      : AttributeValue(attr, mlir::UnknownLoc::get(attr.getContext())) {}
-  AttributeValue(Attribute attr, Location loc)
-      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr),
-        type(cast<TypedAttr>(attr).getType()) {
-    markFullyEvaluated();
-  }
-
-  // Constructors for partially evaluated AttributeValue.
-  AttributeValue(Type type)
-      : AttributeValue(mlir::UnknownLoc::get(type.getContext())) {}
-  AttributeValue(Type type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Attr, loc), type(type) {}
-
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -161,9 +147,32 @@ struct AttributeValue : EvaluatorValue {
 
   Type getType() const { return type; }
 
+  // Factory methods that create AttributeValue objects
+  static std::shared_ptr<EvaluatorValue> get(Attribute attr,
+                                             LocationAttr loc = {});
+  static std::shared_ptr<EvaluatorValue> get(Type type, LocationAttr loc = {});
+
 private:
+  // Make AttributeValue constructible only by the factory methods
+  struct PrivateTag {};
+
+  // Constructor that requires a PrivateTag
+  AttributeValue(PrivateTag, Attribute attr, Location loc)
+      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr),
+        type(cast<TypedAttr>(attr).getType()) {
+    markFullyEvaluated();
+  }
+
+  // Constructor for partially evaluated AttributeValue
+  AttributeValue(PrivateTag, Type type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Attr, loc), type(type) {}
+
   Attribute attr = {};
   Type type;
+
+  // Friend declaration for the factory methods
+  friend std::shared_ptr<EvaluatorValue> get(Attribute attr, LocationAttr loc);
+  friend std::shared_ptr<EvaluatorValue> get(Type type, LocationAttr loc);
 };
 
 // This perform finalization to `value`.

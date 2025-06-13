@@ -87,29 +87,6 @@ class Tgt4(Config):
       1)], IntegerType()).set(1, Integer(3)).size())
 
 
-# MLIR-LABEL: rtg.sequence @seq0
-# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>)
-# MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
-# MLIR-NEXT: rtg.label local [[LABEL]]
-# MLIR-NEXT: }
-
-
-@sequence([SetType(LabelType())])
-def seq0(set: Set):
-  set.get_random().place()
-
-
-# MLIR-LABEL: rtg.sequence @seq1
-# MLIR-NEXT: [[LABEL:%.+]] = rtg.label_decl "s1"
-# MLIR-NEXT: rtg.label local [[LABEL]]
-# MLIR-NEXT: }
-
-
-@sequence([])
-def seq1():
-  Label.declare("s1").place()
-
-
 @sequence([SetType(TupleType([IntegerType(), BoolType()]))])
 def seq2(set):
   pass
@@ -469,3 +446,26 @@ def test91_sets(config):
   seq2(Set.cartesian_product(config.a, config.b))
   int_consumer(config.c.to_set().get_random())
   int_consumer(config.a.to_bag().get_random())
+
+
+# MLIR-LABEL: rtg.sequence @seq0
+# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>)
+# MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
+# MLIR-NEXT: rtg.label local [[LABEL]]
+# MLIR-NEXT: }
+
+
+@sequence([SetType(LabelType())])
+def seq0(set: Set):
+  set.get_random().place()
+
+
+# MLIR-LABEL: rtg.sequence @seq1
+# MLIR-NEXT: [[LABEL:%.+]] = rtg.label_decl "s1"
+# MLIR-NEXT: rtg.label local [[LABEL]]
+# MLIR-NEXT: }
+
+
+@sequence([])
+def seq1():
+  Label.declare("s1").place()

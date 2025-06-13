@@ -87,6 +87,9 @@ MlirType omStringTypeGet(MlirContext ctx) {
   return wrap(StringType::get(unwrap(ctx)));
 }
 
+/// Get the TypeID for a StringType.
+MlirTypeID omStringTypeGetTypeID(void) { return wrap(StringType::getTypeID()); }
+
 /// Is the Type a MapType.
 bool omTypeIsAMapType(MlirType type) { return isa<MapType>(unwrap(type)); }
 
@@ -263,7 +266,7 @@ MlirAttribute omEvaluatorValueGetPrimitive(OMEvaluatorValue evaluatorValue) {
 /// Get the Primitive from an EvaluatorValue, which must contain a Primitive.
 OMEvaluatorValue omEvaluatorValueFromPrimitive(MlirAttribute primitive) {
   // Assert the Attribute is non-null, and return it.
-  return wrap(std::make_shared<evaluator::AttributeValue>(unwrap(primitive)));
+  return wrap(evaluator::AttributeValue::get(unwrap(primitive)));
 }
 
 /// Query if the EvaluatorValue is a List.
@@ -427,6 +430,15 @@ intptr_t omListAttrGetNumElements(MlirAttribute attr) {
 MlirAttribute omListAttrGetElement(MlirAttribute attr, intptr_t pos) {
   auto listAttr = llvm::cast<ListAttr>(unwrap(attr));
   return wrap(listAttr.getElements()[pos]);
+}
+
+MlirAttribute omListAttrGet(MlirType elementType, intptr_t numElements,
+                            const MlirAttribute *elements) {
+  SmallVector<Attribute, 8> attrs;
+  (void)unwrapList(static_cast<size_t>(numElements), elements, attrs);
+  auto type = unwrap(elementType);
+  auto *ctx = type.getContext();
+  return wrap(ListAttr::get(ctx, type, ArrayAttr::get(ctx, attrs)));
 }
 
 //===----------------------------------------------------------------------===//
