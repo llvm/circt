@@ -646,24 +646,26 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       replacedValue = nextMux.getTrueValue();
     }
 
+    if (!replacedValue)
+      return failure();
+
     // Verify reset value compatibility: if register has reset, it must be
     // a constant that matches the mux constant
     if (op.getResetValue()) {
       Attribute resetConst;
       if (matchPattern(op.getResetValue(), m_Constant(&resetConst))) {
         if (resetConst != value)
-          replacedValue = {};
+          return failure();
       } else {
         // Non-constant reset value prevents optimization
-        replacedValue = {};
+        return failure();
       }
     }
 
+    assert(replacedValue);
     // Apply the optimization if all conditions are met
-    if (replacedValue) {
-      rewriter.replaceOp(op, replacedValue);
-      return success();
-    }
+    rewriter.replaceOp(op, replacedValue);
+    return success();
   }
 
   // For reset-less 1d array registers, replace an uninitialized element with
