@@ -807,18 +807,42 @@ LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
   if (op.getInnerSymAttr())
     return failure();
 
+  bool readOnly = true, writeOnly = true;
+
   // If the memory has no read ports, erase it.
   for (auto *user : op->getUsers()) {
-    if (isa<FirMemReadOp, FirMemReadWriteOp>(user))
-      return failure();
-    assert(isa<FirMemWriteOp>(user) && "invalid seq.firmem user");
+    if (isa<FirMemReadOp, FirMemReadWriteOp>(user)) {
+      writeOnly = false;
+    }
+    if (isa<FirMemWriteOp, FirMemReadWriteOp>(user)) {
+      readOnly = false;
+    }
+    assert((isa<FirMemReadOp, FirMemWriteOp, FirMemReadWriteOp>(user)) &&
+           "invalid seq.firmem user");
+  }
+  if (writeOnly) {
+    for (auto *user : llvm::make_early_inc_range(op->getUsers()))
+      rewriter.eraseOp(user);
+
+    rewriter.eraseOp(op);
+    return success();
   }
 
-  for (auto *user : llvm::make_early_inc_range(op->getUsers()))
-    rewriter.eraseOp(user);
-
-  rewriter.eraseOp(op);
-  return success();
+  if (readOnly) {
+    // Replace all read ports with a constant 0.
+    for (auto *user : op->getUsers()) {
+      auto readOp = cast<FirMemReadOp>(user);
+      Value zero = rewriter.create<hw::ConstantOp>(
+          readOp.getLoc(), APInt::getZero(hw::getBitWidth(readOp.getType())));
+      if (readOp.getType() != zero.getType())
+        zero = rewriter.create<hw::BitcastOp>(readOp.getLoc(), readOp.getType(),
+                                              zero);
+      rewriter.replaceOp(readOp, zero);
+    }
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -883,6 +907,9 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
   // Remove the write port if it is trivially dead.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
       isConstClock(op.getClk())) {
+    auto memOp = op.getMemory().getDefiningOp<FirMemOp>();
+    if (memOp.getInnerSymAttr())
+      return failure();
     rewriter.eraseOp(op);
     return success();
   }
