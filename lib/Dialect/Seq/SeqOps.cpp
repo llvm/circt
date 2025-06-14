@@ -874,9 +874,9 @@ LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  if (readOnly) {
+  if (readOnly && !op.getInit()) {
     // Replace all read ports with a constant 0.
-    for (auto *user : op->getUsers()) {
+    for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
       auto readOp = cast<FirMemReadOp>(user);
       Value zero = rewriter.create<hw::ConstantOp>(
           readOp.getLoc(), APInt::getZero(hw::getBitWidth(readOp.getType())));
