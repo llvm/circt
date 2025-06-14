@@ -176,15 +176,29 @@ VerilogDocument::VerilogDocument(
   // Populate source managers.
   const llvm::MemoryBuffer *memBuffer = sourceMgr.getMemoryBuffer(bufferId);
 
-  driver.options.libDirs = libDirs;
+  for (const auto &libDir : libDirs) {
+    driver.sourceLoader.addSearchDirectories(libDir);
+  }
+
   // Assign text to slang.
   auto slangBuffer =
       driver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
-  driver.buffers.push_back(slangBuffer);
+  driver.sourceLoader.addBuffer(slangBuffer);
   bufferIDMap[slangBuffer.id.getId()] = bufferId;
 
   auto diagClient = std::make_shared<LSPDiagnosticClient>(*this, diagnostics);
   driver.diagEngine.addClient(diagClient);
+
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::LintMode, false);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::DisableInstanceCaching, false);
+
+  if (!driver.processOptions()) {
+    return;
+  }
+
+  driver.diagEngine.setIgnoreAllWarnings(false);
 
   if (!driver.parseAllSources()) {
     circt::lsp::Logger::error(Twine("Failed to parse Verilog file ") +
@@ -210,8 +224,7 @@ VerilogDocument::getLspLocation(slang::SourceLocation loc) const {
 
     // Otherwise, construct URI from slang source manager.
     auto fileName = slangSourceManager.getFileName(loc);
-    auto loc = mlir::lsp::URIForFile::fromFile(
-        slangSourceManager.makeAbsolutePath(fileName));
+    auto loc = mlir::lsp::URIForFile::fromFile(fileName);
     if (auto e = loc.takeError())
       return mlir::lsp::Location();
     return mlir::lsp::Location(loc.get(),
