@@ -1,0 +1,71 @@
+name: Cleanup Cache
+
+on:
+  workflow_call:
+    inputs:
+      cache_key_pattern:
+        description: "Cache key pattern to clean up"
+        required: true
+        type: string
+
+jobs:
+  cleanup-cache:
+    name: Cleanup Cache
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Get CIRCT
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+          submodules: "false"
+
+      - name: Set git safe
+        run: |
+          git config --global --add safe.directory $PWD
+
+      - name: Check cache and remove
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CACHE_KEY_PATTERN="${{ inputs.cache_key_pattern }}"
+
+          # Check if cache key pattern is empty
+          if [ -z "$CACHE_KEY_PATTERN" ]; then
+            echo "ERROR: cache_key_pattern is empty or not provided"
+            echo "Please provide a valid cache key pattern"
+            exit 1
+          fi
+
+          echo "Cleaning up caches matching regex pattern: .*${CACHE_KEY_PATTERN}.*"
+          echo "Listing all caches to filter with regex:"
+
+          # Get all caches and filter with regex pattern
+          ALL_CACHES=$(gh cache list -L 200 --json id,key,sizeInBytes)
+          MATCHING_CACHES=$(echo "$ALL_CACHES" | jq --arg pattern ".*${CACHE_KEY_PATTERN}.*" '[.[] | select(.key | test($pattern))]')
+
+          echo "Found $(echo "$MATCHING_CACHES" | jq 'length') matching caches"
+          echo "$MATCHING_CACHES" | jq -r '.[] | "\(.key) - \(.sizeInBytes) bytes"'
+
+          # Calculate the size threshold as 1/2 of the maximum cache size
+          MAX_SIZE=$(echo "$MATCHING_CACHES" | jq 'map(.sizeInBytes) | max // 0')
+          SIZE_THRESHOLD=$((MAX_SIZE / 2))
+
+          echo "Maximum cache size: $MAX_SIZE bytes"
+          echo "Size threshold (1/2 of max): $SIZE_THRESHOLD bytes"
+          echo "Identifying caches to delete..."
+          echo "- All caches smaller than $SIZE_THRESHOLD bytes (likely failed builds)"
+          echo "- Caches beyond the top 1 (if they are >= $SIZE_THRESHOLD bytes)"
+
+          # Get cache info with size and filter:
+          # 1. All caches smaller than threshold (failed builds)
+          # 2. Caches beyond top 1 that are >= threshold (old successful builds)
+          if [ "$MAX_SIZE" -gt 0 ]; then
+            echo "$MATCHING_CACHES" | \
+              jq --argjson threshold "$SIZE_THRESHOLD" \
+              '[.[] | select(.sizeInBytes < $threshold)] + (.[1:] | map(select(.sizeInBytes >= $threshold))) | .[].id' | \
+              ./utils/delete-cache.sh
+          else
+            echo "No caches found matching pattern: .*${CACHE_KEY_PATTERN}.*"
+          fi
