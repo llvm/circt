@@ -188,6 +188,7 @@ TOK_LPKEYWORD(probe)
 TOK_LPKEYWORD(rwprobe)
 
 TOK_LPKEYWORD(intrinsic)
+TOK_LPKEYWORD(cat)
 
 // These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddPrimOp, 2, 0)
@@ -198,7 +199,6 @@ TOK_LPKEYWORD_PRIM(asClock, AsClockPrimOp, 1, 0)
 TOK_LPKEYWORD_PRIM(asSInt, AsSIntPrimOp, 1, 0)
 TOK_LPKEYWORD_PRIM(asUInt, AsUIntPrimOp, 1, 0)
 TOK_LPKEYWORD_PRIM(bits, BitsPrimOp, 1, 2)
-TOK_LPKEYWORD_PRIM(cat, CatPrimOp, 2, 0)
 TOK_LPKEYWORD_PRIM(cvt, CvtPrimOp, 1, 0)
 TOK_LPKEYWORD_PRIM(div, DivPrimOp, 2, 0)
 TOK_LPKEYWORD_PRIM(dshl, DShlPrimOp, 2, 0)

@@ -160,9 +160,12 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
         firrtl::createRandomizeRegisterInitPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!opt.shouldDisableOptimization())
+  if (!opt.shouldDisableOptimization()) {
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createEliminateWiresPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+  }
 
   // Run the infer-rw pass, which merges read and write ports of a memory with
   // mutually exclusive enables.

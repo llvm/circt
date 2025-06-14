@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "llvm/Support/LogicalResult.h"
 #include <optional>
 #include <string>
 #include <vector>
@@ -109,6 +110,32 @@ struct FIRVersion {
     return uint64_t(*this) >= uint64_t(rhs);
   }
 
+  // Parse a version string in the form of `major.minor.patch`.
+  static llvm::FailureOr<FIRVersion> parse(
+      llvm::StringRef version,
+      llvm::function_ref<void(llvm::Twine)> emitError = [](llvm::Twine) {}) {
+    SmallVector<llvm::StringRef, 3> versionParts;
+    version.split(versionParts, '.');
+    if (versionParts.size() != 3)
+      return emitError("failed to parse version string. Version strings must "
+                       "be in the form of `major.minor.patch`"),
+             failure();
+    APInt aInt, bInt, cInt;
+
+    if (versionParts[0].getAsInteger(10, aInt) ||
+        versionParts[1].getAsInteger(10, bInt) ||
+        versionParts[2].getAsInteger(10, cInt))
+      return emitError("version string contains invalid integers"), failure();
+
+    uint16_t major = aInt.getLimitedValue(UINT16_MAX);
+    uint16_t minor = bInt.getLimitedValue(UINT16_MAX);
+    uint16_t patch = cInt.getLimitedValue(UINT16_MAX);
+
+    if (major != aInt || minor != bInt || patch != cInt)
+      return emitError("integers out of range"), failure();
+
+    return FIRVersion(major, minor, patch);
+  }
   uint16_t major;
   uint16_t minor;
   uint16_t patch;

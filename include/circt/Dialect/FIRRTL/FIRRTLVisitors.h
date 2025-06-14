@@ -124,6 +124,7 @@ public:
   HANDLE(OpenSubindexOp, Unhandled);
   HANDLE(ObjectSubfieldOp, Unhandled);
   HANDLE(ObjectAnyRefCastOp, Unhandled);
+  HANDLE(CatPrimOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
   HANDLE(AddPrimOp, Binary);
@@ -144,7 +145,6 @@ public:
   HANDLE(NEQPrimOp, Binary);
 
   // Misc Binary Primitives.
-  HANDLE(CatPrimOp, Binary);
   HANDLE(DShlPrimOp, Binary);
   HANDLE(DShlwPrimOp, Binary);
   HANDLE(DShrPrimOp, Binary);

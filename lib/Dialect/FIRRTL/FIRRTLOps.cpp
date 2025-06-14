@@ -5096,16 +5096,47 @@ FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), 1, isConst(lhs) && isConst(rhs));
 }
 
-FIRRTLType CatPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+FIRRTLType CatPrimOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                      OpaqueProperties properties,
+                                      mlir::RegionRange regions,
                                       std::optional<Location> loc) {
-  int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  bool isConstResult = false;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
-    return {};
+  // If no operands, return a 0-bit UInt
+  if (operands.empty())
+    return UIntType::get(attrs.getContext(), 0);
 
-  if (lhsWidth != -1 && rhsWidth != -1)
-    resultWidth = lhsWidth + rhsWidth;
-  return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
+  // Check that all operands are Int types with same signedness
+  bool isSigned = type_isa<SIntType>(operands[0].getType());
+  for (auto operand : operands) {
+    auto type = type_dyn_cast<IntType>(operand.getType());
+    if (!type)
+      return emitInferRetTypeError(loc, "all operands must be Int type");
+    if (type.isSigned() != isSigned)
+      return emitInferRetTypeError(loc,
+                                   "all operands must have same signedness");
+  }
+
+  // Calculate the total width and determine if result is const
+  int32_t resultWidth = 0;
+  bool isConstResult = true;
+
+  for (auto operand : operands) {
+    auto type = type_cast<IntType>(operand.getType());
+    int32_t width = type.getWidthOrSentinel();
+
+    // If any width is unknown, the result width is unknown
+    if (width == -1) {
+      resultWidth = -1;
+    }
+
+    if (resultWidth != -1)
+      resultWidth += width;
+
+    // Result is const only if all operands are const
+    isConstResult &= type.isConst();
+  }
+
+  // Create and return the result type
+  return UIntType::get(attrs.getContext(), resultWidth, isConstResult);
 }
 
 FIRRTLType DShlPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,

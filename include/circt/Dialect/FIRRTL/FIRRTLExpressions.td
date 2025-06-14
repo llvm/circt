@@ -679,9 +679,16 @@ let inferType = "impl::inferComparisonResult" in {
   }
 }
 
-def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
-  let hasCanonicalizer = true;
+def CatPrimOp : FIRRTLExprOp<"cat"> {
+  let arguments = (ins Variadic<IntType>:$inputs);
+  let results = (outs UIntType:$result);
+
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
+
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
   let description = [{
     A dynamic shift left operation. The width of `$result` is expanded to

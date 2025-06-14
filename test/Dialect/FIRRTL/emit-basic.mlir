@@ -207,7 +207,7 @@ firrtl.circuit "Foo" {
     // CHECK: node gtPrimOp = gt(x, y)
     // CHECK: node eqPrimOp = eq(x, y)
     // CHECK: node neqPrimOp = neq(x, y)
-    // CHECK: node catPrimOp = cat(x, y)
+    // CHECK: node catPrimOp = cat(x, y, x)
     // CHECK: node dShlPrimOp = dshl(x, y)
     // CHECK: node dShlwPrimOp = dshlw(x, y)
     // CHECK: node dShrPrimOp = dshr(x, y)
@@ -225,7 +225,7 @@ firrtl.circuit "Foo" {
     %gtPrimOp_tmp = firrtl.gt %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
     %eqPrimOp_tmp = firrtl.eq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
     %neqPrimOp_tmp = firrtl.neq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %catPrimOp_tmp = firrtl.cat %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %catPrimOp_tmp = firrtl.cat %x, %y, %x : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %dShlPrimOp_tmp = firrtl.dshl %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %dShlwPrimOp_tmp = firrtl.dshlw %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %dShrPrimOp_tmp = firrtl.dshr %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint

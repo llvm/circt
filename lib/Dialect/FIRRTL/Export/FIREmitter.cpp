@@ -138,6 +138,7 @@ struct Emitter {
   void emitExpression(ListCreateOp op);
   void emitExpression(UnresolvedPathOp op);
   void emitExpression(GenericIntrinsicOp op);
+  void emitExpression(CatPrimOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -174,7 +175,6 @@ struct Emitter {
   HANDLE(GTPrimOp, "gt");
   HANDLE(EQPrimOp, "eq");
   HANDLE(NEQPrimOp, "neq");
-  HANDLE(CatPrimOp, "cat");
   HANDLE(DShlPrimOp, "dshl");
   HANDLE(DShlwPrimOp, "dshlw");
   HANDLE(DShrPrimOp, "dshr");
@@ -1368,7 +1368,7 @@ void Emitter::emitExpression(Value value) {
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
-          EQPrimOp, NEQPrimOp, CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
+          EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
           AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
           CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
@@ -1376,7 +1376,7 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp, GenericIntrinsicOp,
+          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1581,6 +1581,45 @@ void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
   ps << ")" << PP::end;
 }
 
+void Emitter::emitExpression(CatPrimOp op) {
+  if (version >= nextFIRVersion)
+    return emitPrimExpr("cat", op);
+
+  size_t numOperands = op.getNumOperands();
+  switch (numOperands) {
+  case 0:
+    // Emit "UInt<0>(0)"
+    emitType(op.getType(), false);
+    ps << "(0)";
+    return;
+  case 1: {
+    auto operand = op->getOperand(0);
+    // If there is no sign conversion, just emit the operand.
+    if (isa<UIntType>(operand.getType()))
+      return emitExpression(operand);
+
+    // Emit cat to convert sign.
+    ps << "cat(" << PP::ibox0;
+    emitExpression(op->getOperand(0));
+    ps << "," << PP::space << "SInt<0>(0))" << PP::end;
+    return;
+  }
+
+  default:
+    // Construct a linear tree of cats.
+    for (size_t i = 0; i < numOperands - 1; ++i) {
+      ps << "cat(" << PP::ibox0;
+      emitExpression(op->getOperand(i));
+      ps << "," << PP::space;
+    }
+
+    emitExpression(op->getOperand(numOperands - 1));
+    for (size_t i = 0; i < numOperands - 1; ++i)
+      ps << ")" << PP::end;
+    return;
+  }
+}
+
 void Emitter::emitAttribute(MemDirAttr attr) {
   switch (attr) {
   case MemDirAttr::Infer:
@@ -1744,10 +1783,26 @@ void circt::firrtl::registerToFIRFileTranslation() {
       llvm::cl::desc("Target line length for emitted .fir"),
       llvm::cl::value_desc("number of chars"),
       llvm::cl::init(defaultTargetLineLength));
+  static llvm::cl::opt<std::string> targetFIRVersion(
+      "target-fir-version",
+      llvm::cl::desc("Target FIRRTL version for emitted FIR. Use latest "
+                     "version if not specified."),
+      llvm::cl::value_desc("version string"), llvm::cl::init(""));
+
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength, exportFIRVersion);
+        auto firVersion = exportFIRVersion;
+        if (!targetFIRVersion.empty()) {
+          auto versionOrErr =
+              FIRVersion::parse(targetFIRVersion, [&](Twine err) {
+                llvm::errs() << err << "\n";
+              });
+          if (failed(versionOrErr))
+            return failure();
+          firVersion = *versionOrErr;
+        }
+        return exportFIRFile(module, os, targetLineLength, firVersion);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();
