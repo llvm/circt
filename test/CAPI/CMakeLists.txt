@@ -110,3 +110,18 @@ target_link_libraries(circt-capi-rtgtest-test
   MLIRCAPIIR
   CIRCTCAPIRTGTest
 )
+
+add_llvm_executable(circt-capi-sv-test
+  PARTIAL_SOURCES_INTENDED
+  sv.c
+)
+llvm_update_compile_flags(circt-capi-sv-test)
+
+target_link_libraries(circt-capi-sv-test
+  PRIVATE
+
+  LLVMCore
+  MLIRCAPIIR
+  CIRCTCAPISV
+  CIRCTCAPIImportVerilog
+)
