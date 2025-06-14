@@ -2315,6 +2315,31 @@ module ImmediateAssertiWithActionBlock;
   assert (x) a = 1; else a = 0;
 endmodule
 
+// CHECK-LABEL: moore.module @ConcurrentAssert(in %clk : !moore.l1)
+module ConcurrentAssert(input clk);
+  // CHECK: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
+  // CHECK: [[A:%.+]] = moore.variable : <i1>
+  bit a;
+  // CHECK: [[B:%.+]] = moore.variable : <l1>
+  logic b;
+
+  // CHECK: moore.procedure always
+    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
+    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 1, 0 : i1
+    // CHECK: [[CONCAT_AB:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]] : !ltl.sequence, !ltl.sequence
+    // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+    // CHECK: [[CONV_CLK:%.+]] = moore.conversion [[READ_CLK]] : !moore.l1 -> i1
+    // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONCAT_AB]], posedge [[CONV_CLK]] : !ltl.sequence
+    // CHECK: verif.assert [[CLK_OP:%.+]] : !ltl.sequence
+    // CHECK:   moore.return
+  // CHECK: }
+  assert property (@(posedge clk) (a ##1 b));
+endmodule
+
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
 // CHECK: dbg.variable "rootParam1", [[TMP]] : !moore.i32
 parameter int rootParam1 = 42;

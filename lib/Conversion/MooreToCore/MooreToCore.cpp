@@ -15,6 +15,7 @@
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
@@ -1630,6 +1631,7 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
+  target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<sim::SimDialect>();
   target.addLegalDialect<verif::VerifDialect>();

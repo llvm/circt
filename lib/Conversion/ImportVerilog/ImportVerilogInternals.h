@@ -13,7 +13,9 @@
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "slang/ast/ASTVisitor.h"
@@ -118,6 +120,10 @@ struct Context {
                                 Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
+  // Convert an assertion expression AST node to MLIR ops.
+  Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
+                                   Location loc);
+
   // Traverse the whole AST to collect hierarchical names.
   LogicalResult
   collectHierarchicalValues(const slang::ast::Expression &expr,
@@ -127,6 +133,13 @@ struct Context {
   // Convert a slang timing control into an MLIR timing control.
   LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
                                      const slang::ast::Statement &stmt);
+
+  /// Helper function to convert a value to a MLIR I1 value.
+  Value convertToI1(Value value);
+
+  // Convert a slang timing control for LTL
+  Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
+                                const Value &seqOrPro);
 
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);
