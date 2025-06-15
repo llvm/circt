@@ -839,6 +839,22 @@ def MaterializeDebugInfo :
   let dependentDialects = ["debug::DebugDialect"];
 }
 
+def LinkCircuits : Pass<"firrtl-link-circuits", "mlir::ModuleOp"> {
+  let summary = "Links multiple circuits into a single one";
+  let description = [{
+    This pass concatenates all circuits into one, iterates through all extmodules
+    to find matching public module implementations, replacing them when possible
+    and any remaining extmodules are treated as blackboxes.
+  }];
+  let constructor = "circt::firrtl::createLinkCircuitsPass()";
+  let options = [
+    Option<"baseCircuitName", "base-circuit", "std::string", "",
+      "The base circuit name.">,
+    Option<"noMangle", "no-mangle", "bool", "",
+      "Do not perform private symbol mangling.">
+  ];
+}
+
 def Lint :
     Pass<"firrtl-lint", "firrtl::FModuleOp"> {
   let summary = "An analysis pass to detect static simulation failures.";
