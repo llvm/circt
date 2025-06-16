@@ -314,10 +314,12 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
     multiple external tools might exist which can process it.  Generator nodes
     list attributes required by hw.module.generated instances.
 
-    For example:
+    Example:
+    ```mlir
     generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
     module.generated @mymem, @MEMORY(ports)
       -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
+    ```
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor,
