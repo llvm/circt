@@ -207,7 +207,7 @@ firrtl.circuit "Foo" {
     // CHECK: node gtPrimOp = gt(x, y)
     // CHECK: node eqPrimOp = eq(x, y)
     // CHECK: node neqPrimOp = neq(x, y)
-    // CHECK: node catPrimOp = cat(x, y, x)
+    // CHECK: node catPrimOp = cat(x, y)
     // CHECK: node dShlPrimOp = dshl(x, y)
     // CHECK: node dShlwPrimOp = dshlw(x, y)
     // CHECK: node dShrPrimOp = dshr(x, y)
@@ -225,7 +225,7 @@ firrtl.circuit "Foo" {
     %gtPrimOp_tmp = firrtl.gt %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
     %eqPrimOp_tmp = firrtl.eq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
     %neqPrimOp_tmp = firrtl.neq %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
-    %catPrimOp_tmp = firrtl.cat %x, %y, %x : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %catPrimOp_tmp = firrtl.cat %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %dShlPrimOp_tmp = firrtl.dshl %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %dShlwPrimOp_tmp = firrtl.dshlw %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %dShrPrimOp_tmp = firrtl.dshr %x, %y : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
@@ -929,4 +929,24 @@ firrtl.circuit "Foo" {
     %time = firrtl.fstring.time : !firrtl.fstring
     firrtl.fflush %clock, %c1_ui1, "test%d{{}}.txt"(%c1_ui1, %time) : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.const.uint<1>, !firrtl.fstring
   }
+
+  // CHECK-LABEL: module Concat :
+  firrtl.module @Concat(in %x: !firrtl.uint<1>, in %y: !firrtl.sint<1>, in %z: !firrtl.uint<1>) {
+    %cat_0_tmp = firrtl.cat  : () -> !firrtl.uint<0>
+    %cat_1_tmp = firrtl.cat %x : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %cat_1_signed_tmp = firrtl.cat %y : (!firrtl.sint<1>) -> !firrtl.uint<1>
+    %cat_2_tmp = firrtl.cat %x, %z : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    %cat_3_tmp = firrtl.cat %x, %z, %x : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<3>
+    // CHECK:      node cat_0_node = UInt<0>(0)
+    // CHECK-NEXT: node cat_1_node = x
+    // CHECK-NEXT: node cat_1_signed_node = cat(y, SInt<0>(0))
+    // CHECK-NEXT: node cat_2_node = cat(x, z)
+    // CHECK-NEXT: node cat_3_node = cat(x, cat(z, x))
+    %cat_0_node = firrtl.node %cat_0_tmp : !firrtl.uint<0>
+    %cat_1_node = firrtl.node %cat_1_tmp : !firrtl.uint<1>
+    %cat_1_signed_node = firrtl.node %cat_1_signed_tmp : !firrtl.uint<1>
+    %cat_2_node = firrtl.node %cat_2_tmp : !firrtl.uint<2>
+    %cat_3_node = firrtl.node %cat_3_tmp : !firrtl.uint<3>
+  }
+
 }
