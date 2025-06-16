@@ -300,7 +300,7 @@ ltl.not %s1 : !ltl.sequence
 %c1 = hw.constant 1 : i1
 %rep1 = ltl.repeat %c1, 0 : !ltl.sequence
 %drep1 = ltl.delay %rep1, 1, 0 : !ltl.sequence
-%ds1 = ltl.delay %s, 1, 0 : !ltl.sequence
+%ds1 = ltl.delay %s1, 1, 0 : !ltl.sequence
 %evs1 = ltl.concat %drep1, %ds1, %c1 : !ltl.sequence
 %res = ltl.intersect %evs1, %s2 : !ltl.sequence  
 ```
@@ -396,7 +396,7 @@ ltl.eventually %p : !ltl.property
 ```mlir
 %1 = ltl.until %p1, %p2 : !ltl.sequence
 %2 = ltl.and %p1, %p2 : !ltl:property
-%n1 = ltl.not %p : !ltl.property
+%n1 = ltl.not %1 : !ltl.property
 %res = ltl.or %n1, %2 : !ltl.property  
 ```  
 
