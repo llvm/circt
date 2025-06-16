@@ -3635,4 +3635,17 @@ firrtl.module @name_prop(in %clock: !firrtl.clock, in %next: !firrtl.uint<8>, ou
   %m = firrtl.node %wire : !firrtl.uint<8>
   firrtl.connect %out_b, %m : !firrtl.uint<8>, !firrtl.uint<8>
 }
+
+hw.hierpath @xmr [@XMRTest::@target]
+
+// CHECK-LABEL: firrtl.module private @XMRTest
+firrtl.module private @XMRTest() {
+  %target = firrtl.wire sym @target : !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.xmr.deref
+  %0 = firrtl.xmr.deref @xmr : !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.xmr.ref
+  %1 = firrtl.xmr.ref @xmr : !firrtl.ref<uint<1>>
+}
 }

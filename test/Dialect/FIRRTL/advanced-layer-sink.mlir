@@ -769,3 +769,23 @@ firrtl.circuit "DoNotSinkInstanceOfModuleWithPortAnno" {
     }
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "SinkXMRs"
+firrtl.circuit "SinkXMRs" {
+  firrtl.layer @A bind {}
+
+  hw.hierpath @xmr [@SinkXMRs::@target]
+
+  firrtl.module public @SinkXMRs() {
+    %target = firrtl.wire sym @target : !firrtl.uint<1>
+    %0 = firrtl.xmr.deref @xmr : !firrtl.uint<1>
+    %1 = firrtl.xmr.ref @xmr : !firrtl.ref<uint<1>>
+  
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NEXT: %0 = firrtl.xmr.deref @xmr : !firrtl.uint<1>
+      // CHECK-NEXT: %1 = firrtl.xmr.ref @xmr : !firrtl.probe<uint<1>>
+      "unknown"(%0, %1) : (!firrtl.uint<1>, !firrtl.ref<uint<1>>) -> ()
+    }
+  }
+}
