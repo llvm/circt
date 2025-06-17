@@ -17,7 +17,9 @@ add_circt_translation_library(CIRCTImportVerilog
   LINK_LIBS PUBLIC
   CIRCTDebug
   CIRCTHW
+  CIRCTLTL
   CIRCTMoore
+  CIRCTVerif
   MLIRFuncDialect
   MLIRSCFDialect
   MLIRTranslateLib
