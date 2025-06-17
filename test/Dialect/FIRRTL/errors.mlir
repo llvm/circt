@@ -2937,3 +2937,41 @@ firrtl.circuit "InvalidCatOperands" {
     %result = firrtl.cat %a, %b : (!firrtl.uint<4>, !firrtl.sint<4>) -> !firrtl.uint<8>
   }
 }
+
+// -----
+
+firrtl.circuit "XMRRefOpMissingTarget" {
+  firrtl.module @XMRRefOpMissingTarget() {
+    // expected-error @below {{op has an invalid symbol reference}}
+    %0 = firrtl.xmr.ref @MissingTarget : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRRefOpTargetsNonHierPath" {
+  firrtl.extmodule @Target()
+  firrtl.module @XMRRefOpMissingTarget() {
+    // expected-error @below {{op does not target a hierpath op}}
+    %0 = firrtl.xmr.ref @Target : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRDerefOpMissingTarget" {
+  firrtl.module @XMRDerefOpMissingTarget() {
+    // expected-error @below {{op has an invalid symbol reference}}
+    %0 = firrtl.xmr.deref @MissingTarget : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
+  firrtl.extmodule @Target()
+  firrtl.module @XMRDerefOpTargetsNonHierPath() {
+    // expected-error @below {{op does not target a hierpath op}}
+    %0 = firrtl.xmr.deref @Target : !firrtl.uint<1>
+  }
+}

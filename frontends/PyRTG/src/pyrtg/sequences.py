@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-from .core import CodeGenRoot, Value, Type
+from .core import CodeGenObject, Value, Type
 from .support import _FromCirctValue, _FromCirctType
-from .base import ir, support
+from .base import ir
 from .rtg import rtg
 
 
-class SequenceDeclaration(CodeGenRoot):
+class SequenceDeclaration(CodeGenObject):
   """
   This class is responsible for managing and generating RTG sequences. It
   encapsulates the sequence function, its argument types, and the source
@@ -32,6 +32,7 @@ class SequenceDeclaration(CodeGenRoot):
     functions.
     """
 
+    self.register()
     return Sequence(self._get_ssa_value())
 
   def substitute(self, *args: Value) -> Sequence:
@@ -67,8 +68,6 @@ class SequenceDeclaration(CodeGenRoot):
     self.get()(*args)
 
   def _codegen(self) -> None:
-    self._already_generated = True
-
     mlir_arg_types = [arg._codegen() for arg in self.arg_types]
     seq = rtg.SequenceOp(self.name,
                          ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)))

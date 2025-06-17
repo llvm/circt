@@ -1589,15 +1589,28 @@ def RWProbeOp : FIRRTLOp<"ref.rwprobe",
   let assemblyFormat = "$target attr-dict `:` type($result)";
 }
 
-def XMRRefOp : FIRRTLOp<"xmr.ref"> {
+def XMRRefOp : FIRRTLOp<"xmr.ref", [
+    Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "FIRRTL XMR operation, targetable by ref ops.";
+  let description = [{
+    Takes a (symbol-ref to a) hierarchical path and returns a reference to
+    the target. Through this reference, the target can be read or written
+    "at a distance".
+  }];
   let arguments = (ins FlatSymbolRefAttr:$ref, DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix);
   let results = (outs RefType:$dest);
   let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";
 }
 
-def XMRDerefOp : FIRRTLOp<"xmr.deref"> {
+def XMRDerefOp : FIRRTLOp<"xmr.deref", [
+    Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "FIRRTL XMR operation, reading an XMR target.";
+  let description = [{
+    A "read at a distance", taking a (symbol-ref to a) hierarchical path,
+    returning the value of the target.
+  }];
   let arguments = (ins FlatSymbolRefAttr:$ref, DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix);
   let results = (outs PassiveType:$dest);
   let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";

@@ -28,11 +28,8 @@ class Tgt0(Config):
   cpu0 = Param(loader=lambda: CPUCore(0))
   cpu1 = Param(loader=lambda: CPUCore(1))
 
-  @classmethod
-  def load(cls):
-    config = cls()
-    CPUCore.register_switch(CPUCore.any(), CPUCore(0), switch)
-    return config
+  def load(self):
+    CPUCore.register_switch(CPUCore.any(), CPUCore(0), switch.get())
 
 
 # CHECK-LABEL: rtg.test @test0_context_args

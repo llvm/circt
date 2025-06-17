@@ -228,8 +228,11 @@ hw.module @FirMem(in %addr : i4, in %clock : !seq.clock, in %data : i42, out out
   // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock [[CLK_FALSE]] {rw6}
   %8 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clk_false {rw6} : <12 x 42, mask 3>
 
-  // CHECK: seq.firmem
+  // CHECK: %has_symbol = seq.firmem
   %has_symbol = seq.firmem sym @someMem 0, 1, undefined, undefined : <12 x 42, mask 3>
+  // CHECK-NEXT: seq.firmem.write_port %has_symbol
+  seq.firmem.write_port %has_symbol[%addr] = %data, clock %clock enable %false {w0} : <12 x 42, mask 3>
+
 
   // CHECK-NOT: seq.firmem
   %no_readers = seq.firmem 0, 1, undefined, undefined : <12 x 42, mask 3>
@@ -306,4 +309,121 @@ hw.module @CompRegClockEnabled(in %clock: !seq.clock, in %d: i42, in %x: i42, in
   %2 = arith.select %en, %d, %x : i42
   %3 = seq.compreg.ce %2, %clock, %en : i42
   hw.output %1, %3 : i42, i42
+}
+
+// CHECK-LABEL: @FirMemCanonicalization
+hw.module @FirMemCanonicalization(in %addr : i4, in %clock : !seq.clock, in %data : i32, out read_data1: i32, out read_data2: i32, out mixed_read: i32) {
+  %true = hw.constant true
+  %false = hw.constant false
+
+  // Write-only memory should be completely erased
+  // CHECK-NOT: %write_only_mem
+  // CHECK-NOT: seq.firmem.write_port {{.*}} %write_only_mem
+  %write_only_mem = seq.firmem 0, 1, undefined, undefined : <16 x 32>
+  seq.firmem.write_port %write_only_mem[%addr] = %data, clock %clock enable %true : <16 x 32>
+
+  // Read-only memory with multiple read ports should be replaced with constant 0
+  // CHECK-NOT: %read_only_mem
+  // CHECK-NOT: seq.firmem.read_port {{.*}} %read_only_mem
+  // CHECK: [[ZERO:%.+]] = hw.constant 0 : i32
+  %read_only_mem = seq.firmem 0, 1, undefined, undefined : <16 x 32>
+  %read_data1 = seq.firmem.read_port %read_only_mem[%addr], clock %clock enable %true : <16 x 32>
+  %read_data2 = seq.firmem.read_port %read_only_mem[%addr], clock %clock enable %true : <16 x 32>
+
+  // Memory with symbol should be preserved
+  // CHECK: %mem_with_symbol = seq.firmem sym @memSym
+  // CHECK: seq.firmem.write_port %mem_with_symbol
+  %mem_with_symbol = seq.firmem sym @memSym 0, 1, undefined, undefined : <16 x 32>
+  seq.firmem.write_port %mem_with_symbol[%addr] = %data, clock %clock enable %true : <16 x 32>
+
+  // Mixed read/write memory should be preserved
+  // CHECK: %mixed_mem = seq.firmem
+  // CHECK-NEXT: %[[MIXED_READ:.*]] = seq.firmem.read_port %mixed_mem
+  // CHECK-NEXT: seq.firmem.write_port %mixed_mem
+  %mixed_mem = seq.firmem 0, 1, undefined, undefined : <16 x 32>
+  %mixed_read = seq.firmem.read_port %mixed_mem[%addr], clock %clock enable %true : <16 x 32>
+  seq.firmem.write_port %mixed_mem[%addr] = %data, clock %clock enable %true : <16 x 32>
+
+  // Memory with read-write port (read-only case)
+  // CHECK-NOT: %rw_read_only_mem
+  // CHECK-NOT: seq.firmem.read_write_port {{.*}} %rw_read_only_mem
+  %rw_read_only_mem = seq.firmem 0, 1, undefined, undefined : <16 x 32>
+  %rw_read_data = seq.firmem.read_write_port %rw_read_only_mem[%addr] = %data if %false, clock %clock enable %true : <16 x 32>
+
+  // CHECK: hw.output [[ZERO]], [[ZERO]], %[[MIXED_READ]] : i32, i32, i32
+  hw.output %read_data1, %read_data2, %mixed_read : i32, i32, i32
+}
+
+// CHECK-LABEL: @FirRegMuxConstant
+hw.module @FirRegMuxConstant(in %clk : !seq.clock, in %cond : i1, in %in : i32) {
+  %c42_i32 = hw.constant 42 : i32
+  %c0_i32 = hw.constant 0 : i32
+  %c5_i32 = hw.constant 5 : i32
+
+  // Register with mux where true branch is register itself and false branch is constant
+  // Should be replaced with the constant
+  %mux1 = comb.mux %cond, %reg1, %c42_i32 : i32
+  %reg1 = seq.firreg %mux1 clock %clk : i32
+  hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+  // CHECK: hw.instance "reg1" @Observe(x: %c42_i32: i32) -> ()
+
+  // Register with mux where false branch is register itself and true branch is constant
+  // Should be replaced with the constant
+  %mux2 = comb.mux %cond, %c0_i32, %reg2 : i32
+  %reg2 = seq.firreg %mux2 clock %clk : i32
+  hw.instance "reg2" @Observe(x: %reg2: i32) -> ()
+  // CHECK: hw.instance "reg2" @Observe(x: %c0_i32: i32) -> ()
+
+  // Register with mux where neither branch is the register itself
+  // Should not be optimized
+  %mux3 = comb.mux %cond, %in, %c5_i32 : i32
+  %reg3 = seq.firreg %mux3 clock %clk : i32
+  hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+  // CHECK: %reg3 = seq.firreg
+  // CHECK: hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+}
+
+// CHECK-LABEL: @FirRegMuxConstantWithPreset
+hw.module @FirRegMuxConstantWithPreset(in %clk : !seq.clock, in %cond : i1) {
+  %c42_i32 = hw.constant 42 : i32
+  %c0_i32 = hw.constant 0 : i32
+
+  // Register with preset should not be optimized
+  %mux1 = comb.mux %cond, %reg1, %c42_i32 : i32
+  %reg1 = seq.firreg %mux1 clock %clk preset 42: i32
+  // CHECK: hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+  hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+}
+
+// CHECK-LABEL: @FirRegMuxConstantWithReset
+hw.module @FirRegMuxConstantWithReset(in %clk : !seq.clock, in %cond : i1, in %rst : i1) {
+  %c42_i32 = hw.constant 42 : i32
+  %c0_i32 = hw.constant 0 : i32
+  %c5_i32 = hw.constant 5 : i32
+
+  // Register with constant reset value that matches the mux constant - should be optimized
+  %mux1 = comb.mux %cond, %reg1, %c42_i32 : i32
+  %reg1 = seq.firreg %mux1 clock %clk reset sync %rst, %c42_i32 : i32
+  hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
+  // CHECK: hw.instance "reg1" @Observe(x: %c42_i32: i32) -> ()
+
+  // Register with constant reset value that doesn't match the mux constant - should not be optimized
+  %mux2 = comb.mux %cond, %reg2, %c42_i32 : i32
+  %reg2 = seq.firreg %mux2 clock %clk reset sync %rst, %c0_i32 : i32
+  hw.instance "reg2" @Observe(x: %reg2: i32) -> ()
+  // CHECK: %reg2 = seq.firreg
+  // CHECK: hw.instance "reg2" @Observe(x: %reg2: i32) -> ()
+
+  // Register with non-constant reset value - should not be optimized
+  %mux3 = comb.mux %cond, %reg3, %c42_i32 : i32
+  %reg3 = seq.firreg %mux3 clock %clk reset sync %rst, %c5_i32 : i32
+  hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+  // CHECK: %reg3 = seq.firreg
+  // CHECK: hw.instance "reg3" @Observe(x: %reg3: i32) -> ()
+
+  // Register with async reset - constant reset value that matches - should be optimized
+  %mux4 = comb.mux %cond, %reg4, %c0_i32 : i32
+  %reg4 = seq.firreg %mux4 clock %clk reset async %rst, %c0_i32 : i32
+  hw.instance "reg4" @Observe(x: %reg4: i32) -> ()
+  // CHECK: hw.instance "reg4" @Observe(x: %c0_i32: i32) -> ()
 }

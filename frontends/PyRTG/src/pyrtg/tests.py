@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .base import ir
-from .core import CodeGenRoot
+from .core import CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .support import _FromCirctValue
 
@@ -19,17 +19,14 @@ class Test(CodeGenRoot):
     self.test_func = test_func
     self.config = config
 
+  def codegen_depends_on(self) -> list[CodeGenObject]:
+    return [self.config]
+
   @property
   def name(self) -> str:
     return self.test_func.__name__
 
   def _codegen(self):
-    # The config the test is referring to must be codegen'd first because only then we have guaranteed access to the param types.
-    if not self.config._already_generated:
-      self.config._codegen()
-
-    self._already_generated = True
-
     # Sort arguments by name
     params_sorted = self.config.get_params()
     params_sorted.sort(key=lambda param: param.get_name())

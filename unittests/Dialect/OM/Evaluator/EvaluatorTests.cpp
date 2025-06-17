@@ -312,7 +312,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
 
   auto result = evaluator.instantiate(
       builder.getStringAttr("MyClass"),
-      {std::make_shared<evaluator::AttributeValue>(circt::om::IntegerAttr::get(
+      {evaluator::AttributeValue::get(circt::om::IntegerAttr::get(
           &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));
@@ -376,7 +376,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   auto result = evaluator.instantiate(
       builder.getStringAttr("MyClass"),
-      {std::make_shared<evaluator::AttributeValue>(circt::om::IntegerAttr::get(
+      {evaluator::AttributeValue::get(circt::om::IntegerAttr::get(
           &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));
@@ -1437,6 +1437,51 @@ TEST(EvaluatorTests, NestedReferenceValue) {
               ->get())
           ->getElements()[0]
           .get()));
+}
+
+TEST(EvaluatorTests, ListAttrConcat) {
+  StringRef mod =
+      "om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {"
+      "%0 = om.constant #om.list<!om.string, [\"X\" : !om.string, \"Y\" : "
+      "!om.string]> : !om.list<!om.string>"
+      "%1 = om.list_concat %0, %0 : !om.list<!om.string>"
+      "om.class.fields %1 : !om.list<!om.string>"
+      "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "ConcatListAttribute"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  auto listVal =
+      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+  ASSERT_EQ(4, listVal.size());
+  auto checkEq = [](evaluator::EvaluatorValue *val, const char *str) {
+    ASSERT_EQ(str, llvm::cast<evaluator::AttributeValue>(val)
+                       ->getAs<StringAttr>()
+                       .getValue()
+                       .str());
+  };
+
+  checkEq(listVal[0].get(), "X");
+  checkEq(listVal[1].get(), "Y");
+  checkEq(listVal[2].get(), "X");
+  checkEq(listVal[3].get(), "Y");
 }
 
 } // namespace

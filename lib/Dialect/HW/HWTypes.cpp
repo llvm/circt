@@ -108,7 +108,7 @@ bool circt::hw::isHWValueType(Type type) {
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
 int64_t circt::hw::getBitWidth(mlir::Type type) {
-  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
+  return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
       .Case<ArrayType, UnpackedArrayType>([](auto a) {

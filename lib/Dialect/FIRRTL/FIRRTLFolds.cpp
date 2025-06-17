@@ -41,6 +41,17 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   return passthrough;
 }
 
+// Return true if it is OK to propagate the name to the operation.
+// Non-pure operations such as instances, registers, and memories are not
+// allowed to update names for name stabilities and LEC reasons.
+static bool isOkToPropagateName(Operation *op) {
+  // Conservatively disallow operations with regions to prevent performance
+  // regression due to recursive calls to sub-regions in mlir::isPure.
+  if (op->getNumRegions() != 0)
+    return false;
+  return mlir::isPure(op) || isa<NodeOp, WireOp>(op);
+}
+
 // Move a name hint from a soon to be deleted operation to a new operation.
 // Pass through the new operation to make patterns easier to write.  This cannot
 // move a name to a port (block argument), doing so would require rewriting all
@@ -52,7 +63,7 @@ static Value moveNameHint(OpResult old, Value passthrough) {
   assert(op && "passthrough must be an operation");
   Operation *oldOp = old.getOwner();
   auto name = oldOp->getAttrOfType<StringAttr>("name");
-  if (name && !name.getValue().empty())
+  if (name && !name.getValue().empty() && isOkToPropagateName(op))
     op->setAttr("name", name);
   return passthrough;
 }
@@ -91,9 +102,9 @@ static bool isUInt1(Type type) {
 static void updateName(PatternRewriter &rewriter, Operation *op,
                        StringAttr name) {
   // Should never rename InstanceOp
-  assert(!isa<InstanceOp>(op));
-  if (!name || name.getValue().empty())
+  if (!name || name.getValue().empty() || !isOkToPropagateName(op))
     return;
+  assert((!isa<InstanceOp, RegOp, RegResetOp>(op)) && "Should never rename");
   auto newName = name.getValue(); // old name is interesting
   auto newOpName = op->getAttrOfType<StringAttr>("name");
   // new name might not be interesting
@@ -1980,8 +1991,7 @@ struct FoldNodeName : public mlir::RewritePattern {
         !AnnotationSet(node).empty() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
-    // Best effort, do not rename InstanceOp
-    if (newOp && !isa<InstanceOp>(newOp))
+    if (newOp)
       updateName(rewriter, newOp, name);
     rewriter.replaceOp(node, node.getInput());
     return success();

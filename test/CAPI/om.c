@@ -17,6 +17,84 @@
 #include <mlir-c/Support.h>
 #include <stdio.h>
 
+void testTypes(MlirContext ctx) {
+  // Test StringType creation and type checking
+  MlirType stringType = omStringTypeGet(ctx);
+
+  // CHECK: string type is StringType: 1
+  fprintf(stderr, "string type is StringType: %d\n",
+          omTypeIsAStringType(stringType));
+
+  // CHECK: !om.string
+  mlirTypeDump(stringType);
+
+  MlirTypeID stringTypeID = omStringTypeGetTypeID();
+  MlirTypeID actualStringTypeID = mlirTypeGetTypeID(stringType);
+
+  // CHECK: StringType TypeID matches: 1
+  fprintf(stderr, "StringType TypeID matches: %d\n",
+          mlirTypeIDEqual(stringTypeID, actualStringTypeID));
+}
+
+void testListAttr(MlirContext ctx) {
+  // Test creating ListAttr with integer elements
+  MlirType i64Type = mlirIntegerTypeGet(ctx, 64);
+
+  MlirAttribute elem1 = mlirIntegerAttrGet(i64Type, 42);
+  MlirAttribute elem2 = mlirIntegerAttrGet(i64Type, 84);
+
+  const MlirAttribute elements[] = {elem1, elem2};
+  MlirAttribute listAttr = omListAttrGet(i64Type, 2, elements);
+
+  // CHECK: list attr is ListAttr: 1
+  fprintf(stderr, "list attr is ListAttr: %d\n", omAttrIsAListAttr(listAttr));
+
+  // CHECK: list attr num elements: 2
+  fprintf(stderr, "list attr num elements: %ld\n",
+          omListAttrGetNumElements(listAttr));
+
+  // CHECK: #om.list<i64, [42, 84]>
+  mlirAttributeDump(listAttr);
+
+  // Test accessing elements
+  MlirAttribute retrievedElem1 = omListAttrGetElement(listAttr, 0);
+  MlirAttribute retrievedElem2 = omListAttrGetElement(listAttr, 1);
+
+  // CHECK: first element: 42 : i64
+  fprintf(stderr, "first element: ");
+  mlirAttributeDump(retrievedElem1);
+
+  // CHECK: second element: 84 : i64
+  fprintf(stderr, "second element: ");
+  mlirAttributeDump(retrievedElem2);
+
+  // Test creating empty ListAttr
+  MlirAttribute emptyListAttr = omListAttrGet(i64Type, 0, NULL);
+
+  // CHECK: empty list attr is ListAttr: 1
+  fprintf(stderr, "empty list attr is ListAttr: %d\n",
+          omAttrIsAListAttr(emptyListAttr));
+
+  // CHECK: empty list attr num elements: 0
+  fprintf(stderr, "empty list attr num elements: %ld\n",
+          omListAttrGetNumElements(emptyListAttr));
+
+  // Test creating ListAttr with string elements
+  MlirType stringType = omStringTypeGet(ctx);
+
+  MlirAttribute strElem = mlirStringAttrTypedGet(
+      stringType, mlirStringRefCreateFromCString("hello"));
+  const MlirAttribute stringElements[] = {strElem};
+  MlirAttribute stringListAttr = omListAttrGet(stringType, 1, stringElements);
+
+  // CHECK: string list attr is ListAttr: 1
+  fprintf(stderr, "string list attr is ListAttr: %d\n",
+          omAttrIsAListAttr(stringListAttr));
+
+  // CHECK: #om.list<!om.string, ["hello" : !om.string]>
+  mlirAttributeDump(stringListAttr);
+}
+
 void testEvaluator(MlirContext ctx) {
   const char *testIR =
       "module {"
@@ -161,6 +239,14 @@ void testEvaluator(MlirContext ctx) {
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__om__(), ctx);
+  MlirDialectHandle omDialectHandle = mlirGetDialectHandle__om__();
+
+  // Load the OM dialect to ensure types are properly initialized
+  mlirContextGetOrLoadDialect(ctx,
+                              mlirDialectHandleGetNamespace(omDialectHandle));
+
+  testTypes(ctx);
+  testListAttr(ctx);
   testEvaluator(ctx);
   return 0;
 }

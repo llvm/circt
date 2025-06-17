@@ -6300,6 +6300,30 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return checks(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
+LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *target = symbolTable.lookupNearestSymbolFrom(*this, getRefAttr());
+  if (!target)
+    return emitOpError("has an invalid symbol reference");
+
+  if (!isa<hw::HierPathOp>(target))
+    return emitOpError("does not target a hierpath op");
+
+  // TODO: Verify that the target's type matches the type of this op.
+  return success();
+}
+
+LogicalResult XMRDerefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *target = symbolTable.lookupNearestSymbolFrom(*this, getRefAttr());
+  if (!target)
+    return emitOpError("has an invalid symbol reference");
+
+  if (!isa<hw::HierPathOp>(target))
+    return emitOpError("does not target a hierpath op");
+
+  // TODO: Verify that the target's type matches the type of this op.
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Layer Block Operations
 //===----------------------------------------------------------------------===//

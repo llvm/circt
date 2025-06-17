@@ -1,0 +1,100 @@
+name: Test PyCDE and the ESI runtime
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * *'
+  pull_request:
+    paths:
+      - 'frontends/PyCDE/**'
+      - 'lib/Dialect/ESI/runtime/**'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  #  Build and test Linux wheels. Run the CIRCT tests also.
+  # ---------------------------------------------------------------------------
+
+  build-linux:
+    name: Build and Test
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
+    container:
+      image: ghcr.io/circt/images/pycde-esi-test:latest
+      volumes:
+        - /mnt:/__w/circt
+    strategy:
+      # Keep the 'matrix' strategy with one data point to make it obvious that
+      # this is one point in the overall matrix.
+      matrix:
+        build-assert: [ON]
+        build-shared: [ON]
+        build-type: [Release]
+        compiler:
+          - cc: clang
+            cxx: clang++
+
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: pycde-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
+          max-size: 500M
+
+      # --------
+      # Build and test CIRCT
+      # --------
+
+      - name: Configure CIRCT
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+          BUILD_ASSERT: ${{ matrix.build-assert }}
+          BUILD_SHARED: ${{ matrix.build-shared }}
+          BUILD_TYPE: ${{ matrix.build-type }}
+        run: |
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          mkdir build && cd build
+          # In order for ccache to be effective, these flags should be kept in sync with nighly.
+          cmake -GNinja ../llvm/llvm \
+            -DBUILD_SHARED_LIBS=$BUILD_SHARED \
+            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
+            -DLLVM_CCACHE_BUILD=ON \
+            -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
+            -DLLVM_ENABLE_PROJECTS=mlir \
+            -DLLVM_EXTERNAL_PROJECTS=circt \
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
+            -DLLVM_TARGETS_TO_BUILD="host" \
+            -DLLVM_USE_LINKER=lld \
+            -DLLVM_USE_SPLIT_DWARF=ON \
+            -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DCIRCT_ENABLE_FRONTENDS=PyCDE \
+            -DESI_RUNTIME=ON \
+            -DLLVM_LIT_ARGS="-v --show-unsupported" \
+            -DCIRCT_SLANG_FRONTEND_ENABLED=ON
+
+      - name: Test CIRCT
+        run: |
+          ninja -C build check-circt -j$(nproc)
+      - name: Test PyCDE
+        run: |
+          ninja -C build check-pycde -j$(nproc)
+      # The PyCDE integration tests exercise the ESI runtime.
+      - name: Test PyCDE and ESI runtime integration
+        run: |
+          ninja -C build check-pycde-integration -j$(nproc)
