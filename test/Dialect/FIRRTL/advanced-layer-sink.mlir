@@ -789,3 +789,31 @@ firrtl.circuit "SinkXMRs" {
     }
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "SinkRefs"
+firrtl.circuit "SinkRefs" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
+
+  firrtl.module public @SinkRefs() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+
+    // CHECK: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      // CHECK-NEXT: %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+      // CHECK-NEXT: %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+      "unknown"(%1) : (!firrtl.uint<1>) -> ()
+    }
+
+    // CHECK: firrtl.layerblock @B
+    firrtl.layerblock @B {
+      // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      // CHECK-NEXT: %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+      // CHECK-NEXT: %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+      "unknown"(%1) : (!firrtl.uint<1>) -> ()
+    }
+  }
+}
