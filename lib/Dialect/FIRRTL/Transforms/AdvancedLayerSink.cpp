@@ -68,7 +68,15 @@ static bool isAncestor(Block *block, Block *other) {
 //===----------------------------------------------------------------------===//
 
 static bool cloneable(Operation *op) {
-  return op->hasTrait<OpTrait::ConstantLike>();
+  // Clone any constants.
+  if (op->hasTrait<OpTrait::ConstantLike>())
+    return true;
+
+  // Clone probe ops, to minimize residue within the design.
+  if (isa<RefSendOp, RefResolveOp, RefCastOp, RefSubOp>(op))
+    return true;
+
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
