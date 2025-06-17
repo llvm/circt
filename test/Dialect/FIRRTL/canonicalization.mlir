@@ -3648,4 +3648,21 @@ firrtl.module private @XMRTest() {
   // CHECK-NOT: firrtl.xmr.ref
   %1 = firrtl.xmr.ref @xmr : !firrtl.ref<uint<1>>
 }
+
+// CHECK-LABEL: firrtl.module private @RefTest
+firrtl.module private @RefTest() {
+  %target = firrtl.wire : !firrtl.bundle<a: uint<1>>
+
+  // CHECK-NOT: firrtl.ref.send
+  %0 = firrtl.ref.send %target : !firrtl.bundle<a: uint<1>>
+
+  // CHECK-NOT: firrtl.ref.resolve
+  %1 = firrtl.ref.resolve %0 : !firrtl.probe<bundle<a: uint<1>>>
+
+  // CHECK-NOT: firrtl.ref.cast
+   %2 = firrtl.ref.cast %0 : (!firrtl.probe<bundle<a: uint<1>>>) -> !firrtl.probe<bundle<a: uint<1>>, @A>
+
+  // CHECK-NOT: firrtl.ref.sub
+  %3 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<a: uint<1>>>
+}
 }
