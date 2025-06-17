@@ -17,9 +17,9 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinOps.h" 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/ArrayRef.h"   
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include <algorithm>
@@ -67,13 +67,13 @@ void populateAssignTree(ModuleOp moduleOp, AssignTree &assignTree) {
     if (index != indexAttr.getInt())
       return;
 
-    assignTree[extractRef.getOperand()][extract.getOperand()][index] =
-        {extractRef, extract, assign, index};
+    assignTree[extractRef.getOperand()][extract.getOperand()][index] = {
+        extractRef, extract, assign, index};
   });
 }
 
 void vectorizeContiguousGroup(llvm::MutableArrayRef<ScalarAssignGroup> group,
-                    mlir::Value dstVec, mlir::Value srcVec) {
+                              mlir::Value dstVec, mlir::Value srcVec) {
   if (group.empty())
     return;
 
@@ -98,7 +98,8 @@ void vectorizeContiguousGroup(llvm::MutableArrayRef<ScalarAssignGroup> group,
   }
 }
 
-void processIndexMap(IndexedGroupMap &indexMap, mlir::Value dst, mlir::Value src) {
+void processIndexMap(IndexedGroupMap &indexMap, mlir::Value dst,
+                     mlir::Value src) {
   llvm::SmallVector<int, 32> sortedIndices;
   for (const auto &pair : indexMap) {
     sortedIndices.push_back(pair.getFirst());
@@ -122,9 +123,9 @@ void processIndexMap(IndexedGroupMap &indexMap, mlir::Value dst, mlir::Value src
 struct VectorizationPass
     : public circt::moore::impl::VectorizationBase<VectorizationPass> {
 
-  void runOnOperation() override; 
+  void runOnOperation() override;
 };
-} 
+} // namespace
 
 std::unique_ptr<mlir::Pass> circt::moore::createVectorizationPass() {
   return std::make_unique<VectorizationPass>();
@@ -151,10 +152,9 @@ void VectorizationPass::runOnOperation() {
     for (const auto &pair : srcMap) {
       srcKeys.push_back(pair.getFirst());
     }
-    std::sort(srcKeys.begin(), srcKeys.end(),
-              [](mlir::Value a, mlir::Value b) {
-                return a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
-              });
+    std::sort(srcKeys.begin(), srcKeys.end(), [](mlir::Value a, mlir::Value b) {
+      return a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
+    });
 
     for (mlir::Value src : srcKeys) {
       processIndexMap(srcMap[src], dst, src);

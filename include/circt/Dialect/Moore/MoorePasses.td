@@ -40,15 +40,15 @@ def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
 }
 
 def Vectorization : Pass<"moore-vectorization", "mlir::ModuleOp"> {
-   let summary = "Vectorize consecutive scalar assignments";
-   let description = [{
-     This pass identifies sequences of `moore.continuous_assign` operations
-     that represent a scalarized vector assignment (i.e., assigning bit by bit).
-     It replaces these sequences with a single, more efficient vector-level
-     `moore.continuous_assign` operation.
-   }];
-   let constructor = "circt::moore::createVectorizationPass()";
-   let dependentDialects = ["circt::moore::MooreDialect"];
+  let summary = "Vectorize consecutive scalar assignments";
+  let description = [{
+    This pass identifies sequences of `moore.continuous_assign` operations
+    that represent a scalarized vector assignment (i.e., assigning bit by bit).
+    It replaces these sequences with a single, more efficient vector-level
+    `moore.continuous_assign` operation.
+  }];
+  let constructor = "circt::moore::createVectorizationPass()";
+  let dependentDialects = ["circt::moore::MooreDialect"];
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREPASSES_TD
