@@ -1,18 +1,35 @@
-#include "mlir/IR/Builders.h"
-#include "mlir/Interfaces/FunctionInterfaces.h"
-#include "mlir/IR/Operation.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Support/LogicalResult.h"
-#include "llvm/Support/raw_ostream.h"
+//===- VectorizationPass.cpp - Vectorization Pass ------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the Vectorization pass.
+// This pass identifies sequences of `moore.continuous_assign` operations that
+// are effectively scalarized vector assignments (i.e., assigning individual
+// bits from one vector to another). It merges these contiguous bit-wise
+// assignments into a single, more efficient vector-level assignment.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/Moore/MooreOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/Pass/PassRegistry.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/Support/IndentedOstream.h"
-#include "mlir/Tools/Plugins/PassPlugin.h"
-#include "llvm/Config/llvm-config.h"
+#include "mlir/IR/BuiltinOps.h" 
+#include "mlir/Pass/Pass.h"
+#include "llvm/ADT/ArrayRef.h"   
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
+#include <algorithm>
+
+namespace circt {
+namespace moore {
+#define GEN_PASS_DEF_VECTORIZATION
+#include "circt/Dialect/Moore/MoorePasses.h.inc"
+} // namespace moore
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -27,27 +44,52 @@ struct ScalarAssignGroup {
   int index;
 };
 
-struct ValueComparator {
-  bool operator()(mlir::Value lhs, mlir::Value rhs) const {
-    return lhs.getAsOpaquePointer() < rhs.getAsOpaquePointer();
-  }
-};
+using IndexedGroupMap = llvm::DenseMap<int, ScalarAssignGroup>;
+using SourceGroupMap = llvm::DenseMap<mlir::Value, IndexedGroupMap>;
+using AssignTree = llvm::DenseMap<mlir::Value, SourceGroupMap>;
 
-using IndexedGroupMap = std::map<int, ScalarAssignGroup>;
-using SourceGroupMap = std::map<mlir::Value, IndexedGroupMap, ValueComparator>;
-using AssignTree = std::map<mlir::Value, SourceGroupMap, ValueComparator>;
+void populateAssignTree(ModuleOp moduleOp, AssignTree &assignTree) {
+  moduleOp.walk([&](moore::ContinuousAssignOp assign) {
+    auto lhs = assign.getDst();
+    auto rhs = assign.getSrc();
 
-void vectorizeGroup(std::vector<ScalarAssignGroup> &group) {
+    auto extractRef = lhs.getDefiningOp<moore::ExtractRefOp>();
+    auto extract = rhs.getDefiningOp<moore::ExtractOp>();
+    if (!extractRef || !extract)
+      return;
+
+    auto indexRefAttr = extractRef.getLowBitAttr();
+    auto indexAttr = extract.getLowBitAttr();
+    if (!indexRefAttr || !indexAttr)
+      return;
+
+    int index = indexRefAttr.getInt();
+    if (index != indexAttr.getInt())
+      return;
+
+    assignTree[extractRef.getOperand()][extract.getOperand()][index] =
+        {extractRef, extract, assign, index};
+  });
+}
+
+void vectorizeContiguousGroup(llvm::MutableArrayRef<ScalarAssignGroup> group,
+                    mlir::Value dstVec, mlir::Value srcVec) {
   if (group.empty())
     return;
 
+  for (auto &g : group) {
+    if (!g.extract.getResult().hasOneUse()) {
+      return;
+    }
+    if (!g.extractRef.getResult().hasOneUse()) {
+      return;
+    }
+  }
+
   auto builder = OpBuilder(group.front().assign.getContext());
   builder.setInsertionPoint(group.front().assign);
-
-  auto dst = group.front().extractRef.getOperand();
-  auto src = group.front().extract.getOperand();
-
-  builder.create<moore::ContinuousAssignOp>(group.front().assign.getLoc(), dst, src);
+  builder.create<moore::ContinuousAssignOp>(group.front().assign.getLoc(),
+                                            dstVec, srcVec);
 
   for (auto &g : group) {
     g.assign.erase();
@@ -56,79 +98,66 @@ void vectorizeGroup(std::vector<ScalarAssignGroup> &group) {
   }
 }
 
-struct SimpleVectorizationPass
-    : public mlir::PassWrapper<SimpleVectorizationPass, mlir::OperationPass<mlir::ModuleOp>> {
+void processIndexMap(IndexedGroupMap &indexMap, mlir::Value dst, mlir::Value src) {
+  llvm::SmallVector<int, 32> sortedIndices;
+  for (const auto &pair : indexMap) {
+    sortedIndices.push_back(pair.getFirst());
+  }
+  std::sort(sortedIndices.begin(), sortedIndices.end());
 
-  void runOnOperation() override {
-    auto module = getOperation();
-    AssignTree assignTree;
-
-    module.walk([&](moore::ContinuousAssignOp assign) {
-      auto lhs = assign.getDst();
-      auto rhs = assign.getSrc();
-
-      auto extractRef = dyn_cast_or_null<moore::ExtractRefOp>(lhs.getDefiningOp());
-      auto extract = dyn_cast_or_null<moore::ExtractOp>(rhs.getDefiningOp());
-      if (!extractRef || !extract)
-        return;
-
-      auto indexRefAttr = extractRef->getAttrOfType<mlir::IntegerAttr>("lowBit");
-      auto indexAttr = extract->getAttrOfType<mlir::IntegerAttr>("lowBit");
-      if (!indexRefAttr || !indexAttr)
-        return;
-
-      int index = indexRefAttr.getInt();
-      if (index != indexAttr.getInt())
-        return;
-
-      assignTree[extractRef.getOperand()][extract.getOperand()][index] =
-          {extractRef, extract, assign, index};
-    });
-
-    for (auto &[dst, srcMap] : assignTree) {
-      for (auto &[src, indexMap] : srcMap) {
-        std::vector<int> sortedIndices;
-        for (const auto &[index, _] : indexMap)
-          sortedIndices.push_back(index);
-        std::sort(sortedIndices.begin(), sortedIndices.end());
-
-        std::vector<ScalarAssignGroup> group;
-        for (size_t i = 0; i < sortedIndices.size(); ++i) {
-          if (!group.empty() && sortedIndices[i] != sortedIndices[i - 1] + 1) {
-            if (group.size() > 1)
-              vectorizeGroup(group);
-            group.clear();
-          }
-          group.push_back(indexMap[sortedIndices[i]]);
-        }
-        if (group.size() > 1)
-          vectorizeGroup(group);
-      }
+  llvm::SmallVector<ScalarAssignGroup, 32> group;
+  for (size_t i = 0; i < sortedIndices.size(); ++i) {
+    if (!group.empty() && sortedIndices[i] != sortedIndices[i - 1] + 1) {
+      if (group.size() > 1)
+        vectorizeContiguousGroup(group, dst, src);
+      group.clear();
     }
+    group.push_back(indexMap.at(sortedIndices[i]));
   }
-
-  StringRef getArgument() const override { return "simple-vec"; }
-
-  StringRef getDescription() const override {
-    return "Simple Vectorization Pass using tree structure";
+  if (group.size() > 1) {
+    vectorizeContiguousGroup(group, dst, src);
   }
-};
-
-} 
-
-extern "C" ::mlir::PassPluginLibraryInfo mlirGetPassPluginInfo() {
-  return {
-      MLIR_PLUGIN_API_VERSION,
-      "SimpleVec",
-      LLVM_VERSION_STRING,
-      []() {
-        PassPipelineRegistration<>(
-            "simple-vec", "Simple Vectorization Pass",
-            [](OpPassManager &pm) {
-              pm.addPass(std::make_unique<SimpleVectorizationPass>());
-            });
-      }};
 }
 
-MLIR_DECLARE_EXPLICIT_TYPE_ID(SimpleVectorizationPass)
-MLIR_DEFINE_EXPLICIT_TYPE_ID(SimpleVectorizationPass)
+struct VectorizationPass
+    : public circt::moore::impl::VectorizationBase<VectorizationPass> {
+
+  void runOnOperation() override; 
+};
+} 
+
+std::unique_ptr<mlir::Pass> circt::moore::createVectorizationPass() {
+  return std::make_unique<VectorizationPass>();
+}
+
+void VectorizationPass::runOnOperation() {
+  ModuleOp moduleOp = getOperation();
+  AssignTree assignTree;
+
+  populateAssignTree(moduleOp, assignTree);
+
+  llvm::SmallVector<mlir::Value> dstKeys;
+  for (const auto &pair : assignTree) {
+    dstKeys.push_back(pair.getFirst());
+  }
+  std::sort(dstKeys.begin(), dstKeys.end(), [](mlir::Value a, mlir::Value b) {
+    return a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
+  });
+
+  for (mlir::Value dst : dstKeys) {
+    auto &srcMap = assignTree[dst];
+
+    llvm::SmallVector<mlir::Value> srcKeys;
+    for (const auto &pair : srcMap) {
+      srcKeys.push_back(pair.getFirst());
+    }
+    std::sort(srcKeys.begin(), srcKeys.end(),
+              [](mlir::Value a, mlir::Value b) {
+                return a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
+              });
+
+    for (mlir::Value src : srcKeys) {
+      processIndexMap(srcMap[src], dst, src);
+    }
+  }
+}
