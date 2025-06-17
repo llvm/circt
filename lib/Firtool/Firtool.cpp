@@ -229,6 +229,18 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                              const FirtoolOptions &opt,
                                              StringRef inputFilename) {
+  // Run layersink immediately before LowerXMR. LowerXMR will "freeze" the
+  // location of probed objects by placing symbols on them. Run layersink first
+  // so that probed objects can be sunk if possible.
+  if (!opt.shouldDisableLayerSink()) {
+    if (opt.shouldAdvancedLayerSink())
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createAdvancedLayerSinkPass());
+    else
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          firrtl::createLayerSinkPass());
+  }
+
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
   // RefType ports and ops.
@@ -240,14 +252,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   //
   // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
   //   https://github.com/llvm/circt/issues/7896
-  if (!opt.shouldDisableLayerSink()) {
-    if (opt.shouldAdvancedLayerSink())
-      pm.nest<firrtl::CircuitOp>().addPass(
-          firrtl::createAdvancedLayerSinkPass());
-    else
-      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-          firrtl::createLayerSinkPass());
-  }
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
