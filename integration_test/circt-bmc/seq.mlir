@@ -31,3 +31,24 @@ hw.module @aggregateReg(in %clk: !seq.clock) {
   %eq = comb.icmp bin eq %c0, %get : i32
   verif.assert %eq : i1
 }
+
+//  Check that ignore-asserts-until works correctly
+//  RUN: circt-bmc %s -b 7 --ignore-asserts-until=4 --module Counter --shared-libs=%libz3 | FileCheck %s --check-prefix=COUNTER4
+//  COUNTER4: Bound reached with no violations!
+//  RUN: circt-bmc %s -b 7 --ignore-asserts-until=3 --module Counter --shared-libs=%libz3 | FileCheck %s --check-prefix=COUNTER3
+//  COUNTER3: Assertion can be violated!
+
+hw.module @Counter(in %clk: !seq.clock, out count: i3) {
+  %init = seq.initial () {
+    %c0_i3 = hw.constant 0 : i3
+    seq.yield %c0_i3 : i3
+  } : () -> !seq.immutable<i3>
+  %c1_i3 = hw.constant 1 : i3
+  %regPlusOne = comb.add %reg, %c1_i3 : i3
+  %reg = seq.compreg %regPlusOne, %clk initial %init : i3
+  // Condition - count is always greater than 3
+  %c3_i3 = hw.constant 3 : i3
+  %lt = comb.icmp ugt %reg, %c3_i3 : i3
+  verif.assert %lt : i1
+  hw.output %reg : i3
+}

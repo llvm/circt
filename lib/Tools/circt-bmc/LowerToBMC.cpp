@@ -66,6 +66,12 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
+  if (bound < ignoreAssertionsUntil) {
+    hwModule->emitError(
+        "number of ignored cycles must be less than or equal to bound");
+    return signalPassFailure();
+  }
+
   // Create necessary function declarations and globals
   auto *ctx = &getContext();
   OpBuilder builder(ctx);
@@ -111,6 +117,13 @@ void LowerToBMCPass::runOnOperation() {
     bmcOp = builder.create<verif::BoundedModelCheckingOp>(
         loc, risingClocksOnly ? bound : 2 * bound,
         cast<IntegerAttr>(numRegs).getValue().getZExtValue(), initialValues);
+    // Annotate the op with how many cycles to ignore - again, we may need to
+    // double this to account for rising and falling edges
+    if (ignoreAssertionsUntil)
+      bmcOp->setAttr("ignore_asserts_until",
+                     builder.getI32IntegerAttr(
+                         risingClocksOnly ? ignoreAssertionsUntil
+                                          : 2 * ignoreAssertionsUntil));
   } else {
     hwModule->emitOpError("no num_regs or initial_values attribute found - "
                           "please run externalize "
