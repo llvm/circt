@@ -1358,35 +1358,10 @@ struct PowSOpConversion : public OpConversionPattern<PowSOp> {
     Type resultType = typeConverter->convertType(op.getResult().getType());
 
     Location loc = op.getLoc();
-    auto intType = cast<IntType>(op.getRhs().getType());
-    // transform a ** b into scf.for 0 to b step 1 { init *= a }, init = 1
-    Type integerType = rewriter.getIntegerType(intType.getWidth());
-    Value lhsVal = rewriter.create<ConversionOp>(loc, resultType, op.getLhs());
-    Value rhsVal = rewriter.create<ConversionOp>(loc, integerType, op.getRhs());
-    Value constZero = rewriter.create<hw::ConstantOp>(loc, integerType, 0);
-    Value constZeroResult = rewriter.create<hw::ConstantOp>(loc, resultType, 0);
-    Value isNegative = rewriter.create<comb::ICmpOp>(loc, ICmpPredicate::slt,
-                                                     rhsVal, constZero);
+    // utilize MLIR math dialect's math.ipowi to handle the exponentiation of expression
+    Value result = rewriter.create<mlir::math::IPowIOp>(loc, adaptor.getLhs(), adaptor.getRhs());
 
-    // if the exponent is negative, return 0
-    lhsVal =
-        rewriter.create<comb::MuxOp>(loc, isNegative, constZeroResult, lhsVal);
-    Value upperBound =
-        rewriter.create<comb::MuxOp>(loc, isNegative, constZero, rhsVal);
-
-    Value lowerBound = constZero;
-    Value step = rewriter.create<hw::ConstantOp>(loc, integerType, 1);
-    Value initVal = rewriter.create<hw::ConstantOp>(loc, resultType, 1);
-
-    auto forOp = rewriter.create<scf::ForOp>(
-        loc, lowerBound, upperBound, step, ValueRange(initVal),
-        [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
-          auto loopVar = iterArgs.front();
-          auto mul = rewriter.create<comb::MulOp>(loc, lhsVal, loopVar);
-          rewriter.create<scf::YieldOp>(loc, ValueRange(mul));
-        });
-
-    rewriter.replaceOp(op, forOp.getResult(0));
+    rewriter.replaceOp(op, result);
 
     return success();
   }
