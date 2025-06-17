@@ -77,11 +77,25 @@ void vectorizeContiguousGroup(llvm::MutableArrayRef<ScalarAssignGroup> group,
   if (group.empty())
     return;
 
+
+  auto refType = mlir::dyn_cast<moore::RefType>(dstVec.getType());
+  if (!refType)
+    return; 
+
+  auto vecType = mlir::dyn_cast<moore::UnpackedType>(refType.getNestedType());
+  if (!vecType || !vecType.getBitSize().has_value())
+    return; 
+  
+  int64_t totalWidth = vecType.getBitSize().value();
+
+
+  if (static_cast<int64_t>(group.size()) != totalWidth) {
+    return;
+  }
+
   for (auto &g : group) {
-    if (!g.extract.getResult().hasOneUse()) {
-      return;
-    }
-    if (!g.extractRef.getResult().hasOneUse()) {
+    if (!g.extract.getResult().hasOneUse() ||
+        !g.extractRef.getResult().hasOneUse()) {
       return;
     }
   }
@@ -137,13 +151,33 @@ void VectorizationPass::runOnOperation() {
 
   populateAssignTree(moduleOp, assignTree);
 
+  auto compareValues = [](mlir::Value a, mlir::Value b) {
+
+    if (auto aArg = dyn_cast<BlockArgument>(a)) {
+
+      if (auto bArg = dyn_cast<BlockArgument>(b))
+        return aArg.getArgNumber() < bArg.getArgNumber();
+
+      return true;
+    }
+
+    if (isa<BlockArgument>(b))
+      return false;
+    
+    Operation *aOp = a.getDefiningOp();
+    Operation *bOp = b.getDefiningOp();
+
+    if (aOp->getBlock() != bOp->getBlock())
+      return aOp->getBlock() < bOp->getBlock(); 
+    return aOp->isBeforeInBlock(bOp);
+  };
+
   llvm::SmallVector<mlir::Value> dstKeys;
   for (const auto &pair : assignTree) {
     dstKeys.push_back(pair.getFirst());
   }
-  std::sort(dstKeys.begin(), dstKeys.end(), [](mlir::Value a, mlir::Value b) {
-    return a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
-  });
+
+  std::sort(dstKeys.begin(), dstKeys.end(), compareValues);
 
   for (mlir::Value dst : dstKeys) {
     auto &srcMap = assignTree[dst];
@@ -152,9 +186,8 @@ void VectorizationPass::runOnOperation() {
     for (const auto &pair : srcMap) {
       srcKeys.push_back(pair.getFirst());
     }
-    std::sort(srcKeys.begin(), srcKeys.end(), [](mlir::Value a, mlir::Value b) {
-      return a.getDefiningOp()->isBeforeInBlock(b.getDefiningOp());
-    });
+
+    std::sort(srcKeys.begin(), srcKeys.end(), compareValues);
 
     for (mlir::Value src : srcKeys) {
       processIndexMap(srcMap[src], dst, src);
