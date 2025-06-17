@@ -14,11 +14,28 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace comb;
+
+Value comb::createZExt(OpBuilder &builder, Location loc, Value value,
+                       unsigned targetWidth) {
+  assert(value.getType().isSignlessInteger());
+  auto inputWidth = value.getType().getIntOrFloatBitWidth();
+  assert(inputWidth <= targetWidth);
+
+  // Nothing to do if the width already matches.
+  if (inputWidth == targetWidth)
+    return value;
+
+  // Create a zero constant for the upper bits.
+  auto zeros = builder.create<hw::ConstantOp>(
+      loc, builder.getIntegerType(targetWidth - inputWidth), 0);
+  return builder.createOrFold<ConcatOp>(loc, zeros, value);
+}
 
 /// Create a sign extension operation from a value of integer type to an equal
 /// or larger integer type.
@@ -109,6 +126,94 @@ Value comb::constructMuxTree(OpBuilder &builder, Location loc,
   };
 
   return constructTreeHelper(0, llvm::Log2_64_Ceil(leafNodes.size()));
+}
+
+Value comb::createDynamicExtract(OpBuilder &builder, Location loc, Value value,
+                                 Value offset, unsigned width) {
+  assert(value.getType().isSignlessInteger());
+  auto valueWidth = value.getType().getIntOrFloatBitWidth();
+  assert(width <= valueWidth);
+
+  // Handle the special case where the offset is constant.
+  APInt constOffset;
+  if (matchPattern(offset, mlir::m_ConstantInt(&constOffset)))
+    if (constOffset.getActiveBits() < 32)
+      return builder.createOrFold<comb::ExtractOp>(
+          loc, value, constOffset.getZExtValue(), width);
+
+  // Zero-extend the offset, shift the value down, and extract the requested
+  // number of bits.
+  offset = createZExt(builder, loc, offset, valueWidth);
+  value = builder.createOrFold<comb::ShrUOp>(loc, value, offset);
+  return builder.createOrFold<comb::ExtractOp>(loc, value, 0, width);
+}
+
+Value comb::createDynamicInject(OpBuilder &builder, Location loc, Value value,
+                                Value offset, Value replacement,
+                                bool twoState) {
+  assert(value.getType().isSignlessInteger());
+  assert(replacement.getType().isSignlessInteger());
+  auto largeWidth = value.getType().getIntOrFloatBitWidth();
+  auto smallWidth = replacement.getType().getIntOrFloatBitWidth();
+  assert(smallWidth <= largeWidth);
+
+  // If we're inserting a zero-width value there's nothing to do.
+  if (smallWidth == 0)
+    return value;
+
+  // Handle the special case where the offset is constant.
+  APInt constOffset;
+  if (matchPattern(offset, mlir::m_ConstantInt(&constOffset)))
+    if (constOffset.getActiveBits() < 32)
+      return createInject(builder, loc, value, constOffset.getZExtValue(),
+                          replacement);
+
+  // Zero-extend the offset and clear the value bits we are replacing.
+  offset = createZExt(builder, loc, offset, largeWidth);
+  Value mask = builder.create<hw::ConstantOp>(
+      loc, APInt::getLowBitsSet(largeWidth, smallWidth));
+  mask = builder.createOrFold<comb::ShlOp>(loc, mask, offset);
+  mask = createOrFoldNot(loc, mask, builder, true);
+  value = builder.createOrFold<comb::AndOp>(loc, value, mask, twoState);
+
+  // Zero-extend the replacement value, shift it up to the offset, and merge it
+  // with the value that has the corresponding bits cleared.
+  replacement = createZExt(builder, loc, replacement, largeWidth);
+  replacement = builder.createOrFold<comb::ShlOp>(loc, replacement, offset);
+  return builder.createOrFold<comb::OrOp>(loc, value, replacement, twoState);
+}
+
+Value comb::createInject(OpBuilder &builder, Location loc, Value value,
+                         unsigned offset, Value replacement) {
+  assert(value.getType().isSignlessInteger());
+  assert(replacement.getType().isSignlessInteger());
+  auto largeWidth = value.getType().getIntOrFloatBitWidth();
+  auto smallWidth = replacement.getType().getIntOrFloatBitWidth();
+  assert(smallWidth <= largeWidth);
+
+  // If the offset is outside the value there's nothing to do.
+  if (offset >= largeWidth)
+    return value;
+
+  // If we're inserting a zero-width value there's nothing to do.
+  if (smallWidth == 0)
+    return value;
+
+  // Assemble the pieces of the injection as everything below the offset, the
+  // replacement value, and everything above the replacement value.
+  SmallVector<Value, 3> fragments;
+  auto end = offset + smallWidth;
+  if (end < largeWidth)
+    fragments.push_back(
+        builder.create<comb::ExtractOp>(loc, value, end, largeWidth - end));
+  if (end <= largeWidth)
+    fragments.push_back(replacement);
+  else
+    fragments.push_back(builder.create<comb::ExtractOp>(loc, replacement, 0,
+                                                        largeWidth - offset));
+  if (offset > 0)
+    fragments.push_back(builder.create<comb::ExtractOp>(loc, value, 0, offset));
+  return builder.createOrFold<comb::ConcatOp>(loc, fragments);
 }
 
 //===----------------------------------------------------------------------===//

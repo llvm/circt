@@ -84,6 +84,10 @@ def parse_args() -> argparse.Namespace:
       default="-",
       help=
       "Output Path (directory if 'split-output=True' or a filepath otherwise)")
+  parser.add_argument("--memories-as-immediates",
+                      type=bool,
+                      default=True,
+                      help="Lower memories as immediates")
 
   args = parser.parse_args()
 
@@ -116,20 +120,18 @@ def frontend_codegen(args: argparse.Namespace) -> ir.Module:
   processing.
   """
 
-  # If we get MLIR direclty, just read the file and parse the MLIR
+  # If we get MLIR directly, just read the file and parse the MLIR
   if args.input_format == InputFormat.MLIR:
     with open(args.file, 'r') as f:
       return ir.Module.parse(f.read())
 
   # Otherwise, codegen the MLIR from the python file
   if args.input_format == InputFormat.PYTHON:
-    file = import_module_from_path(Path(args.file))
+    import_module_from_path(Path(args.file))
 
     module = ir.Module.create()
     with ir.InsertionPoint(module.body):
-      for _, obj in inspect.getmembers(file):
-        if isinstance(obj, pyrtg.core.CodeGenRoot):
-          obj._codegen()
+      pyrtg.core.CodeGenRoot._codegen_all_instances()
     return module
 
   assert False, "input format must be one of the above"
@@ -147,7 +149,8 @@ def compile(mlir_module: ir.Module, args: argparse.Namespace) -> None:
       verbose_pass_execution=args.verbose_pass_executions,
       output_format=to_output_format(args.output_format),
       output_path=args.output_path,
-      split_output=False)
+      split_output=False,
+      memories_as_immediates=args.memories_as_immediates)
   rtgtool_support.populate_randomizer_pipeline(pm, options)
   pm.run(mlir_module.operation)
 

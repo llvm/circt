@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from .base import ir
 from .rtg import rtg
-from .core import Value
+from .core import Value, Type
+from .support import _FromCirctType
 
 
 class Tuple(Value):
@@ -28,7 +29,9 @@ class Tuple(Value):
     element must be provided. Each element can be of a different type.
     """
 
-    assert len(elements) > 0, "at least one element must be present"
+    if len(elements) == 0:
+      raise ValueError("at least one element must be present")
+
     return rtg.TupleCreateOp(elements)
 
   def __getitem__(self, i) -> Value:
@@ -36,18 +39,32 @@ class Tuple(Value):
     Access an element in the tuple at the specified index (read-only).
     """
 
-    assert isinstance(i, int), "index must be a python int"
+    if not isinstance(i, int):
+      raise TypeError("index must be a python int")
+
     return rtg.TupleExtractOp(self, i)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return self._value.type
+  def get_type(self) -> Type:
+    return _FromCirctType(self._value.type)
 
-  def type(*args) -> ir.Type:
-    """
-    Returns the tuple type for the given element types.
-    """
 
-    return ir.TupleType.get_tuple(args)
+class TupleType(Type):
+  """
+  Represents the type of statically typed tuples.
+
+  Fields:
+    element_types: list[Type]
+  """
+
+  def __init__(self, element_types: list[Type]):
+    self.element_types = element_types
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other,
+                      TupleType) and self.element_types == other.element_types
+
+  def _codegen(self) -> ir.Type:
+    return ir.TupleType.get_tuple([ty._codegen() for ty in self.element_types])

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .base import ir
-from .core import Value
+from .core import Value, Type
 from .index import index
 from .rtg import rtg
 
@@ -73,8 +73,8 @@ class Integer(Value):
   def __ge__(self, other: Integer) -> Bool:
     return index.CmpOp("uge", self._get_ssa_value(), other._get_ssa_value())
 
-  def get_type(self) -> ir.Type:
-    return ir.IndexType.get()
+  def get_type(self) -> Type:
+    return IntegerType()
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
@@ -82,12 +82,16 @@ class Integer(Value):
 
     return self._value
 
-  def type(*args: ir.Type) -> ir.Type:
-    """
-    Returns the index type.
-    """
 
-    assert len(args) == 0, "Integer type does not take type arguments"
+class IntegerType(Type):
+  """
+  Represents the type of integer values.
+  """
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, IntegerType)
+
+  def _codegen(self) -> ir.Type:
     return ir.IndexType.get()
 
 
@@ -105,8 +109,8 @@ class Bool(Value):
 
     self._value = value
 
-  def get_type(self) -> ir.Type:
-    return ir.IntegerType.get_signless(1)
+  def get_type(self) -> Type:
+    return BoolType()
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, bool):
@@ -114,10 +118,14 @@ class Bool(Value):
 
     return self._value
 
-  def type(*args: ir.Type) -> ir.Type:
-    """
-    Returns the 'i1' type representing a boolean.
-    """
 
-    assert len(args) == 0, "Bool type does not take type arguments"
+class BoolType(Type):
+  """
+  Represents the type of boolean values.
+  """
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, BoolType)
+
+  def _codegen(self) -> ir.Type:
     return ir.IntegerType.get_signless(1)

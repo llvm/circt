@@ -80,20 +80,27 @@ else()
   endif()
 endif()
 
-FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt
-  GIT_TAG        11.1.4)
-FetchContent_MakeAvailable(fmt)
+# fmt is used for logging and formatting messages.
+if (NOT TARGET fmt::fmt-header-only)
+  message(STATUS "fmt not found, pulling down from git")
+  FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt
+    GIT_TAG        11.1.4)
+  FetchContent_MakeAvailable(fmt)
+endif()
 
 # CLI11 is used for tools' command line options parsing.
-FetchContent_Declare(
-    cli11_proj
-    QUIET
-    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-    GIT_TAG v2.5.0
-)
-FetchContent_MakeAvailable(cli11_proj)
+if (NOT TARGET CLI11::CLI11)
+  message(STATUS "CLI11 not found, pulling down from git")
+  FetchContent_Declare(
+      cli11_proj
+      QUIET
+      GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+      GIT_TAG v2.5.0
+  )
+  FetchContent_MakeAvailable(cli11_proj)
+endif()
 
 # In a Python wheel build, we need to install libraries to different places.
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
@@ -189,6 +196,8 @@ endif()
 target_link_libraries(ESICppRuntime PUBLIC
   ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
+)
+target_link_libraries(ESICppRuntime PRIVATE
   fmt::fmt-header-only
 )
 if(NOT MSVC)

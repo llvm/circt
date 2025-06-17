@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from .core import Value
+from .core import Value, Type
 from .base import ir
 from .index import index
 from .rtg import rtg
 from .integers import Integer
-from .resources import Immediate
+from .immediates import Immediate
+from .support import _FromCirctType
 
 from typing import Union
 
@@ -40,11 +41,27 @@ class MemoryBlock(Value):
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return self._value.type
+  def get_type(self) -> Type:
+    return _FromCirctType(self._value.type)
 
-  def type(address_width: int) -> ir.Type:
-    return rtg.MemoryBlockType.get(address_width)
+
+class MemoryBlockType(Type):
+  """
+  Represents the type of memory blocks.
+
+  Fields:
+    address_width: int
+  """
+
+  def __init__(self, address_width: int):
+    self.address_width = address_width
+
+  def __eq__(self, other) -> bool:
+    return isinstance(
+        other, MemoryBlockType) and self.address_width == other.address_width
+
+  def _codegen(self):
+    return rtg.MemoryBlockType.get(self.address_width)
 
 
 class Memory(Value):
@@ -90,8 +107,24 @@ class Memory(Value):
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return self._value.type
+  def get_type(self) -> Type:
+    return _FromCirctType(self._value.type)
 
-  def type(address_width: int) -> ir.Type:
-    return rtg.MemoryType.get(address_width)
+
+class MemoryType(Type):
+  """
+  Represents the type of memory allocations.
+
+  Fields:
+    address_width: int
+  """
+
+  def __init__(self, address_width: int):
+    self.address_width = address_width
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other,
+                      MemoryType) and self.address_width == other.address_width
+
+  def _codegen(self):
+    return rtg.MemoryType.get(self.address_width)

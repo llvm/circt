@@ -1,6 +1,5 @@
 // RUN: circt-opt --rtg-inline-sequences --split-input-file --verify-diagnostics %s | FileCheck %s
 
-// CHECK-NOT: rtg.sequence
 rtg.sequence @seq0() {
   rtgtest.rv32i.ebreak
   rtgtest.rv32i.ebreak

@@ -16,6 +16,10 @@ rtg.test @test0() {
   %neg_imm = rtg.constant #rtg.isa.immediate<12, 4080>
   %imm13 = rtg.constant #rtg.isa.immediate<13, 6144>
 
+  // CHECK-ALLOWED-NEXT:    la ra, 0
+  // CHECK-NEXT:    la ra, 0
+  rtgtest.rv32i.la %rd, %imm32 : !rtg.isa.immediate<32>
+
   // CHECK-ALLOWED-NEXT:    jalr ra, -16(s0)
   // CHECK-NEXT:    # jalr ra, -16(s0)
   // CHECK-NEXT:    .word 0xFF0400E7

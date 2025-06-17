@@ -8,10 +8,9 @@ import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
-from pycde.constructs import ControlReg, Reg, Wire
+from pycde.constructs import ControlReg, Mux, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
 from pycde.types import (Bits, Channel, ChannelSignaling, UInt)
-from pycde.behavioral import If, Else, EndIf
 from pycde.handshake import Func
 
 import sys
@@ -84,11 +83,11 @@ class MMIOReadWriteClient(Module):
                   rst_value=0,
                   ce=cmd_valid & cmd.write & (cmd.offset == 0x8).as_bits())
     add_amt.assign(cmd.data.as_uint())
-    with If(cmd.write):
-      response_data = Bits(64)(0)
-    with Else():
-      response_data = (cmd.offset + add_amt).as_bits(64)
-    EndIf()
+    response_data = Mux(
+        cmd.write,
+        (cmd.offset + add_amt).as_bits(64),
+        Bits(64)(0),
+    )
     response_chan, response_ready = Channel(Bits(64)).wrap(
         response_data, cmd_valid)
     resp_ready_wire.assign(response_ready)

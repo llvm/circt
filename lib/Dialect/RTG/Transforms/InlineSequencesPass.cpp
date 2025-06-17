@@ -105,8 +105,12 @@ struct SequenceInliner
     IRMapping mapping = iter->getSecond().second;
     Block *block = iter->getSecond().first;
     for (auto [arg, repl] :
-         llvm::zip(block->getArguments(), op.getReplacements()))
+         llvm::zip(block->getArguments(), op.getReplacements())) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "    - Mapping " << arg << " to " << repl << "\n");
       mapping.map(arg, repl);
+    }
+
     materializedSequences[op.getResult()] = std::make_pair(block, mapping);
     return DeletionKind::Delete;
   }
@@ -120,7 +124,10 @@ struct SequenceInliner
                                 "was likely produced by an op or block "
                                 "argument not supported by this pass";
 
-    materializedSequences[op.getResult()] = iter->getSecond();
+    // It's important to force a copy here. Without the temporary variable, we'd
+    // assign an lvalue.
+    auto value = iter->getSecond();
+    materializedSequences[op.getResult()] = value;
     return DeletionKind::Delete;
   }
 
@@ -136,8 +143,17 @@ struct SequenceInliner
     OpBuilder builder(op);
     builder.setInsertionPointAfter(op);
     IRMapping mapping = iter->getSecond().second;
-    for (auto &op : *iter->getSecond().first)
-      builder.clone(op, mapping);
+
+    LLVM_DEBUG({
+      for (auto [k, v] : mapping.getValueMap())
+        llvm::dbgs() << "    - Maps " << k << " to " << v << "\n";
+    });
+
+    for (auto &op : *iter->getSecond().first) {
+      Operation *o = builder.clone(op, mapping);
+      (void)o;
+      LLVM_DEBUG(llvm::dbgs() << "    - Inlined " << *o << "\n");
+    }
 
     ++numSequencesInlined;
 
@@ -222,11 +238,6 @@ void InlineSequencesPass::runOnOperation() {
   for (auto testOp : moduleOp.getOps<TestOp>())
     if (failed(inliner.inlineSequences(testOp)))
       return signalPassFailure();
-
-  // Remove all sequences since they are not accessible from the outside and
-  // are not needed anymore since we fully inlined them.
-  for (auto seqOp : llvm::make_early_inc_range(moduleOp.getOps<SequenceOp>()))
-    seqOp->erase();
 
   numSequencesInlined = inliner.numSequencesInlined;
   numSequencesInterleaved = inliner.numSequencesInterleaved;

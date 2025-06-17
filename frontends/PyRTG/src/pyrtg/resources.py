@@ -6,33 +6,8 @@ from __future__ import annotations
 
 from .rtg import rtg
 from .rtgtest import rtgtest
-from .core import Value
+from .core import Value, Type
 from .base import ir
-from .integers import Integer
-
-from typing import Union
-
-
-class Immediate(Value):
-
-  def __init__(self, width: int, value: Union[ir.Value, int,
-                                              Integer]) -> Immediate:
-    self._width = width
-    self._value = value
-
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, int):
-      self = rtg.ConstantOp(rtg.ImmediateAttr.get(self._width, self._value))
-    if isinstance(self._value, Integer):
-      self = rtg.IntToImmediateOp(rtg.ImmediateType.get(self._width),
-                                  self._value)
-    return self._value
-
-  def get_type(self) -> ir.Type:
-    return rtg.ImmediateType.get(self._width)
-
-  def type(width: int) -> ir.Type:
-    return rtg.ImmediateType.get(width)
 
 
 class IntegerRegister(Value):
@@ -185,8 +160,17 @@ class IntegerRegister(Value):
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return rtgtest.IntegerRegisterType.get()
+  def get_type(self) -> Type:
+    return IntegerRegisterType()
 
-  def type(*args) -> ir.Type:
+
+class IntegerRegisterType(Type):
+  """
+  Represents the type of integer registers.
+  """
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, IntegerRegisterType)
+
+  def _codegen(self):
     return rtgtest.IntegerRegisterType.get()

@@ -117,13 +117,21 @@ hw.module @WaitYieldCount(in %arg0: i42) {
   }
 }
 
-
 // -----
 
 hw.module @HaltYieldCount(in %arg0: i42) {
   llhd.process {
     // expected-error @below {{'llhd.halt' op has 1 yield operands, but enclosing 'llhd.process' returns 0}}
     llhd.halt %arg0 : i42
+  }
+}
+
+// -----
+
+hw.module @HaltYieldCount(in %arg0: i42) {
+  llhd.combinational {
+    // expected-error @below {{'llhd.yield' op has 1 yield operands, but enclosing 'llhd.combinational' returns 0}}
+    llhd.yield %arg0 : i42
   }
 }
 
@@ -144,5 +152,14 @@ hw.module @HaltYieldTypes(in %arg0: i42) {
   llhd.process -> i42, i9001 {
     // expected-error @below {{type of yield operand 1 ('i42') does not match enclosing 'llhd.process' result type ('i9001')}}
     llhd.halt %arg0, %arg0 : i42, i42
+  }
+}
+
+// -----
+
+hw.module @HaltYieldTypes(in %arg0: i42) {
+  llhd.combinational -> i42, i9001 {
+    // expected-error @below {{type of yield operand 1 ('i42') does not match enclosing 'llhd.combinational' result type ('i9001')}}
+    llhd.yield %arg0, %arg0 : i42, i42
   }
 }

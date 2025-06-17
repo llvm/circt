@@ -855,6 +855,126 @@ hw.module @NestedArrayGet3D(
   }
 }
 
+// CHECK-LABEL: @BasicSigExtract
+hw.module @BasicSigExtract(in %u: i42, in %v: i10, in %i: i6, in %q: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : i42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    // CHECK-NOT: llhd.sig.extract
+    %1 = llhd.sig.extract %a from %i : (!hw.inout<i42>) -> !hw.inout<i10>
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[EXT1:%.+]] = hw.constant 0 : i36
+    // CHECK-NEXT: [[EXT2:%.+]] = comb.concat [[EXT1]], %i : i36, i6
+    // CHECK-NEXT: [[EXT3:%.+]] = comb.shru %u, [[EXT2]] : i42
+    // CHECK-NEXT: [[EXT4:%.+]] = comb.extract [[EXT3]] from 0 : (i42) -> i10
+    // CHECK-NEXT: [[MUX:%.+]] = comb.mux %q, %v, [[EXT4]] : i10
+    // CHECK-NEXT: [[INJ1:%.+]] = hw.constant 0 : i36
+    // CHECK-NEXT: [[INJ2:%.+]] = comb.concat [[INJ1]], %i : i36, i6
+    // CHECK-NEXT: [[INJ3:%.+]] = hw.constant 1023 : i42
+    // CHECK-NEXT: [[INJ4:%.+]] = comb.shl [[INJ3]], [[INJ2]] : i42
+    // CHECK-NEXT: [[INJ5:%.+]] = hw.constant -1 : i42
+    // CHECK-NEXT: [[INJ6:%.+]] = comb.xor bin [[INJ4]], [[INJ5]] : i42
+    // CHECK-NEXT: [[INJ7:%.+]] = comb.and %u, [[INJ6]] : i42
+    // CHECK-NEXT: [[INJ8:%.+]] = hw.constant 0 : i32
+    // CHECK-NEXT: [[INJ9:%.+]] = comb.concat [[INJ8]], [[MUX]] : i32, i10
+    // CHECK-NEXT: [[INJ10:%.+]] = comb.shl [[INJ9]], [[INJ2]] : i42
+    // CHECK-NEXT: [[INJ11:%.+]] = comb.or [[INJ7]], [[INJ10]] : i42
+    llhd.drv %1, %v after %0 if %q : !hw.inout<i10>
+    // CHECK-NOT: llhd.prb
+    %2 = llhd.prb %a : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[INJ11]])
+    func.call @use_i42(%2) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ11]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// CHECK-LABEL: @CombCreateDynamicInject
+hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : i42
+
+  // offset = 0
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %u from 10 : (i42) -> i32
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.concat [[TMP1]], %v : i32, i10
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[TMP2]]
+    // CHECK-NEXT: llhd.halt
+    %c0_i6 = hw.constant 0 : i6
+    %1 = llhd.sig.extract %a from %c0_i6 : (!hw.inout<i42>) -> !hw.inout<i10>
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %1, %v after %0 : !hw.inout<i10>
+    llhd.halt
+  }
+
+  // offset > 0, end < 42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %u from 30 : (i42) -> i12
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %u from 0 : (i42) -> i20
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.concat [[TMP1]], %v, [[TMP2]] : i12, i10, i20
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[TMP3]]
+    // CHECK-NEXT: llhd.halt
+    %c20_i6 = hw.constant 20 : i6
+    %1 = llhd.sig.extract %a from %c20_i6 : (!hw.inout<i42>) -> !hw.inout<i10>
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %1, %v after %0 : !hw.inout<i10>
+    llhd.halt
+  }
+
+  // end = 42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %u from 0 : (i42) -> i32
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.concat %v, [[TMP1]] : i10, i32
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[TMP2]]
+    // CHECK-NEXT: llhd.halt
+    %c32_i6 = hw.constant 32 : i6
+    %1 = llhd.sig.extract %a from %c32_i6 : (!hw.inout<i42>) -> !hw.inout<i10>
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %1, %v after %0 : !hw.inout<i10>
+    llhd.halt
+  }
+
+  // offset < 42, end > 42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %v from 0 : (i10) -> i5
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %u from 0 : (i42) -> i37
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.concat [[TMP1]], [[TMP2]] : i5, i37
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[TMP3]]
+    // CHECK-NEXT: llhd.halt
+    %c37_i6 = hw.constant 37 : i6
+    %1 = llhd.sig.extract %a from %c37_i6 : (!hw.inout<i42>) -> !hw.inout<i10>
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %1, %v after %0 : !hw.inout<i10>
+    llhd.halt
+  }
+
+  // offset >= 42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, %u
+    // CHECK-NEXT: llhd.halt
+    %c42_i6 = hw.constant 42 : i6
+    %1 = llhd.sig.extract %a from %c42_i6 : (!hw.inout<i42>) -> !hw.inout<i10>
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %1, %v after %0 : !hw.inout<i10>
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)

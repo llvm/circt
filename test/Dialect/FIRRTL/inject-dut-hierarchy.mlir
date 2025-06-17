@@ -1,6 +1,7 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-inject-dut-hier))' -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Top"
+// CHECK-SAME:    {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}
 firrtl.circuit "Top" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {
@@ -8,6 +9,27 @@ firrtl.circuit "Top" attributes {
   //
   // CHECK:      firrtl.module private @DUT
   // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+  //
+  // CHECK-NEXT:   firrtl.instance Foo {{.+}} @Foo()
+  // CHECK-NEXT: }
+  firrtl.module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+
+  // CHECK:      firrtl.module @Top
+  // CHECK-NEXT:   firrtl.instance dut @DUT
+  firrtl.module @Top() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+firrtl.circuit "Top" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo", moveDut = true}]
+  } {
+  // CHECK:      firrtl.module private @Foo()
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+  //
+  // CHECK:      firrtl.module private @DUT
   //
   // CHECK-NEXT:   firrtl.instance Foo {{.+}} @Foo()
   // CHECK-NEXT: }
@@ -159,6 +181,32 @@ firrtl.circuit "Refs" attributes {
 }
 
 // -----
+// https://github.com/llvm/circt/issues/8552
+// Check rwprobes are updated.
+
+// CHECK-LABEL: firrtl.circuit "RWProbe"
+firrtl.circuit "RWProbe" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
+  } {
+
+  firrtl.module private @DUT(
+    in %in: !firrtl.uint<1>, out %out: !firrtl.rwprobe<uint<1>>
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]}
+  {
+    %w = firrtl.wire sym @sym : !firrtl.uint<1>
+    // CHECK: ref.rwprobe <@Foo::@sym>
+    %rwp = firrtl.ref.rwprobe <@DUT::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %out, %rwp : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @RWProbe() {
+    %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.rwprobe<uint<1>>)
+  }
+}
+
+// -----
 
 // CHECK-LABEL: firrtl.circuit "Properties"
 firrtl.circuit "Properties" attributes {
@@ -179,5 +227,51 @@ firrtl.circuit "Properties" attributes {
   }
   firrtl.module @Properties() {
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUT(in in: !firrtl.integer, out out: !firrtl.integer)
+  }
+}
+
+// -----
+
+firrtl.circuit "PublicMoveDutFalse" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = false
+    }
+  ]
+} {
+  // CHECK: firrtl.module private @Foo()
+  // CHECK: firrtl.module @DUT()
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  firrtl.module @PublicMoveDutFalse() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+firrtl.circuit "PublicMoveDutFalse" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = true
+    }
+  ]
+} {
+  // CHECK: firrtl.module @Foo()
+  // CHECK: firrtl.module private @DUT()
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  firrtl.module @PublicMoveDutFalse() {
+    firrtl.instance dut @DUT()
   }
 }

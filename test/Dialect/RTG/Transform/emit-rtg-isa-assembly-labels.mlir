@@ -8,6 +8,8 @@ rtg.test @test0() {
   %rs = rtg.fixed_reg #rtgtest.s0
   %label = rtg.label_decl "label_name"
 
+  // CHECK-NEXT:    la ra, label_name
+  rtgtest.rv32i.la %rd, %label : !rtg.isa.label
   // CHECK-NEXT:    beq ra, s0, label_name
   rtgtest.rv32i.beq %rd, %rs, %label : !rtg.isa.label
   // CHECK-NEXT:label_name:

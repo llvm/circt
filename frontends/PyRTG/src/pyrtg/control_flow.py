@@ -9,7 +9,7 @@ from .arrays import Array
 from .core import Value
 from .base import ir
 from .scf import scf
-from .support import _FromCirctValue
+from .support import _FromCirctValue, _collect_values_recursively
 
 import ctypes
 from contextvars import ContextVar
@@ -94,7 +94,7 @@ class If:
     # the region in its constructor.
     hasElse = self._hasElse or len(else_list) > 0
     new_if = scf.IfOp(self._cond._get_ssa_value(),
-                      [v.get_type() for v in then_list],
+                      [v.get_type()._codegen() for v in then_list],
                       hasElse=hasElse)
     for op in self._op.then_block.operations:
       new_if.operation.regions[0].blocks[0].append(op)
@@ -229,14 +229,14 @@ class For:
     return self._index
 
   def __enter__(self, stack_level=1) -> Value:
-    self._init_arg_names = [
-        varname for varname, value in sys._getframe(1).f_locals.items()
-        if isinstance(value, Value)
-    ]
-    self._init_args = [
-        value for varname, value in sys._getframe(1).f_locals.items()
-        if isinstance(value, Value)
-    ]
+    visited = set()
+    self._init_args = []
+    self._init_arg_names = []
+    for varname, obj in sys._getframe(1).f_locals.items():
+      if varname != "_":
+        _collect_values_recursively(obj, varname, self._init_args,
+                                    self._init_arg_names, visited)
+
     self._op = scf.ForOp(self._lower._get_ssa_value(),
                          self._upper._get_ssa_value(),
                          self._step._get_ssa_value(),
@@ -252,7 +252,16 @@ class For:
     self._index = all[0]
     self._iter_args = all[1:]
 
-    s.f_locals.update(dict(zip(self._init_arg_names, self._iter_args)))
+    for path, arg in zip(self._init_arg_names, self._iter_args):
+      if '.' in path:
+        parts = path.split('.')
+        obj = s.f_locals[parts[0]]
+        for part in parts[1:-1]:
+          obj = getattr(obj, part)
+        setattr(obj, parts[-1], arg)
+      else:
+        s.f_locals[path] = arg
+
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
     return self._return_on_enter()
@@ -262,35 +271,30 @@ class For:
       return
 
     s = inspect.stack()[stack_level][0]
-    new_lcls: Dict[str, Value] = {}
-    lcls_to_del: Set[str] = set()
-    for (varname, value) in s.f_locals.items():
-      # Only operate on Values.
-      if not isinstance(value, Value):
-        continue
+    results = len(self._op.results) * [None]
 
-      # If the value was in the original scope and it hasn't changed, don't
-      # touch it.
-      if varname in self._scope and self._scope[varname] is value:
-        continue
-
-      if varname in self._init_arg_names:
-        i = self._init_arg_names.index(varname)
-        new_lcls[varname] = _FromCirctValue(self._op.results[i])
-      elif varname in self._scope:
-        new_lcls[varname] = self._scope[varname]
+    for i, path in enumerate(self._init_arg_names):
+      arg = _FromCirctValue(self._op.results[i])
+      if '.' in path:
+        parts = path.split('.')
+        base_name = parts[0]
+        obj = s.f_locals[base_name]
+        for part in parts[1:-1]:
+          obj = getattr(obj, part)
+        results[i] = getattr(obj, parts[-1])
+        setattr(obj, parts[-1], arg)
       else:
-        lcls_to_del.add(varname)
+        results[i] = s.f_locals[path]
+        s.f_locals[path] = arg
 
-    scf.YieldOp([s.f_locals[varname] for varname in self._init_arg_names])
+    scf.YieldOp(results)
 
     self._ip.__exit__(exc_type, exc_value, traceback)
 
-    for varname in lcls_to_del:
-      s.f_locals[varname] = None
+    for varname, _ in s.f_locals.items():
+      if varname not in self._scope or self._scope[varname] is None:
+        s.f_locals[varname] = None
 
-    # Restore existing locals to their original values.
-    s.f_locals.update(new_lcls)
     ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(s), ctypes.c_int(1))
 
 

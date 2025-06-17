@@ -813,13 +813,10 @@ struct Equivalence {
     }
     auto aSymbol = cast<mlir::SymbolOpInterface>(a);
     auto bSymbol = cast<mlir::SymbolOpInterface>(b);
-    if (!canRemoveModule(aSymbol)) {
+    if (!canRemoveModule(aSymbol) && !canRemoveModule(bSymbol)) {
       diag.attachNote(a->getLoc())
           << "module is "
           << (aSymbol.isPrivate() ? "private but not discardable" : "public");
-      return;
-    }
-    if (!canRemoveModule(bSymbol)) {
       diag.attachNote(b->getLoc())
           << "module is "
           << (bSymbol.isPrivate() ? "private but not discardable" : "public");

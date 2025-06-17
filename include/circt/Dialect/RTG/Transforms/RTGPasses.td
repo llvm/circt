@@ -24,9 +24,12 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
     anymore.
   }];
 
-  let options = [
-    Option<"seed", "seed", "unsigned", /*default=*/"",
-      "The seed for any RNG constructs used in the pass.">,
+  let options = [Option<"seed", "seed", "unsigned", /*default=*/"",
+                        "The seed for any RNG constructs used in the pass.">,
+                 Option<
+                     "deleteUnmatchedTests", "delete-unmatched-tests", "bool",
+                     /*default=*/"true",
+                     "Delete tests that could not be matched with a target.">,
   ];
 
   let dependentDialects = ["mlir::index::IndexDialect"];
@@ -108,6 +111,26 @@ def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels", "mlir::ModuleOp"> {
   let statistics = [
     Statistic<"numLabelsLowered", "num-labels-lowered",
       "Number of unique labels lowered to regular label declarations.">,
+  ];
+}
+
+def MemoryAllocationPass : Pass<"rtg-memory-allocation", "rtg::TestOp"> {
+  let summary = "lower memories to immediates or labels";
+  let description = [{
+    This pass lowers 'memory_alloc' and other memory handling operations to
+    immediates or labels by computing offsets within memory blocks according to
+    the memory allocation's size and alignments.
+  }];
+
+  let options = [
+    Option<"useImmediates", "use-immediates", "bool", /*default=*/"true",
+           "Whether the pass should lower memories to immediates instead of "
+           "labels.">,
+  ];
+
+  let statistics = [
+    Statistic<"numMemoriesAllocated", "num-memories-allocated",
+              "Number of memories allocated from memory blocks.">,
   ];
 }
 

@@ -166,6 +166,11 @@ struct ExtractInstancesPass
   /// create a path to the instance
   DenseMap<InnerRefAttr, InstanceOp> innerRefToInstances;
   Type stringType, pathType;
+
+  /// If set, this indicates that the `InjectDUTHierarchy` pass ran with the
+  /// `moveDut` parameter enabled.  If true, then extraction continues outside
+  /// the DUT even when extraction annotations have a wrapper module specified.
+  bool moveDut;
 };
 } // end anonymous namespace
 
@@ -190,6 +195,7 @@ void ExtractInstancesPass::runOnOperation() {
   auto *context = circuitOp->getContext();
   stringType = StringType::get(context);
   pathType = PathType::get(context);
+  moveDut = false;
 
   // Walk the IR and gather all the annotations relevant for extraction that
   // appear on instances and the instantiated modules.
@@ -232,6 +238,23 @@ static bool isAnnoInteresting(Annotation anno) {
 /// populates the corresponding lists and maps of the pass.
 void ExtractInstancesPass::collectAnnos() {
   CircuitOp circuit = getOperation();
+
+  // Find an optional `InjectDUTHierarchyAnnotation`.  If it exists, inspect the
+  // `moveDut` field.  If this is `true`, then we moved the DUT from the
+  // original DUT to the wrapper.  If this occurred, then this affecst the
+  // behavior of whether or not we stop at the DUT (now the wrapper) when we
+  // extract instances.
+  //
+  // TODO: This is tech debt.  This was accepted on condition that work is done
+  // to remove this pass.
+  AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
+    if (!anno.isClass(injectDUTHierarchyAnnoClass))
+      return false;
+
+    if (auto moveDutAnnoAttr = anno.getMember<BoolAttr>("moveDut"))
+      moveDut = moveDutAnnoAttr.getValue();
+    return true;
+  });
 
   // Grab the clock gate extraction annotation on the circuit.
   StringRef clkgateFileName;
@@ -367,7 +390,6 @@ void ExtractInstancesPass::collectAnnos() {
       info.traceFilename = clkgateFileName;
       info.prefix = "clock_gate"; // TODO: Don't hardcode this
       info.wrapperModule = clkgateWrapperModule;
-      info.stopAtDUT = !info.wrapperModule.empty();
       for (auto *instRecord : instanceGraph->lookup(module)->uses()) {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
@@ -400,7 +422,6 @@ void ExtractInstancesPass::collectAnnos() {
       info.traceFilename = memoryFileName;
       info.prefix = "mem_wiring"; // TODO: Don't hardcode this
       info.wrapperModule = memoryWrapperModule;
-      info.stopAtDUT = !info.wrapperModule.empty();
       for (auto *instRecord : instanceGraph->lookup(module)->uses()) {
         if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
           LLVM_DEBUG(llvm::dbgs()
@@ -445,7 +466,6 @@ void ExtractInstancesPass::collectAnno(InstanceOp inst, Annotation anno) {
     // CAVEAT: If the instance has a wrapper module configured then extraction
     // should stop at the DUT module instead of extracting past the DUT into the
     // surrounding test harness. This is all very ugly and hacky.
-    info.stopAtDUT = !info.wrapperModule.empty();
 
     extractionWorklist.push_back({inst, info});
     return;
@@ -512,6 +532,10 @@ void ExtractInstancesPass::extractInstances() {
       prefix = prefixSlot;
     }
 
+    /// Return true if this extraction should stop at the DUT or if it should
+    /// continue beyond it.
+    bool stopAtDUT = !moveDut && !info.wrapperModule.empty();
+
     // If the instance is already in the right place (outside the DUT, already
     // in the root module, or has hit a layer), there's nothing left for us to
     // do.  Otherwise we proceed to bubble it up one level in the hierarchy and
@@ -519,7 +543,7 @@ void ExtractInstancesPass::extractInstances() {
     if (inst->getParentOfType<LayerBlockOp>() ||
         !instanceInfo->anyInstanceInDesign(parent) ||
         instanceGraph->lookup(parent)->noUses() ||
-        (info.stopAtDUT && instanceInfo->isDut(parent))) {
+        (stopAtDUT && instanceInfo->isDut(parent))) {
       LLVM_DEBUG(llvm::dbgs() << "\nNo need to further move " << inst << "\n");
       extractedInstances.push_back({inst, info});
       continue;
@@ -1153,8 +1177,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     addPortsToClass(classFields, sifiveMetadataClass);
     auto *node = instanceGraph->lookup(sifiveMetadataClass);
     assert(node && node->hasOneUse());
-    ObjectOp metadataObj =
-        dyn_cast_or_null<ObjectOp>((*node->usesBegin())->getInstance());
+    ObjectOp metadataObj = (*node->usesBegin())->getInstance<ObjectOp>();
     assert(metadataObj &&
            "expected the class to be instantiated by an object op");
     builderOM.setInsertionPoint(metadataObj);

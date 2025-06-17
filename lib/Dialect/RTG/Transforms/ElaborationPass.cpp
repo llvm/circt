@@ -95,6 +95,7 @@ struct SetStorage;
 struct VirtualRegisterStorage;
 struct UniqueLabelStorage;
 struct TupleStorage;
+struct MemoryStorage;
 struct MemoryBlockStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
@@ -114,7 +115,7 @@ using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *, TupleStorage *,
+                 LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
                  MemoryBlockStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
@@ -426,6 +427,18 @@ struct MemoryBlockStorage : IdentityValue {
   const APInt endAddress;
 };
 
+/// Storage object for '!rtg.isa.memory`-typed values.
+struct MemoryStorage : IdentityValue {
+  MemoryStorage(MemoryBlockStorage *memoryBlock, size_t size, size_t alignment)
+      : IdentityValue(MemoryType::get(memoryBlock->type.getContext(),
+                                      memoryBlock->baseAddress.getBitWidth())),
+        memoryBlock(memoryBlock), size(size), alignment(alignment) {}
+
+  MemoryBlockStorage *memoryBlock;
+  const size_t size;
+  const size_t alignment;
+};
+
 /// Storage object for an '!rtg.randomized_sequence'.
 struct RandomizedSequenceStorage : IdentityValue {
   RandomizedSequenceStorage(ContextResourceAttrInterface context,
@@ -606,6 +619,11 @@ static void print(const TupleStorage *val, llvm::raw_ostream &os) {
   os << ")>";
 }
 
+static void print(const MemoryStorage *val, llvm::raw_ostream &os) {
+  os << "<memory {" << ElaboratorValue(val->memoryBlock)
+     << ", size=" << val->size << ", alignment=" << val->alignment << "}>";
+}
+
 static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
   os << "<memory-block {"
      << ", address-width=" << val->baseAddress.getBitWidth()
@@ -667,11 +685,11 @@ public:
     if (iter != materializedValues.end())
       return iter->second;
 
-    LLVM_DEBUG(llvm::dbgs() << "Materializing " << val << "\n\n");
+    LLVM_DEBUG(llvm::dbgs() << "Materializing " << val);
 
     // In debug mode, track whether values with identity were already
     // materialized before and assert in such a situation.
-    return std::visit(
+    Value res = std::visit(
         [&](auto value) {
           if constexpr (std::is_base_of_v<IdentityValue,
                                           std::remove_pointer_t<
@@ -697,6 +715,10 @@ public:
           return visit(value, loc, emitError);
         },
         val);
+
+    LLVM_DEBUG(llvm::dbgs() << " to\n" << res << "\n\n");
+
+    return res;
   }
 
   /// If `op` is not in the same region as the materializer insertion point, a
@@ -746,10 +768,12 @@ public:
         return diag;
       };
 
-      Value val = materialize(state.at(operand.get()), op->getLoc(), emitError);
+      auto elabVal = state.at(operand.get());
+      Value val = materialize(elabVal, op->getLoc(), emitError);
       if (!val)
         return failure();
 
+      state[val] = elabVal;
       operand.set(val);
     }
 
@@ -774,6 +798,8 @@ public:
   }
 
   ArrayRef<Type> getBlockArgTypes() const { return blockArgTypes; }
+
+  void map(ElaboratorValue eval, Value val) { materializedValues[eval] = val; }
 
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
@@ -893,8 +919,25 @@ private:
 
   Value visit(MemoryBlockStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    emitError() << "materializing a memory block not supported yet";
-    return Value();
+    auto intType = builder.getIntegerType(val->baseAddress.getBitWidth());
+    Value res = builder.create<MemoryBlockDeclareOp>(
+        loc, val->type, IntegerAttr::get(intType, val->baseAddress),
+        IntegerAttr::get(intType, val->endAddress));
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(MemoryStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    auto memBlock = materialize(val->memoryBlock, loc, emitError);
+    auto memSize = materialize(val->size, loc, emitError);
+    auto memAlign = materialize(val->alignment, loc, emitError);
+    if (!(memBlock && memSize && memAlign))
+      return {};
+
+    Value res = builder.create<MemoryAllocOp>(loc, memBlock, memSize, memAlign);
+    materializedValues[val] = res;
+    return res;
   }
 
   Value visit(SequenceStorage *val, Location loc,
@@ -1595,6 +1638,23 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(MemoryAllocOp op) {
+    size_t size = get<size_t>(op.getSize());
+    size_t alignment = get<size_t>(op.getAlignment());
+    auto *memBlock = get<MemoryBlockStorage *>(op.getMemoryBlock());
+    auto *val = sharedState.internalizer.create<MemoryStorage>(memBlock, size,
+                                                               alignment);
+    state[op.getResult()] = val;
+    materializer.registerIdentityValue(val);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(MemorySizeOp op) {
+    auto *memory = get<MemoryStorage *>(op.getMemory());
+    state[op.getResult()] = memory->size;
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(TupleCreateOp op) {
     SmallVector<ElaboratorValue> values;
     values.reserve(op.getElements().size());
@@ -1614,6 +1674,10 @@ public:
 
   FailureOr<DeletionKind> visitOp(CommentOp op) { return DeletionKind::Keep; }
 
+  FailureOr<DeletionKind> visitOp(rtg::YieldOp op) {
+    return DeletionKind::Keep;
+  }
+
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
     bool cond = get<bool>(op.getCondition());
     auto &toElaborate = cond ? op.getThenRegion() : op.getElseRegion();
@@ -1624,14 +1688,13 @@ public:
     // to the elaborated values outside the nested region (since it is not
     // isolated from above) and we want to materialize the region inline, thus
     // don't need a new materializer instance.
-    if (failed(elaborate(toElaborate)))
+    SmallVector<ElaboratorValue> yieldedVals;
+    if (failed(elaborate(toElaborate, {}, yieldedVals)))
       return failure();
 
     // Map the results of the 'scf.if' to the yielded values.
-    for (auto [res, out] :
-         llvm::zip(op.getResults(),
-                   toElaborate.front().getTerminator()->getOperands()))
-      state[res] = state.at(out);
+    for (auto [res, out] : llvm::zip(op.getResults(), yieldedVals))
+      state[res] = out;
 
     return DeletionKind::Delete;
   }
@@ -1656,17 +1719,18 @@ public:
       state[iterArg] = state.at(initArg);
 
     // This loop performs the actual 'scf.for' loop iterations.
+    SmallVector<ElaboratorValue> yieldedVals;
     for (size_t i = lowerBound; i < upperBound; i += step) {
-      if (failed(elaborate(op.getBodyRegion())))
+      yieldedVals.clear();
+      if (failed(elaborate(op.getBodyRegion(), {}, yieldedVals)))
         return failure();
 
       // Prepare for the next iteration by updating the mapping of the nested
       // regions block arguments
       state[op.getInductionVar()] = i + step;
       for (auto [iterArg, prevIterArg] :
-           llvm::zip(op.getRegionIterArgs(),
-                     op.getBody()->getTerminator()->getOperands()))
-        state[iterArg] = state.at(prevIterArg);
+           llvm::zip(op.getRegionIterArgs(), yieldedVals))
+        state[iterArg] = prevIterArg;
     }
 
     // Transfer the previously yielded values to the for loop result values.
@@ -1782,7 +1846,8 @@ public:
 
   // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult elaborate(Region &region,
-                          ArrayRef<ElaboratorValue> regionArguments = {}) {
+                          ArrayRef<ElaboratorValue> regionArguments,
+                          SmallVector<ElaboratorValue> &terminatorOperands) {
     if (region.getBlocks().size() > 1)
       return region.getParentOp()->emitOpError(
           "regions with more than one block are not supported");
@@ -1814,6 +1879,10 @@ public:
         llvm::dbgs() << "]\n\n";
       });
     }
+
+    if (region.front().mightHaveTerminator())
+      for (auto val : region.front().getTerminator()->getOperands())
+        terminatorOperands.push_back(state.at(val));
 
     return success();
   }
@@ -1860,8 +1929,9 @@ Materializer::elaborateSequence(const RandomizedSequenceStorage *seq,
   Materializer materializer(OpBuilder::atBlockBegin(seqOp.getBody()), testState,
                             sharedState, elabArgs);
   Elaborator elaborator(sharedState, testState, materializer, seq->context);
-  if (failed(
-          elaborator.elaborate(familyOp.getBodyRegion(), seq->sequence->args)))
+  SmallVector<ElaboratorValue> yieldedVals;
+  if (failed(elaborator.elaborate(familyOp.getBodyRegion(), seq->sequence->args,
+                                  yieldedVals)))
     return {};
 
   seqOp.setSequenceType(
@@ -1881,7 +1951,7 @@ struct ElaborationPass
   using Base::Base;
 
   void runOnOperation() override;
-  void cloneTargetsIntoTests(SymbolTable &table);
+  void matchTestsAgainstTargets(SymbolTable &table);
   LogicalResult elaborateModule(ModuleOp moduleOp, SymbolTable &table);
 };
 } // namespace
@@ -1890,23 +1960,49 @@ void ElaborationPass::runOnOperation() {
   auto moduleOp = getOperation();
   SymbolTable table(moduleOp);
 
-  cloneTargetsIntoTests(table);
+  matchTestsAgainstTargets(table);
 
   if (failed(elaborateModule(moduleOp, table)))
     return signalPassFailure();
 }
 
-void ElaborationPass::cloneTargetsIntoTests(SymbolTable &table) {
+void ElaborationPass::matchTestsAgainstTargets(SymbolTable &table) {
   auto moduleOp = getOperation();
-  for (auto target : llvm::make_early_inc_range(moduleOp.getOps<TargetOp>())) {
-    for (auto test : moduleOp.getOps<TestOp>()) {
-      // If the test requires nothing from a target, we can always run it.
-      if (test.getTarget().getEntries().empty())
-        continue;
 
-      // If the target requirements do not match, skip this test
-      // TODO: allow target refinements, just not coarsening
-      if (target.getTarget() != test.getTarget())
+  for (auto test : llvm::make_early_inc_range(moduleOp.getOps<TestOp>())) {
+    if (test.getTargetAttr())
+      continue;
+
+    bool matched = false;
+
+    for (auto target : moduleOp.getOps<TargetOp>()) {
+      // Check if the target type is a subtype of the test's target type
+      // This means that for each entry in the test's target type, there must be
+      // a corresponding entry with the same name and type in the target's type
+      bool isSubtype = true;
+      auto testEntries = test.getTargetType().getEntries();
+      auto targetEntries = target.getTarget().getEntries();
+
+      // Check if target is a subtype of test requirements
+      // Since entries are sorted by name, we can do this in a single pass
+      size_t targetIdx = 0;
+      for (auto testEntry : testEntries) {
+        // Find the matching entry in target entries.
+        while (targetIdx < targetEntries.size() &&
+               targetEntries[targetIdx].name.getValue() <
+                   testEntry.name.getValue())
+          targetIdx++;
+
+        // Check if we found a matching entry with the same name and type
+        if (targetIdx >= targetEntries.size() ||
+            targetEntries[targetIdx].name != testEntry.name ||
+            targetEntries[targetIdx].type != testEntry.type) {
+          isSubtype = false;
+          break;
+        }
+      }
+
+      if (!isSubtype)
         continue;
 
       IRRewriter rewriter(test);
@@ -1914,31 +2010,22 @@ void ElaborationPass::cloneTargetsIntoTests(SymbolTable &table) {
       auto newTest = cast<TestOp>(test->clone());
       newTest.setSymName(test.getSymName().str() + "_" +
                          target.getSymName().str());
+
+      // Set the target symbol specifying that this test is only suitable for
+      // that target.
+      newTest.setTargetAttr(target.getSymNameAttr());
+
       table.insert(newTest, rewriter.getInsertionPoint());
-
-      // Copy the target body into the newly created test
-      IRMapping mapping;
-      rewriter.setInsertionPointToStart(newTest.getBody());
-      for (auto &op : target.getBody()->without_terminator())
-        rewriter.clone(op, mapping);
-
-      for (auto [returnVal, result] :
-           llvm::zip(target.getBody()->getTerminator()->getOperands(),
-                     newTest.getBody()->getArguments()))
-        result.replaceAllUsesWith(mapping.lookup(returnVal));
-
-      newTest.getBody()->eraseArguments(0,
-                                        newTest.getBody()->getNumArguments());
-      newTest.setTarget(DictType::get(&getContext(), {}));
+      matched = true;
     }
 
-    target->erase();
-  }
-
-  // Erase all remaining non-matched tests.
-  for (auto test : llvm::make_early_inc_range(moduleOp.getOps<TestOp>()))
-    if (!test.getTarget().getEntries().empty())
+    if (matched || deleteUnmatchedTests)
       test->erase();
+  }
+}
+
+static bool onlyLegalToMaterializeInTarget(Type type) {
+  return isa<MemoryBlockType, ContextResourceTypeInterface>(type);
 }
 
 LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
@@ -1948,18 +2035,78 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
   // Update the name cache
   state.names.add(moduleOp);
 
+  struct TargetElabResult {
+    DictType targetType;
+    SmallVector<ElaboratorValue> yields;
+    TestState testState;
+  };
+
+  // Map to store elaborated targets
+  DenseMap<StringAttr, TargetElabResult> targetMap;
+  for (auto targetOp : moduleOp.getOps<TargetOp>()) {
+    LLVM_DEBUG(llvm::dbgs() << "=== Elaborating target @"
+                            << targetOp.getSymName() << "\n\n");
+
+    auto &result = targetMap[targetOp.getSymNameAttr()];
+    result.targetType = targetOp.getTarget();
+
+    SmallVector<ElaboratorValue> blockArgs;
+    Materializer targetMaterializer(OpBuilder::atBlockBegin(targetOp.getBody()),
+                                    result.testState, state, blockArgs);
+    Elaborator targetElaborator(state, result.testState, targetMaterializer);
+
+    // Elaborate the target
+    if (failed(targetElaborator.elaborate(targetOp.getBodyRegion(), {},
+                                          result.yields)))
+      return failure();
+  }
+
   // Initialize the worklist with the test ops since they cannot be placed by
   // other ops.
   for (auto testOp : moduleOp.getOps<TestOp>()) {
-    TestState testState;
-    testState.name = testOp.getSymNameAttr();
+    // Skip tests without a target attribute - these couldn't be matched
+    // against any target but can be useful to keep around for reporting
+    // purposes.
+    if (!testOp.getTargetAttr())
+      continue;
+
     LLVM_DEBUG(llvm::dbgs()
-               << "\n=== Elaborating test @" << testOp.getSymName() << "\n\n");
+               << "\n=== Elaborating test @" << testOp.getTemplateName()
+               << " for target @" << *testOp.getTarget() << "\n\n");
+
+    // Get the target for this test
+    auto targetResult = targetMap[testOp.getTargetAttr()];
+    TestState testState = targetResult.testState;
+    testState.name = testOp.getSymNameAttr();
+
+    SmallVector<ElaboratorValue> filteredYields;
+    unsigned i = 0;
+    for (auto [entry, yield] :
+         llvm::zip(targetResult.targetType.getEntries(), targetResult.yields)) {
+      if (i >= testOp.getTargetType().getEntries().size())
+        break;
+
+      if (entry.name == testOp.getTargetType().getEntries()[i].name) {
+        filteredYields.push_back(yield);
+        ++i;
+      }
+    }
+
+    // Now elaborate the test with the same state, passing the target yield
+    // values as arguments
     SmallVector<ElaboratorValue> blockArgs;
     Materializer materializer(OpBuilder::atBlockBegin(testOp.getBody()),
                               testState, state, blockArgs);
+
+    for (auto [arg, val] :
+         llvm::zip(testOp.getBody()->getArguments(), filteredYields))
+      if (onlyLegalToMaterializeInTarget(arg.getType()))
+        materializer.map(val, arg);
+
     Elaborator elaborator(state, testState, materializer);
-    if (failed(elaborator.elaborate(testOp.getBodyRegion())))
+    SmallVector<ElaboratorValue> ignore;
+    if (failed(elaborator.elaborate(testOp.getBodyRegion(), filteredYields,
+                                    ignore)))
       return failure();
 
     materializer.finalize();

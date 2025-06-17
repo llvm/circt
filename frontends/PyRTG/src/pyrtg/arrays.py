@@ -7,8 +7,9 @@ from __future__ import annotations
 from .base import ir
 from .rtg import rtg
 from .index import index
-from .core import Value
+from .core import Value, Type
 from .integers import Integer
+from .support import _FromCirctType
 
 from typing import Union
 
@@ -25,7 +26,7 @@ class Array(Value):
 
     self._value = value
 
-  def create(elements: list[Value], element_type: ir.Type) -> Array:
+  def create(elements: list[Value], element_type: Type) -> Array:
     """
     Create an array containing the provided values. All elements must have the
     same type.
@@ -35,7 +36,8 @@ class Array(Value):
       raise TypeError(
           "all elements of an RTG array must be of the specified element type")
 
-    return rtg.ArrayCreateOp(rtg.ArrayType.get(element_type), elements)
+    return rtg.ArrayCreateOp(rtg.ArrayType.get(element_type._codegen()),
+                             elements)
 
   def __getitem__(self, i) -> Value:
     """
@@ -68,12 +70,24 @@ class Array(Value):
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 
-  def get_type(self) -> ir.Type:
-    return self._value.type
+  def get_type(self) -> Type:
+    return _FromCirctType(self._value.type)
 
-  def type(element_type: ir.Type) -> ir.Type:
-    """
-    Returns the array type for the given element type.
-    """
 
-    return rtg.ArrayType.get(element_type)
+class ArrayType(Type):
+  """
+  Represents the type of statically typed arrays.
+
+  Fields:
+    element_type: Type
+  """
+
+  def __init__(self, element_type: Type):
+    self.element_type = element_type
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other,
+                      ArrayType) and self.element_type == other.element_type
+
+  def _codegen(self) -> ir.Type:
+    return rtg.ArrayType.get(self.element_type._codegen())

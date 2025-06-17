@@ -1,11 +1,20 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s
 
-from pyrtg import test, sequence, Integer, Array, Bool, If, Else, EndIf, For, Foreach
+from pyrtg import test, sequence, Integer, IntegerType, Array, Bool, If, Else, EndIf, For, Foreach, config, Config, Param
 
 
-@sequence(Integer.type())
+@sequence([IntegerType()])
 def consumer(arg):
   pass
+
+
+@config
+class Config0(Config):
+
+  a = Param(loader=lambda: Integer(0))
+  b = Param(loader=lambda: Integer(1))
+  cond = Param(loader=lambda: Bool(True))
+  cond2 = Param(loader=lambda: Bool(False))
 
 
 # CHECK-LABEL: rtg.test @test0_if_nested
@@ -33,27 +42,26 @@ def consumer(arg):
 # CHECK-NEXT: rtg.substitute_sequence {{.+}}([[V5]]) : !rtg.sequence<index>
 
 
-@test(("a", Integer.type()), ("b", Integer.type()), ("cond", Bool.type()),
-      ("cond2", Bool.type()))
-def test0_if_nested(a, b, cond, cond2):
-  w = a + b
-  with If(cond):
-    with If(cond2):
-      x = a
+@test(Config0)
+def test0_if_nested(config):
+  w = config.a + config.b
+  with If(config.cond):
+    with If(config.cond2):
+      x = config.a
     with Else():
-      x = b
+      x = config.b
       consumer(w)
     EndIf()
-    v = a + x
-    u = v + b
+    v = config.a + x
+    u = v + config.b
   with Else():
-    with If(cond2):
-      p = a
+    with If(config.cond2):
+      p = config.a
     with Else():
-      p = b
+      p = config.b
     EndIf()
-    v = b + p
-    u = v + a
+    v = config.b + p
+    u = v + config.a
   EndIf()
 
   consumer(u)
@@ -72,13 +80,12 @@ def test0_if_nested(a, b, cond, cond2):
 #      CHECK: rtg.substitute_sequence {{.+}}([[V1]]) : !rtg.sequence<index>
 
 
-@test(("a", Integer.type()), ("b", Integer.type()), ("cond", Bool.type()),
-      ("cond2", Bool.type()))
-def test1_if_default(a, b, cond, cond2):
-  v = a
-  with If(cond):
-    with If(cond2):
-      v = b
+@test(Config0)
+def test1_if_default(config):
+  v = config.a
+  with If(config.cond):
+    with If(config.cond2):
+      v = config.b
       consumer(v)
     EndIf()
   EndIf()
@@ -101,17 +108,25 @@ def test1_if_default(a, b, cond, cond2):
 #      CHECK: rtg.substitute_sequence {{%.+}}([[RES4]]) : !rtg.sequence<index>
 
 
-@test(("iter_arg0", Integer.type()), ("iter_arg1", Integer.type()),
-      ("lower", Integer.type()), ("step", Integer.type()),
-      ("upper", Integer.type()))
-def test2_for(iter_arg0, iter_arg1, lower, step, upper):
-  with For(lower, upper, step) as i:
-    iter_arg0 += iter_arg1
-    iter_arg1 += i
-  consumer(iter_arg0)
+@config
+class Config1(Config):
+
+  iter_arg0 = Param(loader=lambda: Integer(0))
+  iter_arg1 = Param(loader=lambda: Integer(0))
+  lower = Param(loader=lambda: Integer(0))
+  step = Param(loader=lambda: Integer(1))
+  upper = Param(loader=lambda: Integer(5))
+
+
+@test(Config1)
+def test2_for(config):
+  with For(config.lower, config.upper, config.step) as i:
+    config.iter_arg0 += config.iter_arg1
+    config.iter_arg1 += i
+  consumer(config.iter_arg0)
 
   v = Integer(0)
-  with For(upper) as i:
+  with For(config.upper) as i:
     v += i
   consumer(v)
 
@@ -131,10 +146,17 @@ def test2_for(iter_arg0, iter_arg1, lower, step, upper):
 #      CHECK: rtg.substitute_sequence {{.*}}([[RESULT]]) : !rtg.sequence<index>
 
 
-@test(("arr0", Array.type(Integer.type())))
-def test2_foreach(arr0):
+@config
+class Config2(Config):
+
+  arr0 = Param(loader=lambda: Array.create([Integer(0)], IntegerType()))
+
+
+@test(Config2)
+def test2_foreach(config):
   v = Integer(0)
-  with Foreach(arr0, Array.create([Integer(1) for _ in range(3)],
-                                  Integer.type())) as (i, a0, a1):
+  with Foreach(config.arr0,
+               Array.create([Integer(1) for _ in range(3)],
+                            IntegerType())) as (i, a0, a1):
     v += a0 + a1 + i
   consumer(v)

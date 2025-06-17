@@ -146,7 +146,7 @@ The definition of `ltl.repeat` is similar to that of `ltl.delay`. The mapping fr
   
 #### Non-Consecutive Repetition  
 
-Non-consecutive repetition checks that a sequence holds a certain number of times within an arbitrary repitition of the sequence. There are two ways of expressing non-consecutive repetition, either by including the last iteration in the count or not. If the last iteration is included, then this is called a "go-to" style non-consecutive repetition and can be defined using the `ltl.goto_repeat <input>, <N>, <window>` operation, e.g. `a !b b b !b !b b c` is a valid observation of `ltl.goto_repeat %b, 1, 2`, but `a !b b b !b !b b !b !b c` is not. If we omit the constraint of having the last iteration hold, then this is simply called a non-consecutive repetition, and can be defined using the `ltl.non_consecutive_repeat <input, <N>, <window>` operation, e.g. both `a !b b b !b !b b c` and `a !b b b !b !b b !b !b c` are valid observations of `ltl.non_consecutive_repeat %b, 1, 2`. The SVA mapping of these operations is as follows:  
+Non-consecutive repetition checks that a sequence holds a certain number of times within an arbitrary repetition of the sequence. There are two ways of expressing non-consecutive repetition, either by including the last iteration in the count or not. If the last iteration is included, then this is called a "go-to" style non-consecutive repetition and can be defined using the `ltl.goto_repeat <input>, <N>, <window>` operation, e.g. `a !b b b !b !b b c` is a valid observation of `ltl.goto_repeat %b, 1, 2`, but `a !b b b !b !b b !b !b c` is not. If we omit the constraint of having the last iteration hold, then this is simply called a non-consecutive repetition, and can be defined using the `ltl.non_consecutive_repeat <input, <N>, <window>` operation, e.g. both `a !b b b !b !b b c` and `a !b b b !b !b b !b !b c` are valid observations of `ltl.non_consecutive_repeat %b, 1, 2`. The SVA mapping of these operations is as follows:
 
 - `seq[->n:m]`: **Go-To Style Repetition**, equivalent to `ltl.goto_repeat %seq, n, (m-n)`.  
 - `seq[=n:m]` : **Non-Consecutive Repetition** equivalent to `ltl.non_consecutive_repeat %seq, n, (m-n)`.  
@@ -300,7 +300,7 @@ ltl.not %s1 : !ltl.sequence
 %c1 = hw.constant 1 : i1
 %rep1 = ltl.repeat %c1, 0 : !ltl.sequence
 %drep1 = ltl.delay %rep1, 1, 0 : !ltl.sequence
-%ds1 = ltl.delay %s, 1, 0 : !ltl.sequence
+%ds1 = ltl.delay %s1, 1, 0 : !ltl.sequence
 %evs1 = ltl.concat %drep1, %ds1, %c1 : !ltl.sequence
 %res = ltl.intersect %evs1, %s2 : !ltl.sequence  
 ```
@@ -396,7 +396,7 @@ ltl.eventually %p : !ltl.property
 ```mlir
 %1 = ltl.until %p1, %p2 : !ltl.sequence
 %2 = ltl.and %p1, %p2 : !ltl:property
-%n1 = ltl.not %p : !ltl.property
+%n1 = ltl.not %1 : !ltl.property
 %res = ltl.or %n1, %2 : !ltl.property  
 ```  
 
