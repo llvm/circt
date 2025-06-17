@@ -73,8 +73,8 @@ This is a comment line
 // -----
 // Test symbol table
 // CHECK-LABEL: hw.module @aiger_top
-// CHECK-SAME:    (in %[[IN1:.+]] : i1, in %[[IN2:.+]] : i1, out out : i1, in %[[CLOCK:.+]] : !seq.clock) {
-// CHECK-NEXT:    %[[LATCH:.+]] = seq.compreg %[[AND:.+]], %[[CLOCK]] : i1
+// CHECK-SAME:    (in %[[IN1:in1]] : i1, in %[[IN2:in2]] : i1, out out : i1, in %[[CLOCK:.+]] : !seq.clock) {
+// CHECK-NEXT:    %[[LATCH:latch]] = seq.compreg %[[AND:.+]], %[[CLOCK]] : i1
 // CHECK-NEXT:    %[[AND]] = aig.and_inv %[[IN2]], %[[IN1]] : i1
 // CHECK-NEXT:    hw.output %[[AND]] : i1
 // CHECK-NEXT:  }
@@ -156,8 +156,8 @@ o1 carry
 // Test multiple latches with different next states
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, out [[OUTPUT0:.+]] : i1, out [[OUTPUT1:.+]] : i1, in %[[CLOCK:.+]] : !seq.clock) {
-// CHECK-NEXT:         %[[Q1:.+]] = seq.compreg %[[VAL1:.+]], %[[CLOCK]] : i1
-// CHECK-NEXT:         %[[Q2:.+]] = seq.compreg %[[VAL0:.+]], %[[CLOCK]] : i1
+// CHECK-NEXT:         %[[Q1:q1]] = seq.compreg %[[VAL1:.+]], %[[CLOCK]] : i1
+// CHECK-NEXT:         %[[Q2:q2]] = seq.compreg %[[VAL0:.+]], %[[CLOCK]] : i1
 // CHECK-NEXT:         %[[VAL0]] = aig.and_inv %[[Q1]], %[[INPUT0]] : i1
 // CHECK-NEXT:         %[[FALSE:.+]] = hw.constant false
 // CHECK-NEXT:         %[[VAL1]] = aig.and_inv not %[[Q2]], %[[FALSE]] : i1

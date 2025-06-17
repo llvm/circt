@@ -275,7 +275,7 @@ private:
 
 void AIGERLexer::skipWhitespace() {
   while (curPtr < curBuffer.end()) {
-    // NOTE: Don't use llvm::isSpace here because it also skips '\n.
+    // NOTE: Don't use llvm::isSpace here because it also skips '\n'.
     if (*curPtr == ' ' || *curPtr == '\t' || *curPtr == '\r') {
       ++curPtr;
       continue;
@@ -344,14 +344,7 @@ AIGERToken AIGERLexer::nextToken() {
         --curPtr; // Back up to re-lex the identifier
         return lexIdentifier();
       }
-      // Not officially part of the AIGER format, but we support it for
-      // FileCheck tests.
-      if (c == '/') {
-        if (*curPtr == '/') {
-          llvm_unreachable("// should have been skipped");
-          return makeToken(AIGERTokenKind::Error, start);
-        }
-      }
+      assert((c != '/' || *curPtr != '/') && "// should have been skipped");
       return makeToken(AIGERTokenKind::Error, start);
     }
   };
@@ -646,10 +639,6 @@ ParseResult AIGERParser::parseAndGatesBinary() {
     LLVM_DEBUG(llvm::dbgs() << "Binary AND Gate " << i << ": " << lhs << " = "
                             << rhs0 << " & " << rhs1 << " (deltas: " << delta0
                             << ", " << delta1 << ")\n");
-
-    // Validate the decoded literals
-    if (lhs % 2 != 0 || lhs == 0)
-      return emitError("invalid binary AND gate LHS literal");
 
     if (lhs / 2 > maxVarIndex || rhs0 / 2 > maxVarIndex ||
         rhs1 / 2 > maxVarIndex)

@@ -6,8 +6,8 @@
 //    %1 = comb.extract %input from 5678 : (i8196) -> i1
 //    %2 = comb.extract %input from 3 : (i8196) -> i1
 //    %3 = comb.extract %input from 8193 : (i8196) -> i1
-//    %and1 = and.and_inv not %1, %0 : i1
-//    %and2 = and.and_inv %3, not %2 : i1
+//    %and1 = aig.and_inv not %1, %0 : i1
+//    %and2 = aig.and_inv %3, not %2 : i1
 //    %reg = seq.compreg %clock, %and1 : i1
 //    hw.output %and1, %and2, %reg : i1, i1
 // }
