@@ -32,7 +32,8 @@ struct AssertionExprVisitor {
 
   /// Helper to convert a range (min, optional max) to MLIR integer attributes
   std::pair<mlir::IntegerAttr, mlir::IntegerAttr>
-  convertRangeToAttrs(uint32_t min, std::optional<uint32_t> max = std::nullopt) {
+  convertRangeToAttrs(uint32_t min,
+                      std::optional<uint32_t> max = std::nullopt) {
     auto minAttr = builder.getI64IntegerAttr(min);
     mlir::IntegerAttr rangeAttr;
     if (max.has_value()) {
@@ -121,8 +122,8 @@ struct AssertionExprVisitor {
 
       auto [delayMin, delayRange] =
           convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
-      auto delayedSequence = builder.create<ltl::DelayOp>(
-          loc, sequenceValue, delayMin, delayRange);
+      auto delayedSequence = builder.create<ltl::DelayOp>(loc, sequenceValue,
+                                                          delayMin, delayRange);
       sequenceElements.push_back(delayedSequence);
     }
 
@@ -151,17 +152,16 @@ struct AssertionExprVisitor {
         attr =
             convertRangeToAttrs(expr.range.value().min, expr.range.value().max);
       }
-      return builder.create<ltl::RepeatOp>(loc, value, attr.first,
-                                           attr.second);
+      return builder.create<ltl::RepeatOp>(loc, value, attr.first, attr.second);
     }
     case UnaryAssertionOperator::NextTime: {
-        auto minRepetitions = builder.getI64IntegerAttr(1);
-        if (expr.range.has_value()) {
-          minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
-        }
-        return builder.create<ltl::DelayOp>(loc, value, minRepetitions,
-                                            builder.getI64IntegerAttr(0));
+      auto minRepetitions = builder.getI64IntegerAttr(1);
+      if (expr.range.has_value()) {
+        minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
       }
+      return builder.create<ltl::DelayOp>(loc, value, minRepetitions,
+                                          builder.getI64IntegerAttr(0));
+    }
     case UnaryAssertionOperator::Eventually:
     case UnaryAssertionOperator::SNextTime:
     case UnaryAssertionOperator::SAlways:
@@ -200,9 +200,8 @@ struct AssertionExprVisitor {
       auto repeatDelay = builder.create<ltl::DelayOp>(
           loc, oneRepeat, builder.getI64IntegerAttr(1),
           builder.getI64IntegerAttr(0));
-      auto lhsDelay =
-          builder.create<ltl::DelayOp>(loc, lhs, builder.getI64IntegerAttr(1),
-                                       builder.getI64IntegerAttr(0));
+      auto lhsDelay = builder.create<ltl::DelayOp>(
+          loc, lhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
       auto combined = builder.create<ltl::ConcatOp>(
           loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
       return builder.create<ltl::IntersectOp>(
@@ -221,22 +220,20 @@ struct AssertionExprVisitor {
       auto untilOp = builder.create<ltl::UntilOp>(loc, operands);
       auto andOp = builder.create<ltl::AndOp>(loc, operands);
       auto notUntil = builder.create<ltl::NotOp>(loc, untilOp);
-      return builder.create<ltl::OrOp>(
-          loc, SmallVector<Value, 2>{notUntil, andOp});
+      return builder.create<ltl::OrOp>(loc,
+                                       SmallVector<Value, 2>{notUntil, andOp});
     }
     case BinaryAssertionOperator::Implies: {
       auto notLhs = builder.create<ltl::NotOp>(loc, lhs);
-      return builder.create<ltl::OrOp>(loc,
-                                       SmallVector<Value, 2>{notLhs, rhs});
+      return builder.create<ltl::OrOp>(loc, SmallVector<Value, 2>{notLhs, rhs});
     }
     case BinaryAssertionOperator::OverlappedImplication:
       return builder.create<ltl::ImplicationOp>(loc, operands);
     case BinaryAssertionOperator::NonOverlappedImplication: {
       auto constOne =
           builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
-      auto lhsDelay =
-          builder.create<ltl::DelayOp>(loc, lhs, builder.getI64IntegerAttr(1),
-                                       builder.getI64IntegerAttr(0));
+      auto lhsDelay = builder.create<ltl::DelayOp>(
+          loc, lhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
       auto antecedent = builder.create<ltl::ConcatOp>(
           loc, SmallVector<Value, 2>{lhsDelay, constOne});
       return builder.create<ltl::ImplicationOp>(
@@ -252,9 +249,8 @@ struct AssertionExprVisitor {
       auto constOne =
           builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
       auto notRhs = builder.create<ltl::NotOp>(loc, rhs);
-      auto lhsDelay =
-          builder.create<ltl::DelayOp>(loc, lhs, builder.getI64IntegerAttr(1),
-                                       builder.getI64IntegerAttr(0));
+      auto lhsDelay = builder.create<ltl::DelayOp>(
+          loc, lhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
       auto antecedent = builder.create<ltl::ConcatOp>(
           loc, SmallVector<Value, 2>{lhsDelay, constOne});
       auto implication = builder.create<ltl::ImplicationOp>(
