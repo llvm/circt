@@ -1545,12 +1545,8 @@ module Expressions;
     // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
     struct0 = '{43, 9002};
 
-    // CHECK: [[TMP0:%.+]] = moore.constant 2
-    // CHECK: [[TMP1:%.+]] = moore.constant 3
-    // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
-    struct0 = '{2,3};
 
-    // CHECK: [[TMP0:%.+]] = moore.constant 2 : i32
+    // CHECK: [[TMP0:%.+]] = moore.constant 43 : i32
     // CHECK: [[TMP1:%.+]] = moore.sext [[TMP0]] : i32 -> i64
     // CHECK: [[TMP2:%.+]] = moore.read %struct0 : <struct<{a: i32, b: i32}>>
     // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.struct<{a: i32, b: i32}> -> !moore.i64
@@ -1559,7 +1555,7 @@ module Expressions;
     // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.i32 -> !moore.l32
     // CHECK: [[TMP7:%.+]] = moore.conversion [[TMP6]] : !moore.l32 -> !moore.i32
     // CHECK: moore.blocking_assign %c, [[TMP7]] : i32
-    c = 2 inside {struct0};
+    c = 43 inside {struct0};
 
     // CHECK: [[TMP0:%.+]] = moore.constant 44
     // CHECK: [[TMP1:%.+]] = moore.constant 9003

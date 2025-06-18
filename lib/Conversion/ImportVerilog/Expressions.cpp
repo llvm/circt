@@ -637,11 +637,22 @@ struct RvalueExprVisitor {
         cond = builder.create<moore::AndOp>(loc, leftValue, rightValue);
       } else {
         // Handle expressions.
-        if (listExpr->type->isUnpackedArray()) {
+        auto ty = listExpr->type;
+        bool isUnPackedStruct = ty->isUnpackedStruct();
+        bool isUnPackedArray = ty->isUnpackedArray();
+        bool isUnPackedUnion = ty->isUnpackedUnion();
+
+        if (isUnPackedArray || isUnPackedStruct || isUnPackedUnion) {
+          if (listExpr->type->isUnpackedArray()) {
+            mlir::emitError(
+                loc, "unpacked arrays in 'inside' expressions not supported");
+            return {};
+          }
           mlir::emitError(
-              loc, "unpacked arrays in 'inside' expressions not supported");
+              loc, "only simple bit vectors supported in 'inside' expressions");
           return {};
         }
+
         auto value = context.convertToSimpleBitVector(
             context.convertRvalueExpression(*listExpr));
         if (!value)
