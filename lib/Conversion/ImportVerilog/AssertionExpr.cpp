@@ -155,16 +155,12 @@ struct AssertionExprVisitor {
         return builder.create<ltl::RepeatOp>(
             loc, value, builder.getI64IntegerAttr(0), repetitionRange);
       }
-    case UnaryAssertionOperator::NextTime:
-      if (expr.range.has_value()) {
-        auto minRepetitions = mlir::IntegerAttr::get(builder.getIntegerType(64),
-                                                     expr.range.value().min);
+    case UnaryAssertionOperator::NextTime: {
+        auto minRepetitions = builder.getI64IntegerAttr(1);
+        if (expr.range.has_value()) {
+          minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
+        }
         return builder.create<ltl::DelayOp>(loc, value, minRepetitions,
-                                            builder.getI64IntegerAttr(0));
-
-      } else {
-        return builder.create<ltl::DelayOp>(loc, value,
-                                            builder.getI64IntegerAttr(1),
                                             builder.getI64IntegerAttr(0));
       }
     case UnaryAssertionOperator::Eventually:
