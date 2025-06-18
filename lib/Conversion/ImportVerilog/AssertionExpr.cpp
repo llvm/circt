@@ -106,8 +106,7 @@ struct AssertionExprVisitor {
 
   Value visit(const slang::ast::SequenceConcatExpr &expr) {
     // Create a sequence of delayed operations, combined with a concat operation
-    if (expr.elements.empty())
-      return {};
+    assert(!expr.elements.empty());
 
     SmallVector<Value> sequenceElements;
 
@@ -118,12 +117,7 @@ struct AssertionExprVisitor {
         continue;
 
       Type valueType = sequenceValue.getType();
-      if (!valueType.isInteger(1) && !mlir::isa<ltl::SequenceType>(valueType)) {
-        mlir::emitError(
-            loc,
-            "SequenceConcatExpr element must be of type i1 or ltl.sequence");
-        return {};
-      }
+      assert(valueType.isInteger(1) || mlir::isa<ltl::SequenceType>(valueType));
 
       auto [delayMin, delayRange] =
           convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
