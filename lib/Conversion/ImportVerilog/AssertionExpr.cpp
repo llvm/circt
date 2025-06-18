@@ -114,7 +114,7 @@ struct AssertionExprVisitor {
       Value sequenceValue =
           context.convertAssertionExpression(*concatElement.sequence, loc);
       if (!sequenceValue)
-        continue;
+        return {};
 
       Type valueType = sequenceValue.getType();
       assert(valueType.isInteger(1) || mlir::isa<ltl::SequenceType>(valueType));
@@ -126,10 +126,7 @@ struct AssertionExprVisitor {
       sequenceElements.push_back(delayedSequence);
     }
 
-    if (!sequenceElements.empty())
-      return builder.createOrFold<ltl::ConcatOp>(loc, sequenceElements);
-
-    return {};
+    return builder.createOrFold<ltl::ConcatOp>(loc, sequenceElements);
   }
 
   Value visit(const slang::ast::UnaryAssertionExpr &expr) {
