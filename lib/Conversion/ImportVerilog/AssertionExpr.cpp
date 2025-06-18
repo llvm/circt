@@ -311,11 +311,11 @@ Value Context::convertAssertionExpression(const slang::ast::AssertionExpr &expr,
 Value Context::convertToI1(Value value) {
   if (!value)
     return {};
-  if (auto type = dyn_cast_or_null<moore::IntType>(value.getType()))
-    if (type.getBitSize() != 1) {
-      mlir::emitError(value.getLoc(), "expected a 1-bit integer");
-      return {};
-    }
+  auto type = dyn_cast<moore::IntType>(value.getType());
+  if (!type || type.getBitSize() != 1) {
+    mlir::emitError(value.getLoc(), "expected a 1-bit integer");
+    return {};
+  }
 
   return builder.create<moore::ConversionOp>(value.getLoc(),
                                              builder.getI1Type(), value);
