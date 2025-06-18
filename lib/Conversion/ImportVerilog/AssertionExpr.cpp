@@ -85,19 +85,11 @@ struct AssertionExprVisitor {
     // Convert first to a moore type and then add a conversion to `i1`.
     auto value = context.convertRvalueExpression(expr.expr);
     auto loc = context.convertLocation(expr.expr.sourceRange);
-    if (!value) {
-      mlir::emitError(loc,
-                      "Failed to convert expression in SimpleAssertionExpr");
+    if (!value)
       return {};
-    }
     value = context.convertToI1(value);
-    if (!value) {
-      mlir::emitError(
-          loc,
-          "Failed to convert expression to i1 type in SimpleAssertionExpr - "
-          "expression may be too wide for boolean conversion");
+    if (!value)
       return {};
-    }
 
     // The optional repetition is empty, return the converted expression
     if (!expr.repetition.has_value()) {
@@ -107,11 +99,8 @@ struct AssertionExprVisitor {
     // There is a repetition, embed the expression into the kind of given
     // repetition
     Value repeatedValue = createRepetition(loc, expr.repetition.value(), value);
-    if (!repeatedValue) {
-      mlir::emitError(loc,
-                      "Failed to create repetition for SimpleAssertionExpr");
+    if (!repeatedValue)
       return {};
-    }
     return repeatedValue;
   }
 
@@ -300,10 +289,8 @@ struct AssertionExprVisitor {
     if (!assertionExpr)
       return {};
     auto result = context.convertLTLTimingControl(expr.clocking, assertionExpr);
-    if (!result) {
-      mlir::emitError(loc, "Failed to convert clocking assertion expression");
+    if (!result)
       return {};
-    }
     return result;
   }
 

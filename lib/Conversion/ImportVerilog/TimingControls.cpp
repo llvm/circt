@@ -113,18 +113,14 @@ struct LTLClockControlVisitor {
   Value visit(const slang::ast::SignalEventControl &ctrl) {
     auto edge = convertEdgeKindLTL(ctrl.edge);
     auto expr = context.convertRvalueExpression(ctrl.expr);
-    if (!expr) {
-      mlir::emitError(loc, "failed to convert expression");
+    if (!expr)
       return Value{};
-    }
     Value condition;
     if (ctrl.iffCondition) {
       condition = context.convertRvalueExpression(*ctrl.iffCondition);
       condition = context.convertToBool(condition, Domain::TwoValued);
-      if (!condition) {
-        mlir::emitError(loc, "failed to convert iff condition");
+      if (!condition)
         return Value{};
-      }
     }
     expr = context.convertToBool(expr, Domain::TwoValued);
     expr.setType(builder.getI1Type());
