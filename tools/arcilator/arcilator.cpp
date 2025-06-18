@@ -420,6 +420,11 @@ static LogicalResult processBuffer(
 #ifdef ARCILATOR_ENABLE_JIT
   // Handle JIT execution.
   if (outputFormat == OutputRunJIT) {
+    if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd) {
+      llvm::errs() << "full pipeline must be run for JIT execution\n";
+      return failure();
+    }
+
     Operation *toCall = module->lookupSymbol(jitEntryPoint);
     if (!toCall) {
       llvm::errs() << "entry point not found: '" << jitEntryPoint << "'\n";
