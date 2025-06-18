@@ -22,8 +22,8 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -1359,8 +1359,10 @@ struct PowSOpConversion : public OpConversionPattern<PowSOp> {
     Type resultType = typeConverter->convertType(op.getResult().getType());
 
     Location loc = op.getLoc();
-    // utilize MLIR math dialect's math.ipowi to handle the exponentiation of expression
-    Value result = rewriter.create<mlir::math::IPowIOp>(loc, adaptor.getLhs(), adaptor.getRhs());
+    // utilize MLIR math dialect's math.ipowi to handle the exponentiation of
+    // expression
+    Value result = rewriter.create<mlir::math::IPowIOp>(loc, adaptor.getLhs(),
+                                                        adaptor.getRhs());
 
     rewriter.replaceOp(op, result);
 
