@@ -144,17 +144,16 @@ struct AssertionExprVisitor {
       } else {
         return builder.create<ltl::EventuallyOp>(loc, value);
       }
-    case UnaryAssertionOperator::Always:
+    case UnaryAssertionOperator::Always: {
+      std::pair<mlir::IntegerAttr, mlir::IntegerAttr> attr = {
+          builder.getI64IntegerAttr(0), mlir::IntegerAttr{}};
       if (expr.range.has_value()) {
-        auto [minRepetitions, repetitionRange] =
+        attr =
             convertRangeToAttrs(expr.range.value().min, expr.range.value().max);
-        return builder.create<ltl::RepeatOp>(loc, value, minRepetitions,
-                                             repetitionRange);
-      } else {
-        mlir::IntegerAttr repetitionRange;
-        return builder.create<ltl::RepeatOp>(
-            loc, value, builder.getI64IntegerAttr(0), repetitionRange);
       }
+      return builder.create<ltl::RepeatOp>(loc, value, attr.first,
+                                           attr.second);
+    }
     case UnaryAssertionOperator::NextTime: {
         auto minRepetitions = builder.getI64IntegerAttr(1);
         if (expr.range.has_value()) {
