@@ -139,7 +139,9 @@ def StructTypeImpl : HWType<"Struct", [
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.
+    ```mlir
     !hw.struct<fieldName1: Type1, fieldName2: Type2>
+    ```
   }];
   let mnemonic = "struct";
 
@@ -166,7 +168,9 @@ def EnumTypeImpl : HWType<"Enum"> {
   let description = [{
     Represents an enumeration of values. Enums are interpreted as integers with
     a synthesis-defined encoding.
+    ```mlir
     !hw.enum<field1, field2>
+    ```
   }];
   let mnemonic = "enum";
   let parameters = (

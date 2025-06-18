@@ -352,6 +352,34 @@ struct VerifBoundedModelCheckingOpConversion
                       loc, circuitFuncOp,
                       iterArgs.take_front(circuitFuncOp.getNumArguments()))
                   ->getResults();
+
+          // If we have a cycle up to which we ignore assertions, we need an
+          // IfOp to track this
+          // First, save the insertion point so we can safely enter the IfOp
+
+          auto insideForPoint = builder.saveInsertionPoint();
+          // We need to still have the yielded result of the op in scope after
+          // we've built the check
+          Value yieldedValue;
+          auto ignoreAssertionsUntil =
+              op->getAttrOfType<IntegerAttr>("ignore_asserts_until");
+          if (ignoreAssertionsUntil) {
+            auto ignoreUntilConstant = builder.create<arith::ConstantOp>(
+                loc, rewriter.getI32IntegerAttr(
+                         ignoreAssertionsUntil.getValue().getZExtValue()));
+            auto shouldIgnore = builder.create<arith::CmpIOp>(
+                loc, arith::CmpIPredicate::ult, i, ignoreUntilConstant);
+            auto ifShouldIgnore = builder.create<scf::IfOp>(
+                loc, builder.getI1Type(), shouldIgnore, true);
+            // If we should ignore, yield the existing value
+            builder.setInsertionPointToEnd(
+                &ifShouldIgnore.getThenRegion().front());
+            builder.create<scf::YieldOp>(loc, ValueRange(iterArgs.back()));
+            builder.setInsertionPointToEnd(
+                &ifShouldIgnore.getElseRegion().front());
+            yieldedValue = ifShouldIgnore.getResult(0);
+          }
+
           auto checkOp =
               rewriter.create<smt::CheckOp>(loc, builder.getI1Type());
           {
@@ -366,6 +394,17 @@ struct VerifBoundedModelCheckingOpConversion
 
           Value violated = builder.create<arith::OrIOp>(
               loc, checkOp.getResult(0), iterArgs.back());
+
+          // If we've packaged everything in an IfOp, we need to yield the
+          // new violated value
+          if (ignoreAssertionsUntil) {
+            builder.create<scf::YieldOp>(loc, violated);
+            // Replace the variable with the yielded value
+            violated = yieldedValue;
+          }
+
+          // If we created an IfOp, make sure we start inserting after it again
+          builder.restoreInsertionPoint(insideForPoint);
 
           // Call loop func to update clock & state arg values
           SmallVector<Value> loopCallInputs;

@@ -76,6 +76,13 @@ static cl::opt<int> clockBound(
     cl::desc("Specify a number of clock cycles to model check up to."),
     cl::value_desc("clock cycle count"), cl::cat(mainCategory));
 
+static cl::opt<int> ignoreAssertionsUntil(
+    "ignore-asserts-until", cl::Optional,
+    cl::desc("Specify a number of initial clock cycles for which assertions "
+             "should be ignored (e.g. so that a circuit can stabilize)."),
+    cl::value_desc("number of cycles to ignore assertions for"),
+    cl::cat(mainCategory));
+
 static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
                                           cl::desc("<input file>"),
                                           cl::cat(mainCategory));
@@ -182,6 +189,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
+  lowerToBMCOptions.ignoreAssertionsUntil = ignoreAssertionsUntil;
   lowerToBMCOptions.topModule = moduleName;
   lowerToBMCOptions.risingClocksOnly = risingClocksOnly;
   pm.addPass(createLowerToBMC(lowerToBMCOptions));

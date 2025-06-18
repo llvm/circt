@@ -34,8 +34,8 @@ def AggregateConstantOp : HWOp<"aggregate_constant", [Pure, ConstantLike]> {
 
     Examples:
     ```mlir
-      %result = hw.aggregate.constant [1 : i1, 2 : i2, 3 : i2] : !hw.struct<a: i8, b: i8, c: i8>
-      %result = hw.aggregate.constant [1 : i1, [2 : i2, 3 : i2]] : !hw.struct<a: i8, b: vector<i8, 2>>
+      %result = hw.aggregate_constant [1 : i1, 2 : i2, 3 : i2] : !hw.struct<a: i8, b: i8, c: i8>
+      %result = hw.aggregate_constant [1 : i1, [2 : i2, 3 : i2]] : !hw.struct<a: i8, b: vector<i8, 2>>
     ```
   }];
 

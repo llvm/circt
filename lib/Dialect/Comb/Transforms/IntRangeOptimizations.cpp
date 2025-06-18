@@ -13,7 +13,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "mlir/Analysis/DataFlowFramework.h"
-#include "mlir/Dialect/Arith/Transforms/Passes.h"
 
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
