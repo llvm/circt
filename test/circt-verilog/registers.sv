@@ -1,5 +1,7 @@
 // RUN: circt-verilog %s | FileCheck %s
 // REQUIRES: slang
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
 
 // CHECK-LABEL: hw.module @ClockPosEdgeAlwaysFF(
 module ClockPosEdgeAlwaysFF(input logic clock, input int d, output int q);
