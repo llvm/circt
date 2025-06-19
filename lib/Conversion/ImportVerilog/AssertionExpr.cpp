@@ -86,8 +86,6 @@ struct AssertionExprVisitor {
     // Convert first to a moore type and then add a conversion to `i1`.
     auto value = context.convertRvalueExpression(expr.expr);
     auto loc = context.convertLocation(expr.expr.sourceRange);
-    if (!value)
-      return {};
     value = context.convertToI1(value);
     if (!value)
       return {};
@@ -99,10 +97,7 @@ struct AssertionExprVisitor {
 
     // There is a repetition, embed the expression into the kind of given
     // repetition
-    Value repeatedValue = createRepetition(loc, expr.repetition.value(), value);
-    if (!repeatedValue)
-      return {};
-    return repeatedValue;
+    return createRepetition(loc, expr.repetition.value(), value);
   }
 
   Value visit(const slang::ast::SequenceConcatExpr &expr) {
@@ -270,10 +265,7 @@ struct AssertionExprVisitor {
     auto assertionExpr = context.convertAssertionExpression(expr.expr, loc);
     if (!assertionExpr)
       return {};
-    auto result = context.convertLTLTimingControl(expr.clocking, assertionExpr);
-    if (!result)
-      return {};
-    return result;
+    return context.convertLTLTimingControl(expr.clocking, assertionExpr);
   }
 
   /// Emit an error for all other expressions.
