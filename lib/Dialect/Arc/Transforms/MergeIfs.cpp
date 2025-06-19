@@ -133,13 +133,19 @@ void MergeIfsPass::sinkOps(Block &rootBlock) {
     // Assign an order to this op.
     auto order = OpOrder{opOrder.size() + 1, 0};
     opOrder[&op] = order;
+    // Track whether the op is, or contains, any writes (and thus can't
+    // generally be moved into a block)
+    bool opContainsWrites = false;
 
     // Analyze the side effects in the op.
     op.walk([&](Operation *subOp) {
-      if (auto ptr = getPointerWrittenByOp(subOp))
+      if (auto ptr = getPointerWrittenByOp(subOp)) {
         nextWrite[ptr] = &op;
-      else if (!isa<StateReadOp, MemoryReadOp>(subOp) && hasSideEffects(subOp))
+        opContainsWrites = true;
+      } else if (!isa<StateReadOp, MemoryReadOp>(subOp) &&
+                 hasSideEffects(subOp)) {
         nextSideEffect = &op;
+      }
     });
 
     // Determine how much the op can be moved.
@@ -151,7 +157,7 @@ void MergeIfsPass::sinkOps(Block &rootBlock) {
       // Don't move across general side-effecting ops.
       if (nextSideEffect)
         moveLimit.maximize({nextSideEffect, opOrder.lookup(nextSideEffect)});
-    } else if (isa<StateWriteOp, MemoryWriteOp>(&op) || nextSideEffect == &op) {
+    } else if (opContainsWrites || nextSideEffect == &op) {
       // Don't move writes or side-effecting ops.
       continue;
     }
