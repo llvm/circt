@@ -1,6 +1,7 @@
 include(SlangCompilerOptions)
 
 add_circt_translation_library(CIRCTImportVerilog
+  AssertionExpr.cpp
   Expressions.cpp
   FormatStrings.cpp
   HierarchicalNames.cpp
@@ -16,7 +17,9 @@ add_circt_translation_library(CIRCTImportVerilog
   LINK_LIBS PUBLIC
   CIRCTDebug
   CIRCTHW
+  CIRCTLTL
   CIRCTMoore
+  CIRCTVerif
   MLIRFuncDialect
   MLIRSCFDialect
   MLIRTranslateLib

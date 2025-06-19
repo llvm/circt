@@ -642,6 +642,36 @@ struct StmtVisitor {
     return success();
   }
 
+  // Handle concurrent assertion statements.
+  LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
+    auto loc = context.convertLocation(stmt.sourceRange);
+    auto property = context.convertAssertionExpression(stmt.propertySpec, loc);
+    if (!property)
+      return failure();
+
+    // Handle assertion statements that don't have an action block.
+    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+      switch (stmt.assertionKind) {
+      case slang::ast::AssertionKind::Assert:
+        builder.create<verif::AssertOp>(loc, property, Value(), StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::Assume:
+        builder.create<verif::AssumeOp>(loc, property, Value(), StringAttr{});
+        return success();
+      default:
+        break;
+      }
+      mlir::emitError(loc) << "unsupported concurrent assertion kind: "
+                           << slang::ast::toString(stmt.assertionKind);
+      return failure();
+    }
+
+    mlir::emitError(loc)
+        << "concurrent assertion statements with action blocks "
+           "are not supported yet";
+    return failure();
+  }
+
   /// Handle the subset of system calls that return no result value. Return
   /// true if the called system task could be handled, false otherwise. Return
   /// failure if an error occurred.
