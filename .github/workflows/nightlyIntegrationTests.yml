@@ -62,6 +62,8 @@ jobs:
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
+        # Cache only when build type is release
+        if: matrix.build-type == 'Release'
         with:
           max-size: 300M
           key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
