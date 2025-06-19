@@ -281,3 +281,28 @@ func.func @MergeNestedIfs(%arg0: i42, %arg1: i1, %arg2: i1) {
   }
   return
 }
+
+// Check that ops containing a write aren't sunk
+// CHECK-LABEL: func.func @DontNestWrites
+func.func @DontNestWrites(%arg0: !arc.state<i1>, %arg1: i1, %arg2: i1) {
+  // We just want to check that the first if hasn't been moved into the second
+  // CHECK-NEXT:  {{%.+}} = scf.if %arg1 -> (i1) {
+  // CHECK:  } else {
+  // CHECK:  }
+  // CHECK-NEXT:  scf.if %arg2 {
+  // CHECK:  }
+  // CHECK-NEXT:  return
+
+  %1 = scf.if %arg1 -> (i1) {
+    %0 = hw.constant true
+    arc.state_write %arg0 = %0 : <i1>
+    scf.yield %0 : i1
+  } else {
+    %0 = hw.constant false
+    scf.yield %0 : i1
+  }
+  scf.if %arg2 {
+    %0 = comb.or %1, %1 : i1
+  }
+  return
+}
