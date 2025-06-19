@@ -122,8 +122,9 @@ struct LTLClockControlVisitor {
       if (!condition)
         return Value{};
     }
-    expr = context.convertToBool(expr, Domain::TwoValued);
-    expr.setType(builder.getI1Type());
+    expr = context.convertToI1(expr);
+    if (!expr)
+      return Value{};
     return builder.create<ltl::ClockOp>(loc, seqOrPro, edge, expr);
   }
 
