@@ -637,12 +637,7 @@ struct RvalueExprVisitor {
         cond = builder.create<moore::AndOp>(loc, leftValue, rightValue);
       } else {
         // Handle expressions.
-        auto ty = listExpr->type;
-        bool isUnPackedStruct = ty->isUnpackedStruct();
-        bool isUnPackedArray = ty->isUnpackedArray();
-        bool isUnPackedUnion = ty->isUnpackedUnion();
-
-        if (isUnPackedArray || isUnPackedStruct || isUnPackedUnion) {
+        if (!listExpr->type->isIntegral()) {
           if (listExpr->type->isUnpackedArray()) {
             mlir::emitError(
                 loc, "unpacked arrays in 'inside' expressions not supported");
