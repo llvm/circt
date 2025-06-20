@@ -637,7 +637,7 @@ struct RvalueExprVisitor {
         cond = builder.create<moore::AndOp>(loc, leftValue, rightValue);
       } else {
         // Handle expressions.
-        if (!listExpr->type->isSimpleBitVector()) {
+        if (!listExpr->type->isIntegral()) {
           if (listExpr->type->isUnpackedArray()) {
             mlir::emitError(
                 loc, "unpacked arrays in 'inside' expressions not supported");
@@ -647,6 +647,7 @@ struct RvalueExprVisitor {
               loc, "only simple bit vectors supported in 'inside' expressions");
           return {};
         }
+
         auto value = context.convertToSimpleBitVector(
             context.convertRvalueExpression(*listExpr));
         if (!value)
