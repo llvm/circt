@@ -18,6 +18,20 @@ hw.module @Trivial(in %u: i42) {
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
+  // CHECK: llhd.combinational -> i42
+  llhd.combinational -> i42 {
+    // CHECK-NOT: llhd.drv
+    %0 = llhd.constant_time <0ns, 0d, 1e>
+    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    // CHECK-NOT: llhd.prb
+    %1 = llhd.prb %a : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42(%u)
+    func.call @use_i42(%1) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, %u
+    // CHECK-NEXT: llhd.yield %u
+    llhd.yield %1 : i42
+  }
 }
 
 // Drive forwarding across reconvergent control flow.

@@ -1706,7 +1706,7 @@ struct Mem2RegPass : public llhd::impl::Mem2RegPassBase<Mem2RegPass> {
 void Mem2RegPass::runOnOperation() {
   SmallVector<Region *> regions;
   getOperation()->walk<WalkOrder::PreOrder>([&](Operation *op) {
-    if (isa<ProcessOp, FinalOp>(op)) {
+    if (isa<ProcessOp, FinalOp, CombinationalOp>(op)) {
       auto &region = op->getRegion(0);
       if (!region.empty())
         regions.push_back(&region);
