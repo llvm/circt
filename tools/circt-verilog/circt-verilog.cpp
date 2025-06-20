@@ -27,6 +27,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -318,6 +319,9 @@ static void populateMooreToCoreLowering(PassManager &pm) {
 
 /// Convert LLHD dialect IR into core dialect IR
 static void populateLLHDLowering(PassManager &pm) {
+  pm.addNestedPass<hw::HWModuleOp>(llhd::createWrapProceduralOpsPass());
+  pm.addPass(mlir::createSCFToControlFlowPass());
+
   auto &modulePM = pm.nest<hw::HWModuleOp>();
   // modulePM.addPass(mlir::createSROA());
   modulePM.addPass(llhd::createMem2RegPass());

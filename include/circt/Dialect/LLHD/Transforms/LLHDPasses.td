@@ -185,4 +185,24 @@ def CombineDrivesPass : Pass<"llhd-combine-drives", "hw::HWModuleOp"> {
   ];
 }
 
+def WrapProceduralOpsPass : Pass<"llhd-wrap-procedural-ops", "hw::HWModuleOp"> {
+  let summary = "Wrap procedural ops in modules to make them inlinable";
+  let description = [{
+    Operations such as `func.call` or `scf.if` may appear in an `hw.module` body
+    directly. They cannot be inlined into the module though, since the inlined
+    function or result of converting the SCF ops to the CF dialect may create
+    control-flow operations with multiple blocks. This pass wraps such
+    operations in `llhd.combinational` ops to give them an SSACFG region to
+    inline into.
+  }];
+  let dependentDialects = [
+    "llhd::LLHDDialect",
+  ];
+  let statistics = [
+    Statistic<
+      "numOpsWrapped", "ops-wrapped", "Number of procedural ops wrapped"
+    >,
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
