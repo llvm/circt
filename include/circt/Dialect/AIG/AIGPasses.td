@@ -29,4 +29,50 @@ def PrintLongestPathAnalysis : Pass<"aig-print-longest-path-analysis", "mlir::Mo
   ];
 }
 
+def AIGERRunner : Pass<"aig-runner", "hw::HWModuleOp"> {
+  let summary = "Run external logic solvers on AIGER files";
+  let description = [{
+    This pass exports the current hardware module to AIGER format, runs an
+    external logic solver on the exported file, and imports the optimized
+    results back into the MLIR module.
+
+    The solver command arguments must contain placeholder tokens that are
+    replaced at runtime:
+    - `<inputFile>`: Replaced with the path to the temporary AIGER input file
+    - `<outputFile>`: Replaced with the path where the solver should write results.
+
+    ABCRunner is a wrapper around AIGERRunner that uses ABC as the external
+    solver. Hence if the user wants to use ABC, they should use ABCRunner instead
+    of AIGERRunner.
+  }];
+  let options = [
+    Option<"solverPath", "solver-path", "std::string", "",
+           "Path to the external solver executable">,
+    ListOption<"solverArgs", "solver-args", "std::string", "">
+  ];
+
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::seq::SeqDialect"
+  ];
+}
+
+def ABCRunner : Pass<"abc-runner", "hw::HWModuleOp"> {
+  let summary = "Run ABC on AIGER files";
+  let description = [{
+    This pass runs ABC on AIGER files. It is a wrapper around AIGERRunner that
+    uses ABC as the external solver. It runs the following ABC commands:
+    - `read <inputFile>`: Read the AIGER file
+    - for each command in `abcCommands`, run `-q <command>`
+    - `write <outputFile>`: Write the AIGER file
+  }];
+  let options = [
+    Option<"abcPath", "abc-path", "std::string", "", "Path to the ABC executable">,
+    ListOption<"abcCommands", "abc-commands", "std::string", "">
+  ];
+
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::seq::SeqDialect"
+  ];
+}
+
 #endif // CIRCT_DIALECT_AIG_AIGPASSES_TD

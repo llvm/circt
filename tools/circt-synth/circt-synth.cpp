@@ -112,6 +112,14 @@ static cl::opt<std::string> topName("top", cl::desc("Top module name"),
                                     cl::value_desc("name"), cl::init(""),
                                     cl::cat(mainCategory));
 
+static cl::list<std::string> abcCommands("abc-commands",
+                                         cl::desc("ABC passes to run"),
+                                         cl::CommaSeparated,
+                                         cl::cat(mainCategory));
+static cl::opt<std::string> abcPath("abc-path", cl::desc("Path to ABC"),
+                                    cl::value_desc("path"), cl::init("abc"),
+                                    cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -165,6 +173,12 @@ static void populateSynthesisPipeline(PassManager &pm) {
     mpm.addPass(aig::createLowerWordToBits());
     mpm.addPass(createCSEPass());
     mpm.addPass(createSimpleCanonicalizerPass());
+    if (!abcCommands.empty()) {
+      aig::ABCRunnerOptions options;
+      options.abcPath = abcPath;
+      options.abcCommands.assign(abcCommands.begin(), abcCommands.end());
+      mpm.addPass(aig::createABCRunner(options));
+    }
     // TODO: Add balancing, rewriting, FRAIG conversion, etc.
     if (untilReached(UntilEnd))
       return;
