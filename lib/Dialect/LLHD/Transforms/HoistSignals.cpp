@@ -621,7 +621,7 @@ struct HoistSignalsPass
 void HoistSignalsPass::runOnOperation() {
   SmallVector<Region *> regions;
   getOperation()->walk([&](Operation *op) {
-    if (isa<ProcessOp, FinalOp, scf::IfOp>(op))
+    if (isa<ProcessOp, FinalOp, CombinationalOp, scf::IfOp>(op))
       for (auto &region : op->getRegions())
         if (!region.empty())
           regions.push_back(&region);
