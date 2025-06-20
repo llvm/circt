@@ -1120,13 +1120,7 @@ func.func @PowUOp(%arg0: !moore.l32, %arg1: !moore.l32) {
 
 // CHECK-LABEL: func.func @PowSOp
 func.func @PowSOp(%arg0: !moore.i32, %arg1: !moore.i32) {
-  // CHECK: [[COND:%.+]] = comb.icmp slt %arg1, %{{.*}} : i32
-  // CHECK: [[BASE:%.+]] = comb.mux [[COND]], %{{.*}}, %arg0 : i32
-  // CHECK: [[EXP:%.+]] = comb.mux [[COND]], %{{.*}}, %arg1 : i32
-
-  // CHECK: %{{.*}} = scf.for %{{.*}} = %{{.*}} to [[EXP]] step %{{.*}} iter_args([[VAR:%.+]] = %{{.*}}) -> (i32)  : i32 {
-  // CHECK: [[MUL:%.+]] = comb.mul [[BASE]], [[VAR]] : i32
-  // CHECK: scf.yield [[MUL]] : i32
+  // CHECK: %[[RES:.*]] = math.ipowi %arg0, %arg1 : i32
   %0 = moore.pows %arg0, %arg1 : i32
   return
 }

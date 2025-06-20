@@ -1363,9 +1363,11 @@ struct PowSOpConversion : public OpConversionPattern<PowSOp> {
     // expression
     Value result = rewriter.create<mlir::math::IPowIOp>(loc, adaptor.getLhs(),
                                                         adaptor.getRhs());
+    // cast the result back to MooreToCore i32 type; result is originally
+    // math.ipowi regular i32 so we need to revert it back
+    Value castedResult = rewriter.create<ConversionOp>(loc, resultType, result);
 
-    rewriter.replaceOp(op, result);
-
+    rewriter.replaceOp(op, castedResult);
     return success();
   }
 };
@@ -1609,6 +1611,7 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
   target.addLegalDialect<mlir::BuiltinDialect>();
+  target.addLegalDialect<mlir::math::MathDialect>();
   target.addLegalDialect<sim::SimDialect>();
   target.addLegalDialect<verif::VerifDialect>();
 
