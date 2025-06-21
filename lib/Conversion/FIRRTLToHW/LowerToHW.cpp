@@ -4048,22 +4048,32 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
-  auto lhs = getLoweredValue(op.getLhs());
-  auto rhs = getLoweredValue(op.getRhs());
-  if (!lhs) {
-    return handleZeroBit(op.getLhs(), [&]() {
-      if (rhs) // cat(0bit, x) --> x
-        return setLowering(op, rhs);
-      // cat(0bit, 0bit) --> 0bit
-      return handleZeroBit(op.getRhs(),
-                           [&]() { return setLowering(op, Value()); });
-    });
+  // Handle the case of no operands - should result in a 0-bit value
+  if (op.getInputs().empty())
+    return setLowering(op, Value());
+
+  SmallVector<Value> loweredOperands;
+
+  // Lower all operands, filtering out zero-bit values
+  for (auto operand : op.getInputs()) {
+    auto loweredOperand = getLoweredValue(operand);
+    if (loweredOperand) {
+      loweredOperands.push_back(loweredOperand);
+    } else {
+      // Check if this is a zero-bit operand, which we can skip
+      auto result = handleZeroBit(operand, [&]() { return success(); });
+      if (failed(result))
+        return failure();
+      // Zero-bit operands are skipped (not added to loweredOperands)
+    }
   }
 
-  if (!rhs) // cat(x, 0bit) --> x
-    return handleZeroBit(op.getRhs(), [&]() { return setLowering(op, lhs); });
+  // If no non-zero operands, return 0-bit value
+  if (loweredOperands.empty())
+    return setLowering(op, Value());
 
-  return setLoweringTo<comb::ConcatOp>(op, lhs, rhs);
+  // Use comb.concat
+  return setLoweringTo<comb::ConcatOp>(op, loweredOperands);
 }
 
 //===----------------------------------------------------------------------===//

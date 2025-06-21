@@ -2928,6 +2928,18 @@ firrtl.circuit "BindTargetMissingDoNotPrintFlag" {
 
 // -----
 
+firrtl.circuit "InvalidCatOperands" {
+  firrtl.module @InvalidCatOperands(in %in: !firrtl.vector<uint<4>, 4>) {
+    %a = firrtl.wire : !firrtl.uint<4>
+    %b = firrtl.wire : !firrtl.sint<4>
+    // expected-error @below {{all operands must have same signedness}}
+    // expected-error @below {{'firrtl.cat' op failed to infer returned types}}
+    %result = firrtl.cat %a, %b : (!firrtl.uint<4>, !firrtl.sint<4>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
 firrtl.circuit "XMRRefOpMissingTarget" {
   firrtl.module @XMRRefOpMissingTarget() {
     // expected-error @below {{op has an invalid symbol reference}}
