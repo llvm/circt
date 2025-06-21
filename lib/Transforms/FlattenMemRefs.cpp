@@ -303,7 +303,8 @@ struct CondBranchOpConversion
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
         op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
+        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
+        op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };

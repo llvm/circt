@@ -1223,7 +1223,8 @@ struct CondBranchOpConversion : public OpConversionPattern<cf::CondBranchOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<cf::CondBranchOp>(
         op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
+        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
+        op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };
