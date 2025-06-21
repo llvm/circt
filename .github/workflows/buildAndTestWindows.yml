@@ -16,6 +16,7 @@ jobs:
     # This should not be needed, but the unified job unconditionally requires this permission currently.
     permissions:
       contents: write # Upload assets to release.
+      actions: write
     with:
       runner: windows-2022
       cmake_build_type: release
