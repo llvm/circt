@@ -29,6 +29,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cctype>
@@ -258,7 +259,7 @@ private:
   ParseResult expectToken(AIGERTokenKind kind, const Twine &message);
 
   /// Parse a number token into result
-  ParseResult parseNumber(unsigned &result);
+  ParseResult parseNumber(unsigned &result, SMLoc *loc = nullptr);
 
   /// Parse a binary encoded number (variable-length encoding)
   ParseResult parseBinaryNumber(unsigned &result);
@@ -350,7 +351,6 @@ AIGERToken AIGERLexer::nextToken() {
   };
 
   auto token = impl();
-  skipWhitespace();
   return token;
 }
 
@@ -390,15 +390,16 @@ ParseResult AIGERParser::expectToken(AIGERTokenKind kind,
   return success();
 }
 
-ParseResult AIGERParser::parseNumber(unsigned &result) {
-  auto startLoc = lexer.getCurrentLoc();
+ParseResult AIGERParser::parseNumber(unsigned &result, SMLoc *loc) {
   auto token = lexer.nextToken();
+  if (loc)
+    *loc = token.location;
 
   if (token.kind != AIGERTokenKind::Number)
-    return emitError(startLoc, "expected number");
+    return emitError(token.location, "expected number");
 
   if (token.spelling.getAsInteger(10, result))
-    return emitError(startLoc, "invalid number format");
+    return emitError(token.location, "invalid number format");
 
   return success();
 }
@@ -441,7 +442,6 @@ ParseResult AIGERParser::parseHeader() {
   while (lexer.peekToken().kind != AIGERTokenKind::Identifier)
     lexer.nextToken();
 
-  auto startLoc = lexer.getCurrentLoc();
   auto formatToken = lexer.nextToken();
   if (formatToken.spelling == "aag") {
     isBinaryFormat = false;
@@ -450,24 +450,26 @@ ParseResult AIGERParser::parseHeader() {
     isBinaryFormat = true;
     LLVM_DEBUG(llvm::dbgs() << "Format: aig (binary)\n");
   } else {
-    return emitError(startLoc, "expected 'aag' or 'aig' format identifier");
+    return emitError(formatToken.location,
+                     "expected 'aag' or 'aig' format identifier");
   }
 
   // Parse M I L O A (numbers separated by spaces)
-  if (parseNumber(maxVarIndex))
-    return emitError("failed to parse M (max variable index)");
+  SMLoc loc;
+  if (parseNumber(maxVarIndex, &loc))
+    return emitError(loc, "failed to parse M (max variable index)");
 
-  if (parseNumber(numInputs))
-    return emitError("failed to parse I (number of inputs)");
+  if (parseNumber(numInputs, &loc))
+    return emitError(loc, "failed to parse I (number of inputs)");
 
-  if (parseNumber(numLatches))
-    return emitError("failed to parse L (number of latches)");
+  if (parseNumber(numLatches, &loc))
+    return emitError(loc, "failed to parse L (number of latches)");
 
-  if (parseNumber(numOutputs))
-    return emitError("failed to parse O (number of outputs)");
+  if (parseNumber(numOutputs, &loc))
+    return emitError(loc, "failed to parse O (number of outputs)");
 
-  if (parseNumber(numAnds))
-    return emitError("failed to parse A (number of AND gates)");
+  if (parseNumber(numAnds, &loc))
+    return emitError(loc, "failed to parse A (number of AND gates)");
 
   LLVM_DEBUG(llvm::dbgs() << "Header: M=" << maxVarIndex << " I=" << numInputs
                           << " L=" << numLatches << " O=" << numOutputs
@@ -480,7 +482,7 @@ ParseResult AIGERParser::parseHeader() {
 ParseResult AIGERParser::parseNewLine() {
   auto token = lexer.nextToken();
   if (token.kind != AIGERTokenKind::Newline)
-    return emitError("expected newline");
+    return emitError(token.location, "expected newline");
 
   return success();
 }
@@ -496,9 +498,9 @@ ParseResult AIGERParser::parseInputs() {
 
   for (unsigned i = 0; i < numInputs; ++i) {
     unsigned literal;
-    auto startLoc = lexer.getCurrentLoc();
-    if (parseNumber(literal) || parseNewLine())
-      return emitError(startLoc, "failed to parse input literal");
+    SMLoc loc;
+    if (parseNumber(literal, &loc) || parseNewLine())
+      return emitError(loc, "failed to parse input literal");
     inputLiterals.push_back(literal);
   }
 
@@ -507,15 +509,15 @@ ParseResult AIGERParser::parseInputs() {
 
 ParseResult AIGERParser::parseLatches() {
   LLVM_DEBUG(llvm::dbgs() << "Parsing " << numLatches << " latches\n");
-  auto startLoc = lexer.getCurrentLoc();
   if (isBinaryFormat) {
     // In binary format, latches are implicit (literals 2, 4, 6, ...)
     for (unsigned i = 0; i < numLatches; ++i) {
       unsigned literal;
-      if (parseNumber(literal))
-        return emitError(startLoc, "failed to parse latch next state literal");
+      SMLoc loc;
+      if (parseNumber(literal, &loc))
+        return emitError(loc, "failed to parse latch next state literal");
 
-      latchDefs.push_back({2 * (i + 1 + numInputs), literal, startLoc});
+      latchDefs.push_back({2 * (i + 1 + numInputs), literal, loc});
 
       // Expect newline after each latch next state
       if (parseNewLine())
@@ -527,17 +529,19 @@ ParseResult AIGERParser::parseLatches() {
   // Parse latch definitions: current_state next_state
   for (unsigned i = 0; i < numLatches; ++i) {
     unsigned currentState, nextState;
-    if (parseNumber(currentState) || parseNumber(nextState) || parseNewLine())
-      return emitError(startLoc, "failed to parse latch definition");
+    SMLoc loc;
+    if (parseNumber(currentState, &loc) || parseNumber(nextState) ||
+        parseNewLine())
+      return emitError(loc, "failed to parse latch definition");
 
     LLVM_DEBUG(llvm::dbgs() << "Latch " << i << ": " << currentState << " -> "
                             << nextState << "\n");
 
     // Validate current state literal (should be even and positive)
     if (currentState % 2 != 0 || currentState == 0)
-      return emitError(startLoc, "invalid latch current state literal");
+      return emitError(loc, "invalid latch current state literal");
 
-    latchDefs.push_back({currentState, nextState, startLoc});
+    latchDefs.push_back({currentState, nextState, loc});
   }
 
   return success();
@@ -546,18 +550,17 @@ ParseResult AIGERParser::parseLatches() {
 ParseResult AIGERParser::parseOutputs() {
   LLVM_DEBUG(llvm::dbgs() << "Parsing " << numOutputs << " outputs\n");
   // NOTE: Parsing is same for binary and ASCII formats
-  auto startLoc = lexer.getCurrentLoc();
-
   // Parse output literals
   for (unsigned i = 0; i < numOutputs; ++i) {
     unsigned literal;
-    if (parseNumber(literal) || parseNewLine())
-      return emitError(startLoc, "failed to parse output literal");
+    SMLoc loc;
+    if (parseNumber(literal, &loc) || parseNewLine())
+      return emitError(loc, "failed to parse output literal");
 
     LLVM_DEBUG(llvm::dbgs() << "Output " << i << ": " << literal << "\n");
 
     // Output literals can be any valid literal (including inverted)
-    outputLiterals.push_back({literal, startLoc});
+    outputLiterals.push_back({literal, loc});
   }
 
   return success();
@@ -573,28 +576,27 @@ ParseResult AIGERParser::parseAndGates() {
 }
 
 ParseResult AIGERParser::parseAndGatesASCII() {
-  auto startLoc = lexer.getCurrentLoc();
   // Parse AND gate definitions: lhs rhs0 rhs1
   for (unsigned i = 0; i < numAnds; ++i) {
     unsigned lhs, rhs0, rhs1;
-    if (parseNumber(lhs) || parseNumber(rhs0) || parseNumber(rhs1) ||
+    SMLoc loc;
+    if (parseNumber(lhs, &loc) || parseNumber(rhs0) || parseNumber(rhs1) ||
         parseNewLine())
-      return emitError(startLoc, "failed to parse AND gate definition");
+      return emitError(loc, "failed to parse AND gate definition");
 
     LLVM_DEBUG(llvm::dbgs() << "AND Gate " << i << ": " << lhs << " = " << rhs0
                             << " & " << rhs1 << "\n");
 
     // Validate LHS (should be even and positive)
     if (lhs % 2 != 0 || lhs == 0)
-      return emitError(startLoc, "invalid AND gate LHS literal");
+      return emitError(loc, "invalid AND gate LHS literal");
 
     // Validate literal bounds
     if (lhs / 2 > maxVarIndex || rhs0 / 2 > maxVarIndex ||
         rhs1 / 2 > maxVarIndex)
-      return emitError(startLoc,
-                       "AND gate literal exceeds maximum variable index");
+      return emitError(loc, "AND gate literal exceeds maximum variable index");
 
-    andGateDefs.push_back({lhs, rhs0, rhs1, startLoc});
+    andGateDefs.push_back({lhs, rhs0, rhs1, loc});
   }
 
   return success();
@@ -604,7 +606,6 @@ ParseResult AIGERParser::parseAndGatesBinary() {
   // In binary format, AND gates are encoded with delta compression
   // Each AND gate is encoded as: delta0 delta1
   // where: rhs0 = lhs - delta0, rhs1 = rhs0 - delta1
-  auto startLoc = lexer.getCurrentLoc();
 
   LLVM_DEBUG(llvm::dbgs() << "Starting binary AND gate parsing\n");
 
@@ -621,8 +622,9 @@ ParseResult AIGERParser::parseAndGatesBinary() {
 
   for (unsigned i = 0; i < numAnds; ++i) {
     unsigned delta0, delta1;
+    SMLoc loc = lexer.getCurrentLoc();
     if (parseBinaryNumber(delta0) || parseBinaryNumber(delta1))
-      return emitError("failed to parse binary AND gate deltas");
+      return emitError(loc, "failed to parse binary AND gate deltas");
 
     auto lhs = static_cast<int64_t>(currentLHS);
 
@@ -650,7 +652,7 @@ ParseResult AIGERParser::parseAndGatesBinary() {
 
     andGateDefs.push_back({static_cast<unsigned>(lhs),
                            static_cast<unsigned>(rhs0),
-                           static_cast<unsigned>(rhs1), startLoc});
+                           static_cast<unsigned>(rhs1), loc});
     currentLHS += 2; // Next AND gate LHS
   }
 
