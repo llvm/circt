@@ -5,3 +5,7 @@ add_subdirectory(Dialect)
 add_subdirectory(Firtool)
 add_subdirectory(RtgTool)
 add_subdirectory(Transforms)
+
+if(CIRCT_SLANG_FRONTEND_ENABLED)
+  add_subdirectory(ImportVerilog)
+endif()
