@@ -203,6 +203,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // proceed to output-specific pipelines.
   if (!opt.shouldDisableOptimization()) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        circt::firrtl::createEliminateWiresPass());
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createRegisterOptimizerPass());
