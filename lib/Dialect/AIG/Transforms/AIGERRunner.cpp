@@ -1,4 +1,4 @@
-//===- AIGERRunner.cpp - Run external logic solvers on AIGER files --------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -340,7 +340,7 @@ LogicalResult AIGERRunner::runSolver(hw::HWModuleOp module, StringRef inputPath,
   std::string executionError;
   auto solverProgram = llvm::sys::findProgramByName(solverPath);
   if (auto e = solverProgram.getError())
-    return emitError(module.getLoc(), "Failed to find solver program: ")
+    return emitError(module.getLoc(), "failed to find solver program: ")
            << solverPath.str() << ": " << e.message();
 
   // Build complete command line with program name and arguments
@@ -356,7 +356,7 @@ LogicalResult AIGERRunner::runSolver(hw::HWModuleOp module, StringRef inputPath,
 
   // Check for execution failure
   if (executionResult != 0)
-    return emitError(module.getLoc(), "Solver execution failed for module ")
+    return emitError(module.getLoc(), "solver execution failed for module ")
            << module.getModuleNameAttr() << " with error: " << executionError;
 
   return success();
@@ -369,7 +369,7 @@ LogicalResult AIGERRunner::exportToAIGER(Converter &converter,
   // Open output file for writing AIGER data
   auto outputFile = mlir::openOutputFile(outputPath);
   if (!outputFile)
-    return emitError(module.getLoc(), "Failed to open AIGER output file: ")
+    return emitError(module.getLoc(), "failed to open AIGER output file: ")
            << outputPath.str();
 
   LLVM_DEBUG(llvm::dbgs() << "Exporting module " << module.getModuleNameAttr()
@@ -398,7 +398,7 @@ LogicalResult AIGERRunner::importFromAIGER(Converter &converter,
   auto inputFile = mlir::openInputFile(inputPath);
   if (!inputFile)
     return emitError(originalModule.getLoc(),
-                     "Failed to open AIGER input file: ")
+                     "failed to open AIGER input file: ")
            << inputPath.str();
 
   // Add the file buffer to the source manager
@@ -416,7 +416,7 @@ LogicalResult AIGERRunner::importFromAIGER(Converter &converter,
   if (failed(circt::aiger::importAIGER(sourceMgr, originalModule->getContext(),
                                        timingScope, temporaryModule)))
     return emitError(originalModule.getLoc(),
-                     "Failed to import optimized AIGER file");
+                     "failed to import optimized AIGER file");
 
   // Extract the hardware module from the imported content
   auto optimizedModule =
