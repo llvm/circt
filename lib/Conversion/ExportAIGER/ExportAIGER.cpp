@@ -93,9 +93,6 @@ private:
   unsigned getNumOutputs() { return outputs.size(); }
   unsigned getNumAnds() { return andGates.size(); }
 
-  // Namespace for generating unique names
-  Namespace nameGenerator;
-
   llvm::EquivalenceClasses<Object> valueEquivalence;
   SmallVector<std::pair<Object, StringAttr>> inputs;
   SmallVector<std::tuple<Object, StringAttr, Object>>
@@ -351,7 +348,7 @@ LogicalResult AIGERExporter::writeSymbolTable() {
 
   for (auto [index, elem] : llvm::enumerate(inputs)) {
     auto [obj, name] = elem;
-    // Don't write outputs without a name
+    // Don't write inputs without a name
     if (!name)
       continue;
     os << "i" << index << " " << name.getValue() << "\n";
@@ -584,8 +581,6 @@ LogicalResult AIGERExporter::visit(aig::AndInverterOp op) {
 }
 
 LogicalResult AIGERExporter::visit(seq::CompRegOp op) {
-  if (!op.getName())
-    op.setName(nameGenerator.newName("GEN_REG"));
   // Handle registers (latches in AIGER)
   for (int64_t i = 0; i < getBitWidth(op); ++i)
     addLatch({op.getResult(), i}, {op.getInput(), i}, op.getNameAttr());
