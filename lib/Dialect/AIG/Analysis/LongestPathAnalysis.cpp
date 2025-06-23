@@ -30,7 +30,6 @@
 
 #include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/AIG/AIGOps.h"
-#include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -62,7 +61,6 @@
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Mutex.h"
-#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 #include <condition_variable>
 #include <cstdint>
@@ -206,13 +204,6 @@ static void printObjectImpl(llvm::raw_ostream &os, const Object &object,
     os << ", comment=\"" << comment << "\"";
   os << ")";
 }
-
-namespace circt {
-namespace aig {
-#define GEN_PASS_DEF_PRINTLONGESTPATHANALYSIS
-#include "circt/Dialect/AIG/AIGPasses.h.inc"
-} // namespace aig
-} // namespace circt
 
 using namespace circt;
 using namespace aig;
@@ -1356,94 +1347,4 @@ LogicalResult LongestPathAnalysis::getOpenPaths(
 
 ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
-}
-
-namespace {
-struct PrintLongestPathAnalysisPass
-    : public impl::PrintLongestPathAnalysisBase<PrintLongestPathAnalysisPass> {
-  using PrintLongestPathAnalysisBase::outputFile;
-  using PrintLongestPathAnalysisBase::PrintLongestPathAnalysisBase;
-  using PrintLongestPathAnalysisBase::showTopKPercent;
-  void runOnOperation() override;
-  LogicalResult printAnalysisResult(const LongestPathAnalysis &analysis,
-                                    igraph::InstancePathCache &pathCache,
-                                    hw::HWModuleOp top, llvm::raw_ostream &os);
-};
-
-} // namespace
-
-LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
-    const LongestPathAnalysis &analysis, igraph::InstancePathCache &pathCache,
-    hw::HWModuleOp top, llvm::raw_ostream &os) {
-  SmallVector<DataflowPath> closedPaths;
-  SmallVector<std::pair<Object, OpenPath>> openPathsToFF;
-  SmallVector<std::tuple<size_t, size_t, OpenPath>> openPathsFromOutputPorts;
-  auto moduleName = top.getModuleNameAttr();
-  if (failed(analysis.getClosedPaths(moduleName, closedPaths)) ||
-      failed(analysis.getOpenPaths(moduleName, openPathsToFF,
-                                   openPathsFromOutputPorts)))
-    return failure();
-
-  // Emit diagnostics if testing is enabled.
-  if (test) {
-    for (auto &result : closedPaths) {
-      auto fanOutLoc = result.getFanOut().value.getLoc();
-      auto diag = mlir::emitRemark(fanOutLoc);
-      SmallString<128> buf;
-      llvm::raw_svector_ostream os(buf);
-      result.print(os);
-      diag << buf;
-    }
-    for (auto &[object, path] : openPathsToFF) {
-      auto loc = object.value.getLoc();
-      auto diag = mlir::emitRemark(loc);
-      DataflowPath closedPath(object, path, top);
-      SmallString<128> buf;
-      llvm::raw_svector_ostream os(buf);
-      closedPath.print(os);
-      diag << buf;
-    }
-    for (auto &[resultNum, bitPos, path] : openPathsFromOutputPorts) {
-      auto outputPortLoc = top.getOutputLoc(resultNum);
-      auto outputPortName = top.getOutputName(resultNum);
-      auto diag = mlir::emitRemark(outputPortLoc);
-      SmallString<128> buf;
-      llvm::raw_svector_ostream os(buf);
-      path.print(os);
-      diag << "fanOut=Object($root." << outputPortName << "[" << bitPos
-           << "]), fanIn=" << buf;
-    }
-  }
-
-  os << "# Analysis result for " << top.getModuleNameAttr() << "\n"
-     << "Found " << closedPaths.size() << " closed paths\n";
-  if (!closedPaths.empty())
-    os << "Maximum path delay: " << closedPaths.front().getDelay() << "\n";
-
-  // TODO: Print open paths.
-  return success();
-}
-
-void PrintLongestPathAnalysisPass::runOnOperation() {
-  auto am = getAnalysisManager();
-  aig::LongestPathAnalysis analysis(getOperation(), am,
-                                    {
-                                        true,
-                                    });
-  igraph::InstancePathCache pathCache(
-      getAnalysis<circt::igraph::InstanceGraph>());
-  auto outputFileVal = outputFile.getValue();
-
-  std::string error;
-  auto file = mlir::openOutputFile(outputFile.getValue(), &error);
-  if (!file) {
-    llvm::errs() << error;
-    return signalPassFailure();
-  }
-
-  for (auto top : analysis.getTopModules())
-    if (failed(printAnalysisResult(analysis, pathCache, top, file->os())))
-      return signalPassFailure();
-  file->keep();
-  return markAllAnalysesPreserved();
 }
