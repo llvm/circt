@@ -61,8 +61,6 @@ jobs:
 
           # Delete only the caches in the current branch
           MATCHING_CACHES=$(gh cache list -L 200 --json id,key,sizeInBytes --ref "$CACHE_REF")
-          echo "$MATCHING_CACHES"
-          exit 0
 
           # Get cache info with size and filter:
           # 1. All caches smaller than threshold (failed builds)
