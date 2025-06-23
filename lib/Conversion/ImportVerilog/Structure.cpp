@@ -566,6 +566,18 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
+  // Ignore sequence declarations. The declarations are already evaluated by
+  // Slang and are part of an AssertionInstance.
+  LogicalResult visit(const slang::ast::SequenceSymbol &seqNode) {
+    return success();
+  }
+
+  // Ignore property declarations. The declarations are already evaluated by
+  // Slang and are part of an AssertionInstance.
+  LogicalResult visit(const slang::ast::PropertySymbol &propNode) {
+    return success();
+  }
+
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
     return context.convertFunction(subroutine);

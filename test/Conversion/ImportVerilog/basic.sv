@@ -2614,6 +2614,102 @@ module ConcurrentAssert(input clk);
   // CHECK: }
   assert property (@(posedge clk) a);
 
+  // Sequence declaration
+  // CHECK: moore.procedure always {
+    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+    // CHECK: [[A:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
+    // CHECK: [[RES:%.+]] = ltl.concat %6, %9 : !ltl.sequence, !ltl.sequence
+    // CHECK: verif.assert [[RES]] : !ltl.sequence
+    // CHECK: moore.return
+  // CHECK: }
+  sequence s1;
+    a ##1 b;
+  endsequence
+  assert property (s1);
+
+  // CHECK: moore.procedure always {
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+    // CHECK: [[A:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[TRUE:%.+]] = hw.constant true
+    // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
+    // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP3:%.+]] = ltl.delay [[B]], 1, 0 : i1
+    // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
+    // CHECK: [[RES:%.+]] = ltl.intersect [[OP4]], [[A]] : !ltl.sequence, i1
+    // CHECK: verif.assert [[RES]] : !ltl.sequence
+    // CHECK: moore.return
+  // CHECK: }
+  sequence s2(x, y);
+    x within y;
+  endsequence
+  assert property (s2(b, a));
+
+  // CHECK: moore.procedure always {
+    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+    // CHECK: [[A:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
+    // CHECK: [[OP1:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B2:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[RES:%.+]] = ltl.implication [[OP1]], [[B2]] : !ltl.sequence, i1
+    // CHECK: verif.assert [[RES]] : !ltl.property
+    // CHECK: moore.return
+  // CHECK: }
+  property p1;
+    s1 |-> b;
+  endproperty
+  assert property (p1);
+
+  // CHECK: moore.procedure always {
+    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+    // CHECK: [[A1:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+    // CHECK: [[A2:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B1:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[TRUE:%.+]] = hw.constant true
+    // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
+    // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP3:%.+]] = ltl.delay [[A2]], 1, 0 : i1
+    // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
+    // CHECK: [[OP5:%.+]] = ltl.intersect [[OP4]], [[B1]] : !ltl.sequence, i1
+    // CHECK: [[TRUE1:%.+]] = hw.constant true
+    // CHECK: [[OP6:%.+]] = ltl.repeat [[TRUE1]], 0 : i1
+    // CHECK: [[OP7:%.+]] = ltl.delay [[OP6]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP8:%.+]] = ltl.delay [[A1]], 1, 0 : i1
+    // CHECK: [[OP9:%.+]] = ltl.concat [[OP7]], [[OP8]], [[TRUE1]] : !ltl.sequence, !ltl.sequence, i1
+    // CHECK: [[OP10:%.+]] = ltl.intersect [[OP9]], [[OP5]] : !ltl.sequence, !ltl.sequence
+    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+    // CHECK: [[A3:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[DA3:%.+]] = ltl.delay [[A3]], 0, 0 : i1
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B2:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[DB2:%.+]] = ltl.delay [[B2]], 1, 0 : i1
+    // CHECK: [[OP11:%.+]] = ltl.concat [[DA3]], [[DB2]] : !ltl.sequence, !ltl.sequence
+    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+    // CHECK: [[B3:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[OP12:%.+]] = ltl.implication [[OP11]], [[B3]] : !ltl.sequence, i1
+    // CHECK: [[TRUE2:%.+]] = hw.constant true
+    // CHECK: [[OP13:%.+]] = ltl.delay [[OP10]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP14:%.+]] = ltl.concat [[OP13]], [[TRUE2]] : !ltl.sequence, i1
+    // CHECK: [[RES:%.+]] = ltl.implication [[OP14]], [[OP12]] : !ltl.sequence, !ltl.property
+    // CHECK: verif.assert [[RES]] : !ltl.property
+    // CHECK: moore.return
+  // CHECK: }
+  property p2(x, y);
+    s2(x, y) |=> p1;
+  endproperty
+  assert property (p2(a, s2(a, b)));
+
 endmodule
 
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32

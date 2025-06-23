@@ -78,18 +78,22 @@ struct AssertionExprVisitor {
   }
 
   Value visit(const slang::ast::SimpleAssertionExpr &expr) {
-    // A Simple Assertion expression has the following members:
-    // - Expression
-    // - Optional repetition
-
-    // The expression needs to have the type `i1` for the LTL operations.
-    // Convert first to a moore type and then add a conversion to `i1`.
+    // Handle expression
     auto value = context.convertRvalueExpression(expr.expr);
+    if (!value)
+      return {};
     auto loc = context.convertLocation(expr.expr.sourceRange);
-    value = context.convertToI1(value);
+    auto valueType = value.getType();
+    // For assertion instances the value is already the expected type, convert
+    // boolean value
+    if (!(mlir::isa<ltl::SequenceType>(valueType) ||
+          mlir::isa<ltl::PropertyType>(valueType))) {
+      value = context.convertToI1(value);
+    }
     if (!value)
       return {};
 
+    // Handle repetition
     // The optional repetition is empty, return the converted expression
     if (!expr.repetition.has_value()) {
       return value;
