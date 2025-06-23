@@ -60,13 +60,13 @@ jobs:
           echo "- Caches beyond the top 1 (if they are >= $SIZE_THRESHOLD bytes)"
 
           # Delete only the caches in the current branch
-          MATCHING_CACHES=$(gh cache list -L 200 --json id,key,sizeInBytes --ref "$CACHE_REF")
+          MATCHING_CACHES_IN_CURRENT_BRANCH=$(gh cache list -L 200 --json id,key,sizeInBytes --ref "$CACHE_REF" | jq --arg pattern ".*${CACHE_KEY_PATTERN}.*" '[.[] | select(.key | test($pattern))]')
 
           # Get cache info with size and filter:
           # 1. All caches smaller than threshold (failed builds)
           # 2. Caches beyond top 1 that are >= threshold (old successful builds)
           if [ "$MAX_SIZE" -gt 0 ]; then
-            echo "$MATCHING_CACHES" | \
+            echo "$MATCHING_CACHES_IN_CURRENT_BRANCH" | \
               jq --argjson threshold "$SIZE_THRESHOLD" \
               '[.[] | select(.sizeInBytes < $threshold)] + (.[1:] | map(select(.sizeInBytes >= $threshold))) | .[].id' | \
               ./utils/delete-cache.sh
