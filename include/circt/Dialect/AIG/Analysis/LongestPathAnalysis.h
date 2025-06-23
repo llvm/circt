@@ -187,6 +187,13 @@ private:
   Impl *impl;
 };
 
+// A wrapper class for the longest path analysis that also traces debug points.
+// This is necessary for analysis manager to cache the analysis results.
+class LongestPathAnalysisWithTrace : public LongestPathAnalysis {
+public:
+  LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
+      : LongestPathAnalysis(moduleOp, am, {true}) {}
+};
 } // namespace aig
 } // namespace circt
 
