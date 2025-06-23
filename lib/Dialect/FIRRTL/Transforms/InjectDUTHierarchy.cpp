@@ -157,51 +157,42 @@ void InjectDUTHierarchy::runOnOperation() {
   // dut and wrapper do not match the logical definition.
   OpBuilder b(circuit.getContext());
   CircuitNamespace circuitNS(circuit);
-  {
-    b.setInsertionPointAfter(dut);
-    auto newDUT = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
-                                      dut.getConventionAttr(), dut.getPorts(),
-                                      dut.getAnnotationsAttr());
+  b.setInsertionPointAfter(dut);
 
-    // This pass shouldn't create new public modules.  It should only preserve
-    // the existing public modules.  In "moveDut" mode, then the wrapper is the
-    // new DUT and we should move the publicness from the old DUT to the
-    // wrapper.  When not in "moveDut" mode, then the wrapper should be made
-    // private.
-    //
-    // Note: `movedDut=true` violates the FIRRTL ABI unless the user it doing
-    // something clever with module prefixing.  Because this annotation is
-    // already outside the specification, this workflow is allowed even though
-    // it violates the FIRRTL ABI.  The mid-term plan is to remove this pass to
-    // avoid the tech debt that it creates.
-    if (moveDut) {
-      newDUT.setPrivate();
-    } else {
-      newDUT.setVisibility(dut.getVisibility());
-      dut.setPrivate();
-    }
-    dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
+  // After this, he original DUT module is now the "wrapper".  The new module we
+  // just created becomse the "DUT".
+  wrapper = dut;
+  dut = b.create<FModuleOp>(dut.getLoc(), dut.getNameAttr(),
+                            dut.getConventionAttr(), dut.getPorts(),
+                            dut.getAnnotationsAttr());
 
-    // The original DUT module is now the wrapper.  The new module we just
-    // created becomse the DUT.
-    wrapper = dut;
-    dut = newDUT;
-
-    // Finish setting up the wrapper.  Strip the `MarkDUTAnnotation` if we are
-    // in "moveDut" mode.
-    AnnotationSet::removePortAnnotations(wrapper,
-                                         [](auto, auto) { return true; });
-    AnnotationSet::removeAnnotations(wrapper, [&](Annotation anno) {
-      if (anno.isClass(dutAnnoClass))
-        return !moveDut;
-      return true;
-    });
-
-    // Finish setting up the DUT.  Strip the `MarkDUTAnnotation` is we are in
-    // "moveDut" mode.
-    if (moveDut)
-      AnnotationSet::removeAnnotations(dut, dutAnnoClass);
+  // This pass shouldn't create new public modules.  It should only preserve the
+  // existing public modules.  In "moveDut" mode, then the wrapper is the new
+  // DUT and we should move the publicness from the old DUT to the wrapper.
+  // When not in "moveDut" mode, then the wrapper should be made private.
+  //
+  // Note: `movedDut=true` violates the FIRRTL ABI unless the user it doing
+  // something clever with module prefixing.  Because this annotation is already
+  // outside the specification, this workflow is allowed even though it violates
+  // the FIRRTL ABI.  The mid-term plan is to remove this pass to avoid the tech
+  // debt that it creates.
+  if (moveDut) {
+    dut.setPrivate();
+    AnnotationSet::removeAnnotations(dut, dutAnnoClass);
+  } else {
+    dut.setVisibility(wrapper.getVisibility());
+    wrapper.setPrivate();
   }
+  wrapper.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
+
+  // Finish setting up the wrapper.  Strip the `MarkDUTAnnotation` if we are in
+  // "moveDut" mode.
+  wrapper.setPortAnnotationsAttr(b.getArrayAttr({}));
+  AnnotationSet::removeAnnotations(wrapper, [&](Annotation anno) {
+    if (anno.isClass(dutAnnoClass))
+      return !moveDut;
+    return true;
+  });
 
   // Instantiate the wrapper inside the DUT and wire it up.
   b.setInsertionPointToStart(dut.getBodyBlock());
