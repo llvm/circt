@@ -30,6 +30,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CACHE_KEY_PATTERN="${{ inputs.cache_key_pattern }}"
+          CACHE_REF="${{ github.ref }}"
 
           # Check if cache key pattern is empty
           if [ -z "$CACHE_KEY_PATTERN" ]; then
@@ -57,6 +58,11 @@ jobs:
           echo "Identifying caches to delete..."
           echo "- All caches smaller than $SIZE_THRESHOLD bytes (likely failed builds)"
           echo "- Caches beyond the top 1 (if they are >= $SIZE_THRESHOLD bytes)"
+
+          # Delete only the caches in the current branch
+          MATCHING_CACHES=$(gh cache list -L 200 --json id,key,sizeInBytes --ref "$CACHE_REF")
+          echo "$MATCHING_CACHES"
+          exit 0
 
           # Get cache info with size and filter:
           # 1. All caches smaller than threshold (failed builds)
