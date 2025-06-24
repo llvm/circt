@@ -32,6 +32,15 @@ namespace llhd {
 unsigned getLLHDTypeWidth(Type type);
 Type getLLHDElementType(Type type);
 
+/// Signals that an operations regions are procedural.
+template <typename ConcreteType>
+class ProceduralRegion
+    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralRegion> {
+  static LogicalResult verifyTrait(Operation *op) {
+    return mlir::OpTrait::impl::verifyNRegions(op, 1);
+  }
+};
+
 } // namespace llhd
 } // namespace circt
 
