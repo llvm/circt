@@ -159,9 +159,12 @@ static FailureOr<bool> linkExtmodule(SymbolOpInterface collidingOp,
   if (!((isa<FExtModuleOp>(collidingOp) && isa<FModuleOp>(incomingOp)) ||
         (isa<FExtModuleOp>(incomingOp) && isa<FModuleOp>(collidingOp))))
     return failure();
-  auto [definition, declaration] = isa<FModuleOp>(collidingOp)
-                                       ? std::pair(collidingOp, incomingOp)
-                                       : std::pair(incomingOp, collidingOp);
+  auto definition = collidingOp;
+  auto declaration = incomingOp;
+  if (!isa<FModuleOp>(collidingOp)) {
+    definition = incomingOp;
+    declaration = collidingOp;
+  }
   if (!definition.isPublic())
     return definition->emitOpError("should be a public symbol");
   if (!declaration.isPublic())
