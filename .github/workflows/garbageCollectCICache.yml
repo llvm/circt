@@ -32,6 +32,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Keep top 3 caches (in the case LLVM bump involved)
-          gh cache list -k ${{ matrix.key_prefix }} -L 50
-          gh cache list -k ${{ matrix.key_prefix }} -L 50  --jq ".[3:]|.[].id" --json id | ./utils/delete-cache.sh
+          gh cache list -k ${{ matrix.key_prefix }} -L 50 --ref "refs/heads/main"
+          gh cache list -k ${{ matrix.key_prefix }} -L 50 --ref "refs/heads/main" --jq ".[1:]|.[].id" --json id | ./utils/delete-cache.sh
