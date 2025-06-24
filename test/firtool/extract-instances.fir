@@ -20,7 +20,7 @@ circuit Top: %[[
     "class":"sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
     "name":"Logic",
     "moveDut": false
-    },
+  },
   {
     "class": "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
     "target": "~|BlackBox",
