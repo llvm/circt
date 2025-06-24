@@ -573,3 +573,17 @@ firrtl.circuit "RTLPorts" {
   // CHECK-NEXT: om.class.fields %ref, %direction, %width : !om.path, !om.string, !om.integer
 
 }
+
+// CHECK-LABEL: firrtl.circuit "DuplicateButEqualTrackers"
+firrtl.circuit "DuplicateButEqualTrackers" {
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@DuplicateButEqualTrackers]
+  firrtl.module @DuplicateButEqualTrackers() attributes {
+    annotations = [
+      {class = "circt.tracker", id = distinct[0]<>},
+      {class = "circt.tracker", id = distinct[0]<>}
+    ]
+  } {
+    // CHECK: om.path_create reference %basepath [[NLA]]
+    firrtl.path reference distinct[0]<>
+  }
+}

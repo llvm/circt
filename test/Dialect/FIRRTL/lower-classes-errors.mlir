@@ -32,6 +32,9 @@ firrtl.circuit "PathIllegalHierpath" {
 
 firrtl.circuit "PathDuplicateID" {
   firrtl.module @PathDuplicateID() {
+    // Duplicate ID is only an error if something actually refers to that ID. Dedup can create dead, duplicate IDs.
+    %path = firrtl.path reference distinct[0]<>
+
     // expected-error @below {{path identifier already found, paths must resolve to a unique target}}
     %a = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
     // expected-note @below {{other path identifier here}}
