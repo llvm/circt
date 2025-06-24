@@ -24,6 +24,8 @@ target_link_libraries(kanagawatool
     CIRCTSVTransforms
     CIRCTKanagawa
     CIRCTKanagawaTransforms
+    CIRCTCombTransforms
+    CIRCTHWToSV
     CIRCTTransforms
     CIRCTPipelineOps
     CIRCTPipelineToHW
