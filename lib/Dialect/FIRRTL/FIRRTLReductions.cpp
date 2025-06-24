@@ -32,8 +32,10 @@ namespace detail {
 /// A utility doing lazy construction of `SymbolTable`s and `SymbolUserMap`s,
 /// which is handy for reductions that need to look up a lot of symbols.
 struct SymbolCache {
+  SymbolCache() : tables(std::make_unique<SymbolTableCollection>()) {}
+
   SymbolTable &getSymbolTable(Operation *op) {
-    return tables.getSymbolTable(op);
+    return tables->getSymbolTable(op);
   }
   SymbolTable &getNearestSymbolTable(Operation *op) {
     return getSymbolTable(SymbolTable::getNearestSymbolTable(op));
@@ -43,19 +45,19 @@ struct SymbolCache {
     auto it = userMaps.find(op);
     if (it != userMaps.end())
       return it->second;
-    return userMaps.insert({op, SymbolUserMap(tables, op)}).first->second;
+    return userMaps.insert({op, SymbolUserMap(*tables, op)}).first->second;
   }
   SymbolUserMap &getNearestSymbolUserMap(Operation *op) {
     return getSymbolUserMap(SymbolTable::getNearestSymbolTable(op));
   }
 
   void clear() {
-    tables = SymbolTableCollection();
+    tables = std::make_unique<SymbolTableCollection>();
     userMaps.clear();
   }
 
 private:
-  SymbolTableCollection tables;
+  std::unique_ptr<SymbolTableCollection> tables;
   SmallDenseMap<Operation *, SymbolUserMap, 2> userMaps;
 };
 } // namespace detail
