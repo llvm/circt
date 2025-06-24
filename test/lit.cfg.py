@@ -61,7 +61,7 @@ tools = [
     'arcilator', 'circt-as', 'circt-capi-ir-test', 'circt-capi-om-test',
     'circt-capi-firrtl-test', 'circt-capi-firtool-test',
     'circt-capi-rtg-pipelines-test', 'circt-capi-rtg-test',
-    'circt-capi-rtgtest-test', 'circt-dis', 'circt-lec', 'circt-reduce',
+    'circt-capi-rtgtest-test', 'circt-capi-sv-test', 'circt-dis', 'circt-lec', 'circt-reduce',
     'circt-synth', 'circt-test', 'circt-translate', 'firtool', 'hlstool',
     'om-linker', 'kanagawatool'
 ]
