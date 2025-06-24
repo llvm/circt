@@ -231,6 +231,57 @@ void DataflowPath::print(llvm::raw_ostream &os) {
   path.print(os);
 }
 
+void Object::printLikeVerilog(llvm::raw_ostream &os) const {
+  for (auto inst : instancePath) {
+    os << inst.getInstanceName() << ".";
+  }
+  os << getNameImpl(value).getValue();
+  if (bitPos != 0 && getBitWidth(value) > 1)
+    os << "[" << bitPos << "]";
+}
+
+//===----------------------------------------------------------------------===//
+// OpenPath
+//===----------------------------------------------------------------------===//
+
+Object &Object::prependPaths(circt::igraph::InstancePathCache &cache,
+                             circt::igraph::InstancePath path) {
+  instancePath = cache.concatPath(path, instancePath);
+  return *this;
+}
+
+OpenPath &OpenPath::prependPaths(
+    circt::igraph::InstancePathCache &cache,
+    llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+    circt::igraph::InstancePath path) {
+  fanIn.prependPaths(cache, path);
+  if (debugPointFactory)
+    this->history = mapList(debugPointFactory, this->history,
+                            [&](DebugPoint p) -> DebugPoint {
+                              p.object.prependPaths(cache, path);
+                              return p;
+                            });
+  return *this;
+}
+
+//===----------------------------------------------------------------------===//
+// DataflowPath
+//===----------------------------------------------------------------------===//
+
+DataflowPath &DataflowPath::prependPaths(
+    circt::igraph::InstancePathCache &cache,
+    llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+    circt::igraph::InstancePath path) {
+  this->path.prependPaths(cache, debugPointFactory, path);
+  if (!path.empty()) {
+    auto root = path.top()->getParentOfType<hw::HWModuleOp>();
+    assert(root && "root is not a hw::HWModuleOp");
+    this->root = root;
+  }
+  this->fanOut.prependPaths(cache, path);
+  return *this;
+}
+
 template <>
 struct llvm::DenseMapInfo<Object> {
   using Info = llvm::DenseMapInfo<
@@ -781,8 +832,8 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputeResults(Value value,
   // Unique the results.
   deduplicatePaths(results);
   LLVM_DEBUG({
-    llvm::dbgs() << value << "[" << bitPos << "] "
-                 << "Found " << results.size() << " paths\n";
+    llvm::dbgs() << value << "[" << bitPos << "] " << "Found " << results.size()
+                 << " paths\n";
     llvm::dbgs() << "====Paths:\n";
     for (auto &path : results) {
       path.print(llvm::dbgs());

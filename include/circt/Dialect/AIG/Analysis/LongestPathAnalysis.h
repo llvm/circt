@@ -23,6 +23,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
+#include "llvm/ADT/PointerUnion.h"
 
 namespace mlir {
 class AnalysisManager;
@@ -43,11 +44,15 @@ struct Object {
       : instancePath(path), value(value), bitPos(bitPos) {}
   Object() = default;
   void print(llvm::raw_ostream &os) const;
+  void printLikeVerilog(llvm::raw_ostream &os) const;
 
   bool operator==(const Object &other) const {
     return instancePath == other.instancePath && value == other.value &&
            bitPos == other.bitPos;
   }
+
+  Object &prependPaths(circt::igraph::InstancePathCache &cache,
+                       circt::igraph::InstancePath path);
 };
 
 // A debug point represents a point in the dataflow graph which carries delay
@@ -69,6 +74,7 @@ struct DebugPoint {
   }
 
   void print(llvm::raw_ostream &os) const;
+  void printLikeVerilog(llvm::raw_ostream &os) const;
 
   Object object;
   int64_t delay;
@@ -83,12 +89,23 @@ struct OpenPath {
   // History of debug points represented by linked lists.
   // The head of the list is the farthest point from the fanIn.
   llvm::ImmutableList<DebugPoint> history;
+
   OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
            int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
       : fanIn(path, value, bitPos), delay(delay), history(history) {}
 
+  const Object &getFanIn() const { return fanIn; }
+  int64_t getDelay() const { return delay; }
+  const llvm::ImmutableList<DebugPoint> &getHistory() const { return history; }
+
   OpenPath() = default;
   void print(llvm::raw_ostream &os) const;
+  void printLikeVerilog(llvm::raw_ostream &os);
+
+  OpenPath &
+  prependPaths(circt::igraph::InstancePathCache &cache,
+               llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+               circt::igraph::InstancePath path);
 };
 
 // A DataflowPath is a complete path from a fanout to a fanin with associated
@@ -101,14 +118,22 @@ public:
 
   int64_t getDelay() const { return path.delay; }
   const Object &getFanIn() const { return path.fanIn; }
-  const Object &getFanOut() const { return fanOut; }
+  const auto &getFanOut() const { return fanOut; }
   const hw::HWModuleOp &getRoot() const { return root; }
 
-  void print(llvm::raw_ostream &os);
   void setDelay(int64_t delay) { path.delay = delay; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const {
     return path.history;
   }
+
+  // Printers
+  void print(llvm::raw_ostream &os);
+
+  DataflowPath &
+  prependPaths(circt::igraph::InstancePathCache &cache,
+               llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+               circt::igraph::InstancePath path);
+  const OpenPath &getPath() { return path; }
 
 private:
   Object fanOut;

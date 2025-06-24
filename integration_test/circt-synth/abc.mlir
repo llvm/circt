@@ -1,6 +1,6 @@
 // REQUIRES: yosys
-// RUN: circt-synth %s -abc-path %yosys-abc -abc-commands "balance" -top balanceTest | FileCheck %s
-// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(abc-runner{abc-path=%yosys-abc abc-commands="balance"}))' | FileCheck %s
+// RUN: circt-synth %s -abc-path %yosys-abc -abc-commands=balance,print_level -top balanceTest | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(abc-runner{abc-path=%yosys-abc abc-commands=balance,print_level}))' | FileCheck %s
 
 // Test that aig commands work
 hw.module @balanceTest(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out out: i1) {

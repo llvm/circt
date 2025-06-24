@@ -370,6 +370,9 @@ struct InstancePathCache {
   /// Prepend an instance to a path.
   InstancePath prependInstance(InstanceOpInterface inst, InstancePath path);
 
+  /// Concatenate two paths.
+  InstancePath concatPath(InstancePath path1, InstancePath path2);
+
 private:
   using PathsCache = DenseMap<Operation *, ArrayRef<InstancePath>>;
   ArrayRef<InstancePath> getPaths(ModuleOpInterface op, InstanceGraphNode *top,

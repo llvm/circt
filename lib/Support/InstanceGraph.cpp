@@ -329,6 +329,16 @@ InstancePath InstancePathCache::prependInstance(InstanceOpInterface inst,
   return InstancePath(ArrayRef(newPath, n));
 }
 
+
+InstancePath InstancePathCache::concatPath(InstancePath path1,
+                                           InstancePath path2) {
+  size_t n = path1.size() + path2.size();
+  auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
+  std::copy(path1.begin(), path1.end(), newPath);
+  std::copy(path2.begin(), path2.end(), newPath + path1.size());
+  return InstancePath(ArrayRef(newPath, n));
+}
+
 void InstancePathCache::replaceInstance(InstanceOpInterface oldOp,
                                         InstanceOpInterface newOp) {
 
