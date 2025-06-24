@@ -74,17 +74,24 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
   }];
 }
 
-def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
-  let summary = "Deletes all functions.";
+def InlineCallsPass : Pass<"llhd-inline-calls", "ModuleOp"> {
+  let summary = "Inline all function calls in HW modules";
   let description = [{
-    Deletes all functions in the module. In case there is still a function
-    call in an entity or process, it fails.
-    This pass is intended as a post-inlining pass to check if all functions
-    could be successfully inlined and remove the inlined functions. This
-    is necessary because Structural LLHD does not allow functions. Fails in
-    the case that there is still a function call left in a `llhd.process` or
-    `hw.module`.
+    Inlines all `func.call` operations nested within `llhd.combinational`,
+    `llhd.process`, and `llhd.final` ops within `hw.module`s. The `func.func`
+    definitions are left untouched. After the inlining, MLIR's symbol DCE pass
+    may be used to eliminate the function definitions where possible.
+
+    This pass expects the `llhd-wrap-procedural-ops` pass to have already run.
+    Otherwise call ops immediately in the module body, a graph region, cannot be
+    inlined at all since the graph region cannot accommodate the function's
+    control flow.
   }];
+  let statistics = [
+    Statistic<
+      "numInlined", "calls-inlined", "Number of call ops that were inlined"
+    >,
+  ];
 }
 
 def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {

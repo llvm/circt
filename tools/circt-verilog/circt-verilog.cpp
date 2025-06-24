@@ -319,9 +319,14 @@ static void populateMooreToCoreLowering(PassManager &pm) {
 
 /// Convert LLHD dialect IR into core dialect IR
 static void populateLLHDLowering(PassManager &pm) {
+  // Inline function calls and lower SCF to CF.
   pm.addNestedPass<hw::HWModuleOp>(llhd::createWrapProceduralOpsPass());
+  pm.addPass(llhd::createInlineCallsPass());
+  pm.addPass(mlir::createSymbolDCEPass());
   pm.addPass(mlir::createSCFToControlFlowPass());
 
+  // Simplify processes, replace signals with process results, and detect
+  // registers.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
   // modulePM.addPass(mlir::createSROA());
   modulePM.addPass(llhd::createMem2RegPass());
@@ -330,6 +335,8 @@ static void populateLLHDLowering(PassManager &pm) {
   modulePM.addPass(llhd::createLowerProcessesPass());
   modulePM.addPass(mlir::createCSEPass());
   modulePM.addPass(mlir::createCanonicalizerPass());
+
+  // Simplify module-level signals.
   modulePM.addPass(llhd::createCombineDrivesPass());
   modulePM.addPass(llhd::createSig2Reg());
   modulePM.addPass(mlir::createCSEPass());
