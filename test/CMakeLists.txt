@@ -35,6 +35,7 @@ set(CIRCT_TEST_DEPENDS
   circt-translate
   circt-reduce
   handshake-runner
+  firld
   firtool
   hlstool
   kanagawatool

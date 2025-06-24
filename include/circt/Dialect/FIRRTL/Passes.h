@@ -194,6 +194,10 @@ std::unique_ptr<mlir::Pass> createAdvancedLayerSinkPass();
 
 std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
 
+std::unique_ptr<mlir::Pass>
+createLinkCircuitsPass(mlir::StringRef baseCircuitName = "",
+                       bool noMangle = false);
+
 std::unique_ptr<mlir::Pass> createLintingPass();
 
 std::unique_ptr<mlir::Pass> createProbesToSignalsPass();
