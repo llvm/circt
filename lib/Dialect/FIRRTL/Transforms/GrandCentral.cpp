@@ -1959,30 +1959,6 @@ void GrandCentralPass::runOnOperation() {
     return id;
   };
 
-  // Maybe return the lone instance of a module.  Generate errors on the op if
-  // the module is not instantiated or is multiply instantiated.
-  auto exactlyOneInstance = [&](FModuleOp op,
-                                StringRef msg) -> std::optional<InstanceOp> {
-    auto *node = instancePaths->instanceGraph[op];
-
-    switch (node->getNumUses()) {
-    case 0:
-      op->emitOpError() << "is marked as a GrandCentral '" << msg
-                        << "', but is never instantiated";
-      return std::nullopt;
-    case 1:
-      return cast<InstanceOp>(*(*node->uses().begin())->getInstance());
-    default:
-      auto diag = op->emitOpError()
-                  << "is marked as a GrandCentral '" << msg
-                  << "', but it is instantiated more than once";
-      for (auto *instance : node->uses())
-        diag.attachNote(instance->getInstance()->getLoc())
-            << "it is instantiated here";
-      return std::nullopt;
-    }
-  };
-
   nlaTable = &getAnalysis<NLATable>();
 
   /// Walk the circuit and extract all information related to scattered Grand
@@ -2113,11 +2089,6 @@ void GrandCentralPass::runOnOperation() {
                     << "companion instance cannot have output ports";
               }
 
-              // Assert that the companion is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "companion");
-              if (!instance)
-                goto FModuleOp_error;
-
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
               if (!maybeExtractInfo) {
@@ -2130,6 +2101,30 @@ void GrandCentralPass::runOnOperation() {
               if (!instanceInfo->allInstancesUnderEffectiveDut(op)) {
                 ++numAnnosRemoved;
                 return true;
+              }
+
+              // Find the exact, one instance of this Grand Central companion.
+              InstanceOp instance;
+              for (auto *i :
+                   instancePathCache.instanceGraph.lookup(op)->uses()) {
+                if (!instance) {
+                  instance = cast<InstanceOp>(i->getInstance());
+                  continue;
+                }
+
+                auto diag = op->emitOpError()
+                            << "is marked as a GrandCentral 'companion', but "
+                               "it is instantiated more than once";
+                for (auto *instance :
+                     instancePathCache.instanceGraph.lookup(op)->uses())
+                  diag.attachNote(instance->getInstance()->getLoc())
+                      << "it is instantiated here";
+                goto FModuleOp_error;
+              }
+              if (!instance) {
+                op->emitOpError() << "is marked as a GrandCentral 'companion', "
+                                     "but is never instantiated";
+                goto FModuleOp_error;
               }
 
               if (companionMode == CompanionMode::Drop) {
@@ -2146,14 +2141,13 @@ void GrandCentralPass::runOnOperation() {
                 // Lower the companion to a bind unless the user told us
                 // explicitly not to.
                 if (companionMode == CompanionMode::Bind)
-                  (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
+                  instance->setAttr("lowerToBind", builder.getUnitAttr());
 
-                (*instance)->setAttr(
-                    "output_file",
-                    hw::OutputFileAttr::getFromFilename(
-                        &getContext(),
-                        maybeExtractInfo->bindFilename.getValue(),
-                        /*excludeFromFileList=*/true));
+                instance->setAttr("output_file",
+                                  hw::OutputFileAttr::getFromFilename(
+                                      &getContext(),
+                                      maybeExtractInfo->bindFilename.getValue(),
+                                      /*excludeFromFileList=*/true));
               }
 
               // Look for any modules/extmodules _only_ instantiated by the
