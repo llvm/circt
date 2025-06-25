@@ -85,9 +85,12 @@ jobs:
         with:
           fetch-depth: 2
           submodules: "true"
-      - name: Unshallow llvm/circt
+      - name: Set git safe
         run: |
           git config --global --add safe.directory /__w/circt/circt
+      - name: Unshallow llvm/circt if there is an install target (to get release tags)
+        if: inputs.install_target
+        run: |
           git fetch --unshallow --no-recurse-submodules
 # Setup Caching
       - name: sccache
