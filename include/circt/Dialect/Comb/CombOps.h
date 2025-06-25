@@ -38,6 +38,18 @@ class PatternRewriter;
 namespace circt {
 namespace comb {
 
+/// This trait declares all regions of the operation it is attached to as
+/// non-comb-semantic-perserving. This means, the Comb dialect will not attempt
+/// any folding, canonicalization, and optimization across region and block
+/// boundaries. More precisely, if a comb operation is defined in block#1 inside
+/// region#0 of an operation with this trait, comb canonicalizers will not
+/// consider def-use edges coming from outside region#0 as well as outside
+/// block#1.
+template <typename ConcreteType>
+class NonCombSemanticPreservingRegion
+    : public mlir::OpTrait::TraitBase<ConcreteType,
+                                      NonCombSemanticPreservingRegion> {};
+
 using llvm::KnownBits;
 
 /// Compute "known bits" information about the specified value - the set of bits

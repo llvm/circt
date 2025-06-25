@@ -22,18 +22,30 @@ using namespace circt;
 using namespace comb;
 using namespace matchers;
 
-/// In comb, we assume no knowledge of the semantics of cross-block dataflow. As
-/// such, cross-block dataflow is interpreted as a canonicalization barrier.
-/// This is a conservative approach which:
-/// 1. still allows for efficient canonicalization for the common CIRCT usecase
-///    of comb (comb logic nested inside single-block hw.module's)
-/// 2. allows comb operations to be used in non-HW container ops - that may use
-///    MLIR blocks and regions to represent various forms of hierarchical
-///    abstractions, thus allowing comb to compose with other dialects.
+/// Check if folding or canonicalizing across blocks should be considered
+/// illegal.
 static bool hasOperandsOutsideOfBlock(Operation *op) {
-  Block *thisBlock = op->getBlock();
   return llvm::any_of(op->getOperands(), [&](Value operand) {
-    return operand.getParentBlock() != thisBlock;
+    Operation *parentOp = op;
+    while (parentOp->getParentRegion() != operand.getParentRegion()) {
+      parentOp = parentOp->getParentOp();
+      // If the parent block or region is not (yet) attached to a parent
+      // region/op, conservatively assume it will be attached to a
+      // non-semantic-perserving operation.
+      if (!parentOp || parentOp->hasTrait<NonCombSemanticPreservingRegion>())
+        return true;
+    }
+
+    if (operand.getParentBlock() == parentOp->getBlock())
+      return false;
+
+    // If they aren't defined in the same block, we also need to check if the
+    // trait is added to the regions parent op
+    Operation *parentsParent = parentOp->getParentOp();
+    if (!parentsParent)
+      return true;
+
+    return parentsParent->hasTrait<NonCombSemanticPreservingRegion>();
   });
 }
 
