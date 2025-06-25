@@ -39,7 +39,9 @@
 #include "llvm/Support/ToolOutputFile.h"
 
 #include "circt/Conversion/ExportVerilog.h"
+#include "circt/Conversion/HWToSV.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -184,6 +186,7 @@ static void loadDCTransformsPipeline(OpPassManager &pm) {
 }
 
 static void loadESILoweringPipeline(OpPassManager &pm) {
+  pm.addPass(circt::esi::createESIBundleLoweringPass());
   pm.addPass(circt::esi::createESIPortLoweringPass());
   pm.addPass(circt::esi::createESIPhysicalLoweringPass());
   pm.addPass(circt::esi::createESItoHWPass());
@@ -196,6 +199,8 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(circt::createLowerSeqToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
   pm.addPass(mlir::createCSEPass());
+  pm.addPass(circt::comb::createLowerComb());
+  pm.nest<hw::HWModuleOp>().addPass(circt::createLowerHWToSVPass());
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());

@@ -34,15 +34,19 @@ void circt::kanagawa::loadKanagawaLowLevelPassPipeline(mlir::PassManager &pm) {
   pm.nest<kanagawa::DesignOp>().addPass(createContainerizePass());
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
-  // Pre-tunneling CSE pass. This ensures that duplicate get_port calls are
-  // removed before we start tunneling - no reason to tunnel the same thing
-  // twice.
-  pm.addPass(mlir::createCSEPass());
+  // This pass ensures that duplicate get_port calls are removed before we
+  // start tunneling - no reason to tunnel the same thing twice.
+  pm.nest<DesignOp>().nest<ContainerOp>().addPass(
+      createEliminateRedundantOpsPass());
+
   pm.nest<DesignOp>().addPass(
       createTunnelingPass(KanagawaTunnelingOptions{"", ""}));
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
   pm.addPass(createPortrefLoweringPass());
   pm.addPass(createSimpleCanonicalizerPass());
+  // Run this again as some of the above passes may create redundant ops.
+  pm.nest<DesignOp>().nest<ContainerOp>().addPass(
+      createEliminateRedundantOpsPass());
   pm.nest<DesignOp>().addPass(createCleanSelfdriversPass());
   pm.addPass(createContainersToHWPass());
   pm.addPass(hw::createVerifyInnerRefNamespacePass());

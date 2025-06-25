@@ -103,6 +103,20 @@ def KanagawaContainersToHW : Pass<"kanagawa-convert-containers-to-hw", "::mlir::
   let dependentDialects = ["::circt::hw::HWDialect"];
 }
 
+def KanagawaEliminateRedundantOps : Pass<"kanagawa-eliminate-redundant-ops", "kanagawa::ContainerOp"> {
+  let summary = "Kanagawa eliminate redundant operations pass";
+  let description = [{
+    Eliminates redundant operations within Kanagawa containers to optimize the IR.
+    This pass analyzes operations within containers and removes unnecessary or
+    duplicate operations that do not affect the semantic behavior.
+
+    Redundant operations can (read: will) cause issues in other passes. So this
+    pass needs to be run after any pass which can introduce redundant
+    operations.
+  }];
+  let constructor = "::circt::kanagawa::createEliminateRedundantOpsPass()";
+}
+
 def KanagawaArgifyBlocks : Pass<"kanagawa-argify-blocks"> {
   let summary = "Add arguments to kanagawa blocks";
   let description = [{

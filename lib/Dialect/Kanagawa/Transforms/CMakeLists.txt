@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTKanagawaTransforms
   KanagawaConvertHandshakeToDC.cpp
   KanagawaMethodsToContainers.cpp
   KanagawaAddOperatorLibrary.cpp
+  KanagawaEliminateRedundantOps.cpp
 
   DEPENDS
   CIRCTKanagawaTransformsIncGen

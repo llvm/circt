@@ -65,8 +65,9 @@ static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
                              [getPortOp.getPortSymbolAttr().getAttr()];
     if (getPortOp.getDirection() == Direction::Input) {
       if (portAccesses.getAsInput)
-        return containerOp.emitError(
-            "multiple input get_ports - please CSE the input IR");
+        return portAccesses.getAsInput.emitError("multiple input get_ports")
+                   .attachNote(getPortOp.getLoc())
+               << "redundant get_port here";
       portAccesses.getAsInput = getPortOp;
       for (auto *user : getPortOp->getUsers()) {
         if (auto writer = dyn_cast<PortWriteOp>(user)) {
@@ -78,8 +79,9 @@ static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
       }
     } else {
       if (portAccesses.getAsOutput)
-        return containerOp.emitError(
-            "multiple get_port as output - please CSE the input IR");
+        return portAccesses.getAsOutput.emitError("multiple get_port as output")
+                   .attachNote(getPortOp.getLoc())
+               << "redundant get_port here";
       portAccesses.getAsOutput = getPortOp;
 
       for (auto *user : getPortOp->getUsers()) {
