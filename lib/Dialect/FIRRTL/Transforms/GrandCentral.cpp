@@ -1891,6 +1891,21 @@ void GrandCentralPass::runOnOperation() {
   if (removalError)
     return signalPassFailure();
 
+  // per-YAML output list of interfaces.
+  llvm::SmallMapVector<StringAttr, SmallVector<sv::InterfaceOp, 0>, 1>
+      interfaceYAMLMap;
+  if (maybeHierarchyFileYAML.has_value())
+    interfaceYAMLMap[maybeHierarchyFileYAML.value()] = {};
+
+  // Scan entire design for View operations.
+  SmallVector<ViewIntrinsicOp> views;
+  circuitOp.walk([&views](ViewIntrinsicOp view) { views.push_back(view); });
+
+  /// TODO: Handle this differently to allow construction of an options
+  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
+  instancePaths = &instancePathCache;
+  instanceInfo = &getAnalysis<InstanceInfo>();
+
   LLVM_DEBUG({
     llvm::dbgs() << "Extraction Info:\n";
     if (maybeExtractInfo)
@@ -1912,16 +1927,6 @@ void GrandCentralPass::runOnOperation() {
       llvm::dbgs() << "<none>";
     llvm::dbgs() << "\n";
   });
-
-  // per-YAML output list of interfaces.
-  llvm::SmallMapVector<StringAttr, SmallVector<sv::InterfaceOp, 0>, 1>
-      interfaceYAMLMap;
-  if (maybeHierarchyFileYAML.has_value())
-    interfaceYAMLMap[maybeHierarchyFileYAML.value()] = {};
-
-  // Scan entire design for View operations.
-  SmallVector<ViewIntrinsicOp> views;
-  circuitOp.walk([&views](ViewIntrinsicOp view) { views.push_back(view); });
 
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.  However, still generate the YAML file if the annotation for
@@ -1953,11 +1958,6 @@ void GrandCentralPass::runOnOperation() {
     }
     return id;
   };
-
-  /// TODO: Handle this differently to allow construction of an options
-  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
-  instancePaths = &instancePathCache;
-  instanceInfo = &getAnalysis<InstanceInfo>();
 
   // Maybe return the lone instance of a module.  Generate errors on the op if
   // the module is not instantiated or is multiply instantiated.
