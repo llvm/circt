@@ -342,21 +342,21 @@ MlirAttribute firrtlAttrGetNameKind(MlirContext ctx, FIRRTLNameKind nameKind) {
 }
 
 MlirAttribute firrtlAttrGetRUW(MlirContext ctx, FIRRTLRUW ruw) {
-  RUWAttr value;
+  RUWBehavior value;
 
   switch (ruw) {
   case FIRRTL_RUW_UNDEFINED:
-    value = RUWAttr::Undefined;
+    value = RUWBehavior::Undefined;
     break;
   case FIRRTL_RUW_OLD:
-    value = RUWAttr::Old;
+    value = RUWBehavior::Old;
     break;
   case FIRRTL_RUW_NEW:
-    value = RUWAttr::New;
+    value = RUWBehavior::New;
     break;
   }
 
-  return wrap(RUWAttrAttr::get(unwrap(ctx), value));
+  return wrap(RUWBehaviorAttr::get(unwrap(ctx), value));
 }
 
 MlirAttribute firrtlAttrGetMemInit(MlirContext ctx, MlirIdentifier filename,

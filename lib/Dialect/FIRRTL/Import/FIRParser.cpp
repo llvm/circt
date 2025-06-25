@@ -286,8 +286,8 @@ struct FIRParser {
   // Parse a property type specifically.
   ParseResult parsePropertyType(PropertyType &result, const Twine &message);
 
-  ParseResult parseRUW(RUWAttr &result);
-  ParseResult parseOptionalRUW(RUWAttr &result);
+  ParseResult parseRUW(RUWBehavior &result);
+  ParseResult parseOptionalRUW(RUWBehavior &result);
 
   ParseResult parseParameter(StringAttr &resultName, Attribute &resultValue,
                              SMLoc &resultLoc, bool allowAggregates = false);
@@ -1231,19 +1231,19 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 }
 
 /// ruw ::= 'old' | 'new' | 'undefined'
-ParseResult FIRParser::parseRUW(RUWAttr &result) {
+ParseResult FIRParser::parseRUW(RUWBehavior &result) {
   switch (getToken().getKind()) {
 
   case FIRToken::kw_old:
-    result = RUWAttr::Old;
+    result = RUWBehavior::Old;
     consumeToken(FIRToken::kw_old);
     break;
   case FIRToken::kw_new:
-    result = RUWAttr::New;
+    result = RUWBehavior::New;
     consumeToken(FIRToken::kw_new);
     break;
   case FIRToken::kw_undefined:
-    result = RUWAttr::Undefined;
+    result = RUWBehavior::Undefined;
     consumeToken(FIRToken::kw_undefined);
     break;
   default:
@@ -1254,21 +1254,21 @@ ParseResult FIRParser::parseRUW(RUWAttr &result) {
 }
 
 /// ruw ::= 'old' | 'new' | 'undefined'
-ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
+ParseResult FIRParser::parseOptionalRUW(RUWBehavior &result) {
   switch (getToken().getKind()) {
   default:
     break;
 
   case FIRToken::kw_old:
-    result = RUWAttr::Old;
+    result = RUWBehavior::Old;
     consumeToken(FIRToken::kw_old);
     break;
   case FIRToken::kw_new:
-    result = RUWAttr::New;
+    result = RUWBehavior::New;
     consumeToken(FIRToken::kw_new);
     break;
   case FIRToken::kw_undefined:
-    result = RUWAttr::Undefined;
+    result = RUWBehavior::Undefined;
     consumeToken(FIRToken::kw_undefined);
     break;
   }
@@ -4733,7 +4733,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
 
   StringRef id;
   FIRRTLType type;
-  RUWAttr ruw = RUWAttr::Undefined;
+  RUWBehavior ruw = RUWBehavior::Undefined;
 
   if (parseId(id, "expected smem name") ||
       parseToken(FIRToken::colon, "expected ':' in smem") ||
@@ -4788,7 +4788,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   FIRRTLType type;
   int64_t depth = -1, readLatency = -1, writeLatency = -1;
-  RUWAttr ruw = RUWAttr::Undefined;
+  RUWBehavior ruw = RUWBehavior::Undefined;
 
   SmallVector<std::pair<StringAttr, Type>, 4> ports;
 

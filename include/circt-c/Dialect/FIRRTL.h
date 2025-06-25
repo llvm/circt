@@ -292,7 +292,7 @@ MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetParamDecl(MlirContext ctx,
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetNameKind(MlirContext ctx,
                                                        FIRRTLNameKind nameKind);
 
-/// Creates a RUWAttr with the specified Read-Under-Write Behaviour.
+/// Creates a RUWBehaviorAttr with the specified Read-Under-Write Behavior.
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetRUW(MlirContext ctx,
                                                   FIRRTLRUW ruw);
 

@@ -76,15 +76,17 @@ def LayerSpecializationAttr :
     EnumAttr<FIRRTLDialect, LayerSpecialization, "layerspecialization">;
 
 //===----------------------------------------------------------------------===//
-// Read Under Write Behaviour
+// Read Under Write Behavior
 //===----------------------------------------------------------------------===//
 
-def RUW_Undefined: I32EnumAttrCase<"Undefined", 0>;
-def RUW_Old: I32EnumAttrCase<"Old", 1>;
-def RUW_New: I32EnumAttrCase<"New", 2>;
+def RUWBehavior
+    : I32EnumAttr<"RUWBehavior", "read under write behavior",
+                  [I32EnumAttrCase<"Undefined", 0>, I32EnumAttrCase<"Old", 1>,
+                   I32EnumAttrCase<"New", 2>]> {
+  let genSpecializedAttr = 0;
+}
 
-def RUWAttr: I32EnumAttr<"RUWAttr", "Read Under Write Enum",
-                         [RUW_Undefined, RUW_Old, RUW_New]>;
+def RUWBehaviorAttr : EnumAttr<FIRRTLDialect, RUWBehavior, "ruwbehavior">;
 
 //===----------------------------------------------------------------------===//
 // Memory Port Direction
