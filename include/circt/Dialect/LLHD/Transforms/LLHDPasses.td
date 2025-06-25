@@ -212,4 +212,21 @@ def WrapProceduralOpsPass : Pass<"llhd-wrap-procedural-ops", "hw::HWModuleOp"> {
   ];
 }
 
+def RemoveControlFlowPass : Pass<"llhd-remove-control-flow", "hw::HWModuleOp"> {
+  let summary = "Remove acyclic control flow and replace block args with muxes";
+  let description = [{
+    Remove the control flow in `llhd.combinational` operations by merging all
+    blocks into the entry block and replacing block arguments with multiplexers.
+    This requires the control flow to be acyclic, for example by unrolling all
+    loops beforehand. Additionally, since this moves operations from
+    conditionally executed blocks into the unconditionally executed entry block,
+    all operations must be side-effect free.
+  }];
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "mlir::cf::ControlFlowDialect",
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
