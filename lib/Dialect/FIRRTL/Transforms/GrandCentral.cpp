@@ -2098,23 +2098,25 @@ void GrandCentralPass::runOnOperation() {
 
               companionIDMap[id] = {name.getValue(), op, isNonlocal};
 
-              // Assert that the companion is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "companion");
-              if (!instance)
-                goto FModuleOp_error;
-
-              // Companions are only allowed to take inputs.
-              for (auto [i, result] : llvm::enumerate(instance->getResults())) {
-                if (instance->getPortDirection(i) == Direction::In)
+              // Companion modules must only have input ports OR reference type
+              // output ports.  If operating in "drop" mode (where the companion
+              // is not instantiated), then only input ports are allowed. No
+              // output ports are allowed when running in "drop" mode as
+              // dropping the module would created dangling references.
+              for (auto port : op.getPorts()) {
+                if (port.isInput())
                   continue;
-                // Do not allow any outputs in the drop mode.
-                auto ty = result.getType();
+                auto ty = port.type;
                 if (isa<RefType>(ty) && companionMode != CompanionMode::Drop)
                   continue;
                 op.emitOpError()
                     << "companion instance cannot have output ports";
-                goto FModuleOp_error;
               }
+
+              // Assert that the companion is instantiated once and only once.
+              auto instance = exactlyOneInstance(op, "companion");
+              if (!instance)
+                goto FModuleOp_error;
 
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
