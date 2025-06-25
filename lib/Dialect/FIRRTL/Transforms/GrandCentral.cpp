@@ -2062,13 +2062,9 @@ void GrandCentralPass::runOnOperation() {
 
             // If this is a companion, then:
             //   1. Insert it into the companion map
-            //   2. Create a new mapping module.
-            //   3. Instantiate the mapping module in the companion.
-            //   4. Check that the companion is instantiated exactly once.
-            //   5. Set attributes on that lone instance so it will become a
-            //      bind if extraction information was provided.  If a DUT is
-            //      known, then anything in the test harness will not be
-            //      extracted.
+            //   2. Foreach instance of this companion, set attributes to
+            //      extract it if extraction information was provided and the
+            //      instance is inside the design.
             if (annotation.getClass() == companionAnnoClass) {
               builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
@@ -2096,58 +2092,40 @@ void GrandCentralPass::runOnOperation() {
                 return true;
               }
 
-              // If the companion is instantiated above the DUT, then don't
-              // extract it.
-              if (!instanceInfo->allInstancesUnderEffectiveDut(op)) {
-                ++numAnnosRemoved;
-                return true;
-              }
+              // Extract all instances in the design.
+              for (auto *i : instancePaths->instanceGraph.lookup(op)->uses()) {
+                auto instance = cast<InstanceOp>(i->getInstance());
 
-              // Find the exact, one instance of this Grand Central companion.
-              InstanceOp instance;
-              for (auto *i :
-                   instancePathCache.instanceGraph.lookup(op)->uses()) {
-                if (!instance) {
-                  instance = cast<InstanceOp>(i->getInstance());
+                // Skip extraction if the instance is not in the design.
+                if (instance->getParentOfType<LayerBlockOp>())
                   continue;
+                if (!instanceInfo->allInstancesUnderEffectiveDut(
+                        i->getParent()->getModule()))
+                  continue;
+
+                if (companionMode == CompanionMode::Drop) {
+                  // Delete the instance if companions are disabled.
+                  OpBuilder builder(&getContext());
+                  for (auto port : instance->getResults()) {
+                    builder.setInsertionPointAfterValue(port);
+                    auto wire =
+                        builder.create<WireOp>(port.getLoc(), port.getType());
+                    port.replaceAllUsesWith(wire.getResult());
+                  }
+                  instance->erase();
+                } else {
+                  // Lower the companion to a bind unless the user told us
+                  // explicitly not to.
+                  if (companionMode == CompanionMode::Bind)
+                    instance->setAttr("lowerToBind", builder.getUnitAttr());
+
+                  instance->setAttr(
+                      "output_file",
+                      hw::OutputFileAttr::getFromFilename(
+                          &getContext(),
+                          maybeExtractInfo->bindFilename.getValue(),
+                          /*excludeFromFileList=*/true));
                 }
-
-                auto diag = op->emitOpError()
-                            << "is marked as a GrandCentral 'companion', but "
-                               "it is instantiated more than once";
-                for (auto *instance :
-                     instancePathCache.instanceGraph.lookup(op)->uses())
-                  diag.attachNote(instance->getInstance()->getLoc())
-                      << "it is instantiated here";
-                goto FModuleOp_error;
-              }
-              if (!instance) {
-                op->emitOpError() << "is marked as a GrandCentral 'companion', "
-                                     "but is never instantiated";
-                goto FModuleOp_error;
-              }
-
-              if (companionMode == CompanionMode::Drop) {
-                // Delete the instance if companions are disabled.
-                OpBuilder builder(&getContext());
-                for (auto port : instance->getResults()) {
-                  builder.setInsertionPointAfterValue(port);
-                  auto wire =
-                      builder.create<WireOp>(port.getLoc(), port.getType());
-                  port.replaceAllUsesWith(wire.getResult());
-                }
-                instance->erase();
-              } else {
-                // Lower the companion to a bind unless the user told us
-                // explicitly not to.
-                if (companionMode == CompanionMode::Bind)
-                  instance->setAttr("lowerToBind", builder.getUnitAttr());
-
-                instance->setAttr("output_file",
-                                  hw::OutputFileAttr::getFromFilename(
-                                      &getContext(),
-                                      maybeExtractInfo->bindFilename.getValue(),
-                                      /*excludeFromFileList=*/true));
               }
 
               // Look for any modules/extmodules _only_ instantiated by the
