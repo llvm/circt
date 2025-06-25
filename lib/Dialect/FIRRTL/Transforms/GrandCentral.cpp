@@ -2132,20 +2132,6 @@ void GrandCentralPass::runOnOperation() {
                 return true;
               }
 
-              // Look for any modules/extmodules _only_ instantiated by the
-              // companion.  If these have no output file attribute, then mark
-              // them as being extracted into the Grand Central directory.
-              InstanceGraphNode *companionNode =
-                  instancePaths->instanceGraph.lookup(op);
-
-              LLVM_DEBUG({
-                llvm::dbgs()
-                    << "Found companion module: "
-                    << companionNode->getModule().getModuleName() << "\n"
-                    << "  submodules exclusively instantiated "
-                       "(including companion):\n";
-              });
-
               if (companionMode == CompanionMode::Drop) {
                 // Delete the instance if companions are disabled.
                 OpBuilder builder(&getContext());
@@ -2169,6 +2155,20 @@ void GrandCentralPass::runOnOperation() {
                         maybeExtractInfo->bindFilename.getValue(),
                         /*excludeFromFileList=*/true));
               }
+
+              // Look for any modules/extmodules _only_ instantiated by the
+              // companion.  If these have no output file attribute, then mark
+              // them as being extracted into the Grand Central directory.
+              InstanceGraphNode *companionNode =
+                  instancePaths->instanceGraph.lookup(op);
+
+              LLVM_DEBUG({
+                llvm::dbgs()
+                    << "Found companion module: "
+                    << companionNode->getModule().getModuleName() << "\n"
+                    << "  submodules exclusively instantiated "
+                       "(including companion):\n";
+              });
 
               for (auto &node : llvm::depth_first(companionNode)) {
                 auto mod = node->getModule();
