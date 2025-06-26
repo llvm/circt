@@ -8,6 +8,7 @@
 
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Support/Utils.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
