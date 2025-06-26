@@ -102,11 +102,21 @@ static cl::opt<bool>
                   cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<std::string>
-    outputLongestPath("output-longest-path",
-                      cl::desc("Output file for longest path analysis "
-                               "results. The analysis is only run "
-                               "if file name is specified"),
-                      cl::init(""), cl::cat(mainCategory));
+    outputFileLongestPath("output-file-longest-path",
+                          cl::desc("Output file for longest path analysis "
+                                   "results"),
+                          cl::init(""), cl::cat(mainCategory));
+static cl::opt<bool>
+    printLongestPath("print-longest-path",
+                     cl::desc("Output file for longest path analysis "
+                              "results. The analysis is only run "
+                              "if file name is specified"),
+                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<int>
+    numberOfFanOutToPrintLongestPath("num-longest-path-fanout",
+                                     cl::desc("Print longest path analysis "
+                                              "results to the diagnostics"),
+                                     cl::init(10), cl::cat(mainCategory));
 
 static cl::opt<std::string> topName("top", cl::desc("Top module name"),
                                     cl::value_desc("name"), cl::init(""),
@@ -190,10 +200,11 @@ static void populateSynthesisPipeline(PassManager &pm) {
     pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
   }
 
-  if (!outputLongestPath.empty()) {
+  if (printLongestPath.getValue() || !outputFileLongestPath.empty()) {
     circt::aig::PrintLongestPathAnalysisOptions options;
-    options.outputFile = outputLongestPath;
-    options.showTopKPercent = 5;
+    options.outputFile =
+        outputFileLongestPath.empty() ? "-" : outputFileLongestPath.getValue();
+    options.showTopKPercent = numberOfFanOutToPrintLongestPath.getValue();
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
 

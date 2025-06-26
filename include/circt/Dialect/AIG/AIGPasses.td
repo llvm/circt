@@ -25,7 +25,7 @@ def PrintLongestPathAnalysis : Pass<"aig-print-longest-path-analysis", "mlir::Mo
   let options = [
     Option<"outputFile", "output-file", "std::string", "\"-\"", "Output file">,
     Option<"test", "test", "bool", "false", "Emit longest paths to the diagnostics.">,
-    Option<"showTopKPercent", "show-top-k-percent", "int", "5", "The size of the longest paths to show.">
+    Option<"numberOfFanOutToPrint", "num-fanout", "int", "10", "The size of the longest paths to show.">
   ];
 }
 

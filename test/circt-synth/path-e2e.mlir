@@ -18,8 +18,15 @@
 // CHECK-NEXT: Level = 37 . Count = 1  . 93.75   %
 // CHECK-NEXT: Level = 38 . Count = 1  . 96.88   %
 // CHECK-NEXT: Level = 48 . Count = 1  . 100.00  %
+
+// CHECK: nyako
+hw.module @passthrough(in %a: i16, out result: i16) {
+    hw.output %a : i16
+}
+
 hw.module @counter(in %a: i16, in %clk: !seq.clock, out result: i16) {
     %reg = seq.compreg %add, %clk : i16
     %add = comb.mul %reg, %a : i16
-    hw.output %reg : i16
+    %result = hw.instance "passthrough" @passthrough(a: %add: i16) -> (result: i16)
+    hw.output %result : i16
 }

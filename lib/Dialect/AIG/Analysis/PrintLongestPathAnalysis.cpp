@@ -229,9 +229,8 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
 
   // Helper lambda to extract delay from variant timing path data
   auto extractDelay = [](const TimingPathVariant &pathVariant) -> int64_t {
-    if (auto *dataflowPath = std::get_if<DataflowPath>(&pathVariant)) {
+    if (auto *dataflowPath = std::get_if<DataflowPath>(&pathVariant))
       return dataflowPath->getDelay();
-    }
     auto &[resultNumber, bitPosition, openPath] =
         std::get<std::tuple<size_t, size_t, OpenPath>>(pathVariant);
     return openPath.getDelay();
@@ -247,9 +246,8 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
   printTimingLevelStatistics(allTimingPaths, extractDelay, os);
 
   // Print detailed information for top K paths if requested
-  if (showTopKPercent) {
+  if (showTopKPercent)
     printTopKPathDetails(allTimingPaths, extractDelay, top, os);
-  }
 
   return success();
 }
