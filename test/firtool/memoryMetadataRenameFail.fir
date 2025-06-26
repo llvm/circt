@@ -116,13 +116,13 @@ circuit test:
 ; CHECK:      FILE "metadata/tb_seq_mems.json"
 ; CHECK:      [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
-; CHECK-SAME: "mask_granularity":8,"extra_ports":[],
+; CHECK-SAME: "ruw_behavior": "Undefined","mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME: "hierarchy":["test.[[m]]"]}]
 
 ; CHECK:       FILE "metadata/seq_mems.json"
 ; CHECK:       [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
-; CHECK-SAME:  "mask_granularity":8,"extra_ports":[],
+; CHECK-SAME:  "ruw_behavior": "Undefined","mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME:  "hierarchy":["test.[[signed]].[[m]]"],
 ; CHECK-SAME:  "verification_only_data":{
 ; CHECK-SAME:  "test.[[signed]].[[m]]":{"baseAddress":1073741824,
