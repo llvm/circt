@@ -207,7 +207,7 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
       b, mem.loc, moduleName, ports, mem.numReadPorts, mem.numWritePorts,
       mem.numReadWritePorts, mem.dataWidth, mem.maskBits, mem.readLatency,
       mem.writeLatency, mem.depth,
-      *firrtl::symbolizeRUWBehavior(uint32_t(mem.readUnderWrite)));
+      *symbolizeRUWBehavior(uint32_t(mem.readUnderWrite)));
   SymbolTable::setSymbolVisibility(moduleOp, SymbolTable::Visibility::Private);
   return moduleOp;
 }
