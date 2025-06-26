@@ -114,8 +114,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4
 //CHECK-NEXT:    }
 //CHECK-NEXT:  %true_1 = hw.constant true
 //CHECK-NEXT:  sv.always posedge %wo_clock_0 {
-//CHECK-NEXT:    %[[WO_EN:.+]] = comb.and %wo_en_0, %true_1 : i1
-//CHECK-NEXT:    sv.if %[[WO_EN]] {
+//CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
 //CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
 //CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
