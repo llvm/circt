@@ -22,6 +22,7 @@
 #include "circt-c/Dialect/LTL.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
+#include "circt-c/Dialect/Pipeline.h"
 #include "circt-c/Dialect/RTG.h"
 #include "circt-c/Transforms.h"
 #ifdef CIRCT_INCLUDE_TESTS
@@ -56,6 +57,7 @@ static void registerPasses() {
   registerHWArithPasses();
   registerHWPasses();
   registerHandshakePasses();
+  registerPipelinePasses();
   mlirRegisterCIRCTConversionPasses();
   mlirRegisterCIRCTTransformsPasses();
   mlirRegisterTransformsCSE();
@@ -114,6 +116,10 @@ NB_MODULE(_circt, m) {
         MlirDialectHandle om = mlirGetDialectHandle__om__();
         mlirDialectHandleRegisterDialect(om, context);
         mlirDialectHandleLoadDialect(om, context);
+
+        MlirDialectHandle pipeline = mlirGetDialectHandle__pipeline__();
+        mlirDialectHandleRegisterDialect(pipeline, context);
+        mlirDialectHandleLoadDialect(pipeline, context);
 
         MlirDialectHandle rtg = mlirGetDialectHandle__rtg__();
         mlirDialectHandleRegisterDialect(rtg, context);
