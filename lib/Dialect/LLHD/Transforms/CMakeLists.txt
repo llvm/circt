@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   Mem2Reg.cpp
   MemoryToBlockArgumentPass.cpp
   ProcessLoweringPass.cpp
+  RemoveControlFlow.cpp
   Sig2RegPass.cpp
   TemporalCodeMotionPass.cpp
   TemporalRegions.cpp
