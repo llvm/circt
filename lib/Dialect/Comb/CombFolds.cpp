@@ -824,9 +824,6 @@ static bool canCombineOppositeBinCmpIntoConstant(OperandRange operands) {
 }
 
 OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   APInt value = APInt::getAllOnes(cast<IntegerType>(getType()).getWidth());
 
   auto inputs = adaptor.getInputs();
@@ -977,8 +974,6 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
   // Patterns for and with a constant on RHS.
@@ -1101,9 +1096,6 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   auto value = APInt::getZero(cast<IntegerType>(getType()).getWidth());
   auto inputs = adaptor.getInputs();
   // or(x, 10, 01) -> 11
@@ -1163,8 +1155,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
   assert(size > 1 && "expected 2 or more operands");
 
   // Patterns for and with a constant on RHS.
@@ -1243,9 +1233,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1298,9 +1285,6 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 }
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
