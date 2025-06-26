@@ -128,8 +128,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[CONCAT1:%.+]] = comb.concat [[PADRES2]], [[XOR]] : i4, i4
     %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
 
-    // CHECK: comb.concat %in1, %in2
-    %7 = firrtl.cat %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<6>
+    // CHECK: comb.concat %in1, %in2, %in2
+    %7 = firrtl.cat %in1, %in2, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<8>
 
     // CHECK: %out6 = hw.wire [[PADRES2]] sym @__Simple__out6 : i4
     %out6 = firrtl.wire sym @__Simple__out6 : !firrtl.uint<4>

@@ -1371,9 +1371,11 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
         srcLoweredVal = src;
       else {
         if (type_isa<BundleType>(op.getInput().getType())) {
-          srcLoweredVal = builder->create<CatPrimOp>(srcLoweredVal, src);
+          srcLoweredVal =
+              builder->create<CatPrimOp>(ValueRange{srcLoweredVal, src});
         } else {
-          srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+          srcLoweredVal =
+              builder->create<CatPrimOp>(ValueRange{src, srcLoweredVal});
         }
       }
       // Record the total bits already accumulated.
