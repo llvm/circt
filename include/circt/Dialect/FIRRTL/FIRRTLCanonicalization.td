@@ -432,18 +432,6 @@ def OrRasUInt : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// orr(cat(0,x)) -> orr(x)
-def OrRCatZeroH : Pat <
-  (OrRPrimOp:$old (CatPrimOp (variadic $c, $x))),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (ZeroConstantOp $c)]>;
-
-/// orr(cat(x,0)) -> orr(x)
-def OrRCatZeroL : Pat <
-  (OrRPrimOp:$old (CatPrimOp (variadic $x, $c))),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (ZeroConstantOp $c)]>;
-
 /// orr(pad(x,n)) -> orr(x)
 def OrRPadU : Pat <
   (OrRPrimOp:$old (PadPrimOp:$pad $x, $n)),
@@ -473,18 +461,6 @@ def XorRasUInt : Pat <
   (XorRPrimOp:$old (AsUIntPrimOp $x)),
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
-
-/// xorr(cat(0,x)) -> xorr(x)
-def XorRCatZeroH : Pat <
-  (XorRPrimOp:$old (CatPrimOp (variadic $c, $x))),
-  (MoveNameHint $old, (XorRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
-
-/// xorr(cat(x,0)) -> xorr(x)
-def XorRCatZeroL : Pat <
-  (XorRPrimOp:$old (CatPrimOp (variadic $x, $c))),
-  (MoveNameHint $old, (XorRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
 
 /// xorr(pad(x,n)) -> xorr(x)
 def XorRPadU : Pat <
@@ -516,30 +492,6 @@ def AndRasUInt : Pat <
   (AndRPrimOp:$old (AsUIntPrimOp $x)),
   (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
-
-/// andr(cat(*0*, x)) -> 0
-def AndRCatZeroL : Pat <
-  (AndRPrimOp:$old (CatPrimOp (variadic $z, $x))),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
-  [(NotAllOneConstantOp $z)]>;
-
-/// andr(cat(x, *0*)) -> 0
-def AndRCatZeroR : Pat <
-  (AndRPrimOp:$old (CatPrimOp (variadic $x, $z))),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
-  [(NotAllOneConstantOp $z)]>;
-
-/// andr(cat(1, x)) -> andr(x)
-def AndRCatOneL : Pat <
-  (AndRPrimOp:$old (CatPrimOp (variadic $z, $x))),
-  (MoveNameHint $old, (AndRPrimOp $x)),
-  [(AllOneConstantOp $z)]>;
-
-/// andr(cat(x, 1)) -> andr(x)
-def AndRCatOneR : Pat <
-  (AndRPrimOp:$old (CatPrimOp (variadic $x, $z))),
-  (MoveNameHint $old, (AndRPrimOp $x)),
-  [(AllOneConstantOp $z)]>;
 
 /// andr(pad(x:U,n)) -> 0 (where pad is doing something)
 def AndRPadU : Pat <

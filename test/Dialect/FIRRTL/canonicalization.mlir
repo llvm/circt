@@ -969,6 +969,176 @@ firrtl.module @Reduce(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
   // CHECK: firrtl.matchingconnect %d, %a
 }
 
+// CHECK-LABEL: firrtl.module @ReductionCat
+firrtl.module @ReductionCat(in %a: !firrtl.uint<4>, in %b: !firrtl.uint<3>,
+                           out %out_andr: !firrtl.uint<1>, out %out_orr: !firrtl.uint<1>,
+                           out %out_xorr: !firrtl.uint<1>) {
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+  %c15_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // Test AndR with cat containing zero constant - should become constant 0
+  // CHECK: firrtl.matchingconnect %out_andr, %c0_ui1
+  %cat1 = firrtl.cat %a, %c0_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<6>
+  %andr1 = firrtl.andr %cat1 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out_andr, %andr1 : !firrtl.uint<1>
+
+  // Test AndR with cat containing all-ones constant - should reduce to andr(a)
+  // CHECK: %[[ANDR_A:.+]] = firrtl.andr %a
+  // CHECK: firrtl.matchingconnect %out_andr, %[[ANDR_A]]
+  %cat2 = firrtl.cat %c15_ui4, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  %andr2 = firrtl.andr %cat2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out_andr, %andr2 : !firrtl.uint<1>
+
+  // Test OrR with cat containing non-zero constant - should become constant 1
+  // CHECK: firrtl.matchingconnect %out_orr, %c1_ui1
+  %cat3 = firrtl.cat %c3_ui2, %a : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<6>
+  %orr1 = firrtl.orr %cat3 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out_orr, %orr1 : !firrtl.uint<1>
+
+  // Test OrR with cat containing only zero constants - should reduce to orr(a)
+  // CHECK: %[[ORR_A:.+]] = firrtl.orr %a
+  // CHECK: firrtl.matchingconnect %out_orr, %[[ORR_A]]
+  %cat4 = firrtl.cat %c0_ui2, %a, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<8>
+  %orr2 = firrtl.orr %cat4 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out_orr, %orr2 : !firrtl.uint<1>
+
+  // Test XorR with cat containing zero constants - should reduce to xorr(a)
+  // CHECK: %[[XORR_A:.+]] = firrtl.xorr %a
+  // CHECK: firrtl.matchingconnect %out_xorr, %[[XORR_A]]
+  %cat5 = firrtl.cat %c0_ui2, %a : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<6>
+  %xorr1 = firrtl.xorr %cat5 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out_xorr, %xorr1 : !firrtl.uint<1>
+
+  // Test XorR with cat containing non-zero constants - constants should remain
+  // CHECK: %[[CAT_XOR:.+]] = firrtl.cat %c3_ui2, %a
+  // CHECK: %[[XORR_CAT:.+]] = firrtl.xorr %[[CAT_XOR]]
+  // CHECK: firrtl.matchingconnect %out_xorr, %[[XORR_CAT]]
+  %cat6 = firrtl.cat %c3_ui2, %a, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<8>
+  %xorr2 = firrtl.xorr %cat6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out_xorr, %xorr2 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @FlattenCat
+firrtl.module @FlattenCat(in %a: !firrtl.uint<2>, in %b: !firrtl.uint<3>, in %c: !firrtl.uint<4>,
+                         in %d: !firrtl.uint<1>, in %e: !firrtl.uint<2>, in %f: !firrtl.uint<3>,
+                         out %out1: !firrtl.uint<9>, out %out2: !firrtl.uint<15>,
+                         out %out3: !firrtl.uint<10>) {
+  // Test flattening nested cat operations - should flatten into single cat
+  // CHECK: %[[FLAT_CAT:.+]] = firrtl.cat %a, %b, %c
+  // CHECK: firrtl.matchingconnect %out1, %[[FLAT_CAT]]
+  %cat1 = firrtl.cat %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<5>
+  %cat2 = firrtl.cat %cat1, %c : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<9>
+  firrtl.matchingconnect %out1, %cat2 : !firrtl.uint<9>
+
+  // Test deep nesting (level 4) with multiple operands - should flatten completely
+  // CHECK: %[[DEEP_FLAT:.+]] = firrtl.cat %a, %b, %c, %d, %e, %f
+  // CHECK: firrtl.matchingconnect %out2, %[[DEEP_FLAT]]
+  %inner1 = firrtl.cat %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<5>
+  %inner2 = firrtl.cat %c, %d : (!firrtl.uint<4>, !firrtl.uint<1>) -> !firrtl.uint<5>
+  %middle1 = firrtl.cat %inner1, %inner2 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+  %middle2 = firrtl.cat %e, %f : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<5>
+  %outer = firrtl.cat %middle1, %middle2 : (!firrtl.uint<10>, !firrtl.uint<5>) -> !firrtl.uint<15>
+  firrtl.matchingconnect %out2, %outer : !firrtl.uint<15>
+
+  // CHECK: %[[ABAB:.+]] = firrtl.cat %a, %b, %a, %b
+  // CHECK: firrtl.matchingconnect %out3, %[[ABAB]]
+  %cat_a_b = firrtl.cat %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<5>
+  %cat_a_b_a_b = firrtl.cat %cat_a_b, %cat_a_b : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
+
+  firrtl.matchingconnect %out3, %cat_a_b_a_b : !firrtl.uint<10>
+}
+
+// CHECK-LABEL: firrtl.module @FlattenCatEdgeCases
+firrtl.module @FlattenCatEdgeCases(in %a: !firrtl.uint<4>, out %out1: !firrtl.uint<4>, out %out2: !firrtl.uint<8>) {
+  %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+
+  // Test single operand cat - should be replaced with the operand itself
+  // CHECK: firrtl.matchingconnect %out1, %a
+  %single_cat = firrtl.cat %a : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out1, %single_cat : !firrtl.uint<4>
+
+  // Test flattening with zero-width operands - should eliminate zero-width operands
+  // CHECK: firrtl.matchingconnect %out2, %[[ZERO_WIDTH_FLAT:.+]]
+  %zero_cat1 = firrtl.cat %c0_ui0, %a : (!firrtl.uint<0>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %zero_cat2 = firrtl.cat %zero_cat1, %c0_ui0, %a : (!firrtl.uint<4>, !firrtl.uint<0>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  firrtl.matchingconnect %out2, %zero_cat2 : !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @CatOfConstant
+firrtl.module @CatOfConstant(in %a: !firrtl.uint<4>, out %out1: !firrtl.uint<12>,
+                            out %out2: !firrtl.uint<10>) {
+  %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+  %c5_ui3 = firrtl.constant 5 : !firrtl.uint<3>
+  %c7_ui3 = firrtl.constant 7 : !firrtl.uint<3>
+
+  // Test folding successive constants - should fold 3,5 into single constant
+  // CHECK: %[[FOLDED_CONST2:.+]] = firrtl.constant 47 : !firrtl.uint<6>
+  // CHECK: %[[FOLDED_CONST:.+]] = firrtl.constant 29 : !firrtl.uint<5>
+  // CHECK: %[[CAT_FOLDED:.+]] = firrtl.cat %[[FOLDED_CONST]], %a, %c7_ui3
+  // CHECK: firrtl.matchingconnect %out1, %[[CAT_FOLDED]]
+  %cat1 = firrtl.cat %c3_ui2, %c5_ui3, %a, %c7_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<3>) -> !firrtl.uint<12>
+  firrtl.matchingconnect %out1, %cat1 : !firrtl.uint<12>
+
+  // Test folding all constants at the end
+  // CHECK: %[[CAT_FOLDED2:.+]] = firrtl.cat %a, %[[FOLDED_CONST2]]
+  // CHECK: firrtl.matchingconnect %out2, %[[CAT_FOLDED2]]
+  %cat2 = firrtl.cat %a, %c5_ui3, %c7_ui3 : (!firrtl.uint<4>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<10>
+  firrtl.matchingconnect %out2, %cat2 : !firrtl.uint<10>
+}
+
+// CHECK-LABEL: firrtl.module @BitsOfCat
+firrtl.module @BitsOfCat(in %a: !firrtl.uint<4>, in %b: !firrtl.uint<3>, in %c: !firrtl.uint<2>,
+                        out %out1: !firrtl.uint<2>, out %out2: !firrtl.uint<1>, out %out3: !firrtl.uint<5>) {
+  // CHECK: %[[CAT_MULTI:.+]] = firrtl.cat %a, %b, %c
+  // Test bits extraction from cat that can be optimized to extract from single operand
+
+  // bits[3:2] should extract from %b (bits 1:0 of %b)
+  // CHECK: %[[BITS_B:.+]] = firrtl.bits %b 1 to 0
+  // CHECK: firrtl.matchingconnect %out1, %[[BITS_B]]
+  %cat1 = firrtl.cat %a, %b, %c : (!firrtl.uint<4>, !firrtl.uint<3>, !firrtl.uint<2>) -> !firrtl.uint<9>
+  %bits1 = firrtl.bits %cat1 3 to 2 : (!firrtl.uint<9>) -> !firrtl.uint<2>
+  firrtl.matchingconnect %out1, %bits1 : !firrtl.uint<2>
+
+  // Test bits extraction from the most significant operand
+  // bits[8:8] should extract from %a (bit 0 of %a)
+  // CHECK: %[[BITS_A:.+]] = firrtl.bits %a 3 to 3
+  // CHECK: firrtl.matchingconnect %out2, %[[BITS_A]]
+  %bits2 = firrtl.bits %cat1 8 to 8 : (!firrtl.uint<9>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out2, %bits2 : !firrtl.uint<1>
+
+  // Test bits extraction that spans multiple operands - should not be optimized
+  // bits[5:1] spans from %b into %c, so should remain as-is
+  // CHECK: %[[BITS_MULTI:.+]] = firrtl.bits %[[CAT_MULTI]] 5 to 1
+  // CHECK: firrtl.matchingconnect %out3, %[[BITS_MULTI]]
+  %bits3 = firrtl.bits %cat1 5 to 1 : (!firrtl.uint<9>) -> !firrtl.uint<5>
+  firrtl.matchingconnect %out3, %bits3 : !firrtl.uint<5>
+}
+
+// CHECK-LABEL: firrtl.module @ComplexCatOptimization
+firrtl.module @ComplexCatOptimization(in %x: !firrtl.uint<8>, in %y: !firrtl.uint<4>,
+                                     out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<4>) {
+  %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+  %c15_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+
+  // Test complex pattern: reduction of cat with nested operations
+  // The inner cat should be flattened, constants folded, then reduction applied
+  %inner_cat = firrtl.cat %c15_ui4, %c0_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  %outer_cat = firrtl.cat %x, %inner_cat, %y : (!firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<20>
+
+  // AndR should detect the zero constant and return 0
+  // CHECK: firrtl.matchingconnect %out1, %c0_ui1
+  %andr_result = firrtl.andr %outer_cat : (!firrtl.uint<20>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out1, %andr_result : !firrtl.uint<1>
+
+  // Test bits extraction from the optimized cat
+  // Should extract directly from the appropriate operand
+  %bits_result = firrtl.bits %outer_cat 7 to 4 : (!firrtl.uint<20>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out2, %bits_result : !firrtl.uint<4>
+  // CHECK: firrtl.matchingconnect %out2, %c0_ui4
+}
+
 
 // CHECK-LABEL: firrtl.module @subaccess
 firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<uint<8>, 16>) {
