@@ -197,35 +197,26 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
     into the external module, to be used for generating XMRs. Each RefType
     port must be removed by LowerXMR pass.
   }];
-  let arguments =
-      (ins SymbolNameAttr:$sym_name,
-           OptionalAttr<StrAttr>:$defname,
-           ParamDeclArrayAttr:$parameters,
-           ConventionAttr:$convention,
-           DenseBoolArrayAttr:$portDirections,
-           ArrayRefAttr:$portLocations,
-           ArrayRefAttr:$portAnnotations,
-           ArrayRefAttr:$portSymbols,
-           ArrayRefAttr:$portNames,
-           ArrayRefAttr:$portTypes,
-           DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-           OptionalAttr<InternalPathArrayAttr>:$internalPaths
-      );
+  let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$defname,
+      ParamDeclArrayAttr:$parameters, ConventionAttr:$convention,
+      DenseBoolArrayAttr:$portDirections, ArrayRefAttr:$portLocations,
+      ArrayRefAttr:$portAnnotations, ArrayRefAttr:$portSymbols,
+      ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
+      LayerArrayAttr:$knownLayers,
+      DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+      DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
+      OptionalAttr<InternalPathArrayAttr>:$internalPaths);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "StringAttr":$name,
-                      "ConventionAttr":$convention,
-                      "ArrayRef<PortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$defnamAttr,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
-  ];
+  let builders = [OpBuilder<(ins "StringAttr":$name,
+      "ConventionAttr":$convention, "ArrayRef<PortInfo>":$ports,
+      "ArrayAttr":$knownLayers, CArg<"StringRef", "StringRef()">:$defnamAttr,
+      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths,
+      CArg<"ArrayAttr", "ArrayAttr()">:$layers)>];
 
   let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,

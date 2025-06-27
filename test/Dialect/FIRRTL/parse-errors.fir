@@ -1737,3 +1737,35 @@ circuit NestedWhenRedef:
         ; expected-error @+1 {{redefinition of name 'val'}}
         node val = _t_2   ; 'val' is duplicated in nested when
       connect _t, val
+
+// -----
+FIRRTL version 4.0.0
+circuit ModuleEnableLayerSpecMissingLayerName:
+  ; expected-error @below {{expected layer name}}
+  public module ModuleEnableLayerSpecMissingLayerName enablelayer:
+
+// -----
+FIRRTL version 4.0.0
+circuit ModuleEnableLayerSpecMissing2ndLayerName:
+  layer A, bind:
+  ; expected-error @below {{expected layer name}}
+  public module ModuleEnableLayerSpecMissing2ndLayerName enablelayer A,:
+
+// -----
+FIRRTL version 4.0.0
+circuit ModuleKnownLayerSpecNotValid:
+  ; expected-error @below {{expected ':' in module definition}}
+  public module ModuleKnownLayerSpecNotValid knownlayer:
+
+// -----
+FIRRTL version 4.0.0
+circuit ExtModuleKnownLayerSpecMissingLayerName:
+  ; expected-error @below {{expected layer name}}
+  extmodule ExtModuleKnownLayerSpecMissingLayerName knownlayer:
+
+// -----
+FIRRTL version 4.0.0
+circuit ExtModuleKnownLayerSpecMissing2ndLayerName:
+  layer A, bind:
+  ; expected-error @below {{expected layer name}}
+  extmodule ExtModuleKnownLayerSpecMissing2ndLayerName knownlayer A,:
