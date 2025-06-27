@@ -128,7 +128,7 @@ circuit Top : %[[
     connect in, or(tap_0, tap_2[0])
     connect out, or(tap_1, tap_2[1])
 
-; CHECK-LABEL:      module Top
+; CHECK:      module Top
 ; CHECK:        tap_0 = Top.unsigned_0.signed_0.localparam_0.foo.bar.in;
 ; CHECK-NEXT:   tap_1 = Top.unsigned_0.signed_0.localparam_0.foo.bar.out;
 ; CHECK-NEXT:   tap_2_0 = Top.unsigned_0.signed_0.always_ext.Memory[0];
@@ -201,7 +201,7 @@ circuit Top : %[[
     connect io.c, c
     connect io.d, d
 
-    ; CHECK-LABEL:      module Top
+    ; CHECK:      module Top
     ; TODO: fix having constants carry names
     ; CHECK:        wire k = 1'h0
     ; CHECK:        io_b = Top.foo.f_probe;
@@ -248,14 +248,14 @@ circuit TestHarness : %[[
     wire signal : UInt<8>
     connect signal, inv
 
-; CHECK-LABEL: module Top(
+; CHECK:       module Top(
 ; CHECK-NOT:   endmodule
 ; CHECK:         Companion Companion (
 ; CHECK-NEXT:    .io (io),
 ; CHECK-NEXT:    .[[bore:[a-zA-Z0-9_]+]] (Top.test.signal_probe)
 ; CHECK:       endmodule
 
-; CHECK-LABEL: module Companion(
+; CHECK:       module Companion(
 ; CHECK-NOT:   endmodule
 ; CHECK-NEXT:    output io,
 ; CHECK-NEXT:    input [7:0] [[bore]]

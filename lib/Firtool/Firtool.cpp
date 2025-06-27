@@ -202,8 +202,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
   if (!opt.shouldDisableOptimization()) {
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        circt::firrtl::createEliminateWiresPass());
+    if (!opt.shouldDisableWireElimination())
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          circt::firrtl::createEliminateWiresPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -775,6 +776,10 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Control how symbolic values are lowered"),
       llvm::cl::init(verif::SymbolicValueLowering::ExtModule),
       verif::symbolicValueLoweringCLValues()};
+
+  llvm::cl::opt<bool> disableWireElimination{
+      "disable-wire-elimination", llvm::cl::desc("Disable wire elimination"),
+      llvm::cl::init(false)};
 };
 } // namespace
 
@@ -813,7 +818,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       exportModuleHierarchy(false), stripFirDebugInfo(true),
       stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
-      symbolicValueLowering(verif::SymbolicValueLowering::ExtModule) {
+      symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
+      disableWireElimination(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -865,4 +871,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   addCompanionAssume = clOptions->addCompanionAssume;
   selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
   symbolicValueLowering = clOptions->symbolicValueLowering;
+  disableWireElimination = clOptions->disableWireElimination;
 }
