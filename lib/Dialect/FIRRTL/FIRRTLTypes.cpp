@@ -248,7 +248,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                        parseBundleElement))
       return failure();
 
-    return result = BundleType::get(context, elements, isConst), success();
+    result = parser.getChecked<BundleType>(context, elements, isConst);
+    return failure(!result);
   }
   if (name == "openbundle") {
     SmallVector<OpenBundleType::BundleElement, 4> elements;
@@ -1580,6 +1581,19 @@ FIRRTLBaseType BundleType::getAnonymousType() {
   return anonymousType;
 }
 
+LogicalResult BundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                                 ArrayRef<BundleElement> elements,
+                                 bool isConst) {
+  SmallPtrSet<StringAttr, 4> nameSet;
+  for (auto &element : elements) {
+    if (!nameSet.insert(element.name).second)
+      return emitErrorFn() << "duplicate field name " << element.name
+                           << " in bundle";
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // OpenBundle Type
 //===----------------------------------------------------------------------===//
@@ -1785,7 +1799,11 @@ OpenBundleType::getElementTypePreservingConst(size_t index) {
 LogicalResult
 OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                        ArrayRef<BundleElement> elements, bool isConst) {
+  SmallPtrSet<StringAttr, 4> nameSet;
   for (auto &element : elements) {
+    if (!nameSet.insert(element.name).second)
+      return emitErrorFn() << "duplicate field name " << element.name
+                           << " in openbundle";
     if (FIRRTLType(element.type).containsReference() && isConst)
       return emitErrorFn()
              << "'const' bundle cannot have references, but element "

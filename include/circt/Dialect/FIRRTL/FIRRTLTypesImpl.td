@@ -279,6 +279,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
 
 def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType"> {
   let typeName = "firrtl.bundle";
+  let genVerifyDecl = 1;
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();

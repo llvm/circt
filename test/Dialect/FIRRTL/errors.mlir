@@ -1816,6 +1816,22 @@ firrtl.circuit "ConstOpenVector" {
 }
 
 // -----
+// No duplicate fields within.
+
+firrtl.circuit "DupFieldsBundle" {
+  // expected-error @below {{duplicate field name "a" in bundle}}
+  firrtl.extmodule @DupFieldsBundle(out out : !firrtl.bundle<a: uint<1>, a: uint<1>>)
+}
+
+// -----
+// No duplicate fields within.
+
+firrtl.circuit "DupFieldsOpenBundle" {
+  // expected-error @below {{duplicate field name "a" in openbundle}}
+  firrtl.extmodule @DupFieldsOpenBundle(out out : !firrtl.openbundle<a: uint<1>, a: uint<1>>)
+}
+
+// -----
 // No const with probes within.
 
 firrtl.circuit "ConstOpenBundle" {
