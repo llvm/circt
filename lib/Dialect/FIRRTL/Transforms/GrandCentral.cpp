@@ -27,6 +27,7 @@
 #include "circt/Support/Debug.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/YAMLTraits.h"
@@ -2093,7 +2094,8 @@ void GrandCentralPass::runOnOperation() {
               }
 
               // Extract all instances in the design.
-              for (auto *i : instancePaths->instanceGraph.lookup(op)->uses()) {
+              for (auto *i : llvm::make_early_inc_range(
+                       instancePaths->instanceGraph.lookup(op)->uses())) {
                 auto instance = cast<InstanceOp>(i->getInstance());
 
                 // Skip extraction if the instance is not in the design.
@@ -2112,6 +2114,7 @@ void GrandCentralPass::runOnOperation() {
                         builder.create<WireOp>(port.getLoc(), port.getType());
                     port.replaceAllUsesWith(wire.getResult());
                   }
+                  i->erase();
                   instance->erase();
                 } else {
                   // Lower the companion to a bind unless the user told us
@@ -2228,7 +2231,9 @@ void GrandCentralPass::runOnOperation() {
         if (nla.root() == name)
           nla.erase();
       }
-
+      auto *node = instancePaths->instanceGraph.lookup(
+          cast<igraph::ModuleOpInterface>(*mod));
+      instancePaths->instanceGraph.erase(node);
       mod->erase();
     }
 
