@@ -335,6 +335,13 @@ circuit circuit:
 FIRRTL version 4.0.0
 circuit circuit:
   public module circuit :
+    input in: {a: UInt, a: UInt} ; expected-error {{duplicate field name in bundle: a}}
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit circuit:
+  public module circuit :
     input in: UInt<80>
     inst xyz of circuit
     node n = xyz.foo   ; expected-error {{use of invalid field name 'foo' on bundle value}}

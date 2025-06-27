@@ -1020,20 +1020,28 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::l_brace);
 
     SmallVector<OpenBundleType::BundleElement, 4> elements;
+    SmallPtrSet<StringAttr, 4> nameSet;
     bool bundleCompatible = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
-          StringRef fieldName;
-          FIRRTLType type;
-          if (parseFieldId(fieldName, "expected bundle field name") ||
+          auto loc = getToken().getLoc();
+          StringRef fieldNameStr;
+          if (parseFieldId(fieldNameStr, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle"))
             return failure();
+          auto fieldName = StringAttr::get(getContext(), fieldNameStr);
+
+          // Verify that the names of each field are unique.
+          if (!nameSet.insert(fieldName).second)
+            return emitError(loc, "duplicate field name in bundle: " +
+                                      fieldName.getValue());
+
+          FIRRTLType type;
           if (parseType(type, "expected bundle field type"))
             return failure();
 
-          elements.push_back(
-              {StringAttr::get(getContext(), fieldName), isFlipped, type});
+          elements.push_back({fieldName, isFlipped, type});
           bundleCompatible &= isa<BundleType::ElementType>(type);
 
           return success();
