@@ -21,10 +21,11 @@ kanagawa.design @foo {
   }
 }
 """)
-  
+
   # Test that we can parse kanagawa dialect IR
   print("Kanagawa dialect registration and parsing successful!")
-  
+
   # Test that kanagawa passes are registered
-  pm = passmanager.PassManager.parse("builtin.module(kanagawa.design(kanagawa-containerize))")
+  pm = passmanager.PassManager.parse(
+      "builtin.module(kanagawa.design(kanagawa-containerize))")
   print("Kanagawa passes registration successful!")
