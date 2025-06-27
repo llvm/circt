@@ -279,29 +279,39 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     A "firrtl.mem" operation is typically lowered to this operation when they
     are not directly lowered to registers by the compiler.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, UI32Attr:$numReadPorts,
-      UI32Attr:$numWritePorts, UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth,
-      UI32Attr:$maskBits, UI32Attr:$readLatency, UI32Attr:$writeLatency,
-      UI64Attr:$depth, ArrayAttr:$extraPorts,
-      DenseBoolArrayAttr:$portDirections, ArrayRefAttr:$portLocations,
-      ArrayRefAttr:$portAnnotations, ArrayRefAttr:$portSymbols,
-      ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
-      DefaultValuedAttr<RUWBehaviorAttr, "firrtl::RUWBehavior::Undefined">:$ruw,
-      AnnotationArrayAttr:$annotations,
-      DefaultValuedAttr<LayerArrayAttr, "{}">:$layers);
+  let arguments =
+      (ins SymbolNameAttr:$sym_name,
+           UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
+           UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
+           UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
+           ArrayAttr:$extraPorts,
+           DenseBoolArrayAttr:$portDirections,
+           ArrayRefAttr:$portLocations,
+           ArrayRefAttr:$portAnnotations,
+           ArrayRefAttr:$portSymbols,
+           ArrayRefAttr:$portNames,
+           ArrayRefAttr:$portTypes,
+           DefaultValuedAttr<RUWBehaviorAttr,
+             "firrtl::RUWBehavior::Undefined">:$ruw,
+           AnnotationArrayAttr:$annotations,
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
+      );
 
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "StringAttr":$name,
-      "ArrayRef<PortInfo>":$ports, "uint32_t":$numReadPorts,
-      "uint32_t":$numWritePorts, "uint32_t":$numReadWritePorts,
-      "uint32_t":$dataWidth, "uint32_t":$maskBits, "uint32_t":$readLatency,
-      "uint32_t":$writeLatency, "uint64_t":$depth,
-      CArg<"firrtl::RUWBehavior", "firrtl::RUWBehavior::Undefined">:$ruw,
-      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-      CArg<"ArrayAttr", "ArrayAttr()">:$layers)>];
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   "uint32_t":$numReadPorts,  "uint32_t":$numWritePorts,
+                   "uint32_t":$numReadWritePorts, "uint32_t":$dataWidth,
+                   "uint32_t":$maskBits, "uint32_t":$readLatency,
+                   "uint32_t":$writeLatency, "uint64_t":$depth,
+                   CArg<"firrtl::RUWBehavior",
+                    "firrtl::RUWBehavior::Undefined">:$ruw,
+                   CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                   CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
+  ];
 
   let extraModuleClassDeclaration = [{
     /// Return true if this memory has a mask.

@@ -60,18 +60,23 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<
     Define a new behavioral sequential memory.  Sequential memories have a
     write latency and a read latency of 1.
   }];
-  let arguments = (ins RUWBehaviorAttr:$ruw, StrAttr:$name,
-      NameKindAttr:$nameKind, AnnotationArrayAttr:$annotations,
-      OptionalAttr<InnerSymAttr>:$inner_sym, OptionalAttr<MemoryInitAttr>:$init,
-      OptionalAttr<StrAttr>:$prefix);
+  let arguments = (ins RUWBehaviorAttr:$ruw,
+                       StrAttr:$name,
+                       NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<MemoryInitAttr>:$init,
+                       OptionalAttr<StrAttr>:$prefix);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind) $ruw
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
-  let builders = [OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType,
-      "uint64_t":$numElements, "firrtl::RUWBehavior":$ruw,
-      "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
-      "ArrayAttr":$annotations, CArg<"StringAttr", "StringAttr()">:$innerSym,
-      CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>];
+  let builders = [
+    OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
+                   "firrtl::RUWBehavior":$ruw, "mlir::StringRef":$name,
+                   "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
+                   CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
+  ];
 }
 
 def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,

@@ -243,13 +243,16 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 
 def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new mem";
-  let arguments = (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
-      ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
-      ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWBehaviorAttr:$ruw,
-      StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
-      AnnotationArrayAttr:$annotations, PortAnnotationsAttr:$portAnnotations,
-      OptionalAttr<InnerSymAttr>:$inner_sym, OptionalAttr<MemoryInitAttr>:$init,
-      OptionalAttr<StrAttr>:$prefix);
+  let arguments =
+    (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
+         ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
+         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWBehaviorAttr:$ruw,
+         StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
+         AnnotationArrayAttr:$annotations,
+         PortAnnotationsAttr:$portAnnotations,
+         OptionalAttr<InnerSymAttr>:$inner_sym,
+         OptionalAttr<MemoryInitAttr>:$init,
+         OptionalAttr<StrAttr>:$prefix);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
