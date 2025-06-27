@@ -228,6 +228,10 @@ ParseResult BLIFParser::parseId(StringRef &result, const Twine &message) {
   }
 }
 
+/// id  ::= Id
+///
+/// Parse the 'id' grammar, which is a trivial string.  On
+/// success, this returns the identifier in the result attribute.
 ParseResult BLIFParser::parseId(StringAttr &result, const Twine &message) {
   StringRef name;
   if (parseId(name, message))
@@ -258,10 +262,6 @@ ParseResult BLIFParser::parseIdList(SmallVectorImpl<StringRef> &result,
   }
 }
 
-/// id  ::= Id
-///
-/// Parse the 'id' grammar, which is a trivial string.  On
-/// success, this returns the identifier in the result attribute.
 ParseResult BLIFParser::parseOptionalInt(int &result) {
   if (getToken().getKind() == BLIFToken::integer) {
     if (getTokenSpelling().getAsInteger(10, result)) {
