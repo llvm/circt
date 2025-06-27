@@ -14,9 +14,10 @@ circuit Foo:
     wire _x: {a: UInt<1>, flip b: UInt<1>}
     connect _x, a
 
-    ; Default behavior is to preserve named wires.
-    ; CHECK:        wire x_a
+    ; Preserve named wires/nodes if --preserve-values=named.
     ; CHECK:        wire x_b
+    ; CHECK:        wire y
+    ; CHECK:        wire x_a
     wire x: {a: UInt<1>, flip b: UInt<1>}
     connect x, _x
 
@@ -24,8 +25,6 @@ circuit Foo:
     ; CHECK-NOT: wire _y_b
     node _y_b = x.b
 
-    ; Default behavior is to preserve named nodes.
-    ; CHECK:        wire y
     node y = _y_b
 
     connect b.a, y
