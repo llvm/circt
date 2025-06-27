@@ -1361,15 +1361,10 @@ namespace {
 /// This struct provides context information that is global to the module we're
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
-  explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
+  explicit FIRModuleContext(Block *topLevelBlock,
+                            SharedParserConstants &constants, FIRLexer &lexer,
                             FIRVersion version)
-      : FIRParser(constants, lexer, version) {}
-
-  // The expression-oriented nature of firrtl syntax produces tons of constant
-  // nodes which are obviously redundant.  Instead of literally producing them
-  // in the parser, do an implicit CSE to reduce parse time and silliness in the
-  // resulting IR.
-  llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+      : FIRParser(constants, lexer, version), topLevelBlock(topLevelBlock) {}
 
   /// Get a cached constant.
   template <typename OpTy = ConstantOp, typename... Args>
@@ -1383,12 +1378,22 @@ struct FIRModuleContext : public FIRParser {
     // dominance.
     OpBuilder::InsertPoint savedIP;
 
-    auto *parentOp = builder.getInsertionBlock()->getParentOp();
-    if (!isa<FModuleLike>(parentOp)) {
+    // Find the insertion point.
+    if (builder.getInsertionBlock() != topLevelBlock) {
       savedIP = builder.saveInsertionPoint();
-      while (!isa<FModuleLike>(parentOp)) {
-        builder.setInsertionPoint(parentOp);
-        parentOp = builder.getInsertionBlock()->getParentOp();
+      auto *block = builder.getInsertionBlock();
+      while (true) {
+        auto *op = block->getParentOp();
+        if (!op || !op->getBlock()) {
+          // We are inserting into an unknown region.
+          builder.setInsertionPointToEnd(topLevelBlock);
+          break;
+        }
+        if (op->getBlock() == topLevelBlock) {
+          builder.setInsertionPoint(op);
+          break;
+        }
+        block = op->getBlock();
       }
     }
 
@@ -1494,6 +1499,15 @@ struct FIRModuleContext : public FIRParser {
   };
 
 private:
+  /// The top level block in which we insert cached constants.
+  Block *topLevelBlock;
+
+  /// The expression-oriented nature of firrtl syntax produces tons of constant
+  /// nodes which are obviously redundant.  Instead of literally producing them
+  /// in the parser, do an implicit CSE to reduce parse time and silliness in
+  /// the resulting IR.
+  llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+
   /// This symbol table holds the names of ports, wires, and other local decls.
   /// This is scoped because conditional statements introduce subscopes.
   ModuleSymbolTable symbolTable;
@@ -2506,14 +2520,6 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   Type attrType =
       IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
   auto attr = builder.getIntegerAttr(attrType, value);
-
-  // Check to see if we've already created this constant.  If so, reuse it.
-  auto &entry = moduleContext.constantCache[{attr, type}];
-  if (entry) {
-    // If we already had an entry, reuse it.
-    result = entry;
-    return success();
-  }
 
   locationProcessor.setLoc(loc);
   result = moduleContext.getCachedConstant(builder, attr, type, attr);
@@ -6035,7 +6041,8 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
   // Reset the parser/lexer state back to right after the port list.
   deferredModule.lexerCursor.restore(moduleBodyLexer);
 
-  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer, version);
+  FIRModuleContext moduleContext(&body, getConstants(), moduleBodyLexer,
+                                 version);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.

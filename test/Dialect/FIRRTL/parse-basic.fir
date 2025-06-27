@@ -495,6 +495,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   ; CHECK-LABEL: firrtl.module private @constant_implicit_cse(
   module constant_implicit_cse :
     input cond : UInt<1>
+    input enum : {|A|}
 
     ; CHECK: [[CST15:%.+]] = firrtl.constant 15 : !firrtl.const.uint<4>
     ; CHECK: %a = firrtl.node interesting_name [[CST15]]
@@ -520,6 +521,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK:  %f = firrtl.node interesting_name [[CST15]]
     node f = UInt<4>(15)
     node g = UInt<4>(7)
+
+    ; Should be able to use the constant cache under a match without crashing.
+    ; CHECK: [[CST8:%.+]] = firrtl.constant 8 : !firrtl.const.uint<4>
+    match enum:
+      A:
+        ; CHECK:  %h = firrtl.node interesting_name [[CST7]]
+        node h = UInt<4>(7)
+         ; CHECK: %i = firrtl.node interesting_name [[CST8]]
+        node i = UInt<4>(8)
 
   ; CHECK-LABEL: firrtl.module private @subfield_implicit_cse
   module subfield_implicit_cse :
