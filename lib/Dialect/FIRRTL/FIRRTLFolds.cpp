@@ -1124,9 +1124,6 @@ public:
                               SmallVectorImpl<Value> &remaining) const = 0;
 
   /// Return the unit value for this reduction operation:
-  /// - OrR: false (0) - OR with 0 is identity
-  /// - AndR: true (1) - AND with 1 is identity
-  /// - XorR: false (0) - XOR with 0 is identity
   virtual bool getIdentityValue() const = 0;
 
   LogicalResult
@@ -1137,7 +1134,6 @@ public:
     if (!catOp)
       return failure();
 
-    auto resultType = cast<IntType>(op->getResult(0).getType());
     SmallVector<Value> nonConstantOperands;
 
     // Process each operand of the cat operation
@@ -1154,8 +1150,9 @@ public:
 
     // If no operands remain, replace with identity value
     if (nonConstantOperands.empty()) {
-      replaceOpWithNewOpAndCopyName<ConstantOp>(rewriter, op, resultType,
-                                                APInt(1, getIdentityValue()));
+      replaceOpWithNewOpAndCopyName<ConstantOp>(
+          rewriter, op, cast<IntType>(op->getResult(0).getType()),
+          APInt(1, getIdentityValue()));
       return success();
     }
 
@@ -1545,8 +1542,9 @@ struct BitsOfCat : public mlir::RewritePattern {
         return failure();
       if (bitPos < operandWidth) {
         if (bitPos + resultWidth <= operandWidth) {
-          rewriter.replaceOpWithNewOp<BitsPrimOp>(
-              op, operand, bitPos + resultWidth - 1, bitPos);
+          auto newBits = rewriter.createOrFold<BitsPrimOp>(
+              op->getLoc(), operand, bitPos + resultWidth - 1, bitPos);
+          replaceOpAndCopyName(rewriter, op, newBits);
           return success();
         }
         return failure();
