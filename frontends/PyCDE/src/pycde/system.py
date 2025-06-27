@@ -41,7 +41,7 @@ class System:
       "mod", "top_modules", "name", "passed", "_old_system_token", "_op_cache",
       "_generate_queue", "output_directory", "files", "mod_files",
       "packaging_funcs", "sw_api_langs", "_instance_roots", "_placedb",
-      "_appid_index", "platform"
+      "_appid_index", "platform", "plugin_added_passes"
   ]
 
   def __init__(self,
@@ -86,6 +86,8 @@ class System:
     self.output_directory = pathlib.Path(output_directory)
     self.output_directory.mkdir(exist_ok=True)
     self.hw_output_dir.mkdir(exist_ok=True)
+
+    self.plugin_added_passes: Dict[str, List[str]] = {}
 
     with self:
       [m._builder.circt_mod for m in self.top_modules]
@@ -277,6 +279,10 @@ class System:
       # "builtin.module(dc-materialize-forks-sinks)",
       # "builtin.module(lower-dc-to-hw)",
       # "builtin.module(map-arith-to-comb)",
+
+      # Lower the pipeline dialect.
+      "builtin.module(pipeline-explicit-regs)",
+      "builtin.module(lower-pipeline-to-hw)",
 
       # Run ESI manifest passes.
       "builtin.module(esi-appid-hier{{top={tops} }}, esi-build-manifest{{top={tops} }})",

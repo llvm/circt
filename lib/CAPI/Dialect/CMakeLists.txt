@@ -17,6 +17,7 @@ set(LLVM_OPTIONAL_SOURCES
   MSFT.cpp
   Moore.cpp
   OM.cpp
+  Pipeline.cpp
   RTG.cpp
   RTGTest.cpp
   SV.cpp
@@ -129,6 +130,15 @@ add_circt_public_c_api_library(CIRCTCAPIOM
   MLIRCAPIIR
   CIRCTOM
   CIRCTOMEvaluator
+)
+
+add_circt_public_c_api_library(CIRCTCAPIPipeline
+  Pipeline.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTPipelineOps
+  CIRCTPipelineTransforms
 )
 
 add_circt_public_c_api_library(CIRCTCAPIRTG
