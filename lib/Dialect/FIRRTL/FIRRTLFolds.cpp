@@ -1407,8 +1407,7 @@ public:
     while (!worklist.empty()) {
       auto value = worklist.pop_back_val();
       auto catOp = value.getDefiningOp<CatPrimOp>();
-      // Make sure not to flatten if the cat is used by other ops.
-      if (!catOp || !catOp->hasOneUse()) {
+      if (!catOp) {
         operands.push_back(value);
         continue;
       }

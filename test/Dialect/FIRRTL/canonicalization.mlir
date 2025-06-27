@@ -1042,9 +1042,7 @@ firrtl.module @FlattenCat(in %a: !firrtl.uint<2>, in %b: !firrtl.uint<3>, in %c:
   %outer = firrtl.cat %middle1, %middle2 : (!firrtl.uint<10>, !firrtl.uint<5>) -> !firrtl.uint<15>
   firrtl.matchingconnect %out2, %outer : !firrtl.uint<15>
 
-  // Multiply used cat must not be flatten to prevent exponential blowup
-  // CHECK: %[[AB:.+]] = firrtl.cat %a, %b
-  // CHECK: %[[ABAB:.+]] = firrtl.cat %[[AB]], %[[AB]]
+  // CHECK: %[[ABAB:.+]] = firrtl.cat %a, %b, %a, %b
   // CHECK: firrtl.matchingconnect %out3, %[[ABAB]]
   %cat_a_b = firrtl.cat %a, %b : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<5>
   %cat_a_b_a_b = firrtl.cat %cat_a_b, %cat_a_b : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<10>
