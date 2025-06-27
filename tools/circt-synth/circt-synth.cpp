@@ -120,6 +120,11 @@ static cl::opt<std::string> abcPath("abc-path", cl::desc("Path to ABC"),
                                     cl::value_desc("path"), cl::init("abc"),
                                     cl::cat(mainCategory));
 
+static cl::opt<bool>
+    continueOnFailure("ignore-abc-failures",
+                      cl::desc("Continue on ABC failure instead of aborting"),
+                      cl::init(false), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -177,6 +182,7 @@ static void populateSynthesisPipeline(PassManager &pm) {
       aig::ABCRunnerOptions options;
       options.abcPath = abcPath;
       options.abcCommands.assign(abcCommands.begin(), abcCommands.end());
+      options.continueOnFailure = continueOnFailure;
       mpm.addPass(aig::createABCRunner(options));
     }
     // TODO: Add balancing, rewriting, FRAIG conversion, etc.
