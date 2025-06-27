@@ -22,21 +22,6 @@ using namespace circt;
 using namespace comb;
 using namespace matchers;
 
-/// In comb, we assume no knowledge of the semantics of cross-block dataflow. As
-/// such, cross-block dataflow is interpreted as a canonicalization barrier.
-/// This is a conservative approach which:
-/// 1. still allows for efficient canonicalization for the common CIRCT usecase
-///    of comb (comb logic nested inside single-block hw.module's)
-/// 2. allows comb operations to be used in non-HW container ops - that may use
-///    MLIR blocks and regions to represent various forms of hierarchical
-///    abstractions, thus allowing comb to compose with other dialects.
-static bool hasOperandsOutsideOfBlock(Operation *op) {
-  Block *thisBlock = op->getBlock();
-  return llvm::any_of(op->getOperands(), [&](Value operand) {
-    return operand.getParentBlock() != thisBlock;
-  });
-}
-
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
 ///
@@ -432,9 +417,6 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   // If we are extracting the entire input, then return it.
   if (getInput().getType() == getType())
     return getInput();
@@ -563,9 +545,6 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   auto *inputOp = op.getInput().getDefiningOp();
 
   // This turns out to be incredibly expensive.  Disable until performance is
@@ -1628,9 +1607,6 @@ OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
 
 // Constant folding
 OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   if (getNumOperands() == 1)
     return getOperand(0);
 
@@ -1655,9 +1631,6 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -2570,9 +2543,6 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
 
   LogicalResult matchAndRewrite(hw::ArrayCreateOp op,
                                 PatternRewriter &rewriter) const override {
-    if (hasOperandsOutsideOfBlock(&*op))
-      return failure();
-
     if (foldArrayOfMuxes(op, rewriter))
       return success();
     return failure();
