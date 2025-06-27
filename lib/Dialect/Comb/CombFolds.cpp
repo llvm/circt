@@ -268,9 +268,6 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   // Replicate one time -> noop.
   if (cast<IntegerType>(getType()).getWidth() ==
       getInput().getType().getIntOrFloatBitWidth())
@@ -298,9 +295,6 @@ OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   // Constant fold.
   if (auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
@@ -327,9 +321,6 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 }
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
@@ -343,9 +334,6 @@ OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -370,9 +358,6 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     unsigned shift = rhs.getValue().getZExtValue();
     if (shift == 0)
@@ -386,9 +371,6 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -413,9 +395,6 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
@@ -424,9 +403,6 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -1845,9 +1821,6 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   // mux (c, b, b) -> b
   if (getTrueValue() == getFalseValue() && getTrueValue() != getResult())
     return getTrueValue();
@@ -2304,9 +2277,6 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
     return failure();
@@ -2682,9 +2652,6 @@ static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
 }
 
 OpFoldResult ICmpOp::fold(FoldAdaptor adaptor) {
-  if (hasOperandsOutsideOfBlock(getOperation()))
-    return {};
-
   // gt a, a -> false
   // gte a, a -> true
   if (getLhs() == getRhs()) {
@@ -2960,9 +2927,6 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 }
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
-  if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
-
   APInt lhs, rhs;
 
   // icmp 1, x -> icmp x, 1
