@@ -11,7 +11,7 @@ firrtl.circuit "Test" {
   }
   firrtl.layer @B bind {}
 
-  firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @A>)
+  firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @A>) attributes {knownLayers=[@A]}
 
   //===--------------------------------------------------------------------===//
   // Removal of Probe Colors
@@ -21,7 +21,7 @@ firrtl.circuit "Test" {
   firrtl.module @ColoredPorts(out %o: !firrtl.probe<uint<1>, @A>) {}
 
   // CHECK-LABEL: @ExtColoredPorts(out o: !firrtl.probe<uint<1>>)
-  firrtl.extmodule @ExtColoredPorts(out o: !firrtl.probe<uint<1>, @A>)
+  firrtl.extmodule @ExtColoredPorts(out o: !firrtl.probe<uint<1>, @A>) attributes {knownLayers=[@A]}
 
   // CHECK-LABEL: @ColoredPortsOnInstances
   firrtl.module @ColoredPortsOnInstances() {
@@ -710,3 +710,63 @@ firrtl.circuit "Top" {
   }
 }
 
+// -----
+
+// Check that only known bound-in layers are included.
+firrtl.circuit "Top" {
+  firrtl.layer @Layer bind {}
+
+  firrtl.extmodule @ComponentA() attributes {knownLayers=[@Layer]}
+  firrtl.extmodule @ComponentB() attributes {knownLayers=[]}
+
+
+  // There should only be one include statement.
+  // CHECK:     emit.file "layers-Top-Layer.sv"
+  // CHECK:     sv.include local "layers-ComponentA-Layer.sv"
+  // CHECK-NOT: sv.include local "layers-ComponentB-Layer.sv"
+  firrtl.module @Top() {
+    firrtl.instance componentA @ComponentA()
+    firrtl.instance componentB @ComponentB()
+  }
+}
+
+// -----
+
+// When an extmodule knows of a child layer, it also knows the parent. Check
+// that the parent bindfile is included. In this case, the child layer is
+// inline, so it should NOT be included.
+firrtl.circuit "Top" {
+  firrtl.layer @ParentLayer bind {
+    firrtl.layer @ChildLayer inline {}
+  }
+
+  firrtl.extmodule @Component() attributes {knownLayers=[@ParentLayer::@ChildLayer]}
+
+  // There should only be one include statement.
+  // CHECK:     emit.file "layers-Top-ParentLayer.sv"
+  // CHECK:     sv.include local "layers-Component-ParentLayer.sv"
+  // CHECK-NOT: sv.include local "layers-Component-ParentLayer-ChildLayer.sv"
+  firrtl.module public @Top() {
+    firrtl.instance component @Component()
+  }
+}
+
+// -----
+
+// When an extmodule knows of a child layer, it also knows the parent. Check
+// that the parent bindfile is included. In this case, the child layer is
+// bound-in, so it SHOULD be included too.
+firrtl.circuit "Top" {
+  firrtl.layer @ParentLayer bind {
+    firrtl.layer @ChildLayer bind {}
+  }
+
+  firrtl.extmodule @Component() attributes {knownLayers=[@ParentLayer::@ChildLayer]}
+
+  // CHECK: emit.file "layers-Top-ParentLayer.sv"
+  // CHECK: sv.include local "layers-Component-ParentLayer.sv"
+  // CHECK: sv.include local "layers-Component-ParentLayer-ChildLayer.sv"
+  firrtl.module public @Top() {
+    firrtl.instance component @Component()
+  }
+}

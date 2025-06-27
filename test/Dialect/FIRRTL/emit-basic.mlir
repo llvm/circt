@@ -756,10 +756,16 @@ firrtl.circuit "Foo" {
   } {}
 
   // CHECK:      extmodule ExtModuleWithEnabledLayers
+  // CHECK-NEXT:     knownlayer GroupA
+  // CHECK-NEXT:     knownlayer GroupA.GroupB
   // CHECK-NEXT:     enablelayer GroupA
   // CHECK-NEXT:     enablelayer GroupA.GroupB :
   firrtl.extmodule @ExtModuleWithEnabledLayers() attributes {
     layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ],
+    knownLayers = [
       @GroupA,
       @GroupA::@GroupB
     ]

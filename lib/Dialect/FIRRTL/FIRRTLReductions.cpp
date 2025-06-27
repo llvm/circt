@@ -196,7 +196,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getConventionAttr(), module.getPorts(), StringRef(),
+        module.getConventionAttr(), module.getPorts(), ArrayAttr(), StringRef(),
         module.getAnnotationsAttr());
     module->erase();
     return success();

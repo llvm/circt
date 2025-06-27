@@ -65,7 +65,7 @@ struct Emitter {
   void emitFormalLike(Operation *op, StringRef keyword, StringAttr symName,
                       StringAttr moduleName, DictionaryAttr params);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
-
+  void emitKnownLayers(ArrayRef<Attribute> layers);
   void emitParamAssign(ParamDeclAttr param, Operation *op,
                        std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   void emitParamValue(Attribute value, Operation *op);
@@ -439,6 +439,16 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
   }
 }
 
+void Emitter::emitKnownLayers(ArrayRef<Attribute> layers) {
+  for (auto layer : layers) {
+    ps << PP::space;
+    ps.cbox(2, IndentStyle::Block);
+    ps << "knownlayer" << PP::space;
+    emitSymbol(cast<SymbolRefAttr>(layer));
+    ps << PP::end;
+  }
+}
+
 void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
                               std::optional<PPExtString> wordBeforeLHS) {
   if (wordBeforeLHS) {
@@ -544,6 +554,7 @@ void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitKnownLayers(op.getKnownLayers());
   emitEnabledLayers(op.getLayers());
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
