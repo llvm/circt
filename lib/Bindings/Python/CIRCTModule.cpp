@@ -19,6 +19,7 @@
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/HWArith.h"
 #include "circt-c/Dialect/Handshake.h"
+#include "circt-c/Dialect/Kanagawa.h"
 #include "circt-c/Dialect/LTL.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
@@ -57,6 +58,7 @@ static void registerPasses() {
   registerHWArithPasses();
   registerHWPasses();
   registerHandshakePasses();
+  registerKanagawaPasses();
   registerPipelinePasses();
   mlirRegisterCIRCTConversionPasses();
   mlirRegisterCIRCTTransformsPasses();
@@ -146,6 +148,10 @@ NB_MODULE(_circt, m) {
         MlirDialectHandle handshake = mlirGetDialectHandle__handshake__();
         mlirDialectHandleRegisterDialect(handshake, context);
         mlirDialectHandleLoadDialect(handshake, context);
+
+        MlirDialectHandle kanagawa = mlirGetDialectHandle__kanagawa__();
+        mlirDialectHandleRegisterDialect(kanagawa, context);
+        mlirDialectHandleLoadDialect(kanagawa, context);
 
         MlirDialectHandle ltl = mlirGetDialectHandle__ltl__();
         mlirDialectHandleRegisterDialect(ltl, context);

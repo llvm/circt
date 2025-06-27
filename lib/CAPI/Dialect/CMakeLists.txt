@@ -12,6 +12,7 @@ set(LLVM_OPTIONAL_SOURCES
   HW.cpp
   HWArith.cpp
   Handshake.cpp
+  Kanagawa.cpp
   LLHD.cpp
   LTL.cpp
   MSFT.cpp
@@ -130,6 +131,15 @@ add_circt_public_c_api_library(CIRCTCAPIOM
   MLIRCAPIIR
   CIRCTOM
   CIRCTOMEvaluator
+)
+
+add_circt_public_c_api_library(CIRCTCAPIKanagawa
+  Kanagawa.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTKanagawa
+  CIRCTKanagawaTransforms
 )
 
 add_circt_public_c_api_library(CIRCTCAPIPipeline
