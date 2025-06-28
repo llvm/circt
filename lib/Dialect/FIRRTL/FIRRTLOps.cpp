@@ -1188,7 +1188,8 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t numReadWritePorts, uint32_t dataWidth,
                          uint32_t maskBits, uint32_t readLatency,
                          uint32_t writeLatency, uint64_t depth, RUWBehavior ruw,
-                         ArrayAttr annotations, ArrayAttr layers) {
+                         MemoryInitAttr init, ArrayAttr annotations,
+                         ArrayAttr layers) {
   auto *context = builder.getContext();
   buildModule<FMemModuleOp>(builder, result, name, ports, annotations, layers);
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
@@ -1205,6 +1206,7 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
   properties.setDepth(IntegerAttr::get(ui64Type, depth));
   properties.setExtraPorts(ArrayAttr::get(context, {}));
   properties.setRuw(RUWBehaviorAttr::get(context, ruw));
+  properties.setInit(init);
 }
 
 /// Print a list of module ports in the following form:
