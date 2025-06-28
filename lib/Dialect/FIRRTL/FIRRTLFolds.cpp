@@ -1404,14 +1404,13 @@ public:
         worklist.push_back(operand);
     };
     pushOperands(cat);
-    bool existsSigned = false, existsUnsigned = false;
+    bool hasSigned = false, hasUnsigned = false;
     while (!worklist.empty()) {
       auto value = worklist.pop_back_val();
       auto catOp = value.getDefiningOp<CatPrimOp>();
       if (!catOp) {
         operands.push_back(value);
-        (type_isa<UIntType>(value.getType()) ? existsUnsigned : existsSigned) =
-            true;
+        (type_isa<UIntType>(value.getType()) ? hasUnsigned : hasSigned) = true;
         continue;
       }
 
@@ -1437,7 +1436,7 @@ public:
       return failure();
 
     // If types are mixed, cast all operands to unsigned.
-    if (existsSigned && existsUnsigned)
+    if (hasSigned && hasUnsigned)
       for (auto &operand : operands)
         operand = castToUIntIfSigned(operand);
 
