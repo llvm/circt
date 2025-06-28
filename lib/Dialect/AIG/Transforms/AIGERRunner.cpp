@@ -283,10 +283,10 @@ LogicalResult AIGERRunner::run(hw::HWModuleOp module) {
 
   Converter converter;
 
-  auto reportWarningOrError = [&](const Twine &warning) -> LogicalResult {
+  auto reportWarningOrError = [&](const Twine &message) -> LogicalResult {
     (continueOnFailure ? mlir::emitWarning(module.getLoc())
                        : mlir::emitError(module.getLoc()))
-        << warning << " on module " << module.getModuleNameAttr();
+        << message << " on module " << module.getModuleNameAttr();
     return success(continueOnFailure);
   };
 
