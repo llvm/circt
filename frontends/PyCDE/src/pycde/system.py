@@ -142,6 +142,9 @@ class System:
 
   # Kanagawa dialect lowering passes
   KANAGAWA_DIALECT_PASSES = [
+      "builtin.module(canonicalize)",
+      "builtin.module(hw-verify-irn)",
+      "builtin.module(kanagawa.design(kanagawa-containerize))",
       "builtin.module(hw-verify-irn)",
       "builtin.module(kanagawa.design(kanagawa.container(kanagawa-eliminate-redundant-ops)))",
       "builtin.module(kanagawa.design(kanagawa-tunneling))",
@@ -155,49 +158,108 @@ class System:
   ]
 
   def import_mlir(self,
-                  module: str,
+                  module_str: Optional[str] = None,
+                  file: Optional[os.PathLike] = None,
                   name: str = "",
                   lowering: Optional[List[str]] = None,
-                  output_filename: Optional[str] = None) -> Dict[str, Any]:
-    """Import mlir asm created elsewhere into our space.
+                  output_filename: Optional[str] = None,
+                  importer: Optional[Callable] = None,
+                  debug: bool = False) -> Dict[str, Any]:
+    """Import mlir asm created elsewhere into our space. Exactly one of the
+    arguments module_str or file must be provided.
     
     Args:
-      module: The MLIR module to import, as a string.
+      module_str: The MLIR module to import, as a string.
+      file: The MLIR file to import.
       name: Optional name for the system.
       lowering: Optional list of passes to run on the imported module.
-      output_filename: Optional filename to set on the imported ops. Skips type
-                       scopes since they are generally global.
+      output_filename: Optional filename to set on the imported ops.
+      importer: Optional custom importer function which takes a System and the
+                op. Must return a 3-tuple of (name, obj, proxy).
+      debug: Whether to enable debug output for the import process.
     """
 
-    compat_mod = ir.Module.parse(str(module))
+    if module_str is not None:
+      compat_mod = ir.Module.parse(str(module_str))
+    elif file is not None:
+      compat_mod = ir.Module.parseFile(str(file))
+      if name == "":
+        # If no name is given, use the file name as the module name.
+        name = os.path.splitext(os.path.basename(file))[0]
+    else:
+      raise ValueError(
+          "Must provide either 'module_str' or 'file' to import_mlir")
+
     if lowering is not None:
       # List of passes to run. Use our pass list runner.
-      self._run_pass_list(lowering, f"import_lowering_{name}", compat_mod)
+      self._run_pass_list(lowering,
+                          f"import_lowering_{name}",
+                          compat_mod,
+                          debug=debug)
+
+    def import_builtin(
+        op: ir.Operation
+    ) -> Tuple[Optional[str], Optional[Any], Optional[_PyProxy]]:
+      """Try to convert some ops to PyCDE objects. If the op is not recognized,
+      return (None, None, None)."""
+
+      if isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
+        from .module import import_hw_module
+        try:
+          imported_obj = import_hw_module(self, op)
+          return ir.StringAttr(
+              op.name).value, imported_obj, imported_obj._builder
+        except Exception as e:
+          # Ignore errors in importing the module. Just because we can't
+          # interpret it doesn't mean it's not valid IR which needs to be
+          # imported.
+          if debug:
+            sys.stderr.write(
+                f"Warning: Failed to import module {op.name} as PyCDE module. Reason:\n"
+            )
+            sys.stderr.write(f"  {e}\n")
+          pass
+      elif isinstance(op, esi.RandomAccessMemoryDeclOp):
+        from .esi import _import_ram_decl
+        ram = _import_ram_decl(self, op)
+        return ir.StringAttr(op.sym_name).value, ram, None
+      else:
+        # If all else fails, try to import as an opaque proxy. This only
+        # requires a symbol name.
+        if "sym_name" in op.attributes:
+          sym_name = ir.StringAttr(op.attributes["sym_name"]).value
+          proxy = OpaquePyProxy(self._op_cache, sym_name, op)
+          return sym_name, proxy, proxy
+      return None, None, None
 
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
-      if isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
-        from .module import import_hw_module
-        im = import_hw_module(self, op)
-        self._op_cache.install_op(im._builder, op)
-        ret[ir.StringAttr(op.name).value] = im
-      elif isinstance(op, esi.RandomAccessMemoryDeclOp):
-        from .esi import _import_ram_decl
-        ram = _import_ram_decl(self, op)
-        ret[ir.StringAttr(op.sym_name).value] = ram
-      else:
-        if "sym_name" in op.attributes:
-          # TODO: do symbol renaming.
-          sym_name = ir.StringAttr(op.attributes["sym_name"]).value
-          proxy = OpaquePyProxy(self._op_cache, sym_name, op)
-          ret[sym_name] = proxy
-          self._op_cache.install_op(proxy, op, sym_name)
+      imported_obj = None
+      imported_name = None
+      imported_proxy = None
 
+      # If a custom importer is provided, use it to import the op.
+      if importer is not None:
+        imported_name, imported_obj, imported_proxy = importer(self, op)
+      # If no custom importer is provided or it didn't work, try ours.
+      if imported_obj is None:
+        imported_name, imported_obj, imported_proxy = import_builtin(op)
+
+      # If we successfully imported an object, install it in the op cache
+      if imported_obj is not None:
+        assert imported_name is not None, "Imported object must have a name"
+        if imported_proxy is not None:
+          self._op_cache.install_op(imported_proxy, op, imported_name)
+        ret[imported_name] = imported_obj
+
+      # Append everything we find.
       self.body.append(op)
+      # If an output filename is specified, set it on the op.
       if output_filename is not None and not isinstance(op, hw.TypeScopeOp):
         op.attributes["output_file"] = hw.OutputFileAttr.get_from_filename(
             ir.StringAttr.get(output_filename), False, True)
+
     return ret
 
   def create_physical_region(self, name: str = None):

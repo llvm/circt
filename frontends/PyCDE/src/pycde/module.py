@@ -746,9 +746,13 @@ class ImportedModSpec(ModuleBuilder):
     assert False, "ImportedModSpec should not be used on imported modules."
 
 
-def import_hw_module(sys, hw_module: hw.HWModuleOp) -> type[Module]:
+def import_hw_module(
+    sys,
+    hw_module: hw.HWModuleOp,
+    builder_type: type[ModuleBuilder] = ImportedModSpec) -> type[Module]:
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
-  operates just like an external PyCDE module.
+  operates just like an external PyCDE module. If builder_type is specified, use
+  it as the module builder instead of the default `ImportedModSpec`.
 
   For now, the imported module name MUST NOT conflict with any other modules."""
 
@@ -763,7 +767,7 @@ def import_hw_module(sys, hw_module: hw.HWModuleOp) -> type[Module]:
   for output_name, output_type in zip(mod_type.output_names,
                                       mod_type.output_types):
     modattrs[output_name] = Output(_FromCirctType(output_type), output_name)
-  modattrs["BuilderType"] = ImportedModSpec
+  modattrs["BuilderType"] = builder_type
 
   modattrs["add_metadata"] = staticmethod(
       lambda meta, sys=sys: add_metadata(sys, name, meta))
