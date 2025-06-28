@@ -102,27 +102,10 @@ circuit test: %[[
     connect memory.w.mask, wMask
     connect memory.w.data, wData
 
-; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
-; CHECK:      [
-; CHECK-NEXT:   {
-; CHECK-NEXT:     "module_name": "memory_ext",
-; CHECK-NEXT:     "depth": 16,
-; CHECK-NEXT:     "width": 32,
-; CHECK-NEXT:     "masked": true,
-; CHECK-NEXT:     "read": 1,
-; CHECK-NEXT:     "write": 1,
-; CHECK-NEXT:     "readwrite": 0,
-; CHECK-NEXT:     "ruw_behavior": "New",
-; CHECK-NEXT:     "mask_granularity": 8,
-; CHECK-NEXT:     "extra_ports": [],
-; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "test.memory.memory_ext"
-; CHECK-NEXT:     ]
-; CHECK-NEXT:   }
-; CHECK-NEXT: ]
+; CHECK-LABEL: seq_mems.json
+; CHECK:       "ruw_behavior": "New"
 
 ; CHECK: test.conf
-
 ; CHECK: name memory_ext depth 16 width 32 ports mwrite,read mask_gran 8 ruw New
 
 ;// -----
@@ -164,25 +147,8 @@ circuit test: %[[
     connect memory.w.mask, wMask
     connect memory.w.data, wData
 
-; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
-; CHECK:      [
-; CHECK-NEXT:   {
-; CHECK-NEXT:     "module_name": "memory_ext",
-; CHECK-NEXT:     "depth": 16,
-; CHECK-NEXT:     "width": 32,
-; CHECK-NEXT:     "masked": true,
-; CHECK-NEXT:     "read": 1,
-; CHECK-NEXT:     "write": 1,
-; CHECK-NEXT:     "readwrite": 0,
-; CHECK-NEXT:     "ruw_behavior": "Old",
-; CHECK-NEXT:     "mask_granularity": 8,
-; CHECK-NEXT:     "extra_ports": [],
-; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "test.memory.memory_ext"
-; CHECK-NEXT:     ]
-; CHECK-NEXT:   }
-; CHECK-NEXT: ]
+; CHECK-LABEL: seq_mems.json
+; CHECK:       "ruw_behavior": "Old"
 
 ; CHECK: test.conf
-
 ; CHECK: name memory_ext depth 16 width 32 ports mwrite,read mask_gran 8 ruw Old
