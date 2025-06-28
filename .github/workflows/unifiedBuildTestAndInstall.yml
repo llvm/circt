@@ -102,7 +102,7 @@ on:
           - clang++-15
           - clang++-16
           - clang++-17
-          - gcc++
+          - g++
           - cl
         default: clang++
   workflow_call:
