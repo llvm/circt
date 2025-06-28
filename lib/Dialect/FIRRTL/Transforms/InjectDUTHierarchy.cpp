@@ -245,7 +245,7 @@ void InjectDUTHierarchy::runOnOperation() {
     // The DUT name has changed.  Rewrite instances to use the new DUT name.
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     for (auto *use : instanceGraph.lookup(wrapper.getNameAttr())->uses()) {
-      auto instanceOp = dyn_cast<InstanceOp>(use->getInstance());
+      auto instanceOp = use->getInstance<InstanceOp>();
       if (!instanceOp) {
         use->getInstance().emitOpError()
             << "instantiates the design-under-test, but "
