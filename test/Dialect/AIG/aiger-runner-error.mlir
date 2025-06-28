@@ -3,7 +3,7 @@
 
 // expected-error@below {{multiple clocks found in the module}}
 // expected-note@below {{previous clock is here}}
-// expected-error@below {{failed to export module to AIGER format for "multipleClock"}}
+// expected-error@below {{failed to export module to AIGER format on module "multipleClock"}}
 hw.module @multipleClock(in %c1: !seq.clock, in %c2: !seq.clock, in %a: i1, out out1: i1, out out2: i1) {
   %0 = seq.compreg %a, %c1 : i1
   %1 = seq.compreg %a, %c2 : i1

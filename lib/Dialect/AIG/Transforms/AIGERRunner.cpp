@@ -245,8 +245,10 @@ void Converter::notifyClock(Value value) { clock = value; }
 namespace {
 class AIGERRunner {
 public:
-  AIGERRunner(llvm::StringRef solverPath, SmallVector<std::string> solverArgs)
-      : solverPath(solverPath), solverArgs(std::move(solverArgs)) {}
+  AIGERRunner(llvm::StringRef solverPath, SmallVector<std::string> solverArgs,
+              bool continueOnFailure)
+      : solverPath(solverPath), solverArgs(std::move(solverArgs)),
+        continueOnFailure(continueOnFailure) {}
 
   LogicalResult run(hw::HWModuleOp module);
 
@@ -260,6 +262,7 @@ private:
                                 hw::HWModuleOp module);
   llvm::StringRef solverPath;
   SmallVector<std::string> solverArgs;
+  bool continueOnFailure;
 };
 
 } // namespace
@@ -280,21 +283,25 @@ LogicalResult AIGERRunner::run(hw::HWModuleOp module) {
 
   Converter converter;
 
+  auto reportWarningOrError = [&](const Twine &message) -> LogicalResult {
+    (continueOnFailure ? mlir::emitWarning(module.getLoc())
+                       : mlir::emitError(module.getLoc()))
+        << message << " on module " << module.getModuleNameAttr();
+    return success(continueOnFailure);
+  };
+
   // Export current module to AIGER format
   if (failed(exportToAIGER(converter, cast<hw::HWModuleOp>(module), inputPath)))
-    return emitError(module.getLoc(),
-                     "failed to export module to AIGER format for ")
-           << module.getModuleNameAttr();
+    return reportWarningOrError("failed to export module to AIGER format");
 
   // Run the external solver
   if (failed(runSolver(module, inputPath, outputPath)))
-    return emitError(module.getLoc(), "failed to run external solver");
+    return reportWarningOrError("failed to run external solver");
 
   // Import the results back
   if (failed(
           importFromAIGER(converter, outputPath, cast<hw::HWModuleOp>(module))))
-    return emitError(module.getLoc(),
-                     "failed to import results from AIGER format");
+    return reportWarningOrError("failed to import results from AIGER format");
 
   // If we get here, we succeeded. Clean up temporary files.
   if (llvm::sys::fs::remove(inputPath))
@@ -438,25 +445,8 @@ LogicalResult AIGERRunner::importFromAIGER(Converter &converter,
 namespace {
 class AIGERRunnerPass : public impl::AIGERRunnerBase<AIGERRunnerPass> {
 public:
-  AIGERRunnerPass() = default;
-  AIGERRunnerPass(const AIGERRunnerOptions &options) {
-    solverPath = options.solverPath;
-    solverArgs = options.solverArgs;
-  }
-
+  using AIGERRunnerBase<AIGERRunnerPass>::AIGERRunnerBase;
   void runOnOperation() override;
-
-private:
-  using AIGERRunnerBase::AIGERRunnerBase::solverArgs;
-  using AIGERRunnerBase::AIGERRunnerBase::solverPath;
-
-  // Helper methods
-  LogicalResult runSolver(hw::HWModuleOp module, StringRef inputPath,
-                          StringRef outputPath);
-  LogicalResult exportToAIGER(Converter &converter, hw::HWModuleOp module,
-                              StringRef outputPath);
-  LogicalResult importFromAIGER(Converter &converter, StringRef inputPath,
-                                hw::HWModuleOp module);
 };
 } // namespace
 
@@ -468,7 +458,7 @@ void AIGERRunnerPass::runOnOperation() {
   for (const auto &arg : solverArgs)
     solverArgsRef.push_back(arg);
 
-  AIGERRunner runner(solverPath, std::move(solverArgsRef));
+  AIGERRunner runner(solverPath, std::move(solverArgsRef), continueOnFailure);
   if (failed(runner.run(module)))
     signalPassFailure();
 }
@@ -480,12 +470,7 @@ void AIGERRunnerPass::runOnOperation() {
 namespace {
 class ABCRunnerPass : public impl::ABCRunnerBase<ABCRunnerPass> {
 public:
-  ABCRunnerPass() = default;
-  ABCRunnerPass(const ABCRunnerOptions &options) {
-    abcPath = options.abcPath;
-    abcCommands = options.abcCommands;
-  }
-
+  using ABCRunnerBase<ABCRunnerPass>::ABCRunnerBase;
   void runOnOperation() override;
 };
 } // namespace
@@ -514,7 +499,7 @@ void ABCRunnerPass::runOnOperation() {
   addABCCommand("write <outputFile>");
 
   // Execute the ABC optimization sequence
-  AIGERRunner abcRunner(abcPath, std::move(abcArguments));
+  AIGERRunner abcRunner(abcPath, std::move(abcArguments), continueOnFailure);
   if (failed(abcRunner.run(module)))
     signalPassFailure();
 }

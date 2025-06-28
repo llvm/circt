@@ -29,7 +29,18 @@ def PrintLongestPathAnalysis : Pass<"aig-print-longest-path-analysis", "mlir::Mo
   ];
 }
 
-def AIGERRunner : Pass<"aig-runner", "hw::HWModuleOp"> {
+class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {
+  list<Option> baseOptions = [
+    Option<"continueOnFailure", "continue-on-failure", "bool", "false",
+           "Don't fail even if the AIGER exporter, external solver, or AIGER importer fail">,
+  ];
+
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::seq::SeqDialect"
+  ];
+}
+
+def AIGERRunner : ExternalSolverPass<"aig-runner"> {
   let summary = "Run external logic solvers on AIGER files";
   let description = [{
     This pass exports the current hardware module to AIGER format, runs an
@@ -45,18 +56,14 @@ def AIGERRunner : Pass<"aig-runner", "hw::HWModuleOp"> {
     solver. Hence if the user wants to use ABC, they should use ABCRunner instead
     of AIGERRunner.
   }];
-  let options = [
+  let options = baseOptions # [
     Option<"solverPath", "solver-path", "std::string", "",
            "Path to the external solver executable">,
     ListOption<"solverArgs", "solver-args", "std::string", "">
   ];
-
-  let dependentDialects = [
-    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::seq::SeqDialect"
-  ];
 }
 
-def ABCRunner : Pass<"abc-runner", "hw::HWModuleOp"> {
+def ABCRunner : ExternalSolverPass<"abc-runner"> {
   let summary = "Run ABC on AIGER files";
   let description = [{
     This pass runs ABC on AIGER files. It is a wrapper around AIGERRunner that
@@ -65,13 +72,9 @@ def ABCRunner : Pass<"abc-runner", "hw::HWModuleOp"> {
     - for each command in `abcCommands`, run `-q <command>`
     - `write <outputFile>`: Write the AIGER file
   }];
-  let options = [
+  let options =  baseOptions # [
     Option<"abcPath", "abc-path", "std::string", "", "Path to the ABC executable">,
-    ListOption<"abcCommands", "abc-commands", "std::string", "">
-  ];
-
-  let dependentDialects = [
-    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::seq::SeqDialect"
+    ListOption<"abcCommands", "abc-commands", "std::string", "">,
   ];
 }
 
