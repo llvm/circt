@@ -23,7 +23,8 @@ import gc
 import os
 import pathlib
 import sys
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import (Any, Callable, Dict, List, Optional, Set, Type, Tuple,
+                    Union)
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -45,7 +46,7 @@ class System:
   ]
 
   def __init__(self,
-               top_modules: Union[list, Module],
+               top_modules: Union[List[Type[Module]], Type[Module]],
                name: str = None,
                output_directory: str = None,
                sw_api_langs: List[str] = None):
@@ -139,34 +140,61 @@ class System:
   #     "canonicalize",
   # ]
 
+  # Kanagawa dialect lowering passes
+  KANAGAWA_DIALECT_PASSES = [
+      "builtin.module(hw-verify-irn)",
+      "builtin.module(kanagawa.design(kanagawa.container(kanagawa-eliminate-redundant-ops)))",
+      "builtin.module(kanagawa.design(kanagawa-tunneling))",
+      "builtin.module(hw-verify-irn)",
+      "builtin.module(kanagawa-lower-portrefs)",
+      "builtin.module(canonicalize)",
+      "builtin.module(kanagawa.design(kanagawa.container(kanagawa-eliminate-redundant-ops)))",
+      "builtin.module(kanagawa.design(kanagawa-clean-selfdrivers))",
+      "builtin.module(kanagawa-convert-containers-to-hw)",
+      "builtin.module(hw-verify-irn)",
+  ]
+
   def import_mlir(self,
-                  module,
-                  lowering=None,
+                  module: str,
+                  name: str = "",
+                  lowering: Optional[List[str]] = None,
                   output_filename: Optional[str] = None) -> Dict[str, Any]:
-    """Import mlir asm created elsewhere into our space."""
+    """Import mlir asm created elsewhere into our space.
+    
+    Args:
+      module: The MLIR module to import, as a string.
+      name: Optional name for the system.
+      lowering: Optional list of passes to run on the imported module.
+      output_filename: Optional filename to set on the imported ops. Skips type
+                       scopes since they are generally global.
+    """
 
     compat_mod = ir.Module.parse(str(module))
     if lowering is not None:
-      pm = passmanager.PassManager.parse(",".join(lowering))
-      pm.run(compat_mod.operation)
+      # List of passes to run. Use our pass list runner.
+      self._run_pass_list(lowering, f"import_lowering_{name}", compat_mod)
+
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
       if isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
         from .module import import_hw_module
         im = import_hw_module(self, op)
-        self._create_circt_mod(im._builder)
+        self._op_cache.install_op(im._builder, op)
         ret[ir.StringAttr(op.name).value] = im
       elif isinstance(op, esi.RandomAccessMemoryDeclOp):
         from .esi import _import_ram_decl
         ram = _import_ram_decl(self, op)
         ret[ir.StringAttr(op.sym_name).value] = ram
-        self.body.append(op)
       else:
         if "sym_name" in op.attributes:
-          ret[ir.StringAttr(op.attributes["sym_name"]).value] = op
-        # TODO: do symbol renaming.
-        self.body.append(op)
+          # TODO: do symbol renaming.
+          sym_name = ir.StringAttr(op.attributes["sym_name"]).value
+          proxy = OpaquePyProxy(self._op_cache, sym_name, op)
+          ret[sym_name] = proxy
+          self._op_cache.install_op(proxy, op, sym_name)
+
+      self.body.append(op)
       if output_filename is not None and not isinstance(op, hw.TypeScopeOp):
         op.attributes["output_file"] = hw.OutputFileAttr.get_from_filename(
             ir.StringAttr.get(output_filename), False, True)
@@ -257,38 +285,96 @@ class System:
                                                         self)
     return self._instance_roots[key]
 
-  PASS_PHASES = [
-      # First, run all the passes with callbacks into pycde.
+  def _run_pass_list(self, pass_list, pass_run_name, module=None, debug=False):
+    """Run a list of passes with debug output using the given pass run name.
+
+    Args:
+      pass_list: List of passes to run
+      pass_run_name: Name for debug output
+      module: Module to run passes on (defaults to self.mod)
+      debug: Whether to enable debug output
+    """
+    if module is None:
+      module = self.mod
+
+    tops = ",".join(
+        [self._op_cache.get_pyproxy_symbol(m) for m in self.top_modules])
+    verilog_file = self.name + ".sv"
+    tcl_file = self.name + ".tcl"
+
+    self._op_cache.release_ops()
+    if debug:
+      with open(f"after_{pass_run_name}_generate.mlir", "w") as agm:
+        agm.write(f"// Pass run: {pass_run_name}\n")
+        module.operation.print(file=agm, enable_debug_info=True)
+
+    for idx, pass_ in enumerate(pass_list):
+      aplog = None
+      if debug:
+        aplog = open(f"after_{pass_run_name}_pass_{idx}.mlir", "w")
+        aplog.write(f"// Pass run: {pass_run_name}, pass: {idx}\n")
+      try:
+        if isinstance(pass_, str):
+          passes = pass_.format(tops=tops,
+                                verilog_file=verilog_file,
+                                tcl_file=tcl_file,
+                                platform=self.platform).strip()
+          if aplog is not None:
+            aplog.write(f"// passes ran: {passes}\n")
+            aplog.flush()
+          pm = passmanager.PassManager.parse(passes)
+          pm.run(module.operation)
+        else:
+          pass_(self)
+          if aplog is not None:
+            aplog.write(f"// <python code>\n")
+            aplog.flush()
+      except RuntimeError as err:
+        sys.stderr.write(
+            f"Exception while executing pass {pass_} in pass run '{pass_run_name}'.\n"
+        )
+        raise err
+      finally:
+        if aplog is not None:
+          module.operation.print(file=aplog, enable_debug_info=True)
+          aplog.close()
+      self._op_cache.release_ops()
+
+  # Initial lowering passes - ESI connection verification and generation
+  INITIAL_LOWERING_PASSES = [
       "builtin.module(verify-esi-connections)",
       "builtin.module(esi-connect-services)",
       "builtin.module(verify-esi-connections)",
       lambda sys: sys.generate(),
       "builtin.module(verify-esi-connections)",
-
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
+  ]
 
-      # Then run all the passes to lower dialects which produce `hw.module`s.
-
-      # The DC flow is broken, so don't bother running these passes. Leaving
-      # them in case someone fixes it in the future.
-      # https://github.com/llvm/circt/issues/7949 is the latest layer of the
-      # onion.
-      # "builtin.module(lower-handshake-to-dc)",
-      # "builtin.module(dc-materialize-forks-sinks)",
-      # "builtin.module(lower-dc-to-hw)",
-      # "builtin.module(map-arith-to-comb)",
-
-      # Lower the pipeline dialect.
+  # Pipeline dialect lowering passes
+  PIPELINE_DIALECT_PASSES = [
       "builtin.module(pipeline-explicit-regs)",
       "builtin.module(lower-pipeline-to-hw)",
+  ]
 
-      # Run ESI manifest passes.
+  # ESI manifest creation passes
+  ESI_MANIFEST_PASSES = [
       "builtin.module(esi-appid-hier{{top={tops} }}, esi-build-manifest{{top={tops} }})",
       "builtin.module(msft-lower-constructs, msft-lower-instances)",
       "builtin.module(esi-clean-metadata)",
+  ]
 
+  # DC dialect lowering passes (currently broken, not used)
+  DC_DIALECT_PASSES = [
+      "builtin.module(lower-handshake-to-dc)",
+      "builtin.module(dc-materialize-forks-sinks)",
+      "builtin.module(lower-dc-to-hw)",
+      "builtin.module(map-arith-to-comb)",
+  ]
+
+  # Final lowering and cleanup passes
+  FINAL_LOWERING_PASSES = [
       # Instaniate hlmems, which could produce new esi connections.
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
@@ -308,49 +394,32 @@ class System:
   ]
 
   def run_passes(self, debug=False):
+    """Run the default set of CIRCT passes on the system. Turn on 'debug' to
+    dump the IR after each pass to a file."""
+
     if self.passed:
       return
     self.generate()
 
-    tops = ",".join(
-        [self._op_cache.get_pyproxy_symbol(m) for m in self.top_modules])
-    verilog_file = self.name + ".sv"
-    tcl_file = self.name + ".tcl"
-    self.files.add(self.output_directory / verilog_file)
-    self.files.add(self.output_directory / tcl_file)
+    self.files.add(self.output_directory / (self.name + ".sv"))
+    self.files.add(self.output_directory / (self.name + ".tcl"))
 
-    self._op_cache.release_ops()
-    if debug:
-      with open("after_generate.mlir", "w") as agm:
-        self.mod.operation.print(file=agm, enable_debug_info=True)
-    for idx, phase in enumerate(self.PASS_PHASES):
-      aplog = None
-      if debug:
-        aplog = open(f"after_phase_{idx}.mlir", "w")
-      try:
-        if isinstance(phase, str):
-          passes = phase.format(tops=tops,
-                                verilog_file=verilog_file,
-                                tcl_file=tcl_file,
-                                platform=self.platform).strip()
-          if aplog is not None:
-            aplog.write(f"// passes ran: {passes}\n")
-            aplog.flush()
-          pm = passmanager.PassManager.parse(passes)
-          pm.run(self.mod.operation)
-        else:
-          phase(self)
-          if aplog is not None:
-            aplog.write(f"// <python code>\n")
-            aplog.flush()
-      except RuntimeError as err:
-        sys.stderr.write(f"Exception while executing phase {phase}.\n")
-        raise err
-      finally:
-        if aplog is not None:
-          self.mod.operation.print(file=aplog, enable_debug_info=True)
-          aplog.close()
-      self._op_cache.release_ops()
+    # Run each pass group with descriptive names for debugging.
+    self._run_pass_list(self.INITIAL_LOWERING_PASSES,
+                        "pre_dialect_lowering",
+                        debug=debug)
+    self._run_pass_list(self.PIPELINE_DIALECT_PASSES,
+                        "pipeline_dialect",
+                        debug=debug)
+    # The DC flow is broken, so don't bother running these passes. Leaving
+    # them in case someone fixes it in the future.
+    # https://github.com/llvm/circt/issues/7949 is the latest layer of the
+    # onion.
+    # self._run_pass_list(self.DC_DIALECT_PASSES, "dc_dialect", debug=debug)
+    self._run_pass_list(self.ESI_MANIFEST_PASSES, "esi_manifest", debug=debug)
+    self._run_pass_list(self.FINAL_LOWERING_PASSES,
+                        "final_lowering",
+                        debug=debug)
 
     self.passed = True
 
@@ -397,10 +466,10 @@ class _OpCache:
 
   def __init__(self, module: ir.Module):
     self._module = module
-    self._symbols: Dict[str, ir.OpView] = None
+    self._symbols: Optional[Dict[str, ir.OpView]] = None
     self._pyproxy_symbols: dict[_PyProxy, str] = {}
     self._symbol_pyproxy: dict[str, _PyProxy] = {}
-    self._pyproxies: Set[weakref.ref[_PyProxy]] = set()
+    self._pyproxies: weakref.WeakSet[_PyProxy] = weakref.WeakSet()
 
     # InstanceHier caches are indexes are (module_sym, instance_name)
     self._instance_hier_cache: dict[(ir.FlatSymbolRefAttr, ir.StringAttr),
@@ -423,10 +492,8 @@ class _OpCache:
     self._instance_cache.clear()
     self._module_inside_sym_cache.clear()
     self._dyn_insts_in_inst.clear()
-    for proxy_ref in self._pyproxies:
-      proxy = proxy_ref()
-      if proxy is not None:
-        proxy.clear_op_refs()
+    for proxy in self._pyproxies:
+      proxy.clear_op_refs()
 
     gc.collect()
     # Pending https://github.com/llvm/llvm-project/pull/78663
@@ -456,9 +523,31 @@ class _OpCache:
 
   def register_pyproxy(self, pyproxy: _PyProxy):
     """Used to report a new _PyProxy to the cache which doesn't have a symbol."""
-    self._pyproxies.add(weakref.ref(pyproxy))
+    self._pyproxies.add(pyproxy)
 
-  def create_symbol(self, pyproxy: _PyProxy) -> Tuple[str, Callable]:
+  def install_op(self,
+                 pyproxy: _PyProxy,
+                 op: ir.OpView,
+                 symbol: Optional[str] = None):
+    """Install a symbol for an op. Checks to ensure that the assigned symbol
+    matches the sym_name attribute if it exists."""
+    sym_name = None
+    if "sym_name" in op.attributes:
+      sym_name = ir.StringAttr(op.attributes["sym_name"]).value
+    if symbol is not None and sym_name != symbol:
+      raise ValueError(
+          f"Symbol mismatch: {symbol} != {op.attributes['sym_name']}")
+    if symbol is None:
+      symbol = sym_name
+    if symbol is None:
+      raise ValueError("If op doesn't have a sym_name, must provide a symbol")
+    self.symbols[symbol] = op
+    self._pyproxy_symbols[pyproxy] = symbol
+    self._symbol_pyproxy[symbol] = pyproxy
+    self._pyproxies.add(pyproxy)
+
+  def create_symbol(
+      self, pyproxy: _PyProxy) -> Tuple[Optional[str], Optional[Callable]]:
     """Create a unique symbol and add it to the cache. If it is to be preserved,
     the caller must use it as the symbol on a top-level op. Returns the symbol
     string and a callback to install the mapping. Return (None, None) if
@@ -474,11 +563,8 @@ class _OpCache:
       ctr += 1
       symbol = basename + "_" + str(ctr)
 
-    def install(op):
-      self._symbols[symbol] = op
-      self._pyproxy_symbols[pyproxy] = symbol
-      self._symbol_pyproxy[symbol] = pyproxy
-      self._pyproxies.add(weakref.ref(pyproxy))
+    def install(op: ir.OpView):
+      return self.install_op(pyproxy, op, symbol)
 
     return symbol, install
 
@@ -488,7 +574,7 @@ class _OpCache:
       symbol = ir.FlatSymbolRefAttr(symbol).value
     return self._symbol_pyproxy[symbol]
 
-  def get_pyproxy_symbol(self, spec_mod) -> str:
+  def get_pyproxy_symbol(self, spec_mod) -> Optional[str]:
     """Get the symbol for a module or its associated _PyProxy."""
     if not isinstance(spec_mod, Module):
       if isinstance(spec_mod, ModuleLikeType):
@@ -497,7 +583,7 @@ class _OpCache:
       return None
     return self._pyproxy_symbols[spec_mod]
 
-  def get_circt_mod(self, spec_mod: Module) -> Optional[ir.Operation]:
+  def get_circt_mod(self, spec_mod: _PyProxy) -> Optional[ir.Operation]:
     """Get the CIRCT module op for a PyCDE module."""
     sym = self.get_pyproxy_symbol(spec_mod)
     if sym in self.symbols:
@@ -609,3 +695,29 @@ class _OpCache:
         {op.instanceRef: op for op in inst.body.blocks[0]
          if isinstance(op, msft.DynamicInstanceOp)}
     return self._dyn_insts_in_inst[inst]
+
+
+class OpaquePyProxy(_PyProxy):
+  """A proxy class for an IR op with no corresponding PyCDE class."""
+
+  __slots__ = ["_op", "_op_cache"]
+
+  def __init__(self, cache: _OpCache, name: str, op: ir.OpView):
+    super().__init__(name)
+    self._op_cache = cache
+    self._op = op
+
+  def clear_op_refs(self):
+    """Clear all references to IR ops."""
+    self._op = None
+
+  @property
+  def op(self) -> Optional[ir.Operation]:
+    """Get the CIRCT op corresponding to this proxy.
+
+    WARNING: DO NOT keep the return op around. Take the information you need and
+    throw this reference away before returning control."""
+
+    if self._op is None:
+      self._op = self._op_cache.get_circt_mod(self)
+    return self._op
