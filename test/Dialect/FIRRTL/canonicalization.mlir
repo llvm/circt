@@ -1066,6 +1066,25 @@ firrtl.module @FlattenCatEdgeCases(in %a: !firrtl.uint<4>, out %out1: !firrtl.ui
   firrtl.matchingconnect %out2, %zero_cat2 : !firrtl.uint<8>
 }
 
+// Issue 8618
+// CHECK-LABEL: firrtl.module @FlattenCatDifferentSigns
+firrtl.module @FlattenCatDifferentSigns(in %a: !firrtl.uint<1>, in %b: !firrtl.sint<1>, in %c: !firrtl.sint<1>, out %d: !firrtl.uint<3>, out %e: !firrtl.uint<4>) {
+  // CHECK-NEXT: %[[AS_UINT1:.+]] = firrtl.asUInt %b : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  // CHECK-NEXT: %[[AS_UINT2:.+]] = firrtl.asUInt %b : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  // CHECK-NEXT: %[[CAT1:.+]] = firrtl.cat %a, %[[AS_UINT1]], %[[AS_UINT2]] : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<3>
+  // CHECK-NEXT: firrtl.matchingconnect %d, %[[CAT1]]
+  %0 = firrtl.cat %b, %b : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<2>
+  %1 = firrtl.cat %a, %0 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  firrtl.matchingconnect %d, %1 : !firrtl.uint<3>
+
+  // CHECK-NEXT: %[[CAT2:.+]] = firrtl.cat %b, %c, %c, %b : (!firrtl.sint<1>, !firrtl.sint<1>, !firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.matchingconnect %e, %[[CAT2]]
+  %2 = firrtl.cat %b, %c : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<2>
+  %3 = firrtl.cat %c, %b : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<2>
+  %4 = firrtl.cat %2, %3 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %e, %4 : !firrtl.uint<4>
+}
+
 // CHECK-LABEL: firrtl.module @CatOfConstant
 firrtl.module @CatOfConstant(in %a: !firrtl.uint<4>, out %out1: !firrtl.uint<12>,
                             out %out2: !firrtl.uint<10>) {

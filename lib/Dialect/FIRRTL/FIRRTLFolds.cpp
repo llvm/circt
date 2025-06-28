@@ -1404,24 +1404,42 @@ public:
         worklist.push_back(operand);
     };
     pushOperands(cat);
+    bool existsSigned = false, existsUnsigned = false;
     while (!worklist.empty()) {
       auto value = worklist.pop_back_val();
       auto catOp = value.getDefiningOp<CatPrimOp>();
       if (!catOp) {
         operands.push_back(value);
+        (type_isa<UIntType>(value.getType()) ? existsUnsigned : existsSigned) =
+            true;
         continue;
       }
 
       pushOperands(catOp);
     }
 
+    // Helper function to cast signed values to unsigned. CatPrimOp converts
+    // signed values to unsigned so we need to do it explicitly here.
+    auto castToUIntIfSigned = [&](Value value) -> Value {
+      if (type_isa<UIntType>(value.getType()))
+        return value;
+      return rewriter.create<AsUIntPrimOp>(value.getLoc(), value);
+    };
+
+    assert(operands.size() >= 1 && "zero width cast must be rejected");
+
     if (operands.size() == 1) {
-      rewriter.replaceOp(op, operands[0]);
+      rewriter.replaceOp(op, castToUIntIfSigned(operands[0]));
       return success();
     }
 
     if (operands.size() == cat->getNumOperands())
       return failure();
+
+    // If types are mixed, cast all operands to unsigned.
+    if (existsSigned && existsUnsigned)
+      for (auto &operand : operands)
+        operand = castToUIntIfSigned(operand);
 
     replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
                                              operands);
