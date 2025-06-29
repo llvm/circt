@@ -100,7 +100,18 @@ struct ObjectModelIR {
     extraPortsClass = ClassOp::create(builderOM, "ExtraPortsMemorySchema",
                                       extraPortFields, extraPortsType);
 
-    mlir::Type classFieldTypes[14] = {
+    mlir::Type memInitType[] = {
+        StringType::get(context), // filename
+        BoolType::get(context),   // isBinary
+        BoolType::get(context)    // isInline
+    };
+
+    StringRef memInitFields[3] = {"filename", "isBinary", "isInline"};
+
+    memInitFileClass = builderOM.create<ClassOp>("MemoryInitFileSchema",
+                                                 memInitFields, memInitType);
+
+    mlir::Type classFieldTypes[15] = {
         StringType::get(context),
         FIntegerType::get(context),
         FIntegerType::get(context),
@@ -117,7 +128,9 @@ struct ObjectModelIR {
             context, cast<PropertyType>(
                          detail::getInstanceTypeForClassLike(extraPortsClass))),
         ListType::get(context, cast<PropertyType>(StringType::get(context))),
-    };
+        ListType::get(context,
+                      cast<PropertyType>(detail::getInstanceTypeForClassLike(
+                          memInitFileClass)))};
 
     memorySchemaClass = ClassOp::create(builderOM, "MemorySchema",
                                         memoryParamNames, classFieldTypes);
@@ -359,6 +372,29 @@ struct ObjectModelIR {
     }
     auto extraPorts = ListCreateOp::create(
         builderOM, memorySchemaClass.getPortType(24), extraPortsList);
+
+    SmallVector<Value, 1> memInitFileOpt;
+    ClassType memInitFileType;
+    if (mem.getInit().has_value()) {
+      auto filename = createConstField(mem.getInit()->getFilename());
+      auto isBinary = createConstField(
+          BoolAttr::get(context, mem.getInit()->getIsBinary()));
+      auto isInline = createConstField(
+          BoolAttr::get(context, mem.getInit()->getIsInline()));
+      auto memInitFileObj =
+          builderOM.create<ObjectOp>(memInitFileClass, "initFile");
+      memInitFileType = memInitFileObj.getType();
+      auto inPort = builderOM.create<ObjectSubfieldOp>(memInitFileObj, 0);
+      builderOM.create<PropAssignOp>(inPort, filename);
+      inPort = builderOM.create<ObjectSubfieldOp>(memInitFileObj, 2);
+      builderOM.create<PropAssignOp>(inPort, isBinary);
+      inPort = builderOM.create<ObjectSubfieldOp>(memInitFileObj, 4);
+      builderOM.create<PropAssignOp>(inPort, isInline);
+      memInitFileOpt.push_back(memInitFileObj);
+    }
+    auto memInitFile = builderOM.create<ListCreateOp>(
+        memorySchemaClass.getPortType(28), memInitFileOpt);
+
     for (auto field : llvm::enumerate(memoryParamNames)) {
       auto propVal = createConstField(
           llvm::StringSwitch<TypedAttr>(field.value())
@@ -375,6 +411,7 @@ struct ObjectModelIR {
               .Case("inDut", BoolAttr::get(context, inDut))
               .Case("extraPorts", {})
               .Case("preExtInstName", {})
+              .Case("initFile", {})
               .Case("ruwBehavior", builderOM.getStringAttr(
                                        stringifyRUWBehavior(mem.getRuw()))));
       if (!propVal) {
@@ -382,8 +419,10 @@ struct ObjectModelIR {
           propVal = hierpaths;
         else if (field.value() == "preExtInstName")
           propVal = finalInstNamesList;
-        else
+        else if (field.value() == "extraPorts")
           propVal = extraPorts;
+        else
+          propVal = memInitFile;
       }
 
       // The memory schema is a simple class, with input tied to output. The
@@ -495,15 +534,15 @@ struct ObjectModelIR {
   InstanceInfo &instanceInfo;
   /// Cached module namespaces.
   DenseMap<Operation *, hw::InnerSymbolNamespace> &moduleNamespaces;
-  ClassOp memorySchemaClass, extraPortsClass;
+  ClassOp memorySchemaClass, extraPortsClass, memInitFileClass;
   ClassOp memoryMetadataClass;
   ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
   ClassOp blackBoxModulesSchemaClass, blackBoxMetadataClass;
-  StringRef memoryParamNames[14] = {
-      "name",        "depth",         "width",          "maskBits",
-      "readPorts",   "writePorts",    "readwritePorts", "writeLatency",
-      "readLatency", "ruwBehavior",   "hierarchy",      "inDut",
-      "extraPorts",  "preExtInstName"};
+  StringRef memoryParamNames[15] = {
+      "name",        "depth",          "width",          "maskBits",
+      "readPorts",   "writePorts",     "readwritePorts", "writeLatency",
+      "readLatency", "ruwBehavior",    "hierarchy",      "inDut",
+      "extraPorts",  "preExtInstName", "initFile"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[3] = {"moduleName", "inDut", "libraries"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
@@ -611,14 +650,20 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     auto maskGranStr =
         !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
 
-    seqMemConfStr = (StringRef(seqMemConfStr) + "name {{" + Twine(symId) +
-                     "}} depth " + Twine(mem.getDepth()) + " width " +
-                     Twine(width) + " ports " + portStr + maskGranStr +
-                     (mem.getRuw() == RUWBehavior::Undefined
-                          ? ""
-                          : " ruw " + stringifyRUWBehavior(mem.getRuw())) +
-                     "\n")
-                        .str();
+    seqMemConfStr += ("name {{" + Twine(symId) + "}}").str();
+    seqMemConfStr += (" depth " + Twine(mem.getDepth())).str();
+    seqMemConfStr += (" width " + Twine(width)).str();
+    seqMemConfStr += " ports " + portStr;
+    seqMemConfStr += maskGranStr;
+    if (mem.getRuw() != RUWBehavior::Undefined)
+      seqMemConfStr += (" ruw " + stringifyRUWBehavior(mem.getRuw())).str();
+    if (mem.getInit().has_value()) {
+      seqMemConfStr +=
+          mem.getInit()->getIsBinary() ? " init-bin " : " init-hex ";
+      seqMemConfStr +=
+          ("\"" + mem.getInit()->getFilename().getValue() + "\"").str();
+    }
+    seqMemConfStr += "\n";
 
     // Do not emit any JSON for memories which are not in the DUT.
     if (!instanceInfo->anyInstanceInEffectiveDesign(mem))
@@ -636,6 +681,14 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       jsonStream.attribute("ruw_behavior", stringifyRUWBehavior(mem.getRuw()));
       if (isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
+      if (mem.getInit().has_value()) {
+        jsonStream.attributeObject("init", [&] {
+          jsonStream.attribute("filename",
+                               mem.getInit()->getFilename().getValue());
+          jsonStream.attribute("isBinary", mem.getInit()->getIsBinary());
+          jsonStream.attribute("isInline", mem.getInit()->getIsInline());
+        });
+      }
       jsonStream.attributeArray("extra_ports", [&] {
         for (auto attr : mem.getExtraPorts()) {
           jsonStream.object([&] {
