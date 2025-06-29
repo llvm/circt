@@ -1361,13 +1361,8 @@ struct PowSOpConversion : public OpConversionPattern<PowSOp> {
     Location loc = op.getLoc();
     // utilize MLIR math dialect's math.ipowi to handle the exponentiation of
     // expression
-    Value result = rewriter.create<mlir::math::IPowIOp>(loc, adaptor.getLhs(),
-                                                        adaptor.getRhs());
-    // cast the result back to MooreToCore i32 type; result is originally
-    // math.ipowi regular i32 so we need to revert it back
-    Value castedResult = rewriter.create<ConversionOp>(loc, resultType, result);
-
-    rewriter.replaceOp(op, castedResult);
+    rewriter.replaceOpWithNewOp<mlir::math::IPowIOp>(
+        op, resultType, adaptor.getLhs(), adaptor.getRhs());
     return success();
   }
 };
