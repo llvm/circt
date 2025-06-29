@@ -4,7 +4,7 @@
 # Reads cache IDs from stdin and deletes them one by one
 # Usage: ./delete-cache.sh [OPTIONS]
 
-set -euo pipefail
+set -uo pipefail
 
 # Default values
 DRY_RUN=false

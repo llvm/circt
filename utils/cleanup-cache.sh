@@ -4,7 +4,7 @@
 # This script identifies and deletes cache entries based on size and age criteria
 # to maintain cache efficiency and remove caches from failed builds.
 
-set -euo pipefail
+set -uo pipefail
 
 # Default values
 DRY_RUN=false
