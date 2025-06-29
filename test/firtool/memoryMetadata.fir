@@ -186,6 +186,7 @@ circuit test:
 ; CHECK-NEXT:     "read": 1,
 ; CHECK-NEXT:     "write": 1,
 ; CHECK-NEXT:     "readwrite": 0,
+; CHECK-NEXT:     "ruw_behavior": "Undefined",
 ; CHECK-NEXT:     "extra_ports": [],
 ; CHECK-NEXT:     "hierarchy": [
 ; CHECK-NEXT:       "dutModule.hello.dutMemory.dutMemory_ext"

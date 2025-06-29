@@ -26,7 +26,7 @@ firrtl.module @Write() {
 // port.
 firrtl.circuit "Read" {
 // CHECK: firrtl.memmodule private @MRead_ext
-// CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+// CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, ruw = #firrtl<ruwbehavior Undefined>, writeLatency = 1 : ui32}
 firrtl.module @Read() {
   %MRead_read, %MRead_write = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance MRead  @MRead(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
@@ -103,12 +103,12 @@ firrtl.circuit "NoTestharnessDedup0" {
 // CHECK: firrtl.module private @mem0
 // CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 
-// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, ruw = #firrtl<ruwbehavior Undefined>, writeLatency = 1 : ui32}
 
 // CHECK: firrtl.module private @mem1
 // CHECK-NEXT: firrtl.instance mem1_ext  @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 
-// CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+// CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, ruw = #firrtl<ruwbehavior Undefined>, writeLatency = 1 : ui32}
 firrtl.module @NoTestharnessDedup0() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem0  @mem0
@@ -125,7 +125,7 @@ firrtl.circuit "NoTestharnessDedup1" {
 // CHECK: firrtl.module private @mem0
 // CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 
-// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+// CHECK: firrtl.memmodule private @mem0_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, ruw = #firrtl<ruwbehavior Undefined>, writeLatency = 1 : ui32}
 firrtl.module @NoTestharnessDedup1() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem0  @mem0
@@ -134,7 +134,7 @@ firrtl.module @NoTestharnessDedup1() {
 // CHECK: firrtl.module private @mem1
 // CHECK-NEXT: firrtl.instance mem1_ext  @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 
-// CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+// CHECK: firrtl.memmodule private @mem1_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, ruw = #firrtl<ruwbehavior Undefined>, writeLatency = 1 : ui32}
 firrtl.module @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
   %mem1_write = firrtl.mem Undefined {depth = 12 :i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem1  @mem1
@@ -308,5 +308,23 @@ firrtl.module @MemoryInLayer() {
     } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>
   }
 
+}
+}
+
+// Check that the read under write behavior annotation is preserved
+
+// CHECK-LABEL: "RUWNew"
+firrtl.circuit "RUWNew" {
+// CHECK: firrtl.memmodule private @RUWNew_ext{{.*}}, ruw = #firrtl<ruwbehavior New>
+firrtl.module @RUWNew() {
+  %0:2 = firrtl.mem New {depth = 12 : i64, name = "RUWNew", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+}
+}
+
+// CHECK-LABEL: "RUWOld"
+firrtl.circuit "RUWOld" {
+// CHECK: firrtl.memmodule private @RUWOld_ext{{.*}}, ruw = #firrtl<ruwbehavior Old>
+firrtl.module @RUWOld() {
+  %0:2 = firrtl.mem Old {depth = 12 : i64, name = "RUWOld", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 }
 }

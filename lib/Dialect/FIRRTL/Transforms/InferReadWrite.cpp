@@ -156,7 +156,7 @@ struct InferReadWritePass
       // Create the new rw memory.
       auto rwMem = builder.create<MemOp>(
           resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
-          memOp.getDepth(), RUWAttr::Undefined,
+          memOp.getDepth(), RUWBehavior::Undefined,
           builder.getArrayAttr(resultNames), memOp.getNameAttr(),
           memOp.getNameKind(), memOp.getAnnotations(),
           builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),
