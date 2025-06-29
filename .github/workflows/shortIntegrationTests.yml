@@ -110,10 +110,10 @@ jobs:
         run: |
           ninja -C build check-circt-integration -j$(nproc)
       # Clean up cache after build completes
-      - name:
-          if: always() # Run even if build fails
-          uses: ./.github/workflows/cleanupCache.yml
-          permissions:
-            actions: write
-          with:
-            cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}
+      - name: cleanup-cache
+        if: always() # Run even if build fails
+        uses: ./.github/workflows/cleanupCache.yml
+        permissions:
+          actions: write
+        with:
+          cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}
