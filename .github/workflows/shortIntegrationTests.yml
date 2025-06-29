@@ -28,8 +28,6 @@ jobs:
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
-    outputs:
-      cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     container:
       image: ghcr.io/circt/images/circt-integration-test:v19
       volumes:
@@ -111,12 +109,11 @@ jobs:
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)
-  # Clean up cache after build completes
-  cleanup-cache:
-    needs: build-circt
-    if: always() # Run even if build fails
-    uses: ./.github/workflows/cleanupCache.yml
-    permissions:
-      actions: write
-    with:
-      cache_key_pattern: ${{ needs.build-circt.outputs.cache-key-pattern }}
+      # Clean up cache after build completes
+      - name:
+          if: always() # Run even if build fails
+          uses: ./.github/workflows/cleanupCache.yml
+          permissions:
+            actions: write
+          with:
+            cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}

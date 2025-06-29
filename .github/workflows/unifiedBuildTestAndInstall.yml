@@ -151,8 +151,6 @@ jobs:
     runs-on: ${{ inputs.runner }}
     permissions:
       contents: write # Upload assets to release.
-    outputs:
-      cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     steps:
       - name: Generate cache key pattern
         id: cache-key
@@ -310,12 +308,11 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.
 
-  # Clean up cache after build completes
-  cleanup-cache:
-    needs: build-test-and-install
-    if: always() # Run even if build fails
-    uses: ./.github/workflows/cleanupCache.yml
-    permissions:
-      actions: write
-    with:
-      cache_key_pattern: ${{ needs.build-test-and-install.outputs.cache-key-pattern }}
+      # Clean up cache after build completes
+      - name: cleanup-cache
+        if: always() # Run even if build fails
+        uses: ./.github/workflows/cleanupCache.yml
+        permissions:
+          actions: write
+        with:
+          cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}
