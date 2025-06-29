@@ -2241,7 +2241,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
         auto updatedBase = updateBase(element.type);
         if (!updatedBase)
           return {};
-        elements.emplace_back(element.name, updatedBase);
+        elements.emplace_back(element.name, element.value, updatedBase);
       }
       return FEnumType::get(context, elements, enumType.isConst());
     }

@@ -310,20 +310,25 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
     /// Each element of an enum, which is a name and type.
     struct EnumElement {
       StringAttr name;
+      IntegerAttr value;
       FIRRTLBaseType type;
 
-      EnumElement(StringAttr name, FIRRTLBaseType type)
-          : name(name), type(type) {}
+      EnumElement(StringAttr name, IntegerAttr value, FIRRTLBaseType type)
+          : name(name), value(value), type(type) {}
 
       bool operator==(const EnumElement &rhs) const {
-        return name == rhs.name && type == rhs.type;
+        return name == rhs.name && value == rhs.value && type == rhs.type;
       }
       bool operator!=(const EnumElement &rhs) const {
         return !operator==(rhs);
       }
+      bool operator<(const EnumElement &rhs) const {
+        return value.getValue().ult(rhs.value.getValue());
+      }
 
       friend llvm::hash_code hash_value(const FEnumType::EnumElement &arg) {
-        return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+        return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.value) ^
+               mlir::hash_value(arg.type);
       }
     };
 
@@ -339,6 +344,9 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
     /// Return this type with any type alias types recursively removed from itself.
     FIRRTLBaseType getAnonymousType();
 
+    /// Get the width of the the tag field.
+    size_t getTagWidth();
+
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);
     std::optional<unsigned> getElementIndex(StringRef name);
@@ -346,6 +354,13 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
     /// Look up an element's name by index. This asserts if index is invalid.
     StringAttr getElementNameAttr(size_t index);
     StringRef getElementName(size_t index);
+    
+    // Look up an element's value by index. This asserts if index is invalid.
+    IntegerAttr getElementValueAttr(size_t index);
+    APInt getElementValue(size_t index);
+
+    // Look up an element's type by index. This asserts if index is invalid.
+    FIRRTLBaseType getElementType(size_t index);
 
     /// Look up an element by name.  This returns None on failure.
     std::optional<EnumElement> getElement(StringAttr name);
