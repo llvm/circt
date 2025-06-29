@@ -1298,7 +1298,71 @@ Value Context::convertToSimpleBitVector(Value value) {
                                                  value);
     }
   }
-
+  if (llvm::isa<moore::StringType>(value.getType())) { // extract or readop
+    moore::ReadOp ReadOp;
+    if (auto ExtractOp =
+            llvm::dyn_cast<moore::ExtractOp>(value.getDefiningOp())) {
+      // if the value is index of a string array, the DefiningOp is ExtractOp
+      ReadOp = llvm::dyn_cast<moore::ReadOp>(
+          ExtractOp->getOperand(0).getDefiningOp());
+    } else {
+      ReadOp = llvm::dyn_cast<moore::ReadOp>(value.getDefiningOp());
+    }
+    if (auto VarOp = ReadOp->getOperand(0).getDefiningOp()) {
+      Operation *AssignOp = nullptr;
+      for (auto user : VarOp->getResults().getUsers()) {
+        // find the assign op
+        if (llvm::isa<moore::BlockingAssignOp>(user)) {
+          AssignOp = user;
+        }
+      }
+      if (VarOp->use_empty()) {
+        // if the string is not initialized, the VarOp->getOperands().size() ==
+        // 0 so we need to find assign op to get the value
+        if (AssignOp == nullptr) {
+          mlir::emitError(value.getLoc()) << "nullValue\n";
+          return {};
+        } else {
+          auto ConvertOp = llvm::dyn_cast<moore::ConversionOp>(
+              AssignOp->getOperand(1).getDefiningOp());
+          auto initValue = ConvertOp->getOperand(0);
+          if (llvm::isa<moore::RefType>(initValue.getType())) {
+            // if the initValue is a ref type, we need to get the actual value
+            auto ActualOp = initValue.getDefiningOp();
+            auto RefVarOp = ActualOp->getOperand(0).getDefiningOp();
+            initValue = RefVarOp->getOperand(0);
+          }
+          return builder.create<moore::ConversionOp>(
+              value.getLoc(), initValue.getType(), value);
+        }
+      }
+      mlir::Value initValue;
+      if (AssignOp == nullptr) {
+        // if the string no assign op ,use initial value
+        if (auto ConvertOp = llvm::dyn_cast<moore::ConversionOp>(
+                VarOp->getOperand(0).getDefiningOp())) {
+          initValue = ConvertOp->getOperand(0);
+        } else {
+          mlir::emitError(value.getLoc())
+              << "not support " << VarOp->getOperand(0).getType()
+              << " as a string\n";
+          return {};
+        }
+      } else {
+        if (auto ConvertOp = llvm::dyn_cast<moore::ConversionOp>(
+                AssignOp->getOperand(1).getDefiningOp())) {
+          initValue = ConvertOp->getOperand(0);
+        } else {
+          mlir::emitError(value.getLoc())
+              << "not support " << AssignOp->getOperand(1).getType()
+              << " as a string\n";
+          return {};
+        }
+      }
+      return builder.create<moore::ConversionOp>(value.getLoc(),
+                                                 initValue.getType(), value);
+    }
+  }
   mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
                                   << " cannot be cast to a simple bit vector";
   return {};

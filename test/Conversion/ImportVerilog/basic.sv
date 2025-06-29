@@ -2722,3 +2722,19 @@ module RangeElementSelection(
       b[3:0] = b[c[0]-:2];
     end
 endmodule
+
+module displayfunction();
+
+bit [8*14:1] a;
+bit [8*14:1] b;
+string c;
+initial begin
+	a = "Test";
+	b = "TEST";
+  c = {"Hello", "_", "World", "!"};
+	$display(":assert: ('TEST' in '%s')", {"a", "b"});
+	$display(":assert: ('Test' in '%s')", {a, b});
+  $display(":assert:('%s' == 'Hello_World!')", c);
+end
+
+endmodule
