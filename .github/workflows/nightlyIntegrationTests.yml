@@ -22,6 +22,8 @@ jobs:
       image: ghcr.io/circt/images/circt-integration-test:v19
       volumes:
         - /mnt:/__w/circt
+    permissions:
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -127,7 +129,5 @@ jobs:
       - name: cleanup-cache
         if: ${{ steps.cache-key.outputs.pattern }} != ''
         uses: ./.github/workflows/cleanupCache.yml
-        permissions:
-          actions: write
         with:
           cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}

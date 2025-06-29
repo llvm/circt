@@ -151,6 +151,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     permissions:
       contents: write # Upload assets to release.
+      actions: write
     steps:
       - name: Generate cache key pattern
         id: cache-key
@@ -312,7 +313,5 @@ jobs:
       - name: cleanup-cache
         if: always() # Run even if build fails
         uses: ./.github/workflows/cleanupCache.yml
-        permissions:
-          actions: write
         with:
           cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}

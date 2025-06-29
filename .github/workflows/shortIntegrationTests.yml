@@ -28,6 +28,8 @@ jobs:
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
+    permissions:
+      action: write
     container:
       image: ghcr.io/circt/images/circt-integration-test:v19
       volumes:
@@ -113,7 +115,5 @@ jobs:
       - name: cleanup-cache
         if: always() # Run even if build fails
         uses: ./.github/workflows/cleanupCache.yml
-        permissions:
-          actions: write
         with:
           cache_key_pattern: ${{ steps.cache-key.outputs.pattern }}
