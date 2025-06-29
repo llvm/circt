@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/Utils.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/BitVector.h"
