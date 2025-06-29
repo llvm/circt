@@ -1150,6 +1150,27 @@ def ConcatRefOp : MooreOp<"concat_ref", [
   }];
 }
 
+def UnpackedArrayConcatOp : MooreOp<"unpacked_array_concat", [Pure]> {
+  let summary = "Unpacked array concatenation expression";
+  let description = [{
+    This operation represents the SystemVerilog unpacked array concatenation,
+    See IEEE 1800-2017 §10.10 "Unpacked array concatenation".
+
+    - An item whose self-determined type is assignment compatible with the 
+    element type of the target array shall represent a single element, 
+    - An item whose self-determined type is an unpacked array whose 
+    slowest-varying dimension's element type is assignment compatible 
+    with the element type of the target array shall represent as many 
+    elements as exist in that item, arranged in the same left-to-right order 
+    as they would appear in the array item itself.
+  }];
+  let arguments = (ins Variadic<AnyType>:$values);
+  let results = (outs AnyIndexedUnpackedArrayType:$result);
+  let assemblyFormat = [{
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
+  }];
+}
+
 def ReplicateOp : MooreOp<"replicate", [
   Pure
 ]> {
