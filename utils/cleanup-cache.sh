@@ -32,7 +32,7 @@ EXAMPLES:
     $0 -p "test-cache" -r "\${{ github.ref }}"
 
 DESCRIPTION:
-    This script uses a dynamic size threshold of 1/2 of maximum cache size
+    This script uses a dynamic size threshold of 1/3 of maximum cache size
     as the cleanup threshold. It employs regex pattern matching to find caches
     with '.*PATTERN.*' for flexible matching. The system keeps the top 1 cache
     to preserve the most recent successful build.
@@ -106,14 +106,14 @@ echo "Found $(echo "$MATCHING_CACHES" | jq 'length') matching caches"
 echo "Matching caches:"
 echo "$MATCHING_CACHES" | jq -r '.[] | "  \(.key) - \(.sizeInBytes) bytes"'
 
-# Calculate the size threshold as 1/2 of the maximum cache size
+# Calculate the size threshold as 1/3 of the maximum cache size
 MAX_SIZE=$(echo "$MATCHING_CACHES" | jq 'map(.sizeInBytes) | max // 0')
-SIZE_THRESHOLD=$((MAX_SIZE / 2))
+SIZE_THRESHOLD=$((MAX_SIZE / 3))
 
 echo ""
 echo "=== Cleanup Analysis ==="
 echo "Maximum cache size: $MAX_SIZE bytes"
-echo "Size threshold (1/2 of max): $SIZE_THRESHOLD bytes"
+echo "Size threshold (1/3 of max): $SIZE_THRESHOLD bytes"
 echo "Will delete:"
 echo "  - All caches smaller than $SIZE_THRESHOLD bytes (likely failed builds)"
 echo "  - Caches beyond the top 1 (if they are >= $SIZE_THRESHOLD bytes)"
