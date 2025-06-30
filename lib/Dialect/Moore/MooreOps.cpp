@@ -268,7 +268,7 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
   if (initial && mlir::mayHaveSSADominance(*op->getParentRegion())) {
     rewriter.modifyOpInPlace(op, [&] { op.getInitialMutable().clear(); });
     rewriter.setInsertionPointAfter(op);
-    rewriter.create<BlockingAssignOp>(initial.getLoc(), op, initial);
+    rewriter.create<BlockingAssignOp>(initial.getLoc(), op, initial, Value());
     return success();
   }
 

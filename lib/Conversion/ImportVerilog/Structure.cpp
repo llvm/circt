@@ -431,7 +431,7 @@ struct ModuleVisitor : public BaseVisitor {
       auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
       if (dstType != rvalue.getType())
         rvalue = builder.create<moore::ConversionOp>(loc, dstType, rvalue);
-      builder.create<moore::ContinuousAssignOp>(loc, lvalue, rvalue);
+      builder.create<moore::ContinuousAssignOp>(loc, lvalue, rvalue, Value());
     }
 
     return success();
@@ -486,12 +486,6 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle continuous assignments.
   LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
-    if (const auto *delay = assignNode.getDelay()) {
-      auto loc = context.convertLocation(delay->sourceRange);
-      return mlir::emitError(loc,
-                             "delayed continuous assignments not supported");
-    }
-
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
     auto lhs = context.convertLvalueExpression(expr.left());
@@ -503,7 +497,18 @@ struct ModuleVisitor : public BaseVisitor {
     if (!rhs)
       return failure();
 
-    builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
+    Value delay;
+    if (assignNode.getDelay())
+      if (const auto *delayNode =
+              assignNode.getDelay()->as_if<slang::ast::DelayControl>()) {
+        auto expr = context.convertRvalueExpression(delayNode->expr);
+        if (!expr)
+          return failure();
+        delay = builder.create<moore::DelayOp>(
+            loc, expr, moore::TimeUnitEnum::Nanoseconds);
+      }
+
+    builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs, delay);
     return success();
   }
 
@@ -854,7 +859,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     Value portArg = port.arg;
     if (port.ast.direction != slang::ast::ArgumentDirection::In)
       portArg = builder.create<moore::ReadOp>(port.loc, port.arg);
-    builder.create<moore::ContinuousAssignOp>(port.loc, value, portArg);
+    builder.create<moore::ContinuousAssignOp>(port.loc, value, portArg, Value());
   }
 
   // Ensure the number of operands of this module's terminator and the number of
