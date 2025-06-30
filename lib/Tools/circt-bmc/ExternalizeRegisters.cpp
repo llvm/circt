@@ -150,6 +150,57 @@ void ExternalizeRegistersPass::runOnOperation() {
           ++numRegs;
           return;
         }
+        if (auto regOp = dyn_cast<seq::FirRegOp>(op)) {
+          if (!isa<BlockArgument>(regOp.getClk())) {
+            regOp.emitError("only clocks directly given as block arguments "
+                            "are supported");
+            return signalPassFailure();
+          }
+          mlir::Attribute initState;
+          if (auto preset = regOp.getPreset()) {
+            // Get preset value as initState
+            initState = mlir::IntegerAttr::get(
+                mlir::IntegerType::get(&getContext(), preset->getBitWidth()),
+                *preset);
+          } else {
+            // If there's no preset value just add a unit attribute to maintain
+            // one-to-one correspondence with module ports
+            initState = mlir::UnitAttr::get(&getContext());
+          }
+          addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
+          addedOutputs[module.getSymNameAttr()].push_back(
+              regOp.getNext().getType());
+          OpBuilder builder(regOp);
+          auto regName = regOp.getName();
+          StringAttr newInputName, newOutputName;
+          if (!regName.empty()) {
+            newInputName = builder.getStringAttr(regName + "_state");
+            newOutputName = builder.getStringAttr(regName + "_input");
+          } else {
+            newInputName =
+                builder.getStringAttr("reg_" + Twine(numRegs) + "_state");
+            newOutputName =
+                builder.getStringAttr("reg_" + Twine(numRegs) + "_input");
+          }
+          addedInputNames[module.getSymNameAttr()].push_back(newInputName);
+          addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
+          initialValues[module.getSymNameAttr()].push_back(initState);
+
+          regOp.getResult().replaceAllUsesWith(
+              module.appendInput(newInputName, regOp.getType()).second);
+          if (auto reset = regOp.getReset()) {
+            auto resetValue = regOp.getResetValue();
+            auto mux =
+                builder.create<comb::MuxOp>(regOp.getLoc(), regOp.getType(),
+                                            reset, resetValue, regOp.getNext());
+            module.appendOutput(newOutputName, mux);
+          } else {
+            module.appendOutput(newOutputName, regOp.getNext());
+          }
+          regOp->erase();
+          ++numRegs;
+          return;
+        }
         if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
           OpBuilder builder(instanceOp);
           auto newInputs =
