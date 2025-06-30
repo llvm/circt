@@ -164,6 +164,8 @@ class System:
                   lowering: Optional[List[str]] = None,
                   output_filename: Optional[str] = None,
                   importer: Optional[Callable] = None,
+                  preprocess_op: Optional[Callable[[ir.OpView],
+                                                   Optional[ir.OpView]]] = None,
                   debug: bool = False) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space. Exactly one of the
     arguments module_str or file must be provided.
@@ -176,6 +178,8 @@ class System:
       output_filename: Optional filename to set on the imported ops.
       importer: Optional custom importer function which takes a System and the
                 op. Must return a 3-tuple of (name, obj, proxy).
+      preprocess_op: Optional preprocessing function which takes an Operation and
+                     returns a modified Operation or None to skip.
       debug: Whether to enable debug output for the import process.
     """
 
@@ -234,6 +238,12 @@ class System:
 
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
+      if preprocess_op is not None:
+        op = preprocess_op(op)
+        if op is None:
+          # If the op was preprocessed to None, skip it.
+          continue
+
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
       imported_obj = None
       imported_name = None

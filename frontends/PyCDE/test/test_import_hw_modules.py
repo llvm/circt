@@ -1,6 +1,5 @@
 # RUN: %PYTHON% %s %t | FileCheck %s
 
-from pycde.circt.ir import Module as IrModule
 from pycde.circt.dialects import hw
 
 from pycde import Input, Output, System, generator, Module, types
@@ -21,6 +20,8 @@ hw.module @and(in %a: i1, in %b: i1, out out: i1) {
   %0 = comb.and %a, %b : i1
   hw.output %0 : i1
 }
+
+hw.module.extern @skip()
 
 hw.type_scope @otherScope {}
 """
@@ -54,8 +55,15 @@ class Top(Module):
     ports.out1 = outs[1]
 
 
+def preprocess_op(op):
+  """Preprocess the operation to skip the `skip` module."""
+  if isinstance(op, hw.HWModuleExternOp) and op.name.value == "skip":
+    return None
+  return op
+
+
 system = System([Top], output_directory=sys.argv[1])
-imported_modules = system.import_mlir(mlir_module)
+imported_modules = system.import_mlir(mlir_module, preprocess_op=preprocess_op)
 imported_modules["add"].add_metadata(Metadata(name="add"))
 system.generate()
 TypeAlias.declare_aliases(system.mod)
