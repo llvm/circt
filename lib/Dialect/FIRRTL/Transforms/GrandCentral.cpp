@@ -2131,6 +2131,13 @@ void GrandCentralPass::runOnOperation() {
                 }
               }
 
+              // If the companion is instantiated above the DUT, then don't
+              // extract it.
+              if (!instanceInfo->allInstancesUnderEffectiveDut(op)) {
+                ++numAnnosRemoved;
+                return true;
+              }
+
               // Look for any modules/extmodules _only_ instantiated by the
               // companion.  If these have no output file attribute, then mark
               // them as being extracted into the Grand Central directory.
