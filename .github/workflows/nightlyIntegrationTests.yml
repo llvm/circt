@@ -125,8 +125,8 @@ jobs:
 
   # Clean up cache after build completes
   cleanup-cache:
-    needs: build-test-and-install
-    if: ${{ needs.build-test-and-install.outputs.cache-key-pattern }} != ''
+    needs: build-circt
+    if: ${{ needs.build-circt.outputs.cache-key-pattern }} != ''
     uses: ./.github/workflows/cleanupCache.yml
     permissions:
       actions: write
