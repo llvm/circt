@@ -50,9 +50,8 @@ jobs:
           - build-type: Release
             compiler: {cc: gcc, cxx: g++}
             lit-flags: --vg
-    outputs:
-      cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
-
+    permissions:
+      actions: write
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -123,12 +122,14 @@ jobs:
         run: |
           ninja -C build check-circt-integration -j$(nproc)
 
-  # Clean up cache after build completes
-  cleanup-cache:
-    needs: build-circt
-    if: ${{ needs.build-circt.outputs.cache-key-pattern }} != ''
-    uses: ./.github/workflows/cleanupCache.yml
-    permissions:
-      actions: write
-    with:
-      cache_key_pattern: ${{ needs.build-test-and-install.outputs.cache-key-pattern }}
+      # Clean up cache after build completes (only for Release builds that use cache)
+      # Cannot use reusable cleanup-cache job here because it requires the cache key pattern
+      # for the current build.
+      - name: Cleanup cache
+        if: matrix.build-type == 'Release' && always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./utils/cleanup-cache.sh \
+            --pattern "${{ steps.cache-key.outputs.pattern }}" \
+            --ref "${{ github.ref }}"
