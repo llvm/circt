@@ -50,8 +50,7 @@ jobs:
           - build-type: Release
             compiler: {cc: gcc, cxx: g++}
             lit-flags: --vg
-    permissions:
-      actions: write
+
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -61,21 +60,13 @@ jobs:
           fetch-depth: 1
           submodules: true
 
-      - name: Generate cache key pattern
-        id: cache-key
-        shell: bash
-        if: matrix.build-type == 'Release'
-        run: |
-          CACHE_KEY="nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}"
-          echo "pattern=$CACHE_KEY" >> $GITHUB_OUTPUT
-
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         # Cache only when build type is release
         if: matrix.build-type == 'Release'
         with:
           max-size: 300M
-          key: ${{ steps.cache-key.outputs.pattern }}
+          key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
 
       # --------
       # Build and test CIRCT
@@ -121,15 +112,3 @@ jobs:
         if: ${{ matrix.lit-flags == '' }}
         run: |
           ninja -C build check-circt-integration -j$(nproc)
-
-      # Clean up cache after build completes (only for Release builds that use cache)
-      # Cannot use reusable cleanup-cache job here because it requires the cache key pattern
-      # for the current build.
-      - name: Cleanup cache
-        if: matrix.build-type == 'Release' && always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./utils/cleanup-cache.sh \
-            --pattern "${{ steps.cache-key.outputs.pattern }}" \
-            --ref "${{ github.ref }}"
