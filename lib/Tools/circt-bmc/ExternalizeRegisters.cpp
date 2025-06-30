@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -90,10 +91,6 @@ void ExternalizeRegistersPass::runOnOperation() {
                             "are supported");
             return signalPassFailure();
           }
-          if (regOp.getReset()) {
-            regOp.emitError("registers with reset signals not yet supported");
-            return signalPassFailure();
-          }
           mlir::Attribute initState;
           if (auto initVal = regOp.getInitialValue()) {
             // Find the constant op that defines the reset value in an initial
@@ -140,7 +137,15 @@ void ExternalizeRegistersPass::runOnOperation() {
 
           regOp.getResult().replaceAllUsesWith(
               module.appendInput(newInputName, regOp.getType()).second);
-          module.appendOutput(newOutputName, regOp.getInput());
+          if (auto reset = regOp.getReset()) {
+            auto resetValue = regOp.getResetValue();
+            auto mux = builder.create<comb::MuxOp>(
+                regOp.getLoc(), regOp.getType(), reset, resetValue,
+                regOp.getInput());
+            module.appendOutput(newOutputName, mux);
+          } else {
+            module.appendOutput(newOutputName, regOp.getInput());
+          }
           regOp->erase();
           ++numRegs;
           return;
