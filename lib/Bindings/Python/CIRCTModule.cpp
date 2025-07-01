@@ -57,6 +57,7 @@ static void registerPasses() {
   registerFSMPasses();
   registerHWArithPasses();
   registerHWPasses();
+  registerRTGPasses();
   registerHandshakePasses();
   registerKanagawaPasses();
   registerPipelinePasses();

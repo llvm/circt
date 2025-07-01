@@ -157,6 +157,7 @@ add_circt_public_c_api_library(CIRCTCAPIRTG
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTRTGDialect
+  CIRCTRTGTransforms
 )
 
 if(CIRCT_INCLUDE_TESTS)
