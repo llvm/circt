@@ -2722,3 +2722,44 @@ module RangeElementSelection(
       b[3:0] = b[c[0]-:2];
     end
 endmodule
+
+// Check that ImportVerilog recognizes case statements that are exhaustive
+// assuming that the values are two-state. These statements are technically not
+// exhaustive in four-state logic, but a lot of real world Verilog code relies
+// on this hack.
+// CHECK-LABEL: @seeminglyExhaustiveCase
+function void seeminglyExhaustiveCase(logic [1:0] a);
+  // CHECK: [[Z:%.+]] = moore.variable
+  logic [3:0] z;
+  case (a)
+    // CHECK: moore.constant 0 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE0:\^.+]], [[ELSE0:\^.+]]
+    // CHECK: moore.constant 1 : i4
+    // CHECK: cf.br [[EXIT:\^.+]]
+    2'd0: z = 4'b0001;
+    // CHECK: [[ELSE0]]:
+    // CHECK: moore.constant 1 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE1:\^.+]], [[ELSE1:\^.+]]
+    // CHECK: moore.constant 2 : i4
+    // CHECK: cf.br [[EXIT]]
+    2'd1: z = 4'b0010;
+    // CHECK: [[ELSE1]]:
+    // CHECK: moore.constant -2 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE2:\^.+]], [[ELSE2:\^.+]]
+    // CHECK: moore.constant 4 : i4
+    // CHECK: cf.br [[EXIT]]
+    2'd2: z = 4'b0100;
+    // CHECK: [[ELSE2]]:
+    // CHECK: moore.constant -1 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE3:\^.+]], [[ELSE3:\^.+]]
+    // CHECK: moore.constant -8 : i4
+    // CHECK: cf.br [[EXIT]]
+    2'd3: z = 4'b1000;
+    // Instead of a default statement, branch to the final item.
+    // CHECK: [[ELSE3]]:
+    // CHECK-NOT: moore.constant -1 : i4
+    // CHECK-NOT: cf.br [[EXIT]]
+    // CHECK-NEXT: cf.br [[CASE3]]
+    default: z = 4'b1111;
+  endcase
+endfunction

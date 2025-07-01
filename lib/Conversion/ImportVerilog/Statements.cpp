@@ -256,7 +256,7 @@ struct StmtVisitor {
     return success();
   }
 
-  // Handle case statements.
+  /// Handle case statements.
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
     using slang::ast::CaseStatementCondition;
     auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
@@ -267,11 +267,14 @@ struct StmtVisitor {
     // `unique0`, and `priority` modifiers which would allow for additional
     // optimizations.
     auto &exitBlock = createBlock();
+    Block *lastMatchBlock = nullptr;
+    SmallVector<moore::FVIntegerAttr> itemConsts;
 
     for (const auto &item : caseStmt.items) {
       // Create the block that will contain the main body of the expression.
       // This is where any of the comparisons will branch to if they match.
       auto &matchBlock = createBlock();
+      lastMatchBlock = &matchBlock;
 
       // The SV standard requires expressions to be checked in the order
       // specified by the user, and for the evaluation to stop as soon as the
@@ -281,6 +284,13 @@ struct StmtVisitor {
         if (!value)
           return failure();
         auto itemLoc = value.getLoc();
+
+        // Take note if the expression is a constant.
+        auto maybeConst = value;
+        if (auto defOp = maybeConst.getDefiningOp<moore::ConversionOp>())
+          maybeConst = defOp.getInput();
+        if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
+          itemConsts.push_back(defOp.getValueAttr());
 
         // Generate the appropriate equality operator.
         Value cond;
@@ -325,12 +335,51 @@ struct StmtVisitor {
       }
     }
 
-    // Generate the default case if present.
-    if (caseStmt.defaultCase)
-      if (failed(context.convertStatement(*caseStmt.defaultCase)))
-        return failure();
-    if (!isTerminated())
-      builder.create<mlir::cf::BranchOp>(loc, &exitBlock);
+    // Check if the case statement looks exhaustive assuming two-state values.
+    // We use this information to work around a common bug in input Verilog
+    // where a case statement enumerates all possible two-state values of the
+    // case expression, but forgets to deal with cases involving X and Z bits in
+    // the input.
+    //
+    // Once the core dialects start supporting four-state values we may want to
+    // tuck this behind an import option that is on by default, since it does
+    // not preserve semantics.
+    auto twoStateExhaustive = false;
+    if (auto intType = dyn_cast<moore::IntType>(caseExpr.getType());
+        intType && intType.getWidth() < 32 &&
+        itemConsts.size() == (1 << intType.getWidth())) {
+      // Sort the constants by value.
+      llvm::sort(itemConsts, [](auto a, auto b) {
+        return a.getValue().getRawValue().ult(b.getValue().getRawValue());
+      });
+
+      // Ensure that every possible value of the case expression is present. Do
+      // this by starting at 0 and iterating over all sorted items. Each item
+      // must be the previous item + 1. At the end, the addition must exactly
+      // overflow and take us back to zero.
+      auto nextValue = FVInt::getZero(intType.getWidth());
+      for (auto value : itemConsts) {
+        if (value.getValue() != nextValue)
+          break;
+        nextValue += 1;
+      }
+      twoStateExhaustive = nextValue.isZero();
+    }
+
+    // If the case statement is exhaustive assuming two-state values, don't
+    // generate the default case. Instead, branch to the last match block. This
+    // will essentially make the last case item the "default".
+    if (twoStateExhaustive && lastMatchBlock &&
+        caseStmt.condition == CaseStatementCondition::Normal) {
+      builder.create<mlir::cf::BranchOp>(loc, lastMatchBlock);
+    } else {
+      // Generate the default case if present.
+      if (caseStmt.defaultCase)
+        if (failed(context.convertStatement(*caseStmt.defaultCase)))
+          return failure();
+      if (!isTerminated())
+        builder.create<mlir::cf::BranchOp>(loc, &exitBlock);
+    }
 
     // If control never reaches the exit block, remove it and mark control flow
     // as terminated. Otherwise we continue inserting ops in the exit block.
