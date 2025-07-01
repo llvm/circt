@@ -205,7 +205,9 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
 void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
 
-  results.add<FoldAddIntoCompress, ConstantFoldCompress>(context);
+  results
+      .add<FoldCompressIntoCompress, FoldAddIntoCompress, ConstantFoldCompress>(
+          context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -232,12 +234,12 @@ struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
         return failure(); // Skip if we don't know anything about the bits
 
       size_t nonZeroBits = inputWidth - knownBits.Zero.countLeadingOnes();
-      
+
       // If all bits non-zero we will not reduce the number of results
       if (nonZeroBits == op.getNumResults())
         return failure();
-      
-        maxNonZeroBits = std::max(maxNonZeroBits, nonZeroBits);
+
+      maxNonZeroBits = std::max(maxNonZeroBits, nonZeroBits);
     }
 
     auto newPP = rewriter.create<datapath::PartialProductOp>(
