@@ -341,6 +341,20 @@ void Sig2RegPass::runOnOperation() {
 
   for (auto sigOp :
        llvm::make_early_inc_range(moduleOp.getOps<llhd::SignalOp>())) {
+    // If the signal is only driven, but never read or used otherwise, remove
+    // it.
+    if (llvm::all_of(sigOp->getUses(), [](auto &use) {
+          return isa<llhd::DrvOp>(use.getOwner()) &&
+                 use.getOperandNumber() == 0;
+        })) {
+      LLVM_DEBUG(llvm::dbgs() << "  - Removing drive-only signal "
+                              << sigOp.getName() << "\n");
+      for (auto *user : llvm::make_early_inc_range(sigOp->getUsers()))
+        user->erase();
+      sigOp.erase();
+      continue;
+    }
+
     LLVM_DEBUG(llvm::dbgs() << "  - Attempting to promote signal "
                             << sigOp.getName() << "\n");
     SigPromoter promoter(sigOp);
