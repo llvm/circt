@@ -55,6 +55,7 @@ static void registerPasses() {
   registerFSMPasses();
   registerHWArithPasses();
   registerHWPasses();
+  registerRTGPasses();
   registerHandshakePasses();
   mlirRegisterCIRCTConversionPasses();
   mlirRegisterCIRCTTransformsPasses();

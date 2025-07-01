@@ -20,6 +20,7 @@ extern "C" {
 //===----------------------------------------------------------------------===//
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(RTG, rtg);
+MLIR_CAPI_EXPORTED void registerRTGPasses(void);
 
 //===----------------------------------------------------------------------===//
 // Type API.
