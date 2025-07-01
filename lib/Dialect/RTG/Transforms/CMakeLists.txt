@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTRTGTransforms
   LinearScanRegisterAllocationPass.cpp
   LowerUniqueLabelsPass.cpp
   MemoryAllocationPass.cpp
+  UniqueValidateOpsPass.cpp
 
   DEPENDS
   CIRCTRTGTransformsIncGen
