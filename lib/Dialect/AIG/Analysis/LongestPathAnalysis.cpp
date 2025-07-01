@@ -49,6 +49,7 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT//MapVector.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/MapVector.h"
@@ -109,7 +110,8 @@ static void deduplicatePaths(SmallVectorImpl<OpenPath> &results,
 
 static void deduplicatePaths(SmallVectorImpl<DataflowPath> &results,
                              size_t startIndex = 0) {
-  deduplicatePathsImpl<DataflowPath, std::pair<Object, Object>>(
+  deduplicatePathsImpl<DataflowPath,
+                       std::pair<DataflowPath::FanOutType, Object>>(
       results, startIndex,
       [](const DataflowPath &path) {
         return std::pair(path.getFanOut(), path.getFanIn());
@@ -222,37 +224,80 @@ void DebugPoint::print(llvm::raw_ostream &os) const {
 
 void Object::print(llvm::raw_ostream &os) const { printObjectImpl(os, *this); }
 
+void DataflowPath::printFanOut(llvm::raw_ostream &os) {
+  if (auto *object = std::get_if<Object>(&fanOut)) {
+    object->print(os);
+  } else {
+    auto &[resultNumber, bitPos] =
+        *std::get_if<std::pair<size_t, size_t>>(&fanOut);
+    auto outputPortName = root.getOutputName(resultNumber);
+    os << "Object($root." << outputPortName << "[" << bitPos << "])";
+  }
+}
+
 void DataflowPath::print(llvm::raw_ostream &os) {
   os << "root=" << root.getModuleName() << ", ";
   os << "fanOut=";
-  fanOut.print(os);
+  printFanOut(os);
   os << ", ";
   os << "fanIn=";
   path.print(os);
 }
 
-template <>
-struct llvm::DenseMapInfo<Object> {
-  using Info = llvm::DenseMapInfo<
-      std::tuple<circt::igraph::InstancePath, Value, size_t>>;
-  static Object getEmptyKey() {
-    auto [path, value, bitPos] = Info::getEmptyKey();
-    return Object(path, value, bitPos);
+//===----------------------------------------------------------------------===//
+// OpenPath
+//===----------------------------------------------------------------------===//
+
+Object &Object::prependPaths(circt::igraph::InstancePathCache &cache,
+                             circt::igraph::InstancePath path) {
+  instancePath = cache.concatPath(path, instancePath);
+  return *this;
+}
+
+OpenPath &OpenPath::prependPaths(
+    circt::igraph::InstancePathCache &cache,
+    llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+    circt::igraph::InstancePath path) {
+  fanIn.prependPaths(cache, path);
+  if (debugPointFactory)
+    this->history = mapList(debugPointFactory, this->history,
+                            [&](DebugPoint p) -> DebugPoint {
+                              p.object.prependPaths(cache, path);
+                              return p;
+                            });
+  return *this;
+}
+
+//===----------------------------------------------------------------------===//
+// DataflowPath
+//===----------------------------------------------------------------------===//
+
+DataflowPath &DataflowPath::prependPaths(
+    circt::igraph::InstancePathCache &cache,
+    llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+    circt::igraph::InstancePath path) {
+  this->path.prependPaths(cache, debugPointFactory, path);
+  if (!path.empty()) {
+    auto root = path.top()->getParentOfType<hw::HWModuleOp>();
+    assert(root && "root is not a hw::HWModuleOp");
+    this->root = root;
   }
 
-  static Object getTombstoneKey() {
-    auto [path, value, bitPos] = Info::getTombstoneKey();
-    return Object(path, value, bitPos);
-  }
-  static llvm::hash_code getHashValue(Object object) {
-    return Info::getHashValue(
-        {object.instancePath, object.value, object.bitPos});
-  }
-  static bool isEqual(const Object &a, const Object &b) {
-    return Info::isEqual({a.instancePath, a.value, a.bitPos},
-                         {b.instancePath, b.value, b.bitPos});
-  }
-};
+  // If the fanout is an object, prepend the path.
+  if (auto *object = std::get_if<Object>(&fanOut))
+    object->prependPaths(cache, path);
+
+  return *this;
+}
+
+Location DataflowPath::getFanOutLoc() {
+  // If the fanout is an object, return the location of the object.
+  if (auto *object = std::get_if<Object>(&fanOut))
+    return object->value.getLoc();
+
+  // Return output port location.
+  return root.getOutputLoc(std::get<std::pair<size_t, size_t>>(fanOut).first);
+}
 
 class LocalVisitor;
 
@@ -336,6 +381,14 @@ public:
   const auto &getFromInputPortToFanOut() const { return fromInputPortToFanOut; }
   const auto &getFromOutputPortToFanIn() const { return fromOutputPortToFanIn; }
   const auto &getFanOutResults() const { return fanOutResults; }
+
+  circt::igraph::InstancePathCache *getInstancePathCache() const {
+    return instancePathCache.get();
+  }
+
+  llvm::ImmutableListFactory<DebugPoint> *getDebugPointFactory() const {
+    return debugPointFactory.get();
+  }
 
 private:
   void putUnclosedResult(const Object &object, int64_t delay,
@@ -1009,13 +1062,13 @@ struct LongestPathAnalysis::Impl {
              llvm::ImmutableListFactory<DebugPoint> *debugPointFactory =
                  nullptr) const;
 
+  template <bool elaborate>
   LogicalResult getClosedPaths(StringAttr moduleName,
                                SmallVectorImpl<DataflowPath> &results) const;
-  LogicalResult
-  getOpenPaths(StringAttr moduleName,
-               SmallVectorImpl<std::pair<Object, OpenPath>> &openPathsFromFF,
-               SmallVectorImpl<std::tuple<size_t, size_t, OpenPath>>
-                   &openPathsFromOutputPorts) const;
+  LogicalResult getOpenPathsFromInputPortsToInternal(
+      StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
+  LogicalResult getOpenPathsFromInternalToOutputPorts(
+      StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
 
   llvm::ArrayRef<hw::HWModuleOp> getTopModules() const { return topModules; }
 
@@ -1093,41 +1146,48 @@ LogicalResult LongestPathAnalysis::Impl::getResultsImpl(
   return success();
 }
 
+template <bool elaborate>
 LogicalResult LongestPathAnalysis::Impl::getClosedPaths(
     StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
-  auto collectClosedPaths = [&](StringAttr name) {
+  auto collectClosedPaths = [&](StringAttr name,
+                                igraph::InstanceGraphNode *top = nullptr) {
     if (!isAnalysisAvailable(name))
       return;
     auto *visitor = ctx.getLocalVisitor(name);
     for (auto &[point, state] : visitor->getFanOutResults())
-      for (const auto &dataFlow : state)
-        results.emplace_back(point, dataFlow, visitor->getHWModuleOp());
+      for (const auto &dataFlow : state) {
+        if constexpr (elaborate) {
+          // If elaborate, we need to prepend the path to the root.
+          auto *instancePathCache = visitor->getInstancePathCache();
+          auto topToRoot = instancePathCache->getRelativePaths(
+              visitor->getHWModuleOp(), top);
+          for (auto &instancePath : topToRoot) {
+            results.emplace_back(point, dataFlow,
+                                 top->getModule<hw::HWModuleOp>());
+            results.back().prependPaths(*visitor->getInstancePathCache(),
+                                        visitor->getDebugPointFactory(),
+                                        instancePath);
+          }
+        } else {
+          results.emplace_back(point, dataFlow, visitor->getHWModuleOp());
+        }
+      }
   };
 
   if (ctx.instanceGraph) {
     // Accumulate all closed results under the given module.
     auto *node = ctx.instanceGraph->lookup(moduleName);
     for (auto *child : llvm::post_order(node))
-      collectClosedPaths(child->getModule().getModuleNameAttr());
+      collectClosedPaths(child->getModule().getModuleNameAttr(), node);
   } else {
     collectClosedPaths(moduleName);
   }
 
-  // Sort by delay.
-  // TODO: Consider using names and bitpos when tie-breaking to make it more
-  // stable.
-  std::sort(results.begin(), results.end(),
-            [](DataflowPath &a, DataflowPath &b) {
-              return a.getDelay() > b.getDelay();
-            });
   return success();
 }
 
-LogicalResult LongestPathAnalysis::Impl::getOpenPaths(
-    StringAttr moduleName,
-    SmallVectorImpl<std::pair<Object, OpenPath>> &openPathsFromFF,
-    SmallVectorImpl<std::tuple<size_t, size_t, OpenPath>>
-        &openPathsFromOutputPorts) const {
+LogicalResult LongestPathAnalysis::Impl::getOpenPathsFromInputPortsToInternal(
+    StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
   auto *visitor = ctx.getLocalVisitor(moduleName);
   if (!visitor)
     return failure();
@@ -1137,29 +1197,32 @@ LogicalResult LongestPathAnalysis::Impl::getOpenPaths(
     for (auto [point, delayAndHistory] : value) {
       auto [path, start, startBitPos] = point;
       auto [delay, history] = delayAndHistory;
-      openPathsFromFF.emplace_back(
-          Object(path, start, startBitPos),
-          OpenPath({}, arg, argBitPos, delay, history));
+      results.emplace_back(Object(path, start, startBitPos),
+                           OpenPath({}, arg, argBitPos, delay, history),
+                           visitor->getHWModuleOp());
     }
   }
+
+  return success();
+}
+
+LogicalResult LongestPathAnalysis::Impl::getOpenPathsFromInternalToOutputPorts(
+    StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
+  auto *visitor = ctx.getLocalVisitor(moduleName);
+  if (!visitor)
+    return failure();
 
   for (auto &[key, value] : visitor->getFromOutputPortToFanIn()) {
     auto [resultNum, bitPos] = key;
     for (auto [point, delayAndHistory] : value) {
       auto [path, start, startBitPos] = point;
       auto [delay, history] = delayAndHistory;
-      openPathsFromOutputPorts.emplace_back(
-          resultNum, bitPos,
-          OpenPath(path, start, startBitPos, delay, history));
+      results.emplace_back(std::make_pair(resultNum, bitPos),
+                           OpenPath(path, start, startBitPos, delay, history),
+                           visitor->getHWModuleOp());
     }
   }
 
-  std::sort(openPathsFromFF.begin(), openPathsFromFF.end(),
-            [](auto &a, auto &b) { return a.second.delay > b.second.delay; });
-  std::sort(openPathsFromOutputPorts.begin(), openPathsFromOutputPorts.end(),
-            [](auto &a, auto &b) {
-              return std::get<2>(a).delay > std::get<2>(b).delay;
-            });
   return success();
 }
 
@@ -1331,18 +1394,36 @@ int64_t LongestPathAnalysis::getMaxDelay(Value value) const {
   return impl->getMaxDelay(value);
 }
 
-LogicalResult LongestPathAnalysis::getClosedPaths(
-    StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
-  return impl->getClosedPaths(moduleName, results);
+LogicalResult
+LongestPathAnalysis::getClosedPaths(StringAttr moduleName,
+                                    SmallVectorImpl<DataflowPath> &results,
+                                    bool elaboratePaths) const {
+  if (elaboratePaths)
+    return impl->getClosedPaths<true>(moduleName, results);
+  return impl->getClosedPaths<false>(moduleName, results);
 }
 
-LogicalResult LongestPathAnalysis::getOpenPaths(
-    StringAttr moduleName,
-    SmallVectorImpl<std::pair<Object, OpenPath>> &openPathsToFF,
-    SmallVectorImpl<std::tuple<size_t, size_t, OpenPath>>
-        &openPathsFromOutputPorts) const {
-  return impl->getOpenPaths(moduleName, openPathsToFF,
-                            openPathsFromOutputPorts);
+LogicalResult LongestPathAnalysis::getOpenPathsFromInputPortsToInternal(
+    StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
+  return impl->getOpenPathsFromInputPortsToInternal(moduleName, results);
+}
+
+LogicalResult LongestPathAnalysis::getOpenPathsFromInternalToOutputPorts(
+    StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
+  return impl->getOpenPathsFromInternalToOutputPorts(moduleName, results);
+}
+
+LogicalResult
+LongestPathAnalysis::getAllPaths(StringAttr moduleName,
+                                 SmallVectorImpl<DataflowPath> &results,
+                                 bool elaboratePaths) const {
+  if (failed(getClosedPaths(moduleName, results, elaboratePaths)))
+    return failure();
+  if (failed(getOpenPathsFromInputPortsToInternal(moduleName, results)))
+    return failure();
+  if (failed(getOpenPathsFromInternalToOutputPorts(moduleName, results)))
+    return failure();
+  return success();
 }
 
 ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {

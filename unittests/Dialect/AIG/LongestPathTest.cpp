@@ -39,6 +39,17 @@ const char *ir = R"MLIR(
       %r = aig.and_inv not %a, %b {sv.namehint = "child.r"} : i2
       hw.output %r : i2
     }
+
+    hw.module private @nest(in %clock : !seq.clock, in %a: i1, out x: i1) {
+      %p = seq.compreg %p, %clock : i1
+      hw.output %p: i1
+    }
+
+    hw.module private @top(in %clock : !seq.clock, in %a: i1) {
+      %0 = hw.instance "inst1" @nest(clock: %clock: !seq.clock, a: %a: i1) -> (x: i1)
+      %1 = hw.instance "inst2" @nest(clock: %clock: !seq.clock, a: %a: i1) -> (x: i1)
+    }
+
     )MLIR";
 
 TEST(LongestPathTest, BasicTest) {
@@ -87,9 +98,10 @@ TEST(LongestPathTest, BasicTest) {
 
     EXPECT_EQ(results.size(), 4u);
     for (auto path : results)
-      EXPECT_TRUE(answerSet.erase(
-          {path.getFanIn().value, path.getFanIn().bitPos,
-           path.getFanOut().value, path.getFanOut().bitPos, path.getDelay()}));
+      EXPECT_TRUE(
+          answerSet.erase({path.getFanIn().value, path.getFanIn().bitPos,
+                           path.getFanOutAsObject().value,
+                           path.getFanOutAsObject().bitPos, path.getDelay()}));
 
     // Check other API.
     EXPECT_EQ(longestPath.getMaxDelay(concat), 3); // max([3, 3, 0, 0]) = 3
@@ -141,14 +153,66 @@ TEST(LongestPathTest, BasicTest) {
 
     EXPECT_EQ(results.size(), 6u);
     for (auto path : results)
-      EXPECT_TRUE(answerSet.erase(
-          {path.getFanIn().value, path.getFanIn().bitPos,
-           path.getFanOut().value, path.getFanOut().bitPos, path.getDelay()}));
+      EXPECT_TRUE(
+          answerSet.erase({path.getFanIn().value, path.getFanIn().bitPos,
+                           path.getFanOutAsObject().value,
+                           path.getFanOutAsObject().bitPos, path.getDelay()}));
 
     EXPECT_EQ(longestPath.getMaxDelay(concat), 2); // max([2, 2, 0, 0]) = 3
     EXPECT_EQ(longestPath.getAverageMaxDelay(concat),
               1); // avg([2, 2, 0, 0]) = 1
   }
+}
+
+TEST(LongestPathTest, ElaborationTest) {
+  MLIRContext context;
+  context.loadDialect<AIGDialect>();
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<seq::SeqDialect>();
+  context.loadDialect<comb::CombDialect>();
+
+  // Parse the IR string into a module
+  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &context);
+  ASSERT_TRUE(module);
+
+  // Find the 'top' module
+  SymbolTable symbolTable(module.get());
+  auto basicModule = symbolTable.lookup<hw::HWModuleOp>("top");
+  ASSERT_TRUE(basicModule);
+  ModuleAnalysisManager mam(module.get(), nullptr);
+  AnalysisManager am(mam);
+
+  LongestPathAnalysis longestPath(module.get(), am, {true});
+  llvm::SmallVector<DataflowPath> elaboratedPaths, unelaboratedPaths;
+  auto elaborated =
+      longestPath.getClosedPaths(basicModule.getModuleNameAttr(),
+                                 elaboratedPaths, /*elaboratePaths=*/true);
+  auto unelaborated = longestPath.getClosedPaths(
+      basicModule.getModuleNameAttr(), unelaboratedPaths,
+      /*elaboratePaths=*/false);
+
+  // In unelaborated representation, there are 1 paths: {p -> p}.
+  // In elaborated representation, there are 2 paths: {inst1.p -> inst1.p,
+  // inst2.p -> inst2.p}.
+  EXPECT_TRUE(succeeded(unelaborated));
+  EXPECT_EQ(unelaboratedPaths.size(), 1u);
+  EXPECT_TRUE(succeeded(elaborated));
+  EXPECT_EQ(elaboratedPaths.size(), 2u);
+
+  EXPECT_EQ(unelaboratedPaths[0].getFanIn().instancePath.size(), 0u);
+  EXPECT_EQ(unelaboratedPaths[0].getRoot().getModuleName().compare("nest"), 0);
+
+  for (auto &path : elaboratedPaths) {
+    EXPECT_EQ(path.getFanIn().instancePath.size(), 1u);
+    EXPECT_EQ(path.getRoot().getModuleName().compare("top"), 0);
+    EXPECT_TRUE(
+        path.getFanIn().instancePath.leaf().getInstanceName().starts_with(
+            "inst"));
+  }
+
+  EXPECT_NE(
+      elaboratedPaths[0].getFanIn().instancePath.leaf().getInstanceNameAttr(),
+      elaboratedPaths[1].getFanIn().instancePath.leaf().getInstanceNameAttr());
 }
 
 } // namespace

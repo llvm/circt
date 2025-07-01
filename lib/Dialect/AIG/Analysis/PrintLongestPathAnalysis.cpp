@@ -49,55 +49,41 @@ struct PrintLongestPathAnalysisPass
 
 } // namespace
 
+/// Main method to print comprehensive longest path analysis results.
 LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
     const LongestPathAnalysis &analysis, igraph::InstancePathCache &pathCache,
     hw::HWModuleOp top, llvm::raw_ostream &os) {
-  SmallVector<DataflowPath> closedPaths;
-  SmallVector<std::pair<Object, OpenPath>> openPathsToFF;
-  SmallVector<std::tuple<size_t, size_t, OpenPath>> openPathsFromOutputPorts;
+  SmallVector<DataflowPath> results;
   auto moduleName = top.getModuleNameAttr();
-  if (failed(analysis.getClosedPaths(moduleName, closedPaths)) ||
-      failed(analysis.getOpenPaths(moduleName, openPathsToFF,
-                                   openPathsFromOutputPorts)))
+
+  // Get all timing paths with full hierarchical elaboration
+  if (failed(
+          analysis.getAllPaths(moduleName, results, /*elaboratedPaths=*/true)))
     return failure();
 
-  // Emit diagnostics if testing is enabled.
+  // Emit diagnostics if testing is enabled (for regression testing)
   if (test) {
-    for (auto &result : closedPaths) {
-      auto fanOutLoc = result.getFanOut().value.getLoc();
+    for (auto &result : results) {
+      auto fanOutLoc = result.getFanOutLoc();
       auto diag = mlir::emitRemark(fanOutLoc);
       SmallString<128> buf;
       llvm::raw_svector_ostream os(buf);
       result.print(os);
       diag << buf;
     }
-    for (auto &[object, path] : openPathsToFF) {
-      auto loc = object.value.getLoc();
-      auto diag = mlir::emitRemark(loc);
-      DataflowPath closedPath(object, path, top);
-      SmallString<128> buf;
-      llvm::raw_svector_ostream os(buf);
-      closedPath.print(os);
-      diag << buf;
-    }
-    for (auto &[resultNum, bitPos, path] : openPathsFromOutputPorts) {
-      auto outputPortLoc = top.getOutputLoc(resultNum);
-      auto outputPortName = top.getOutputName(resultNum);
-      auto diag = mlir::emitRemark(outputPortLoc);
-      SmallString<128> buf;
-      llvm::raw_svector_ostream os(buf);
-      path.print(os);
-      diag << "fanOut=Object($root." << outputPortName << "[" << bitPos
-           << "]), fanIn=" << buf;
-    }
   }
 
-  os << "# Analysis result for " << top.getModuleNameAttr() << "\n"
-     << "Found " << closedPaths.size() << " closed paths\n";
-  if (!closedPaths.empty())
-    os << "Maximum path delay: " << closedPaths.front().getDelay() << "\n";
+  // Print analysis header
+  os << "# Longest Path Analysis result for " << top.getModuleNameAttr() << "\n"
+     << "Found " << results.size() << " paths\n";
 
-  // TODO: Print open paths.
+  if (!results.empty()) {
+    llvm::sort(results, [](const DataflowPath &a, const DataflowPath &b) {
+      return a.getDelay() > b.getDelay();
+    });
+    os << "Maximum path delay: " << results.front().getDelay() << "\n";
+  }
+
   return success();
 }
 
