@@ -52,3 +52,21 @@ hw.module @Counter(in %clk: !seq.clock, out count: i3) {
   verif.assert %lt : i1
   hw.output %reg : i3
 }
+
+// Check that reset can be triggered
+// RUN: circt-bmc %s -b 4 --module Counter_with_reset --shared-libs=%libz3 | FileCheck %s --check-prefix=REGRESET
+// REGRESET: Assertion can be violated!
+hw.module @Counter_with_reset(in %clk: !seq.clock, in %rst: i1, out count: i3) {
+  %init = seq.initial () {
+    %c1_i3 = hw.constant 1 : i3
+    seq.yield %c1_i3 : i3
+  } : () -> !seq.immutable<i3>
+  %c0_i3 = hw.constant 0 : i3
+  %c1_i3 = hw.constant 1 : i3
+  %regPlusOne = comb.add %reg, %c1_i3 : i3
+  %reg = seq.compreg %regPlusOne, %clk reset %rst, %c0_i3 initial %init : i3
+  %neq = comb.icmp bin ne %reg, %c0_i3 : i3
+  // Assertion will be violated if the reset is triggered
+  verif.assert %neq : i1
+  hw.output %reg : i3
+}
