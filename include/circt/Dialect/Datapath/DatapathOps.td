@@ -51,4 +51,26 @@ def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAnd
   ];
 }
 
+def PartialProductOp : DatapathOp<"pp", [Pure, SameTypeOperands, SameOperandsAndResultType, Commutative]> {
+  let summary = "Generate a partial product array returning a set of results, "
+                "that when summed return the multiplication of operands.";
+
+  let arguments = (ins HWIntegerType:$multiplicand, 
+                       HWIntegerType:$multiplier);
+  let results   = (outs Variadic<HWIntegerType>:$results);
+
+  // let hasFolder = true;
+  let hasCustomAssemblyFormat = true;
+  // let hasVerifier = 1;
+  // let hasCanonicalizer = true;
+
+  let builders = [
+    OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
+      auto inputType = lhs.front().getType();
+      SmallVector<Type> resultTypes(targetRows, inputType);
+      return build($_builder, $_state, resultTypes, lhs);
+    }]>
+  ];
+}
+
 #endif // CIRCT_DIALECT_DATAPATH_OPS_TD

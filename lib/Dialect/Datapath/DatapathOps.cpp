@@ -103,6 +103,55 @@ void CompressOp::print(OpAsmPrinter &p) {
   p << ")";
 }
 
+ParseResult PartialProductOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
+  
+  // Parse the operands
+  if (parser.parseOperandList(operands))
+    return failure();
+  
+  // Parse the colon
+  if (parser.parseColon())
+    return failure();
+  
+  // Parse the number literal
+  size_t numResults;
+  if (parser.parseInteger(numResults))
+    return failure();  
+  
+  // Parse the "x" token
+  if (parser.parseKeyword("x"))
+    return failure();  
+  
+    // Parse the operand type
+  Type resultType;
+  if (parser.parseType(resultType))
+    return failure();
+  
+  // Resolve the operands
+  SmallVector<Type> operandTypes(operands.size(), resultType);
+  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(), result.operands))
+    return failure();
+    
+  // Set the result types
+  SmallVector<Type> resultTypes(numResults, resultType);
+  result.addTypes(resultTypes);
+  
+  return success();
+}
+
+// Custom printer for the PartialProductOp
+void PartialProductOp::print(OpAsmPrinter &p) {
+  // Print the operation name and operands
+  p << " " << getOperands();
+  
+  // Get the first operand type
+  Type resultType = getResult(0).getType();
+  
+  // Print the custom format with number of operands
+  p << " : " << getNumResults() << " x " << resultType;
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

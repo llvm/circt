@@ -12,8 +12,11 @@
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/Support/KnownBits.h"
+#include <algorithm>
 
 using namespace mlir;
 using namespace circt;
@@ -77,27 +80,72 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
 
   LogicalResult matchAndRewrite(CompressOp op,
                                 PatternRewriter &rewriter) const override {
-  auto inputs = op.getInputs();
-  auto size = inputs.size();
-  assert(size > 1 && "expected 2 or more operands");
+    auto inputs = op.getInputs();
+    auto size = inputs.size();
+    assert(size > 1 && "expected 2 or more operands");
 
-  APInt value, value2;
+    APInt value;
 
-  // compress(..., 0) -> compress(...) -- identity
-  if (matchPattern(inputs.back(), m_ConstantInt(&value)) && value.isZero()) {
-    auto newCompressOp = rewriter.create<CompressOp>(op.getLoc(), inputs.drop_back(), 2);
+    // compress(..., 0) -> compress(...) -- identity
+    if (matchPattern(inputs.back(), m_ConstantInt(&value)) && value.isZero()) {
+      auto newCompressOp =
+          rewriter.create<CompressOp>(op.getLoc(), inputs.drop_back(), 2);
 
-    rewriter.replaceOp(op, newCompressOp.getResults());
-    return success();
+      rewriter.replaceOp(op, newCompressOp.getResults());
+      return success();
+    }
+
+    return failure();
   }
-
-  return failure();
-}
 };
 
-// In your DatapathOps.cpp file
+struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+    auto operands = op.getOperands();
+
+    auto inputType = operands[0].getType();
+    unsigned inputWidth = inputType.getIntOrFloatBitWidth();
+
+    // TODO: implement a constant folding for the PartialProductOp
+
+    size_t maxNonZeroBits = 0;
+    // pp(concat(0,a), concat(0,b)) -> reduce number of results
+    for (Value operand : operands) {
+      // If the extracted bits are all known, then return the result.
+      auto knownBits = comb::computeKnownBits(operand);
+      if (knownBits.isUnknown())
+        return failure(); // Skip if we don't know anything about the bits
+
+      size_t nonZeroBits = inputWidth - knownBits.Zero.countLeadingOnes();
+      maxNonZeroBits = std::max(maxNonZeroBits, nonZeroBits);
+    }
+
+    if (maxNonZeroBits == op.getNumResults())
+      return failure();
+
+    auto newPP = rewriter.create<datapath::PartialProductOp>(
+        op.getLoc(), op.getOperands(), maxNonZeroBits);
+
+    auto zero = rewriter.create<hw::ConstantOp>(op.getLoc(),
+                                                APInt::getZero(inputWidth));
+
+    // Collect newPP results and pad with zeros if needed
+    SmallVector<Value> newResults(newPP.getResults().begin(),
+                                  newPP.getResults().end());
+    while (newResults.size() < op.getNumResults())
+      newResults.push_back(zero);
+
+    rewriter.replaceOp(op, newResults);
+    return success();
+  }
+};
+
 void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   // Add the fold pattern
-  results.add<FoldAddIntoCompress, ConstantFoldCompress>(context);
+  results.add<FoldAddIntoCompress, ConstantFoldCompress,
+              ConstantFoldPartialProduct>(context);
 }
