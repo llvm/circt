@@ -1,4 +1,4 @@
-//===- DCDialect.h - DC dialect definition ----------------------*- C++ -*-===//
+//===- DatapathDialect.h - Datapath dialect definition ----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,8 +9,6 @@
 #ifndef CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_H
 #define CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_H
 
-#include "circt/Support/LLVM.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the dialect definition.

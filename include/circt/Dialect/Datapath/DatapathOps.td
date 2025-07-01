@@ -1,4 +1,4 @@
-//===- DatapathOps.td - datapath ops ----------*- tablegen -*-===//
+//===- DatapathOps.td - Datapath dialect ops ---------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -28,14 +28,27 @@ class DatapathOp<string mnemonic, list<Trait> traits = []> :
 
 //===----------------------------------------------------------------------===//
 
-def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAndResultType, Commutative]> {
-  let summary = "Apply a compressor tree to reduce a set of input bitvectors, "
-                "to be added to targetRows output bitvectors.";
+// Compress an array of bitvectors to a smaller set of bitvectors (at least 2).
+def CompressOp : DatapathOp<"compress", 
+                                   [Pure, SameTypeOperands, 
+                                    SameOperandsAndResultType, Commutative]> {
+  let summary = "Reduce a set of bitvectors to a carry-save representation";
+  let description = [{
+    A compressor tree sums multiple bitvectors (often partial products in
+    multipliers or adders). Instead of adding all bitvectors sequentially, a 
+    compressor tree reduces the number of operands in parallel stages. The 
+    result is stored in a redundant (carry-save) representation, deferring the 
+    compressor tree implementation to a later stage.
+
+    Example:
+    ```mlir
+    %0:2 = datapath.compress %a, %b, %c : 3 x i16 -> (i16, i16)
+    ```
+  }];
 
   let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  // let hasFolder = true;
   let hasCustomAssemblyFormat = true;
   let hasVerifier = 1;
   let hasCanonicalizer = true;
@@ -44,25 +57,33 @@ def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAnd
     OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
       auto inputType = lhs.front().getType();
       SmallVector<Type> resultTypes(targetRows, inputType);
-      // for (auto i=0; i< targetRows; ++i) 
-      //   resultTypes.push_back(inputType);
       return build($_builder, $_state, resultTypes, lhs);
     }]>
   ];
 }
 
-def PartialProductOp : DatapathOp<"pp", [Pure, SameTypeOperands, SameOperandsAndResultType, Commutative]> {
-  let summary = "Generate a partial product array returning a set of results, "
-                "that when summed return the multiplication of operands.";
+// Construct partial product array from two operands
+def PartialProductOp : DatapathOp<"pp", 
+                                    [Pure, SameTypeOperands, 
+                                     SameOperandsAndResultType, Commutative]> {
+  let summary = "Generate partial products from multiplying the operands";
+  let description = [{
+    The first step in a multiplication is to generate partial products, which 
+    when summed, yield the product of the two operands. The partial
+    product operator does not specify an implementation, only that summing the 
+    results will yield the product of the two operands. 
 
+    Example:
+    ```mlir
+    %0:8 = datapath.pp %a, %b : 8 x i8
+    ```
+  }];
   let arguments = (ins HWIntegerType:$multiplicand, 
                        HWIntegerType:$multiplier);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  // let hasFolder = true;
   let hasCustomAssemblyFormat = true;
-  // let hasVerifier = 1;
-  // let hasCanonicalizer = true;
+  let hasCanonicalizer = true;
 
   let builders = [
     OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{

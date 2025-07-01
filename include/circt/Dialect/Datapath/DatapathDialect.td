@@ -1,4 +1,4 @@
-//===- DatapathDialect.td - Datapath dialect definition --------------------*- tablegen -*-===//
+//===- DatapathDialect.td - Datapath dialect definition ----*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,7 +23,7 @@ def DatapathDialect : Dialect {
     This dialect defines the `datapath` dialect, which is intended to be a 
     representation of low-level datapath optimization constructs.
   }];
-  // let hasConstantMaterializer = 1;
+  
   let dependentDialects = ["circt::comb::CombDialect"];
   let cppNamespace = "::circt::datapath";
 }

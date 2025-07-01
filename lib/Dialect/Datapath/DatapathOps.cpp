@@ -1,4 +1,4 @@
-//===- DatapathOps.cpp - Implement the Datapath operations ------------------------===//
+//===- DatapathOps.cpp - Implement the Datapath operations-----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -15,12 +15,8 @@
 using namespace circt;
 using namespace datapath;
 
-//===----------------------------------------------------------------------===//
-// Unary Operations
-//===----------------------------------------------------------------------===//
-
 LogicalResult CompressOp::verify() {
-  // The compressor must reduce the number of operands by at least 1 otherwise 
+  // The compressor must reduce the number of operands by at least 1 otherwise
   // it fails to perform any reduction.
   if (getNumOperands() < 3)
     return emitOpError("Requires 3 or more arguments - otherwise use add");
@@ -30,125 +26,99 @@ LogicalResult CompressOp::verify() {
 
   if (getNumResults() < 2)
     return emitOpError("Must produce at least 2 results");
-  
+
   return success();
 }
 
 ParseResult CompressOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
-  
-  // Parse the operands
+
   if (parser.parseOperandList(operands))
     return failure();
-  
-  // Parse the colon
+
   if (parser.parseColon())
     return failure();
-  
-  // Parse the number literal
+
   size_t numOperands;
   if (parser.parseInteger(numOperands))
-    return failure();  
-  
-  // Parse the "x" token
+    return failure();
+
   if (parser.parseKeyword("x"))
-    return failure();  
-  
-    // Parse the operand type
+    return failure();
+
   Type operandType;
   if (parser.parseType(operandType))
     return failure();
-  
-    
+
   // Verify the number of operands
   if (numOperands != operands.size()) {
-    return parser.emitError(parser.getNameLoc(), 
-      "number of operands does not match specified count");
+    return parser.emitError(
+        parser.getNameLoc(),
+        "number of operands does not match specified count");
   }
-  
-  // Parse the arrow and result type list
+
   SmallVector<Type, 2> resultTypes;
-  if (parser.parseArrow() || 
-      parser.parseLParen() ||
-      parser.parseTypeList(resultTypes) ||
-      parser.parseRParen())
+  if (parser.parseArrow() || parser.parseLParen() ||
+      parser.parseTypeList(resultTypes) || parser.parseRParen())
     return failure();
-  
+
   // Resolve the operands
   SmallVector<Type> operandTypes(operands.size(), operandType);
-  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(), result.operands))
+  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(),
+                             result.operands))
     return failure();
-    
-  // Set the result types
+
   result.addTypes(resultTypes);
-  
+
   return success();
 }
 
 // Custom printer for the CompressOp
 void CompressOp::print(OpAsmPrinter &p) {
-  // Print the operation name and operands
   p << " " << getOperands();
-  
-  // Get the first operand type
   Type operandType = getOperand(0).getType();
-  
-  // Print the custom format with number of operands
   p << " : " << getNumOperands() << " x " << operandType << " -> (";
-  // p << " : " << operandType << ":" << getNumOperands() << " -> (";
-  
-  // Print result types
   llvm::interleaveComma(getResultTypes(), p);
-  
   p << ")";
 }
 
-ParseResult PartialProductOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult PartialProductOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
-  
-  // Parse the operands
+
   if (parser.parseOperandList(operands))
     return failure();
-  
-  // Parse the colon
+
   if (parser.parseColon())
     return failure();
-  
-  // Parse the number literal
+
   size_t numResults;
   if (parser.parseInteger(numResults))
-    return failure();  
-  
-  // Parse the "x" token
+    return failure();
+
   if (parser.parseKeyword("x"))
-    return failure();  
-  
-    // Parse the operand type
+    return failure();
+
   Type resultType;
   if (parser.parseType(resultType))
     return failure();
-  
+
   // Resolve the operands
   SmallVector<Type> operandTypes(operands.size(), resultType);
-  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(), result.operands))
+  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(),
+                             result.operands))
     return failure();
-    
-  // Set the result types
+
   SmallVector<Type> resultTypes(numResults, resultType);
   result.addTypes(resultTypes);
-  
+
   return success();
 }
 
 // Custom printer for the PartialProductOp
 void PartialProductOp::print(OpAsmPrinter &p) {
-  // Print the operation name and operands
   p << " " << getOperands();
-  
-  // Get the first operand type
   Type resultType = getResult(0).getType();
-  
-  // Print the custom format with number of operands
   p << " : " << getNumResults() << " x " << resultType;
 }
 

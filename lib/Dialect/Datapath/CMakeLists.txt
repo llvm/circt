@@ -8,8 +8,6 @@ add_circt_dialect_library(CIRCTDatapath
 
   DEPENDS
   CIRCTComb
-  # MLIRCombIncGen
-  # MLIRCombEnumsIncGen
   
   LINK_COMPONENTS
   Support
@@ -19,6 +17,5 @@ add_circt_dialect_library(CIRCTDatapath
   CIRCTComb
   MLIRIR
   MLIRInferTypeOpInterface
-  )
+)
 
-# add_dependencies(circt-headers)
