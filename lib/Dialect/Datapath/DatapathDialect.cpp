@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Datapath/DatapathDialect.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
 
 using namespace circt;
