@@ -43,7 +43,7 @@ def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAnd
 
   // let hasFolder = true;
   let hasVerifier = 1;
-  // let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 
   let builders = [
     OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
