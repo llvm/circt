@@ -28,7 +28,7 @@ class DatapathOp<string mnemonic, list<Trait> traits = []> :
 
 //===----------------------------------------------------------------------===//
 
-def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAndResultType]> {
+def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAndResultType, Commutative]> {
   let summary = "Apply a compressor tree to reduce a set of input bitvectors, "
                 "to be added to targetRows output bitvectors.";
 
@@ -45,15 +45,15 @@ def CompressOp : DatapathOp<"compress", [Pure, SameTypeOperands, SameOperandsAnd
   let hasVerifier = 1;
   // let hasCanonicalizeMethod = true;
 
-  // let builders = [
-  //   OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
-  //     auto inputType = lhs.front().getType();
-  //     SmallVector<Type> resultTypes(targetRows, inputType);
-  //     // for (auto i=0; i< targetRows; ++i) 
-  //     //   resultTypes.push_back(inputType);
-  //     return build($_builder, $_state, resultTypes, lhs, targetRows);
-  //   }]>
-  // ];
+  let builders = [
+    OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
+      auto inputType = lhs.front().getType();
+      SmallVector<Type> resultTypes(targetRows, inputType);
+      // for (auto i=0; i< targetRows; ++i) 
+      //   resultTypes.push_back(inputType);
+      return build($_builder, $_state, resultTypes, lhs);
+    }]>
+  ];
 }
 
 #endif // CIRCT_DIALECT_DATAPATH_OPS_TD
