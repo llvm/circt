@@ -57,7 +57,7 @@ TEST(InstancePathTest, RelativePath) {
   EXPECT_EQ("cat", catToAlligatorPaths[0][1].getInstanceName());
 }
 
-TEST(InstancePathTest, AppendPrependInstance) {
+TEST(InstancePathTest, AppendPrependConcatInstance) {
   MLIRContext context;
   ModuleOp circuit = fixtures::createModule(&context);
   hw::InstanceGraph graph(circuit);
@@ -91,6 +91,13 @@ TEST(InstancePathTest, AppendPrependInstance) {
   ASSERT_EQ(2ull, appended.size());
   EXPECT_EQ(breakfast, appended[0]);
   EXPECT_EQ(kitty, appended[1]);
+
+  auto concatenated =
+      pathCache.concatPath(pathCache.appendInstance(empty, breakfast),
+                           pathCache.appendInstance(empty, kitty));
+  ASSERT_EQ(2ull, concatenated.size());
+  EXPECT_EQ(breakfast, concatenated[0]);
+  EXPECT_EQ(kitty, concatenated[1]);
 }
 
 TEST(InstancePathTest, Hash) {
