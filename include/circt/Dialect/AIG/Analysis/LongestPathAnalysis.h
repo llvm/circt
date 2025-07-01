@@ -113,15 +113,15 @@ public:
   // FanOut can be either an internal circuit object or a module output port
   // This flexibility allows representing both closed paths
   // (register-to-register) and open paths (register-to-output) in a unified way
-  using FanOutType = std::variant<Object, std::pair<size_t, size_t>>;
+  using OutputPort = std::pair<size_t, size_t>;
+  using FanOutType = std::variant<Object, OutputPort>;
 
   // Constructor for paths with Object fanout (internal circuit nodes)
   DataflowPath(Object fanOut, OpenPath fanIn, hw::HWModuleOp root)
       : fanOut(fanOut), path(fanIn), root(root) {}
 
   // Constructor for paths with port fanout (module output ports)
-  DataflowPath(std::pair<size_t, size_t> fanOut, OpenPath fanIn,
-               hw::HWModuleOp root)
+  DataflowPath(OutputPort fanOut, OpenPath fanIn, hw::HWModuleOp root)
       : fanOut(fanOut), path(fanIn), root(root) {}
 
   DataflowPath() = default;
@@ -130,8 +130,8 @@ public:
   const Object &getFanIn() const { return path.fanIn; }
   const FanOutType &getFanOut() const { return fanOut; }
   const Object &getFanOutAsObject() const { return std::get<Object>(fanOut); }
-  const std::pair<size_t, size_t> &getFanOutAsPort() const {
-    return std::get<std::pair<size_t, size_t>>(fanOut);
+  const OutputPort &getFanOutAsPort() const {
+    return std::get<OutputPort>(fanOut);
   }
   hw::HWModuleOp getRoot() { return root; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const {

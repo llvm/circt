@@ -61,8 +61,19 @@ For each operation, the analysis:
 
 The `LongestPathAnalysis` class provides the following key methods:
 
+#### Core Query Methods
+
 - `getResults(Value, size_t, SmallVectorImpl<DataflowPath>&)`: Gets all paths to the given value and bit position.
 - `getAverageMaxDelay(Value)`: Returns the average of maximum delays across all bits of a value
-- `getClosedPaths(StringAttr, SmallVectorImpl<DataflowPath>&)`: Gets all closed paths (register-to-register) in a module
-- `getOpenPaths(StringAttr, ...)`: Gets all open paths (input-to-register and register-to-output) in a module
 - `isAnalysisAvailable(StringAttr)`: Checks if analysis is available for a module
+
+#### Path Query Methods
+
+- `getClosedPaths(StringAttr, SmallVectorImpl<DataflowPath>&, bool elaboratePaths = false)`: Gets all closed paths (register-to-register) in a module
+- `getOpenPathsFromInputPortsToInternal(StringAttr, SmallVectorImpl<DataflowPath>&)`: Gets open paths from module input ports to internal sequential elements
+- `getOpenPathsFromInternalToOutputPorts(StringAttr, SmallVectorImpl<DataflowPath>&)`: Gets open paths from internal sequential elements to module output ports
+- `getAllPaths(StringAttr, SmallVectorImpl<DataflowPath>&, bool elaboratePaths = false)`: Convenience method that combines all path types
+
+#### Hierarchical Path Support
+
+The analysis now supports hierarchical path elaboration through the `elaboratePaths` parameter. When enabled, paths include full hierarchical instance information across module boundaries, providing complete visibility into timing paths in hierarchical designs.
