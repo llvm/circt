@@ -42,6 +42,15 @@ rtg.test @withFixedRegs() {
   rtgtest.rv32i.jalr %2, %3, %imm
 }
 
+// CHECK-LABEL: @validation
+rtg.test @validation() {
+  %reg = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
+  %default = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK: rtg.validate
+  %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  rtgtest.rv32i.lui %reg, %0 : !rtg.isa.immediate<32>
+}
+
 // -----
 
 rtg.test @spilling() {
@@ -56,6 +65,6 @@ rtg.test @spilling() {
 
 rtg.test @unsupportedUser() {
   %0 = rtg.virtual_reg [#rtgtest.ra]
-  // expected-error @below {{only operations implementing 'InstructionOpInterface are allowed to use registers}}
+  // expected-error @below {{only operations implementing 'InstructionOpInterface' and 'rtg.validate' are allowed to use registers}}
   rtg.set_create %0 : !rtgtest.ireg
 }

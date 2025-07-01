@@ -214,3 +214,14 @@ rtg.target @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, m
 
 // CHECK-LABEL: rtg.test @template() template "temp_name" target @target {
 rtg.test @template() template "temp_name" target @target { }
+
+// CHECK-LABEL: rtg.test @validation()
+rtg.test @validation() {
+  %0 = rtg.fixed_reg #rtgtest.t0
+  %1 = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK: %{{.*}} = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+
+  // CHECK: %{{.*}} = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %3 = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+}
