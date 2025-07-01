@@ -1360,7 +1360,6 @@ struct PowSOpConversion : public OpConversionPattern<PowSOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
 
-    Location loc = op.getLoc();
     // utilize MLIR math dialect's math.ipowi to handle the exponentiation of
     // expression
     rewriter.replaceOpWithNewOp<mlir::math::IPowIOp>(
