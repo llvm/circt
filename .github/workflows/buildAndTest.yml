@@ -72,7 +72,7 @@ jobs:
         if: ${{ always() }}
         run: |
           # Run clang-format
-          git clang-format $DIFF_COMMIT
+          git clang-format $DIFF_COMMIT || true
           git diff --ignore-submodules > clang-format.patch
           if [ -s clang-format.patch ]; then
             echo "Clang-format found formatting problems in the following " \
