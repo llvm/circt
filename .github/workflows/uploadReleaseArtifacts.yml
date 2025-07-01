@@ -129,6 +129,7 @@ jobs:
         generated: ${{ fromJSON(needs.choose-matrix.outputs.static) }}
     permissions:
       contents: write # Upload assets to release.
+      actions: write
     uses: ./.github/workflows/unifiedBuildTestAndInstallStatic.yml
     with:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
@@ -147,6 +148,7 @@ jobs:
         generated: ${{ fromJSON(needs.choose-matrix.outputs.native) }}
     permissions:
       contents: write # Upload assets to release.
+      actions: write
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
       runner: ${{ matrix.generated.runner }}

@@ -78,7 +78,6 @@ jobs:
     steps:
       - name: Generate cache key pattern
         id: cache-key
-        shell: bash
         run: |
           CACHE_KEY="alpine-${{ inputs.cmake_build_type }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}"
           echo "pattern=$CACHE_KEY" >> $GITHUB_OUTPUT
@@ -204,4 +203,3 @@ jobs:
       actions: write
     with:
       cache_key_pattern: ${{ needs.build-test-and-install.outputs.cache-key-pattern }}
-      dry_run: true  # Set to false when ready for production
