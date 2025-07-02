@@ -127,13 +127,11 @@ hw.module @SkipDynamicArrayGet(in %u: i6, in %v: i42) {
   llhd.drv %2, %v after %0 : !hw.inout<i42>
 }
 
-// CHECK-LABEL: @SkipIfGapsPresent
-hw.module @SkipIfGapsPresent(in %u: i11, in %v: i30) {
+// CHECK-LABEL: @SkipIfGapsPresentAndDefaultValueUnknown
+hw.module @SkipIfGapsPresentAndDefaultValueUnknown(inout %a: i42, in %u: i11, in %v: i30) {
   %c0_i6 = hw.constant 0 : i6
   %c12_i6 = hw.constant 12 : i6
   %0 = llhd.constant_time <0ns, 0d, 1e>
-  %1 = builtin.unrealized_conversion_cast to i42
-  %a = llhd.sig %1 : i42
   // Bit 11 is not covered.
   // CHECK: [[TMP1:%.+]] = llhd.sig.extract %a from %c0_i6
   // CHECK: [[TMP2:%.+]] = llhd.sig.extract %a from %c12_i6
@@ -239,3 +237,81 @@ hw.module @RegressionSingleFieldStruct(in %u: i1) {
   %2 = llhd.sig.struct_extract %a["x"] : !hw.inout<struct<x: i1>>
   llhd.drv %2, %u after %1 : !hw.inout<i1>
 }
+
+// Partially driven signals with no unknown uses and a known default value use
+// the default value to fill in gaps.
+// CHECK-LABEL: @FillIntegerGaps
+hw.module @FillIntegerGaps(in %u: i42) {
+  %c0_i7 = hw.constant 0 : i7
+  %c0_i126 = hw.constant 0 : i126
+  // CHECK: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: %a = llhd.sig %c0_i126 :
+  // CHECK-NEXT: [[TMP:%.+]] = comb.concat [[DEFAULT:%.+]], %u
+  // CHECK-NEXT: llhd.drv %a, [[TMP]] after [[T]] :
+  // CHECK-NEXT: [[DEFAULT]] = comb.extract %c0_i126 from 42 : (i126) -> i84
+  %a = llhd.sig %c0_i126 : i126
+  %1 = llhd.sig.extract %a from %c0_i7 : (!hw.inout<i126>) -> !hw.inout<i42>
+  llhd.drv %1, %u after %0 : !hw.inout<i42>
+}
+
+// Partially driven signals with no unknown uses and a known default value use
+// the default value to fill in gaps.
+// CHECK-LABEL: @FillStructGaps
+hw.module @FillStructGaps(in %u: i42) {
+  %c0_i7 = hw.constant 0 : i7
+  %c0_i126 = hw.constant 0 : i126
+  %0 = hw.bitcast %c0_i126 : (i126) -> !hw.struct<a: i42, b: i41, c: i43>
+  // CHECK: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: %x = llhd.sig [[INIT:%.+]] :
+  // CHECK-NEXT: [[TMP:%.+]] = hw.struct_create (%u, [[DEFAULT_B:%.+]], [[DEFAULT_C:%.+]])
+  // CHECK-NEXT: llhd.drv %x, [[TMP]] after [[T]] :
+  // CHECK-NEXT: [[DEFAULT_B]] = hw.struct_extract [[INIT]]["b"]
+  // CHECK-NEXT: [[DEFAULT_C]] = hw.struct_extract [[INIT]]["c"]
+  %x = llhd.sig %0 : !hw.struct<a: i42, b: i41, c: i43>
+  %2 = llhd.sig.struct_extract %x["a"] : !hw.inout<struct<a: i42, b: i41, c: i43>>
+  llhd.drv %2, %u after %1 : !hw.inout<i42>
+}
+
+// Partially driven signals with no unknown uses and a known default value use
+// the default value to fill in gaps.
+// CHECK-LABEL: @FillArrayGaps
+hw.module @FillArrayGaps(in %u: i42) {
+  %c0_i2 = hw.constant 0 : i2
+  %c0_i126 = hw.constant 0 : i126
+  %0 = hw.bitcast %c0_i126 : (i126) -> !hw.array<3xi42>
+  // CHECK: [[T:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: %a = llhd.sig [[INIT:%.+]] :
+  // CHECK-NEXT: [[TMP1:%.+]] = hw.array_create %u
+  // CHECK-NEXT: [[TMP2:%.+]] = hw.array_concat [[DEFAULT:%.+]], [[TMP1]]
+  // CHECK-NEXT: llhd.drv %a, [[TMP2]] after [[T]] :
+  // CHECK-NEXT: %c1_i2 = hw.constant 1 : i2
+  // CHECK-NEXT: [[DEFAULT]] = hw.array_slice [[INIT]][%c1_i2]
+  %a = llhd.sig %0 : !hw.array<3xi42>
+  %2 = llhd.sig.array_get %a[%c0_i2] : !hw.inout<array<3xi42>>
+  llhd.drv %2, %u after %1 : !hw.inout<i42>
+}
+
+// Don't use default value to fill gaps if there are unknown signal uses. These
+// might drive a signal value that would conflict with the additional default
+// value drive.
+// CHECK-LABEL: @SkipGapsOnUnknownUse
+hw.module @SkipGapsOnUnknownUse(in %u: i42) {
+  %c0_i7 = hw.constant 0 : i7
+  %c42_i7 = hw.constant 42 : i7
+  %c0_i126 = hw.constant 0 : i126
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %c0_i126 : i126
+  // CHECK: [[TMP1:%.+]] = llhd.sig.extract %a from %c0_i7
+  // CHECK: [[TMP2:%.+]] = llhd.sig.extract %a from %c42_i7
+  // CHECK: llhd.drv [[TMP1]], %u
+  // CHECK: func.call @useSigI42([[TMP2]])
+  %1 = llhd.sig.extract %a from %c0_i7 : (!hw.inout<i126>) -> !hw.inout<i42>
+  %2 = llhd.sig.extract %a from %c42_i7 : (!hw.inout<i126>) -> !hw.inout<i42>
+  llhd.drv %1, %u after %0 : !hw.inout<i42>
+  func.call @useSigI42(%2) : (!hw.inout<i42>) -> ()
+}
+
+func.func private @useSigI42(%arg0: !hw.inout<i42>)

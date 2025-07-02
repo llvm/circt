@@ -28,6 +28,7 @@ using namespace circt;
 using namespace llhd;
 using hw::HWModuleOp;
 using llvm::SmallMapVector;
+using llvm::SmallSetVector;
 using llvm::SpecificBumpPtrAllocator;
 
 /// Determine the number of elements in a type. This returns the number of bits
@@ -61,8 +62,13 @@ struct ValueSlice {
 /// signal directly. Instead this struct only tracks the offset and length of
 /// the slice in the signal that is being assigned.
 struct DriveSlice {
-  /// The drive op assigning a value.
+  /// The drive op assigning a value. This may be null if no current drive op
+  /// exists.
   DrvOp op;
+  /// The value being assigned. Usually this is equal to `op.getValue()`, but
+  /// may hold something like a default signal value if this slice was created
+  /// to fill a gap in drives and no drive op exists.
+  Value value;
   /// The offset within the larger signal that is being assigned.
   unsigned offset = 0;
   /// The number of elements starting at the offset that are being assigned.
@@ -137,6 +143,8 @@ struct ModuleContext {
 
   // Utilities to aggregate drives to a signal.
   void aggregateDrives(Signal &signal);
+  void addDefaultDriveSlices(Signal &signal,
+                             SmallVectorImpl<DriveSlice> &slices);
   void aggregateDriveSlices(Signal &signal, Value driveDelay, Value driveEnable,
                             ArrayRef<DriveSlice> slices);
 
@@ -306,8 +314,11 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   // collect the different combinations of delay and enable operands of the
   // drives as separate vectors of drive slices.
   SmallMapVector<std::pair<Value, Value>, SmallVector<DriveSlice>, 2> drives;
-  auto addDrive = [&](DriveSlice slice) {
-    drives[{slice.op.getTime(), slice.op.getEnable()}].push_back(slice);
+  SmallPtrSet<Operation *, 8> knownDrives;
+  auto addDrive = [&](DrvOp op, unsigned offset, unsigned length) {
+    knownDrives.insert(op);
+    drives[{op.getTime(), op.getEnable()}].push_back(
+        DriveSlice{op, op.getValue(), offset, length});
   };
   for (auto *subsignal : signal.subsignals) {
     aggregateDrives(*subsignal);
@@ -319,7 +330,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
     // fact that this is a single scalar element as opposed to a length-1 slice
     // of the aggregate by setting the drive slice's length field to 0.
     for (auto driveOp : subsignal->completeDrives)
-      addDrive(DriveSlice{driveOp, subsignal->indexInParent, 0});
+      addDrive(driveOp, subsignal->indexInParent, 0);
   }
 
   // Gather all drives targeting this signal or slices of it directly.
@@ -328,8 +339,39 @@ void ModuleContext::aggregateDrives(Signal &signal) {
       auto driveOp = dyn_cast<DrvOp>(use.getOwner());
       if (driveOp && use.getOperandNumber() == 0 &&
           driveOp->getBlock() == slice.value.getParentBlock())
-        addDrive(DriveSlice{driveOp, slice.offset, slice.length});
+        addDrive(driveOp, slice.offset, slice.length);
     }
+  }
+
+  // Check if all uses of this signal are probes or drives we are aware of. If
+  // this is true we know that we can drive undriven slices of the signal with
+  // its default value without breaking semantics.
+  SmallSetVector<Value, 8> worklist;
+  worklist.insert(signal.value);
+  bool hasUnknownUses = false;
+  while (!worklist.empty() && !hasUnknownUses) {
+    auto value = worklist.pop_back_val();
+    for (auto *user : value.getUsers()) {
+      if (isa<PrbOp>(user))
+        continue;
+      if (isa<DrvOp>(user) && knownDrives.contains(user))
+        continue;
+      if (isa<SigExtractOp, SigStructExtractOp, SigArrayGetOp, SigArraySliceOp>(
+              user)) {
+        worklist.insert(user->getResult(0));
+        continue;
+      }
+      hasUnknownUses = true;
+      break;
+    }
+  }
+
+  // If the signal has no unknown uses and all drives have the same delay and
+  // condition, we can use the signal's default value to fill in undriven
+  // slices.
+  if (!hasUnknownUses && drives.size() == 1) {
+    auto &slices = drives.begin()->second;
+    addDefaultDriveSlices(signal, slices);
   }
 
   // Combine driven values that uniquely cover the entire signal without gaps or
@@ -340,6 +382,115 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   }
 }
 
+/// Fill gaps in a list of drive slices with parts of the signal's default
+/// value. The slices do not have to be sorted. The filler slices are appended
+/// to `slices` directly.
+void ModuleContext::addDefaultDriveSlices(Signal &signal,
+                                          SmallVectorImpl<DriveSlice> &slices) {
+  auto type = cast<hw::InOutType>(signal.value.getType()).getElementType();
+
+  // Sort the slices such that we can find gaps easily.
+  llvm::sort(slices, [](auto &a, auto &b) { return a.offset < b.offset; });
+
+  // A helper function to add to `gapSlices` to fill in gaps as we encounter
+  // them. Structs require each field to be listed separately, since there are
+  // no struct slices.
+  bool anyOverlaps = false;
+  bool needSeparateFields = isa<hw::StructType>(type);
+  SmallVector<DriveSlice> gapSlices;
+  auto fillGap = [&](unsigned from, unsigned to) {
+    if (from == to)
+      return;
+    if (from > to) {
+      anyOverlaps = true;
+      return;
+    }
+    if (needSeparateFields) {
+      for (auto idx = from; idx < to; ++idx)
+        gapSlices.push_back(DriveSlice{DrvOp{}, Value{}, idx, 0});
+    } else {
+      gapSlices.push_back(DriveSlice{DrvOp{}, Value{}, from, to - from});
+    }
+  };
+
+  // Go through the slices and keep track of the offset at which we expect the
+  // slice to start. If a slice starts beyond that offset, there is a gap which
+  // we can fill with a chunk of the signal's default value.
+  unsigned expectedOffset = 0;
+  for (auto slice : slices) {
+    fillGap(expectedOffset, slice.offset);
+    expectedOffset = slice.offset + std::max<unsigned>(1, slice.length);
+    if (anyOverlaps)
+      return;
+  }
+  fillGap(expectedOffset, getLength(signal.value.getType()));
+
+  // If we have seen any overlapping slices, don't bother filling in gaps
+  // because we'll later give up on combining the drives anyway.
+  if (anyOverlaps || gapSlices.empty())
+    return;
+
+  // Dig up the default value for the signal.
+  //
+  // This is technically only valid if the signal's default value is a constant.
+  // Otherwise its value may have changed between the signal's initialization
+  // and now. But checking for const-ness is tricky because we might use
+  // bitcasts or other aggregate creation ops to build up the constant. We
+  // currently never create non-constant signal values, so this is fine for now.
+  // We'll want to revisit this at a later point, though.
+  //
+  // This currently does not work for nested signals. To support those, we
+  // potentially have to walk up our parent signals to find an actual `llhd.sig`
+  // op, and then descend back down, extracting subfields.
+  auto signalOp = signal.value.getDefiningOp<SignalOp>();
+  if (!signalOp)
+    return;
+  auto defaultValue = signalOp.getInit();
+
+  // Create drives with the default value for the gaps we've filled in.
+  ImplicitLocOpBuilder builder(signal.value.getLoc(),
+                               signal.value.getContext());
+  builder.setInsertionPointAfterValue(signal.value);
+
+  for (auto &slice : gapSlices) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Filling gap " << signal << "[" << slice.offset << ".."
+               << (slice.offset + slice.length) << "] with initial value\n");
+
+    // Handle integers.
+    if (auto intType = dyn_cast<IntegerType>(type)) {
+      assert(slice.length > 0);
+      slice.value = builder.create<comb::ExtractOp>(
+          builder.getIntegerType(slice.length), defaultValue, slice.offset);
+      continue;
+    }
+
+    // Handle structs.
+    if (auto structType = dyn_cast<hw::StructType>(type)) {
+      assert(slice.length == 0);
+      slice.value = builder.create<hw::StructExtractOp>(
+          defaultValue, structType.getElements()[slice.offset]);
+      continue;
+    }
+
+    // Handle arrays.
+    if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+      assert(slice.length > 0);
+      auto offset = builder.create<hw::ConstantOp>(
+          APInt(llvm::Log2_64_Ceil(arrayType.getNumElements()), slice.offset));
+      slice.value = builder.create<hw::ArraySliceOp>(
+          hw::ArrayType::get(arrayType.getElementType(), slice.length),
+          defaultValue, offset);
+      continue;
+    }
+  }
+
+  // Add the gap fillers to the list of slices. These will be resorted later and
+  // will then form a consecutive non-overlapping assignment to the entire
+  // signal.
+  slices.append(gapSlices.begin(), gapSlices.end());
+}
+
 /// Combine multiple drive slices into a single drive of the aggregate value.
 /// The slices must be sorted by offset with the lowest offset first.
 void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
@@ -348,6 +499,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   // Check whether the slices are consecutive and non-overlapping.
   unsigned expectedOffset = 0;
   for (auto slice : slices) {
+    assert(slice.value && "all slices must have an assigned value");
     if (slice.offset != expectedOffset) {
       expectedOffset = -1;
       break;
@@ -366,7 +518,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   // If we get here we cover the entire signal. If we already have a single
   // drive, simply mark that as this signal's single drive. Otherwise we have to
   // do some actual work.
-  if (slices.size() == 1 && slices[0].length != 0) {
+  if (slices.size() == 1 && slices[0].length != 0 && slices[0].op) {
     signal.completeDrives.push_back(slices[0].op);
     return;
   }
@@ -394,7 +546,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     // everything is just a concatenation.
     SmallVector<Value> operands;
     for (auto slice : slices)
-      operands.push_back(slice.op.getValue());
+      operands.push_back(slice.value);
     std::reverse(operands.begin(), operands.end()); // why, just why
     result = builder.create<comb::ConcatOp>(operands);
     LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
@@ -406,7 +558,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     // individual field that we can use directly to create the struct.
     SmallVector<Value> operands;
     for (auto slice : slices)
-      operands.push_back(slice.op.getValue());
+      operands.push_back(slice.value);
     result = builder.create<hw::StructCreateOp>(structType, operands);
     LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
   }
@@ -429,10 +581,10 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     };
     for (auto slice : slices) {
       if (slice.length == 0) {
-        scalars.push_back(slice.op.getValue());
+        scalars.push_back(slice.value);
       } else {
         flushScalars();
-        aggregates.push_back(slice.op.getValue());
+        aggregates.push_back(slice.value);
       }
     }
     flushScalars();
@@ -456,6 +608,8 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
 
   // Mark the old drives as to be deleted.
   for (auto slice : slices) {
+    if (!slice.op)
+      continue;
     LLVM_DEBUG(llvm::dbgs() << "  - Removed " << slice.op << "\n");
     pruner.eraseNow(slice.op);
   }
