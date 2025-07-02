@@ -817,3 +817,22 @@ firrtl.circuit "SinkRefs" {
     }
   }
 }
+
+firrtl.circuit "SinkRWProbe" {
+  firrtl.layer @A bind {}
+
+  firrtl.module public @SinkRWProbe(out %p: !firrtl.rwprobe<uint<1>, @A>) {
+    %w = firrtl.wire sym @sym : !firrtl.uint<1>
+    %0 = firrtl.ref.rwprobe <@SinkRWProbe::@sym> : !firrtl.rwprobe<uint<1>>
+    %1 = firrtl.ref.cast %0 : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+    // CHECK:      %w = firrtl.wire sym @sym : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.layerblock @A {
+    // CHECK-NEXT:   %0 = firrtl.ref.rwprobe <@SinkRWProbe::@sym> : !firrtl.rwprobe<uint<1>>
+    // CHECK-NEXT:   %1 = firrtl.ref.cast %0 : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+    // CHECK-NEXT:   firrtl.ref.define %p, %1 : !firrtl.rwprobe<uint<1>, @A>
+    // CHECK-NEXT: }
+    firrtl.layerblock @A {
+      firrtl.ref.define %p, %1 : !firrtl.rwprobe<uint<1>, @A>
+    }
+  }
+}

@@ -6260,30 +6260,10 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     }
     return success();
   };
-
-  auto checkLayers = [&](Location loc) -> LogicalResult {
-    auto dstLayers = getAmbientLayersAt(target.getOp());
-    auto srcLayers = getLayersFor(getResult());
-    SmallVector<SymbolRefAttr> missingLayers;
-    if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
-      auto diag = emitOpError("target has insufficient layer requirements");
-      auto &note = diag.attachNote(loc);
-      note << "target is missing layer requirements: ";
-      llvm::interleaveComma(missingLayers, note);
-      return failure();
-    }
-    return success();
-  };
-  auto checks = [&](auto type, Location loc) {
-    if (failed(checkLayers(loc)))
-      return failure();
-    return checkFinalType(type, loc);
-  };
-
   if (target.isPort()) {
     auto mod = cast<FModuleLike>(target.getOp());
-    return checks(mod.getPortType(target.getPort()),
-                  mod.getPortLocation(target.getPort()));
+    return checkFinalType(mod.getPortType(target.getPort()),
+                          mod.getPortLocation(target.getPort()));
   }
   hw::InnerSymbolOpInterface symOp =
       cast<hw::InnerSymbolOpInterface>(target.getOp());
@@ -6297,7 +6277,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     return emitOpError("is not dominated by target")
         .attachNote(symOp.getLoc())
         .append("target here");
-  return checks(symOp.getTargetResult().getType(), symOp.getLoc());
+  return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
 LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
