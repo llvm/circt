@@ -331,19 +331,34 @@ firrtl.circuit "Test" {
 
   // CHECK:      sv.macro.decl @layer$Inline
   // CHECK-NEXT: sv.macro.decl @layer$Inline$Inline
+  // CHECK-NEXT: sv.macro.decl @layer$Inline$Bound$Inline
   // CHECK-NEXT: sv.macro.decl @layer$Bound$Inline
   firrtl.layer @Inline inline {
     firrtl.layer @Inline inline {}
+
+    firrtl.layer @Bound bind {
+      firrtl.layer @Inline inline {}
+    }
   }
 
   firrtl.layer @Bound bind {
-    firrtl.layer @Inline inline {}
+    firrtl.layer @Inline inline {
+      firrtl.layer @Bound bind {}
+    }
   }
 
+  // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Inline_Bound() {
+  // CHECK-NEXT:   %w3 = firrtl.wire : !firrtl.uint<3>
+  // CHECK-NEXT: }
+
+  // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound_Inline_Bound() {
+  // CHECK-NEXT:   %w6 = firrtl.wire : !firrtl.uint<6>
+  // CHECK-NEXT: }
+
   // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
-  // CHECK-NEXT:   %w3 = firrtl.wire
+  // CHECK-NEXT:   %w4 = firrtl.wire
   // CHECK-NEXT:   sv.ifdef @layer$Bound$Inline {
-  // CHECK-NEXT:     %w4 = firrtl.wire
+  // CHECK-NEXT:     %w5 = firrtl.wire
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
@@ -353,7 +368,10 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:     sv.ifdef @layer$Inline$Inline {
   // CHECK-NEXT:       %w2 = firrtl.wire
   // CHECK-NEXT:     }
+  // CHECK-NEXT:     firrtl.instance inline_bound {{.*}} @ModuleWithInlineLayerBlocks_Inline_Bound()
   // CHECK-NEXT:   }
+  // CHECK-NEXT:   firrtl.instance bound_inline_bound
+  // CHECK-NEXT:   firrtl.instance bound {{.*}} @ModuleWithInlineLayerBlocks_Bound()
   // CHECK-NEXT: }
   firrtl.module @ModuleWithInlineLayerBlocks() {
     firrtl.layerblock @Inline {
@@ -361,12 +379,18 @@ firrtl.circuit "Test" {
       firrtl.layerblock @Inline::@Inline {
         %w2 = firrtl.wire : !firrtl.uint<2>
       }
+      firrtl.layerblock @Inline::@Bound {
+        %w3 = firrtl.wire : !firrtl.uint<3>
+      }
     }
 
     firrtl.layerblock @Bound {
-      %w3 = firrtl.wire : !firrtl.uint<3>
+      %w4 = firrtl.wire : !firrtl.uint<4>
       firrtl.layerblock @Bound::@Inline {
-        %w4 = firrtl.wire : !firrtl.uint<4>
+        %w5 = firrtl.wire : !firrtl.uint<5>
+        firrtl.layerblock @Bound::@Inline::@Bound {
+          %w6 = firrtl.wire : !firrtl.uint<6>
+        }
       }
     }
   }

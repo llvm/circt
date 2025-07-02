@@ -451,7 +451,6 @@ def LayerOp : FIRRTLOp<
   let assemblyFormat = [{
     $sym_name `` $convention attr-dict-with-keyword $body
   }];
-  let hasVerifier = 1;
 }
 
 def OptionOp : FIRRTLOp<"option", [
