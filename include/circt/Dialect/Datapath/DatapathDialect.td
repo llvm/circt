@@ -1,4 +1,4 @@
-//===- DatapathDialect.td - Datapath dialect definition ----*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,14 +20,12 @@ def DatapathDialect : Dialect {
 
   let summary = "Datapath Optimization";
   let description = [{
-    This dialect defines the `datapath` dialect, which is intended to be a 
-    representation of low-level datapath optimization constructs.
+    This dialect defines the `datapath` dialect, which is about the efficient 
+    construction of arithmetic circuits via low-level datapath optimizations.
   }];
   
   let dependentDialects = ["circt::comb::CombDialect"];
   let cppNamespace = "::circt::datapath";
 }
-
-include "circt/Dialect/HW/HWTypes.td"
 
 #endif // CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_TD
