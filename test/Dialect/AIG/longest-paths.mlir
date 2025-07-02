@@ -55,15 +55,21 @@ hw.module private @bound(in %a: i1) {
   hw.output
 }
 
-hw.module private @child(in %a : i1, in %b : i1, out x : i1) {
-  %r = aig.and_inv %a, %b : i1 // r[0] := max(a[0], b[0]) + 1 = 1
-  hw.instance "bound" @bound(a: %a: i1) -> () {doNotPrint}
+hw.module private @pass(in %a : i1, out x : i1) {
+  %r = aig.and_inv %a {sv.namehint = "foo"} : i1
   hw.output %r : i1
 }
 
+hw.module private @child(in %a : i1, in %b : i1, out x : i1) {
+  %r = aig.and_inv %a, %b : i1 // r[0] := max(a[0], b[0]) + 1 = 1
+  %r1 = hw.instance "pass" @pass(a: %r: i1) -> (x: i1)
+  hw.instance "bound" @bound(a: %a: i1) -> () {doNotPrint}
+  hw.output %r1 : i1
+}
+
 // Check history.
-// expected-remark @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=2, history=[Object($root.c2.x[0], delay=2, comment="output port"), Object($root/c2:child.a[0], delay=1, comment="input port"), Object($root.c1.x[0], delay=1, comment="output port"), Object($root/c1:child.a[0], delay=0, comment="input port"), Object($root.a[0], delay=0, comment="input port")])}}
-// expected-remark @below {{fanOut=Object($root.x[0]), fanIn=Object($root.b[0], delay=2, history=[Object($root.c2.x[0], delay=2, comment="output port"), Object($root/c2:child.a[0], delay=1, comment="input port"), Object($root.c1.x[0], delay=1, comment="output port"), Object($root/c1:child.b[0], delay=0, comment="input port"), Object($root.b[0], delay=0, comment="input port")])}}
+// expected-remark @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=2, history=[Object($root.c2.x[0], delay=2, comment="output port"), Object($root/c2:child.pass.x[0], delay=2, comment="output port"), Object($root/c2:child/pass:pass.foo[0], delay=2, comment="namehint"), Object($root/c2:child/pass:pass.a[0], delay=2, comment="input port"), Object($root/c2:child.a[0], delay=1, comment="input port"), Object($root.c1.x[0], delay=1, comment="output port"), Object($root/c1:child.pass.x[0], delay=1, comment="output port"), Object($root/c1:child/pass:pass.foo[0], delay=1, comment="namehint"), Object($root/c1:child/pass:pass.a[0], delay=1, comment="input port"), Object($root/c1:child.a[0], delay=0, comment="input port"), Object($root.a[0], delay=0, comment="input port")])}}
+// expected-remark @below {{fanOut=Object($root.x[0]), fanIn=Object($root.b[0], delay=2, history=[Object($root.c2.x[0], delay=2, comment="output port"), Object($root/c2:child.pass.x[0], delay=2, comment="output port"), Object($root/c2:child/pass:pass.foo[0], delay=2, comment="namehint"), Object($root/c2:child/pass:pass.a[0], delay=2, comment="input port"), Object($root/c2:child.a[0], delay=1, comment="input port"), Object($root.c1.x[0], delay=1, comment="output port"), Object($root/c1:child.pass.x[0], delay=1, comment="output port"), Object($root/c1:child/pass:pass.foo[0], delay=1, comment="namehint"), Object($root/c1:child/pass:pass.a[0], delay=1, comment="input port"), Object($root/c1:child.b[0], delay=0, comment="input port"), Object($root.b[0], delay=0, comment="input port")])}}
 hw.module private @parent(in %a : i1, in %b : i1, out x : i1) {
   %0 = hw.instance "c1" @child(a: %a: i1, b: %b: i1) -> (x: i1)
   %1 = hw.instance "c2" @child(a: %0: i1, b: %b: i1) -> (x: i1)
