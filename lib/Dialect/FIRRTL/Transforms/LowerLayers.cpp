@@ -385,10 +385,12 @@ LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
 
 void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
                                             LayerBlockOp layerBlock) {
-  OpBuilder builder(layerBlock);
-  auto macroName = macroNames[layer];
-  auto ifDef = builder.create<sv::IfDefOp>(layerBlock.getLoc(), macroName);
-  ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+  if (!layerBlock.getBody()->empty()) {
+    OpBuilder builder(layerBlock);
+    auto macroName = macroNames[layer];
+    auto ifDef = builder.create<sv::IfDefOp>(layerBlock.getLoc(), macroName);
+    ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+  }
   layerBlock.erase();
 }
 
@@ -873,7 +875,7 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
     // We will also have to manually enable any subsequent ancestors.
     auto parentMacroSymbol = macroNames[parent];
     b.create<sv::MacroDefOp>(loc, parentMacroSymbol);
-    parent = layer->getParentOfType<LayerOp>();
+    parent = parent->getParentOfType<LayerOp>();
   }
 
   // Create IR to include bind files for child modules. If a module is
