@@ -87,3 +87,14 @@ hw.module @different_initial_values(in %clk: !seq.clock, in %in : i32) {
   %reg2 = seq.compreg %in, %clk : i32
   hw.output
 }
+
+// CHECK:  hw.module @reg_with_reset(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[IN:%.+]] : i32, in [[OLD_REG:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit], num_regs = 1 : i32} {
+// CHECK:    [[C0_I32:%.+]] = hw.constant 0 : i32
+// CHECK:    [[MUX:%.+]] = comb.mux [[RST]], [[C0_I32]], [[IN]] : i32
+// CHECK:    hw.output [[OLD_REG]], [[MUX]]
+// CHECK:  }
+hw.module @reg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
+  %c0_i32 = hw.constant 0 : i32
+  %1 = seq.compreg %in, %clk reset %rst, %c0_i32 : i32
+  hw.output %1 : i32
+}
