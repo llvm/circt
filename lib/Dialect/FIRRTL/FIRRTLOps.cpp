@@ -2228,38 +2228,6 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 }
 
 //===----------------------------------------------------------------------===//
-// LayerOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult LayerOp::verify() {
-
-  // A Bind Convention layer may not exist under an Inline Convention layer
-  // because we haven't implemented a lowering for it.  A lowering should be
-  // possible, but it gets weird.  This also transitively disallows a Bind
-  // Convention under an Inline Convention under a Bind Convention.  We don't
-  // have a lowering for this either.  Consequently, just reject this for now as
-  // it's a niche use case.
-  //
-  // TODO: Remove this restriction by defining a lowering for bind-under-inline
-  // and bind-under-inline-under-bind.
-  if (getConvention() == LayerConvention::Bind) {
-    Operation *parentOp = (*this)->getParentOp();
-    while (auto parentLayer = dyn_cast<LayerOp>(parentOp)) {
-      if (parentLayer.getConvention() == LayerConvention::Inline) {
-        auto diag = emitOpError() << "has bind convention and cannot be nested "
-                                     "under a layer with inline convention";
-        diag.attachNote(parentLayer.getLoc())
-            << "layer with inline convention here";
-        return failure();
-      }
-      parentOp = parentOp->getParentOp();
-    }
-  }
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
