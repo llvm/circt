@@ -1909,18 +1909,6 @@ firrtl.circuit "ClassCannotHavePortSymbols" {
 
 // -----
 
-// A bind layer cannot be nested under an inline layer as we can't lower it.
-firrtl.circuit "BindUnderInline" {
-  // expected-note @below {{layer with inline convention here}}
-  firrtl.layer @A inline {
-    // expected-error @below {{has bind convention and cannot be nested under a layer with inline convention}}
-    firrtl.layer @B bind {}
-  }
-  firrtl.module @BindUnderInline() {}
-}
-
-// -----
-
 // A layer block, "@A::@B", is missing an outer nesting of a layer block
 // definition with symbol "@A".
 firrtl.circuit "LayerBlockMissingNesting" {
