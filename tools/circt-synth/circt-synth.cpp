@@ -108,6 +108,17 @@ static cl::opt<std::string>
                                "if file name is specified"),
                       cl::init(""), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    outputLongestPathJSON("output-longest-path-json",
+                          cl::desc("Output longest path analysis results in "
+                                   "JSON format"),
+                          cl::init(false), cl::cat(mainCategory));
+static cl::opt<int>
+    outputLongestPathTopKPercent("output-longest-path-top-k-percent",
+                                 cl::desc("Output top K percent of longest "
+                                          "paths in the analysis results"),
+                                 cl::init(5), cl::cat(mainCategory));
+
 static cl::opt<std::string> topName("top", cl::desc("Top module name"),
                                     cl::value_desc("name"), cl::init(""),
                                     cl::cat(mainCategory));
@@ -199,7 +210,8 @@ static void populateSynthesisPipeline(PassManager &pm) {
   if (!outputLongestPath.empty()) {
     circt::aig::PrintLongestPathAnalysisOptions options;
     options.outputFile = outputLongestPath;
-    options.showTopKPercent = 5;
+    options.showTopKPercent = outputLongestPathTopKPercent;
+    options.emitJSON = outputLongestPathJSON;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
 
