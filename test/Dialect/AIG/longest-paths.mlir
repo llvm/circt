@@ -61,7 +61,7 @@ hw.module private @pass(in %a : i1, out x : i1) {
 }
 
 hw.module private @child(in %a : i1, in %b : i1, out x : i1) {
-  %r = aig.and_inv %a, %b  : i1 // r[0] := max(a[0], b[0]) + 1 = 1
+  %r = aig.and_inv %a, %b : i1 // r[0] := max(a[0], b[0]) + 1 = 1
   %r1 = hw.instance "pass" @pass(a: %r: i1) -> (x: i1)
   hw.instance "bound" @bound(a: %a: i1) -> () {doNotPrint}
   hw.output %r1 : i1
