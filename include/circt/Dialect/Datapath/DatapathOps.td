@@ -15,9 +15,6 @@
 
 include "circt/Dialect/Datapath/DatapathDialect.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
-include "mlir/IR/OpAsmInterface.td"
-include "mlir/IR/SymbolInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 include "circt/Dialect/HW/HWTypes.td"
