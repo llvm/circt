@@ -57,6 +57,7 @@ void rtg::populateRandomizerPipeline(mlir::PassManager &pm,
     anyPm.addPass(mlir::createCSEPass());
     anyPm.addPass(createSimpleCanonicalizerPass());
   }
+  pm.addPass(rtg::createUniqueValidateOpsPass());
 
   if (options.getOutputFormat() == RtgToolOptions::OutputFormat::ElaboratedMLIR)
     return;

@@ -114,6 +114,14 @@ def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels", "mlir::ModuleOp"> {
   ];
 }
 
+def UniqueValidateOpsPass : Pass<"rtg-unique-validate", "mlir::ModuleOp"> {
+  let summary = "compute unique IDs for validate operations";
+  let description = [{
+    This pass visits all 'rtg.validate' operations without an ID attribute and
+    assigns a unique ID to them.
+  }];
+}
+
 def MemoryAllocationPass : Pass<"rtg-memory-allocation", "rtg::TestOp"> {
   let summary = "lower memories to immediates or labels";
   let description = [{
