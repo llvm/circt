@@ -289,3 +289,11 @@ rtg.target @memoryBlockBaseAddressLargerThanEndAddress : !rtg.dict<> {
   // expected-error @below {{base address must be smaller than or equal to the end address}}
   rtg.isa.memory_block_declare [0x9 - 0x8] : !rtg.isa.memory_block<64>
 }
+
+// -----
+
+rtg.test @validate() {
+  %0 = rtg.fixed_reg #rtgtest.t0
+  // expected-error @below {{result type must be a valid content type for the ref value}}
+  %2 = rtg.validate %0, %0 : !rtgtest.ireg -> !rtgtest.ireg
+}
