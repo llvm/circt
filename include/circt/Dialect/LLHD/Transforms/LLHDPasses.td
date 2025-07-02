@@ -229,4 +229,12 @@ def RemoveControlFlowPass : Pass<"llhd-remove-control-flow", "hw::HWModuleOp"> {
   ];
 }
 
+def SelectToMuxPass : Pass<"llhd-select-to-mux", "hw::HWModuleOp"> {
+  let summary = "Replace `arith.select` with `comb.mux`";
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+  ];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES

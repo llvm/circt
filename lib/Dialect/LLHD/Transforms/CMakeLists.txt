@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   MemoryToBlockArgumentPass.cpp
   ProcessLoweringPass.cpp
   RemoveControlFlow.cpp
+  SelectToMux.cpp
   Sig2RegPass.cpp
   TemporalCodeMotionPass.cpp
   TemporalRegions.cpp
@@ -24,6 +25,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   CIRCTHW
   CIRCTLLHD
   CIRCTSeq
+  MLIRArithDialect
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRIR
