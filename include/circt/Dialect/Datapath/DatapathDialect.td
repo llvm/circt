@@ -28,6 +28,4 @@ def DatapathDialect : Dialect {
   let cppNamespace = "::circt::datapath";
 }
 
-include "circt/Dialect/HW/HWTypes.td"
-
 #endif // CIRCT_DIALECT_DATAPATH_DATAPATHDIALECT_TD
