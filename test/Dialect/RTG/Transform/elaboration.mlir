@@ -14,6 +14,7 @@ func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
 func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 func.func @dummy13(%arg0: !rtg.isa.memory_block<32>) -> () {return}
 func.func @dummy14(%arg0: !rtg.isa.memory<32>) -> () {return}
+func.func @dummy15(%arg0: !rtg.isa.immediate<32>) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
@@ -734,6 +735,18 @@ rtg.target @subtypeTarget : !rtg.dict<a: index, b: index> {
 // CHECK: rtg.test @subtypeMatching_subtypeTarget(
 rtg.test @subtypeMatching(b = %b: index) {
   func.call @dummy2(%b) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @validateOp
+rtg.test @validateOp(singleton = %none: index) {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK-NEXT: [[V2:%.+]] = rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK-NEXT: func.call @dummy15([[V2]])
+  %reg = rtg.fixed_reg #rtgtest.t0
+  %default = rtg.constant #rtg.isa.immediate<32, 0>
+  %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  func.call @dummy15(%0) : (!rtg.isa.immediate<32>) -> ()
 }
 
 // -----
