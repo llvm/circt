@@ -785,7 +785,8 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
       if (ctx->doTraceDebugPoints()) {
         newHistory =
             mapList(debugPointFactory.get(), history, [&](DebugPoint p) {
-              p.object.instancePath = newPath;
+              p.object.instancePath =
+                  instancePathCache->prependInstance(op, p.object.instancePath);
               return p;
             });
         newHistory = debugPointFactory->add(
@@ -808,7 +809,8 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
         // Update the history to have correct instance path.
         newHistory =
             mapList(debugPointFactory.get(), history, [&](DebugPoint p) {
-              p.object.instancePath = newPath;
+              p.object.instancePath =
+                  instancePathCache->prependInstance(op, p.object.instancePath);
               p.delay += path.delay;
               return p;
             });
