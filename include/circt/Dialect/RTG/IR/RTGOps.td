@@ -803,14 +803,17 @@ def ValidateOp : RTGOp<"validate", [
     equivalence checks such as adding it to sets or bags.
   }];
 
-  let arguments = (ins AnyType:$ref,
+  let arguments = (ins ValidationTypeInterface:$ref,
                        AnyType:$defaultValue,
                        OptionalAttr<StrAttr>:$id);
   let results = (outs AnyType:$value);
 
   let assemblyFormat = [{
-    $ref `,` $defaultValue (`,` $id^)? `:` type($ref) `->` type($value) attr-dict
+    $ref `,` $defaultValue (`,` $id^)? `:`
+    type($ref) `->` type($value) attr-dict
   }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
