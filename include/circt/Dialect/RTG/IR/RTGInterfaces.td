@@ -64,7 +64,7 @@ def ValidationTypeInterface : TypeInterface<"ValidationTypeInterface"> {
       Parses the given string as a value of the given content type and returns
       an Attribute representing the value for that type. A null attribute may be
       returned if the string cannot be parsed as a value of the given type.
-    }], "mlir::Attribute", "parseContentValue",
+    }], "mlir::TypedAttr", "parseContentValue",
       (ins "mlir::StringRef":$valueString, "mlir::Type":$contentType)>,
 
     // NOTE: this method should probably be factored out into a separate

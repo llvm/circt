@@ -142,4 +142,34 @@ def MemoryAllocationPass : Pass<"rtg-memory-allocation", "rtg::TestOp"> {
   ];
 }
 
+def EmbedValidationValuesPass : Pass<"rtg-embed-validation-values",
+                                     "mlir::ModuleOp"> {
+  let summary = "lower validate operations to the externally provided values";
+  let description = [{
+    This pass replaces 'rtg.validate' operations with concrete values read from
+    an external file. The file should contain the expected validation values
+    with matching IDs computed, e.g., by running the program in a simulator.
+
+    Each validate operation is matched with its corresponding value using the
+    unique identifier. If an identifier occurs multiple times in the file, the
+    pass fails. If an identifier for a 'validate' operation is missing in the
+    file, the pass will not modify that operation. Otherwise, the values are
+    parsed according to the implementation provided by the
+    'ValidationTypeInterface' implementation of the 'ref' operand type and
+    materialized in the IR as constants to replace the 'validate' operation.
+
+    This pass is typically used as part of a two-phase compilation process that
+    forks after the 'rtg-unique-valiate' pass is run:
+    1. Run the 'rtg-lower-validate-ops-to-labels' pass and the rest of the
+       pipeline, then simulate the output in a reference simulator to generate
+       a file with the expected values.
+    2. Run this pass and the rest of the pipeline to produce the final test.
+  }];
+
+  let options = [
+    Option<"filename", "filename", "std::string", "",
+           "The file with the validation values.">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD
