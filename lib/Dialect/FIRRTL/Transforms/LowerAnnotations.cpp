@@ -630,6 +630,8 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {injectDUTHierarchyAnnoClass, NoTargetAnnotation},
     {convertMemToRegOfVecAnnoClass, NoTargetAnnotation},
     {sitestBlackBoxAnnoClass, NoTargetAnnotation},
+    {sitestBlackBoxLibrariesAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {enumComponentAnnoClass, {noResolve, drop}},
     {enumDefAnnoClass, {noResolve, drop}},
     {enumVecAnnoClass, {noResolve, drop}},

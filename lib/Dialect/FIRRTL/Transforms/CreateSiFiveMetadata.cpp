@@ -165,7 +165,7 @@ struct ObjectModelIR {
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
-    Type classFieldTypes[] = {StringType::get(context), BoolType::get(context)};
+    Type classFieldTypes[] = {StringType::get(context), BoolType::get(context), ListType::get(context, cast<PropertyType>(StringType::get(context)))};
     blackBoxModulesSchemaClass =
         builderOM.create<ClassOp>("SitestBlackBoxModulesSchema",
                                   blackBoxModulesParamNames, classFieldTypes);
@@ -174,7 +174,7 @@ struct ObjectModelIR {
         builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);
   }
 
-  void addBlackBoxModule(FExtModuleOp module, bool inDut) {
+  void addBlackBoxModule(FExtModuleOp module, bool inDut, ArrayRef<StringRef> libraries) {
     if (!blackBoxModulesSchemaClass)
       addBlackBoxModulesSchema();
     StringRef defName = *module.getDefname();
@@ -184,6 +184,18 @@ struct ObjectModelIR {
         module.getLoc(), blackBoxMetadataClass.getBodyBlock());
     auto modEntry = builderOM.create<StringConstantOp>(module.getDefnameAttr());
     auto inDutAttr = builderOM.create<BoolConstantOp>(inDut);
+
+    // Create list of blackbox resources from the provided list
+    SmallVector<Value> libValues;
+    for (StringRef libName : libraries) {
+      auto libNameAttr = builderOM.create<StringConstantOp>(
+          builderOM.getStringAttr(libName));
+      libValues.push_back(libNameAttr);
+    }
+    auto blackBoxResourcesList = builderOM.create<ListCreateOp>(
+        ListType::get(builderOM.getContext(), cast<PropertyType>(StringType::get(builderOM.getContext()))),
+        libValues);
+
     auto object = builderOM.create<ObjectOp>(blackBoxModulesSchemaClass,
                                              module.getModuleNameAttr());
 
@@ -191,6 +203,8 @@ struct ObjectModelIR {
     builderOM.create<PropAssignOp>(inPortModuleName, modEntry);
     auto inPortInDut = builderOM.create<ObjectSubfieldOp>(object, 2);
     builderOM.create<PropAssignOp>(inPortInDut, inDutAttr);
+    auto inPortBlackBoxResources = builderOM.create<ObjectSubfieldOp>(object, 4);
+    builderOM.create<PropAssignOp>(inPortBlackBoxResources, blackBoxResourcesList);
     auto portIndex = blackBoxMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
@@ -463,7 +477,7 @@ struct ObjectModelIR {
       "readLatency",   "hierarchy",  "inDut",          "extraPorts",
       "preExtInstName"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
-  StringRef blackBoxModulesParamNames[2] = {"moduleName", "inDut"};
+  StringRef blackBoxModulesParamNames[3] = {"moduleName", "inDut", "libraries"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
 }; // namespace
 
@@ -796,8 +810,8 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 LogicalResult
 CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
-  // Any extmodule with these annotations should be excluded from the blackbox
-  // list.
+  // Any extmodule with these annotations should be excluded from the blackbox list
+  // if it doesn't declare any additional libraries.
   std::array<StringRef, 6> blackListedAnnos = {
       blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
       dataTapsBlackboxClass, memTapBlackboxClass};
@@ -819,30 +833,49 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
   // Find all extmodules in the circuit. Check if they are black-listed from
   // being included in the list. If they are not, separate them into two
   // groups depending on if theyre in the DUT or the test harness.
-  SmallVector<StringRef> dutModules;
-  SmallVector<StringRef> testModules;
+  SmallVector<StringRef> dutLibs;
+  SmallVector<StringRef> testLibs;
+
   for (auto extModule : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
+    SmallVector<StringRef> libs;
+
     // If the module doesn't have a defname, then we can't record it properly.
     // Just skip it.
     if (!extModule.getDefname())
       continue;
 
-    // If its a generated blackbox, skip it.
     AnnotationSet annos(extModule);
-    if (llvm::any_of(blackListedAnnos, [&](auto blackListedAnno) {
-          return annos.hasAnnotation(blackListedAnno);
-        }))
-      continue;
 
-    // Record the defname of the module.
+    bool isBlacklistedBlackbox = llvm::any_of(blackListedAnnos, [&](auto blackListedAnno) {
+      return annos.hasAnnotation(blackListedAnno);
+    });
+
+    if (!isBlacklistedBlackbox)
+      libs.push_back(*extModule.getDefname());
+
+    bool hasLibs = false;
+    if (auto libsAnno = annos.getAnnotation(sitestBlackBoxLibrariesAnnoClass)) {
+      if (auto libsAttr = libsAnno.getMember<ArrayAttr>("libraries")) {
+        for (auto lib : libsAttr) {
+          if (auto libStr = dyn_cast<StringAttr>(lib)) {
+            libs.push_back(libStr.getValue());
+            hasLibs = true;
+          }
+        }
+      }
+    }
+
     bool inDut = false;
     if (instanceInfo->anyInstanceInEffectiveDesign(extModule)) {
       inDut = true;
-      dutModules.push_back(*extModule.getDefname());
+      for (StringRef lib : libs)
+        dutLibs.push_back(lib);
     } else {
-      testModules.push_back(*extModule.getDefname());
+      for (StringRef lib : libs)
+        testLibs.push_back(lib);
     }
-    omir.addBlackBoxModule(extModule, inDut);
+
+    omir.addBlackBoxModule(extModule, inDut, libs);
   }
 
   // This is a helper to create the verbatim output operation.
@@ -874,8 +907,8 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
     });
   };
 
-  createOutput(testModules, testFilename);
-  createOutput(dutModules, dutFilename);
+  createOutput(testLibs, testFilename);
+  createOutput(dutLibs, dutFilename);
 
   return success();
 }
