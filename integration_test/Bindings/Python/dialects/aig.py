@@ -4,6 +4,7 @@
 import circt
 from circt.dialects import aig, hw
 from circt.ir import Context, Location, Module, InsertionPoint, IntegerType
+from circt.dialects.aig import LongestPathAnalysis, LongestPathCollection
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -11,22 +12,67 @@ with Context() as ctx, Location.unknown():
   m = Module.create()
   with InsertionPoint(m.body):
     # Test basic AIG dialect functionality
-    i1 = IntegerType.get_signless(1)
+    i32 = IntegerType.get_signless(32)
 
     # Create a simple hardware module with AIG operations
     def build_module(module):
       a, b = module.entry_block.arguments
 
-      result = aig.and_inv([a, b], [False, True])
+      result1 = aig.and_inv([a, b], [False, True])
+      result2 = aig.and_inv([a, result1], [True, False])
 
-      hw.OutputOp([result])
+      hw.OutputOp([result1, result2])
 
     hw.HWModuleOp(name="test_aig",
-                  input_ports=[("a", i1), ("b", i1)],
-                  output_ports=[("out", i1)],
+                  input_ports=[("a", i32), ("b", i32)],
+                  output_ports=[("out1", i32), ("out2", i32)],
                   body_builder=build_module)
     # CHECK-LABEL: AIG dialect registration and basic operations successful!
     print("AIG dialect registration and basic operations successful!")
     # Test aig.and_inv operation
-    # CHECK: %{{.*}} = aig.and_inv %a, not %b : i1
+    # CHECK: %[[RESULT1:.*]] = aig.and_inv %a, not %b : i32
+    # CHECK: %{{.*}} = aig.and_inv not %a, %[[RESULT1]] : i32
     print(m)
+
+    # Test LongestPathAnalysis Python bindings
+    analysis = LongestPathAnalysis(m.operation)
+
+    collection = analysis.get_all_paths("test_aig")
+    # CHECK-LABEL:      LongestPathAnalysis created successfully!
+    print("LongestPathAnalysis created successfully!")
+
+    # CHECK:      Total paths: 96
+    # CHECK-NEXT: Max delay: 2
+    # CHECK-NEXT: Min delay: 1
+    # CHECK-NEXT: 50th percentile delay: 1
+    # CHECK-NEXT: 90th percentile delay: 2
+    # CHECK-NEXT: 95th percentile delay: 2
+    # CHECK-NEXT: 99th percentile delay: 2
+    # CHECK-NEXT: 99.9th percentile delay: 2
+    collection.print_summary()
+
+    # Check index.
+    # CHECK-NEXT: index 1 delay: 2
+    # CHECK-NEXT: index -1 delay: 1
+    print("index 1 delay:", collection[1].delay)
+    print("index -1 delay:", collection[-1].delay)
+
+    try:
+      print(collection[96])
+    except IndexError:
+      # CHECK-NEXT: IndexError correctly raised
+      print("IndexError correctly raised")
+
+    # Check that iterator works
+    # CHECK-NEXT: sum: 128
+    print("sum: ", sum(p.delay for p in collection))
+
+    for p in list(collection)[:2]:
+      # CHECK-NEXT: delay 2 : out2[{{[0-9]+}}]
+      # CHECK-NEXT: delay 2 : out2[{{[0-9]+}}]
+      print("delay", p.delay, ":", p.fan_out)
+
+    # Test framegraph emission.
+    # CHECK:      top:test_aig;a[7] 0
+    # CHECK-NEXT: top:test_aig;out2[7] 2
+    print(collection.longest_path.to_flamegraph())
