@@ -18,6 +18,7 @@ set(CIRCT_TEST_DEPENDS
   FileCheck count not
   split-file
   arcilator
+  circt-capi-aig-test
   circt-capi-ir-test
   circt-capi-om-test
   circt-capi-firrtl-test
