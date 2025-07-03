@@ -23,6 +23,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
+#include <variant>
 
 namespace mlir {
 class AnalysisManager;
@@ -36,18 +37,22 @@ namespace aig {
 // A class represents an object in the dataflow graph.
 // An Object identifies a specific bit of a value at a specific instance path.
 struct Object {
-  circt::igraph::InstancePath instancePath;
-  Value value;
-  size_t bitPos;
   Object(circt::igraph::InstancePath path, Value value, size_t bitPos)
       : instancePath(path), value(value), bitPos(bitPos) {}
   Object() = default;
-  void print(llvm::raw_ostream &os) const;
 
   bool operator==(const Object &other) const {
     return instancePath == other.instancePath && value == other.value &&
            bitPos == other.bitPos;
   }
+
+  void print(llvm::raw_ostream &os) const;
+  Object &prependPaths(circt::igraph::InstancePathCache &cache,
+                       circt::igraph::InstancePath path);
+
+  circt::igraph::InstancePath instancePath;
+  Value value;
+  size_t bitPos;
 };
 
 // A debug point represents a point in the dataflow graph which carries delay
@@ -78,44 +83,84 @@ struct DebugPoint {
 // An OpenPath represents a path from a fan-in with an associated
 // delay and history of debug points.
 struct OpenPath {
+  OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
+           int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
+      : fanIn(path, value, bitPos), delay(delay), history(history) {}
+  OpenPath() = default;
+
+  const Object &getFanIn() const { return fanIn; }
+  int64_t getDelay() const { return delay; }
+  const llvm::ImmutableList<DebugPoint> &getHistory() const { return history; }
+
+  void print(llvm::raw_ostream &os) const;
+  OpenPath &
+  prependPaths(circt::igraph::InstancePathCache &cache,
+               llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+               circt::igraph::InstancePath path);
+
   Object fanIn;
   int64_t delay;
   // History of debug points represented by linked lists.
   // The head of the list is the farthest point from the fanIn.
   llvm::ImmutableList<DebugPoint> history;
-  OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
-           int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
-      : fanIn(path, value, bitPos), delay(delay), history(history) {}
-
-  OpenPath() = default;
-  void print(llvm::raw_ostream &os) const;
 };
 
-// A DataflowPath is a complete path from a fanout to a fanin with associated
-// delay information.
+// A DataflowPath represents a complete timing path from a fanout to a fanin
+// with associated delay information. This is the primary result type for
+// longest path analysis, containing both endpoints and path history.
 class DataflowPath {
 public:
+  // FanOut can be either an internal circuit object or a module output port
+  // This flexibility allows representing both closed paths
+  // (register-to-register) and open paths (register-to-output) in a unified way
+  using OutputPort = std::pair<size_t, size_t>;
+  using FanOutType = std::variant<Object, OutputPort>;
+
+  // Constructor for paths with Object fanout (internal circuit nodes)
   DataflowPath(Object fanOut, OpenPath fanIn, hw::HWModuleOp root)
       : fanOut(fanOut), path(fanIn), root(root) {}
+
+  // Constructor for paths with port fanout (module output ports)
+  DataflowPath(OutputPort fanOut, OpenPath fanIn, hw::HWModuleOp root)
+      : fanOut(fanOut), path(fanIn), root(root) {}
+
   DataflowPath() = default;
 
   int64_t getDelay() const { return path.delay; }
   const Object &getFanIn() const { return path.fanIn; }
-  const Object &getFanOut() const { return fanOut; }
-  const hw::HWModuleOp &getRoot() const { return root; }
-
-  void print(llvm::raw_ostream &os);
-  void setDelay(int64_t delay) { path.delay = delay; }
+  const FanOutType &getFanOut() const { return fanOut; }
+  const Object &getFanOutAsObject() const { return std::get<Object>(fanOut); }
+  const OutputPort &getFanOutAsPort() const {
+    return std::get<OutputPort>(fanOut);
+  }
+  hw::HWModuleOp getRoot() { return root; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const {
     return path.history;
   }
+  const OpenPath &getPath() { return path; }
+
+  // Get source location for the fanout point (for diagnostics)
+  Location getFanOutLoc();
+
+  void setDelay(int64_t delay) { path.delay = delay; }
+
+  void print(llvm::raw_ostream &os);
+  void printFanOut(llvm::raw_ostream &os);
+
+  // Path elaboration for hierarchical analysis
+  // Prepends instance path information to create full hierarchical paths
+  DataflowPath &
+  prependPaths(circt::igraph::InstancePathCache &cache,
+               llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
+               circt::igraph::InstancePath path);
 
 private:
-  Object fanOut;
-  OpenPath path;
-  hw::HWModuleOp root;
+  FanOutType fanOut;   // Either Object or (port_index, bit_index)
+  OpenPath path;       // The actual timing path with history
+  hw::HWModuleOp root; // Root module for this path
 };
 
+// Options for the longest path analysis.
 struct LongestPathAnalysisOption {
   bool traceDebugPoints = false;
 };
@@ -147,24 +192,35 @@ public:
   // these maximum delays across all bits of the value.
   int64_t getAverageMaxDelay(Value value) const;
 
-  // Return paths that are closed under the given module.  Results are
-  // sorted by delay from longest to shortest. Closed paths are typically
-  // register-to-register paths. A closed path is a path that starts and ends at
-  // sequential elements (registers/flip-flops), forming a complete timing path
-  // through combinational logic. The path may cross module boundaries but both
-  // endpoints are sequential elements, not ports.
+  // Return paths that are closed under the given module. Closed paths are
+  // typically register-to-register paths. A closed path is a path that starts
+  // and ends at sequential elements (registers/flip-flops), forming a complete
+  // timing path through combinational logic. The path may cross module
+  // boundaries but both endpoints are sequential elements, not ports.
   LogicalResult getClosedPaths(StringAttr moduleName,
-                               SmallVectorImpl<DataflowPath> &results) const;
+                               SmallVectorImpl<DataflowPath> &results,
+                               bool elaboratePaths = false) const;
 
-  // Return open paths for the given module. Results are sorted by delay from
-  // longest to shortest. Open paths are typically input-to-register or
-  // register-to-output paths. An open path is a timing path that has at least
-  // one endpoint at a module port rather than a sequential element.
-  LogicalResult
-  getOpenPaths(StringAttr moduleName,
-               SmallVectorImpl<std::pair<Object, OpenPath>> &openPathsToFF,
-               SmallVectorImpl<std::tuple<size_t, size_t, OpenPath>>
-                   &openPathsFromOutputPorts) const;
+  // Return input-to-internal timing paths for the given module.
+  // These are open paths from module input ports to internal sequential
+  // elements (registers/flip-flops).
+  LogicalResult getOpenPathsFromInputPortsToInternal(
+      StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
+
+  // Return internal-to-output timing paths for the given module.
+  // These are open paths from internal sequential elements to module output
+  // ports.
+  LogicalResult getOpenPathsFromInternalToOutputPorts(
+      StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
+
+  // Get all timing paths in the given module including both closed and open
+  // paths. This is a convenience method that combines results from
+  // getClosedPaths, getOpenPathsFromInputPortsToInternal, and
+  // getOpenPathsFromInternalToOutputPorts. If elaboratedPaths is true, paths
+  // include full hierarchical instance information.
+  LogicalResult getAllPaths(StringAttr moduleName,
+                            SmallVectorImpl<DataflowPath> &results,
+                            bool elaboratePaths = false) const;
 
   // Return true if the analysis is available for the given module.
   bool isAnalysisAvailable(StringAttr moduleName) const;
@@ -187,7 +243,40 @@ private:
   Impl *impl;
 };
 
+// A wrapper class for the longest path analysis that also traces debug points.
+// This is necessary for analysis manager to cache the analysis results.
+class LongestPathAnalysisWithTrace : public LongestPathAnalysis {
+public:
+  LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
+      : LongestPathAnalysis(moduleOp, am, {true}) {}
+};
 } // namespace aig
 } // namespace circt
 
+namespace llvm {
+// Provide DenseMapInfo for Object.
+template <>
+struct DenseMapInfo<circt::aig::Object> {
+  using Info = llvm::DenseMapInfo<
+      std::tuple<circt::igraph::InstancePath, mlir::Value, size_t>>;
+  using Object = circt::aig::Object;
+  static Object getEmptyKey() {
+    auto [path, value, bitPos] = Info::getEmptyKey();
+    return Object(path, value, bitPos);
+  }
+
+  static Object getTombstoneKey() {
+    auto [path, value, bitPos] = Info::getTombstoneKey();
+    return Object(path, value, bitPos);
+  }
+  static llvm::hash_code getHashValue(Object object) {
+    return Info::getHashValue(
+        {object.instancePath, object.value, object.bitPos});
+  }
+  static bool isEqual(const Object &a, const Object &b) {
+    return Info::isEqual({a.instancePath, a.value, a.bitPos},
+                         {b.instancePath, b.value, b.bitPos});
+  }
+};
+} // namespace llvm
 #endif // CIRCT_ANALYSIS_AIG_ANALYSIS_H

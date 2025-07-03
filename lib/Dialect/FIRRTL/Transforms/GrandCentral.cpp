@@ -27,6 +27,7 @@
 #include "circt/Support/Debug.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/YAMLTraits.h"
@@ -1891,6 +1892,21 @@ void GrandCentralPass::runOnOperation() {
   if (removalError)
     return signalPassFailure();
 
+  // per-YAML output list of interfaces.
+  llvm::SmallMapVector<StringAttr, SmallVector<sv::InterfaceOp, 0>, 1>
+      interfaceYAMLMap;
+  if (maybeHierarchyFileYAML.has_value())
+    interfaceYAMLMap[maybeHierarchyFileYAML.value()] = {};
+
+  // Scan entire design for View operations.
+  SmallVector<ViewIntrinsicOp> views;
+  circuitOp.walk([&views](ViewIntrinsicOp view) { views.push_back(view); });
+
+  /// TODO: Handle this differently to allow construction of an options
+  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
+  instancePaths = &instancePathCache;
+  instanceInfo = &getAnalysis<InstanceInfo>();
+
   LLVM_DEBUG({
     llvm::dbgs() << "Extraction Info:\n";
     if (maybeExtractInfo)
@@ -1912,16 +1928,6 @@ void GrandCentralPass::runOnOperation() {
       llvm::dbgs() << "<none>";
     llvm::dbgs() << "\n";
   });
-
-  // per-YAML output list of interfaces.
-  llvm::SmallMapVector<StringAttr, SmallVector<sv::InterfaceOp, 0>, 1>
-      interfaceYAMLMap;
-  if (maybeHierarchyFileYAML.has_value())
-    interfaceYAMLMap[maybeHierarchyFileYAML.value()] = {};
-
-  // Scan entire design for View operations.
-  SmallVector<ViewIntrinsicOp> views;
-  circuitOp.walk([&views](ViewIntrinsicOp view) { views.push_back(view); });
 
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.  However, still generate the YAML file if the annotation for
@@ -1952,35 +1958,6 @@ void GrandCentralPass::runOnOperation() {
       return std::nullopt;
     }
     return id;
-  };
-
-  /// TODO: Handle this differently to allow construction of an options
-  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
-  instancePaths = &instancePathCache;
-  instanceInfo = &getAnalysis<InstanceInfo>();
-
-  // Maybe return the lone instance of a module.  Generate errors on the op if
-  // the module is not instantiated or is multiply instantiated.
-  auto exactlyOneInstance = [&](FModuleOp op,
-                                StringRef msg) -> std::optional<InstanceOp> {
-    auto *node = instancePaths->instanceGraph[op];
-
-    switch (node->getNumUses()) {
-    case 0:
-      op->emitOpError() << "is marked as a GrandCentral '" << msg
-                        << "', but is never instantiated";
-      return std::nullopt;
-    case 1:
-      return cast<InstanceOp>(*(*node->uses().begin())->getInstance());
-    default:
-      auto diag = op->emitOpError()
-                  << "is marked as a GrandCentral '" << msg
-                  << "', but it is instantiated more than once";
-      for (auto *instance : node->uses())
-        diag.attachNote(instance->getInstance()->getLoc())
-            << "it is instantiated here";
-      return std::nullopt;
-    }
   };
 
   nlaTable = &getAnalysis<NLATable>();
@@ -2086,34 +2063,27 @@ void GrandCentralPass::runOnOperation() {
 
             // If this is a companion, then:
             //   1. Insert it into the companion map
-            //   2. Create a new mapping module.
-            //   3. Instantiate the mapping module in the companion.
-            //   4. Check that the companion is instantiated exactly once.
-            //   5. Set attributes on that lone instance so it will become a
-            //      bind if extraction information was provided.  If a DUT is
-            //      known, then anything in the test harness will not be
-            //      extracted.
+            //   2. Foreach instance of this companion, set attributes to
+            //      extract it if extraction information was provided and the
+            //      instance is inside the design.
             if (annotation.getClass() == companionAnnoClass) {
               builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
 
               companionIDMap[id] = {name.getValue(), op, isNonlocal};
 
-              // Assert that the companion is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "companion");
-              if (!instance)
-                goto FModuleOp_error;
-
-              // Companions are only allowed to take inputs.
-              for (auto [i, result] : llvm::enumerate(instance->getResults())) {
-                if (instance->getPortDirection(i) == Direction::In)
+              // Companion modules must only have input ports OR reference type
+              // output ports.  If operating in "drop" mode (where the companion
+              // is not instantiated), then only input ports are allowed. No
+              // output ports are allowed when running in "drop" mode as
+              // dropping the module would created dangling references.
+              for (auto port : op.getPorts()) {
+                if (port.isInput())
                   continue;
-                // Do not allow any outputs in the drop mode.
-                auto ty = result.getType();
+                auto ty = port.type;
                 if (isa<RefType>(ty) && companionMode != CompanionMode::Drop)
                   continue;
                 op.emitOpError()
                     << "companion instance cannot have output ports";
-                goto FModuleOp_error;
               }
 
               // If no extraction info was provided, exit.  Otherwise, setup the
@@ -2121,6 +2091,44 @@ void GrandCentralPass::runOnOperation() {
               if (!maybeExtractInfo) {
                 ++numAnnosRemoved;
                 return true;
+              }
+
+              // Extract all instances in the design.
+              for (auto *i : llvm::make_early_inc_range(
+                       instancePaths->instanceGraph.lookup(op)->uses())) {
+                auto instance = cast<InstanceOp>(i->getInstance());
+
+                // Skip extraction if the instance is not in the design.
+                if (instance->getParentOfType<LayerBlockOp>())
+                  continue;
+                if (!instanceInfo->allInstancesUnderEffectiveDut(
+                        i->getParent()->getModule()))
+                  continue;
+
+                if (companionMode == CompanionMode::Drop) {
+                  // Delete the instance if companions are disabled.
+                  OpBuilder builder(&getContext());
+                  for (auto port : instance->getResults()) {
+                    builder.setInsertionPointAfterValue(port);
+                    auto wire =
+                        builder.create<WireOp>(port.getLoc(), port.getType());
+                    port.replaceAllUsesWith(wire.getResult());
+                  }
+                  i->erase();
+                  instance->erase();
+                } else {
+                  // Lower the companion to a bind unless the user told us
+                  // explicitly not to.
+                  if (companionMode == CompanionMode::Bind)
+                    instance->setAttr("lowerToBind", builder.getUnitAttr());
+
+                  instance->setAttr(
+                      "output_file",
+                      hw::OutputFileAttr::getFromFilename(
+                          &getContext(),
+                          maybeExtractInfo->bindFilename.getValue(),
+                          /*excludeFromFileList=*/true));
+                }
               }
 
               // If the companion is instantiated above the DUT, then don't
@@ -2143,30 +2151,6 @@ void GrandCentralPass::runOnOperation() {
                     << "  submodules exclusively instantiated "
                        "(including companion):\n";
               });
-
-              if (companionMode == CompanionMode::Drop) {
-                // Delete the instance if companions are disabled.
-                OpBuilder builder(&getContext());
-                for (auto port : instance->getResults()) {
-                  builder.setInsertionPointAfterValue(port);
-                  auto wire =
-                      builder.create<WireOp>(port.getLoc(), port.getType());
-                  port.replaceAllUsesWith(wire.getResult());
-                }
-                instance->erase();
-              } else {
-                // Lower the companion to a bind unless the user told us
-                // explicitly not to.
-                if (companionMode == CompanionMode::Bind)
-                  (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
-
-                (*instance)->setAttr(
-                    "output_file",
-                    hw::OutputFileAttr::getFromFilename(
-                        &getContext(),
-                        maybeExtractInfo->bindFilename.getValue(),
-                        /*excludeFromFileList=*/true));
-              }
 
               for (auto &node : llvm::depth_first(companionNode)) {
                 auto mod = node->getModule();
@@ -2254,7 +2238,9 @@ void GrandCentralPass::runOnOperation() {
         if (nla.root() == name)
           nla.erase();
       }
-
+      auto *node = instancePaths->instanceGraph.lookup(
+          cast<igraph::ModuleOpInterface>(*mod));
+      instancePaths->instanceGraph.erase(node);
       mod->erase();
     }
 

@@ -32,6 +32,7 @@ createTunnelingPass(const KanagawaTunnelingOptions & = {});
 std::unique_ptr<mlir::Pass> createPortrefLoweringPass();
 std::unique_ptr<mlir::Pass> createCleanSelfdriversPass();
 std::unique_ptr<mlir::Pass> createContainersToHWPass();
+std::unique_ptr<mlir::Pass> createEliminateRedundantOpsPass();
 std::unique_ptr<mlir::Pass> createArgifyBlocksPass();
 std::unique_ptr<mlir::Pass> createReblockPass();
 std::unique_ptr<mlir::Pass> createInlineSBlocksPass();

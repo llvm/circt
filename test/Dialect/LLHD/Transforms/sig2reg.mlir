@@ -167,3 +167,16 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
   %8 = llhd.prb %out : !hw.inout<i4>
   hw.output %8 : i4
 }
+
+// CHECK-LABEL: @RemoveDriveOnlySignals
+hw.module @RemoveDriveOnlySignals(in %d: i42, in %e: i1) {
+  %0 = hw.constant 0 : i42
+  %1 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NOT: llhd.sig
+  %a = llhd.sig %0 : i42
+  %b = llhd.sig %0 : i42
+  // CHECK-NOT: llhd.drv
+  llhd.drv %a, %d after %1 : !hw.inout<i42>
+  llhd.drv %b, %d after %1 if %e : !hw.inout<i42>
+  // CHECK: hw.output
+}

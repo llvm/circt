@@ -93,9 +93,9 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       lr.fixedReg = regOp.getReg();
 
     for (auto *user : op.getUsers()) {
-      if (!isa<rtg::InstructionOpInterface>(user)) {
-        user->emitError("only operations implementing 'InstructionOpInterface "
-                        "are allowed to use registers");
+      if (!isa<rtg::InstructionOpInterface, rtg::ValidateOp>(user)) {
+        user->emitError("only operations implementing 'InstructionOpInterface' "
+                        "and 'rtg.validate' are allowed to use registers");
         return signalPassFailure();
       }
 

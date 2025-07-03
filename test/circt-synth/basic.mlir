@@ -3,6 +3,7 @@
 // RUN: circt-synth %s --until-before aig-lowering | FileCheck %s --check-prefix=AIG
 // RUN: circt-synth %s --until-before aig-lowering --convert-to-comb | FileCheck %s --check-prefix=COMB
 
+// TOP-LABEL: module attributes {"aig.longest-path-analysis-top" = @and}
 // AIG-LABEL: @and
 // CHECK-LABEL: @and
 // COMB-LABEL: @and

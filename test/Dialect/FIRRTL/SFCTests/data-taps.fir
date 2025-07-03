@@ -203,10 +203,10 @@ circuit Top : %[[
 
     ; CHECK:      module Top
     ; TODO: fix having constants carry names
-    ; CHECK:        wire inv = 1'h0
+    ; CHECK:        wire k = 1'h0
     ; CHECK:        io_b = Top.foo.f_probe;
     ; CHECK-NEXT:   io_c = Top.foo.g_probe;
-    ; CHECK-NEXT:   io_d = inv;
+    ; CHECK-NEXT:   io_d = k;
 
 ; // -----
 
@@ -516,7 +516,7 @@ circuit Top : %[[
 ; CHECK-NEXT:          [[DUT_tap_8_port:[a-zA-Z0-9_]+]]
 ; CHECK-NEXT:          [[DUT_tap_11_port:[a-zA-Z0-9_]+]]
 ;
-; CHECK-DAG:     tap_6 = DUT.submodule.wire_Submodule_probe;
+; CHECK-DAG:     tap_6 = DUT.submodule.inv_probe;
 ; CHECK-DAG:     tap_7 = inv;
 ; CHECK-DAG:     tap_8 = [[DUT_tap_8_port]];
 ; CHECK-DAG:     tap_9 = 1'h0;
@@ -530,8 +530,8 @@ circuit Top : %[[
 
 ; CHECK-LABEL: module Top
 ;
-; CHECK-DAG:     tap_12_0 = Top.dut.submodule.wire_Submodule
-; CHECK-DAG:     tap_12_1 = Top.dut.wire_DUT
+; CHECK-DAG:     tap_12_0 = Top.dut.submodule.inv_probe
+; CHECK-DAG:     tap_12_1 = Top.dut.inv_probe
 ; CHECK-DAG:     tap_12_2 = inv;
 ; CHECK-DAG:     tap_12_3 = 1'h0
 ; CHECK-DAG:     tap_12_4 = 1'h0

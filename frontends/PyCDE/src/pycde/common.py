@@ -158,7 +158,7 @@ class _PyProxy:
   """Parent class for a Python object which has a corresponding IR op (i.e. a
   proxy class)."""
 
-  __slots__ = ["name"]
+  __slots__ = ["name", "__weakref__"]
 
   def __init__(self, name: str):
     self.name = name

@@ -141,6 +141,7 @@ public:
   verif::SymbolicValueLowering getSymbolicValueLowering() const {
     return symbolicValueLowering;
   }
+  bool shouldDisableWireElimination() const { return disableWireElimination; }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -386,6 +387,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setDisableWireElimination(bool value) {
+    disableWireElimination = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -436,6 +442,7 @@ private:
   bool disableCSEinClasses;
   bool selectDefaultInstanceChoice;
   verif::SymbolicValueLowering symbolicValueLowering;
+  bool disableWireElimination;
 };
 
 void registerFirtoolCLOptions();

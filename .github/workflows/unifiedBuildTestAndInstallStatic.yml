@@ -73,7 +73,14 @@ jobs:
     container: "alpine"
     permissions:
       contents: write # Upload assets to release.
+    outputs:
+      cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     steps:
+      - name: Generate cache key pattern
+        id: cache-key
+        run: |
+          CACHE_KEY="alpine-${{ inputs.cmake_build_type }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}"
+          echo "pattern=$CACHE_KEY" >> $GITHUB_OUTPUT
 # Per-operating system setup
       - name: Setup (linux)
         run: |
@@ -94,7 +101,7 @@ jobs:
         if: inputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: alpine-${{ inputs.cmake_build_type }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}
+          key: ${{ steps.cache-key.outputs.pattern }}
           max-size: 500M
           variant: sccache
       - name: Configure sccache
@@ -186,3 +193,13 @@ jobs:
           files: ${{ steps.name_archive.outputs.name }}*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.
+
+  # Clean up cache after build completes
+  cleanup-cache:
+    needs: build-test-and-install
+    if: always() # Run even if build fails
+    uses: ./.github/workflows/cleanupCache.yml
+    permissions:
+      actions: write
+    with:
+      cache_key_pattern: ${{ needs.build-test-and-install.outputs.cache-key-pattern }}

@@ -20,7 +20,7 @@ circuit Top: %[[
     "class":"sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
     "name":"Logic",
     "moveDut": false
-    },
+  },
   {
     "class": "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
     "target": "~|BlackBox",
@@ -115,8 +115,8 @@ circuit Top: %[[
     inst foo of Foo
     connect a, foo.a
 
-; CHECK-NOT:   FILE "testbench{{.*}}Logic.sv"
-; CHECK-LABEL: module Logic(
+; CHECK-NOT:   FILE "testbench{{.*}}Foo.sv"
+; CHECK-LABEL: module Foo(
 ; CHECK-NOT:   module
 ; CHECK:         Bar bar (
 
@@ -125,12 +125,12 @@ circuit Top: %[[
 ; CHECK-NOT:   module
 ; CHECK:         BlackBox blackbox (
 
-; CHECK:       FILE "testbench{{.*}}Foo.sv"
-; CHECK-LABEL: module Foo(
+; CHECK:       FILE "testbench{{.*}}Logic.sv"
+; CHECK-LABEL: module Logic(
 ; CHECK-NOT:   module
 ; CHECK:         BlackBoxes BlackBoxes (
 ; CHECK-NOT:   module
-; CHECK:         Logic Logic
+; CHECK:         Foo Foo
 
 ; // -----
 
@@ -241,14 +241,14 @@ circuit Top: %[[
     inst foo of Foo
     connect a, foo.a
 
-; CHECK-NOT:   FILE "testbench{{.*}}Logic.sv"
-; CHECK-LABEL: module Logic(
+; CHECK-NOT:   FILE "testbench{{.*}}Foo.sv"
+; CHECK-LABEL: module Foo(
 ; CHECK-NOT:   module
 ; CHECK:         Bar bar (
 
-; CHECK:       FILE "testbench{{.*}}Foo.sv"
-; CHECK-LABEL: module Foo(
+; CHECK:       FILE "testbench{{.*}}Logic.sv"
+; CHECK-LABEL: module Logic(
 ; CHECK-NOT:   module
-; CHECK:         Logic Logic (
+; CHECK:         Foo Foo (
 ; CHECK-NOT:   module
 ; CHECK:         BlackBox blackbox (

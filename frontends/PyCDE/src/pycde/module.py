@@ -743,21 +743,16 @@ class ImportedModSpec(ModuleBuilder):
   # Creation callback that just moves the already build module into the System's
   # ModuleOp and returns it.
   def create_op(self, sys, symbol: str):
-    hw_module = self.modcls.hw_module
-
-    # TODO: deal with symbolrefs to this (potentially renamed) module symbol.
-    sys.mod.body.append(hw_module)
-
-    # Need to clear out the reference to ourselves so that we can release the
-    # raw reference to `hw_module`. It's safe to do so since unlike true PyCDE
-    # modules, this can only be run once during the import_mlir.
-    self.modcls.hw_module = None
-    return hw_module
+    assert False, "ImportedModSpec should not be used on imported modules."
 
 
-def import_hw_module(sys, hw_module: hw.HWModuleOp):
+def import_hw_module(
+    sys,
+    hw_module: hw.HWModuleOp,
+    builder_type: type[ModuleBuilder] = ImportedModSpec) -> type[Module]:
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
-  operates just like an external PyCDE module.
+  operates just like an external PyCDE module. If builder_type is specified, use
+  it as the module builder instead of the default `ImportedModSpec`.
 
   For now, the imported module name MUST NOT conflict with any other modules."""
 
@@ -772,8 +767,7 @@ def import_hw_module(sys, hw_module: hw.HWModuleOp):
   for output_name, output_type in zip(mod_type.output_names,
                                       mod_type.output_types):
     modattrs[output_name] = Output(_FromCirctType(output_type), output_name)
-  modattrs["BuilderType"] = ImportedModSpec
-  modattrs["hw_module"] = hw_module
+  modattrs["BuilderType"] = builder_type
 
   modattrs["add_metadata"] = staticmethod(
       lambda meta, sys=sys: add_metadata(sys, name, meta))
@@ -781,6 +775,8 @@ def import_hw_module(sys, hw_module: hw.HWModuleOp):
   # Use the name and ports to construct a class object like what externmodule
   # would wrap.
   cls = type(name, (Module,), modattrs)
+  cls._builder = cls.BuilderType(cls, modattrs, hw_module.location)
+  cls._builder.go()
 
   def add_metadata(sys, symbol: str, meta: Optional[Metadata]):
     return cls._builder.add_metadata(sys, symbol, meta)

@@ -97,6 +97,7 @@ struct UniqueLabelStorage;
 struct TupleStorage;
 struct MemoryStorage;
 struct MemoryBlockStorage;
+struct ValidationValue;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -116,7 +117,7 @@ using ElaboratorValue =
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
                  LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
-                 MemoryBlockStorage *>;
+                 MemoryBlockStorage *, ValidationValue *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -453,6 +454,17 @@ struct RandomizedSequenceStorage : IdentityValue {
   const SequenceStorage *sequence;
 };
 
+/// Storage object for an '!rtg.validate' result.
+struct ValidationValue : IdentityValue {
+  ValidationValue(Type type, const ElaboratorValue &ref,
+                  const ElaboratorValue &defaultValue, StringAttr id)
+      : IdentityValue(type), ref(ref), defaultValue(defaultValue), id(id) {}
+
+  const ElaboratorValue ref;
+  const ElaboratorValue defaultValue;
+  const StringAttr id;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -631,6 +643,11 @@ static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
      << ", end-address=" << val->endAddress << "}>";
 }
 
+static void print(const ValidationValue *val, llvm::raw_ostream &os) {
+  os << "<validation-value {type=" << val->type << ", ref=" << val->ref
+     << ", defaultValue=" << val->defaultValue << "}>";
+}
+
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
   std::visit([&](auto val) { print(val, os); }, value);
@@ -739,7 +756,7 @@ public:
     // replaced with freshly materialized values from the ElaborationValue. But
     // then, why can't we delete the value defining op?
     for (auto res : op->getResults())
-      if (!res.use_empty())
+      if (!res.use_empty() && !isa<ValidateOp>(op))
         return op->emitOpError(
             "ops with results that have uses are not supported");
 
@@ -1034,6 +1051,15 @@ private:
     for (auto v : val->values)
       materialized.push_back(materialize(v, loc, emitError));
     Value res = builder.create<TupleCreateOp>(loc, materialized);
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(ValidationValue *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    Value res = builder.create<ValidateOp>(
+        loc, val->type, materialize(val->ref, loc, emitError),
+        materialize(val->defaultValue, loc, emitError), val->id);
     materializedValues[val] = res;
     return res;
   }
@@ -1675,6 +1701,16 @@ public:
   FailureOr<DeletionKind> visitOp(CommentOp op) { return DeletionKind::Keep; }
 
   FailureOr<DeletionKind> visitOp(rtg::YieldOp op) {
+    return DeletionKind::Keep;
+  }
+
+  FailureOr<DeletionKind> visitOp(ValidateOp op) {
+    auto *validationVal = sharedState.internalizer.create<ValidationValue>(
+        op.getType(), state[op.getRef()], state[op.getDefaultValue()],
+        op.getIdAttr());
+    state[op.getValue()] = validationVal;
+    materializer.registerIdentityValue(validationVal);
+    materializer.map(validationVal, op.getValue());
     return DeletionKind::Keep;
   }
 

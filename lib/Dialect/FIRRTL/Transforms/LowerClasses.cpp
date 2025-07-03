@@ -594,14 +594,8 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
     // Get the owning module. If there is no owning module, then this
     // declaration does not have a use, and we can return early.
     auto owningModule = owningModules.lookup(id);
-    if (!owningModule) {
-      PathInfoTableEntry entry;
-      // This entry is used for checking id uniquness.
-      entry.op = op;
-      entry.id = id;
-      entries.push_back(entry);
+    if (!owningModule)
       return true;
-    }
 
     // Copy the middle part from the annotation's NLA.
     if (hierPathOp) {
@@ -711,10 +705,26 @@ LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
     pathInfoTable.addAltBasePathRoot(root);
 
   for (const auto &entry : entries) {
+    assert(entry.pathAttr &&
+           "expected all PathInfoTableEntries to have a pathAttr");
+
     // Record the path operation associated with the path op.
     auto [it, inserted] = pathInfoTable.table.try_emplace(entry.id);
     auto &pathInfo = it->second;
     if (!inserted) {
+      // If this DistinctAttr has been seen before, check if it actually points
+      // to the same thing. This can happen in Dedup, where multiple trackers
+      // end up getting created for different paths, which ultimately coalesce
+      // into the same path after Dedup completes. Unfortunately, we can't
+      // easily detect this in the middle of Dedup, so allow duplicate
+      // DistinctAttrs here.
+      assert(pathInfo.symRef && "expected all PathInfos to have a symRef");
+      auto existingHierpath =
+          symbolTable.lookup<hw::HierPathOp>(pathInfo.symRef.getValue());
+      auto existingPathAttr = existingHierpath.getNamepath();
+      if (existingPathAttr == entry.pathAttr)
+        continue;
+
       assert(pathInfo.loc.has_value() && "all PathInfo should have a Location");
       auto diag = emitError(pathInfo.loc.value(),
                             "path identifier already found, paths must resolve "
@@ -727,13 +737,8 @@ LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
     // be invalidated later, so this is the last time we want to access it here.
     bool canBeInstanceTarget = isa<InstanceOp, FModuleLike>(entry.op);
 
-    if (entry.pathAttr) {
-      pathInfo = {entry.op->getLoc(), canBeInstanceTarget,
-                  cache.getRefFor(entry.pathAttr), entry.altBasePathModule};
-    } else {
-      pathInfo.loc = entry.op->getLoc();
-      pathInfo.canBeInstanceTarget = canBeInstanceTarget;
-    }
+    pathInfo = {entry.op->getLoc(), canBeInstanceTarget,
+                cache.getRefFor(entry.pathAttr), entry.altBasePathModule};
   }
   return success();
 }

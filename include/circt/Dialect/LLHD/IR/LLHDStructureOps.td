@@ -9,14 +9,19 @@
 include "circt/Dialect/LLHD/IR/LLHDDialect.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 
+def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
+  let cppNamespace = "::circt::llhd";
+}
+
 //===----------------------------------------------------------------------===//
 // ProcessOp
 //===----------------------------------------------------------------------===//
 
 def ProcessOp : LLHDOp<"process", [
+  HasParent<"hw::HWModuleOp">,
   NoRegionArguments,
+  ProceduralRegion,
   RecursiveMemoryEffects,
-  HasParent<"hw::HWModuleOp">
 ]> {
   let summary = "A process that runs concurrently during simulation";
   let description = [{
@@ -55,9 +60,10 @@ def ProcessOp : LLHDOp<"process", [
 //===----------------------------------------------------------------------===//
 
 def FinalOp : LLHDOp<"final", [
-  NoRegionArguments,
-  RecursiveMemoryEffects,
   HasParent<"hw::HWModuleOp">,
+  NoRegionArguments,
+  ProceduralRegion,
+  RecursiveMemoryEffects,
 ]> {
   let summary = "A process that runs at the end of simulation";
   let description = [{
@@ -94,6 +100,7 @@ def FinalOp : LLHDOp<"final", [
 def CombinationalOp : LLHDOp<"combinational", [
   HasParent<"hw::HWModuleOp">,
   NoRegionArguments,
+  ProceduralRegion,
   RecursiveMemoryEffects,
 ]> {
   let summary = "A process that runs when any of its operand values change";

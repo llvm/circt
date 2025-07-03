@@ -1855,6 +1855,7 @@ private:
   ParseResult parseIntegerLiteralExp(Value &result);
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
+  ParseResult parseCatExp(Value &result);
 
   template <typename T, size_t M, size_t N, size_t... Ms, size_t... Ns>
   ParseResult parsePrim(std::index_sequence<Ms...>, std::index_sequence<Ns...>,
@@ -2224,6 +2225,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
+  case FIRToken::lp_cat:
+    if (parseCatExp(result))
+      return failure();
+    break;
+
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
   case FIRToken::identifier: // exp ::= id
@@ -2587,6 +2593,33 @@ ParseResult FIRStmtParser::parseListConcatExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = builder.create<ListConcatOp>(type, operands);
+  return success();
+}
+
+/// cat-exp ::= 'cat(' exp* ')'
+ParseResult FIRStmtParser::parseCatExp(Value &result) {
+  consumeToken(FIRToken::lp_cat);
+
+  auto loc = getToken().getLoc();
+  SmallVector<Value, 3> operands;
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        Value operand;
+        locationProcessor.setLoc(loc);
+        if (parseExp(operand, "expected expression in cat expression"))
+          return failure();
+
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  if (operands.size() != 2) {
+    if (requireFeature(nextFIRVersion, "variadic cat", loc))
+      return failure();
+  }
+
+  locationProcessor.setLoc(loc);
+  result = builder.create<CatPrimOp>(operands);
   return success();
 }
 

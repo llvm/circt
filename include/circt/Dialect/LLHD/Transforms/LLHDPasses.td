@@ -74,17 +74,24 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
   }];
 }
 
-def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
-  let summary = "Deletes all functions.";
+def InlineCallsPass : Pass<"llhd-inline-calls", "ModuleOp"> {
+  let summary = "Inline all function calls in HW modules";
   let description = [{
-    Deletes all functions in the module. In case there is still a function
-    call in an entity or process, it fails.
-    This pass is intended as a post-inlining pass to check if all functions
-    could be successfully inlined and remove the inlined functions. This
-    is necessary because Structural LLHD does not allow functions. Fails in
-    the case that there is still a function call left in a `llhd.process` or
-    `hw.module`.
+    Inlines all `func.call` operations nested within `llhd.combinational`,
+    `llhd.process`, and `llhd.final` ops within `hw.module`s. The `func.func`
+    definitions are left untouched. After the inlining, MLIR's symbol DCE pass
+    may be used to eliminate the function definitions where possible.
+
+    This pass expects the `llhd-wrap-procedural-ops` pass to have already run.
+    Otherwise call ops immediately in the module body, a graph region, cannot be
+    inlined at all since the graph region cannot accommodate the function's
+    control flow.
   }];
+  let statistics = [
+    Statistic<
+      "numInlined", "calls-inlined", "Number of call ops that were inlined"
+    >,
+  ];
 }
 
 def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
@@ -182,6 +189,43 @@ def CombineDrivesPass : Pass<"llhd-combine-drives", "hw::HWModuleOp"> {
   let dependentDialects = [
     "comb::CombDialect",
     "hw::HWDialect",
+  ];
+}
+
+def WrapProceduralOpsPass : Pass<"llhd-wrap-procedural-ops", "hw::HWModuleOp"> {
+  let summary = "Wrap procedural ops in modules to make them inlinable";
+  let description = [{
+    Operations such as `func.call` or `scf.if` may appear in an `hw.module` body
+    directly. They cannot be inlined into the module though, since the inlined
+    function or result of converting the SCF ops to the CF dialect may create
+    control-flow operations with multiple blocks. This pass wraps such
+    operations in `llhd.combinational` ops to give them an SSACFG region to
+    inline into.
+  }];
+  let dependentDialects = [
+    "llhd::LLHDDialect",
+  ];
+  let statistics = [
+    Statistic<
+      "numOpsWrapped", "ops-wrapped", "Number of procedural ops wrapped"
+    >,
+  ];
+}
+
+def RemoveControlFlowPass : Pass<"llhd-remove-control-flow", "hw::HWModuleOp"> {
+  let summary = "Remove acyclic control flow and replace block args with muxes";
+  let description = [{
+    Remove the control flow in `llhd.combinational` operations by merging all
+    blocks into the entry block and replacing block arguments with multiplexers.
+    This requires the control flow to be acyclic, for example by unrolling all
+    loops beforehand. Additionally, since this moves operations from
+    conditionally executed blocks into the unconditionally executed entry block,
+    all operations must be side-effect free.
+  }];
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "mlir::cf::ControlFlowDialect",
   ];
 }
 

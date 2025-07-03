@@ -2057,20 +2057,6 @@ firrtl.circuit "RWProbeUseDef" {
 
 // -----
 
-firrtl.circuit "RWProbeLayerRequirements" {
-  firrtl.layer @A bind { }
-  firrtl.module @RWProbeLayerRequirements(in %cond : !firrtl.uint<1>) {
-    // expected-note @below {{target is missing layer requirements: @A}}
-    %w = firrtl.wire sym @x : !firrtl.uint<1>
-    firrtl.layerblock @A {
-      // expected-error @below {{target has insufficient layer requirements}}
-      %rw = firrtl.ref.rwprobe <@RWProbeLayerRequirements::@x> : !firrtl.rwprobe<uint<1>>
-    }
-  }
-}
-
-// -----
-
 firrtl.circuit "MissingClassForObjectPortInModule" {
   // expected-error @below {{'firrtl.module' op references unknown class @Missing}}
   firrtl.module @MissingClassForObjectPortInModule(out %o: !firrtl.class<@Missing()>) {}
@@ -2924,6 +2910,18 @@ firrtl.circuit "BindTargetMissingDoNotPrintFlag" {
 
   // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not marked doNotPrint}}
   firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
+
+// -----
+
+firrtl.circuit "InvalidCatOperands" {
+  firrtl.module @InvalidCatOperands(in %in: !firrtl.vector<uint<4>, 4>) {
+    %a = firrtl.wire : !firrtl.uint<4>
+    %b = firrtl.wire : !firrtl.sint<4>
+    // expected-error @below {{all operands must have same signedness}}
+    // expected-error @below {{'firrtl.cat' op failed to infer returned types}}
+    %result = firrtl.cat %a, %b : (!firrtl.uint<4>, !firrtl.sint<4>) -> !firrtl.uint<8>
+  }
 }
 
 // -----

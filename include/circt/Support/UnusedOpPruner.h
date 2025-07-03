@@ -11,6 +11,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
@@ -28,9 +29,12 @@ struct UnusedOpPruner {
   /// Mark the defining op of a value to be erased later if the op is unused at
   /// that point.
   void eraseLaterIfUnused(Value value) {
-    if (value)
-      if (auto *defOp = value.getDefiningOp())
-        eraseLaterIfUnused(defOp);
+    if (!value)
+      return;
+    if (auto *defOp = value.getDefiningOp())
+      eraseLaterIfUnused(defOp);
+    else
+      blockArgsToEraseIfUnused.insert(cast<BlockArgument>(value));
   }
 
   /// Mark the defining ops of a range of values to be erased later if the ops
@@ -51,21 +55,45 @@ struct UnusedOpPruner {
 
   // Erase tracked operations that are side-effect free and have become unused.
   void eraseNow() {
-    while (!opsToEraseIfUnused.empty()) {
-      auto it = opsToEraseIfUnused.begin();
-      auto *op = *it;
-      opsToEraseIfUnused.erase(it);
-      if (!isOpTriviallyDead(op))
-        continue;
-      eraseLaterIfUnused(op->getOperands());
-      op->erase();
+    using mlir::BranchOpInterface;
+    while (!opsToEraseIfUnused.empty() || !blockArgsToEraseIfUnused.empty()) {
+      while (!opsToEraseIfUnused.empty()) {
+        auto it = opsToEraseIfUnused.begin();
+        auto *op = *it;
+        opsToEraseIfUnused.erase(it);
+        if (!isOpTriviallyDead(op))
+          continue;
+        eraseLaterIfUnused(op->getOperands());
+        op->erase();
+      }
+      while (!blockArgsToEraseIfUnused.empty()) {
+        auto it = blockArgsToEraseIfUnused.begin();
+        auto arg = *it;
+        blockArgsToEraseIfUnused.erase(it);
+        if (!arg.use_empty())
+          continue;
+        if (!llvm::all_of(arg.getOwner()->getUses(), [](auto &blockOperand) {
+              return isa<BranchOpInterface>(blockOperand.getOwner());
+            }))
+          continue;
+        unsigned argIdx = arg.getArgNumber();
+        for (auto &blockOperand : arg.getOwner()->getUses()) {
+          auto branchOp = cast<BranchOpInterface>(blockOperand.getOwner());
+          auto operands =
+              branchOp.getSuccessorOperands(blockOperand.getOperandNumber());
+          eraseLaterIfUnused(operands[argIdx]);
+          operands.erase(argIdx);
+        }
+        arg.getOwner()->eraseArgument(argIdx);
+      }
     }
   }
 
 private:
-  /// The set of operations that may have become unused through the IR changes
-  /// made during the promotion. We try to clean these up later.
+  /// The set of operations that may have become unused.
   llvm::SmallDenseSet<Operation *> opsToEraseIfUnused;
+  /// The set of block arguments that may have become unused.
+  llvm::SmallDenseSet<BlockArgument> blockArgsToEraseIfUnused;
 };
 
 } // namespace circt

@@ -1545,6 +1545,18 @@ module Expressions;
     // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
     struct0 = '{43, 9002};
 
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 43 : i32
+    // CHECK: [[TMP1:%.+]] = moore.sext [[TMP0]] : i32 -> i64
+    // CHECK: [[TMP2:%.+]] = moore.read %struct0 : <struct<{a: i32, b: i32}>>
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.struct<{a: i32, b: i32}> -> !moore.i64
+    // CHECK: [[TMP4:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP3]] : i64 -> i1
+    // CHECK: [[TMP5:%.+]] = moore.zext [[TMP4]] : i1 -> i32
+    // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP7:%.+]] = moore.conversion [[TMP6]] : !moore.l32 -> !moore.i32
+    // CHECK: moore.blocking_assign %c, [[TMP7]] : i32
+    c = 43 inside {struct0};
+
     // CHECK: [[TMP0:%.+]] = moore.constant 44
     // CHECK: [[TMP1:%.+]] = moore.constant 9003
     // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
@@ -2710,3 +2722,44 @@ module RangeElementSelection(
       b[3:0] = b[c[0]-:2];
     end
 endmodule
+
+// Check that ImportVerilog recognizes case statements that are exhaustive
+// assuming that the values are two-state. These statements are technically not
+// exhaustive in four-state logic, but a lot of real world Verilog code relies
+// on this hack.
+// CHECK-LABEL: @seeminglyExhaustiveCase
+function void seeminglyExhaustiveCase(logic [1:0] a);
+  // CHECK: [[Z:%.+]] = moore.variable
+  logic [3:0] z;
+  case (a)
+    // CHECK: moore.constant 0 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE0:\^.+]], [[ELSE0:\^.+]]
+    // CHECK: moore.constant 1 : i4
+    // CHECK: cf.br [[EXIT:\^.+]]
+    2'd0: z = 4'b0001;
+    // CHECK: [[ELSE0]]:
+    // CHECK: moore.constant 1 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE1:\^.+]], [[ELSE1:\^.+]]
+    // CHECK: moore.constant 2 : i4
+    // CHECK: cf.br [[EXIT]]
+    2'd1: z = 4'b0010;
+    // CHECK: [[ELSE1]]:
+    // CHECK: moore.constant -2 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE2:\^.+]], [[ELSE2:\^.+]]
+    // CHECK: moore.constant 4 : i4
+    // CHECK: cf.br [[EXIT]]
+    2'd2: z = 4'b0100;
+    // CHECK: [[ELSE2]]:
+    // CHECK: moore.constant -1 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE3:\^.+]], [[ELSE3:\^.+]]
+    // CHECK: moore.constant -8 : i4
+    // CHECK: cf.br [[EXIT]]
+    2'd3: z = 4'b1000;
+    // Instead of a default statement, branch to the final item.
+    // CHECK: [[ELSE3]]:
+    // CHECK-NOT: moore.constant -1 : i4
+    // CHECK-NOT: cf.br [[EXIT]]
+    // CHECK-NEXT: cf.br [[CASE3]]
+    default: z = 4'b1111;
+  endcase
+endfunction

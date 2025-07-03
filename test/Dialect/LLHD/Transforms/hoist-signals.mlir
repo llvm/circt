@@ -1,7 +1,7 @@
 // RUN: circt-opt --llhd-hoist-signals %s | FileCheck %s
 
-// CHECK-LABEL: @SimpleProbes
-hw.module @SimpleProbes() {
+// CHECK-LABEL: @SimpleProbesInProcessOp
+hw.module @SimpleProbesInProcessOp() {
   %c0_i42 = hw.constant 0 : i42
   %a = llhd.sig %c0_i42 : i42
   // CHECK: llhd.sig
@@ -20,6 +20,23 @@ hw.module @SimpleProbes() {
     // CHECK-NEXT: call @use_i42([[A]])
     func.call @use_i42(%1) : (i42) -> ()
     llhd.halt
+  }
+}
+
+// CHECK-LABEL: @SimpleProbesInCombinationalOp
+hw.module @SimpleProbesInCombinationalOp() {
+  %c0_i42 = hw.constant 0 : i42
+  %a = llhd.sig %c0_i42 : i42
+  // CHECK: llhd.sig
+  // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+  // CHECK-NEXT: llhd.combinational -> i42
+  llhd.combinational -> i42 {
+    // CHECK-NOT: llhd.prb
+    %0 = llhd.prb %a : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[A]])
+    func.call @use_i42(%0) : (i42) -> ()
+    // CHECK-NEXT: llhd.yield [[A]]
+    llhd.yield %0 : i42
   }
 }
 

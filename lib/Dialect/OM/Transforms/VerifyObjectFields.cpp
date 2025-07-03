@@ -57,9 +57,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
                   cast<ClassType>(objectField.getObject().getType());
-              ClassLike classDef =
-                  symbolTable.lookupNearestSymbolFrom<ClassLike>(
-                      objectField, objectInstType.getClassName());
+              ClassLike classDef = symbolTable.lookup<ClassLike>(
+                  objectInstType.getClassName().getAttr());
               if (!classDef) {
                 objectField.emitError()
                     << "class " << objectInstType.getClassName()
@@ -100,8 +99,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
                   // Check if the nested ClassOp exists. ObjectInstOp verifier
                   // already checked the class exits but it's not verified yet
                   // if the object is an input argument.
-                  classDef = symbolTable.lookupNearestSymbolFrom<ClassOp>(
-                      objectField, classType.getClassName());
+                  classDef = symbolTable.lookup<ClassOp>(
+                      classType.getClassName().getAttr());
 
                   if (!classDef) {
                     objectField.emitError()

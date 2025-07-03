@@ -112,6 +112,19 @@ static cl::opt<std::string> topName("top", cl::desc("Top module name"),
                                     cl::value_desc("name"), cl::init(""),
                                     cl::cat(mainCategory));
 
+static cl::list<std::string> abcCommands("abc-commands",
+                                         cl::desc("ABC passes to run"),
+                                         cl::CommaSeparated,
+                                         cl::cat(mainCategory));
+static cl::opt<std::string> abcPath("abc-path", cl::desc("Path to ABC"),
+                                    cl::value_desc("path"), cl::init("abc"),
+                                    cl::cat(mainCategory));
+
+static cl::opt<bool>
+    continueOnFailure("ignore-abc-failures",
+                      cl::desc("Continue on ABC failure instead of aborting"),
+                      cl::init(false), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -165,6 +178,13 @@ static void populateSynthesisPipeline(PassManager &pm) {
     mpm.addPass(aig::createLowerWordToBits());
     mpm.addPass(createCSEPass());
     mpm.addPass(createSimpleCanonicalizerPass());
+    if (!abcCommands.empty()) {
+      aig::ABCRunnerOptions options;
+      options.abcPath = abcPath;
+      options.abcCommands.assign(abcCommands.begin(), abcCommands.end());
+      options.continueOnFailure = continueOnFailure;
+      mpm.addPass(aig::createABCRunner(options));
+    }
     // TODO: Add balancing, rewriting, FRAIG conversion, etc.
     if (untilReached(UntilEnd))
       return;
@@ -223,6 +243,14 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-synth"));
   populateSynthesisPipeline(pm);
+
+  if (!topName.empty()) {
+    // Set a top module name for the longest path analysis.
+    module.get()->setAttr(
+        circt::aig::LongestPathAnalysis::getTopModuleNameAttrName(),
+        FlatSymbolRefAttr::get(&context, topName));
+  }
+
   if (failed(pm.run(module.get())))
     return failure();
 

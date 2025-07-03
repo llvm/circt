@@ -776,6 +776,43 @@ def YieldOp : RTGOp<"yield", [Pure, Terminator]> {
   let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 }
 
+def ValidateOp : RTGOp<"validate", [
+  AllTypesMatch<["defaultValue", "value"]>
+]> {
+  let summary = "validate the value in the given resource";
+  let description = [{
+    Validates the content of a reference-style value from the payload dialect
+    at the position of this operation. This validation may happen in a single
+    lowering step, e.g., a compiler pass that interprets the IR and inlines the
+    interpreted value directly, or a program that can be run to generate the
+    desired values may be generated first and in a second compilation run those
+    values (possibly stored in a file by the first run) may be inlined at the
+    position of these operations. For the latter, the ID attribute may be used
+    to match the values to the right operations and the 'defaultValue' is used
+    by the first run instead of the simulated value.
+
+    If the control-flow of the payload program visits this operation multiple
+    times, a possibly different value may be logged each time. In such
+    situations, the lowering should fail as no single value can be determined
+    that can be hardcoded/inlined in its place.
+
+    The value returned by this operation is not known during elaboration and
+    is thus treated like a value with identity (even though it might just be
+    a simple integer). Therefore, it is strongly recommended to not use the
+    result value of this operation in situations that expect structural
+    equivalence checks such as adding it to sets or bags.
+  }];
+
+  let arguments = (ins AnyType:$ref,
+                       AnyType:$defaultValue,
+                       OptionalAttr<StrAttr>:$id);
+  let results = (outs AnyType:$value);
+
+  let assemblyFormat = [{
+    $ref `,` $defaultValue (`,` $id^)? `:` type($ref) `->` type($value) attr-dict
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // ISA Target Operations
 //===----------------------------------------------------------------------===//

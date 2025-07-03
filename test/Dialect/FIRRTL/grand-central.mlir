@@ -1063,3 +1063,139 @@ firrtl.circuit "Top" attributes {
   // CHECK-NEXT:   sv.interface.signal @bar : i2
   // CHECK-NOT:    sv.interface @Bundle2_0
 }
+
+// -----
+
+firrtl.circuit "MultiplyInstantiated" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "View",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 42 : i64,
+        name = "field"}],
+     id = 0 : i64},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"},
+    {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+     filename = "gct.yaml"}]} {
+  firrtl.layer @A bind {}
+  firrtl.module private @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+       defName = "Companion",
+       id = 0 : i64,
+       name = "View"}]} {
+    %0 = firrtl.constant 0 :!firrtl.uint<1>
+    %zero = firrtl.node  %0  {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 42 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+  }
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance foo @View_companion()
+    firrtl.instance bar @View_companion()
+    firrtl.layerblock @A {
+      firrtl.instance baz @View_companion()
+    }
+  }
+  firrtl.module @MultiplyInstantiated() {
+    firrtl.instance dut @DUT()
+    firrtl.instance qux @View_companion()
+  }
+}
+
+// Only extract instances that are in the design.  The other instances should
+// not be extracted.
+//
+// CHECK:      sv.verbatim
+// CHECK-SAME:   - name: View
+// CHECK-SAME:     fields:
+// CHECK-SAME:       - name: field
+// CHECK-SAME:         dimensions: [ ]
+// CHECK-SAME:         width: 1
+// CHECK-SAME:     instances: []
+//
+// CHECK:      firrtl.module private @DUT()
+// CHECK-NEXT:   firrtl.instance foo
+// CHECK-SAME:     lowerToBind
+// CHECK-SAME:     output_file = #hw.output_file<"gct-dir{{/|\\\\}}bindings.sv"
+// CHECK-NEXT:   firrtl.instance bar
+// CHECK-SAME:     lowerToBind
+// CHECK-SAME:     output_file = #hw.output_file<"gct-dir{{/|\\\\}}bindings.sv"
+// CHECK-NEXT:   firrtl.layerblock @A {
+// CHECK-NEXT:     firrtl.instance baz
+// CHECK-NOT:       lowerToBind
+// CHECK-NOT:       output_file
+//
+// CHECK:      firrtl.module @MultiplyInstantiated()
+// CHECK-NEXT:   firrtl.instance dut @DUT()
+// CHECK-NEXT:   firrtl.instance qux
+// CHECK-NOT:      lowerToBind
+// CHECK-NOT:      output_file
+//
+// CHECK:      sv.interface
+
+// -----
+
+firrtl.circuit "CompanionInTestharness" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "View",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 42 : i64,
+        name = "field"}],
+     id = 0 : i64},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"},
+    {class = "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+     filename = "gct.yaml"},
+    {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "testbench"}]} {
+  firrtl.layer @A bind {}
+  firrtl.module private @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+       defName = "Companion",
+       id = 0 : i64,
+       name = "View"}]} {
+    %0 = firrtl.constant 0 :!firrtl.uint<1>
+    %zero = firrtl.node  %0  {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 42 : i64
+        }
+      ]
+    } : !firrtl.uint<1>
+  }
+  firrtl.module public @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+  }
+  firrtl.module @CompanionInTestharness() {
+    firrtl.instance dut @DUT()
+    firrtl.instance foo @View_companion()
+  }
+}
+
+// CHECK:     firrtl.module private @View_companion()
+// CHECK-NOT: output_file
+//
+// CHECK:     firrtl.module public @DUT()
