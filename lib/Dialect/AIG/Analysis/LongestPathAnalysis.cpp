@@ -899,8 +899,8 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputeResults(Value value,
   // Unique the results.
   deduplicatePaths(results);
   LLVM_DEBUG({
-    llvm::dbgs() << value << "[" << bitPos << "] "
-                 << "Found " << results.size() << " paths\n";
+    llvm::dbgs() << value << "[" << bitPos << "] " << "Found " << results.size()
+                 << " paths\n";
     llvm::dbgs() << "====Paths:\n";
     for (auto &path : results) {
       path.print(llvm::dbgs());
@@ -1445,7 +1445,7 @@ LongestPathAnalysis::~LongestPathAnalysis() { delete impl; }
 LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
     const LongestPathAnalysisOption &option)
-    : impl(new Impl(moduleOp, am, option)) {}
+    : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {}
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return impl->isAnalysisAvailable(moduleName);
