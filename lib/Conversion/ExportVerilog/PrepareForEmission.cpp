@@ -1085,6 +1085,38 @@ static LogicalResult legalizeHWModule(Block &block,
       continue;
     }
 
+    // Lower `hw.array_inject` to a temporary variable that contains a copy of
+    // the input array, with the injected index overwritten.
+    if (auto arrayInjectOp = dyn_cast<hw::ArrayInjectOp>(op)) {
+      bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
+      ImplicitLocOpBuilder builder(op.getLoc(), &op);
+      Value decl;
+      if (procedural)
+        decl = builder.create<LogicOp>(arrayInjectOp.getType());
+      else
+        decl = builder.create<sv::RegOp>(arrayInjectOp.getType());
+      for (auto &use : llvm::make_early_inc_range(arrayInjectOp->getUses()))
+        use.set(builder.create<ReadInOutOp>(decl));
+
+      // Make sure we have a procedural region where we can first copy the input
+      // array into `decl`, and then overwrite a single index.
+      if (!procedural) {
+        auto alwaysOp = builder.create<sv::AlwaysCombOp>();
+        builder.setInsertionPointToStart(alwaysOp.getBodyBlock());
+      }
+
+      // Copy the input array into `decl`.
+      builder.create<sv::BPAssignOp>(decl, arrayInjectOp.getInput());
+
+      // Overwrite the injected value.
+      auto target =
+          builder.create<sv::ArrayIndexInOutOp>(decl, arrayInjectOp.getIndex());
+      builder.create<sv::BPAssignOp>(target, arrayInjectOp.getElement());
+
+      arrayInjectOp.erase();
+      continue;
+    }
+
     // Force array index expressions to be a simple name when the
     // `mitigateVivadoArrayIndexConstPropBug` option is set.
     if (options.mitigateVivadoArrayIndexConstPropBug &&
