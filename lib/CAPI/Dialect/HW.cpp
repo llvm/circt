@@ -143,8 +143,6 @@ void hwModuleTypeGetPort(MlirType type, intptr_t index, HWModulePort *ret) {
   case ModulePort::Direction::InOut:
     dir = HWModulePortDirection::InOut;
     break;
-  default:
-    llvm_unreachable("unknown ModulePort::Direction");
   }
 
   ret->name = wrap(static_cast<Attribute>(port.name));
