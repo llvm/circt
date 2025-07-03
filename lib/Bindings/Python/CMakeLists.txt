@@ -14,6 +14,7 @@ set(LLVM_OPTIONAL_SOURCES
 )
 
 set(PYTHON_BINDINGS_SOURCES
+  AIGModule.cpp
   CIRCTModule.cpp
   ESIModule.cpp
   HWModule.cpp
@@ -30,6 +31,7 @@ set(PYTHON_BINDINGS_SOURCES
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
+  CIRCTCAPIAIG
   CIRCTCAPIArc
   CIRCTCAPIComb
   CIRCTCAPIConversion
@@ -120,6 +122,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/comb.py
   DIALECT_NAME comb)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/AIGOps.td
+  SOURCES
+    dialects/aig.py
+  DIALECT_NAME aig)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
