@@ -260,3 +260,20 @@ hw.module @hoist_reg(in %dummy : i32, out out : i17) {
   %res_reg_data = sv.read_inout %res_reg : !hw.inout<i17>
   hw.output %res_reg_data : i17
 }
+
+// DISALLOW-LABEL: module ArrayInjectProcedural(
+hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
+  // DISALLOW: reg [3:0][41:0] z;
+  %z = sv.reg : !hw.inout<array<4xi42>>
+  // DISALLOW-NEXT: reg [3:0][41:0] [[TMP:.+]];
+  // DISALLOW-NEXT: always_comb begin
+  // DISALLOW-NEXT:   [[TMP]] = a;
+  // DISALLOW-NEXT:   [[TMP]][i] = b;
+  // DISALLOW-NEXT: end // always_comb
+  // DISALLOW-NEXT: always_comb
+  // DISALLOW-NEXT:   z = [[TMP]];
+  sv.alwayscomb {
+    %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
+    sv.bpassign %z, %0 : !hw.array<4xi42>
+  }
+}
