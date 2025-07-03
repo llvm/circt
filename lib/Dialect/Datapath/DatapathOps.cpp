@@ -19,13 +19,13 @@ LogicalResult CompressOp::verify() {
   // The compressor must reduce the number of operands by at least 1 otherwise
   // it fails to perform any reduction.
   if (getNumOperands() < 3)
-    return emitOpError("Requires 3 or more arguments - otherwise use add");
+    return emitOpError("requires 3 or more arguments - otherwise use add");
 
   if (getNumResults() >= getNumOperands())
-    return emitOpError("Must reduce the number of operands by at least 1");
+    return emitOpError("must reduce the number of operands by at least 1");
 
   if (getNumResults() < 2)
-    return emitOpError("Must produce at least 2 results");
+    return emitOpError("must produce at least 2 results");
 
   return success();
 }
@@ -33,8 +33,7 @@ LogicalResult CompressOp::verify() {
 // Parser for the custom type format
 // Parser for "<num-inputs> x <input-type> -> <output-type>"
 static ParseResult parseCompressFormat(OpAsmParser &parser,
-                                       SmallVectorImpl<Type> &inputTypes,
-                                       SmallVectorImpl<Type> &resultTypes) {
+                                       SmallVectorImpl<Type> &inputTypes) {
 
   int64_t inputCount;
   Type inputElementType;
@@ -51,19 +50,6 @@ static ParseResult parseCompressFormat(OpAsmParser &parser,
   if (parser.parseLParen())
     return failure();
 
-  Type resultType;
-  if (parser.parseType(resultType))
-    return failure();
-
-  resultTypes.push_back(resultType);
-
-  // Parse additional output types
-  while (parser.parseOptionalComma().succeeded()) {
-    if (parser.parseType(resultType))
-      return failure();
-    resultTypes.push_back(resultType);
-  }
-
   if (parser.parseRParen())
     return failure();
 
@@ -75,17 +61,12 @@ static ParseResult parseCompressFormat(OpAsmParser &parser,
 
 // Printer for "<num-inputs> x <input-type> -> <output-type>"
 static void printCompressFormat(OpAsmPrinter &printer, Operation *op,
-                                TypeRange inputTypes, TypeRange resultTypes) {
+                                TypeRange inputTypes) {
 
   // Print input types as "count x type"
   printer << inputTypes.size() << " x " << inputTypes[0];
 
   printer << " -> ";
-
-  // Print output types as tuple
-  printer << "(";
-  llvm::interleaveComma(resultTypes, printer);
-  printer << ")";
 }
 
 //===----------------------------------------------------------------------===//

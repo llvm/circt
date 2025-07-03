@@ -25,12 +25,11 @@ class DatapathOp<string mnemonic, list<Trait> traits = []> :
 
 //===----------------------------------------------------------------------===//
 
-// Compress an array of bitvectors to a smaller set of bitvectors (at least 2).
 def CompressOp : DatapathOp<"compress", 
-                                   [Pure, SameTypeOperands, 
-                                    SameOperandsAndResultType, Commutative]> {
+            [Pure, SameTypeOperands, SameOperandsAndResultType, Commutative]> {
   let summary = "Reduce a set of bitvectors to a carry-save representation";
   let description = [{
+    Reduce an array of bitvectors to a smaller set of bitvectors (at least 2).
     A compressor tree sums multiple bitvectors (often partial products in
     multipliers or adders). Instead of adding all bitvectors sequentially, a 
     compressor tree reduces the number of operands in parallel stages. The 
@@ -46,8 +45,9 @@ def CompressOp : DatapathOp<"compress",
   let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  let assemblyFormat = 
-    "$inputs attr-dict `:` custom<CompressFormat>(type($inputs), type($results))";
+  let assemblyFormat = [{
+    $inputs attr-dict `:` custom<CompressFormat>(type($inputs)) type(results)
+  }];
   let hasVerifier = 1;
   let hasCanonicalizer = true;
 
@@ -60,10 +60,8 @@ def CompressOp : DatapathOp<"compress",
   ];
 }
 
-// Construct partial product array from two operands
 def PartialProductOp : DatapathOp<"partial_product", 
-                                    [Pure, SameTypeOperands, 
-                                     SameOperandsAndResultType, Commutative]> {
+            [Pure, SameTypeOperands, SameOperandsAndResultType, Commutative]> {
   let summary = "Generate partial products from multiplying the operands";
   let description = [{
     The first step in a multiplication is to generate partial products, which 
@@ -75,10 +73,10 @@ def PartialProductOp : DatapathOp<"partial_product",
     
     Verilog Example 4-bit multiplication:
     ```verilog
-        partial_product[0][3:0] = {4{a[0]}} & b
-        ...
-        partial_product[3][3:0] = {4{a[3]}} & b
-        ab[3:0] = partial_product[0] + ... + partial_product[3] // = a*b
+    partial_product[0][3:0] = {4{a[0]}} & b
+    ...
+    partial_product[3][3:0] = {4{a[3]}} & b
+    ab[3:0] = partial_product[0] + ... + partial_product[3] // = a*b
     ```
 
     Example using `datapath` dialect:
@@ -86,13 +84,13 @@ def PartialProductOp : DatapathOp<"partial_product",
     %0:4 = datapath.partial_product %a, %b : 4 x i4
     ```
   }];
-  let arguments = (ins HWIntegerType:$multiplicand, 
-                       HWIntegerType:$multiplier);
+  let arguments = (ins HWIntegerType:$lhs, 
+                       HWIntegerType:$rhs);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  // let hasCustomAssemblyFormat = true;
-  let assemblyFormat =
-    "$multiplicand `,` $multiplier attr-dict `:` functional-type(operands, results)";
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` functional-type(operands, results)
+  }];
   let hasCanonicalizer = true;
 
   let builders = [
