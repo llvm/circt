@@ -46,7 +46,8 @@ def CompressOp : DatapathOp<"compress",
   let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  let hasCustomAssemblyFormat = true;
+  let assemblyFormat = 
+    "$inputs attr-dict `:` custom<CompressFormat>(type($inputs), type($results))";
   let hasVerifier = 1;
   let hasCanonicalizer = true;
 

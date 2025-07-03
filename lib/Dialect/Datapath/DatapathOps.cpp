@@ -30,97 +30,68 @@ LogicalResult CompressOp::verify() {
   return success();
 }
 
-ParseResult CompressOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
-
-  if (parser.parseOperandList(operands))
+// Parser for the custom type format
+// Parser for "<num-inputs> x <input-type> -> <output-type>"
+static ParseResult parseCompressFormat(
+    OpAsmParser &parser,
+    SmallVectorImpl<Type> &inputTypes,
+    SmallVectorImpl<Type> &resultTypes) {
+  
+  int64_t inputCount;
+  Type inputElementType;
+  
+  if (parser.parseInteger(inputCount) ||
+      parser.parseKeyword("x") ||
+      parser.parseType(inputElementType))
     return failure();
-
-  if (parser.parseColon())
+  
+  // Parse arrow
+  if (parser.parseArrow())
     return failure();
-
-  size_t numOperands;
-  if (parser.parseInteger(numOperands))
+  
+  // Parse output types
+  if (parser.parseLParen())
     return failure();
-
-  if (parser.parseKeyword("x"))
+  
+  Type resultType;
+  if (parser.parseType(resultType))
     return failure();
-
-  Type operandType;
-  if (parser.parseType(operandType))
-    return failure();
-
-  // Verify the number of operands
-  if (numOperands != operands.size()) {
-    return parser.emitError(
-        parser.getNameLoc(),
-        "number of operands does not match specified count");
+  
+  resultTypes.push_back(resultType);
+  
+  // Parse additional output types
+  while (parser.parseOptionalComma().succeeded()) {
+    if (parser.parseType(resultType))
+      return failure();
+    resultTypes.push_back(resultType);
   }
-
-  SmallVector<Type, 2> resultTypes;
-  if (parser.parseArrow() || parser.parseLParen() ||
-      parser.parseTypeList(resultTypes) || parser.parseRParen())
+  
+  if (parser.parseRParen())
     return failure();
-
-  // Resolve the operands
-  SmallVector<Type> operandTypes(operands.size(), operandType);
-  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(),
-                             result.operands))
-    return failure();
-
-  result.addTypes(resultTypes);
-
+  
+  // Fill input types
+  inputTypes.assign(inputCount, inputElementType);
+  
   return success();
 }
 
-// Custom printer for the CompressOp
-void CompressOp::print(OpAsmPrinter &p) {
-  p << " " << getOperands();
-  Type operandType = getOperand(0).getType();
-  p << " : " << getNumOperands() << " x " << operandType << " -> (";
-  llvm::interleaveComma(getResultTypes(), p);
-  p << ")";
+// Printer for "<num-inputs> x <input-type> -> <output-type>"
+static void printCompressFormat(
+    OpAsmPrinter &printer,
+    Operation *op,
+    TypeRange inputTypes,
+    TypeRange resultTypes) {
+  
+  // Print input types as "count x type"
+  printer << inputTypes.size() << " x " << inputTypes[0];
+  
+  printer << " -> ";
+  
+  // Print output types as tuple
+  printer << "(";
+  llvm::interleaveComma(resultTypes, printer);
+  printer << ")";
 }
-
-// ParseResult PartialProductOp::parse(OpAsmParser &parser,
-//                                     OperationState &result) {
-//   SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
-
-//   if (parser.parseOperandList(operands))
-//     return failure();
-
-//   if (parser.parseColon())
-//     return failure();
-
-//   size_t numResults;
-//   if (parser.parseInteger(numResults))
-//     return failure();
-
-//   if (parser.parseKeyword("x"))
-//     return failure();
-
-//   Type resultType;
-//   if (parser.parseType(resultType))
-//     return failure();
-
-//   // Resolve the operands
-//   SmallVector<Type> operandTypes(operands.size(), resultType);
-//   if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(),
-//                              result.operands))
-//     return failure();
-
-//   SmallVector<Type> resultTypes(numResults, resultType);
-//   result.addTypes(resultTypes);
-
-//   return success();
-// }
-
-// // Custom printer for the PartialProductOp
-// void PartialProductOp::print(OpAsmPrinter &p) {
-//   p << " " << getOperands();
-//   Type resultType = getResult(0).getType();
-//   p << " : " << getNumResults() << " x " << resultType;
-// }
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
