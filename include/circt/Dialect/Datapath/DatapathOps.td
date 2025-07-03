@@ -60,7 +60,7 @@ def CompressOp : DatapathOp<"compress",
 }
 
 // Construct partial product array from two operands
-def PartialProductOp : DatapathOp<"pp", 
+def PartialProductOp : DatapathOp<"partial_product", 
                                     [Pure, SameTypeOperands, 
                                      SameOperandsAndResultType, Commutative]> {
   let summary = "Generate partial products from multiplying the operands";
@@ -72,7 +72,7 @@ def PartialProductOp : DatapathOp<"pp",
 
     Example:
     ```mlir
-    %0:8 = datapath.pp %a, %b : 8 x i8
+    %0:8 = datapath.partial_product %a, %b : 8 x i8
     ```
   }];
   let arguments = (ins HWIntegerType:$multiplicand, 

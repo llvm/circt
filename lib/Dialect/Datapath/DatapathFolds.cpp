@@ -42,13 +42,13 @@ struct FoldCompressIntoCompress
   LogicalResult matchAndRewrite(datapath::CompressOp compOp,
                                 PatternRewriter &rewriter) const override {
     auto operands = compOp.getOperands();
-    SmallVector<Value, 8> processedCompressorResults;
+    SmallSetVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
 
     for (Value operand : operands) {
 
       // Skip if already processed this compressor
-      if (llvm::is_contained(processedCompressorResults, operand))
+      if (processedCompressorResults.contains(operand))
         continue;
 
       // If the operand has multiple uses, we do not fold it into a compress
