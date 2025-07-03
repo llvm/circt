@@ -32,61 +32,56 @@ LogicalResult CompressOp::verify() {
 
 // Parser for the custom type format
 // Parser for "<num-inputs> x <input-type> -> <output-type>"
-static ParseResult parseCompressFormat(
-    OpAsmParser &parser,
-    SmallVectorImpl<Type> &inputTypes,
-    SmallVectorImpl<Type> &resultTypes) {
-  
+static ParseResult parseCompressFormat(OpAsmParser &parser,
+                                       SmallVectorImpl<Type> &inputTypes,
+                                       SmallVectorImpl<Type> &resultTypes) {
+
   int64_t inputCount;
   Type inputElementType;
-  
-  if (parser.parseInteger(inputCount) ||
-      parser.parseKeyword("x") ||
+
+  if (parser.parseInteger(inputCount) || parser.parseKeyword("x") ||
       parser.parseType(inputElementType))
     return failure();
-  
+
   // Parse arrow
   if (parser.parseArrow())
     return failure();
-  
+
   // Parse output types
   if (parser.parseLParen())
     return failure();
-  
+
   Type resultType;
   if (parser.parseType(resultType))
     return failure();
-  
+
   resultTypes.push_back(resultType);
-  
+
   // Parse additional output types
   while (parser.parseOptionalComma().succeeded()) {
     if (parser.parseType(resultType))
       return failure();
     resultTypes.push_back(resultType);
   }
-  
+
   if (parser.parseRParen())
     return failure();
-  
+
   // Fill input types
   inputTypes.assign(inputCount, inputElementType);
-  
+
   return success();
 }
 
 // Printer for "<num-inputs> x <input-type> -> <output-type>"
-static void printCompressFormat(
-    OpAsmPrinter &printer,
-    Operation *op,
-    TypeRange inputTypes,
-    TypeRange resultTypes) {
-  
+static void printCompressFormat(OpAsmPrinter &printer, Operation *op,
+                                TypeRange inputTypes, TypeRange resultTypes) {
+
   // Print input types as "count x type"
   printer << inputTypes.size() << " x " << inputTypes[0];
-  
+
   printer << " -> ";
-  
+
   // Print output types as tuple
   printer << "(";
   llvm::interleaveComma(resultTypes, printer);
