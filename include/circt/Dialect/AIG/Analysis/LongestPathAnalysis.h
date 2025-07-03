@@ -21,9 +21,12 @@
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/JSON.h"
+#include <memory>
 #include <variant>
 
 namespace mlir {
@@ -242,9 +245,13 @@ public:
     return "aig.longest-path-analysis-top";
   }
 
+  MLIRContext *getContext() const { return ctx; }
+
 private:
   struct Impl;
   Impl *impl;
+
+  mlir::MLIRContext *ctx;
 };
 
 // A wrapper class for the longest path analysis that also traces debug points.
@@ -254,6 +261,27 @@ public:
   LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
       : LongestPathAnalysis(moduleOp, am, {true}) {}
 };
+
+// A collection of longest paths. The data structure owns the paths, and used
+// for computing statistics and CAPI.
+class LongestPathCollection {
+public:
+  LongestPathCollection(MLIRContext *ctx) : ctx(ctx){};
+  const DataflowPath &getPath(unsigned index) const { return paths[index]; }
+  MLIRContext *getContext() const { return ctx; }
+  llvm::SmallVector<DataflowPath, 64> paths;
+
+  // Sort the paths by delay in descending order.
+  void sortInDescendingOrder() {
+    llvm::sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
+      return a.getDelay() > b.getDelay();
+    });
+  }
+
+private:
+  MLIRContext *ctx;
+};
+
 } // namespace aig
 } // namespace circt
 
