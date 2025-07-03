@@ -21,11 +21,25 @@ def LowerWordToBits : Pass<"aig-lower-word-to-bits", "hw::HWModuleOp"> {
 }
 
 def PrintLongestPathAnalysis : Pass<"aig-print-longest-path-analysis", "mlir::ModuleOp"> {
-  let summary = "Print longest path analysis";
+  let summary = "Print longest path analysis results with detailed timing statistics";
+  let description = [{
+    This pass performs longest path analysis on AIG circuits and outputs detailed
+    timing information including:
+    - Delay distribution statistics showing timing levels and path counts
+    - Critical path details for the top N fanout points
+    - Path history with intermediate debug points for detailed analysis
+
+    The analysis considers each AIG and-inverter operation to have unit delay and
+    computes maximum delays through combinational paths across module hierarchies.
+  }];
   let options = [
-    Option<"outputFile", "output-file", "std::string", "\"-\"", "Output file">,
-    Option<"test", "test", "bool", "false", "Emit longest paths to the diagnostics.">,
-    Option<"showTopKPercent", "show-top-k-percent", "int", "5", "The size of the longest paths to show.">
+    Option<"outputFile", "output-file", "std::string", "\"-\"",
+           "Output file for analysis results (use '-' for stdout)">,
+    Option<"test", "test", "bool", "false",
+           "Emit longest paths as diagnostic remarks for testing">,
+    Option<"showTopKPercent", "show-top-k-percent", "int", "5", "The size of the longest paths to show.">,
+    Option<"emitJSON", "emit-json", "bool", "false",
+           "Output analysis results in JSON format">
   ];
 }
 

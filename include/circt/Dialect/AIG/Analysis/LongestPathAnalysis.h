@@ -23,6 +23,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
+#include "llvm/Support/JSON.h"
 #include <variant>
 
 namespace mlir {
@@ -133,11 +134,11 @@ public:
   const OutputPort &getFanOutAsPort() const {
     return std::get<OutputPort>(fanOut);
   }
-  hw::HWModuleOp getRoot() { return root; }
+  hw::HWModuleOp getRoot() const { return root; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const {
     return path.history;
   }
-  const OpenPath &getPath() { return path; }
+  const OpenPath &getPath() const { return path; }
 
   // Get source location for the fanout point (for diagnostics)
   Location getFanOutLoc();
@@ -159,6 +160,9 @@ private:
   OpenPath path;       // The actual timing path with history
   hw::HWModuleOp root; // Root module for this path
 };
+
+// JSON serialization for DataflowPath
+llvm::json::Value toJSON(const circt::aig::DataflowPath &path);
 
 // Options for the longest path analysis.
 struct LongestPathAnalysisOption {
