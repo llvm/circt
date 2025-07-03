@@ -9,6 +9,7 @@
 #include "CIRCTModules.h"
 
 #include "circt-c/Conversion.h"
+#include "circt-c/Dialect/AIG.h"
 #include "circt-c/Dialect/Arc.h"
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/DC.h"
@@ -49,6 +50,7 @@
 namespace nb = nanobind;
 
 static void registerPasses() {
+  registerAIGPasses();
   registerArcPasses();
   registerCombPasses();
   registerDCPasses();
@@ -80,6 +82,10 @@ NB_MODULE(_circt, m) {
         MlirContext context = mlirPythonCapsuleToContext(wrappedCapsule.ptr());
 
         // Collect CIRCT dialects to register.
+        MlirDialectHandle aig = mlirGetDialectHandle__aig__();
+        mlirDialectHandleRegisterDialect(aig, context);
+        mlirDialectHandleLoadDialect(aig, context);
+
         MlirDialectHandle comb = mlirGetDialectHandle__comb__();
         mlirDialectHandleRegisterDialect(comb, context);
         mlirDialectHandleLoadDialect(comb, context);
@@ -179,6 +185,8 @@ NB_MODULE(_circt, m) {
     mlirExportSplitVerilog(mod, cDirectory);
   });
 
+  nb::module_ aig = m.def_submodule("_aig", "AIG API");
+  circt::python::populateDialectAIGSubmodule(aig);
   nb::module_ esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
   nb::module_ msft = m.def_submodule("_msft", "MSFT API");
