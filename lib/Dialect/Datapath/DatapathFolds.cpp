@@ -1,4 +1,4 @@
-//===- DatapathFolds.cpp - Folds + Canonicalization for datapath ops-------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -22,6 +22,9 @@ using namespace matchers;
 //===----------------------------------------------------------------------===//
 // Compress Operation
 //===----------------------------------------------------------------------===//
+// Check that all compressor results are included in this list of operands
+// If not we must take care as manipulating compressor results independently
+// could easily introduce a non-equivalent representation.
 static bool areAllCompressorResultsSummed(ValueRange compressResults,
                                           ValueRange operands) {
   for (auto result : compressResults) {
@@ -38,12 +41,10 @@ struct FoldCompressIntoCompress
   // compress(compress(a,b,c), add(e,f)) -> compress(a,b,c,e,f)
   LogicalResult matchAndRewrite(datapath::CompressOp compOp,
                                 PatternRewriter &rewriter) const override {
-    // Get operands of the AddOp
     auto operands = compOp.getOperands();
     SmallVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
 
-    // Check if any operand is a CompressOp and collect all operands
     for (Value operand : operands) {
 
       // Skip if already processed this compressor
@@ -51,7 +52,7 @@ struct FoldCompressIntoCompress
         continue;
 
       // If the operand has multiple uses, we do not fold it into a compress
-      // operation, so we treat it as a regular operand.
+      // operation, so we treat it as a regular operand to maintain sharing.
       if (!operand.hasOneUse()) {
         newCompressOperands.push_back(operand);
         continue;
@@ -65,7 +66,8 @@ struct FoldCompressIntoCompress
           return failure();
 
         llvm::append_range(newCompressOperands, compressOp.getOperands());
-        // Only process each compressor once
+        // Only process each compressor once as multiple operands will point
+        // to the same defining operation
         llvm::append_range(processedCompressorResults, compressOp.getResults());
         continue;
       }
@@ -95,16 +97,18 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 
   LogicalResult matchAndRewrite(comb::AddOp addOp,
                                 PatternRewriter &rewriter) const override {
+    // comb.add canonicalization patterns handle folding add operations
     if (addOp.getNumOperands() <= 2)
-      return failure(); // Not enough operands to fold
+      return failure();
 
     // Get operands of the AddOp
     auto operands = addOp.getOperands();
     SmallVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
+    // Only construct compressor if can form a larger compressor than what
+    // is currently an input of this add
     bool shouldFold = false;
 
-    // Check if any operand is a CompressOp and collect all operands
     for (Value operand : operands) {
 
       // Skip if already processed this compressor
@@ -147,14 +151,14 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 
     // Only fold if we have constructed a larger compressor than what was
     // already there
-    if (!(shouldFold & (newCompressOperands.size() > addOp.getNumOperands())))
+    if (!(shouldFold))
       return failure();
 
     // Create a new CompressOp with all collected operands
     auto newCompressOp = rewriter.create<datapath::CompressOp>(
         addOp.getLoc(), newCompressOperands, 2);
 
-    // Replace the original AddOp with our new CompressOp
+    // Replace the original AddOp with a new add(compress(inputs))
     rewriter.replaceOpWithNewOp<comb::AddOp>(addOp, newCompressOp.getResults(),
                                              true);
     return success();
@@ -168,29 +172,19 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
                                 PatternRewriter &rewriter) const override {
     auto inputs = op.getInputs();
     auto size = inputs.size();
-    assert(size > 2 && "expected 3 or more operands");
 
     APInt value;
 
     // compress(..., 0) -> compress(...) -- identity
     if (matchPattern(inputs.back(), m_ConstantInt(&value)) && value.isZero()) {
-      // Compressor should be replaced by an add
-      auto resultWidth = op.getResult(0).getType().getIntOrFloatBitWidth();
-      auto zero = rewriter.create<hw::ConstantOp>(op.getLoc(),
-                                                  APInt::getZero(resultWidth));
-      if (size == 3) {
-        // 3 input compressor must produce exactly two results
-        auto newAddOp =
-            rewriter.create<comb::AddOp>(op.getLoc(), inputs.drop_back(), true);
 
-        rewriter.replaceOp(op, {newAddOp.getResult(), zero});
+      // If only reducing by one row and contains zero - pass through operands
+      if (size - 1 == op.getNumResults()) {
+        rewriter.replaceOp(op, inputs.drop_back());
         return success();
       }
 
-      // TODO: determine how to compress this case
-      if (size - 1 == op.getNumResults())
-        return failure();
-
+      // Default create a compressor with fewer arguments
       auto newCompressOp = rewriter.create<CompressOp>(
           op.getLoc(), inputs.drop_back(), op.getNumResults());
 
@@ -219,9 +213,7 @@ struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
     auto operands = op.getOperands();
-
-    auto inputType = operands[0].getType();
-    unsigned inputWidth = inputType.getIntOrFloatBitWidth();
+    unsigned inputWidth = operands[0].getType().getIntOrFloatBitWidth();
 
     // TODO: implement a constant multiplication for the PartialProductOp
 
