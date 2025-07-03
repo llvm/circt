@@ -33,17 +33,18 @@ public:
 
   /// Lint the specified module.
   LogicalResult lint() {
-    auto walkResult = fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
+    bool failed = false;
+    fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
       if (isa<WhenOp>(op))
         return WalkResult::skip();
       if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
         if (checkAssert(op).failed())
-          return WalkResult::interrupt();
+          failed = true;
 
       return WalkResult::advance();
     });
 
-    if (walkResult.wasInterrupted())
+    if (failed)
       return failure();
 
     return success();
