@@ -1382,7 +1382,7 @@ LongestPathAnalysis::~LongestPathAnalysis() { delete impl; }
 LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
     const LongestPathAnalysisOption &option)
-    : impl(new Impl(moduleOp, am, option)) {}
+    : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {}
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return impl->isAnalysisAvailable(moduleName);
