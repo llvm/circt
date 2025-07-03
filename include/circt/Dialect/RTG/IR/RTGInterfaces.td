@@ -57,7 +57,7 @@ def ValidationTypeInterface : TypeInterface<"ValidationTypeInterface"> {
       Returns whether the specified type is a valid content type, e.g., if this
       type is an integer register it is a handle to a bit-vector stored in that
       register, thus an immediate of the width of the register is a valid
-      content tyep.
+      content type.
     }], "bool", "isValidContentType", (ins "mlir::Type":$contentType)>,
 
     InterfaceMethod<[{
