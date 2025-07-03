@@ -68,18 +68,30 @@ def PartialProductOp : DatapathOp<"partial_product",
     The first step in a multiplication is to generate partial products, which 
     when summed, yield the product of the two operands. The partial
     product operator does not specify an implementation, only that summing the 
-    results will yield the product of the two operands. 
+    results will yield the product of the two operands. The number of results 
+    corresponds to the rows of a partial product array, which by default is
+    equal to the width of the inputs. 
+    
+    Verilog Example 4-bit multiplication:
+    ```verilog
+        partial_product[0][3:0] = {4{a[0]}} & b
+        ...
+        partial_product[3][3:0] = {4{a[3]}} & b
+        ab[3:0] = partial_product[0] + ... + partial_product[3] // = a*b
+    ```
 
-    Example:
+    Example using `datapath` dialect:
     ```mlir
-    %0:8 = datapath.partial_product %a, %b : 8 x i8
+    %0:4 = datapath.partial_product %a, %b : 4 x i4
     ```
   }];
   let arguments = (ins HWIntegerType:$multiplicand, 
                        HWIntegerType:$multiplier);
   let results   = (outs Variadic<HWIntegerType>:$results);
 
-  let hasCustomAssemblyFormat = true;
+  // let hasCustomAssemblyFormat = true;
+  let assemblyFormat =
+    "$multiplicand `,` $multiplier attr-dict `:` functional-type(operands, results)";
   let hasCanonicalizer = true;
 
   let builders = [

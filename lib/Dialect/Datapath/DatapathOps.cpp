@@ -82,45 +82,45 @@ void CompressOp::print(OpAsmPrinter &p) {
   p << ")";
 }
 
-ParseResult PartialProductOp::parse(OpAsmParser &parser,
-                                    OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
+// ParseResult PartialProductOp::parse(OpAsmParser &parser,
+//                                     OperationState &result) {
+//   SmallVector<OpAsmParser::UnresolvedOperand, 8> operands;
 
-  if (parser.parseOperandList(operands))
-    return failure();
+//   if (parser.parseOperandList(operands))
+//     return failure();
 
-  if (parser.parseColon())
-    return failure();
+//   if (parser.parseColon())
+//     return failure();
 
-  size_t numResults;
-  if (parser.parseInteger(numResults))
-    return failure();
+//   size_t numResults;
+//   if (parser.parseInteger(numResults))
+//     return failure();
 
-  if (parser.parseKeyword("x"))
-    return failure();
+//   if (parser.parseKeyword("x"))
+//     return failure();
 
-  Type resultType;
-  if (parser.parseType(resultType))
-    return failure();
+//   Type resultType;
+//   if (parser.parseType(resultType))
+//     return failure();
 
-  // Resolve the operands
-  SmallVector<Type> operandTypes(operands.size(), resultType);
-  if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(),
-                             result.operands))
-    return failure();
+//   // Resolve the operands
+//   SmallVector<Type> operandTypes(operands.size(), resultType);
+//   if (parser.resolveOperands(operands, operandTypes, parser.getNameLoc(),
+//                              result.operands))
+//     return failure();
 
-  SmallVector<Type> resultTypes(numResults, resultType);
-  result.addTypes(resultTypes);
+//   SmallVector<Type> resultTypes(numResults, resultType);
+//   result.addTypes(resultTypes);
 
-  return success();
-}
+//   return success();
+// }
 
-// Custom printer for the PartialProductOp
-void PartialProductOp::print(OpAsmPrinter &p) {
-  p << " " << getOperands();
-  Type resultType = getResult(0).getType();
-  p << " : " << getNumResults() << " x " << resultType;
-}
+// // Custom printer for the PartialProductOp
+// void PartialProductOp::print(OpAsmPrinter &p) {
+//   p << " " << getOperands();
+//   Type resultType = getResult(0).getType();
+//   p << " : " << getNumResults() << " x " << resultType;
+// }
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

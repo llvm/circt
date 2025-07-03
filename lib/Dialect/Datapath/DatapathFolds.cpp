@@ -42,7 +42,7 @@ struct FoldCompressIntoCompress
   LogicalResult matchAndRewrite(datapath::CompressOp compOp,
                                 PatternRewriter &rewriter) const override {
     auto operands = compOp.getOperands();
-    SmallSetVector<Value, 8> processedCompressorResults;
+    llvm::SmallSetVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
 
     for (Value operand : operands) {
@@ -68,7 +68,8 @@ struct FoldCompressIntoCompress
         llvm::append_range(newCompressOperands, compressOp.getOperands());
         // Only process each compressor once as multiple operands will point
         // to the same defining operation
-        llvm::append_range(processedCompressorResults, compressOp.getResults());
+        processedCompressorResults.insert(compressOp.getResults().begin(),
+                                          compressOp.getResults().end());
         continue;
       }
 
@@ -103,7 +104,7 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 
     // Get operands of the AddOp
     auto operands = addOp.getOperands();
-    SmallVector<Value, 8> processedCompressorResults;
+    llvm::SmallSetVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
     // Only construct compressor if can form a larger compressor than what
     // is currently an input of this add
@@ -112,7 +113,7 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
     for (Value operand : operands) {
 
       // Skip if already processed this compressor
-      if (llvm::is_contained(processedCompressorResults, operand))
+      if (processedCompressorResults.contains(operand))
         continue;
 
       // If the operand has multiple uses, we do not fold it into a compress
@@ -134,7 +135,8 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
         shouldFold |= !newCompressOperands.empty();
         llvm::append_range(newCompressOperands, compressOp.getOperands());
         // Only process each compressor once
-        llvm::append_range(processedCompressorResults, compressOp.getResults());
+        processedCompressorResults.insert(compressOp.getResults().begin(),
+                                          compressOp.getResults().end());
         continue;
       }
 
