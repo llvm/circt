@@ -1445,7 +1445,7 @@ LongestPathAnalysis::~LongestPathAnalysis() { delete impl; }
 LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
     const LongestPathAnalysisOption &option)
-    : impl(new Impl(moduleOp, am, option)) {}
+    : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {}
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return impl->isAnalysisAvailable(moduleName);
@@ -1493,4 +1493,27 @@ LongestPathAnalysis::getAllPaths(StringAttr moduleName,
 
 ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
+}
+
+// ===----------------------------------------------------------------------===//
+// LongestPathCollection
+// ===----------------------------------------------------------------------===//
+
+void LongestPathCollection::sortInDescendingOrder() {
+  llvm::sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
+    return a.getDelay() > b.getDelay();
+  });
+}
+
+void LongestPathCollection::sortAndDropNonCriticalPathsPerFanOut() {
+  sortInDescendingOrder();
+  // Deduplicate paths by fanout point, keeping only the worst-case delay per
+  // fanOut. This gives us the critical delay for each fanout point in the
+  // design
+  llvm::DenseSet<DataflowPath::FanOutType> seen;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (seen.insert(paths[i].getFanOut()).second)
+      paths[seen.size() - 1] = std::move(paths[i]);
+  }
+  paths.resize(seen.size());
 }

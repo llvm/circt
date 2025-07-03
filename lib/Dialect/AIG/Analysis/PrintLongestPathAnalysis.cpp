@@ -71,16 +71,17 @@ private:
 LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
     const LongestPathAnalysis &analysis, igraph::InstancePathCache &pathCache,
     hw::HWModuleOp top, llvm::raw_ostream *os, llvm::json::OStream *jsonOS) {
-  SmallVector<DataflowPath> results;
   auto moduleName = top.getModuleNameAttr();
 
+  LongestPathCollection collection(top.getContext());
+
   // Get all timing paths with full hierarchical elaboration
-  if (failed(analysis.getAllPaths(moduleName, results, true)))
+  if (failed(analysis.getAllPaths(moduleName, collection.paths, true)))
     return failure();
 
   // Emit diagnostics if testing is enabled (for regression testing)
   if (test) {
-    for (auto &result : results) {
+    for (auto &result : collection.paths) {
       auto fanOutLoc = result.getFanOutLoc();
       auto diag = mlir::emitRemark(fanOutLoc);
       SmallString<128> buf;
@@ -90,37 +91,21 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
     }
   }
 
-  // Deduplicate paths by fanout point, keeping only the worst-case delay per
-  // fanout This gives us the critical delay for each fanout point in the design
-  SmallVector<DataflowPath> longestPathForEachFanOut;
-  llvm::DenseMap<DataflowPath::FanOutType, size_t> index;
-  for (auto &path : results) {
-    assert(path.getFanIn().value);
-    auto [it, inserted] =
-        index.try_emplace(path.getFanOut(), longestPathForEachFanOut.size());
-    if (inserted)
-      longestPathForEachFanOut.push_back(path);
-    else if (longestPathForEachFanOut[it->second].getDelay() < path.getDelay())
-      longestPathForEachFanOut[it->second] =
-          path; // Keep the path with higher delay
-  }
-
-  // Sort all timing paths by delay value (ascending order for statistics)
-  llvm::sort(longestPathForEachFanOut, [&](const auto &lhs, const auto &rhs) {
-    return lhs.getDelay() < rhs.getDelay();
-  });
+  size_t oldPathCount = collection.paths.size();
+  collection.sortAndDropNonCriticalPathsPerFanOut();
+  auto &longestPathForEachFanOut = collection.paths;
 
   // Print analysis header
   if (os) {
     *os << "# Longest Path Analysis result for " << top.getModuleNameAttr()
         << "\n"
-        << "Found " << results.size() << " paths\n"
+        << "Found " << oldPathCount << " paths\n"
         << "Found " << longestPathForEachFanOut.size()
         << " unique fanout points\n"
         << "Maximum path delay: "
         << (longestPathForEachFanOut.empty()
                 ? 0
-                : longestPathForEachFanOut.back().getDelay())
+                : longestPathForEachFanOut.front().getDelay())
         << "\n";
 
     *os << "## Showing Levels\n";
@@ -171,16 +156,17 @@ void PrintLongestPathAnalysisPass::printTimingLevelStatistics(
   });
 
   // Process paths grouped by delay level (paths are already sorted by delay)
-  for (size_t index = 0; index < allTimingPaths.size();) {
+  if (allTimingPaths.empty())
+    return;
+  for (int64_t index = allTimingPaths.size() - 1; index >= 0;) {
     int64_t oldIndex = index;
-    auto currentDelay = allTimingPaths[index++].getDelay();
+    auto currentDelay = allTimingPaths[index--].getDelay();
 
     // Count all paths with the same delay value to create histogram bins
-    while (index < allTimingPaths.size() &&
-           allTimingPaths[index].getDelay() == currentDelay)
-      index++;
+    while (index >= 0 && allTimingPaths[index].getDelay() == currentDelay)
+      --index;
 
-    int64_t pathsWithSameDelay = index - oldIndex;
+    int64_t pathsWithSameDelay = oldIndex - index;
 
     cumulativeCount += pathsWithSameDelay;
 
@@ -233,7 +219,7 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
   // sorted ascending)
   for (size_t i = 0; i < std::min<size_t>(topKCount, allTimingPaths.size());
        ++i) {
-    auto &path = allTimingPaths[allTimingPaths.size() - i - 1];
+    auto &path = allTimingPaths[i];
     if (jsonOS)
       jsonOS->value(toJSON(path));
 
