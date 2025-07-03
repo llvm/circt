@@ -19,13 +19,13 @@ LogicalResult CompressOp::verify() {
   // The compressor must reduce the number of operands by at least 1 otherwise
   // it fails to perform any reduction.
   if (getNumOperands() < 3)
-    return emitOpError("Requires 3 or more arguments - otherwise use add");
+    return emitOpError("requires 3 or more arguments - otherwise use add");
 
   if (getNumResults() >= getNumOperands())
-    return emitOpError("Must reduce the number of operands by at least 1");
+    return emitOpError("must reduce the number of operands by at least 1");
 
   if (getNumResults() < 2)
-    return emitOpError("Must produce at least 2 results");
+    return emitOpError("must produce at least 2 results");
 
   return success();
 }

@@ -96,6 +96,7 @@ struct FoldCompressIntoCompress
 struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
   using OpRewritePattern::OpRewritePattern;
 
+  // add(compress(a,b,c),d) -> add(compress(a,b,c,d))
   LogicalResult matchAndRewrite(comb::AddOp addOp,
                                 PatternRewriter &rewriter) const override {
     // comb.add canonicalization patterns handle folding add operations
