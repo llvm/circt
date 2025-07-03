@@ -44,8 +44,7 @@ namespace {
 struct PrintLongestPathAnalysisPass
     : public impl::PrintLongestPathAnalysisBase<PrintLongestPathAnalysisPass> {
   void runOnOperation() override;
-  using impl::PrintLongestPathAnalysisBase<
-      PrintLongestPathAnalysisPass>::PrintLongestPathAnalysisBase;
+  using PrintLongestPathAnalysisBase::PrintLongestPathAnalysisBase;
   LogicalResult printAnalysisResult(const LongestPathAnalysis &analysis,
                                     igraph::InstancePathCache &pathCache,
                                     hw::HWModuleOp top, llvm::raw_ostream *os,
