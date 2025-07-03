@@ -849,5 +849,21 @@ def ConvertAIGToComb: Pass<"convert-aig-to-comb", "hw::HWModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertCombToDatapath
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
+  let summary = "Lower Comb ops to Datapath ops";
+  let description = [{
+    This pass converts arithmetic Comb operations into Datapath operations that 
+    leverage redundant number representations (carry save). Primarily for use
+    in the synthesis flow.
+  }];
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::datapath::DatapathDialect",
+    "circt::hw::HWDialect"
+  ];
+}
 
 #endif // CIRCT_CONVERSION_PASSES_TD

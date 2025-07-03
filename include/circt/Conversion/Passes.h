@@ -22,6 +22,7 @@
 #include "circt/Conversion/CalyxToHW.h"
 #include "circt/Conversion/CombToAIG.h"
 #include "circt/Conversion/CombToArith.h"
+#include "circt/Conversion/CombToDatapath.h"
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Conversion/DCToHW.h"
