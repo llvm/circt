@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   Sig2RegPass.cpp
   TemporalCodeMotionPass.cpp
   TemporalRegions.cpp
+  UnrollLoops.cpp
   WrapProceduralOps.cpp
 
   DEPENDS
