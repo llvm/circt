@@ -1772,7 +1772,7 @@ FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = (*this)->getParentOfType<CircuitOp>();
   for (auto layer : getKnownLayersAttr().getAsRange<SymbolRefAttr>()) {
     if (!symbolTable.lookupSymbolIn(circuitOp, layer))
-      return emitOpError() << "knows of unknown layer '" << layer << "'";
+      return emitOpError() << "references unknown layer '" << layer << "'";
   }
   for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>()) {
     if (!symbolTable.lookupSymbolIn(circuitOp, layer))
