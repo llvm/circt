@@ -353,7 +353,7 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 // -----
 
 firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
-  // expected-error @below {{op references unknown layer '@A'}}
+  // expected-error @below {{op knows undefined layer '@A'}}
   firrtl.extmodule @Ext() attributes {knownLayers=[@A]}
 }
 
@@ -2012,7 +2012,7 @@ firrtl.circuit "InvalidProbeAssociationWire_SymbolIsNotALayer" {
 // -----
 
 firrtl.circuit "UnknownEnabledLayer" {
-  // expected-error @below {{'firrtl.module' op enables unknown layer '@A'}}
+  // expected-error @below {{'firrtl.module' op enables undefined layer '@A'}}
   firrtl.module @UnknownEnabledLayer() attributes {layers = [@A]} {}
 }
 
