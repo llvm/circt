@@ -718,8 +718,6 @@ firrtl.circuit "Top" {
 
   firrtl.extmodule @ComponentA() attributes {knownLayers=[@Layer]}
   firrtl.extmodule @ComponentB() attributes {knownLayers=[]}
-
-
   // There should only be one include statement.
   // CHECK:     emit.file "layers-Top-Layer.sv"
   // CHECK:     sv.include local "layers-ComponentA-Layer.sv"

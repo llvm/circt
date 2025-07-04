@@ -586,7 +586,7 @@ struct SpecializeLayers {
     return nullptr;
   }
 
-  /// Specialize the known layers of an extmodule,.
+  /// Specialize the known layers of an extmodule.
   void specializeKnownLayers(FExtModuleOp module) {
     auto knownLayers = module.getKnownLayersAttr();
     module.setKnownLayersAttr(specializeKnownLayers(knownLayers));
