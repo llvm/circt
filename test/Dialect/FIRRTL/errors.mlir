@@ -362,7 +362,7 @@ firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
 firrtl.circuit "ExtModuleUsesUnknownLayerInProbeColor" {
   firrtl.layer @A bind {}
 
-  // expected-error @below {{op references unknown layer}}
+  // expected-error @below {{op references unknown layers}}
   // expected-note  @below {{unknown layers: @A}}
   firrtl.extmodule @Ext(out p: !firrtl.probe<uint<1>, @A>)
 
@@ -373,7 +373,7 @@ firrtl.circuit "ExtModuleUsesUnknownLayerInProbeColor" {
 firrtl.circuit "ExtModuleUseUnkownLayerInEnableLayerSpec" {
   firrtl.layer @A bind {}
 
-  // expected-error @below {{op references unknown layer}}
+  // expected-error @below {{op references unknown layers}}
   // expected-note  @below {{unknown layers: @A}}
   firrtl.extmodule @Ext() attributes {layers=[@A]}
 }
