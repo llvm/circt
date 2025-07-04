@@ -1749,14 +1749,13 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
 }
 
 LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  if (failed(
-          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+  if (failed(verifyPortSymbolUses(*this, symbolTable)))
     return failure();
 
-  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
   for (auto layer : getLayers()) {
     if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
-      return emitOpError() << "enables unknown layer '" << layer << "'";
+      return emitOpError() << "enables undefined layer '" << layer << "'";
   }
 
   return success();
@@ -1764,19 +1763,17 @@ LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-
-  if (failed(
-          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+  if (failed(verifyPortSymbolUses(*this, symbolTable)))
     return failure();
 
-  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
   for (auto layer : getKnownLayersAttr().getAsRange<SymbolRefAttr>()) {
     if (!symbolTable.lookupSymbolIn(circuitOp, layer))
-      return emitOpError() << "references unknown layer '" << layer << "'";
+      return emitOpError() << "knows undefined layer '" << layer << "'";
   }
   for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>()) {
     if (!symbolTable.lookupSymbolIn(circuitOp, layer))
-      return emitOpError() << "enables unknown layer '" << layer << "'";
+      return emitOpError() << "enables undefined layer '" << layer << "'";
   }
 
   return success();
@@ -1784,12 +1781,12 @@ FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 FIntModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  return verifyPortSymbolUses(*this, symbolTable);
 }
 
 LogicalResult
 FMemModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  return verifyPortSymbolUses(*this, symbolTable);
 }
 
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
