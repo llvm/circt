@@ -212,7 +212,7 @@ void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
 //===----------------------------------------------------------------------===//
 struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
   using OpRewritePattern::OpRewritePattern;
-  
+
   // pp(concat(0,a), concat(0,b)) -> reduced number of results
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
