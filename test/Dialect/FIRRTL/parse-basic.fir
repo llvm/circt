@@ -1723,7 +1723,7 @@ circuit LayerEnabledModule:
 
 ;// -----
 
-FIRRTL version 5.0.0
+FIRRTL version 5.2.0
 
 ; CHECK-LABEL: firrtl.circuit "KnownLayers"
 circuit KnownLayers:

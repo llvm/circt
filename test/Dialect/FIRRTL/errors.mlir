@@ -353,7 +353,7 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 // -----
 
 firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
-  // expected-error @below {{op knows of unknown layer '@A'}}
+  // expected-error @below {{op references unknown layer '@A'}}
   firrtl.extmodule @Ext() attributes {knownLayers=[@A]}
 }
 
