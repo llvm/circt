@@ -2,8 +2,8 @@
 
 // CHECK-LABEL: @compressor
 hw.module @compressor(in %a : i4, in %b : i4, in %c : i4, out carry : i4, out save : i4) {
-  // CHECK-NEXT: datapath.compress %a, %b, %c : 3 x i4 -> (i4, i4)
-  %0:2 = datapath.compress %a, %b, %c : 3 x i4 -> (i4, i4)
+  // CHECK-NEXT: datapath.compress %a, %b, %c : i4 [3 -> 2]
+  %0:2 = datapath.compress %a, %b, %c : i4 [3 -> 2]
   hw.output %0#0, %0#1 : i4, i4
 }
 
