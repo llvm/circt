@@ -38,7 +38,7 @@ def CompressOp : DatapathOp<"compress",
 
     Example:
     ```mlir
-    %0:2 = datapath.compress %a, %b, %c : 3 x i16 -> (i16, i16)
+    %0:2 = datapath.compress %a, %b, %c : i16 [3 -> 2]
     ```
   }];
 
@@ -46,7 +46,7 @@ def CompressOp : DatapathOp<"compress",
   let results   = (outs Variadic<HWIntegerType>:$results);
 
   let assemblyFormat = [{
-    $inputs attr-dict `:` custom<CompressFormat>(type($inputs)) type(results)
+    $inputs attr-dict `:` custom<CompressFormat>(type($inputs), type($results))
   }];
   let hasVerifier = 1;
   let hasCanonicalizer = true;

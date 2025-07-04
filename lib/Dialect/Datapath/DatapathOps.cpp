@@ -31,42 +31,32 @@ LogicalResult CompressOp::verify() {
 }
 
 // Parser for the custom type format
-// Parser for "<num-inputs> x <input-type> -> <output-type>"
+// Parser for "<input-type> [<num-inputs> -> <num-outputs>]"
 static ParseResult parseCompressFormat(OpAsmParser &parser,
-                                       SmallVectorImpl<Type> &inputTypes) {
+                                       SmallVectorImpl<Type> &inputTypes,
+                                       SmallVectorImpl<Type> &resultTypes) {
 
-  int64_t inputCount;
+  int64_t inputCount, resultCount;
   Type inputElementType;
 
-  if (parser.parseInteger(inputCount) || parser.parseKeyword("x") ||
-      parser.parseType(inputElementType))
+  if (parser.parseType(inputElementType) || parser.parseLSquare() ||
+      parser.parseInteger(inputCount) || parser.parseArrow() ||
+      parser.parseInteger(resultCount) || parser.parseRSquare())
     return failure();
 
-  // Parse arrow
-  if (parser.parseArrow())
-    return failure();
-
-  // Parse output types
-  if (parser.parseLParen())
-    return failure();
-
-  if (parser.parseRParen())
-    return failure();
-
-  // Fill input types
+  // Inputs and results have same type
   inputTypes.assign(inputCount, inputElementType);
+  resultTypes.assign(resultCount, inputElementType);
 
   return success();
 }
 
-// Printer for "<num-inputs> x <input-type> -> <output-type>"
+// Printer for "<input-type> [<num-inputs> -> <num-outputs>]"
 static void printCompressFormat(OpAsmPrinter &printer, Operation *op,
-                                TypeRange inputTypes) {
+                                TypeRange inputTypes, TypeRange resultTypes) {
 
-  // Print input types as "count x type"
-  printer << inputTypes.size() << " x " << inputTypes[0];
-
-  printer << " -> ";
+  printer << inputTypes[0] << " [" << inputTypes.size() << " -> "
+          << resultTypes.size() << "]";
 }
 
 //===----------------------------------------------------------------------===//
