@@ -213,6 +213,7 @@ void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
 struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
   using OpRewritePattern::OpRewritePattern;
 
+  // pp(concat(0,a), concat(0,b)) -> reduced number of results
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
     auto operands = op.getOperands();
@@ -221,7 +222,6 @@ struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
     // TODO: implement a constant multiplication for the PartialProductOp
 
     size_t maxNonZeroBits = 0;
-    // pp(concat(0,a), concat(0,b)) -> reduce number of results
     for (Value operand : operands) {
       // If the extracted bits are all known, then return the result.
       auto knownBits = comb::computeKnownBits(operand);

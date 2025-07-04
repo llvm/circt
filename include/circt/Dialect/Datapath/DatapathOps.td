@@ -81,7 +81,7 @@ def PartialProductOp : DatapathOp<"partial_product",
 
     Example using `datapath` dialect:
     ```mlir
-    %0:4 = datapath.partial_product %a, %b : 4 x i4
+    %0:4 = datapath.partial_product %a, %b : (i4, i4) -> (i4, i4, i4, i4)
     ```
   }];
   let arguments = (ins HWIntegerType:$lhs, 
