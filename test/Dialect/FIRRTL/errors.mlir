@@ -352,9 +352,38 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 
 // -----
 
+firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
+  // expected-error @below {{op knows undefined layer '@A'}}
+  firrtl.extmodule @Ext() attributes {knownLayers=[@A]}
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUsesUnknownLayerInProbeColor" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layers}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext(out p: !firrtl.probe<uint<1>, @A>)
+
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUseUnkownLayerInEnableLayerSpec" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layers}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext() attributes {layers=[@A]}
+}
+
+// -----
+
 firrtl.circuit "InstanceMissingLayers" {
+  firrtl.layer @A bind {}
   // expected-note @below {{original module declared here}}
-  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {knownLayers = [@A], layers = [@A]}
   firrtl.module @InstanceMissingLayers() {
     // expected-error @below {{'firrtl.instance' op layers must be [@A], but got []}}
     %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1>)
@@ -1983,7 +2012,7 @@ firrtl.circuit "InvalidProbeAssociationWire_SymbolIsNotALayer" {
 // -----
 
 firrtl.circuit "UnknownEnabledLayer" {
-  // expected-error @below {{'firrtl.module' op enables unknown layer '@A'}}
+  // expected-error @below {{'firrtl.module' op enables undefined layer '@A'}}
   firrtl.module @UnknownEnabledLayer() attributes {layers = [@A]} {}
 }
 
