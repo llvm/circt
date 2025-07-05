@@ -1719,6 +1719,31 @@ circuit LayerEnabledModule:
 
 ;// -----
 
+FIRRTL version 5.0.0
+
+; CHECK-LABEL: firrtl.circuit "KnownLayers"
+circuit KnownLayers:
+  layer A, bind:
+  layer B, bind:
+    layer C, bind:
+
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayers
+  ; CHECK-SAME: knownLayers = [@A, @B, @B::@C]}
+  extmodule ExtModuleWithKnownLayers knownlayer A knownlayer B knownlayer B.C:
+
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayerAndEnabledLayers()
+  ; CHECK-SAME: knownLayers = [@A, @B::@C]
+  ; CHECK-SAME: layers = [@A, @B]
+  extmodule ExtModuleWithKnownLayerAndEnabledLayers enablelayer A knownlayer A enablelayer B knownlayer B.C:
+
+  public module KnownLayers enablelayer A enablelayer B.C:
+    ; CHECK: firrtl.instance ext1 interesting_name @ExtModuleWithKnownLayers()
+    inst ext1 of ExtModuleWithKnownLayers
+    ; CHECK: firrtl.instance ext2 interesting_name {layers = [@A, @B]} @ExtModuleWithKnownLayerAndEnabledLayers()
+    inst ext2 of ExtModuleWithKnownLayerAndEnabledLayers
+
+;// -----
+
 FIRRTL version 3.3.0
 ; CHECK-LABEL: circuit "StaticShiftRight"
 circuit StaticShiftRight:

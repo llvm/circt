@@ -352,9 +352,38 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 
 // -----
 
+firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
+  // expected-error @below {{op knows of unknown layer '@A'}}
+  firrtl.extmodule @Ext() attributes {knownLayers=[@A]}
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUsesUnknownLayerInProbeColor" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layer}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext(out p: !firrtl.probe<uint<1>, @A>)
+
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUseUnkownLayerInEnableLayerSpec" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layer}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext() attributes {layers=[@A]}
+}
+
+// -----
+
 firrtl.circuit "InstanceMissingLayers" {
+  firrtl.layer @A bind {}
   // expected-note @below {{original module declared here}}
-  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {knownLayers = [@A], layers = [@A]}
   firrtl.module @InstanceMissingLayers() {
     // expected-error @below {{'firrtl.instance' op layers must be [@A], but got []}}
     %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1>)
@@ -1832,18 +1861,6 @@ firrtl.circuit "ClassCannotHavePortSymbols" {
   // Not great diagnostic, but this should never happen so don't bother checking for it.
   // expected-error @below {{expected ')'}}
   firrtl.class @ClassWithPortSymbol(in %in: !firrtl.string sym @foo, in %in2 : !firrtl.string) {}
-}
-
-// -----
-
-// A bind layer cannot be nested under an inline layer as we can't lower it.
-firrtl.circuit "BindUnderInline" {
-  // expected-note @below {{layer with inline convention here}}
-  firrtl.layer @A inline {
-    // expected-error @below {{has bind convention and cannot be nested under a layer with inline convention}}
-    firrtl.layer @B bind {}
-  }
-  firrtl.module @BindUnderInline() {}
 }
 
 // -----
