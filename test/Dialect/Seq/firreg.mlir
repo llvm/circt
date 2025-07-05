@@ -928,3 +928,86 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
     //CHECK:   } else {
     //CHECK:     sv.passign %r1, %[[V2]] : i2
 }
+
+// Tests for registers buried under ifdef macros.
+
+// CHECK-LABEL: sv.macro.decl @MyMacro
+sv.macro.decl @MyMacro
+
+// Test for registers buried under an ifdef's "then" branch.
+
+// CHECK: hw.hierpath @RegUnderIfdef_reg [@RegUnderIfdef::@reg]
+// CHECK: @RegUnderIfdef
+hw.module @RegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK:   %reg = sv.reg sym @reg
+  // CHECK:   sv.if %reset {
+  // CHECK:     sv.passign %reg, %false_0 : i1
+  // CHECK:   } else {
+  // CHECK:     sv.passign %reg, %value : i1
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.ifdef.procedural @MyMacro {
+  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdef_reg : !hw.inout<i1>
+  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !hw.inout<i32>
+  // CHECK:     %[[VAL:.*]] = comb.extract %[[RNG]] from 0 : (i32) -> i1
+  // CHECK:     sv.bpassign %[[REG]], %[[VAL]] : i1
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
+
+// Test for registers buried under an ifdef's "else" branch.
+
+// CHECK: hw.hierpath @RegUnderIfdefElse_reg [@RegUnderIfdefElse::@reg]
+// CHECK: @RegUnderIfdefElse
+hw.module @RegUnderIfdefElse(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK: } else {
+  // CHECK:   %reg = sv.reg sym @reg
+  // CHECK:   sv.if %reset {
+  // CHECK:     sv.passign %reg, %false_0 : i1
+  // CHECK:   } else {
+  // CHECK:     sv.passign %reg, %value : i1
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+  } else {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.ifdef.procedural @MyMacro {
+  // CHECK:   } else {
+  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdefElse_reg : !hw.inout<i1>
+  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !hw.inout<i32>
+  // CHECK:     %[[VAL:.*]] = comb.extract %[[RNG]] from 0 : (i32) -> i1
+  // CHECK:     sv.bpassign %[[REG]], %[[VAL]] : i1
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
+
+// Test for registers with conflicting names, to ensure we are uniquing.
+
+// CHECK: hw.hierpath @RegUnderIfdefDupName_reg [@RegUnderIfdefDupName::@reg]
+// CHECK: hw.hierpath @RegUnderIfdefDupName_reg_0 [@RegUnderIfdefDupName::@reg_0]
+// CHECK: @RegUnderIfdefDupName
+hw.module @RegUnderIfdefDupName(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  } else {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  }
+  hw.output
+}
