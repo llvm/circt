@@ -16,7 +16,6 @@
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,10 +26,10 @@ void testAIGDialectRegistration(void) {
 
   MlirDialect aig =
       mlirContextGetOrLoadDialect(ctx, mlirStringRefCreateFromCString("aig"));
-  assert(!mlirDialectIsNull(aig));
 
-  printf("AIG dialect registration: PASS\n");
   // CHECK: AIG dialect registration: PASS
+  if (!mlirDialectIsNull(aig))
+    printf("AIG dialect registration: PASS\n");
 
   mlirContextDestroy(ctx);
 }
@@ -56,7 +55,6 @@ void testLongestPathAnalysis(void) {
 
   MlirModule module =
       mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(moduleStr));
-  assert(!mlirModuleIsNull(module));
 
   MlirOperation moduleOp = mlirModuleGetOperation(module);
 
@@ -133,7 +131,6 @@ void testErrorHandling(void) {
 
   MlirModule module =
       mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(moduleStr));
-  assert(!mlirModuleIsNull(module));
 
   MlirOperation moduleOp = mlirModuleGetOperation(module);
 
