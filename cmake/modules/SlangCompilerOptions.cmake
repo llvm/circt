@@ -1,7 +1,3 @@
-# slang uses exceptions
-set(LLVM_REQUIRES_EH ON)
-set(LLVM_REQUIRES_RTTI ON)
-
 # For ABI compatibility, define the DEBUG macro in debug builds. Slang sets this
 # internally. If we don't set this here as well, header-defined things like the
 # destructor of `Driver`, which is generated in ImportVerilog's compilation
@@ -15,9 +11,6 @@ add_compile_definitions($<$<CONFIG:Debug>:DEBUG>)
 if (MSVC)
   # No idea what to put here
 else ()
-  # slang uses exceptions; we intercept these in ImportVerilog
-  add_compile_options(-fexceptions)
-  add_compile_options(-frtti)
   # slang has some classes with virtual funcs but non-virtual destructor.
   add_compile_options(-Wno-non-virtual-dtor)
   # some other warnings we've seen

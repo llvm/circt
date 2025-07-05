@@ -1581,7 +1581,7 @@ LogicalResult FModuleOp::verify() {
   for (auto [arg, type, loc] : zip(body->getArguments(), portTypes, portLocs)) {
     if (arg.getType() != cast<TypeAttr>(type).getValue())
       return emitOpError("block argument types should match signature types");
-    if (arg.getLoc() != cast<LocationAttr>(loc))
+    if (arg.getLoc() != cast<Location>(loc))
       return emitOpError(
           "block argument locations should match signature locations");
   }
