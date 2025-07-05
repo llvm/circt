@@ -70,19 +70,21 @@ def optional_dict_to_dict_attr(d: Optional[Dict]) -> ir.DictAttr:
 
 
 __dir__ = os.path.dirname(__file__)
-_local_files = set([os.path.join(__dir__, x) for x in os.listdir(__dir__)])
-_hidden_filenames = set(["functools.py"])
+_hidden_filenames = set(["functools.py", "support.py"])
 
 
 def get_user_loc() -> ir.Location:
   import traceback
+  stack_locs = []
   stack = reversed(traceback.extract_stack())
   for frame in stack:
     fn = os.path.split(frame.filename)[1]
-    if frame.filename in _local_files or fn in _hidden_filenames:
+    if fn in _hidden_filenames:
       continue
-    return ir.Location.file(frame.filename, frame.lineno, 0)
-  return ir.Location.unknown()
+    stack_locs.append(ir.Location.file(frame.filename, frame.lineno, 0))
+  if len(stack_locs) == 0:
+    return ir.Location.unknown()
+  return ir.Location.callsite(stack_locs[0], stack_locs[1:])
 
 
 def create_const_zero(type):

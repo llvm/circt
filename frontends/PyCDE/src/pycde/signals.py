@@ -52,7 +52,7 @@ class Signal:
 
   def bitcast(self, new_type: Type) -> Signal:
     from .circt.dialects import hw
-    casted_value = hw.BitcastOp(new_type._type, self.value)
+    casted_value = hw.BitcastOp(new_type._type, self.value, loc=get_user_loc())
     return _FromCirctValue(casted_value.result, new_type)
 
   def reg(self,
