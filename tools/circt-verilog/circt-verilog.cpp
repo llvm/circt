@@ -336,6 +336,11 @@ static void populateLLHDLowering(PassManager &pm) {
   modulePM.addPass(llhd::createLowerProcessesPass());
   modulePM.addPass(mlir::createCSEPass());
   modulePM.addPass(mlir::createCanonicalizerPass());
+
+  // Unroll loops and remove control flow.
+  modulePM.addPass(llhd::createUnrollLoopsPass());
+  modulePM.addPass(mlir::createCSEPass());
+  modulePM.addPass(mlir::createCanonicalizerPass());
   modulePM.addPass(llhd::createRemoveControlFlowPass());
   modulePM.addPass(mlir::createCSEPass());
   modulePM.addPass(mlir::createCanonicalizerPass());
