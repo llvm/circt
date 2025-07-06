@@ -117,7 +117,8 @@ struct Context {
 
   // Convert an expression AST node to MLIR ops.
   Value convertRvalueExpression(const slang::ast::Expression &expr,
-                                Type requiredType = {});
+                                Type requiredType = {},
+                                bool isAssignmentContextRhs = false);
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   // Convert an assertion expression AST node to MLIR ops.

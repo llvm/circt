@@ -27,6 +27,15 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
   return FVInt(APInt(svint.getBitWidth(), value));
 }
 
+static Type getArrayElementsType(Type arrayType) {
+  return TypeSwitch<Type, Type>(arrayType)
+      .Case<moore::ArrayType, moore::UnpackedArrayType, moore::OpenArrayType,
+            moore::OpenUnpackedArrayType, moore::AssocArrayType,
+            moore::QueueType>(
+          [](auto &type) -> Type { return type.getElementType(); })
+      .Default([](auto &type) -> Type { return {}; });
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 struct RvalueExprVisitor {
@@ -107,7 +116,8 @@ struct RvalueExprVisitor {
 
     context.lvalueStack.push_back(lhs);
     auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType(),
+        true);
     context.lvalueStack.pop_back();
     if (!rhs)
       return {};
@@ -1202,8 +1212,43 @@ struct LvalueExprVisitor {
 } // namespace
 
 Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
-                                       Type requiredType) {
+                                       Type requiredType,
+                                       bool isAssignmentContextRhs) {
   auto loc = convertLocation(expr.sourceRange);
+  if (isAssignmentContextRhs) {
+    switch (expr.kind) {
+    case slang::ast::ExpressionKind::Concatenation: {
+      auto isUnpackedArray = [](Type arg) {
+        return isa<moore::UnpackedArrayType, moore::OpenUnpackedArrayType,
+                   moore::QueueType>(arg);
+      };
+      if (!isUnpackedArray(requiredType))
+        return convertRvalueExpression(expr, requiredType);
+      SmallVector<Value> operands;
+
+      const auto &concatExpr =
+          static_cast<const slang::ast::ConcatenationExpression &>(expr);
+      Type elementType = getArrayElementsType(requiredType);
+
+      for (auto *operand : concatExpr.operands()) {
+        auto value = convertRvalueExpression(*operand);
+        if (!value)
+          continue;
+
+        if (!isUnpackedArray(value.getType()) && elementType != value.getType())
+          value = builder.create<moore::ConversionOp>(loc, elementType, value);
+
+        operands.push_back(value);
+      }
+      return builder.create<moore::UnpackedArrayConcatOp>(loc, requiredType,
+                                                          operands);
+    }
+
+    default:
+      return convertRvalueExpression(expr, requiredType);
+    }
+  }
+
   auto value = expr.visit(RvalueExprVisitor(*this, loc));
   if (value && requiredType)
     value =
