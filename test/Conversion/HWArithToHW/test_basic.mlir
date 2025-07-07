@@ -381,3 +381,17 @@ hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediate
   %4 = hw.struct_create (%3) : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>
   hw.output %4: !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>
 }
+
+
+// -----
+// CHECK-LABEL:  hw.module @UnpackedArrayInout() {
+// CHECK-NEXT:     %vec_a = sv.reg : !hw.inout<uarray<16xi32>>
+// CHECK-NEXT:     %c0_i4 = hw.constant 0 : i4
+// CHECK-NEXT:     [[R0:%.+]] = sv.array_index_inout %vec_a[%c0_i4] : !hw.inout<uarray<16xi32>>, i4
+// CHECK-NEXT:     sv.read_inout [[R0]] : !hw.inout<i32>
+hw.module @UnpackedArrayInout() {
+    %vec_a = sv.reg : !hw.inout<uarray<16xsi32>>
+    %1 = hw.constant 0 : i4
+    %2 = sv.array_index_inout %vec_a[%1] : !hw.inout<uarray<16xsi32>>, i4
+    %3 = sv.read_inout %2 : !hw.inout<si32>
+}

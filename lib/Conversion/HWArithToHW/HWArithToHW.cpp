@@ -112,6 +112,8 @@ static bool isSignednessType(Type type) {
           .Case<IntegerType>([](auto type) { return !type.isSignless(); })
           .Case<hw::ArrayType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<hw::UnpackedArrayType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
           .Case<hw::StructType>([](auto type) {
             return llvm::any_of(type.getElements(), [](auto element) {
               return isSignednessType(element.type);
@@ -367,6 +369,10 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
           .Case<hw::ArrayType>([this](auto type) {
             return hw::ArrayType::get(removeSignedness(type.getElementType()),
                                       type.getNumElements());
+          })
+          .Case<hw::UnpackedArrayType>([this](auto type) {
+            return hw::UnpackedArrayType::get(
+                removeSignedness(type.getElementType()), type.getNumElements());
           })
           .Case<hw::StructType>([this](auto type) {
             // Recursively convert each element.
