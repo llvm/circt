@@ -271,8 +271,11 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       // Unwrap the requested address and read from that memory location.
       auto addressUnwrap =
           b.create<UnwrapValidReadyOp>(toServer, dataChannel.getReady());
-      Value memLoc =
-          b.create<sv::ArrayIndexInOutOp>(mem, addressUnwrap.getRawOutput());
+      Value unsignedAddress = addressUnwrap.getRawOutput();
+      Value signlessAddress = b.create<hw::BitcastOp>(
+          b.getIntegerType(llvm::Log2_64_Ceil(ramDecl.getDepth())),
+          unsignedAddress);
+      Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, signlessAddress);
       auto readData = b.create<sv::ReadInOutOp>(memLoc);
 
       // Set the data on the response.
@@ -294,7 +297,10 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
           Value a = address, d = data; // So the lambda can capture.
           // If we're told to go, do the write.
           b.create<sv::IfOp>(go, [&] {
-            Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, a);
+            Value signlessAddress = b.create<hw::BitcastOp>(
+                b.getIntegerType(llvm::Log2_64_Ceil(ramDecl.getDepth())), a);
+            Value memLoc =
+                b.create<sv::ArrayIndexInOutOp>(mem, signlessAddress);
             b.create<sv::PAssignOp>(memLoc, d);
           });
         }

@@ -36,7 +36,7 @@ assert dummy_info is not None
 
 
 def read(addr: int) -> bytearray:
-  mem_read_addr.write([addr])
+  mem_read_addr.write(addr)
   resp = cast(bytearray, mem_read_data.read())
   print(f"resp: {resp}")
   return resp
@@ -45,7 +45,7 @@ def read(addr: int) -> bytearray:
 # The contents of address 3 are continuously updated to the contents of address
 # 2 by the accelerator.
 data = bytearray([random.randint(0, 2**8 - 1) for _ in range(8)])
-mem_write.write({"address": [2], "data": data})
+mem_write.write({"address": 2, "data": data})
 resp = read(2)
 try_count = 0
 
@@ -64,6 +64,6 @@ assert resp == data
 # Check this by writing to address 3 and reading from it. Shouldn't have
 # changed.
 zeros = bytearray([0] * 8)
-mem_write.write({"address": [3], "data": zeros})
+mem_write.write({"address": 3, "data": zeros})
 resp = read(3)
 assert resp == data

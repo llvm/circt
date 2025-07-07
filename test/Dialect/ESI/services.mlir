@@ -121,22 +121,24 @@ esi.pure_module @LoopbackCosimPure {
 }
 
 // CONN-LABEL: esi.mem.ram @MemA i64 x 20
-// CONN-LABEL: hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+// CONN-LABEL: hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui5, data: i64>>, in %readAddress : !esi.channel<ui5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg  : !hw.inout<uarray<20xi64>>
 // CONN:         %chanOutput, %ready = esi.wrap.vr %c0_i0, %write_done : i0
-// CONN:         %rawOutput, %valid = esi.unwrap.vr %write, %ready : !hw.struct<address: i5, data: i64>
-// CONN:         %address = hw.struct_extract %rawOutput["address"] : !hw.struct<address: i5, data: i64>
-// CONN:         %data = hw.struct_extract %rawOutput["data"] : !hw.struct<address: i5, data: i64>
+// CONN:         %rawOutput, %valid = esi.unwrap.vr %write, %ready : !hw.struct<address: ui5, data: i64>
+// CONN:         %address = hw.struct_extract %rawOutput["address"] : !hw.struct<address: ui5, data: i64>
+// CONN:         %data = hw.struct_extract %rawOutput["data"] : !hw.struct<address: ui5, data: i64>
 // CONN:         %[[ANDVR:.*]] = comb.and %valid, %ready {sv.namehint = "write_go"} : i1
 // CONN:         %write_done = seq.compreg sym @write_done  %[[ANDVR]], %clk reset %rst, %false  : i1
 // CONN:         %chanOutput_0, %ready_1 = esi.wrap.vr %[[MEMREAD:.*]], %valid_3 : i64
-// CONN:         %rawOutput_2, %valid_3 = esi.unwrap.vr %readAddress, %ready_1 : i5
-// CONN:         %[[MEMREADIO:.*]] = sv.array_index_inout %MemA[%rawOutput_2] : !hw.inout<uarray<20xi64>>, i5
+// CONN:         %rawOutput_2, %valid_3 = esi.unwrap.vr %readAddress, %ready_1 : ui5
+// CONN:         %[[ADDR:.*]] = hw.bitcast %rawOutput_2 : (ui5) -> i5
+// CONN:         %[[MEMREADIO:.*]] = sv.array_index_inout %MemA[%[[ADDR]]] : !hw.inout<uarray<20xi64>>, i5
 // CONN:         %[[MEMREAD]] = sv.read_inout %[[MEMREADIO]] : !hw.inout<i64>
 // CONN:         %[[CLOCK:.+]] = seq.from_clock %clk
 // CONN:         sv.alwaysff(posedge %[[CLOCK]]) {
 // CONN:           sv.if %[[ANDVR]] {
-// CONN:             %[[ARRIDX:.*]] = sv.array_index_inout %MemA[%address] : !hw.inout<uarray<20xi64>>, i5
+// CONN:             %[[ADDR:.*]] = hw.bitcast %address : (ui5) -> i5
+// CONN:             %[[ARRIDX:.*]] = sv.array_index_inout %MemA[%[[ADDR]]] : !hw.inout<uarray<20xi64>>, i5
 // CONN:             sv.passign %[[ARRIDX]], %data : i64
 // CONN:           }
 // CONN:         }(syncreset : posedge %rst) {
@@ -144,11 +146,11 @@ esi.pure_module @LoopbackCosimPure {
 // CONN:         hw.output %chanOutput_0, %chanOutput : !esi.channel<i64>, !esi.channel<i0>
 
 esi.mem.ram @MemA i64 x 20
-!write = !hw.struct<address: i5, data: i64>
+!write = !hw.struct<address: ui5, data: i64>
 !writeBundle = !esi.bundle<[!esi.channel<!write> from "req", !esi.channel<i0> to "ack"]>
-!readBundle = !esi.bundle<[!esi.channel<i5> from "address", !esi.channel<i64> to "data"]>
+!readBundle = !esi.bundle<[!esi.channel<ui5> from "address", !esi.channel<i64> to "data"]>
 
-hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!write>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!write>, in %readAddress : !esi.channel<ui5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
   esi.service.instance #esi.appid<"mem"> svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
   %writeBundle = esi.service.req <@MemA::@write> (#esi.appid<"write">) : !writeBundle
   %done = esi.bundle.unpack %write from %writeBundle : !writeBundle
@@ -158,11 +160,11 @@ hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.ch
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
 
-// CONN-LABEL: hw.module @MemoryAccess2Read(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, in %readAddress2 : !esi.channel<i5>, out readData : !esi.channel<i64>, out readData2 : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+// CONN-LABEL: hw.module @MemoryAccess2Read(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui5, data: i64>>, in %readAddress : !esi.channel<ui5>, in %readAddress2 : !esi.channel<ui5>, out readData : !esi.channel<i64>, out readData2 : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg : !hw.inout<uarray<20xi64>>
 // CONN:         hw.output %chanOutput_0, %chanOutput_4, %chanOutput : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
 
-hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.channel<!write>, in %readAddress: !esi.channel<i5>, in %readAddress2: !esi.channel<i5>, out readData: !esi.channel<i64>, out readData2: !esi.channel<i64>, out writeDone: !esi.channel<i0>) {
+hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.channel<!write>, in %readAddress: !esi.channel<ui5>, in %readAddress2: !esi.channel<ui5>, out readData: !esi.channel<i64>, out readData2: !esi.channel<i64>, out writeDone: !esi.channel<i0>) {
   esi.service.instance #esi.appid<"mem"> svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
 
   %writeBundle = esi.service.req <@MemA::@write> (#esi.appid<"write">) : !writeBundle
