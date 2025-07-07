@@ -358,6 +358,17 @@ LogicalResult CompRegClockEnabledOp::canonicalize(CompRegClockEnabledOp op,
     return success();
   }
 
+  // Match constant clock enable values.
+  APInt en;
+  if (mlir::matchPattern(op.getClockEnable(), mlir::m_ConstantInt(&en))) {
+    if (en.isAllOnes()) {
+      rewriter.replaceOpWithNewOp<seq::CompRegOp>(
+          op, op.getInput(), op.getClk(), op.getNameAttr(), op.getReset(),
+          op.getResetValue(), op.getInitialValue(), op.getInnerSymAttr());
+      return success();
+    }
+  }
+
   return failure();
 }
 
