@@ -27,7 +27,7 @@ In a simple example, we can fold a*b+c using the datapath dialect to remove a ca
 ```
 Which is equivalent to:
 ```mlir
-%0:4 = datapath.pp %a, %b : 4 x i4
-%1:2 = datapath.compress %0#0, %0#1, %0#2, %0#3, %c : 5 x i4 -> (i4, i4)
+%0:4 = datapath.partial_product %a, %b : (i4, i4) -> (i4, i4, i4, i4)
+%1:2 = datapath.compress %0#0, %0#1, %0#2, %0#3, %c : i4 [5 -> 2]
 %2 = comb.add %1#0, %1#1 : i4
 ```

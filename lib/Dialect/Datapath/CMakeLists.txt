@@ -1,5 +1,7 @@
 add_circt_dialect_library(CIRCTDatapath
   DatapathDialect.cpp
+  DatapathFolds.cpp
+  DatapathOps.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Datapath
