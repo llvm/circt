@@ -93,7 +93,7 @@ hw.module @LoopbackArray() {
 }
 
 esi.mem.ram @MemA i64 x 20
-!write = !hw.struct<address: i5, data: i64>
+!write = !hw.struct<address: ui5, data: i64>
 !writeBundle = !esi.bundle<[!esi.channel<!write> from "req", !esi.channel<i0> to "ack"]>
 
 hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1) {

@@ -465,7 +465,7 @@ def DeclareRandomAccessMemory(inner_type: Type,
   class DeclareRandomAccessMemory(ServiceDecl):
     __name__ = name
     address_width = (depth - 1).bit_length()
-    address_type = Bits(address_width)
+    address_type = UInt(address_width)
     write_struct = StructType([('address', address_type), ('data', inner_type)])
 
     read = Bundle([
