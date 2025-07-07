@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt %s -verify-roundtrip | FileCheck %s
 
 // CHECK-LABEL: @compressor
 hw.module @compressor(in %a : i4, in %b : i4, in %c : i4, out carry : i4, out save : i4) {
