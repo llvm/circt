@@ -33,14 +33,14 @@ bool IntegerRegisterType::isValidContentType(Type type) const {
   return llvm::isa<rtg::ImmediateType>(type);
 }
 
-Attribute IntegerRegisterType::parseContentValue(llvm::StringRef valueString,
+TypedAttr IntegerRegisterType::parseContentValue(llvm::StringRef valueString,
                                                  Type contentType) const {
   auto immType = dyn_cast<rtg::ImmediateType>(contentType);
   if (!immType)
     return {};
 
   APInt intValue;
-  if (valueString.getAsInteger(16, intValue))
+  if (valueString.getAsInteger(0, intValue))
     return {};
 
   if (intValue.getBitWidth() < immType.getWidth()) {
