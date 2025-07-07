@@ -1111,11 +1111,9 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
 
 // CHECK-LABEL: func.func @PowUOp
 func.func @PowUOp(%arg0: !moore.l32, %arg1: !moore.l32) {
-  // CHECK: %{{.*}} = scf.for %{{.*}} = %{{.*}} to %arg1 step %{{.*}} iter_args([[VAR:%.+]] = %{{.*}}) -> (i32)  : i32 {
-  // CHECK: [[MUL:%.+]] = comb.mul %arg0, [[VAR]] : i32
-  // CHECK: scf.yield [[MUL]] : i32
-  %0 = moore.powu %arg0, %arg1 : l32
-  return
+  // CHECK: %[[RES:.*]] = math.ipowi %arg0, %arg1 : i32
+    %0 = moore.powu %arg0, %arg1 : l32
+    return
 }
 
 // CHECK-LABEL: func.func @PowSOp

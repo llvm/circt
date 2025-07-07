@@ -1325,29 +1325,8 @@ struct PowUOpConversion : public OpConversionPattern<PowUOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
 
-    Location loc = op.getLoc();
-    auto intType = cast<IntType>(op.getRhs().getType());
-
-    // transform a ** b into scf.for 0 to b step 1 { init *= a }, init = 1
-    Type integerType = rewriter.getIntegerType(intType.getWidth());
-    Value lowerBound = rewriter.create<hw::ConstantOp>(loc, integerType, 0);
-    Value upperBound =
-        rewriter.create<ConversionOp>(loc, integerType, op.getRhs());
-    Value step = rewriter.create<hw::ConstantOp>(loc, integerType, 1);
-
-    Value initVal = rewriter.create<hw::ConstantOp>(loc, resultType, 1);
-    Value lhsVal = rewriter.create<ConversionOp>(loc, resultType, op.getLhs());
-
-    auto forOp = rewriter.create<scf::ForOp>(
-        loc, lowerBound, upperBound, step, ValueRange(initVal),
-        [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
-          Value loopVar = iterArgs.front();
-          Value mul = rewriter.create<comb::MulOp>(loc, lhsVal, loopVar);
-          rewriter.create<scf::YieldOp>(loc, ValueRange(mul));
-        });
-
-    rewriter.replaceOp(op, forOp.getResult(0));
-
+    rewriter.replaceOpWithNewOp<mlir::math::IPowIOp>(
+        op, resultType, adaptor.getLhs(), adaptor.getRhs());
     return success();
   }
 };
