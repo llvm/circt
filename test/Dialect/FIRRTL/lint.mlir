@@ -82,3 +82,48 @@ firrtl.layer @GroupFoo bind {}
     }
   }
 }
+
+// -----
+
+firrtl.circuit "XMRInDesign" {
+  hw.hierpath private @xmrPath [@XMRInDesign::@sym]
+  // expected-note @below {{op is instantiated in this module}}
+  firrtl.module @XMRInDesign() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    %a = firrtl.wire sym @sym : !firrtl.uint<1>
+    // expected-error @below {{is in the design. (Did you forget to put it under a layer?)}}
+    %0 = firrtl.xmr.deref @xmrPath : !firrtl.uint<1>
+    %b = firrtl.node %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRInDesignAndTestHarness" {
+  hw.hierpath private @xmrPath [@Foo::@sym]
+  // expected-note @below {{op is instantiated in this module}}
+  firrtl.module @Foo() {
+    %a = firrtl.wire sym @sym : !firrtl.uint<1>
+    // expected-error @below {{is in the design. (Did you forget to put it under a layer?)}}
+    %0 = firrtl.xmr.deref @xmrPath : !firrtl.uint<1>
+    %b = firrtl.node %0 : !firrtl.uint<1>
+  }
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance foo @Foo()
+  }
+  firrtl.module @XMRInDesignAndTestHarness()  {
+    firrtl.instance dut @DUT()
+    firrtl.instance foo @Foo()
+  }
+}

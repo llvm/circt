@@ -6,9 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 
@@ -37,8 +39,8 @@ struct Config {
 class Linter {
 
 public:
-  Linter(FModuleOp fModule, const Config &config)
-      : fModule(fModule), config(config){};
+  Linter(FModuleOp fModule, InstanceInfo &instanceInfo, const Config &config)
+      : fModule(fModule), instanceInfo(instanceInfo), config(config){};
 
   /// Lint the specified module.
   LogicalResult lint() {
@@ -48,6 +50,10 @@ public:
         return WalkResult::skip();
       if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
         if (config.lintStaticAsserts && checkAssert(op).failed())
+          failed = true;
+
+      if (auto xmrDerefOp = dyn_cast<XMRDerefOp>(op))
+        if (checkXmr(xmrDerefOp).failed())
           failed = true;
 
       return WalkResult::advance();
@@ -61,6 +67,7 @@ public:
 
 private:
   FModuleOp fModule;
+  InstanceInfo &instanceInfo;
   const Config &config;
 
   LogicalResult checkAssert(Operation *op) {
@@ -93,6 +100,45 @@ private:
 
     return success();
   }
+
+  LogicalResult checkXmr(XMRDerefOp op) {
+    // XMRs under layers are okay.
+    if (op->getParentOfType<LayerBlockOp>() ||
+        op->getParentOfType<sv::IfDefOp>())
+      return success();
+
+    // The XMR is not under a layer.  This module must never be instantiated in
+    // the design.  Intentionally do NOT use "effective" design as this could
+    // lead to false positives.
+    if (!instanceInfo.anyInstanceInDesign(fModule))
+      return success();
+
+    // If all users are connect sources, and each connect destinations is to an
+    // instance which is marked `lowerToBind`, then this is a pattern for
+    // inlining the XMR into the bound instance site.  This pattern is used by
+    // Grand Central, but not elsewhere.
+    //
+    // If there are _no_ users, this is also okay as this expression will not be
+    // emitted.
+    auto boundInstancePortUser = [&](auto user) {
+      auto connect = dyn_cast<MatchingConnectOp>(user);
+      if (connect && connect.getSrc() == op.getResult())
+        if (auto *definingOp = connect.getDest().getDefiningOp())
+          if (auto instanceOp = dyn_cast<InstanceOp>(definingOp))
+            if (instanceOp->hasAttr("lowerToBind"))
+              return true;
+      return false;
+    };
+    if (llvm::all_of(op.getResult().getUsers(), boundInstancePortUser))
+      return success();
+
+    auto diag =
+        op.emitOpError()
+        << "is in the design. (Did you forget to put it under a layer?)";
+    diag.attachNote(fModule.getLoc()) << "op is instantiated in this module";
+
+    return failure();
+  }
 };
 
 struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
@@ -101,6 +147,7 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
   void runOnOperation() override {
 
     CircuitOp circuitOp = getOperation();
+    auto instanceInfo = getAnalysis<InstanceInfo>();
 
     auto reduce = [](LogicalResult a, LogicalResult b) -> LogicalResult {
       if (succeeded(a) && succeeded(b))
@@ -108,7 +155,7 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
       return failure();
     };
     auto transform = [&](FModuleOp moduleOp) -> LogicalResult {
-      return Linter(moduleOp, {lintStaticAsserts}).lint();
+      return Linter(moduleOp, instanceInfo, {lintStaticAsserts}).lint();
     };
 
     SmallVector<FModuleOp> modules(circuitOp.getOps<FModuleOp>());
