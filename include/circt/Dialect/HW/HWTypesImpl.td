@@ -215,6 +215,31 @@ def UnionTypeImpl : HWType<"Union"> {
   }];
 }
 
+def HiZTypeImpl : HWType<"HiZ"> {
+  let summary = "A high impedence type";
+  let description = [{
+   A high impedance type.  These types are for networks which might not have 
+   drivers and can have multiple drivers.  These cannot be inputs or outputs to 
+   most operations.  They must be driven by an explicit (conditional) driver and 
+   observed with an explicit read.  These types have no inherent directionality; 
+   we model them with in-ports.  Due to their flexibility and lack of dataflow 
+   semantics, minimal checks are performed to ensure correct construction (where
+   correct may include physically important properties like a single dynamic 
+   driver).
+  }];
+
+  let mnemonic = "hiz";
+  let parameters = (ins "::mlir::Type":$elementType);
+  let genVerifyDecl = 1;
+
+  let assemblyFormat = "`<` custom<HWElementType>($elementType) `>`";
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+       return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+}
+
 def TypeAliasType : HWType<"TypeAlias"> {
   let summary = "An symbolic reference to a type declaration";
   let description = [{

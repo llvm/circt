@@ -45,6 +45,10 @@ class InOutTypeOf<list<Type> allowedTypes>
   : ContainerType<AnyTypeOf<allowedTypes>, CPred<"::circt::hw::type_isa<::circt::hw::InOutType>($_self)">,
     "::circt::hw::type_cast<::circt::hw::InOutType>($_self).getElementType()", "InOutType">;
 
+def HiZType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::HiZType>($_self)">,
+          "HiZType", "::circt::hw::HiZType">;
+
 // A handle to refer to circt::hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::ArrayType>($_self)">,

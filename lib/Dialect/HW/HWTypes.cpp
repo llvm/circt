@@ -739,6 +739,17 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 //===----------------------------------------------------------------------===//
+// HiZType
+//===----------------------------------------------------------------------===//
+
+LogicalResult HiZType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type innerType) {
+  if (!isHWValueType(innerType))
+    return emitError() << "invalid element for hw.hiz type " << innerType;
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TypeAliasType
 //===----------------------------------------------------------------------===//
 

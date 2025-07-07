@@ -192,4 +192,35 @@ def EnumCmpOp : HWOp<"enum.cmp", [Pure]> {
   }];
 }
 
+class HiZTypeConstraint<string input, string result> : TypesMatchWith<
+  "result type must be the unwrapped type of the HiZ input",
+  input, result,
+  "type_cast<circt::hw::HiZType>($_self).getElementType()"
+>;
+
+def HiZRead : HWOp<"hiz.read", [Pure,   
+                                HiZTypeConstraint<"input", "result">
+                               ]> {
+  let summary = "Extract the value from a high impedance type";
+  let description = [{
+    This taps a high impedance bus (of type hw.hiz) and provides the value.
+    This exists to unwrap the multiconnect bus into the dataflow realm.
+  }];
+  let arguments = (ins HiZType:$input);
+  let results = (outs HWValueType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
+def HiZDrive : HWOp<"hiz.drive", [Pure,
+                                  HiZTypeConstraint<"input", "value">
+                                 ]> {
+  let summary = "Conditionally drive a value onto a high impedance bus";
+  let description = [{
+    This drives a high impedance bus (of type hw.hiz).
+  }];
+  let arguments = (ins HiZType:$input, I1:$cond, HWValueType:$value);
+  let results = (outs);
+  let assemblyFormat = "$input $cond $value attr-dict `:` type($input)";
+}
+
 #endif // CIRCT_DIALECT_HW_HWMISCOPS_TD
