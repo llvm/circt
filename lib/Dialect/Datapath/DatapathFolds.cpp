@@ -154,7 +154,7 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 
     // Only fold if we have constructed a larger compressor than what was
     // already there
-    if (!(shouldFold))
+    if (!shouldFold)
       return failure();
 
     // Create a new CompressOp with all collected operands
@@ -188,10 +188,8 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
       }
 
       // Default create a compressor with fewer arguments
-      auto newCompressOp = rewriter.create<CompressOp>(
-          op.getLoc(), inputs.drop_back(), op.getNumResults());
-
-      rewriter.replaceOp(op, newCompressOp.getResults());
+      rewriter.replaceOpWithNewOp<CompressOp>(op, inputs.drop_back(),
+                                              op.getNumResults());
       return success();
     }
 
@@ -210,7 +208,7 @@ void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
 //===----------------------------------------------------------------------===//
 // Partial Product Operation
 //===----------------------------------------------------------------------===//
-struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
+struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
   using OpRewritePattern::OpRewritePattern;
 
   // pp(concat(0,a), concat(0,b)) -> reduced number of results
@@ -246,8 +244,8 @@ struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
     // Collect newPP results and pad with zeros if needed
     SmallVector<Value> newResults(newPP.getResults().begin(),
                                   newPP.getResults().end());
-    while (newResults.size() < op.getNumResults())
-      newResults.push_back(zero);
+
+    newResults.append(op.getNumResults() - newResults.size(), zero);
 
     rewriter.replaceOp(op, newResults);
     return success();
@@ -257,5 +255,5 @@ struct ConstantFoldPartialProduct : public OpRewritePattern<PartialProductOp> {
 void PartialProductOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
 
-  results.add<ConstantFoldPartialProduct>(context);
+  results.add<ReduceNumPartialProducts>(context);
 }
