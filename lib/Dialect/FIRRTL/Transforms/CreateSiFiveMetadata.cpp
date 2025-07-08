@@ -188,8 +188,13 @@ struct ObjectModelIR {
     // Create list of blackbox resources from the provided list
     SmallVector<Value> libValues;
     for (StringRef libName : libraries) {
-      auto libNameAttr = builderOM.create<StringConstantOp>(
-          builderOM.getStringAttr(libName));
+      Value libNameAttr;
+      if (libName == defName) {
+        libNameAttr = modEntry;
+      } else {
+        libNameAttr = builderOM.create<StringConstantOp>(
+            builderOM.getStringAttr(libName));
+      }
       libValues.push_back(libNameAttr);
     }
     auto blackBoxResourcesList = builderOM.create<ListCreateOp>(
