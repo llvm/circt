@@ -2763,3 +2763,22 @@ function void seeminglyExhaustiveCase(logic [1:0] a);
     default: z = 4'b1111;
   endcase
 endfunction
+
+
+// Regression test for #8657.
+// CHECK-LABEL: rvalueAndLvalueElementSelect
+module rvalueAndLvalueElementSelect(
+  input wire [63:0] arg0,
+  output wire [63:0] result0
+);
+  wire [0:1][31:0] arg0_unflattened;
+  // CHECK: moore.extract_ref {{.*}} from 1 : <array<2 x l32>> -> <l32>
+  assign arg0_unflattened[0] = arg0[31:0];
+  // CHECK: moore.extract_ref {{.*}} from 0 : <array<2 x l32>> -> <l32>
+  assign arg0_unflattened[1] = arg0[63:32];
+
+  // CHECK: moore.extract {{.*}} from 0 : array<2 x l32> -> l32
+  // CHECK: moore.extract {{.*}} from 1 : array<2 x l32> -> l32
+  assign result0 = {arg0_unflattened[1], arg0_unflattened[0]};
+endmodule
+
