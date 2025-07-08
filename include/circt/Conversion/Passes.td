@@ -858,7 +858,7 @@ def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
   let description = [{
     This pass converts arithmetic Comb operations into Datapath operations that 
     leverage redundant number representations (carry save). Primarily for use
-    in the synthesis flow.
+    in the circt-synth flow.
   }];
   let dependentDialects = [
     "circt::comb::CombDialect", "circt::datapath::DatapathDialect",

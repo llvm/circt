@@ -51,13 +51,13 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     auto results =
         rewriter.create<datapath::CompressOp>(op.getLoc(), op.getOperands(), 2);
     // carry+saved
-    rewriter.replaceOpWithNewOp<comb::AddOp>(op, results.getResults(), true);
+    rewriter.replaceOpWithNewOp<AddOp>(op, results.getResults(), true);
     return success();
   }
 };
 
 // mul(a,b) -> add(pp(a,b))
-// multi-input adder will be converted to a compressor by canonicalizers
+// multi-input adder will be converted to a compressor by other pattern
 struct CombMulOpConversion : OpConversionPattern<MulOp> {
   using OpConversionPattern<MulOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
@@ -68,12 +68,12 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     if (adaptor.getInputs().size() != 2)
       return failure();
 
-    int64_t width = op.getType().getIntOrFloatBitWidth();
-    // Create partial product rows
+    auto width = op.getType().getIntOrFloatBitWidth();
+    // Create partial product rows - number of rows == width
     auto pp = rewriter.create<datapath::PartialProductOp>(
         op.getLoc(), op.getInputs(), width);
     // Sum partial products
-    rewriter.replaceOpWithNewOp<comb::AddOp>(op, pp.getResults(), true);
+    rewriter.replaceOpWithNewOp<AddOp>(op, pp.getResults(), true);
     return success();
   }
 };
