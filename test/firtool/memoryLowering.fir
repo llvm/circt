@@ -66,12 +66,7 @@ circuit test: %[[
 ;// -----
 
 FIRRTL version 4.0.0
-circuit test: %[[
-  {
-    "class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
-    "target": "test.test"
-  }
-]]
+circuit test:
   public module test:
     input clock: Clock
     input rAddr: UInt<4>
@@ -111,12 +106,7 @@ circuit test: %[[
 ;// -----
 
 FIRRTL version 4.0.0
-circuit test: %[[
-  {
-    "class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
-    "target": "test.test"
-  }
-]]
+circuit test:
   public module test:
     input clock: Clock
     input rAddr: UInt<4>
