@@ -294,9 +294,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
-  pm.nest<firrtl::CircuitOp>().addPass(circt::firrtl::createLintingPass(
-      /*lintStaticAsserts=*/opt.getLintStaticAsserts(),
-      /*lintXmrsInDesign=*/opt.getLintXmrsInDesign()));
+  pm.nest<firrtl::CircuitOp>().addPass(circt::firrtl::createLint(
+      {/*lintStaticAsserts=*/opt.getLintStaticAsserts(),
+       /*lintXmrsInDesign=*/opt.getLintXmrsInDesign()}));
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
                                        opt.getVerificationFlavor()));

@@ -26,24 +26,15 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-/// Linter configuration.
-struct Config {
-  /// If true, then assertions that are statically false (and will trivially
-  /// fail simulation) will result in an error.
-  bool lintStaticAsserts;
-  /// If true, then XMRs that exist in the "design" (not the "effective design")
-  /// will be flagged as an error.
-  bool lintXmrsInDesign;
-};
-
 /// Class that stores state related to linting.  This exists to avoid needing to
 /// clear members of `LintPass` and instead just rely on `Linter` objects being
 /// deleted.
 class Linter {
 
 public:
-  Linter(FModuleOp fModule, InstanceInfo &instanceInfo, const Config &config)
-      : fModule(fModule), instanceInfo(instanceInfo), config(config){};
+  Linter(FModuleOp fModule, InstanceInfo &instanceInfo,
+         const LintOptions &options)
+      : fModule(fModule), instanceInfo(instanceInfo), options(options){};
 
   /// Lint the specified module.
   LogicalResult lint() {
@@ -52,11 +43,11 @@ public:
       if (isa<WhenOp>(op))
         return WalkResult::skip();
       if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
-        if (config.lintStaticAsserts && checkAssert(op).failed())
+        if (options.lintStaticAsserts && checkAssert(op).failed())
           failed = true;
 
       if (auto xmrDerefOp = dyn_cast<XMRDerefOp>(op))
-        if (config.lintXmrsInDesign && checkXmr(xmrDerefOp).failed())
+        if (options.lintXmrsInDesign && checkXmr(xmrDerefOp).failed())
           failed = true;
 
       return WalkResult::advance();
@@ -71,7 +62,7 @@ public:
 private:
   FModuleOp fModule;
   InstanceInfo &instanceInfo;
-  const Config &config;
+  const LintOptions &options;
 
   LogicalResult checkAssert(Operation *op) {
     Value predicate;
@@ -145,8 +136,7 @@ private:
 };
 
 struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
-  using LintBase::lintStaticAsserts;
-  using LintBase::lintXmrsInDesign;
+  using LintBase::LintBase;
 
   void runOnOperation() override {
 
@@ -173,11 +163,3 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
   };
 };
 } // namespace
-
-std::unique_ptr<Pass> firrtl::createLintingPass(bool lintStaticAsserts,
-                                                bool lintXmrsInDesign) {
-  auto pass = std::make_unique<LintPass>();
-  pass->lintStaticAsserts = lintStaticAsserts;
-  pass->lintXmrsInDesign = lintXmrsInDesign;
-  return pass;
-}

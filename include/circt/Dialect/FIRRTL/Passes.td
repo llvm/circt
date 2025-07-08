@@ -860,11 +860,10 @@ def Lint :
     Currently it detects assertions whose predicate condition can be statically
     inferred to be false. The pass emits error on such failing ops.
   }];
-  let constructor = "circt::firrtl::createLintingPass()";
   let options = [
-    Option<"lintStaticAsserts", "lint-static-asserts", "bool", "",
+    Option<"lintStaticAsserts", "lint-static-asserts", "bool", "true",
       "enable linting of static assertions">,
-    Option<"lintXmrsInDesign", "lint-xmrs-in-design", "bool", "",
+    Option<"lintXmrsInDesign", "lint-xmrs-in-design", "bool", "true",
       "enable linting of XMRs that exist in the design">
   ];
 }
