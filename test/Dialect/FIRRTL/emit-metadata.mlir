@@ -306,10 +306,13 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-SAME:            in %[[moduleName_in:[^:]+]]: !firrtl.string,
 // CHECK-SAME:            out %moduleName: !firrtl.string,
 // CHECK-SAME:            in %[[inDut_in:[^:]+]]: !firrtl.bool,
-// CHECK-SAME:            out %inDut: !firrtl.bool
+// CHECK-SAME:            out %inDut: !firrtl.bool,
+// CHECK-SAME:            in %[[libraries_in:[^:]+]]: !firrtl.list<string>,
+// CHECK-SAME:            out %libraries: !firrtl.list<string>
 // CHECK-SAME:          ) {
 // CHECK-NEXT:            firrtl.propassign %moduleName, %[[moduleName_in]]
 // CHECK-NEXT:            firrtl.propassign %inDut, %[[inDut_in]]
+// CHECK-NEXT:            firrtl.propassign %libraries, %[[libraries_in]]
 // CHECK:               }
 //
 // CHECK:               firrtl.class @SitestBlackBoxMetadata(
@@ -322,47 +325,62 @@ firrtl.circuit "BasicBlackboxes" attributes {
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "TestBlackbox"
 // CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool false
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#defname]] : !firrtl.list<string>
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
 // CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
 // CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
 // CHECK-NEXT:            firrtl.propassign %TestBlackbox_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "DUTBlackbox2"
 // CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#defname]] : !firrtl.list<string>
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
 // CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
 // CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
 // CHECK-NEXT:            firrtl.propassign %DUTBlackbox_0_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "DUTBlackbox1"
 // CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#defname]] : !firrtl.list<string>
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
 // CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
 // CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
 // CHECK-NEXT:            firrtl.propassign %DUTBlackbox_1_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "LayerBlackboxInDesign"
 // CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#defname]] : !firrtl.list<string>
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
 // CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
 // CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
 // CHECK-NEXT:            firrtl.propassign %LayerBlackboxInDesign_field, %[[object]]
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "LayerBlackbox"
 // CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool false
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#defname]] : !firrtl.list<string>
 // CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
 // CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
 // CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
 // CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
 // CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
 // CHECK-NEXT:            firrtl.propassign %LayerBlackbox_field, %[[object]]
 //
 // CHECK-NOT:             firrtl.object
