@@ -1004,13 +1004,13 @@ void Deseq::implementRegisters() {
     implementRegister(drive);
 }
 
-/// Implement the conditional behavior of a drive with a `seq.compreg` or
-/// `seq.compreg.ce` op, and make the drive unconditional. This function pulls
-/// the analyzed clock and reset from the given `DriveInfo` and creates the
-/// necessary ops outside the process represent the behavior as a register. It
-/// also calls `specializeValue` and `specializeProcess` to convert the
-/// sequential `llhd.process` into a purely combinational `llhd.combinational`
-/// that is simplified by assuming that the clock edge occurs.
+/// Implement the conditional behavior of a drive with a `seq.firreg` op and
+/// make the drive unconditional. This function pulls the analyzed clock and
+/// reset from the given `DriveInfo` and creates the necessary ops outside the
+/// process represent the behavior as a register. It also calls
+/// `specializeValue` and `specializeProcess` to convert the sequential
+/// `llhd.process` into a purely combinational `llhd.combinational` that is
+/// simplified by assuming that the clock edge occurs.
 void Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
   auto loc = drive.op.getLoc();
@@ -1096,16 +1096,26 @@ void Deseq::implementRegister(DriveInfo &drive) {
   if (enable)
     enable = specializeValue(enable, fixedValues);
 
+  // Try to guess a name for the register.
+  StringAttr name;
+  if (auto sigOp = drive.op.getSignal().getDefiningOp<llhd::SignalOp>())
+    name = sigOp.getNameAttr();
+  if (!name)
+    name = builder.getStringAttr("");
+
   // Create the register op.
-  Value reg;
-  if (enable)
-    reg = builder.create<seq::CompRegClockEnabledOp>(
-        loc, value, clock, enable, StringAttr{}, reset, resetValue, Value{},
-        hw::InnerSymAttr{});
-  else
-    reg =
-        builder.create<seq::CompRegOp>(loc, value, clock, StringAttr{}, reset,
-                                       resetValue, Value{}, hw::InnerSymAttr{});
+  auto reg =
+      builder.create<seq::FirRegOp>(loc, value, clock, name, hw::InnerSymAttr{},
+                                    /*preset=*/IntegerAttr{}, reset, resetValue,
+                                    /*isAsync=*/reset != Value{});
+
+  // If the register has an enable, insert a self-mux in front of the register.
+  if (enable) {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(reg);
+    reg.getNextMutable().assign(builder.create<comb::MuxOp>(
+        loc, enable, reg.getNext(), reg.getResult()));
+  }
 
   // Make the original `llhd.drv` drive the register value unconditionally.
   drive.op.getValueMutable().assign(reg);

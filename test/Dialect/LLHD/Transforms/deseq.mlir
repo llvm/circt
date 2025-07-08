@@ -6,7 +6,7 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg %d, [[CLK]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -30,7 +30,7 @@ hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
-  // CHECK: [[REG:%.+]] = seq.compreg %d, [[CLK_INV]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -54,7 +54,7 @@ hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[RST_INV:%.+]] = comb.xor %reset, %true
-  // CHECK: [[REG:%.+]] = seq.compreg %d, [[CLK]] reset [[RST_INV]], %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async [[RST_INV]], %c42_i42 : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -84,7 +84,7 @@ hw.module @ClockNegEdgeWithActiveHighReset(in %clock: i1, in %reset: i1, in %d: 
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
-  // CHECK: [[REG:%.+]] = seq.compreg %d, [[CLK_INV]] reset %reset, %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] reset async %reset, %c42_i42 : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -132,7 +132,8 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg.ce [[ER]]#0, [[CLK]], [[ER]]#1 : i42
+  // CHECK: [[MUX:%.+]] = comb.mux [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
 }
@@ -168,7 +169,8 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg.ce [[ER]]#0, [[CLK]], [[ER]]#1 reset %reset, %c42_i42 : i42
+  // CHECK: [[MUX:%.+]] = comb.mux [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
 }
@@ -178,7 +180,7 @@ hw.module @ChasePastValuesThroughControlFlow(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
-  // CHECK: seq.compreg
+  // CHECK: seq.firreg
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -348,7 +350,7 @@ hw.module @AcceptMuxForReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg %d, [[CLK]] reset %reset, %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, %c42_i42 : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -420,7 +422,8 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg.ce [[ER]]#0, [[CLK]], [[ER]]#1 : i42
+  // CHECK: [[MUX:%.+]] = comb.mux [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
 }
@@ -431,7 +434,7 @@ hw.module @ClockAndResetSameConst(in %clock: i1, in %reset: i1) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg %c42_i42, [[CLK]] reset %reset, %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c42_i42 : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -460,7 +463,7 @@ hw.module @ClockAndResetDifferentConst(in %clock: i1, in %reset: i1) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg %c42_i42, [[CLK]] reset %reset, %c0_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c0_i42 : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -492,7 +495,7 @@ hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %2 = hw.struct_extract %1["a"] : !hw.struct<a: i42, b: i42>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg %d, [[CLK]] reset %reset, [[FIELD]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, [[FIELD]] : i42
   %3, %4 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -821,41 +824,76 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
   }
   // CHECK: [[CLK:%.+]] = seq.to_clock %clk
   // CHECK: [[RST:%.+]] = comb.xor %rstn, %true
-  // CHECK: seq.compreg.ce [[ER]]#0, [[CLK]], [[ER]]#1 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#2, [[CLK]], [[ER]]#3 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#4, [[CLK]], [[ER]]#5 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#6, [[CLK]], [[ER]]#7 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#8, [[CLK]], [[ER]]#9 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#10, [[CLK]], [[ER]]#11 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#12, [[CLK]], [[ER]]#13 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#14, [[CLK]], [[ER]]#15 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#16, [[CLK]], [[ER]]#17 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#18, [[CLK]], [[ER]]#19 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#20, [[CLK]], [[ER]]#21 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#22, [[CLK]], [[ER]]#23 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#24, [[CLK]], [[ER]]#25 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#26, [[CLK]], [[ER]]#27 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#28, [[CLK]], [[ER]]#29 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#30, [[CLK]], [[ER]]#31 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#32, [[CLK]], [[ER]]#33 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#34, [[CLK]], [[ER]]#35 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#36, [[CLK]], [[ER]]#37 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#38, [[CLK]], [[ER]]#39 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#40, [[CLK]], [[ER]]#41 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#42, [[CLK]], [[ER]]#43 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#44, [[CLK]], [[ER]]#45 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#46, [[CLK]], [[ER]]#47 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#48, [[CLK]], [[ER]]#49 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#50, [[CLK]], [[ER]]#51 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#52, [[CLK]], [[ER]]#53 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#54, [[CLK]], [[ER]]#55 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#56, [[CLK]], [[ER]]#57 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#58, [[CLK]], [[ER]]#59 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#60, [[CLK]], [[ER]]#61 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#62, [[CLK]], [[ER]]#63 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#64, [[CLK]], [[ER]]#65 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#66, [[CLK]], [[ER]]#67 reset [[RST]], %c0_i15
-  // CHECK: seq.compreg.ce [[ER]]#68, [[CLK]], [[ER]]#69 reset [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#1, [[ER]]#0, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#3, [[ER]]#2, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#5, [[ER]]#4, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#7, [[ER]]#6, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#9, [[ER]]#8, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#11, [[ER]]#10, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#13, [[ER]]#12, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#15, [[ER]]#14, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#17, [[ER]]#16, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#19, [[ER]]#18, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#21, [[ER]]#20, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#23, [[ER]]#22, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#25, [[ER]]#24, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#27, [[ER]]#26, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#29, [[ER]]#28, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#31, [[ER]]#30, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#33, [[ER]]#32, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#35, [[ER]]#34, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#37, [[ER]]#36, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#39, [[ER]]#38, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#41, [[ER]]#40, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#43, [[ER]]#42, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#45, [[ER]]#44, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#47, [[ER]]#46, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#49, [[ER]]#48, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#51, [[ER]]#50, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#53, [[ER]]#52, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#55, [[ER]]#54, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#57, [[ER]]#56, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#59, [[ER]]#58, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#61, [[ER]]#60, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#63, [[ER]]#62, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#65, [[ER]]#64, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#67, [[ER]]#66, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
+  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#69, [[ER]]#68, {{%.+}}
+  // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
   llhd.drv %mem0, %1#0 after %0 if %1#1 : !hw.inout<i15>
   llhd.drv %mem1, %1#2 after %0 if %1#3 : !hw.inout<i15>
   llhd.drv %mem2, %1#4 after %0 if %1#5 : !hw.inout<i15>
@@ -901,7 +939,7 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.compreg.ce {{%.+}}, [[CLK]], {{%.+}} : i42
+  // CHECK: [[REG:%.+]] = seq.firreg {{%.+}} clock [[CLK]] : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
