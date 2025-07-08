@@ -865,17 +865,19 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
       }
     }
 
-    bool inDut = false;
-    if (instanceInfo->anyInstanceInEffectiveDesign(extModule)) {
-      inDut = true;
-      for (StringRef lib : libs)
-        dutLibs.push_back(lib);
-    } else {
-      for (StringRef lib : libs)
-        testLibs.push_back(lib);
-    }
+    if (!libs.empty()) {
+      bool inDut = false;
+      if (instanceInfo->anyInstanceInEffectiveDesign(extModule)) {
+        inDut = true;
+        for (StringRef lib : libs)
+          dutLibs.push_back(lib);
+      } else {
+        for (StringRef lib : libs)
+          testLibs.push_back(lib);
+      }
 
-    omir.addBlackBoxModule(extModule, inDut, libs);
+      omir.addBlackBoxModule(extModule, inDut, libs);
+    }
   }
 
   // This is a helper to create the verbatim output operation.
