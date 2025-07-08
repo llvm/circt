@@ -27,8 +27,8 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
   return FVInt(APInt(svint.getBitWidth(), value));
 }
 
-static Value getSelectIndex(OpBuilder &builder, Value index,
-                            const slang::ConstantRange &range) const {
+static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
+                            const slang::ConstantRange &range) {
   auto indexType = cast<moore::UnpackedType>(index.getType());
   auto bw = std::max(llvm::Log2_32_Ceil(std::max(std::abs(range.lower()),
                                                  std::abs(range.upper()))),
@@ -507,7 +507,7 @@ struct RvalueExprVisitor {
     if (!lowBit)
       return {};
     return builder.create<moore::DynExtractOp>(
-        loc, type, value, getSelectIndex(builder, lowBit, range));
+        loc, type, value, getSelectIndex(builder, loc, lowBit, range));
   }
 
   // Handle range bits selections.
@@ -575,7 +575,7 @@ struct RvalueExprVisitor {
       return builder.create<moore::ExtractOp>(
           loc, type, value, range.translateIndex(constLowBit));
     return builder.create<moore::DynExtractOp>(
-        loc, type, value, getSelectIndex(builder, dynLowBit, range));
+        loc, type, value, getSelectIndex(builder, loc, dynLowBit, range));
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
@@ -1028,7 +1028,7 @@ struct LvalueExprVisitor {
       return {};
     return builder.create<moore::DynExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        getSelectIndex(lowBit, range));
+        getSelectIndex(builder, loc, lowBit, range));
   }
 
   // Handle range bits selections.
@@ -1098,7 +1098,7 @@ struct LvalueExprVisitor {
           range.translateIndex(constLowBit));
     return builder.create<moore::DynExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        getSelectIndex(dynLowBit, range));
+        getSelectIndex(builder, loc, dynLowBit, range));
   }
 
   Value visit(const slang::ast::StreamingConcatenationExpression &expr) {
