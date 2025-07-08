@@ -55,15 +55,6 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK:      emit.file "qux{{/|\\\\}}NotQux.jpeg" sym @blackbox_Qux.sv {
   // CHECK-NEXT:   emit.verbatim "/* Qux */\0A"
   // CHECK-NEXT: }
-
-  // CHECK:      emit.file_list "firrtl_black_box_resource_files.f", [
-  // CHECK-SAME:   @blackbox_hello.v
-  // CHECK-SAME:   @blackbox_hello3.v
-  // CHECK-SAME:   @blackbox_Bar.v
-  // CHECK-SAME:   @blackbox_Baz.sv
-  // CHECK-SAME:   @blackbox_hello2.v
-  // CHECK-SAME:   @blackbox_Qux.sv
-  // CHECK-SAME: ] sym @blackbox_filelist
 }
 
 //--- NoDUT.mlir
@@ -91,7 +82,4 @@ firrtl.circuit "NoDUT" attributes {annotations = [
   // CHECK:      emit.file ".{{/|\\\\}}NoDUTBlackBox.sv" sym @blackbox_NoDUTBlackBox.sv {
   // CHECK-NEXT:   emit.verbatim "module NoDUTBlackBox();\0Aendmodule\0A"
   // CHECK-NEXT: }
-  // CHECK:      emit.file_list "firrtl_black_box_resource_files.f", [
-  // CHECK-SAME:   @blackbox_NoDUTBlackBox.sv
-  // CHECK-SAME: ] sym @blackbox_filelist
 }

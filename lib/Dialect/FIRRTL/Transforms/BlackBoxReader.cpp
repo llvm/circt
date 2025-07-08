@@ -269,11 +269,6 @@ void BlackBoxReaderPass::runOnOperation() {
     SmallVector<Attribute> symbols;
     for (emit::FileOp file : fileListFiles)
       symbols.push_back(FlatSymbolRefAttr::get(file.getSymNameAttr()));
-
-    builder.create<emit::FileListOp>(
-        loc, builder.getStringAttr("firrtl_black_box_resource_files.f"),
-        builder.getArrayAttr(symbols),
-        builder.getStringAttr(ns.newName("blackbox_filelist")));
   }
 
   // If nothing has changed we can preserve the analysis.

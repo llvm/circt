@@ -5,12 +5,8 @@
 // RUN: FileCheck %s --check-prefix=VERILOG-HDR < %t/magic/blackbox-inline.svh
 // RUN: FileCheck %s --check-prefix=VERILOG-GIB < %t/magic/blackbox-path.v
 // RUN: FileCheck %s --check-prefix=LIST-TOP < %t/filelist.f
-// RUN: FileCheck %s --check-prefix=LIST-BLACK-BOX < %t/firrtl_black_box_resource_files.f
 
 // LIST-TOP: test_mod.sv
-
-// LIST-BLACK-BOX:      magic{{[/\]}}blackbox-inline.v
-// LIST-BLACK-BOX-NEXT: magic{{[/\]}}blackbox-path.v
 
 firrtl.circuit "test_mod" attributes {annotations = [
   // Black box processing should honor only the last annotation.
