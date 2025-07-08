@@ -322,9 +322,9 @@ static void populateMooreToCoreLowering(PassManager &pm) {
 static void populateLLHDLowering(PassManager &pm) {
   // Inline function calls and lower SCF to CF.
   pm.addNestedPass<hw::HWModuleOp>(llhd::createWrapProceduralOpsPass());
+  pm.addPass(mlir::createSCFToControlFlowPass());
   pm.addPass(llhd::createInlineCallsPass());
   pm.addPass(mlir::createSymbolDCEPass());
-  pm.addPass(mlir::createSCFToControlFlowPass());
 
   // Simplify processes, replace signals with process results, and detect
   // registers.
