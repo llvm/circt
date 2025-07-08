@@ -294,8 +294,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
-  pm.nest<firrtl::CircuitOp>().addPass(
-      circt::firrtl::createLintingPass(opt.getLintStaticAsserts()));
+  pm.nest<firrtl::CircuitOp>().addPass(circt::firrtl::createLintingPass(
+      /*lintStaticAsserts=*/opt.getLintStaticAsserts(),
+      /*lintXmrsInDesign=*/opt.getLintXmrsInDesign()));
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
                                        opt.getVerificationFlavor()));
@@ -781,8 +782,15 @@ struct FirtoolCmdOptions {
       "disable-wire-elimination", llvm::cl::desc("Disable wire elimination"),
       llvm::cl::init(false)};
 
+  //===----------------------------------------------------------------------===
+  // Lint options
+  //===----------------------------------------------------------------------===
+
   llvm::cl::opt<bool> lintStaticAsserts{
       "lint-static-asserts", llvm::cl::desc("Lint static assertions"),
+      llvm::cl::init(true)};
+  llvm::cl::opt<bool> lintXmrsInDesign{
+      "lint-xmrs-in-design", llvm::cl::desc("Lint XMRs in the design"),
       llvm::cl::init(true)};
 };
 } // namespace
@@ -823,7 +831,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
-      disableWireElimination(false), lintStaticAsserts(true) {
+      disableWireElimination(false), lintStaticAsserts(true),
+      lintXmrsInDesign(true) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -877,4 +886,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   symbolicValueLowering = clOptions->symbolicValueLowering;
   disableWireElimination = clOptions->disableWireElimination;
   lintStaticAsserts = clOptions->lintStaticAsserts;
+  lintXmrsInDesign = clOptions->lintXmrsInDesign;
 }
