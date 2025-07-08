@@ -19,6 +19,7 @@ target_link_libraries(circt-synth
   CIRCTSV
   CIRCTTransforms
   CIRCTVerif
+  MLIRBytecodeWriter
   MLIRIR
   MLIRParser
   LLVMSupport
