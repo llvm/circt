@@ -198,7 +198,7 @@ std::unique_ptr<mlir::Pass>
 createLinkCircuitsPass(mlir::StringRef baseCircuitName = "",
                        bool noMangle = false);
 
-std::unique_ptr<mlir::Pass> createLintingPass();
+std::unique_ptr<mlir::Pass> createLintingPass(bool lintStaticAsserts = true);
 
 std::unique_ptr<mlir::Pass> createProbesToSignalsPass();
 

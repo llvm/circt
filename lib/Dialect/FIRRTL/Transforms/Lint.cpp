@@ -24,13 +24,21 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
+/// Linter configuration.
+struct Config {
+  /// If true, then assertions that are statically false (and will trivially
+  /// fail simulation) will result in an error.
+  bool lintStaticAsserts;
+};
+
 /// Class that stores state related to linting.  This exists to avoid needing to
 /// clear members of `LintPass` and instead just rely on `Linter` objects being
 /// deleted.
 class Linter {
 
 public:
-  Linter(FModuleOp fModule) : fModule(fModule){};
+  Linter(FModuleOp fModule, const Config &config)
+      : fModule(fModule), config(config){};
 
   /// Lint the specified module.
   LogicalResult lint() {
@@ -39,7 +47,7 @@ public:
       if (isa<WhenOp>(op))
         return WalkResult::skip();
       if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
-        if (checkAssert(op).failed())
+        if (config.lintStaticAsserts && checkAssert(op).failed())
           failed = true;
 
       return WalkResult::advance();
@@ -53,6 +61,7 @@ public:
 
 private:
   FModuleOp fModule;
+  const Config &config;
 
   LogicalResult checkAssert(Operation *op) {
     Value predicate;
@@ -87,6 +96,8 @@ private:
 };
 
 struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
+  using LintBase::lintStaticAsserts;
+
   void runOnOperation() override {
 
     CircuitOp circuitOp = getOperation();
@@ -97,7 +108,7 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
       return failure();
     };
     auto transform = [&](FModuleOp moduleOp) -> LogicalResult {
-      return Linter(moduleOp).lint();
+      return Linter(moduleOp, {lintStaticAsserts}).lint();
     };
 
     SmallVector<FModuleOp> modules(circuitOp.getOps<FModuleOp>());
@@ -110,6 +121,8 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
 };
 } // namespace
 
-std::unique_ptr<Pass> firrtl::createLintingPass() {
-  return std::make_unique<LintPass>();
+std::unique_ptr<Pass> firrtl::createLintingPass(bool lintStaticAsserts) {
+  auto pass = std::make_unique<LintPass>();
+  pass->lintStaticAsserts = lintStaticAsserts;
+  return pass;
 }

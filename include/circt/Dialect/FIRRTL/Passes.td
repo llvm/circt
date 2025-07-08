@@ -861,6 +861,10 @@ def Lint :
     inferred to be false. The pass emits error on such failing ops.
   }];
   let constructor = "circt::firrtl::createLintingPass()";
+  let options = [
+    Option<"lintStaticAsserts", "lint-static-asserts", "bool", "",
+      "enable linting of static assertions">
+  ];
 }
 
 def SpecializeLayers : Pass<"firrtl-specialize-layers", "firrtl::CircuitOp"> {
