@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import BundledChannel, ChannelDirection, ChannelSignaling, Type
+from .types import (Bundle, BundledChannel, Channel, ChannelDirection,
+                    ChannelSignaling, Type)
 
 from .circt.dialects import esi, sv
 from .circt import support
@@ -781,7 +782,8 @@ class ChannelSignal(Signal):
     ready_wire = Wire(Bits(1))
     data, valid = self.unwrap(ready_wire)
     data = transform(data)
-    ret_chan, ready = Channel(data.type).wrap(data, valid)
+    ret_chan, ready = Channel(data.type,
+                              signaling=self.type.signaling).wrap(data, valid)
     ready_wire.assign(ready)
     return ret_chan
 
@@ -869,6 +871,93 @@ class BundleSignal(Signal):
     for name, wire in froms:
       wire.assign(unpacked_self[name])
 
+  def transform(
+      self, **kwargs: Union[Callable, Tuple[Type, Callable]]) -> BundleSignal:
+    """Transform the channels in the bundle using the functions given as kwargs
+    by channel name. The transformed output bundle type's FROM channels are
+    given in `from_transforms_input_types`."""
+    from .constructs import Wire
+
+    def get_type_func(kwarg: Union[Callable, Tuple[Type, Callable]],
+                      default_type: Channel) -> Tuple[Type, Callable]:
+      """If `kwarg` is a tuple, return a (channel of the type, the callable).
+      Get the control spec from the default_type. If it's callable, return the
+      default type and the callable."""
+
+      if isinstance(kwarg, tuple):
+        if len(kwarg) != 2:
+          raise ValueError(
+              "Expected a tuple of (Type, Callable) for channel transform")
+        t = kwarg[0]
+        if not isinstance(t, Type):
+          raise TypeError(
+              f"Expected first element of tuple to be a Type, got {type(t)}")
+        if not isinstance(kwarg[1], Callable):
+          raise TypeError(
+              f"Expected second element of tuple to be a Callable, got {type(kwarg[1])}"
+          )
+        return Channel(inner_type=t,
+                       signaling=default_type.signaling,
+                       data_delay=default_type.data_delay), kwarg[1]
+      elif callable(kwarg):
+        # If a callable, return the type of the channel.
+        return default_type, kwarg
+      else:
+        raise TypeError(
+            "Expected a callable or a tuple of (Type, Callable) for channel "
+            f"transform, got {type(kwarg)}")
+
+    # Build wires for the FROM channels to be assigned after packing.
+    transformed_from_channels = {}
+    for bc in self.type.channels:
+      if bc.direction == ChannelDirection.FROM:
+        transformed_from_channels[bc.name] = Wire(bc.channel)
+
+    # Unpack the bundle.
+    to_channels = self.unpack(**transformed_from_channels)
+
+    # Transform the TO channels.
+    transformed_to_channels = {}
+    for name, channel in to_channels.items():
+      if name in kwargs:
+        t, transform = get_type_func(kwargs[name], channel.type)
+        if t != channel.type:
+          # If the type is different, we need to create a new channel.
+          raise TypeError(f"Cannot transform types of TO channel '{name}'")
+        transformed_to_channels[name] = channel.transform(transform)
+      else:
+        transformed_to_channels[name] = channel
+
+    # Since we return a new bundle potentially with a different type, we need to
+    # build that new type.
+    ret_bundled_channels = []
+    for bc in self.type.channels:
+      if bc.direction == ChannelDirection.TO:
+        assert bc.name in transformed_to_channels, f"Missing transformed channel '{bc.name}'"
+        ret_bundled_channels.append(
+            BundledChannel(bc.name, ChannelDirection.TO,
+                           transformed_to_channels[bc.name].type))
+      else:
+        from_type = bc.channel
+        if bc.name in kwargs:
+          from_type, _ = get_type_func(kwargs[bc.name], from_type)
+        ret_bundled_channels.append(
+            BundledChannel(bc.name, ChannelDirection.FROM, from_type))
+    ret_bundle_type = Bundle(ret_bundled_channels)
+
+    # Pack the transformed TO channels into the new bundle type. Assign the FROM channels.
+    ret_bundle, from_channels = ret_bundle_type.pack(**transformed_to_channels)
+    for name, wire in transformed_from_channels.items():
+      assert name in from_channels, f"Missing from channel '{name}'"
+      if name in kwargs:
+        # If a transform was provided, assign the transformed wire.
+        _, transform = get_type_func(kwargs[name], from_channels[name].type)
+        wire.assign(from_channels[name].transform(transform))
+      else:
+        wire.assign(from_channels[name])
+
+    return ret_bundle
+
   def coerce(
       self,
       new_bundle_type: "Bundle",
@@ -890,40 +979,60 @@ class BundleSignal(Signal):
     sig_to_chan, sig_from_chan = self.type.get_to_from()
     ret_to_chan, ret_from_chan = new_bundle_type.get_to_from()
 
-    # Get the from channel and run the transform if specified.
-    from_channel_wire = Wire(ret_from_chan.channel)
-    if from_chan_transform is not None:
-      from_channel = from_channel_wire.transform(from_chan_transform)
-    else:
-      from_channel = from_channel_wire
-    if from_channel.type.signaling != sig_from_chan.channel.signaling:
-      check_clk_rst()
-      from_channel = from_channel.buffer(
-          clk, rst, 1, output_signaling=sig_from_chan.channel.signaling)
+    froms = {}
+    from_channel_wire = None
+    if ret_from_chan is not None:
+      if sig_from_chan is None:
+        raise ValueError(
+            "Cannot coerce a bundle with no FROM channel to one with a FROM channel."
+        )
+      # Get the from channel and run the transform if specified.
+      from_channel_wire = Wire(ret_from_chan.channel)
+      if from_chan_transform is not None:
+        from_channel = from_channel_wire.transform(from_chan_transform)
+      else:
+        from_channel = from_channel_wire
+      if from_channel.type.signaling != sig_from_chan.channel.signaling:
+        check_clk_rst()
+        from_channel = from_channel.buffer(
+            clk,
+            rst,
+            stages=1,
+            output_signaling=sig_from_chan.channel.signaling)
 
-    if from_channel.type != sig_from_chan.channel:
-      raise TypeError(
-          f"Expected channel type {sig_from_chan.channel}, got {from_channel.type} on FROM channel"
-      )
+      if from_channel.type != sig_from_chan.channel:
+        raise TypeError(
+            f"Expected channel type {sig_from_chan.channel}, got {from_channel.type} on FROM channel"
+        )
+      froms = {sig_from_chan.name: from_channel}
 
     # Unpack the to channel and run the transform if specified.
-    to_channels = self.unpack(**{sig_from_chan.name: from_channel})
-    to_channel = to_channels[sig_to_chan.name]
-    if to_chan_transform is not None:
-      to_channel = to_channel.transform(to_chan_transform)
-    if to_channel.type.signaling != sig_to_chan.channel.signaling:
-      check_clk_rst()
-      to_channel = to_channel.buffer(
-          clk, rst, 1, output_signaling=sig_to_chan.channel.signaling)
-    if to_channel.type != ret_to_chan.channel:
-      raise TypeError(
-          f"Expected channel type {ret_to_chan.channel}, got {to_channel.type} on TO channel"
-      )
+    to_channels = self.unpack(**froms)
+
+    pack_to_channels = {}
+    if ret_to_chan is not None:
+      if sig_to_chan is None:
+        raise ValueError(
+            "Cannot coerce a bundle with no TO channel to one with a TO channel."
+        )
+
+      to_channel = to_channels[sig_to_chan.name]
+      if to_chan_transform is not None:
+        to_channel = to_channel.transform(to_chan_transform)
+      if ret_to_chan.channel.signaling != sig_to_chan.channel.signaling:
+        check_clk_rst()
+        to_channel = to_channel.buffer(
+            clk, rst, 1, output_signaling=ret_to_chan.channel.signaling)
+      if to_channel.type != ret_to_chan.channel:
+        raise TypeError(
+            f"Expected channel type {ret_to_chan.channel}, got {to_channel.type} on TO channel"
+        )
+      pack_to_channels[ret_to_chan.name] = to_channel
 
     # Pack the new bundle, assign the from channel, and return.
-    ret_bundle, from_chans = new_bundle_type.pack(
-        **{ret_to_chan.name: to_channel})
-    from_channel_wire.assign(from_chans[ret_from_chan.name])
+    ret_bundle, from_chans = new_bundle_type.pack(**pack_to_channels)
+    if from_channel_wire is not None:
+      from_channel_wire.assign(from_chans[ret_from_chan.name])
     return ret_bundle
 
 

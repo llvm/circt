@@ -154,14 +154,6 @@ class RecvBundleTest(Module):
 # -----
 
 try:
-  Bundle([]).get_to_from()
-  # CHECK: Bundle must have exactly two channels.
-except ValueError as e:
-  print(e)
-
-# -----
-
-try:
   Bundle([
       BundledChannel("req", ChannelDirection.TO, Channel(Bits(32))),
       BundledChannel("resp", ChannelDirection.TO, Channel(Bits(8))),

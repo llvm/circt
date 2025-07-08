@@ -568,8 +568,11 @@ void UnpackBundleOp::build(::mlir::OpBuilder &odsBuilder,
 }
 
 LogicalResult PackBundleOp::verify() {
-  if (!getBundle().hasOneUse())
-    return emitOpError("bundles must have exactly one user");
+  if (!getBundle().hasOneUse()) {
+    if (getBundle().getUsers().empty())
+      return emitOpError("bundle must be used");
+    return emitOpError("bundle must only be used once");
+  }
   return success();
 }
 void PackBundleOp::build(::mlir::OpBuilder &odsBuilder,
@@ -584,8 +587,11 @@ void PackBundleOp::build(::mlir::OpBuilder &odsBuilder,
 }
 
 LogicalResult UnpackBundleOp::verify() {
-  if (!getBundle().hasOneUse())
-    return emitOpError("bundles must have exactly one user");
+  if (!getBundle().hasOneUse()) {
+    if (getBundle().getUsers().empty())
+      return emitOpError("bundle must be used");
+    return emitOpError("bundle must only be used once");
+  }
   return success();
 }
 
