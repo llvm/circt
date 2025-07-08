@@ -853,7 +853,7 @@ def LinkCircuits : Pass<"firrtl-link-circuits", "mlir::ModuleOp"> {
 }
 
 def Lint :
-    Pass<"firrtl-lint", "firrtl::FModuleOp"> {
+    Pass<"firrtl-lint", "firrtl::CircuitOp"> {
   let summary = "An analysis pass to detect static simulation failures.";
   let description = [{
     This pass detects operations that will trivially fail any simulation.

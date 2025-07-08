@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
@@ -87,7 +88,21 @@ private:
 
 struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
   void runOnOperation() override {
-    if (failed(Linter(getOperation()).lint()))
+
+    CircuitOp circuitOp = getOperation();
+
+    auto reduce = [](LogicalResult a, LogicalResult b) -> LogicalResult {
+      if (succeeded(a) && succeeded(b))
+        return success();
+      return failure();
+    };
+    auto transform = [&](FModuleOp moduleOp) -> LogicalResult {
+      return Linter(moduleOp).lint();
+    };
+
+    SmallVector<FModuleOp> modules(circuitOp.getOps<FModuleOp>());
+    if (failed(transformReduce(circuitOp.getContext(), modules, success(),
+                               reduce, transform)))
       return signalPassFailure();
 
     markAllAnalysesPreserved();
