@@ -27,6 +27,36 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
   return FVInt(APInt(svint.getBitWidth(), value));
 }
 
+static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
+                            const slang::ConstantRange &range) {
+  auto indexType = cast<moore::UnpackedType>(index.getType());
+  auto bw = std::max(llvm::Log2_32_Ceil(std::max(std::abs(range.lower()),
+                                                 std::abs(range.upper()))),
+                     indexType.getBitSize().value());
+  auto intType =
+      moore::IntType::get(index.getContext(), bw, indexType.getDomain());
+
+  if (range.isLittleEndian()) {
+    if (range.lower() == 0)
+      return index;
+
+    Value newIndex =
+        builder.createOrFold<moore::ConversionOp>(loc, intType, index);
+    Value offset = builder.create<moore::ConstantOp>(
+        loc, intType, range.lower(), /*isSigned = */ range.lower() < 0);
+    return builder.createOrFold<moore::SubOp>(loc, newIndex, offset);
+  }
+
+  if (range.upper() == 0)
+    return builder.createOrFold<moore::NegOp>(loc, index);
+
+  Value newIndex =
+      builder.createOrFold<moore::ConversionOp>(loc, intType, index);
+  Value offset = builder.create<moore::ConstantOp>(
+      loc, intType, range.upper(), /* isSigned = */ range.upper() < 0);
+  return builder.createOrFold<moore::SubOp>(loc, offset, newIndex);
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 struct RvalueExprVisitor {
@@ -458,35 +488,6 @@ struct RvalueExprVisitor {
     return builder.create<moore::ReplicateOp>(loc, type, value);
   }
 
-  Value getSelectIndex(Value index, const slang::ConstantRange &range) const {
-    auto indexType = cast<moore::UnpackedType>(index.getType());
-    auto bw = std::max(llvm::Log2_32_Ceil(std::max(std::abs(range.lower()),
-                                                   std::abs(range.upper()))),
-                       indexType.getBitSize().value());
-    auto intType =
-        moore::IntType::get(index.getContext(), bw, indexType.getDomain());
-
-    if (range.isLittleEndian()) {
-      if (range.lower() == 0)
-        return index;
-
-      Value newIndex =
-          builder.createOrFold<moore::ConversionOp>(loc, intType, index);
-      Value offset = builder.create<moore::ConstantOp>(
-          loc, intType, range.lower(), /*isSigned = */ range.lower() < 0);
-      return builder.createOrFold<moore::SubOp>(loc, newIndex, offset);
-    }
-
-    if (range.upper() == 0)
-      return builder.createOrFold<moore::NegOp>(loc, index);
-
-    Value newIndex =
-        builder.createOrFold<moore::ConversionOp>(loc, intType, index);
-    Value offset = builder.create<moore::ConstantOp>(
-        loc, intType, range.upper(), /* isSigned = */ range.upper() < 0);
-    return builder.createOrFold<moore::SubOp>(loc, offset, newIndex);
-  }
-
   // Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -505,8 +506,8 @@ struct RvalueExprVisitor {
     auto lowBit = context.convertRvalueExpression(expr.selector());
     if (!lowBit)
       return {};
-    return builder.create<moore::DynExtractOp>(loc, type, value,
-                                               getSelectIndex(lowBit, range));
+    return builder.create<moore::DynExtractOp>(
+        loc, type, value, getSelectIndex(builder, loc, lowBit, range));
   }
 
   // Handle range bits selections.
@@ -574,7 +575,7 @@ struct RvalueExprVisitor {
       return builder.create<moore::ExtractOp>(
           loc, type, value, range.translateIndex(constLowBit));
     return builder.create<moore::DynExtractOp>(
-        loc, type, value, getSelectIndex(dynLowBit, range));
+        loc, type, value, getSelectIndex(builder, loc, dynLowBit, range));
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
@@ -1012,6 +1013,7 @@ struct LvalueExprVisitor {
     auto value = context.convertLvalueExpression(expr.value());
     if (!type || !value)
       return {};
+    auto range = expr.value().type->getFixedRange();
     if (auto *constValue = expr.selector().constant) {
       assert(!constValue->hasUnknown());
       assert(constValue->size() <= 32);
@@ -1019,14 +1021,14 @@ struct LvalueExprVisitor {
       auto lowBit = constValue->integer().as<uint32_t>().value();
       return builder.create<moore::ExtractRefOp>(
           loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-          lowBit);
+          range.translateIndex(lowBit));
     }
     auto lowBit = context.convertRvalueExpression(expr.selector());
     if (!lowBit)
       return {};
     return builder.create<moore::DynExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        lowBit);
+        getSelectIndex(builder, loc, lowBit, range));
   }
 
   // Handle range bits selections.
@@ -1089,13 +1091,14 @@ struct LvalueExprVisitor {
       else
         dynLowBit = context.convertRvalueExpression(expr.left());
     }
+    auto range = expr.value().type->getFixedRange();
     if (leftConst && rightConst)
       return builder.create<moore::ExtractRefOp>(
           loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-          constLowBit);
+          range.translateIndex(constLowBit));
     return builder.create<moore::DynExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        dynLowBit);
+        getSelectIndex(builder, loc, dynLowBit, range));
   }
 
   Value visit(const slang::ast::StreamingConcatenationExpression &expr) {
