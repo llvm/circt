@@ -504,7 +504,8 @@ LogicalResult RemoveUnusedArcArgumentsPattern::matchAndRewrite(
       if (toDelete[i])
         user.getArgOperandsMutable().erase(i);
 
-  op.eraseArguments(toDelete);
+  if (failed(op.eraseArguments(toDelete)))
+    return failure();
   op.setFunctionType(
       rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
 
