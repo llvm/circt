@@ -5275,7 +5275,7 @@ ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
       return failure();
 
   if (knownLayersBuffer.size() != 0)
-    if (requireFeature({5, 1, 0}, "extmodules with known layers"))
+    if (requireFeature(nextFIRVersion, "extmodules with known layers"))
       return failure();
 
   enabledLayers = ArrayAttr::get(getContext(), enabledLayersBuffer);
