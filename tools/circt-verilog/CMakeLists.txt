@@ -11,6 +11,7 @@ set(libs
   CIRCTSeq
   CIRCTSim
   CIRCTSupport
+  CIRCTTransforms
   CIRCTVerif
   MLIRBytecodeReader
   MLIRControlFlowDialect

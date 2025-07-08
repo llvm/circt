@@ -110,3 +110,18 @@ target_link_libraries(circt-capi-rtgtest-test
   MLIRCAPIIR
   CIRCTCAPIRTGTest
 )
+
+add_llvm_executable(circt-capi-aig-test
+  PARTIAL_SOURCES_INTENDED
+  aig.c
+)
+llvm_update_compile_flags(circt-capi-aig-test)
+
+target_link_libraries(circt-capi-aig-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIAIG
+  CIRCTCAPIHW
+  CIRCTCAPISeq
+)

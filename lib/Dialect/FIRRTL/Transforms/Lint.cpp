@@ -23,23 +23,35 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
-  void runOnOperation() override {
-    auto fModule = getOperation();
-    auto walkResult = fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
+/// Class that stores state related to linting.  This exists to avoid needing to
+/// clear members of `LintPass` and instead just rely on `Linter` objects being
+/// deleted.
+class Linter {
+
+public:
+  Linter(FModuleOp fModule) : fModule(fModule){};
+
+  /// Lint the specified module.
+  LogicalResult lint() {
+    bool failed = false;
+    fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
       if (isa<WhenOp>(op))
         return WalkResult::skip();
       if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
         if (checkAssert(op).failed())
-          return WalkResult::interrupt();
+          failed = true;
 
       return WalkResult::advance();
     });
-    if (walkResult.wasInterrupted())
-      return signalPassFailure();
 
-    markAllAnalysesPreserved();
-  };
+    if (failed)
+      return failure();
+
+    return success();
+  }
+
+private:
+  FModuleOp fModule;
 
   LogicalResult checkAssert(Operation *op) {
     Value predicate;
@@ -71,6 +83,15 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
 
     return success();
   }
+};
+
+struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
+  void runOnOperation() override {
+    if (failed(Linter(getOperation()).lint()))
+      return signalPassFailure();
+
+    markAllAnalysesPreserved();
+  };
 };
 } // namespace
 

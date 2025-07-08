@@ -366,11 +366,11 @@ def Writer(type):
 
 # CHECK:  hw.module @Ram1(in %clk : !seq.clock, in %rst : i1)
 # CHECK:    esi.service.instance #esi.appid<"ram"> svc @ram impl as "sv"(%clk, %rst) : (!seq.clock, i1) -> ()
-# CHECK:    [[WR:%.+]] = esi.service.req <@ram::@write>(#esi.appid<"ram_writer"[0]>) : !esi.bundle<[!esi.channel<!hw.struct<address: i3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
+# CHECK:    [[WR:%.+]] = esi.service.req <@ram::@write>(#esi.appid<"ram_writer"[0]>) : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
 # CHECK:    %rawOutput, %valid = esi.unwrap.vr %req, %ready : !hw.struct<address: ui3, data: ui32>
-# CHECK:    [[CASTED:%.+]] = hw.bitcast %rawOutput : (!hw.struct<address: ui3, data: ui32>) -> !hw.struct<address: i3, data: i32>
-# CHECK:    %chanOutput, %ready = esi.wrap.vr [[CASTED]], %valid : !hw.struct<address: i3, data: i32>
-# CHECK:    %ack = esi.bundle.unpack %chanOutput from [[WR]] : !esi.bundle<[!esi.channel<!hw.struct<address: i3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
+# CHECK:    [[CASTED:%.+]] = hw.bitcast %rawOutput : (!hw.struct<address: ui3, data: ui32>) -> !hw.struct<address: ui3, data: i32>
+# CHECK:    %chanOutput, %ready = esi.wrap.vr [[CASTED]], %valid : !hw.struct<address: ui3, data: i32>
+# CHECK:    %ack = esi.bundle.unpack %chanOutput from [[WR]] : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: i32>> from "req", !esi.channel<i0> to "ack"]>
 # CHECK:    %bundle, %req = esi.bundle.pack %ack : !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>> from "req", !esi.channel<i0> to "ack"]>
 # CHECK:    hw.instance "Writer" sym @Writer @Writer(clk: %clk: !seq.clock, rst: %rst: i1, cmd: %bundle: !esi.bundle<[!esi.channel<!hw.struct<address: ui3, data: ui32>> from "req", !esi.channel<i0> to "ack"]>) -> ()
 
@@ -404,3 +404,64 @@ class UTurn(Module):
   @generator
   def build(ports):
     ports.out1, ports.out2 = Bundle1.create_uturn()
+
+
+# Define test bundles with both TO and FROM channels
+TestBundleInput = Bundle([
+    BundledChannel("req", ChannelDirection.TO, Channel(Bits(8))),
+    BundledChannel("resp", ChannelDirection.FROM, Channel(Bits(24)))
+])
+TestBundleOutput = Bundle([
+    BundledChannel("req", ChannelDirection.TO, Channel(Bits(16))),
+    BundledChannel("resp", ChannelDirection.FROM, Channel(Bits(48)))
+])
+
+
+def transform_double_width(data):
+  """Transform function that doubles the width by padding with zeros."""
+  from pycde.dialects import hw
+  from pycde.signals import BitsSignal
+  # Convert to bits to enable operations
+  data_bits = data.as_bits()
+  zero_pad = Bits(8)(0)
+  return BitsSignal.concat([zero_pad, data_bits])
+
+
+def transform_truncate_half(data):
+  """Transform function that truncates to half width."""
+  # Convert to bits to enable slicing
+  data_bits = data.as_bits()
+  half_width = data_bits.type.width // 2
+  return data_bits[0:half_width]
+
+
+# CHECK-LABEL:   hw.module @TestBundleTransformBasic(in %clk : !seq.clock, in %rst : i1, in %bundle_in : !esi.bundle<[!esi.channel<i8> to "req", !esi.channel<i24> from "resp"]>, out bundle_out : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i48> from "resp"]>) attributes {output_file = #hw.output_file<"TestBundleTransformBasic.sv", includeReplicatedOps>} {
+# CHECK-NEXT:      %req = esi.bundle.unpack %chanOutput_2 from %bundle_in : !esi.bundle<[!esi.channel<i8> to "req", !esi.channel<i24> from "resp"]>
+# CHECK-NEXT:      %rawOutput, %valid = esi.unwrap.vr %req, %ready : i8
+# CHECK-NEXT:      %c0_i8 = hw.constant 0 : i8
+# CHECK-NEXT:      [[R0:%.+]] = comb.concat %c0_i8, %rawOutput : i8, i8
+# CHECK-NEXT:      %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
+# CHECK-NEXT:      %bundle, %resp = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i48> from "resp"]>
+# CHECK-NEXT:      %rawOutput_0, %valid_1 = esi.unwrap.vr %resp, %ready_3 : i48
+# CHECK-NEXT:      [[R1:%.+]] = comb.extract %rawOutput_0 from 0 : (i48) -> i24
+# CHECK-NEXT:      %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : i24
+# CHECK-NEXT:      hw.output %bundle : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i48> from "resp"]>
+@unittestmodule()
+class TestBundleTransformBasic(Module):
+  """Test basic bundle transform functionality with bidirectional bundle."""
+
+  clk = Clock()
+  rst = Input(Bits(1))
+
+  # Bundle input/output for testing
+  bundle_in = Input(TestBundleInput)
+  bundle_out = Output(TestBundleOutput)
+
+  @generator
+  def build(self):
+    # Transform the bundle by doubling the width of the req channel
+    # and truncating the resp channel to half width
+    transformed_bundle = self.bundle_in.transform(
+        req=transform_double_width, resp=(Bits(48), transform_truncate_half))
+
+    self.bundle_out = transformed_bundle

@@ -81,7 +81,8 @@ class ServiceDecl(_PyProxy):
           for (_, attr) in self.__dict__.items():
             if isinstance(attr, _RequestConnection):
               raw_esi.ServiceDeclPortOp(attr._name,
-                                        ir.TypeAttr.get(attr.type._type))
+                                        ir.TypeAttr.get(attr.type._type),
+                                        loc=get_user_loc())
     return sym_name
 
   def instantiate_builtin(self,
@@ -99,7 +100,8 @@ class ServiceDecl(_PyProxy):
         service_symbol=ir.FlatSymbolRefAttr.get(
             self._materialize_service_decl()),
         impl_type=ir.StringAttr.get(builtin),
-        inputs=[x.value for x in inputs]).operation.results
+        inputs=[x.value for x in inputs],
+        loc=get_user_loc()).operation.results
     return [_FromCirctValue(x) for x in impl_results]
 
   def implement_as(self,
@@ -131,8 +133,10 @@ class _RequestConnection:
       type = self.type
     self.decl._materialize_service_decl()
     return _FromCirctValue(
-        raw_esi.RequestConnectionOp(type._type, self.service_port,
-                                    appid._appid).toClient)
+        raw_esi.RequestConnectionOp(type._type,
+                                    self.service_port,
+                                    appid._appid,
+                                    loc=get_user_loc()).toClient)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
@@ -190,13 +194,12 @@ class _OutputBundleSetter(AssignableSignal):
 
     with get_user_loc(), ir.InsertionPoint.at_block_begin(
         self.rec.reqDetails.blocks[0]):
-      raw_esi.ServiceImplClientRecordOp(
-          self.req.relativeAppIDPath,
-          self.req.servicePort,
-          ir.TypeAttr.get(self.req.toClient.type),
-          channelAssignments=channel_assignments,
-          implDetails=details,
-      )
+      raw_esi.ServiceImplClientRecordOp(self.req.relativeAppIDPath,
+                                        self.req.servicePort,
+                                        ir.TypeAttr.get(self.req.toClient.type),
+                                        channelAssignments=channel_assignments,
+                                        implDetails=details,
+                                        loc=get_user_loc())
 
   @property
   def client_name(self) -> List[AppID]:
@@ -231,10 +234,13 @@ class EngineServiceRecord:
                details: Optional[Dict[str, object]] = None):
     rec_appid = AppID(f"{engine.appid.name}_record", engine.appid.index)
     details = optional_dict_to_dict_attr(details)
-    self._rec = raw_esi.ServiceImplRecordOp(appID=rec_appid._appid,
-                                            serviceImplName=engine.TypeName,
-                                            implDetails=details,
-                                            isEngine=True)
+    self._rec = raw_esi.ServiceImplRecordOp(
+        appID=rec_appid._appid,
+        serviceImplName=engine.TypeName,
+        implDetails=details,
+        isEngine=True,
+        loc=get_user_loc(),
+    )
     self._rec.regions[0].blocks.append()
 
   def add_record(self,
@@ -256,6 +262,7 @@ class EngineServiceRecord:
           ir.TypeAttr.get(client.req.toClient.type),
           channelAssignments=channel_assignments,
           implDetails=details,
+          loc=get_user_loc(),
       )
 
 
@@ -458,7 +465,7 @@ def DeclareRandomAccessMemory(inner_type: Type,
   class DeclareRandomAccessMemory(ServiceDecl):
     __name__ = name
     address_width = (depth - 1).bit_length()
-    address_type = Bits(address_width)
+    address_type = UInt(address_width)
     write_struct = StructType([('address', address_type), ('data', inner_type)])
 
     read = Bundle([
@@ -498,8 +505,10 @@ def DeclareRandomAccessMemory(inner_type: Type,
     @staticmethod
     def _op(sym_name: ir.StringAttr):
       return raw_esi.RandomAccessMemoryDeclOp(
-          sym_name, ir.TypeAttr.get(inner_type._type),
-          ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth))
+          sym_name,
+          ir.TypeAttr.get(inner_type._type),
+          ir.IntegerAttr.get(ir.IntegerType.get_signless(64), depth),
+          loc=get_user_loc())
 
   if name is not None:
     DeclareRandomAccessMemory.name = name
@@ -628,7 +637,7 @@ class MMIO:
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):
-    return raw_esi.MMIOServiceDeclOp(sym_name)
+    return raw_esi.MMIOServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 class _HostMem(ServiceDecl):
@@ -692,10 +701,12 @@ class _HostMem(ServiceDecl):
     return cast(
         BundleSignal,
         _FromCirctValue(
-            raw_esi.RequestConnectionOp(
-                write_bundle_type._type,
-                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
-                appid._appid).toClient))
+            raw_esi.RequestConnectionOp(write_bundle_type._type,
+                                        hw.InnerRefAttr.get(
+                                            self.symbol,
+                                            ir.StringAttr.get("write")),
+                                        appid._appid,
+                                        loc=get_user_loc()).toClient))
 
   def read_bundle_type(self, resp_type: Type) -> Bundle:
     """Build a read bundle type for the given data type."""
@@ -715,10 +726,12 @@ class _HostMem(ServiceDecl):
     return cast(
         BundleSignal,
         _FromCirctValue(
-            raw_esi.RequestConnectionOp(
-                read_bundle_type._type,
-                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("read")),
-                appid._appid).toClient))
+            raw_esi.RequestConnectionOp(read_bundle_type._type,
+                                        hw.InnerRefAttr.get(
+                                            self.symbol,
+                                            ir.StringAttr.get("read")),
+                                        appid._appid,
+                                        loc=get_user_loc()).toClient))
 
   def read(self, appid: AppID, req: ChannelSignal,
            data_type: Type) -> ChannelSignal:
@@ -734,7 +747,7 @@ class _HostMem(ServiceDecl):
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):
-    return raw_esi.HostMemServiceDeclOp(sym_name)
+    return raw_esi.HostMemServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 HostMem = _HostMem()
@@ -823,16 +836,18 @@ class _FuncService(ServiceDecl):
         BundledChannel("result", ChannelDirection.FROM, result.type)
     ])
     self._materialize_service_decl()
-    func_call = raw_esi.RequestConnectionOp(
-        bundle._type, hw.InnerRefAttr.get(self.symbol,
-                                          ir.StringAttr.get("call")),
-        name._appid)
+    func_call = raw_esi.RequestConnectionOp(bundle._type,
+                                            hw.InnerRefAttr.get(
+                                                self.symbol,
+                                                ir.StringAttr.get("call")),
+                                            name._appid,
+                                            loc=get_user_loc())
     to_funcs = _FromCirctValue(func_call.toClient).unpack(result=result)
     return to_funcs['arg']
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):
-    return raw_esi.FuncServiceDeclOp(sym_name)
+    return raw_esi.FuncServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 FuncService = _FuncService()
@@ -862,16 +877,17 @@ class _CallService(ServiceDecl):
     self._materialize_service_decl()
 
     func_call = _FromCirctValue(
-        raw_esi.RequestConnectionOp(
-            func_type._type,
-            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
-            name._appid).toClient)
+        raw_esi.RequestConnectionOp(func_type._type,
+                                    hw.InnerRefAttr.get(
+                                        self.symbol, ir.StringAttr.get("call")),
+                                    name._appid,
+                                    loc=get_user_loc()).toClient)
     assert isinstance(func_call, BundleSignal)
     return func_call
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):
-    return raw_esi.CallServiceDeclOp(sym_name)
+    return raw_esi.CallServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 CallService = _CallService()
@@ -907,7 +923,7 @@ class _Telemetry(ServiceDecl):
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):
-    return raw_esi.TelemetryServiceDeclOp(sym_name)
+    return raw_esi.TelemetryServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 Telemetry = _Telemetry()

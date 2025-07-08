@@ -772,13 +772,16 @@ class Bundle(Type):
             _FromCirctType(ty)) for (name, dir, ty) in self._type.channels
     ])
 
-  def get_to_from(self) -> typing.Tuple[BundledChannel, BundledChannel]:
-    """In a bidirectional, two-channel bundle, it is often desirable to easily
-    have access to the from and to channels."""
+  def get_to_from(
+      self
+  ) -> typing.Tuple[typing.Optional[BundledChannel],
+                    typing.Optional[BundledChannel]]:
+    """In a bidirectional, one or two channel bundle, it is often desirable to
+    easily have access to the from and to channels."""
 
     bundle_channels = self.channels
-    if len(bundle_channels) != 2:
-      raise ValueError("Bundle must have exactly two channels.")
+    if len(bundle_channels) > 2:
+      raise ValueError("Bundle must have at most two channels")
 
     # Return vars.
     to_channel_bc: typing.Optional[BundledChannel] = None
@@ -790,14 +793,16 @@ class Bundle(Type):
     else:
       from_channel_bc = bundle_channels[0]
 
-    # Look at the second channel.
-    if bundle_channels[1].direction == ChannelDirection.TO:
-      to_channel_bc = bundle_channels[1]
-    else:
-      from_channel_bc = bundle_channels[1]
+    if len(bundle_channels) == 2:
+      # Look at the second channel.
+      if bundle_channels[1].direction == ChannelDirection.TO:
+        to_channel_bc = bundle_channels[1]
+      else:
+        from_channel_bc = bundle_channels[1]
 
     # Check and return.
-    if to_channel_bc is None or from_channel_bc is None:
+    if len(bundle_channels) == 2 and (to_channel_bc is None or
+                                      from_channel_bc is None):
       raise ValueError("Bundle must have one channel in each direction.")
     return to_channel_bc, from_channel_bc
 
@@ -854,6 +859,9 @@ class Bundle(Type):
       self._from_channels_idx = {
           name: idx for idx, name in enumerate(from_channels_idx)
       }
+
+    def __contains__(self, name: str) -> bool:
+      return name in self._from_channels_idx
 
     @singledispatchmethod
     def __getitem__(self, name: str) -> ChannelSignal:

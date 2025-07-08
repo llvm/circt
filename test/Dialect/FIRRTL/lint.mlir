@@ -29,6 +29,8 @@ firrtl.circuit "assert_const" {
     %false = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @below {{'firrtl.assert' op is guaranteed to fail simulation, as the predicate is constant false}}
     firrtl.assert %clock, %false, %true, "valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
+    // expected-error @below {{'firrtl.assert' op is guaranteed to fail simulation, as the predicate is constant false}}
+    firrtl.assert %clock, %false, %true, "valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
   }
 }
 

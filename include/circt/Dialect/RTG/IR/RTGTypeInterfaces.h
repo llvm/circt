@@ -14,6 +14,8 @@
 #define CIRCT_DIALECT_RTG_IR_RTGTYPEINTERFACES_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Types.h"
 
 #include "circt/Dialect/RTG/IR/RTGTypeInterfaces.h.inc"

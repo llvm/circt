@@ -39,7 +39,9 @@ static ServicePortInfo createReqResp(StringAttr sym, Twine name,
 
 ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
   auto *ctxt = getContext();
-  auto addressType = IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()));
+  auto addressType =
+      IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()),
+                       IntegerType::SignednessSemantics::Unsigned);
 
   // Write port
   hw::StructType writeType = hw::StructType::get(
@@ -53,7 +55,9 @@ ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
 
 ServicePortInfo RandomAccessMemoryDeclOp::readPortInfo() {
   auto *ctxt = getContext();
-  auto addressType = IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()));
+  auto addressType =
+      IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()),
+                       IntegerType::SignednessSemantics::Unsigned);
 
   return createReqResp(getSymNameAttr(), "read", "address", addressType, "data",
                        getInnerType());

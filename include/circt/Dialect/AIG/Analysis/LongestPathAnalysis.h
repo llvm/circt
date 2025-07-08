@@ -21,8 +21,11 @@
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/JSON.h"
 #include <variant>
 
 namespace mlir {
@@ -133,11 +136,11 @@ public:
   const OutputPort &getFanOutAsPort() const {
     return std::get<OutputPort>(fanOut);
   }
-  hw::HWModuleOp getRoot() { return root; }
+  hw::HWModuleOp getRoot() const { return root; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const {
     return path.history;
   }
-  const OpenPath &getPath() { return path; }
+  const OpenPath &getPath() const { return path; }
 
   // Get source location for the fanout point (for diagnostics)
   Location getFanOutLoc();
@@ -159,6 +162,9 @@ private:
   OpenPath path;       // The actual timing path with history
   hw::HWModuleOp root; // Root module for this path
 };
+
+// JSON serialization for DataflowPath
+llvm::json::Value toJSON(const circt::aig::DataflowPath &path);
 
 // Options for the longest path analysis.
 struct LongestPathAnalysisOption {
@@ -238,9 +244,13 @@ public:
     return "aig.longest-path-analysis-top";
   }
 
+  MLIRContext *getContext() const { return ctx; }
+
 private:
   struct Impl;
   Impl *impl;
+
+  mlir::MLIRContext *ctx;
 };
 
 // A wrapper class for the longest path analysis that also traces debug points.
@@ -250,6 +260,26 @@ public:
   LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
       : LongestPathAnalysis(moduleOp, am, {true}) {}
 };
+
+// A collection of longest paths. The data structure owns the paths, and used
+// for computing statistics and CAPI.
+class LongestPathCollection {
+public:
+  LongestPathCollection(MLIRContext *ctx) : ctx(ctx){};
+  const DataflowPath &getPath(unsigned index) const { return paths[index]; }
+  MLIRContext *getContext() const { return ctx; }
+  llvm::SmallVector<DataflowPath, 64> paths;
+
+  // Sort the paths by delay in descending order.
+  void sortInDescendingOrder();
+
+  // Sort and drop all paths except the longest path per fanout point.
+  void sortAndDropNonCriticalPathsPerFanOut();
+
+private:
+  MLIRContext *ctx;
+};
+
 } // namespace aig
 } // namespace circt
 

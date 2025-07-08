@@ -32,6 +32,7 @@
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
@@ -66,6 +67,13 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
                                            cl::init("-"),
                                            cl::cat(mainCategory));
+static cl::opt<bool>
+    emitBytecode("emit-bytecode",
+                 cl::desc("Emit bytecode when generating MLIR output"),
+                 cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool> force("f", cl::desc("Enable binary output on terminals"),
+                           cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
@@ -107,6 +115,17 @@ static cl::opt<std::string>
                                "results. The analysis is only run "
                                "if file name is specified"),
                       cl::init(""), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    outputLongestPathJSON("output-longest-path-json",
+                          cl::desc("Output longest path analysis results in "
+                                   "JSON format"),
+                          cl::init(false), cl::cat(mainCategory));
+static cl::opt<int>
+    outputLongestPathTopKPercent("output-longest-path-top-k-percent",
+                                 cl::desc("Output top K percent of longest "
+                                          "paths in the analysis results"),
+                                 cl::init(5), cl::cat(mainCategory));
 
 static cl::opt<std::string> topName("top", cl::desc("Top module name"),
                                     cl::value_desc("name"), cl::init(""),
@@ -199,11 +218,35 @@ static void populateSynthesisPipeline(PassManager &pm) {
   if (!outputLongestPath.empty()) {
     circt::aig::PrintLongestPathAnalysisOptions options;
     options.outputFile = outputLongestPath;
-    options.showTopKPercent = 5;
+    options.showTopKPercent = outputLongestPathTopKPercent;
+    options.emitJSON = outputLongestPathJSON;
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
 
   // TODO: Add LUT mapping, etc.
+}
+
+/// Check output stream before writing bytecode to it.
+/// Warn and return true if output is known to be displayed.
+static bool checkBytecodeOutputToConsole(raw_ostream &os) {
+  if (os.is_displayed()) {
+    llvm::errs() << "WARNING: You're attempting to print out a bytecode file.\n"
+                    "This is inadvisable as it may cause display problems. If\n"
+                    "you REALLY want to taste MLIR bytecode first-hand, you\n"
+                    "can force output with the `-f' option.\n\n";
+    return true;
+  }
+  return false;
+}
+
+/// Print the operation to the specified stream, emitting bytecode when
+/// requested and politely avoiding dumping to terminal unless forced.
+static LogicalResult printOp(Operation *op, raw_ostream &os) {
+  if (emitBytecode && (force || !checkBytecodeOutputToConsole(os)))
+    return writeBytecodeToFile(op, os,
+                               mlir::BytecodeWriterConfig(getCirctVersion()));
+  op->print(os);
+  return success();
 }
 
 /// This function initializes the various components of the tool and
@@ -255,8 +298,8 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
     return failure();
 
   auto timer = ts.nest("Print MLIR output");
-  OpPrintingFlags printingFlags;
-  module->print(outputFile.value()->os(), printingFlags);
+  if (failed(printOp(module.get(), outputFile.value()->os())))
+    return failure();
   outputFile.value()->keep();
   return success();
 }

@@ -59,6 +59,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Mutex.h"
@@ -297,6 +298,68 @@ Location DataflowPath::getFanOutLoc() {
 
   // Return output port location.
   return root.getOutputLoc(std::get<std::pair<size_t, size_t>>(fanOut).first);
+}
+
+//===----------------------------------------------------------------------===//
+// JSON serialization
+//===----------------------------------------------------------------------===//
+
+static llvm::json::Value toJSON(const circt::igraph::InstancePath &path) {
+  llvm::json::Array result;
+  for (auto op : path) {
+    llvm::json::Object obj;
+    obj["instance_name"] = op.getInstanceName();
+    obj["module_name"] = op.getReferencedModuleNames()[0];
+    result.push_back(std::move(obj));
+  }
+  return result;
+}
+
+static llvm::json::Value toJSON(const circt::aig::Object &object) {
+  return llvm::json::Object{
+      {"instance_path", toJSON(object.instancePath)},
+      {"name", getNameImpl(object.value).getValue()},
+      {"bit_pos", object.bitPos},
+  };
+}
+
+static llvm::json::Value toJSON(const DataflowPath::FanOutType &path,
+                                hw::HWModuleOp root) {
+  using namespace llvm::json;
+  if (auto *object = std::get_if<circt::aig::Object>(&path))
+    return toJSON(*object);
+
+  auto &[resultNumber, bitPos] = *std::get_if<std::pair<size_t, size_t>>(&path);
+  return llvm::json::Object{
+      {"instance_path", {}}, // Instance path is empty for output ports.
+      {"name", root.getOutputName(resultNumber)},
+      {"bit_pos", bitPos},
+  };
+}
+
+static llvm::json::Value toJSON(const DebugPoint &point) {
+  return llvm::json::Object{
+      {"object", toJSON(point.object)},
+      {"delay", point.delay},
+      {"comment", point.comment},
+  };
+}
+
+static llvm::json::Value toJSON(const OpenPath &path) {
+  llvm::json::Array history;
+  for (auto &point : path.history)
+    history.push_back(toJSON(point));
+  return llvm::json::Object{{"fan_in", toJSON(path.fanIn)},
+                            {"delay", path.delay},
+                            {"history", std::move(history)}};
+}
+
+llvm::json::Value circt::aig::toJSON(const DataflowPath &path) {
+  return llvm::json::Object{
+      {"fan_out", ::toJSON(path.getFanOut(), path.getRoot())},
+      {"path", ::toJSON(path.getPath())},
+      {"root", path.getRoot().getModuleName()},
+  };
 }
 
 class LocalVisitor;
@@ -1382,7 +1445,7 @@ LongestPathAnalysis::~LongestPathAnalysis() { delete impl; }
 LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
     const LongestPathAnalysisOption &option)
-    : impl(new Impl(moduleOp, am, option)) {}
+    : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {}
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return impl->isAnalysisAvailable(moduleName);
@@ -1430,4 +1493,27 @@ LongestPathAnalysis::getAllPaths(StringAttr moduleName,
 
 ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
+}
+
+// ===----------------------------------------------------------------------===//
+// LongestPathCollection
+// ===----------------------------------------------------------------------===//
+
+void LongestPathCollection::sortInDescendingOrder() {
+  llvm::sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
+    return a.getDelay() > b.getDelay();
+  });
+}
+
+void LongestPathCollection::sortAndDropNonCriticalPathsPerFanOut() {
+  sortInDescendingOrder();
+  // Deduplicate paths by fanout point, keeping only the worst-case delay per
+  // fanOut. This gives us the critical delay for each fanout point in the
+  // design
+  llvm::DenseSet<DataflowPath::FanOutType> seen;
+  for (size_t i = 0; i < paths.size(); ++i) {
+    if (seen.insert(paths[i].getFanOut()).second)
+      paths[seen.size() - 1] = std::move(paths[i]);
+  }
+  paths.resize(seen.size());
 }

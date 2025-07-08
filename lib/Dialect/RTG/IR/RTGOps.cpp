@@ -684,6 +684,18 @@ LogicalResult TargetOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
+// ValidateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ValidateOp::verify() {
+  if (!getRef().getType().isValidContentType(getType()))
+    return emitOpError(
+        "result type must be a valid content type for the ref value");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ArrayCreateOp
 //===----------------------------------------------------------------------===//
 

@@ -1468,3 +1468,31 @@ hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
   %0 = hw.aggregate_constant [[[false], [true]]] : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
   hw.output %0 : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
 }
+
+// CHECK-LABEL: module ArrayInjectStructural(
+hw.module @ArrayInjectStructural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2, out z: !hw.array<4xi42>) {
+  // CHECK: reg [3:0][41:0] [[TMP:.+]];
+  // CHECK-NEXT: always_comb begin
+  // CHECK-NEXT:   [[TMP]] = a;
+  // CHECK-NEXT:   [[TMP]][i] = b;
+  // CHECK-NEXT: end
+  %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
+  // CHECK-NEXT: assign z = [[TMP]];
+  hw.output %0 : !hw.array<4xi42>
+}
+
+// CHECK-LABEL: module ArrayInjectProcedural(
+hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
+  // CHECK: reg [3:0][41:0] z;
+  %z = sv.reg : !hw.inout<array<4xi42>>
+  // CHECK-NEXT: always_comb begin
+  sv.alwayscomb {
+    // CHECK-NEXT: automatic logic [3:0][41:0] [[TMP:.+]];
+    // CHECK-NEXT: [[TMP]] = a;
+    // CHECK-NEXT: [[TMP]][i] = b;
+    %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
+    // CHECK-NEXT: z = [[TMP]];
+    sv.bpassign %z, %0 : !hw.array<4xi42>
+  }
+  // CHECK-NEXT: end
+}
