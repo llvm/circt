@@ -165,7 +165,9 @@ struct ObjectModelIR {
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
-    Type classFieldTypes[] = {StringType::get(context), BoolType::get(context), ListType::get(context, cast<PropertyType>(StringType::get(context)))};
+    Type classFieldTypes[] = {
+        StringType::get(context), BoolType::get(context),
+        ListType::get(context, cast<PropertyType>(StringType::get(context)))};
     blackBoxModulesSchemaClass =
         builderOM.create<ClassOp>("SitestBlackBoxModulesSchema",
                                   blackBoxModulesParamNames, classFieldTypes);
@@ -174,7 +176,8 @@ struct ObjectModelIR {
         builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);
   }
 
-  void addBlackBoxModule(FExtModuleOp module, bool inDut, ArrayRef<StringRef> libraries) {
+  void addBlackBoxModule(FExtModuleOp module, bool inDut,
+                         ArrayRef<StringRef> libraries) {
     if (!blackBoxModulesSchemaClass)
       addBlackBoxModulesSchema();
     StringRef defName = *module.getDefname();
@@ -197,7 +200,9 @@ struct ObjectModelIR {
       libValues.push_back(libNameAttr);
     }
     auto blackBoxResourcesList = builderOM.create<ListCreateOp>(
-        ListType::get(builderOM.getContext(), cast<PropertyType>(StringType::get(builderOM.getContext()))),
+        ListType::get(
+            builderOM.getContext(),
+            cast<PropertyType>(StringType::get(builderOM.getContext()))),
         libValues);
 
     auto object = builderOM.create<ObjectOp>(blackBoxModulesSchemaClass,
@@ -207,8 +212,10 @@ struct ObjectModelIR {
     builderOM.create<PropAssignOp>(inPortModuleName, modEntry);
     auto inPortInDut = builderOM.create<ObjectSubfieldOp>(object, 2);
     builderOM.create<PropAssignOp>(inPortInDut, inDutAttr);
-    auto inPortBlackBoxResources = builderOM.create<ObjectSubfieldOp>(object, 4);
-    builderOM.create<PropAssignOp>(inPortBlackBoxResources, blackBoxResourcesList);
+    auto inPortBlackBoxResources =
+        builderOM.create<ObjectSubfieldOp>(object, 4);
+    builderOM.create<PropAssignOp>(inPortBlackBoxResources,
+                                   blackBoxResourcesList);
     auto portIndex = blackBoxMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
@@ -814,8 +821,8 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 LogicalResult
 CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
-  // Any extmodule with these annotations should be excluded from the blackbox list
-  // if it doesn't declare any additional libraries.
+  // Any extmodule with these annotations should be excluded from the blackbox
+  // list if it doesn't declare any additional libraries.
   std::array<StringRef, 6> blackListedAnnos = {
       blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
       dataTapsBlackboxClass, memTapBlackboxClass};
@@ -850,9 +857,10 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
     AnnotationSet annos(extModule);
 
-    bool isBlacklistedBlackbox = llvm::any_of(blackListedAnnos, [&](auto blackListedAnno) {
-      return annos.hasAnnotation(blackListedAnno);
-    });
+    bool isBlacklistedBlackbox =
+        llvm::any_of(blackListedAnnos, [&](auto blackListedAnno) {
+          return annos.hasAnnotation(blackListedAnno);
+        });
 
     if (!isBlacklistedBlackbox)
       libs.push_back(*extModule.getDefname());
