@@ -772,6 +772,12 @@ class ChannelSignal(Signal):
     snoop = esi.SnoopValidReadyOp(self.value)
     return snoop[0], snoop[1], snoop[2]
 
+  def snoop_xact(self) -> Tuple[Bits(1), Type]:
+    """Combinationally snoop on the internal signals of a channel."""
+    from .dialects import esi
+    snoop = esi.SnoopTransactionOp(self.value)
+    return snoop[0], snoop[1]
+
   def transform(self, transform: Callable[[Signal], Signal]) -> ChannelSignal:
     """Transform the data in the channel using the provided function. Said
     function must be combinational so it is intended for wire and simple type

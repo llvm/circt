@@ -65,6 +65,23 @@ LogicalResult SnoopValidReadyOp::inferReturnTypes(
   return success();
 }
 
+LogicalResult SnoopTransactionOp::verify() {
+  ChannelType type = getInput().getType();
+  if (type.getInner() != getData().getType())
+    return emitOpError("input and output types must match");
+  return success();
+}
+
+LogicalResult SnoopTransactionOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto i1 = IntegerType::get(context, 1);
+  results.push_back(i1);
+  results.push_back(cast<ChannelType>(operands[0].getType()).getInner());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FIFO functions.
 //===----------------------------------------------------------------------===//
