@@ -239,6 +239,7 @@ firrtl.circuit "BasicBlackboxes" attributes {
     firrtl.instance test @DUTBlackbox_1()
     firrtl.instance test @DUTBlackbox_2()
     firrtl.instance layerBlackboxInDesign1 @LayerBlackboxInDesign()
+    firrtl.instance blacklistedWithLibsDut @InlineBlackboxWithLibs()
     firrtl.layerblock @A {
       firrtl.instance layerBlackboxInDesign2 @LayerBlackboxInDesign()
       firrtl.instance layerBlackbox @LayerBlackbox()
@@ -298,6 +299,37 @@ firrtl.circuit "BasicBlackboxes" attributes {
   firrtl.extmodule @DUTBlackbox_2() attributes {defname = "DUTBlackbox1"}
   firrtl.extmodule @LayerBlackboxInDesign() attributes {defname = "LayerBlackboxInDesign"}
   firrtl.extmodule @LayerBlackbox() attributes {defname = "LayerBlackbox"}
+
+  // Test blacklisted blackbox with additional libraries - should be included
+  firrtl.extmodule @InlineBlackboxWithLibs() attributes {
+    annotations = [
+      {
+        class = "firrtl.transforms.BlackBoxInlineAnno"
+      },
+      {
+        class = "sifive.enterprise.firrtl.SitestBlackBoxLibrariesAnnotation",
+        libraries = ["lib1", "lib2"]
+      }
+    ],
+    defname = "InlineBlackboxWithLibs"
+  }
+
+  // Test non-blacklisted blackbox with additional libraries - should be included
+  firrtl.extmodule @BlackboxWithLibs() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.SitestBlackBoxLibrariesAnnotation",
+        libraries = ["lib3", "lib4", "lib5"]
+      }
+    ],
+    defname = "BlackboxWithLibs"
+  }
+
+  firrtl.module @TestHarness() {
+    firrtl.instance inlineBlackboxWithLibs @InlineBlackboxWithLibs()
+    firrtl.instance blackboxWithLibs @BlackboxWithLibs()
+    firrtl.instance test @TestBlackbox()
+  }
 }
 
 // (1) Class-based metadata ----------------------------------------------------
@@ -321,6 +353,8 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-SAME:            out %DUTBlackbox_1_field: !firrtl.class<@SitestBlackBoxModulesSchema(
 // CHECK-SAME:            out %LayerBlackboxInDesign_field: !firrtl.class<@SitestBlackBoxModulesSchema(
 // CHECK-SAME:            out %LayerBlackbox_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-SAME:            out %InlineBlackboxWithLibs_field: !firrtl.class<@SitestBlackBoxModulesSchema(
+// CHECK-SAME:            out %BlackboxWithLibs_field: !firrtl.class<@SitestBlackBoxModulesSchema(
 // CHECK-NOT:             !firrtl.class<@SitestBlackBoxModulesSchema(
 //
 // CHECK-NEXT:            %[[#defname:]] = firrtl.string "TestBlackbox"
@@ -383,14 +417,47 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
 // CHECK-NEXT:            firrtl.propassign %LayerBlackbox_field, %[[object]]
 //
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "InlineBlackboxWithLibs"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool true
+// CHECK-NEXT:            %[[#lib1:]] = firrtl.string "lib1"
+// CHECK-NEXT:            %[[#lib2:]] = firrtl.string "lib2"
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#lib1]], %[[#lib2]] : !firrtl.list<string>
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
+// CHECK-NEXT:            firrtl.propassign %InlineBlackboxWithLibs_field, %[[object]]
+//
+// CHECK-NEXT:            %[[#defname:]] = firrtl.string "BlackboxWithLibs"
+// CHECK-NEXT:            %[[#inDutVal:]] = firrtl.bool false
+// CHECK-NEXT:            %[[#lib3:]] = firrtl.string "lib3"
+// CHECK-NEXT:            %[[#lib4:]] = firrtl.string "lib4"
+// CHECK-NEXT:            %[[#lib5:]] = firrtl.string "lib5"
+// CHECK-NEXT:            %[[#libsList:]] = firrtl.list.create %[[#defname]], %[[#lib3]], %[[#lib4]], %[[#lib5]] : !firrtl.list<string>
+// CHECK-NEXT:            %[[object:.+]] = firrtl.object @SitestBlackBoxModulesSchema
+// CHECK-NEXT:            %[[#moduleName:]] = firrtl.object.subfield %[[object]][moduleName_in]
+// CHECK-NEXT:            firrtl.propassign %[[#moduleName]], %[[#defname:]] : !firrtl.string
+// CHECK-NEXT:            %[[#inDut:]] = firrtl.object.subfield %[[object]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %[[#inDut]], %[[#inDutVal]] : !firrtl.bool
+// CHECK-NEXT:            %[[#libraries:]] = firrtl.object.subfield %[[object]][libraries_in]
+// CHECK-NEXT:            firrtl.propassign %[[#libraries]], %[[#libsList]] : !firrtl.list<string>
+// CHECK-NEXT:            firrtl.propassign %BlackboxWithLibs_field, %[[object]]
+//
 // CHECK-NOT:             firrtl.object
 
 // (2) JSON file-based metadata ------------------------------------------------
 //
 // CHECK:               emit.file "test_blackboxes.json" {
 // CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A
+// CHECK-SAME:              \22BlackboxWithLibs\22,\0A
 // CHECK-SAME:              \22LayerBlackbox\22,\0A
-// CHECK-SAME:              \22TestBlackbox\22\0A
+// CHECK-SAME:              \22TestBlackbox\22,\0A
+// CHECK-SAME:              \22lib3\22,\0A
+// CHECK-SAME:              \22lib4\22,\0A
+// CHECK-SAME:              \22lib5\22\0A
 // CHECK-SAME:            ]"
 // CHECK-NEXT:          }
 //
@@ -398,7 +465,9 @@ firrtl.circuit "BasicBlackboxes" attributes {
 // CHECK-NEXT{LITERAL}:   emit.verbatim "[\0A
 // CHECK-SAME:              \22DUTBlackbox1\22,\0A
 // CHECK-SAME:              \22DUTBlackbox2\22,\0A
-// CHECK-SAME:              \22LayerBlackboxInDesign\22\0A
+// CHECK-SAME:              \22LayerBlackboxInDesign\22,\0A
+// CHECK-SAME:              \22lib1\22,\0A
+// CHECK-SAME:              \22lib2\22\0A
 // CHECK-SAME:            ]"
 // CHECK-NEXT:          }
 
