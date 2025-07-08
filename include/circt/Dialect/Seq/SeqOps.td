@@ -239,7 +239,6 @@ def FirRegOp : SeqOp<"firreg",
   );
   let results = (outs AnyType:$data);
 
-  let skipDefaultBuilders = 1;
   let hasCanonicalizeMethod = true;
   let hasFolder = true;
   let builders = [
