@@ -31,6 +31,9 @@ struct Config {
   /// If true, then assertions that are statically false (and will trivially
   /// fail simulation) will result in an error.
   bool lintStaticAsserts;
+  /// If true, then XMRs that exist in the "design" (not the "effective design")
+  /// will be flagged as an error.
+  bool lintXmrsInDesign;
 };
 
 /// Class that stores state related to linting.  This exists to avoid needing to
@@ -53,7 +56,7 @@ public:
           failed = true;
 
       if (auto xmrDerefOp = dyn_cast<XMRDerefOp>(op))
-        if (checkXmr(xmrDerefOp).failed())
+        if (config.lintXmrsInDesign && checkXmr(xmrDerefOp).failed())
           failed = true;
 
       return WalkResult::advance();
@@ -143,6 +146,7 @@ private:
 
 struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
   using LintBase::lintStaticAsserts;
+  using LintBase::lintXmrsInDesign;
 
   void runOnOperation() override {
 
@@ -155,7 +159,9 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
       return failure();
     };
     auto transform = [&](FModuleOp moduleOp) -> LogicalResult {
-      return Linter(moduleOp, instanceInfo, {lintStaticAsserts}).lint();
+      return Linter(moduleOp, instanceInfo,
+                    {lintStaticAsserts, lintXmrsInDesign})
+          .lint();
     };
 
     SmallVector<FModuleOp> modules(circuitOp.getOps<FModuleOp>());
@@ -168,8 +174,10 @@ struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
 };
 } // namespace
 
-std::unique_ptr<Pass> firrtl::createLintingPass(bool lintStaticAsserts) {
+std::unique_ptr<Pass> firrtl::createLintingPass(bool lintStaticAsserts,
+                                                bool lintXmrsInDesign) {
   auto pass = std::make_unique<LintPass>();
   pass->lintStaticAsserts = lintStaticAsserts;
+  pass->lintXmrsInDesign = lintXmrsInDesign;
   return pass;
 }

@@ -863,7 +863,9 @@ def Lint :
   let constructor = "circt::firrtl::createLintingPass()";
   let options = [
     Option<"lintStaticAsserts", "lint-static-asserts", "bool", "",
-      "enable linting of static assertions">
+      "enable linting of static assertions">,
+    Option<"lintXmrsInDesign", "lint-xmrs-in-design", "bool", "",
+      "enable linting of XMRs that exist in the design">
   ];
 }
 
