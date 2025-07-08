@@ -143,6 +143,8 @@ public:
   }
   bool shouldDisableWireElimination() const { return disableWireElimination; }
 
+  bool getLintStaticAsserts() const { return lintStaticAsserts; }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -392,6 +394,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setLintStaticAsserts(bool value) {
+    lintStaticAsserts = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -443,6 +450,7 @@ private:
   bool selectDefaultInstanceChoice;
   verif::SymbolicValueLowering symbolicValueLowering;
   bool disableWireElimination;
+  bool lintStaticAsserts;
 };
 
 void registerFirtoolCLOptions();

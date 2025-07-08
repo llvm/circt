@@ -294,7 +294,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
-  pm.nest<firrtl::CircuitOp>().addPass(circt::firrtl::createLintingPass());
+  pm.nest<firrtl::CircuitOp>().addPass(
+      circt::firrtl::createLintingPass(opt.getLintStaticAsserts()));
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
                                        opt.getVerificationFlavor()));
@@ -779,6 +780,10 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> disableWireElimination{
       "disable-wire-elimination", llvm::cl::desc("Disable wire elimination"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> lintStaticAsserts{
+      "lint-static-asserts", llvm::cl::desc("Lint static assertions"),
+      llvm::cl::init(true)};
 };
 } // namespace
 
@@ -818,7 +823,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
-      disableWireElimination(false) {
+      disableWireElimination(false), lintStaticAsserts(true) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -871,4 +876,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
   symbolicValueLowering = clOptions->symbolicValueLowering;
   disableWireElimination = clOptions->disableWireElimination;
+  lintStaticAsserts = clOptions->lintStaticAsserts;
 }
