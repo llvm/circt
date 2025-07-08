@@ -410,8 +410,6 @@ void MachineOpConverter::buildStateCaseMux(
 LogicalResult MachineOpConverter::dispatch() {
   b.setInsertionPoint(machineOp);
   auto loc = machineOp.getLoc();
-  if (machineOp.getNumStates() < 2)
-    return machineOp.emitOpError() << "expected at least 2 states.";
 
   // Clone all referenced constants into the machine body - constants may have
   // been moved to the machine parent due to the lack of IsolationFromAbove.
