@@ -100,11 +100,6 @@ private:
   /// The target directory for testbench files.
   StringRef testBenchDir;
 
-  /// The file list file name (sic) for black boxes. If set, generates a file
-  /// that lists all non-header source files for black boxes. Can be changed
-  /// through `firrtl.transforms.BlackBoxResourceFileNameAnno` annotations.
-  StringRef resourceFileName;
-
   /// Analyses used by this pass.
   InstanceGraph *instanceGraph;
   InstanceInfo *instanceInfo;
@@ -143,24 +138,11 @@ void BlackBoxReaderPass::runOnOperation() {
   // Determine the target directory and resource file name from the
   // annotations present on the circuit operation.
   targetDir = ".";
-  resourceFileName = "firrtl_black_box_resource_files.f";
 
   // Process black box annotations on the circuit.  Some of these annotations
   // will affect how the rest of the annotations are resolved.
   SmallVector<Attribute, 4> filteredAnnos;
   for (auto annot : AnnotationSet(circuitOp)) {
-    // Handle resource file name annotation.
-    if (annot.isClass(blackBoxResourceFileNameAnnoClass)) {
-      if (auto resourceFN = annot.getMember<StringAttr>("resourceFileName")) {
-        resourceFileName = resourceFN.getValue();
-        continue;
-      }
-
-      circuitOp->emitError(blackBoxResourceFileNameAnnoClass)
-          << " annotation missing \"resourceFileName\" attribute";
-      signalPassFailure();
-      continue;
-    }
     filteredAnnos.push_back(annot.getDict());
 
     // Get the testbench and cover directories.
@@ -193,9 +175,8 @@ void BlackBoxReaderPass::runOnOperation() {
   anythingChanged |=
       AnnotationSet(filteredAnnos, context).applyToOperation(circuitOp);
 
-  LLVM_DEBUG(llvm::dbgs() << "Black box target directory: " << targetDir << "\n"
-                          << "Black box resource file name: "
-                          << resourceFileName << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "Black box target directory: " << targetDir
+                          << "\n");
 
   // Newly generated IR will be placed at the end of the circuit.
   auto builder = circuitOp.getBodyBuilder();
@@ -290,7 +271,7 @@ void BlackBoxReaderPass::runOnOperation() {
       symbols.push_back(FlatSymbolRefAttr::get(file.getSymNameAttr()));
 
     builder.create<emit::FileListOp>(
-        loc, builder.getStringAttr(resourceFileName),
+        loc, builder.getStringAttr("firrtl_black_box_resource_files.f"),
         builder.getArrayAttr(symbols),
         builder.getStringAttr(ns.newName("blackbox_filelist")));
   }

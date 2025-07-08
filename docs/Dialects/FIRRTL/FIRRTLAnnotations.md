@@ -285,23 +285,7 @@ Example:
 }
 ```
 
-### [BlackBoxResourceFileNameAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxResourceFileNameAnno.html)
 
-| Property         | Type   | Description                                      |
-| ----------       | ------ | -------------                                    |
-| class            | string | `firrtl.transforms.BlackBoxResourceFileNameAnno` |
-| resourceFileName | string | Output filename                                  |
-
-Specifies the output file name for the list of black box source files that
-is generated as a collateral of the pass.
-
-Example:
-```json
-{
-  "class": "firrtl.transforms.BlackBoxResourceFileNameAnno",
-  "resourceFileName": "FileList.f"
-}
-```
 
 ### [BlackBoxTargetDirAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxTargetDirAnno.html)
 

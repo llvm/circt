@@ -405,9 +405,6 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
     - `{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "..."}`
       Overrides the target directory into which black box source files are
       emitted.
-    - `{class = "firrtl.transforms.BlackBoxResourceFileNameAnno", resourceFileName = "xyz.f"}`
-      Specifies the output file name for the list of black box source files that
-      is generated as a collateral of the pass.
 
     The supported `firrtl.extmodule` annotations are:
 

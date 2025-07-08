@@ -5,7 +5,7 @@
 // RUN: FileCheck %s --check-prefix=VERILOG-HDR < %t/magic/blackbox-inline.svh
 // RUN: FileCheck %s --check-prefix=VERILOG-GIB < %t/magic/blackbox-path.v
 // RUN: FileCheck %s --check-prefix=LIST-TOP < %t/filelist.f
-// RUN: FileCheck %s --check-prefix=LIST-BLACK-BOX < %t/magic.f
+// RUN: FileCheck %s --check-prefix=LIST-BLACK-BOX < %t/firrtl_black_box_resource_files.f
 
 // LIST-TOP: test_mod.sv
 
@@ -15,9 +15,7 @@
 firrtl.circuit "test_mod" attributes {annotations = [
   // Black box processing should honor only the last annotation.
   {class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "ignore_me_plz"},
-  {class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "magic"},
-  {class = "firrtl.transforms.BlackBoxResourceFileNameAnno", resourceFileName = "definitely_bad.f"},
-  {class = "firrtl.transforms.BlackBoxResourceFileNameAnno", resourceFileName = "magic.f"}
+  {class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "magic"}
 ]} {
   // VERILOG-TOP-LABEL: module test_mod
   // VERILOG-TOP-NEXT:    ExtInline foo

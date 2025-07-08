@@ -56,8 +56,6 @@ constexpr const char *blackBoxPathAnnoClass =
     "firrtl.transforms.BlackBoxPathAnno";
 constexpr const char *blackBoxTargetDirAnnoClass =
     "firrtl.transforms.BlackBoxTargetDirAnno";
-constexpr const char *blackBoxResourceFileNameAnnoClass =
-    "firrtl.transforms.BlackBoxResourceFileNameAnno";
 constexpr const char *blackBoxAnnoClass =
     "firrtl.transforms.BlackBox"; // Not in SFC
 constexpr const char *mustDedupAnnoClass =
