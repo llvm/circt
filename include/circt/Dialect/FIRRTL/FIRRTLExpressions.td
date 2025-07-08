@@ -1627,17 +1627,17 @@ class LTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
   }];
-  let results = (outs UInt1Type:$result);
+  let results = (outs NonConstUInt1Type:$result);
 }
 
 class UnaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
     LTLIntrinsicOp<mnemonic, traits> {
-  let arguments = (ins UInt1Type:$input);
+  let arguments = (ins NonConstUInt1Type:$input);
 }
 
 class BinaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
     LTLIntrinsicOp<mnemonic, traits> {
-  let arguments = (ins UInt1Type:$lhs, UInt1Type:$rhs);
+  let arguments = (ins NonConstUInt1Type:$lhs, NonConstUInt1Type:$rhs);
 }
 
 
@@ -1648,7 +1648,7 @@ def LTLIntersectIntrinsicOp : BinaryLTLIntrinsicOp<"intersect", [Commutative]>;
 
 // Sequences
 def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
-  let arguments = (ins UInt1Type:$input,
+  let arguments = (ins NonConstUInt1Type:$input,
                        I64Attr:$delay,
                        OptionalAttr<I64Attr>:$length);
   let assemblyFormat = [{
@@ -1658,7 +1658,7 @@ def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
 }
 def LTLConcatIntrinsicOp : BinaryLTLIntrinsicOp<"concat">;
 def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
-  let arguments = (ins UInt1Type:$input,
+  let arguments = (ins NonConstUInt1Type:$input,
                        I64Attr:$base,
                        OptionalAttr<I64Attr>:$more);
   let assemblyFormat = [{
@@ -1668,7 +1668,7 @@ def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
 }
 
 def LTLGoToRepeatIntrinsicOp : LTLIntrinsicOp<"goto_repeat"> {
-  let arguments = (ins UInt1Type:$input,
+  let arguments = (ins NonConstUInt1Type:$input,
                        I64Attr:$base,
                        I64Attr:$more);
   let assemblyFormat = [{
@@ -1678,7 +1678,7 @@ def LTLGoToRepeatIntrinsicOp : LTLIntrinsicOp<"goto_repeat"> {
 }
 
 def LTLNonConsecutiveRepeatIntrinsicOp : LTLIntrinsicOp<"non_consecutive_repeat"> {
-  let arguments = (ins UInt1Type:$input,
+  let arguments = (ins NonConstUInt1Type:$input,
                        I64Attr:$base,
                        I64Attr:$more);
   let assemblyFormat = [{
@@ -1695,7 +1695,7 @@ def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
 
 // Clocking
 def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
-  let arguments = (ins UInt1Type:$input, ClockType:$clock);
+  let arguments = (ins NonConstUInt1Type:$input, ClockType:$clock);
   let assemblyFormat = [{
     $input `,` $clock attr-dict `:` functional-type(operands, results)
   }];
