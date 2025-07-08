@@ -172,4 +172,12 @@ def EmbedValidationValuesPass : Pass<"rtg-embed-validation-values",
   ];
 }
 
+def LowerValidateToLabelsPass : Pass<"rtg-lower-validate-to-labels"> {
+  let summary = "lower validation operations to intrinsic labels";
+  let description = [{
+    Lowers the 'rtg.validate' operations to special intrinsic labels understood
+    by the target simulator to print the register contents.
+  }];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD
