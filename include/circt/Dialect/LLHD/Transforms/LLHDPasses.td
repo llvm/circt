@@ -229,4 +229,13 @@ def RemoveControlFlowPass : Pass<"llhd-remove-control-flow", "hw::HWModuleOp"> {
   ];
 }
 
+def UnrollLoopsPass : Pass<"llhd-unroll-loops", "hw::HWModuleOp"> {
+  let summary = "Unroll control flow loops with static bounds";
+  let description = [{
+    Unroll loops in `llhd.combinational` operations by replicating the loop body
+    and replacing induction variables with constants. The loop bounds must be
+    known at compile time.
+  }];
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
