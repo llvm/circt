@@ -782,9 +782,13 @@ Example:
 | filename   | string | The file to write to                                |
 
 This annotation triggers the creation of a file containing a JSON array of the
-names of all external modules in the device under test which are not imported
+`defname`s of all external modules in the device under test which are not imported
 or inlined blackbox modules. This will only collect modules which are
 instantiated under a module annotated with `MarkDUTAnnotation`.
+
+If any external modules (including imported and inlined blackboxes) have a
+`SitestBlackBoxLibrariesAnnotation`, the libraries specified in that annotation
+will be included in the output.
 
 Example:
 ```json
@@ -802,15 +806,41 @@ Example:
 | filename   | string | The file to write to                                           |
 
 This annotation triggers the creation of a file containing a JSON array of the
-names of all external modules in the test harness which are not imported or
+`defname`s of all external modules in the test harness which are not imported or
 inlined blackbox modules. This will only collect modules which are not
 instantiated under a module annotated with `MarkDUTAnnotation`.
+
+If any external modules (including imported and inlined blackboxes) have a
+`SitestBlackBoxLibrariesAnnotation`, the libraries specified in that annotation
+will also be included in the output.
 
 Example:
 ```json
 {
   "class":"sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
   "filename":"./testharness_blackboxes.json"
+}
+```
+
+### SitestBlackBoxLibrariesAnnotation
+
+| Property   | Type   | Description                                                      |
+| ---------- | ------ | -------------                                                    |
+| class      | string | `sifive.enterprise.firrtl.SitestBlackBoxLibrariesAnnotation`     |
+| libraries  | array  | Array of library names to include in blackbox metadata           |
+
+This annotation is used to specify additional library names that should be
+included in the blackbox metadata for an external module. When applied to an
+external module, the specified libraries will be added to the blackbox resource
+list in the generated metadata. Both the `defname` and any libraries specified by
+this annotation will be included in the metadata for non-imported and non-inlined
+blackboxes.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.SitestBlackBoxLibrariesAnnotation",
+  "libraries":["libmath", "libcrypto", "custom_lib"]
 }
 ```
 
