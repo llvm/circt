@@ -185,7 +185,6 @@ struct ObjectModelIR {
     auto modEntry = builderOM.create<StringConstantOp>(module.getDefnameAttr());
     auto inDutAttr = builderOM.create<BoolConstantOp>(inDut);
 
-    // Create list of blackbox resources from the provided list
     SmallVector<Value> libValues;
     for (StringRef libName : libraries) {
       Value libNameAttr;
