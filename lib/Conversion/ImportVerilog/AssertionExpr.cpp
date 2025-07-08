@@ -86,8 +86,7 @@ struct AssertionExprVisitor {
     auto valueType = value.getType();
     // For assertion instances the value is already the expected type, convert
     // boolean value
-    if (!(mlir::isa<ltl::SequenceType>(valueType) ||
-          mlir::isa<ltl::PropertyType>(valueType))) {
+    if (!mlir::isa<ltl::SequenceType, ltl::PropertyType>(valueType)) {
       value = context.convertToI1(value);
     }
     if (!value)
