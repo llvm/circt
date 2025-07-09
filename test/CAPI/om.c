@@ -199,7 +199,6 @@ void testEvaluator(MlirContext ctx) {
   OMEvaluatorValue bar = omEvaluatorObjectGetField(
       child, mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("bar")));
 
-
   MlirAttribute fieldNamesC = omEvaluatorObjectGetFieldNames(child);
 
   // CHECK: ["bar", "foo"]
@@ -221,7 +220,6 @@ void testEvaluator(MlirContext ctx) {
   // CHECK: 15 : i64
   mlirAttributeDump(
       omEvaluatorValueGetPrimitive(omEvaluatorListGetElement(bar, 1)));
-
 }
 
 int main(void) {

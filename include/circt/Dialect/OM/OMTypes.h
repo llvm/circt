@@ -16,9 +16,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Types.h"
 
-namespace circt::om {
-
-} // namespace circt::om
+namespace circt::om {} // namespace circt::om
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/OM/OMTypes.h.inc"

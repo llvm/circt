@@ -90,7 +90,6 @@ MlirType omStringTypeGet(MlirContext ctx) {
 /// Get the TypeID for a StringType.
 MlirTypeID omStringTypeGetTypeID(void) { return wrap(StringType::getTypeID()); }
 
-
 //===----------------------------------------------------------------------===//
 // Evaluator data structures.
 //===----------------------------------------------------------------------===//

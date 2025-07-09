@@ -40,8 +40,8 @@ using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
 /// MlirAttribute and the upstream MLIR type casters.  If the MlirAttribute
 /// is tried first, then we can hit an assert inside the MLIR codebase.
 struct None {};
-using PythonValue = std::variant<None, Object, List, BasePath, Path,
-                                 PythonPrimitive>;
+using PythonValue =
+    std::variant<None, Object, List, BasePath, Path, PythonPrimitive>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
