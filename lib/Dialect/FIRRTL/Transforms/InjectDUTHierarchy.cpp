@@ -239,9 +239,16 @@ void InjectDUTHierarchy::runOnOperation() {
   auto emptyArray = b.getArrayAttr({});
   auto name = circuitNS.newName(wrapperName.getValue());
   if (moveDut) {
-    dut.setPrivate();
     dut.setPortAnnotationsAttr(emptyArray);
     dut.setName(b.getStringAttr(name));
+    // If the wrapper is the circuit's main module, then we need to rename the
+    // circuit.  This mandates that the wrapper is now public.
+    if (circuit.getNameAttr() == wrapper.getNameAttr()) {
+      circuit.setNameAttr(dut.getNameAttr());
+      dut.setPublic();
+    } else {
+      dut.setPrivate();
+    }
     // The DUT name has changed.  Rewrite instances to use the new DUT name.
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     for (auto *use : instanceGraph.lookup(wrapper.getNameAttr())->uses()) {

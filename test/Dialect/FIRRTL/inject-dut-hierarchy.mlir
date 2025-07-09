@@ -347,3 +347,25 @@ firrtl.circuit "PublicMoveDutTrue" attributes {
     firrtl.instance dut @DUT()
   }
 }
+
+// -----
+
+// CHECK: firrtl.circuit "Foo"
+firrtl.circuit "MoveDutMainModule" attributes{
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = true
+    }
+  ]
+} {
+  // CHECK: firrtl.module @MoveDutMainModule()
+  firrtl.module @MoveDutMainModule() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  // CHECK:      firrtl.module @Foo() {
+  // CHECK-NEXT:   firrtl.instance MoveDutMainModule {{.*}} @MoveDutMainModule()
+}
