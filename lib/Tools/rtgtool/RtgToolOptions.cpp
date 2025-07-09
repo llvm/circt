@@ -8,6 +8,7 @@
 
 #include "circt/Tools/rtgtool/RtgToolOptions.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTG/Transforms/RTGPassPipelines.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Passes.h"
 #include "mlir/Transforms/Passes.h"
@@ -40,24 +41,11 @@ void rtg::populateRandomizerPipeline(mlir::PassManager &pm,
     return;
 
   {
-    ElaborationPassOptions passOptions;
-    passOptions.seed = options.getSeed();
-    pm.addPass(rtg::createElaborationPass(passOptions));
+    rtg::RandomizationPipelineOptions pipelineOptions;
+    pipelineOptions.seed = options.getSeed();
+    pipelineOptions.memoriesAsImmediates = options.getMemoriesAsImmediates();
+    rtg::buildRandomizationPipeline(pm, pipelineOptions);
   }
-  pm.addPass(rtg::createInlineSequencesPass());
-  {
-    MemoryAllocationPassOptions passOptions;
-    passOptions.useImmediates = options.getMemoriesAsImmediates();
-    pm.addNestedPass<rtg::TestOp>(rtg::createMemoryAllocationPass());
-  }
-  pm.addPass(rtg::createLowerUniqueLabelsPass());
-  pm.addNestedPass<rtg::TestOp>(rtg::createLinearScanRegisterAllocationPass());
-  {
-    auto &anyPm = pm.nestAny();
-    anyPm.addPass(mlir::createCSEPass());
-    anyPm.addPass(createSimpleCanonicalizerPass());
-  }
-  pm.addPass(rtg::createUniqueValidateOpsPass());
 
   if (options.getOutputFormat() == RtgToolOptions::OutputFormat::ElaboratedMLIR)
     return;

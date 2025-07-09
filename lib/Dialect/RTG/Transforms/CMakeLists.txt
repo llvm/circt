@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTRTGTransforms
   LowerUniqueLabelsPass.cpp
   LowerValidateToLabelsPass.cpp
   MemoryAllocationPass.cpp
+  RTGPassPipelines.cpp
   UniqueValidateOpsPass.cpp
 
   DEPENDS
