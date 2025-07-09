@@ -327,7 +327,7 @@ firrtl.circuit "PublicMoveDutFalse" attributes {
 
 // -----
 
-firrtl.circuit "PublicMoveDutFalse" attributes {
+firrtl.circuit "PublicMoveDutTrue" attributes {
   annotations = [
     {
       class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
@@ -343,7 +343,7 @@ firrtl.circuit "PublicMoveDutFalse" attributes {
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
     ]
   } {}
-  firrtl.module @PublicMoveDutFalse() {
+  firrtl.module @PublicMoveDutTrue() {
     firrtl.instance dut @DUT()
   }
 }
