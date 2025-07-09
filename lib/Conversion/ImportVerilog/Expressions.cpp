@@ -1065,6 +1065,10 @@ struct RvalueExprVisitor : public ExprVisitor {
     return builder.create<moore::ConcatOp>(loc, slicedOperands);
   }
 
+  Value visit(const slang::ast::AssertionInstanceExpression &expr) {
+    return context.convertAssertionExpression(expr.body, loc);
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
