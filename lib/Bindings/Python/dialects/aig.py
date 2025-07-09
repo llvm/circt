@@ -334,6 +334,7 @@ class LongestPathCollection:
         Returns:
             DataflowPath at the specified position ratio
         """
+    assert ratio >= 0.0 and ratio <= 1.0, "Ratio must be between 0.0 and 1.0"
     index = int(len(self) * (1 - ratio))
     return self[index]
 

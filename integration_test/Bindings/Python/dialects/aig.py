@@ -4,7 +4,7 @@
 import circt
 from circt.dialects import aig, hw
 from circt.ir import Context, Location, Module, InsertionPoint, IntegerType
-from circt.dialects.aig import LongestPathAnalysis, LongestPathCollection
+from circt.dialects.aig import LongestPathAnalysis, LongestPathCollection, DataflowPath
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -56,6 +56,14 @@ with Context() as ctx, Location.unknown():
     # CHECK-NEXT: index -1 delay: 1
     print("index 1 delay:", collection[1].delay)
     print("index -1 delay:", collection[-1].delay)
+    # CHECK-NEXT: collection.get_path(5) == collection[5]: True
+    print(
+        "collection.get_path(5) == collection[5]:",
+        DataflowPath.from_json_string(
+            collection.collection.get_path(5)) == collection[5])
+    # Check that len and get_size are the same
+    # CHECK-NEXT: 96 96
+    print(len(collection), collection.collection.get_size())
 
     try:
       print(collection[96])

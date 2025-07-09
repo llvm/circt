@@ -47,15 +47,14 @@ void circt::python::populateDialectAIGSubmodule(nb::module_ &m) {
              MlirStringRef moduleNameRef =
                  mlirStringRefCreateFromCString(moduleName.c_str());
 
-             if (aigLongestPathCollectionIsNull(
-                     aigLongestPathAnalysisGetAllPaths(*self, moduleNameRef,
-                                                       elaboratePaths)))
-               throw nb::value_error(
-                   "Failed to get all paths, see previous error(s).");
-
              auto collection =
                  AIGLongestPathCollection(aigLongestPathAnalysisGetAllPaths(
                      *self, moduleNameRef, elaboratePaths));
+
+             if (aigLongestPathCollectionIsNull(collection))
+               throw nb::value_error(
+                   "Failed to get all paths, see previous error(s).");
+
              return collection;
            });
 
