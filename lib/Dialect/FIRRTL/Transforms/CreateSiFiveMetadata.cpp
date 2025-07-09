@@ -877,7 +877,7 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
       }
     }
 
-    if (!libs.empty())
+    if (libs.empty())
       continue;
 
     bool inDut = false;
