@@ -992,3 +992,26 @@ hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
+
+// Regression test that verifies probe is inserted post use.
+// CHECK-LABEL: ProbePostDef
+hw.module @ProbePostDef() {
+  %false = hw.constant false
+  %f = llhd.sig %false : i1
+  %h = llhd.sig %false : i1
+  %0 = llhd.prb %h : !hw.inout<i1>
+  %1 = llhd.prb %f : !hw.inout<i1>
+  %2 = llhd.combinational -> i1 {
+    %c7_i32 = hw.constant 7 : i32
+    %c0_i31 = hw.constant 0 : i31
+    %false_0 = hw.constant false
+    %e = llhd.sig %false_0 : i1
+    %3 = comb.concat %c0_i31, %1 : i31, i1
+    %4 = llhd.prb %e : !hw.inout<i1>
+    %5 = comb.icmp ult %3, %c7_i32 : i32
+    %6 = comb.and %5, %4 : i1
+    llhd.yield %6 : i1
+  }
+  hw.output
+}
+
