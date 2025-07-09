@@ -50,8 +50,7 @@ LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
   assert(isFullyEvaluated());
   return llvm::TypeSwitch<EvaluatorValue *, LogicalResult>(this)
       .Case<AttributeValue, ObjectValue, ListValue, ReferenceValue,
-            BasePathValue, PathValue>(
-          [](auto v) { return v->finalizeImpl(); });
+            BasePathValue, PathValue>([](auto v) { return v->finalizeImpl(); });
 }
 
 Type circt::om::evaluator::EvaluatorValue::getType() const {
@@ -154,12 +153,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp,
-                      ObjectFieldOp>([&](auto op) {
+                .Case<ListCreateOp, ListConcatOp, ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
-                })
-                .Case<TupleGetOp>([&](auto op) {
-                  return evaluateTupleGet(op, actualParams, loc);
                 })
                 .Case<ObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());

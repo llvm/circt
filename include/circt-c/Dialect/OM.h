@@ -61,7 +61,6 @@ MLIR_CAPI_EXPORTED MlirTypeID omListTypeGetTypeID(void);
 // Return a element type of a ListType.
 MLIR_CAPI_EXPORTED MlirType omListTypeGetElementType(MlirType type);
 
-
 /// Is the Type a StringType.
 MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
 
@@ -239,12 +238,11 @@ MLIR_CAPI_EXPORTED bool omAttrIsAListAttr(MlirAttribute attr);
 MLIR_CAPI_EXPORTED intptr_t omListAttrGetNumElements(MlirAttribute attr);
 
 MLIR_CAPI_EXPORTED MlirAttribute omListAttrGetElement(MlirAttribute attr,
+                                                      intptr_t pos);
 
 MLIR_CAPI_EXPORTED MlirAttribute omListAttrGet(MlirType elementType,
                                                intptr_t numElements,
                                                const MlirAttribute *elements);
-                                                      intptr_t pos);
-
 
 #ifdef __cplusplus
 }
