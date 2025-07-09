@@ -154,12 +154,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp,
-                      ObjectFieldOp>([&](auto op) {
+                .Case<ListCreateOp, ListConcatOp, ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
-                })
-                .Case<TupleGetOp>([&](auto op) {
-                  return evaluateTupleGet(op, actualParams, loc);
                 })
                 .Case<ObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
