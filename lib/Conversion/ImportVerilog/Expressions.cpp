@@ -27,6 +27,9 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
   return FVInt(APInt(svint.getBitWidth(), value));
 }
 
+/// Map an index into an array, with bounds `range`, to a bit offset of the
+/// underlying bit storage. This is a dynamic version of
+/// `slang::ConstantRange::translateIndex`.
 static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
                             const slang::ConstantRange &range) {
   auto indexType = cast<moore::UnpackedType>(index.getType());
@@ -57,15 +60,257 @@ static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
   return builder.createOrFold<moore::SubOp>(loc, offset, newIndex);
 }
 
-// NOLINTBEGIN(misc-no-recursion)
 namespace {
-struct RvalueExprVisitor {
+/// A visitor handling expressions that can be lowered as lvalue and rvalue.
+struct ExprVisitor {
   Context &context;
   Location loc;
   OpBuilder &builder;
+  bool isLvalue;
 
+  ExprVisitor(Context &context, Location loc, bool isLvalue)
+      : context(context), loc(loc), builder(context.builder),
+        isLvalue(isLvalue) {}
+
+  /// Convert an expression either as an lvalue or rvalue, depending on whether
+  /// this is an lvalue or rvalue visitor. This is useful for projections such
+  /// as `a[i]`, where you want `a` as an lvalue if you want `a[i]` as an
+  /// lvalue, or `a` as an rvalue if you want `a[i]` as an rvalue.
+  Value convertLvalueOrRvalueExpression(const slang::ast::Expression &expr) {
+    if (isLvalue)
+      return context.convertLvalueExpression(expr);
+    return context.convertRvalueExpression(expr);
+  }
+
+  /// Handle single bit selections.
+  Value visit(const slang::ast::ElementSelectExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto value = convertLvalueOrRvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+    auto resultType =
+        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto range = expr.value().type->getFixedRange();
+    if (auto *constValue = expr.selector().constant) {
+      assert(!constValue->hasUnknown());
+      assert(constValue->size() <= 32);
+
+      auto lowBit = constValue->integer().as<uint32_t>().value();
+      if (isLvalue)
+        return builder.create<moore::ExtractRefOp>(
+            loc, resultType, value, range.translateIndex(lowBit));
+      else
+        return builder.create<moore::ExtractOp>(loc, resultType, value,
+                                                range.translateIndex(lowBit));
+    }
+    auto lowBit = context.convertRvalueExpression(expr.selector());
+    if (!lowBit)
+      return {};
+    lowBit = getSelectIndex(builder, loc, lowBit, range);
+    if (isLvalue)
+      return builder.create<moore::DynExtractRefOp>(loc, resultType, value,
+                                                    lowBit);
+    else
+      return builder.create<moore::DynExtractOp>(loc, resultType, value,
+                                                 lowBit);
+  }
+
+  /// Handle range bit selections.
+  Value visit(const slang::ast::RangeSelectExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto value = convertLvalueOrRvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+
+    std::optional<int32_t> constLeft;
+    std::optional<int32_t> constRight;
+    if (auto *constant = expr.left().constant)
+      constLeft = constant->integer().as<int32_t>();
+    if (auto *constant = expr.right().constant)
+      constRight = constant->integer().as<int32_t>();
+
+    // We need to determine the right bound of the range. This is the address of
+    // the least significant bit of the underlying bit storage, which is the
+    // offset we want to pass to the extract op.
+    //
+    // The arrays [6:2] and [2:6] both have 5 bits worth of underlying storage.
+    // The left and right bound of the range only determine the addressing
+    // scheme of the storage bits:
+    //
+    // Storage bits:   4  3  2  1  0  <-- extract op works on storage bits
+    // [6:2] indices:  6  5  4  3  2  ("little endian" in Slang terms)
+    // [2:6] indices:  2  3  4  5  6  ("big endian" in Slang terms)
+    //
+    // Before we can extract, we need to map the range select left and right
+    // bounds from these indices to actual bit positions in the storage.
+
+    Value offsetDyn;
+    int32_t offsetConst = 0;
+    auto range = expr.value().type->getFixedRange();
+
+    using slang::ast::RangeSelectionKind;
+    if (expr.getSelectionKind() == RangeSelectionKind::Simple) {
+      // For a constant range [a:b], we want the offset of the lowest storage
+      // bit from which we are starting the extract. For a range [5:3] this is
+      // bit index 3; for a range [3:5] this is bit index 5. Both of these are
+      // later translated map to bit offset 1 (see bit indices above).
+      assert(constRight && "constness checked in slang");
+      offsetConst = *constRight;
+    } else {
+      // For an indexed range [a+:b] or [a-:b], determining the lowest storage
+      // bit is a bit more complicated. We start out with the base index `a`.
+      // This is the lower *index* of the range, but not the lower *storage bit
+      // position*.
+      //
+      // The range [a+:b] expands to [a+b-1:a] for a [6:2] range, or [a:a+b-1]
+      // for a [2:6] range. The range [a-:b] expands to [a:a-b+1] for a [6:2]
+      // range, or [a-b+1:a] for a [2:6] range.
+      if (constLeft) {
+        offsetConst = *constLeft;
+      } else {
+        offsetDyn = context.convertRvalueExpression(expr.left());
+        if (!offsetDyn)
+          return {};
+      }
+
+      // For a [a-:b] select on [2:6] and a [a+:b] select on [6:2], the range
+      // expands to [a-b+1:a] and [a+b-1:a]. In this case, the right bound which
+      // corresponds to the lower *storage bit offset*, is just `a` and there's
+      // no further tweaking to do.
+      int32_t offsetAdd = 0;
+
+      // For a [a-:b] select on [6:2], the range expands to [a:a-b+1]. We
+      // therefore have to take the `a` from above and adjust it by `-b+1` to
+      // arrive at the right bound.
+      if (expr.getSelectionKind() == RangeSelectionKind::IndexedDown &&
+          range.isLittleEndian()) {
+        assert(constRight && "constness checked in slang");
+        offsetAdd = 1 - *constRight;
+      }
+
+      // For a [a+:b] select on [2:6], the range expands to [a:a+b-1]. We
+      // therefore have to take the `a` from above and adjust it by `+b-1` to
+      // arrive at the right bound.
+      if (expr.getSelectionKind() == RangeSelectionKind::IndexedUp &&
+          !range.isLittleEndian()) {
+        assert(constRight && "constness checked in slang");
+        offsetAdd = *constRight - 1;
+      }
+
+      // Adjust the offset such that it matches the right bound of the range.
+      if (offsetAdd != 0) {
+        if (offsetDyn)
+          offsetDyn = builder.create<moore::AddOp>(
+              loc, offsetDyn,
+              builder.create<moore::ConstantOp>(
+                  loc, cast<moore::IntType>(offsetDyn.getType()), offsetAdd,
+                  /*isSigned=*/offsetAdd < 0));
+        else
+          offsetConst += offsetAdd;
+      }
+    }
+
+    // Create a dynamic or constant extract. Use `getSelectIndex` and
+    // `ConstantRange::translateIndex` to map from the bit indices provided by
+    // the user to the actual storage bit position. Since `offset*` corresponds
+    // to the right bound of the range, which provides the index of the least
+    // significant selected storage bit, we get the bit offset at which we want
+    // to start extracting.
+    auto resultType =
+        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+
+    if (offsetDyn) {
+      offsetDyn = getSelectIndex(builder, loc, offsetDyn, range);
+      if (isLvalue) {
+        return builder.create<moore::DynExtractRefOp>(loc, resultType, value,
+                                                      offsetDyn);
+      } else {
+        return builder.create<moore::DynExtractOp>(loc, resultType, value,
+                                                   offsetDyn);
+      }
+    } else {
+      offsetConst = range.translateIndex(offsetConst);
+      if (isLvalue) {
+        return builder.create<moore::ExtractRefOp>(loc, resultType, value,
+                                                   offsetConst);
+      } else {
+        return builder.create<moore::ExtractOp>(loc, resultType, value,
+                                                offsetConst);
+      }
+    }
+  }
+
+  /// Handle concatenations.
+  Value visit(const slang::ast::ConcatenationExpression &expr) {
+    SmallVector<Value> operands;
+    for (auto *operand : expr.operands()) {
+      // Handle empty replications like `{0{...}}` which may occur within
+      // concatenations. Slang assigns them a `void` type which we can check for
+      // here.
+      if (operand->type->isVoid())
+        continue;
+      auto value = convertLvalueOrRvalueExpression(*operand);
+      if (!value)
+        return {};
+      if (!isLvalue)
+        value = context.convertToSimpleBitVector(value);
+      operands.push_back(value);
+    }
+    if (isLvalue)
+      return builder.create<moore::ConcatRefOp>(loc, operands);
+    else
+      return builder.create<moore::ConcatOp>(loc, operands);
+  }
+
+  /// Handle member accesses.
+  Value visit(const slang::ast::MemberAccessExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto valueType = expr.value().type;
+    auto value = convertLvalueOrRvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+
+    auto resultType =
+        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto memberName = builder.getStringAttr(expr.member.name);
+
+    // Handle structs.
+    if (valueType->isStruct()) {
+      if (isLvalue)
+        return builder.create<moore::StructExtractRefOp>(loc, resultType,
+                                                         memberName, value);
+      else
+        return builder.create<moore::StructExtractOp>(loc, resultType,
+                                                      memberName, value);
+    }
+
+    // Handle unions.
+    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      if (isLvalue)
+        return builder.create<moore::UnionExtractRefOp>(loc, resultType,
+                                                        memberName, value);
+      else
+        return builder.create<moore::UnionExtractOp>(loc, type, memberName,
+                                                     value);
+    }
+
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " has no member fields";
+    return {};
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Rvalue Conversion
+//===----------------------------------------------------------------------===//
+
+// NOLINTBEGIN(misc-no-recursion)
+namespace {
+struct RvalueExprVisitor : public ExprVisitor {
   RvalueExprVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
+      : ExprVisitor(context, loc, /*isLvalue=*/false) {}
+  using ExprVisitor::visit;
 
   // Handle references to the left-hand side of a parent assignment.
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
@@ -461,24 +706,6 @@ struct RvalueExprVisitor {
     return context.materializeSVInt(expr.getValue(), *expr.type, loc);
   }
 
-  // Handle concatenations.
-  Value visit(const slang::ast::ConcatenationExpression &expr) {
-    SmallVector<Value> operands;
-    for (auto *operand : expr.operands()) {
-      // Handle empty replications like `{0{...}}` which may occur within
-      // concatenations. Slang assigns them a `void` type which we can check for
-      // here.
-      if (operand->type->isVoid())
-        continue;
-      auto value = context.convertRvalueExpression(*operand);
-      value = context.convertToSimpleBitVector(value);
-      if (!value)
-        return {};
-      operands.push_back(value);
-    }
-    return builder.create<moore::ConcatOp>(loc, operands);
-  }
-
   // Handle replications.
   Value visit(const slang::ast::ReplicationExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -486,115 +713,6 @@ struct RvalueExprVisitor {
     if (!value)
       return {};
     return builder.create<moore::ReplicateOp>(loc, type, value);
-  }
-
-  // Handle single bit selections.
-  Value visit(const slang::ast::ElementSelectExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto value = context.convertRvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-    auto range = expr.value().type->getFixedRange();
-    if (auto *constValue = expr.selector().constant) {
-      assert(!constValue->hasUnknown());
-      assert(constValue->size() <= 32);
-
-      auto lowBit = constValue->integer().as<uint32_t>().value();
-      return builder.create<moore::ExtractOp>(loc, type, value,
-                                              range.translateIndex(lowBit));
-    }
-    auto lowBit = context.convertRvalueExpression(expr.selector());
-    if (!lowBit)
-      return {};
-    return builder.create<moore::DynExtractOp>(
-        loc, type, value, getSelectIndex(builder, loc, lowBit, range));
-  }
-
-  // Handle range bits selections.
-  Value visit(const slang::ast::RangeSelectExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto value = context.convertRvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-
-    Value dynLowBit;
-    uint32_t constLowBit;
-    auto *leftConst = expr.left().constant;
-    auto *rightConst = expr.right().constant;
-    if (leftConst) {
-      assert(!leftConst->hasUnknown());
-      assert(leftConst->size() <= 32);
-    }
-    if (rightConst) {
-      assert(!rightConst->hasUnknown());
-      assert(rightConst->size() <= 32);
-    }
-
-    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
-      if (leftConst && rightConst) {
-        // Estimate whether is big endian or little endian.
-        auto lhs = leftConst->integer().as<uint32_t>().value();
-        auto rhs = rightConst->integer().as<uint32_t>().value();
-        constLowBit = lhs < rhs ? lhs : rhs;
-      } else {
-        mlir::emitError(loc, "unsupported a variable as the index in the")
-            << slang::ast::toString(expr.getSelectionKind()) << "kind";
-        return {};
-      }
-    } else if (expr.getSelectionKind() ==
-               slang::ast::RangeSelectionKind::IndexedDown) {
-      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
-      // depending on little endian or bit endian. No matter which situation,
-      // the low bit must be "0".
-      if (leftConst) {
-        auto subtrahend = leftConst->integer().as<uint32_t>().value();
-        auto sliceWidth =
-            expr.right().constant->integer().as<uint32_t>().value();
-        constLowBit = subtrahend - sliceWidth - 1;
-      } else {
-        auto subtrahend = context.convertRvalueExpression(expr.left());
-        auto subtrahendType = cast<moore::UnpackedType>(subtrahend.getType());
-        auto intType = moore::IntType::get(context.getContext(),
-                                           subtrahendType.getBitSize().value(),
-                                           subtrahendType.getDomain());
-        auto sliceWidth =
-            expr.right().constant->integer().as<uint32_t>().value() - 1;
-        auto minuend = builder.create<moore::ConstantOp>(
-            loc, intType, sliceWidth, expr.left().type->isSigned());
-        dynLowBit = builder.create<moore::SubOp>(loc, subtrahend, minuend);
-      }
-    } else {
-      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
-      if (leftConst)
-        constLowBit = leftConst->integer().as<uint32_t>().value();
-      else
-        dynLowBit = context.convertRvalueExpression(expr.left());
-    }
-    auto range = expr.value().type->getFixedRange();
-    if (leftConst && rightConst)
-      return builder.create<moore::ExtractOp>(
-          loc, type, value, range.translateIndex(constLowBit));
-    return builder.create<moore::DynExtractOp>(
-        loc, type, value, getSelectIndex(builder, loc, dynLowBit, range));
-  }
-
-  Value visit(const slang::ast::MemberAccessExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = context.convertRvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-    if (valueType->isStruct()) {
-      return builder.create<moore::StructExtractOp>(
-          loc, type, builder.getStringAttr(expr.member.name), value);
-    }
-    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
-      return builder.create<moore::UnionExtractOp>(
-          loc, type, builder.getStringAttr(expr.member.name), value);
-    }
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be accessed";
-    return {};
   }
 
   // Handle set membership operator.
@@ -962,14 +1080,15 @@ struct RvalueExprVisitor {
 };
 } // namespace
 
-namespace {
-struct LvalueExprVisitor {
-  Context &context;
-  Location loc;
-  OpBuilder &builder;
+//===----------------------------------------------------------------------===//
+// Lvalue Conversion
+//===----------------------------------------------------------------------===//
 
+namespace {
+struct LvalueExprVisitor : public ExprVisitor {
   LvalueExprVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
+      : ExprVisitor(context, loc, /*isLvalue=*/true) {}
+  using ExprVisitor::visit;
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
@@ -993,112 +1112,6 @@ struct LvalueExprVisitor {
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
-  }
-
-  // Handle concatenations.
-  Value visit(const slang::ast::ConcatenationExpression &expr) {
-    SmallVector<Value> operands;
-    for (auto *operand : expr.operands()) {
-      auto value = context.convertLvalueExpression(*operand);
-      if (!value)
-        return {};
-      operands.push_back(value);
-    }
-    return builder.create<moore::ConcatRefOp>(loc, operands);
-  }
-
-  // Handle single bit selections.
-  Value visit(const slang::ast::ElementSelectExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto value = context.convertLvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-    auto range = expr.value().type->getFixedRange();
-    if (auto *constValue = expr.selector().constant) {
-      assert(!constValue->hasUnknown());
-      assert(constValue->size() <= 32);
-
-      auto lowBit = constValue->integer().as<uint32_t>().value();
-      return builder.create<moore::ExtractRefOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-          range.translateIndex(lowBit));
-    }
-    auto lowBit = context.convertRvalueExpression(expr.selector());
-    if (!lowBit)
-      return {};
-    return builder.create<moore::DynExtractRefOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        getSelectIndex(builder, loc, lowBit, range));
-  }
-
-  // Handle range bits selections.
-  Value visit(const slang::ast::RangeSelectExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto value = context.convertLvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-
-    Value dynLowBit;
-    uint32_t constLowBit;
-    auto *leftConst = expr.left().constant;
-    auto *rightConst = expr.right().constant;
-    if (leftConst) {
-      assert(!leftConst->hasUnknown());
-      assert(leftConst->size() <= 32);
-    }
-    if (rightConst) {
-      assert(!rightConst->hasUnknown());
-      assert(rightConst->size() <= 32);
-    }
-
-    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
-      if (leftConst && rightConst) {
-        // Estimate whether is big endian or little endian.
-        auto lhs = leftConst->integer().as<uint32_t>().value();
-        auto rhs = rightConst->integer().as<uint32_t>().value();
-        constLowBit = lhs < rhs ? lhs : rhs;
-      } else {
-        mlir::emitError(loc, "unsupported a variable as the index in the")
-            << slang::ast::toString(expr.getSelectionKind()) << "kind";
-        return {};
-      }
-    } else if (expr.getSelectionKind() ==
-               slang::ast::RangeSelectionKind::IndexedDown) {
-      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
-      // depending on little endian or bit endian. No matter which situation,
-      // the low bit must be "0".
-      if (leftConst) {
-        auto subtrahend = leftConst->integer().as<uint32_t>().value();
-        auto sliceWidth =
-            expr.right().constant->integer().as<uint32_t>().value();
-        constLowBit = subtrahend - sliceWidth - 1;
-      } else {
-        auto subtrahend = context.convertRvalueExpression(expr.left());
-        auto subtrahendType = cast<moore::UnpackedType>(subtrahend.getType());
-        auto intType = moore::IntType::get(context.getContext(),
-                                           subtrahendType.getBitSize().value(),
-                                           subtrahendType.getDomain());
-        auto sliceWidth =
-            expr.right().constant->integer().as<uint32_t>().value() - 1;
-        auto minuend =
-            builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
-        dynLowBit = builder.create<moore::SubOp>(loc, subtrahend, minuend);
-      }
-    } else {
-      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
-      if (leftConst)
-        constLowBit = leftConst->integer().as<uint32_t>().value();
-      else
-        dynLowBit = context.convertRvalueExpression(expr.left());
-    }
-    auto range = expr.value().type->getFixedRange();
-    if (leftConst && rightConst)
-      return builder.create<moore::ExtractRefOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-          range.translateIndex(constLowBit));
-    return builder.create<moore::DynExtractRefOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        getSelectIndex(builder, loc, dynLowBit, range));
   }
 
   Value visit(const slang::ast::StreamingConcatenationExpression &expr) {
@@ -1170,27 +1183,6 @@ struct LvalueExprVisitor {
     return builder.create<moore::ConcatRefOp>(loc, slicedOperands);
   }
 
-  Value visit(const slang::ast::MemberAccessExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = context.convertLvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-    if (valueType->isStruct()) {
-      return builder.create<moore::StructExtractRefOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
-          builder.getStringAttr(expr.member.name), value);
-    }
-    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
-      return builder.create<moore::UnionExtractRefOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
-          builder.getStringAttr(expr.member.name), value);
-    }
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be accessed";
-    return {};
-  }
-
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
@@ -1203,6 +1195,10 @@ struct LvalueExprVisitor {
   }
 };
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Entry Points
+//===----------------------------------------------------------------------===//
 
 Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
                                        Type requiredType) {
