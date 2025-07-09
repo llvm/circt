@@ -143,6 +143,8 @@ constexpr const char *sitestBlackBoxAnnoClass =
     "sifive.enterprise.firrtl.SitestBlackBoxAnnotation";
 constexpr const char *sitestTestHarnessBlackBoxAnnoClass =
     "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation";
+constexpr const char *sitestBlackBoxLibrariesAnnoClass =
+    "sifive.enterprise.firrtl.SitestBlackBoxLibrariesAnnotation";
 constexpr const char *dontObfuscateModuleAnnoClass =
     "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
 constexpr const char *elaborationArtefactsDirectoryAnnoClass =
