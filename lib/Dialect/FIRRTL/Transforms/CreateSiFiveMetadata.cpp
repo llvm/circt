@@ -865,13 +865,11 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
     if (!isBlacklistedBlackbox)
       libs.push_back(*extModule.getDefname());
 
-    bool hasLibs = false;
     if (auto libsAnno = annos.getAnnotation(sitestBlackBoxLibrariesAnnoClass)) {
       if (auto libsAttr = libsAnno.getMember<ArrayAttr>("libraries")) {
         for (auto lib : libsAttr) {
           if (auto libStr = dyn_cast<StringAttr>(lib)) {
             libs.push_back(libStr.getValue());
-            hasLibs = true;
           }
         }
       }
