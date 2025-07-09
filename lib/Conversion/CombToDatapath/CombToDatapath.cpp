@@ -36,9 +36,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Can only introduce compressor for three-inputs or more
-    if (op.getNumOperands() <= 2)
-      return failure();
 
     auto width = op.getType().getIntOrFloatBitWidth();
     // Skip a zero width value.
@@ -60,7 +57,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 // multi-input adder will be converted to a compressor by other pattern
 struct CombMulOpConversion : OpConversionPattern<MulOp> {
   using OpConversionPattern<MulOp>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -104,11 +100,9 @@ void ConvertCombToDatapathPass::runOnOperation() {
   target.addLegalDialect<datapath::DatapathDialect, comb::CombDialect,
                          hw::HWDialect>();
 
-  target.addIllegalOp<comb::AddOp, comb::MulOp>();
-
   // Permit 2-input adders (carry-propagate adders)
   target.addDynamicallyLegalOp<comb::AddOp>(
-      [](comb::AddOp op) { return op.getNumOperands() == 2; });
+      [](comb::AddOp op) { return op.getNumOperands() <= 2; });
   // TODO: determine lowering of multi-input multipliers
   target.addDynamicallyLegalOp<comb::MulOp>(
       [](comb::MulOp op) { return op.getNumOperands() > 2; });

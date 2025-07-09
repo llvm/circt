@@ -7,7 +7,7 @@ hw.module @test(in %arg0: i4, in %arg1: i4, in %arg2: i4, in %arg3: i4) {
 
   // CHECK-NEXT: comb.add %arg0, %arg1 : i4
   %0 = comb.add %arg0, %arg1 : i4
-  
+
   // CHECK-NEXT: %[[COMP1:.+]]:2 = datapath.compress %arg0, %arg1, %arg2, %arg3 : i4 [4 -> 2]
   // CHECK-NEXT: comb.add bin %[[COMP1]]#0, %[[COMP1]]#1 : i4
   %1 = comb.add %arg0, %arg1, %arg2, %arg3 : i4
@@ -20,3 +20,10 @@ hw.module @test(in %arg0: i4, in %arg1: i4, in %arg2: i4, in %arg3: i4) {
   // CHECK-NEXT: comb.mul %arg0, %arg1, %arg2 : i4
   %7 = comb.mul %arg0, %arg1, %arg2 : i4
 }
+
+// CHECK-LABEL: @zero_width
+hw.module @zero_width(in %arg0: i0, in %arg1: i0, in %arg2: i0) {
+  // CHECK-NEXT: hw.constant 0 : i0
+  %0 = comb.add %arg0, %arg1, %arg2 : i0
+}
+
