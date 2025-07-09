@@ -420,6 +420,55 @@ LogicalResult ConcatOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ReverseOp
+//===----------------------------------------------------------------------===//
+
+// Folding of ReverseOp: if the input is constant, compute the reverse at compile time.
+OpFoldResult comb::ReverseOp::fold(FoldAdaptor adaptor) {
+  // Try to cast the input attribute to an IntegerAttr.
+  auto cstInput = llvm::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getInput());
+  if (!cstInput)
+    return {};
+
+  APInt val = cstInput.getValue();
+  APInt reversedVal = val.reverseBits();
+
+  return mlir::IntegerAttr::get(getType(), reversedVal);
+}
+
+namespace {
+struct ReverseOfReverse : public OpRewritePattern<comb::ReverseOp> {
+  using OpRewritePattern<comb::ReverseOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(comb::ReverseOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputOp = op.getInput().getDefiningOp<comb::ReverseOp>();
+    if (!inputOp)
+      return failure();
+
+    rewriter.replaceOp(op, inputOp.getInput());
+    return success();
+  }
+};
+} 
+
+void comb::ReverseOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                  MLIRContext *context) {
+  results.add<ReverseOfReverse>(context);
+}
+
+mlir::LogicalResult comb::ReverseOp::verify() {
+  return mlir::success();
+}
+
+void comb::ReverseOp::inferResultRanges(
+    llvm::ArrayRef<mlir::ConstantIntRanges> operandRanges,
+    llvm::function_ref<void(mlir::Value, const mlir::ConstantIntRanges &)>
+        setResultRangeFn) {
+  setResultRangeFn(getResult(), operandRanges.front());
+}
+
+//===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
 
