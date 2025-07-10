@@ -1,4 +1,4 @@
-; RUN: firtool --disable-all-randomization --advanced-layer-sink %s | FileCheck %s
+; RUN: firtool --disable-all-randomization %s | FileCheck %s
 
 ; Check that the probes are correctly sunk into the layer, and there are
 ; no bare probes left in the design.

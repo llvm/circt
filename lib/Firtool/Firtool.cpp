@@ -235,14 +235,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Run layersink immediately before LowerXMR. LowerXMR will "freeze" the
   // location of probed objects by placing symbols on them. Run layersink first
   // so that probed objects can be sunk if possible.
-  if (!opt.shouldDisableLayerSink()) {
-    if (opt.shouldAdvancedLayerSink())
-      pm.nest<firrtl::CircuitOp>().addPass(
-          firrtl::createAdvancedLayerSinkPass());
-    else
-      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-          firrtl::createLayerSinkPass());
-  }
+  if (!opt.shouldDisableLayerSink() && !opt.shouldDisableOptimization())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
 
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
@@ -601,11 +595,6 @@ struct FirtoolCmdOptions {
           "connections into bulk connections)"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> advancedLayerSink{
-      "advanced-layer-sink",
-      llvm::cl::desc("Sink logic into layer blocks (advanced)"),
-      llvm::cl::init(false)};
-
   llvm::cl::opt<bool> lowerMemories{
       "lower-memories",
       llvm::cl::desc("Lower memories to have memories with masks as an "
@@ -816,9 +805,9 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableOptimization(false), exportChiselInterface(false),
       chiselInterfaceOutDirectory(""), vbToBV(false), noDedup(false),
       companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false), advancedLayerSink(false),
-      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
-      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
+      disableAggressiveMergeConnections(false), lowerMemories(false),
+      blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
+      extractTestCode(false), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
       enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
@@ -854,7 +843,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
-  advancedLayerSink = clOptions->advancedLayerSink;
   lowerMemories = clOptions->lowerMemories;
   blackBoxRootPath = clOptions->blackBoxRootPath;
   replSeqMem = clOptions->replSeqMem;
