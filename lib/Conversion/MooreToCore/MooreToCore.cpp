@@ -1325,8 +1325,25 @@ struct PowUOpConversion : public OpConversionPattern<PowUOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
 
-    rewriter.replaceOpWithNewOp<mlir::math::IPowIOp>(
-        op, resultType, adaptor.getLhs(), adaptor.getRhs());
+    Location loc = op->getLoc();
+
+    auto intType = cast<IntType>(op.getRhs().getType());
+
+    // get the original width of the result and our intended width after zero
+    // extending
+    auto originalWidth = intType.getWidth();
+    auto extendedIntType = IntegerType::get(op.getContext(), originalWidth + 1);
+
+    Value zeroVal = rewriter.create<hw::ConstantOp>(loc, extendedIntType, 0);
+    // zero extend both LHS & RHS to ensure the unsigned integers are
+    // interpreted correctly when calculating power
+    auto lhs = rewriter.create<comb::ConcatOp>(loc, zeroVal, adaptor.getLhs());
+    auto rhs = rewriter.create<comb::ConcatOp>(loc, zeroVal, adaptor.getRhs());
+
+    // lower the exponentiation via MLIR's math dialect
+    auto pow = rewriter.create<mlir::math::IPowIOp>(loc, lhs, rhs);
+
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, pow, 0);
     return success();
   }
 };

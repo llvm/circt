@@ -1112,8 +1112,8 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
 // CHECK-LABEL: func.func @PowUOp
 func.func @PowUOp(%arg0: !moore.l32, %arg1: !moore.l32) {
   // CHECK: %[[RES:.*]] = math.ipowi %arg0, %arg1 : i32
-    %0 = moore.powu %arg0, %arg1 : l32
-    return
+  %0 = moore.powu %arg0, %arg1 : l32
+  return
 }
 
 // CHECK-LABEL: func.func @PowSOp
