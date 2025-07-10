@@ -13,7 +13,7 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     i4 = IntegerType.get_signless(4)
 
-    # Create a simple hardware module with AIG operations
+    # Create a module with comb.mul
     def build_module(module):
       a, b = module.entry_block.arguments
       hw.OutputOp([comb.mul([a, b])])
