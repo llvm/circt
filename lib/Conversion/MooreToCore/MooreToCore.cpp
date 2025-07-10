@@ -1325,29 +1325,18 @@ struct PowUOpConversion : public OpConversionPattern<PowUOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
 
-    Location loc = op.getLoc();
-    auto intType = cast<IntType>(op.getRhs().getType());
+    Location loc = op->getLoc();
 
-    // transform a ** b into scf.for 0 to b step 1 { init *= a }, init = 1
-    Type integerType = rewriter.getIntegerType(intType.getWidth());
-    Value lowerBound = rewriter.create<hw::ConstantOp>(loc, integerType, 0);
-    Value upperBound =
-        rewriter.create<ConversionOp>(loc, integerType, op.getRhs());
-    Value step = rewriter.create<hw::ConstantOp>(loc, integerType, 1);
+    Value zeroVal = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
+    // zero extend both LHS & RHS to ensure the unsigned integers are
+    // interpreted correctly when calculating power
+    auto lhs = rewriter.create<comb::ConcatOp>(loc, zeroVal, adaptor.getLhs());
+    auto rhs = rewriter.create<comb::ConcatOp>(loc, zeroVal, adaptor.getRhs());
 
-    Value initVal = rewriter.create<hw::ConstantOp>(loc, resultType, 1);
-    Value lhsVal = rewriter.create<ConversionOp>(loc, resultType, op.getLhs());
+    // lower the exponentiation via MLIR's math dialect
+    auto pow = rewriter.create<mlir::math::IPowIOp>(loc, lhs, rhs);
 
-    auto forOp = rewriter.create<scf::ForOp>(
-        loc, lowerBound, upperBound, step, ValueRange(initVal),
-        [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
-          Value loopVar = iterArgs.front();
-          Value mul = rewriter.create<comb::MulOp>(loc, lhsVal, loopVar);
-          rewriter.create<scf::YieldOp>(loc, ValueRange(mul));
-        });
-
-    rewriter.replaceOp(op, forOp.getResult(0));
-
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, pow, 0);
     return success();
   }
 };
