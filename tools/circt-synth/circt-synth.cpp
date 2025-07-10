@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/AIGToComb.h"
-#include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
@@ -22,7 +21,6 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -31,12 +29,14 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Synthesis/SynthesisPipeline.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/Passes.h"
@@ -51,6 +51,7 @@ namespace cl = llvm::cl;
 
 using namespace mlir;
 using namespace circt;
+using namespace synthesis;
 
 //===----------------------------------------------------------------------===//
 // Command-line options declaration
@@ -90,7 +91,6 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
-// Options to control early-out from pipeline.
 enum Until { UntilAIGLowering, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
@@ -140,7 +140,7 @@ static cl::opt<std::string> abcPath("abc-path", cl::desc("Path to ABC"),
                                     cl::cat(mainCategory));
 
 static cl::opt<bool>
-    continueOnFailure("ignore-abc-failures",
+    ignoreAbcFailures("ignore-abc-failures",
                       cl::desc("Continue on ABC failure instead of aborting"),
                       cl::init(false), cl::cat(mainCategory));
 
@@ -152,6 +152,17 @@ static bool untilReached(Until until) {
   return until >= runUntilBefore || until > runUntilAfter;
 }
 
+static void
+nestOrAddToHierarchicalRunner(OpPassManager &pm,
+                              std::function<void(OpPassManager &pm)> pipeline,
+                              const std::string &topName) {
+  if (topName.empty()) {
+    pipeline(pm.nest<hw::HWModuleOp>());
+  } else {
+    pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
@@ -161,60 +172,24 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
 
-static void populateSynthesisPipeline(PassManager &pm) {
-  auto pipeline = [](OpPassManager &mpm) {
-    // Add the AIG to Comb at the scope exit if requested.
-    auto addAIGToComb = llvm::make_scope_exit([&]() {
-      if (convertToComb) {
-        mpm.addPass(circt::createConvertAIGToComb());
-        mpm.addPass(createCSEPass());
-      }
-    });
-    {
-      // Partially legalize Comb to AIG, run CSE and canonicalization.
-      circt::ConvertCombToAIGOptions options;
-      partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp,
-                                 comb::MuxOp, comb::ICmpOp, hw::ArrayGetOp,
-                                 hw::ArraySliceOp, hw::ArrayCreateOp,
-                                 hw::ArrayConcatOp, hw::AggregateConstantOp>(
-          options.additionalLegalOps);
-      mpm.addPass(circt::createConvertCombToAIG(options));
-    }
-    mpm.addPass(createCSEPass());
-    mpm.addPass(createSimpleCanonicalizerPass());
-
-    mpm.addPass(circt::hw::createHWAggregateToCombPass());
-    mpm.addPass(circt::createConvertCombToAIG());
-    mpm.addPass(createCSEPass());
+// Add a default synthesis pipeline and analysis.
+static void populateCIRCTSynthPipeline(PassManager &pm) {
+  auto pipeline = [](OpPassManager &pm) {
+    circt::synthesis::buildAIGLoweringPipeline(pm);
     if (untilReached(UntilAIGLowering))
       return;
-    mpm.addPass(createSimpleCanonicalizerPass());
-    mpm.addPass(createCSEPass());
-    mpm.addPass(aig::createLowerVariadic());
-    // TODO: LowerWordToBits is not scalable for large designs. Change to
-    // conditionally enable the pass once the rest of the pipeline was able
-    // to handle multibit operands properly.
-    mpm.addPass(aig::createLowerWordToBits());
-    mpm.addPass(createCSEPass());
-    mpm.addPass(createSimpleCanonicalizerPass());
-    if (!abcCommands.empty()) {
-      aig::ABCRunnerOptions options;
-      options.abcPath = abcPath;
-      options.abcCommands.assign(abcCommands.begin(), abcCommands.end());
-      options.continueOnFailure = continueOnFailure;
-      mpm.addPass(aig::createABCRunner(options));
-    }
-    // TODO: Add balancing, rewriting, FRAIG conversion, etc.
-    if (untilReached(UntilEnd))
-      return;
+
+    circt::synthesis::AIGOptimizationPipelineOptions options;
+    options.abcCommands = abcCommands;
+    options.abcPath.setValue(abcPath);
+    options.ignoreAbcFailures.setValue(ignoreAbcFailures);
+
+    circt::synthesis::buildAIGOptimizationPipeline(pm, options);
   };
 
-  if (topName.empty()) {
-    pipeline(pm.nest<hw::HWModuleOp>());
-  } else {
-    pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
-  }
+  nestOrAddToHierarchicalRunner(pm, pipeline, topName);
 
+  // Run analysis if requested.
   if (!outputLongestPath.empty()) {
     circt::aig::PrintLongestPathAnalysisOptions options;
     options.outputFile = outputLongestPath;
@@ -223,7 +198,14 @@ static void populateSynthesisPipeline(PassManager &pm) {
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
 
-  // TODO: Add LUT mapping, etc.
+  if (convertToComb)
+    nestOrAddToHierarchicalRunner(
+        pm,
+        [&](OpPassManager &pm) {
+          pm.addPass(circt::createConvertAIGToComb());
+          pm.addPass(createCSEPass());
+        },
+        topName);
 }
 
 /// Check output stream before writing bytecode to it.
@@ -285,7 +267,7 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-synth"));
-  populateSynthesisPipeline(pm);
+  populateCIRCTSynthPipeline(pm);
 
   if (!topName.empty()) {
     // Set a top module name for the longest path analysis.
@@ -320,6 +302,7 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
+
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
