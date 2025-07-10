@@ -1298,6 +1298,12 @@ void Promoter::insertProbes(BlockEntry *node) {
       continue;
     LLVM_DEBUG(llvm::dbgs() << "- Inserting probe for " << neededDef
                             << " in block " << node->block << "\n");
+    OpBuilder::InsertionGuard guard(builder);
+    // If the neededDef is in the same block, one can't just insert at top.
+    if (Operation *op = neededDef.getDefiningOp()) {
+      if (op->getBlock() == node->block)
+        builder.setInsertionPointAfterValue(neededDef);
+    }
     auto value = builder.create<PrbOp>(neededDef.getLoc(), neededDef);
     auto *def = lattice.createDef(value, DriveCondition::never());
     node->insertedProbes.push_back({neededDef, def});
