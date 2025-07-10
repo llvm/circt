@@ -236,7 +236,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // location of probed objects by placing symbols on them. Run layersink first
   // so that probed objects can be sunk if possible.
   if (!opt.shouldDisableLayerSink() && !opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAdvancedLayerSinkPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSinkPass());
 
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all

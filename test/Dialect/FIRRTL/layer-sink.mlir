@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl-advanced-layer-sink))" -allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl-layer-sink))" -allow-unregistered-dialect %s | FileCheck %s
 
 //===----------------------------------------------------------------------===//
 // Movement of layers to the back of their containing block.

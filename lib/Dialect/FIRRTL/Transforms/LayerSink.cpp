@@ -1,4 +1,4 @@
-//===- AdvancedLayerSink.cpp - Sink ops into layer blocks -----------------===//
+//===- LayerSink.cpp - Sink ops into layer blocks -------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,7 +25,7 @@
 
 namespace circt {
 namespace firrtl {
-#define GEN_PASS_DEF_ADVANCEDLAYERSINK
+#define GEN_PASS_DEF_LAYERSINK
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
 } // namespace firrtl
 } // namespace circt
@@ -479,13 +479,13 @@ bool ModuleLayerSink::operator()() {
 
 namespace {
 /// A control-flow sink pass.
-struct AdvancedLayerSinkPass final
-    : public circt::firrtl::impl::AdvancedLayerSinkBase<AdvancedLayerSinkPass> {
+struct LayerSinkPass final
+    : public circt::firrtl::impl::LayerSinkBase<LayerSinkPass> {
   void runOnOperation() override;
 };
 } // namespace
 
-void AdvancedLayerSinkPass::runOnOperation() {
+void LayerSinkPass::runOnOperation() {
   auto circuit = getOperation();
   LLVM_DEBUG(debugPassHeader(this)
                  << "\n"
@@ -510,6 +510,6 @@ void AdvancedLayerSinkPass::runOnOperation() {
 // Pass Constructor
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createAdvancedLayerSinkPass() {
-  return std::make_unique<AdvancedLayerSinkPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createLayerSinkPass() {
+  return std::make_unique<LayerSinkPass>();
 }
