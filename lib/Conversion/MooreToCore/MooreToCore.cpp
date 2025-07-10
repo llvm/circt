@@ -1327,14 +1327,7 @@ struct PowUOpConversion : public OpConversionPattern<PowUOp> {
 
     Location loc = op->getLoc();
 
-    auto intType = cast<IntType>(op.getRhs().getType());
-
-    // get the original width of the result and our intended width after zero
-    // extending
-    auto originalWidth = intType.getWidth();
-    auto extendedIntType = IntegerType::get(op.getContext(), originalWidth + 1);
-
-    Value zeroVal = rewriter.create<hw::ConstantOp>(loc, extendedIntType, 0);
+    Value zeroVal = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
     // zero extend both LHS & RHS to ensure the unsigned integers are
     // interpreted correctly when calculating power
     auto lhs = rewriter.create<comb::ConcatOp>(loc, zeroVal, adaptor.getLhs());
