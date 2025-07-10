@@ -87,7 +87,7 @@ inline void registerAllPasses() {
   verif::registerPasses();
 
   // Register pass pipelines
-  rtg::registerRTGPipelines();
+  rtg::registerPipelines();
 }
 
 } // namespace circt

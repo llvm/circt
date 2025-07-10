@@ -46,7 +46,7 @@ void circt::rtg::buildRandomizationPipeline(
 // Pipeline registration.
 //===----------------------------------------------------------------------===//
 
-void circt::rtg::registerRTGPipelines() {
+void circt::rtg::registerPipelines() {
   PassPipelineRegistration<RandomizationPipelineOptions>(
       "rtg-randomization-pipeline",
       "The default pipeline for randomizing RTG tests.",

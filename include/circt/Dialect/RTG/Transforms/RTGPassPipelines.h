@@ -34,7 +34,7 @@ void buildRandomizationPipeline(mlir::OpPassManager &pm,
                                 const RandomizationPipelineOptions &options);
 
 /// Registers all pipelines for the `rtg` dialect.
-void registerRTGPipelines();
+void registerPipelines();
 
 } // namespace rtg
 } // namespace circt

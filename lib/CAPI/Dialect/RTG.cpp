@@ -26,7 +26,7 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTG, rtg, RTGDialect)
 
 void registerRTGPasses() {
   circt::rtg::registerPasses();
-  circt::rtg::registerRTGPipelines();
+  circt::rtg::registerPipelines();
 }
 
 //===----------------------------------------------------------------------===//
