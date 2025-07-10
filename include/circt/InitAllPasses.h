@@ -33,6 +33,7 @@
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Pipeline/PipelinePasses.h"
+#include "circt/Dialect/RTG/Transforms/RTGPassPipelines.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Dialect/SSP/SSPPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
@@ -84,6 +85,9 @@ inline void registerAllPasses() {
   sv::registerPasses();
   systemc::registerPasses();
   verif::registerPasses();
+
+  // Register pass pipelines
+  rtg::registerPipelines();
 }
 
 } // namespace circt
