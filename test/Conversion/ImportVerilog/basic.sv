@@ -1869,6 +1869,43 @@ module GenerateConstructs;
   endgenerate
 endmodule
 
+// CHECK-LABEL: @UseGenerateBlockNameInVariables
+module UseGenerateBlockNameInVariables;
+  // CHECK: %x = moore.variable
+  int x;
+  begin : foo
+    // CHECK: %foo.y = moore.variable
+    int y;
+    for (genvar i = 2; i < 6; ++i) begin : bar
+      // CHECK: %foo.bar_2.z = moore.variable
+      // CHECK: %foo.bar_3.z = moore.variable
+      // CHECK: %foo.bar_4.z = moore.variable
+      // CHECK: %foo.bar_5.z = moore.variable
+      int z;
+    end
+  end
+endmodule
+
+// CHECK-LABEL: @UseGenerateBlockNameInInstances
+module UseGenerateBlockNameInInstances;
+  // CHECK: moore.instance "x" @Dummy
+  Dummy x();
+  begin : foo
+    // CHECK: moore.instance "foo.y" @Dummy
+    Dummy y();
+    for (genvar i = 2; i < 6; ++i) begin : bar
+      // CHECK: moore.instance "foo.bar_2.z" @Dummy
+      // CHECK: moore.instance "foo.bar_3.z" @Dummy
+      // CHECK: moore.instance "foo.bar_4.z" @Dummy
+      // CHECK: moore.instance "foo.bar_5.z" @Dummy
+      Dummy z();
+    end
+  end
+endmodule
+
+module Dummy;
+endmodule
+
 // Should accept and ignore empty packages.
 package Package;
   typedef logic [41:0] PackageType;

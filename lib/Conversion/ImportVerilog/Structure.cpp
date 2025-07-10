@@ -228,8 +228,14 @@ static moore::NetKind convertNetKind(slang::ast::NetType::NetKind kind) {
 
 namespace {
 struct ModuleVisitor : public BaseVisitor {
-  using BaseVisitor::BaseVisitor;
   using BaseVisitor::visit;
+
+  // A prefix of block names such as `foo.bar.` to put in front of variable and
+  // instance names.
+  StringRef blockNamePrefix;
+
+  ModuleVisitor(Context &context, Location loc, StringRef blockNamePrefix = "")
+      : BaseVisitor(context, loc), blockNamePrefix(blockNamePrefix) {}
 
   // Skip ports which are already handled by the module itself.
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
@@ -413,7 +419,8 @@ struct ModuleVisitor : public BaseVisitor {
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
     auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
     auto inst = builder.create<moore::InstanceOp>(
-        loc, moduleType.getOutputTypes(), builder.getStringAttr(instNode.name),
+        loc, moduleType.getOutputTypes(),
+        builder.getStringAttr(Twine(blockNamePrefix) + instNode.name),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
 
@@ -452,7 +459,7 @@ struct ModuleVisitor : public BaseVisitor {
 
     auto varOp = builder.create<moore::VariableOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-        builder.getStringAttr(varNode.name), initial);
+        builder.getStringAttr(Twine(blockNamePrefix) + varNode.name), initial);
     context.valueSymbols.insert(&varNode, varOp);
     return success();
   }
@@ -479,7 +486,8 @@ struct ModuleVisitor : public BaseVisitor {
 
     auto netOp = builder.create<moore::NetOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-        builder.getStringAttr(netNode.name), netkind, assignment);
+        builder.getStringAttr(Twine(blockNamePrefix) + netNode.name), netkind,
+        assignment);
     context.valueSymbols.insert(&netNode, netOp);
     return success();
   }
@@ -538,19 +546,55 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle generate block.
   LogicalResult visit(const slang::ast::GenerateBlockSymbol &genNode) {
-    if (!genNode.isUninstantiated) {
-      for (auto &member : genNode.members()) {
-        if (failed(member.visit(ModuleVisitor(context, loc))))
-          return failure();
-      }
+    // Ignore uninstantiated blocks.
+    if (genNode.isUninstantiated)
+      return success();
+
+    // If the block has a name, add it to the list of block name prefices.
+    SmallString<64> prefixBuffer;
+    auto prefix = blockNamePrefix;
+    if (!genNode.name.empty()) {
+      prefixBuffer += blockNamePrefix;
+      prefixBuffer += genNode.name;
+      prefixBuffer += '.';
+      prefix = prefixBuffer;
     }
+
+    // Visit each member of the generate block.
+    for (auto &member : genNode.members())
+      if (failed(member.visit(ModuleVisitor(context, loc, prefix))))
+        return failure();
     return success();
   }
 
   // Handle generate block array.
   LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
-    for (const auto *member : genArrNode.entries) {
-      if (failed(member->asSymbol().visit(ModuleVisitor(context, loc))))
+    // If the block has a name, add it to the list of block name prefices and
+    // prepare to append the array index and a `.` in each iteration.
+    SmallString<64> prefixBuffer;
+    if (!genArrNode.name.empty()) {
+      prefixBuffer += blockNamePrefix;
+      prefixBuffer += genArrNode.name;
+    }
+    auto prefixBufferBaseLen = prefixBuffer.size();
+
+    // Visit each iteration entry of the generate block.
+    for (const auto *entry : genArrNode.entries) {
+      // Append the index to the prefix if this block has a name.
+      auto prefix = blockNamePrefix;
+      if (prefixBufferBaseLen > 0) {
+        prefixBuffer.resize(prefixBufferBaseLen);
+        prefixBuffer += '_';
+        if (entry->arrayIndex)
+          prefixBuffer += entry->arrayIndex->toString();
+        else
+          Twine(entry->constructIndex).toVector(prefixBuffer);
+        prefixBuffer += '.';
+        prefix = prefixBuffer;
+      }
+
+      // Visit this iteration entry.
+      if (failed(entry->asSymbol().visit(ModuleVisitor(context, loc, prefix))))
         return failure();
     }
     return success();
