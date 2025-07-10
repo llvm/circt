@@ -5,7 +5,6 @@ add_circt_library(CIRCTSynthesis
   CIRCTAIGTransforms
   CIRCTCombToAIG
   CIRCTHWTransforms
-  CIRCTTransforms
   CIRCTSupport
 
   MLIRIR

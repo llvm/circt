@@ -36,68 +36,48 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
 
-/// Helper function to check if we should stop at a certain point.
-static bool untilReached(SynthesisPipelineOptions::UntilPoint point,
-                         SynthesisPipelineOptions::UntilPoint target) {
-  return static_cast<int>(point) >= static_cast<int>(target);
+void circt::synthesis::buildAIGLoweringPipeline(OpPassManager &pm) {
+  {
+    // Partially legalize Comb to AIG, run CSE and canonicalization.
+    circt::ConvertCombToAIGOptions convOptions;
+    partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp,
+                               comb::MuxOp, comb::ICmpOp, hw::ArrayGetOp,
+                               hw::ArraySliceOp, hw::ArrayCreateOp,
+                               hw::ArrayConcatOp, hw::AggregateConstantOp>(
+        convOptions.additionalLegalOps);
+    pm.addPass(circt::createConvertCombToAIG(convOptions));
+  }
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+
+  pm.addPass(circt::hw::createHWAggregateToCombPass());
+  pm.addPass(circt::createConvertCombToAIG());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(createCSEPass());
 }
 
-void circt::synthesis::buildSynthesisPipeline(
-    OpPassManager &pm, const SynthesisPipelineOptions &options) {
-  auto pipeline = [&](OpPassManager &mpm) {
-    {
-      // Partially legalize Comb to AIG, run CSE and canonicalization.
-      circt::ConvertCombToAIGOptions convOptions;
-      partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp,
-                                 comb::MuxOp, comb::ICmpOp, hw::ArrayGetOp,
-                                 hw::ArraySliceOp, hw::ArrayCreateOp,
-                                 hw::ArrayConcatOp, hw::AggregateConstantOp>(
-          convOptions.additionalLegalOps);
-      mpm.addPass(circt::createConvertCombToAIG(convOptions));
-    }
-    mpm.addPass(createCSEPass());
-    mpm.addPass(createSimpleCanonicalizerPass());
+void circt::synthesis::buildAIGOptimizationPipeline(
+    OpPassManager &pm, const AIGOptimizationPipelineOptions &options) {
 
-    mpm.addPass(circt::hw::createHWAggregateToCombPass());
-    mpm.addPass(circt::createConvertCombToAIG());
-    mpm.addPass(createCSEPass());
+  pm.addPass(aig::createLowerVariadic());
 
-    if (untilReached(SynthesisPipelineOptions::UntilAIGLowering,
-                     options.runUntilAfter.getValue()))
-      return;
+  // TODO: LowerWordToBits is not scalable for large designs. Change to
+  // conditionally enable the pass once the rest of the pipeline was able
+  // to handle multibit operands properly.
+  pm.addPass(aig::createLowerWordToBits());
+  pm.addPass(createCSEPass());
+  pm.addPass(createSimpleCanonicalizerPass());
 
-    mpm.addPass(createSimpleCanonicalizerPass());
-    mpm.addPass(createCSEPass());
-    mpm.addPass(aig::createLowerVariadic());
-
-    // TODO: LowerWordToBits is not scalable for large designs. Change to
-    // conditionally enable the pass once the rest of the pipeline was able
-    // to handle multibit operands properly.
-    mpm.addPass(aig::createLowerWordToBits());
-    mpm.addPass(createCSEPass());
-    mpm.addPass(createSimpleCanonicalizerPass());
-
-    if (!options.abcCommands.empty()) {
-      aig::ABCRunnerOptions abcOptions;
-      abcOptions.abcPath = options.abcPath;
-      abcOptions.abcCommands.assign(options.abcCommands.begin(),
-                                    options.abcCommands.end());
-      abcOptions.continueOnFailure = options.ignoreAbcFailures;
-      mpm.addPass(aig::createABCRunner(abcOptions));
-    }
-
-    // TODO: Add balancing, rewriting, FRAIG conversion, etc.
-    assert(options.runUntilAfter.getValue() ==
-           SynthesisPipelineOptions::UntilEnd);
-  };
-
-  if (options.topName.empty()) {
-    pipeline(pm.nest<hw::HWModuleOp>());
-  } else {
-    pm.addPass(circt::createHierarchicalRunner(options.topName, pipeline));
+  if (!options.abcCommands.empty()) {
+    aig::ABCRunnerOptions abcOptions;
+    abcOptions.abcPath = options.abcPath;
+    abcOptions.abcCommands.assign(options.abcCommands.begin(),
+                                  options.abcCommands.end());
+    abcOptions.continueOnFailure = options.ignoreAbcFailures;
+    pm.addPass(aig::createABCRunner(abcOptions));
   }
-
-  // TODO: Add LUT mapping, etc.
+  // TODO: Add balancing, rewriting, FRAIG conversion, etc.
 }
 
 //===----------------------------------------------------------------------===//
@@ -105,7 +85,11 @@ void circt::synthesis::buildSynthesisPipeline(
 //===----------------------------------------------------------------------===//
 
 void circt::synthesis::registerSynthesisPipeline() {
-  PassPipelineRegistration<SynthesisPipelineOptions>(
-      "synthesis-pipeline", "The default pipeline for synthesis pipeline",
-      buildSynthesisPipeline);
+  PassPipelineRegistration<EmptyPipelineOptions>(
+      "synthesis-aig-lowering-pipeline",
+      "The default pipeline for until AIG lowering", buildAIGLoweringPipeline);
+  PassPipelineRegistration<AIGOptimizationPipelineOptions>(
+      "synthesis-aig-optimization-pipeline",
+      "The default pipeline for AIG optimization pipeline",
+      buildAIGOptimizationPipeline);
 }

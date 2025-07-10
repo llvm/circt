@@ -1,8 +1,8 @@
 // RUN: circt-synth %s | FileCheck %s
 // RUN: circt-synth %s --top and | FileCheck %s --check-prefixes=TOP,CHECK
 // RUN: circt-synth %s --top and --emit-bytecode -f | circt-opt | FileCheck %s --check-prefix=CHECK
-// RUN: circt-synth %s --until-after aig-lowering | FileCheck %s --check-prefix=AIG
-// RUN: circt-synth %s --until-after aig-lowering --convert-to-comb | FileCheck %s --check-prefix=COMB
+// RUN: circt-synth %s --until-before aig-lowering | FileCheck %s --check-prefix=AIG
+// RUN: circt-synth %s --until-before aig-lowering --convert-to-comb | FileCheck %s --check-prefix=COMB
 
 // TOP-LABEL: module attributes {"aig.longest-path-analysis-top" = @and}
 // AIG-LABEL: @and

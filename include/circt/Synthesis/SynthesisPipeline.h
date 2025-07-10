@@ -13,15 +13,11 @@
 #ifndef LIB_SYNTHESIS_SYNTHESISPIPELINE_H
 #define LIB_SYNTHESIS_SYNTHESISPIPELINE_H
 
+#include "circt-c/Synthesis.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
 #include <string>
 #include <vector>
-
-namespace mlir {
-class PassManager;
-class OpPassManager;
-} // namespace mlir
 
 //===----------------------------------------------------------------------===//
 // Pipeline Options
@@ -29,16 +25,9 @@ class OpPassManager;
 namespace circt {
 namespace synthesis {
 
-/// Options for the synthesis pipeline.
-struct SynthesisPipelineOptions
-    : public mlir::PassPipelineOptions<SynthesisPipelineOptions> {
-
-  /// Enumeration for pipeline stopping points.
-  enum UntilPoint { UntilAIGLowering = 0, UntilEnd = 1 };
-
-  PassOptions::Option<std::string> topName{
-      *this, "top", llvm::cl::desc("Top module name"), llvm::cl::init("")};
-
+/// Options for the aig optimization pipeline.
+struct AIGOptimizationPipelineOptions
+    : public mlir::PassPipelineOptions<AIGOptimizationPipelineOptions> {
   PassOptions::ListOption<std::string> abcCommands{
       *this, "abc-commands", llvm::cl::desc("ABC passes to run")};
 
@@ -49,26 +38,21 @@ struct SynthesisPipelineOptions
       *this, "ignore-abc-failures",
       llvm::cl::desc("Continue on ABC failure instead of aborting"),
       llvm::cl::init(false)};
-
-  PassOptions::Option<UntilPoint> runUntilAfter{
-      *this, "until-after",
-      llvm::cl::desc("Stop pipeline after a specified point"),
-      llvm::cl::init(UntilEnd),
-      llvm::cl::values(
-          clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
-          clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"))};
 };
+
 //===----------------------------------------------------------------------===//
 // Pipeline Functions
 //===----------------------------------------------------------------------===//
 
-/// Populate the synthesis pipeline with the given options.
-void buildSynthesisPipeline(mlir::OpPassManager &pm,
-                            const SynthesisPipelineOptions &options);
+/// Populate the synthesis pipelines.
+void buildAIGLoweringPipeline(mlir::OpPassManager &pm);
+void buildAIGOptimizationPipeline(
+    mlir::OpPassManager &pm, const AIGOptimizationPipelineOptions &options);
 
-/// Register the synthesis pipeline.
+/// Register the synthesis pipelines.
 void registerSynthesisPipeline();
-} // namespace synthesis
 
+} // namespace synthesis
 } // namespace circt
+
 #endif // LIB_SYNTHESIS_SYNTHESISPIPELINE_H

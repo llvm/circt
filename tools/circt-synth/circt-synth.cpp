@@ -30,6 +30,7 @@
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Synthesis/SynthesisPipeline.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
@@ -90,17 +91,18 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
-// Options to control early-out from pipeline.
-static auto runUntilValues =
-    llvm::cl::values(clEnumValN(SynthesisPipelineOptions::UntilAIGLowering,
-                                "aig-lowering", "Lowering of AIG"),
-                     clEnumValN(SynthesisPipelineOptions::UntilEnd, "all",
-                                "Run entire pipeline (default)"));
+enum Until { UntilAIGLowering, UntilEnd };
 
-static llvm::cl::opt<SynthesisPipelineOptions::UntilPoint> runUntilAfter(
+static auto runUntilValues = llvm::cl::values(
+    clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
+    clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
+
+static llvm::cl::opt<Until> runUntilBefore(
+    "until-before", llvm::cl::desc("Stop pipeline before a specified point"),
+    runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
+static llvm::cl::opt<Until> runUntilAfter(
     "until-after", llvm::cl::desc("Stop pipeline after a specified point"),
-    runUntilValues, llvm::cl::init(SynthesisPipelineOptions::UntilEnd),
-    llvm::cl::cat(mainCategory));
+    runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
 
 static cl::opt<bool>
     convertToComb("convert-to-comb",
@@ -143,6 +145,25 @@ static cl::opt<bool>
                       cl::init(false), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
+// Main Tool Logic
+//===----------------------------------------------------------------------===//
+
+static bool untilReached(Until until) {
+  return until >= runUntilBefore || until > runUntilAfter;
+}
+
+static void
+nestOrAddToHierarchicalRunner(OpPassManager &pm,
+                              std::function<void(OpPassManager &pm)> pipeline,
+                              const std::string &topName) {
+  if (topName.empty()) {
+    pipeline(pm.nest<hw::HWModuleOp>());
+  } else {
+    pm.addPass(circt::createHierarchicalRunner(topName, pipeline));
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
@@ -153,14 +174,22 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
 
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
-  circt::synthesis::SynthesisPipelineOptions options;
-  options.topName.setValue(topName);
-  options.abcCommands = abcCommands;
-  options.abcPath.setValue(abcPath);
-  options.ignoreAbcFailures.setValue(ignoreAbcFailures);
-  options.runUntilAfter = runUntilAfter.getValue();
+  auto pipeline = [](OpPassManager &pm) {
+    circt::synthesis::buildAIGLoweringPipeline(pm);
+    if (untilReached(UntilAIGLowering))
+      return;
 
-  circt::synthesis::buildSynthesisPipeline(pm, options);
+    circt::synthesis::AIGOptimizationPipelineOptions options;
+    options.abcCommands = abcCommands;
+    options.abcPath.setValue(abcPath);
+    options.ignoreAbcFailures.setValue(ignoreAbcFailures);
+
+    circt::synthesis::buildAIGOptimizationPipeline(pm, options);
+  };
+
+  nestOrAddToHierarchicalRunner(pm, pipeline, topName);
+
+  // Run analysis if requested.
   if (!outputLongestPath.empty()) {
     circt::aig::PrintLongestPathAnalysisOptions options;
     options.outputFile = outputLongestPath;
@@ -169,11 +198,14 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
   }
 
-  // Add the AIG to Comb at the scope exit if requested.
-  if (convertToComb) {
-    pm.nest<hw::HWModuleOp>().addPass(circt::createConvertAIGToComb());
-    pm.nest<hw::HWModuleOp>().addPass(createCSEPass());
-  }
+  if (convertToComb)
+    nestOrAddToHierarchicalRunner(
+        pm,
+        [&](OpPassManager &pm) {
+          pm.addPass(circt::createConvertAIGToComb());
+          pm.addPass(createCSEPass());
+        },
+        topName);
 }
 
 /// Check output stream before writing bytecode to it.

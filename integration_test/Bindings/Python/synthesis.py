@@ -18,13 +18,17 @@ with Context() as ctx, Location.unknown():
       a, b = module.entry_block.arguments
       hw.OutputOp([comb.mul([a, b])])
 
-    hw.HWModuleOp(name="foo",
-                  input_ports=[("a", i4), ("b", i4)],
-                  output_ports=[("out", i4)],
-                  body_builder=build_module)
+    hw.HWModuleOp(
+        name="foo",
+        input_ports=[("a", i4), ("b", i4)],
+        output_ports=[("out", i4)],
+        body_builder=build_module,
+    )
 
   # Check that the synthesis pipeline is registered.
-  pm = PassManager.parse("builtin.module(synthesis-pipeline{top=\"foo\"})")
+  pm = PassManager.parse(
+      "builtin.module(hw.module(synthesis-aig-lowering-pipeline, "
+      "synthesis-aig-optimization-pipeline))")
   pm.run(m.operation)
   # CHECK: hw.module @foo(
   # CHECK-NOT: comb.mul
