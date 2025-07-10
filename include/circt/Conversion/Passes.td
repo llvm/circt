@@ -872,8 +872,6 @@ def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
 
 def ConvertDatapathToSMT : Pass<"convert-datapath-to-smt"> {
   let summary = "Convert datapath ops to SMT ops";
-  // Need to depend on HWDialect because some 'datapath' canonicalization patterns
-  // build 'hw.constant' operations.
   let dependentDialects = [
     "mlir::smt::SMTDialect", "hw::HWDialect", "mlir::func::FuncDialect"
   ];
