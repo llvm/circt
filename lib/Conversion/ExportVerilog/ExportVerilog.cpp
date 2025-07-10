@@ -2598,6 +2598,14 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      SubExprSignRequirement signRequirement,
                                      bool isSelfDeterminedUnsignedValue,
                                      bool isAssignmentLikeContext) {
+
+  if (auto reverseOp = dyn_cast_or_null<comb::ReverseOp>(exp.getDefiningOp())) {
+    ps << "{<<{";
+    emitSubExpr(reverseOp.getInput(), LowestPrecedence);
+    ps << "}}";
+    emittedExprs.insert(reverseOp);
+    return {Symbol, IsUnsigned};
+  }
   // `verif.contract` ops act as no-ops.
   if (auto result = dyn_cast<OpResult>(exp))
     if (auto contract = dyn_cast<verif::ContractOp>(result.getOwner()))
