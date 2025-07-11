@@ -789,9 +789,11 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> lintStaticAsserts{
       "lint-static-asserts", llvm::cl::desc("Lint static assertions"),
       llvm::cl::init(true)};
+  // TODO: Change this default to 'true' once this has been better tested and
+  // `-sv-extract-test-code` has been removed.
   llvm::cl::opt<bool> lintXmrsInDesign{
       "lint-xmrs-in-design", llvm::cl::desc("Lint XMRs in the design"),
-      llvm::cl::init(true)};
+      llvm::cl::init(false)};
 };
 } // namespace
 
