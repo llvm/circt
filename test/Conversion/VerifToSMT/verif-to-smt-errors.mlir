@@ -145,3 +145,26 @@ func.func @multiple_clocks() -> (i1) {
   }
   func.return %bmc : i1
 }
+
+// -----
+
+func.func @wrong_initial_type() -> (i1) {
+  // expected-error @below {{type of initial value does not match type of initialized register}}
+  %bmc = verif.bmc bound 10 num_regs 1 initial_values [-1 : i7]
+  init {
+    %c0_i1 = hw.constant 0 : i1
+    %clk = seq.to_clock %c0_i1
+    verif.yield %clk : !seq.clock
+  }
+  loop {
+    ^bb0(%clk: !seq.clock):
+    verif.yield %clk: !seq.clock
+  }
+  circuit {
+  ^bb0(%clk: !seq.clock, %arg0: i8):
+    %true = hw.constant true
+    verif.assert %true : i1
+    verif.yield %arg0 : i8
+  }
+  func.return %bmc : i1
+}
