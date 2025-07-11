@@ -1280,7 +1280,7 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1,
   %1 = comb.mux %cond, %arg1, %arg0 : i32
   %o7 = comb.mux %cond2, %1, %arg0 : i32
 
-  /// CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
+  // CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
   %o8 = comb.mux %o8, %o8, %o8 : i1
 
   // CHECK: [[O9:%.+]] = comb.mux [[TRUE]], [[O9]], %arg0 : i32
