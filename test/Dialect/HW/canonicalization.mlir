@@ -1186,6 +1186,21 @@ hw.module @enum_constant() {
   %0 = hw.enum.constant A : !hw.enum<A, B, C>
 }
 
+// CHECK-LABEL:  hw.type_scope @__foo {
+// CHECK-NEXT:     hw.typedecl @RecordTy : !hw.struct<a: i4, b: ui32>
+// CHECK-LABEL:  hw.module @Driver(out x : !hw.typealias<@__foo::@RecordTy, !hw.struct<a: i4, b: ui32>>) {
+// CHECK-NEXT:     [[R0:%.*]] = hw.aggregate_constant [0 : i4, 0 : ui32] : !hw.typealias<@__foo::@RecordTy, !hw.struct<a: i4, b: ui32>>
+// CHECK-NEXT:     hw.output [[R0]] : !hw.typealias<@__foo::@RecordTy, !hw.struct<a: i4, b: ui32>>
+hw.type_scope @__foo{
+  hw.typedecl @RecordTy : !hw.struct<a: i4, b: ui32>
+}
+hw.module @Driver(out x: !hw.typealias<@__foo::@RecordTy, !hw.struct<a: i4, b: ui32>>) {
+  %c0_i4 = hw.constant 0 : i4
+  %0 = hwarith.constant 0 : ui32
+  %1 = hw.struct_create (%c0_i4, %0) : !hw.typealias<@__foo::@RecordTy, !hw.struct<a: i4, b: ui32>>
+  hw.output %1 : !hw.typealias<@__foo::@RecordTy, !hw.struct<a: i4, b: ui32>>
+}
+
 
 // == Begin: test cases from LowerToHW ==
 
