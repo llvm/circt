@@ -11,7 +11,7 @@ firrtl.circuit "Test" {
   }
   firrtl.layer @B bind {}
 
-  firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @A>)
+  firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @A>) attributes {knownLayers=[@A]}
 
   //===--------------------------------------------------------------------===//
   // Removal of Probe Colors
@@ -21,7 +21,7 @@ firrtl.circuit "Test" {
   firrtl.module @ColoredPorts(out %o: !firrtl.probe<uint<1>, @A>) {}
 
   // CHECK-LABEL: @ExtColoredPorts(out o: !firrtl.probe<uint<1>>)
-  firrtl.extmodule @ExtColoredPorts(out o: !firrtl.probe<uint<1>, @A>)
+  firrtl.extmodule @ExtColoredPorts(out o: !firrtl.probe<uint<1>, @A>) attributes {knownLayers=[@A]}
 
   // CHECK-LABEL: @ColoredPortsOnInstances
   firrtl.module @ColoredPortsOnInstances() {
@@ -329,31 +329,50 @@ firrtl.circuit "Test" {
   // Inline Layers
   //===--------------------------------------------------------------------===//
 
-  // CHECK:      sv.macro.decl @layer_Test$Inline
-  // CHECK-NEXT: sv.macro.decl @layer_Test$Inline$Inline
-  // CHECK-NEXT: sv.macro.decl @layer_Test$Bound$Inline
+  // CHECK:      sv.macro.decl @layer_ModuleWithInlineLayerBlocks$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_ModuleWithInlineLayerBlocks$Inline$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_ModuleWithInlineLayerBlocks$Inline$Bound$Inline
+  // CHECK-NEXT: sv.macro.decl @layer_ModuleWithInlineLayerBlocks$Bound$Inline
+
   firrtl.layer @Inline inline {
     firrtl.layer @Inline inline {}
+
+    firrtl.layer @Bound bind {
+      firrtl.layer @Inline inline {}
+    }
   }
 
   firrtl.layer @Bound bind {
-    firrtl.layer @Inline inline {}
+    firrtl.layer @Inline inline {
+      firrtl.layer @Bound bind {}
+    }
   }
 
+  // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Inline_Bound() {
+  // CHECK-NEXT:   %w3 = firrtl.wire : !firrtl.uint<3>
+  // CHECK-NEXT: }
+
+  // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound_Inline_Bound() {
+  // CHECK-NEXT:   %w6 = firrtl.wire : !firrtl.uint<6>
+  // CHECK-NEXT: }
+
   // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
-  // CHECK-NEXT:   %w3 = firrtl.wire
+  // CHECK-NEXT:   %w4 = firrtl.wire
   // CHECK-NEXT:   sv.ifdef @layer_Test$Bound$Inline {
-  // CHECK-NEXT:     %w4 = firrtl.wire
+  // CHECK-NEXT:     %w5 = firrtl.wire
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: firrtl.module @ModuleWithInlineLayerBlocks() {
-  // CHECK-NEXT:   sv.ifdef @layer_Test$Inline {
-  // CHECK-NEXT:     %w1 = firrtl.wire
-  // CHECK-NEXT:     sv.ifdef @layer_Test$Inline$Inline {
-  // CHECK-NEXT:       %w2 = firrtl.wire
+  // CHECK:      firrtl.module @ModuleWithInlineLayerBlocks() {
+  // CHECK-NEXT:   sv.ifdef  @layer_ModuleWithInlineLayerBlocks$Inline {
+  // CHECK-NEXT:     %w1 = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:     sv.ifdef  @layer_ModuleWithInlineLayerBlocks$Inline$Inline {
+  // CHECK-NEXT:       %w2 = firrtl.wire : !firrtl.uint<2>
   // CHECK-NEXT:     }
+  // CHECK-NEXT:     firrtl.instance inline_bound
   // CHECK-NEXT:   }
+  // CHECK-NEXT:   firrtl.instance bound_inline_bound
+  // CHECK-NEXT:   firrtl.instance bound
   // CHECK-NEXT: }
   firrtl.module @ModuleWithInlineLayerBlocks() {
     firrtl.layerblock @Inline {
@@ -361,16 +380,21 @@ firrtl.circuit "Test" {
       firrtl.layerblock @Inline::@Inline {
         %w2 = firrtl.wire : !firrtl.uint<2>
       }
+      firrtl.layerblock @Inline::@Bound {
+        %w3 = firrtl.wire : !firrtl.uint<3>
+      }
     }
 
     firrtl.layerblock @Bound {
-      %w3 = firrtl.wire : !firrtl.uint<3>
+      %w4 = firrtl.wire : !firrtl.uint<4>
       firrtl.layerblock @Bound::@Inline {
-        %w4 = firrtl.wire : !firrtl.uint<4>
+        %w5 = firrtl.wire : !firrtl.uint<5>
+        firrtl.layerblock @Bound::@Inline::@Bound {
+          %w6 = firrtl.wire : !firrtl.uint<6>
+        }
       }
     }
   }
-
 }
 
 // -----
@@ -710,3 +734,63 @@ firrtl.circuit "Top" {
   }
 }
 
+// -----
+
+// Check that only known bound-in layers are included.
+firrtl.circuit "Top" {
+  firrtl.layer @Layer bind {}
+
+  firrtl.extmodule @ComponentA() attributes {knownLayers=[@Layer]}
+  firrtl.extmodule @ComponentB() attributes {knownLayers=[]}
+
+
+  // There should only be one include statement.
+  // CHECK:     emit.file "layers-Top-Layer.sv"
+  // CHECK:     sv.include local "layers-ComponentA-Layer.sv"
+  // CHECK-NOT: sv.include local "layers-ComponentB-Layer.sv"
+  firrtl.module @Top() {
+    firrtl.instance componentA @ComponentA()
+    firrtl.instance componentB @ComponentB()
+  }
+}
+
+// -----
+
+// When an extmodule knows of a child layer, it also knows the parent. Check
+// that the parent bindfile is included. In this case, the child layer is
+// inline, so it should NOT be included.
+firrtl.circuit "Top" {
+  firrtl.layer @ParentLayer bind {
+    firrtl.layer @ChildLayer inline {}
+  }
+
+  firrtl.extmodule @Component() attributes {knownLayers=[@ParentLayer::@ChildLayer]}
+
+  // There should only be one include statement.
+  // CHECK:     emit.file "layers-Top-ParentLayer.sv"
+  // CHECK:     sv.include local "layers-Component-ParentLayer.sv"
+  // CHECK-NOT: sv.include local "layers-Component-ParentLayer-ChildLayer.sv"
+  firrtl.module public @Top() {
+    firrtl.instance component @Component()
+  }
+}
+
+// -----
+
+// When an extmodule knows of a child layer, it also knows the parent. Check
+// that the parent bindfile is included. In this case, the child layer is
+// bound-in, so it SHOULD be included too.
+firrtl.circuit "Top" {
+  firrtl.layer @ParentLayer bind {
+    firrtl.layer @ChildLayer bind {}
+  }
+
+  firrtl.extmodule @Component() attributes {knownLayers=[@ParentLayer::@ChildLayer]}
+
+  // CHECK: emit.file "layers-Top-ParentLayer.sv"
+  // CHECK: sv.include local "layers-Component-ParentLayer.sv"
+  // CHECK: sv.include local "layers-Component-ParentLayer-ChildLayer.sv"
+  firrtl.module public @Top() {
+    firrtl.instance component @Component()
+  }
+}

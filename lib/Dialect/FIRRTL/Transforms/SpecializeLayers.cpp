@@ -481,6 +481,18 @@ struct SpecializeLayers {
     }
   }
 
+  /// Specialize the list of known layers for an extmodule.
+  ArrayAttr specializeKnownLayers(ArrayAttr layers) {
+    SmallVector<Attribute> newLayers;
+    for (auto layer : layers.getAsRange<SymbolRefAttr>()) {
+      if (auto result = specializeLayerRef(layer))
+        if (auto newLayer = result.getValue())
+          newLayers.push_back(newLayer);
+    }
+
+    return ArrayAttr::get(context, newLayers);
+  }
+
   /// Specialize the list of enabled layers for a module.  Return a disabled
   /// layer if one of the required layers has been disabled.
   Specialized<ArrayAttr> specializeEnableLayers(ArrayAttr layers) {
@@ -574,6 +586,12 @@ struct SpecializeLayers {
     return nullptr;
   }
 
+  /// Specialize the known layers of an extmodule,.
+  void specializeKnownLayers(FExtModuleOp module) {
+    auto knownLayers = module.getKnownLayersAttr();
+    module.setKnownLayersAttr(specializeKnownLayers(knownLayers));
+  }
+
   /// Specialize a layer operation, by removing enabled layers and inlining
   /// their contents, deleting disabled layers and all nested layers, and
   /// mangling the names of any inlined layers.
@@ -639,7 +657,12 @@ struct SpecializeLayers {
     DenseSet<Attribute> removedSyms;
     for (auto &op : llvm::make_early_inc_range(*circuit.getBodyBlock())) {
       TypeSwitch<Operation *>(&op)
-          .Case<FModuleOp, FExtModuleOp>([&](auto module) {
+          .Case<FModuleOp>([&](FModuleOp module) {
+            if (specializeEnableLayers(module, removedSyms))
+              specialize.push_back(module);
+          })
+          .Case<FExtModuleOp>([&](FExtModuleOp module) {
+            specializeKnownLayers(module);
             if (specializeEnableLayers(module, removedSyms))
               specialize.push_back(module);
           })
