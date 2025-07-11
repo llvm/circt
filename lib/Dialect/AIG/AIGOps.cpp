@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
@@ -37,8 +38,10 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
       APInt::getAllOnes(op.getResult().getType().getIntOrFloatBitWidth());
 
   bool invertedConstFound = false;
+  bool flippedFound = false;
 
   for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
+    bool newInverted = inverted;
     if (auto constOp = value.getDefiningOp<hw::ConstantOp>()) {
       if (inverted) {
         constValue &= ~constOp.getValue();
@@ -49,12 +52,21 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
       continue;
     }
 
+    if (auto andInverterOp = value.getDefiningOp<aig::AndInverterOp>()) {
+      if (andInverterOp.getInputs().size() == 1 &&
+          andInverterOp.isInverted(0)) {
+        value = andInverterOp.getOperand(0);
+        newInverted = andInverterOp.isInverted(0) ^ inverted;
+        flippedFound = true;
+      }
+    }
+
     auto it = seen.find(value);
     if (it == seen.end()) {
-      seen.insert({value, inverted});
+      seen.insert({value, newInverted});
       uniqueValues.push_back(value);
-      uniqueInverts.push_back(inverted);
-    } else if (it->second != inverted) {
+      uniqueInverts.push_back(newInverted);
+    } else if (it->second != newInverted) {
       // replace with const 0
       rewriter.replaceOpWithNewOp<hw::ConstantOp>(
           op, APInt::getZero(value.getType().getIntOrFloatBitWidth()));
@@ -69,7 +81,7 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   }
 
   // No change.
-  if (uniqueValues.size() == op.getInputs().size() ||
+  if ((uniqueValues.size() == op.getInputs().size() && !flippedFound) ||
       (!constValue.isAllOnes() && !invertedConstFound &&
        uniqueValues.size() + 1 == op.getInputs().size()))
     return failure();
@@ -87,8 +99,8 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   }
 
   // build new op with reduced input values
-  rewriter.replaceOpWithNewOp<aig::AndInverterOp>(op, uniqueValues,
-                                                  uniqueInverts);
+  replaceOpWithNewOpAndCopyNamehint<aig::AndInverterOp>(
+      rewriter, op, uniqueValues, uniqueInverts);
   return success();
 }
 
