@@ -52,7 +52,7 @@ endmodule
 // CHECK-LABEL: hw.module @Enable(
 module Enable(input logic clock, input logic enable, input int d, output int q);
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[MUX:%.+]] = comb.mux %enable, %d, [[REG:%.+]] : i32
+  // CHECK: [[MUX:%.+]] = comb.mux bin %enable, %d, [[REG:%.+]] : i32
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i32
   // CHECK: hw.output [[REG]]
   always @(posedge clock) if (enable) q <= d;
@@ -61,7 +61,7 @@ endmodule
 // CHECK-LABEL: hw.module @ResetAndEnable(
 module ResetAndEnable(input logic clock, input logic reset, input logic enable, input int d, output int q);
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[MUX:%.+]] = comb.mux %enable, %d, [[REG:%.+]] : i32
+  // CHECK: [[MUX:%.+]] = comb.mux bin %enable, %d, [[REG:%.+]] : i32
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i32 : i32
   // CHECK: hw.output [[REG]]
   always @(posedge clock, posedge reset) if (reset) q <= 42; else if (enable) q <= d;

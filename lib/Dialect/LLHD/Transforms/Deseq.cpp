@@ -1110,11 +1110,14 @@ void Deseq::implementRegister(DriveInfo &drive) {
                                     /*isAsync=*/reset != Value{});
 
   // If the register has an enable, insert a self-mux in front of the register.
+  // Set the `bin` flag on the mux specifically to make up for a subtle
+  // difference between a `if (en) q <= d` enable on a register, and a `q <= en
+  // ? d : q` enable.
   if (enable) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPoint(reg);
     reg.getNextMutable().assign(builder.create<comb::MuxOp>(
-        loc, enable, reg.getNext(), reg.getResult()));
+        loc, enable, reg.getNext(), reg.getResult(), true));
   }
 
   // Make the original `llhd.drv` drive the register value unconditionally.
