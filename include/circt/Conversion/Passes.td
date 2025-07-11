@@ -866,4 +866,15 @@ def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertDatapathToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertDatapathToSMT : Pass<"convert-datapath-to-smt"> {
+  let summary = "Convert datapath ops to SMT ops";
+  let dependentDialects = [
+    "mlir::smt::SMTDialect"
+  ];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD
