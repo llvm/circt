@@ -229,9 +229,10 @@ class RecvBundleTest(Module):
 
 # CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)
 # CHECK-NEXT:     %valid, %ready, %data = esi.snoop.vr %s1_in : !esi.channel<i32>
-# CHECK-NEXT:     %rawOutput, %valid_0 = esi.unwrap.vr %s1_in, %ready_1 : i32
+# CHECK-NEXT:     %transaction, %{{.+}} = esi.snoop.xact %s1_in : !esi.channel<i32>
+# CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : i32
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
-# CHECK-NEXT:     %chanOutput, %ready_1 = esi.wrap.vr [[R0]], %valid_0 : i8
+# CHECK-NEXT:     %chanOutput, [[READY2]] = esi.wrap.vr [[R0]], [[VALID2]] : i8
 # CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8>
 @unittestmodule()
 class ChannelTransform(Module):
@@ -241,6 +242,7 @@ class ChannelTransform(Module):
   @generator
   def build(self):
     valid, ready, data = self.s1_in.snoop()
+    xact, _ = self.s1_in.snoop_xact()
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
 
 

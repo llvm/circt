@@ -90,6 +90,8 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
   %valid, %ready, %data = esi.snoop.vr %ints: !esi.channel<i32>
   %xact = comb.and %valid, %ready : i1
 
+  %tx_xact, %tx_data = esi.snoop.xact %ints: !esi.channel<i32>
+
   %nullBit = esi.null : !esi.channel<i4>
   hw.instance "nullRcvr" @Reciever(a: %nullBit: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
 
@@ -99,6 +101,7 @@ hw.module @test2(in %clk: !seq.clock, in %rst:i1) {
 // HW-LABEL: hw.module @test2(in %clk : !seq.clock, in %rst : i1) {
 // HW-NEXT:    %adder.ints_ready, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4 = hw.instance "adder" @add11(clk: %clk: !seq.clock, ints: %adder.mutatedInts: i32, ints_valid: %adder.mutatedInts_valid: i1, mutatedInts_ready: %adder.ints_ready: i1) -> (ints_ready: i1, mutatedInts: i32, mutatedInts_valid: i1, c4: i4)
 // HW-NEXT:    [[XACT:%.+]] = comb.and %adder.mutatedInts_valid, %adder.ints_ready : i1
+// HW-NEXT:    [[TX_XACT:%.+]] = comb.and %adder.mutatedInts_valid, %adder.ints_ready : i1
 // HW:         [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
 // HW:         sv.interface.signal.assign %i4ToNullRcvr(@IValidReady_i4::@data) = [[ZERO]] : i4
 // HW:         [[ZM:%.+]] = sv.modport.get %{{.+}} @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
@@ -283,3 +286,22 @@ hw.module @testConversion(in %clk: !seq.clock, in %rst:i1) {
   %intsFifo = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, FIFO>
   %intsVR = esi.buffer %clk, %rst, %intsFifo : !esi.channel<i4, FIFO> -> !esi.channel<i4>
 }
+
+hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<i32, FIFO>, out output: !esi.channel<i32>, out fifo_xact: i1, out vr_xact: i1) {
+  // Test FIFO signaling
+  %fifo_tx_xact, %fifo_tx_data = esi.snoop.xact %input : !esi.channel<i32, FIFO>
+
+  // Test ValidReady signaling
+  %vrChan = esi.buffer %clk, %rst, %input : !esi.channel<i32, FIFO> -> !esi.channel<i32>
+  %vr_tx_xact, %vr_tx_data = esi.snoop.xact %vrChan : !esi.channel<i32>
+
+  hw.output %vrChan, %fifo_tx_xact, %vr_tx_xact : !esi.channel<i32>, i1, i1
+}
+// HW-LABEL:   hw.module @testSnoopTx(in %clk : !seq.clock, in %rst : i1, in %input : i32, in %input_empty : i1, in %output_ready : i1, out input_rden : i1, out output : i32, out output_valid : i1, out fifo_xact : i1, out vr_xact : i1) {
+// HW:         [[NOT_EMPTY1:%.+]] = comb.xor %input_empty, %true : i1
+// HW:         [[FIFO_XACT:%.+]] = comb.and [[NOT_EMPTY1]], [[R2:%.+]] : i1
+// HW:         [[R2]] = comb.and %pipelineStage.a_ready, [[NOT_EMPTY2:%.+]] : i1
+// HW:         [[NOT_EMPTY2]] = comb.xor %input_empty, %true_0 : i1
+// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage2<WIDTH: ui32 = 32>(clk: %clk: !seq.clock, rst: %rst: i1, a: %input: i32, a_valid: %3: i1, x_ready: %output_ready: i1) -> (a_ready: i1, x: i32, x_valid: i1)
+// HW:         [[VR_XACT:%.+]] = comb.and %pipelineStage.x_valid, %output_ready : i1
+// HW:         hw.output [[R2]], %pipelineStage.x, %pipelineStage.x_valid, [[FIFO_XACT]], [[VR_XACT]] : i1, i32, i1, i1, i1
