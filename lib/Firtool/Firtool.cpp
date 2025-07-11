@@ -278,7 +278,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                ? llvm::sys::path::parent_path(inputFilename)
                                : opt.getBlackBoxRootPath();
   pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createBlackBoxReaderPass(blackBoxRoot));
+      firrtl::createBlackBoxReader({/*inputPrefix=*/blackBoxRoot.str()}));
 
   // Remove TraceAnnotations and write their updated paths to an output
   // annotation file.

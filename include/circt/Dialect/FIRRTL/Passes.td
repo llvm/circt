@@ -408,7 +408,6 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       to the target directory.
   }];
 
-  let constructor = "circt::firrtl::createBlackBoxReaderPass()";
   let options = [
     Option<"inputPrefix", "input-prefix", "std::string", "",
       "Prefix for input paths in black box annotations. This should be the "

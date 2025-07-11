@@ -76,14 +76,14 @@ struct AnnotationInfo {
 
 struct BlackBoxReaderPass
     : public circt::firrtl::impl::BlackBoxReaderBase<BlackBoxReaderPass> {
+  using Base::Base;
+
   void runOnOperation() override;
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
                        bool isCover, AnnotationInfo &annotationInfo);
   StringAttr loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
   hw::OutputFileAttr getOutputFile(Operation *origOp, StringAttr fileNameAttr,
                                    bool isCover = false);
-
-  using BlackBoxReaderBase::inputPrefix;
 
 private:
   /// A list of all files which will be included in the file list.  This is
@@ -389,16 +389,4 @@ hw::OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
   SmallString<128> outputFilePath(outDir);
   llvm::sys::path::append(outputFilePath, fileName);
   return hw::OutputFileAttr::getFromFilename(context, outputFilePath, exclude);
-}
-
-//===----------------------------------------------------------------------===//
-// Pass Creation
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createBlackBoxReaderPass(std::optional<StringRef> inputPrefix) {
-  auto pass = std::make_unique<BlackBoxReaderPass>();
-  if (inputPrefix)
-    pass->inputPrefix = inputPrefix->str();
-  return pass;
 }
