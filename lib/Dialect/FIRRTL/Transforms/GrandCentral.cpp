@@ -592,7 +592,7 @@ struct InterfaceElemsBuilder {
 ///    cross-module references (XMRs) to drive the interface.
 struct GrandCentralPass
     : public circt::firrtl::impl::GrandCentralBase<GrandCentralPass> {
-  using GrandCentralBase::companionMode;
+  using Base::Base;
 
   void runOnOperation() override;
 
@@ -2664,15 +2664,4 @@ void GrandCentralPass::emitHierarchyYamlFile(
                                    &getContext(), yamlPath,
                                    /*excludeFromFileList=*/true));
   LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-}
-
-//===----------------------------------------------------------------------===//
-// Pass Creation
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createGrandCentralPass(CompanionMode companionMode) {
-  auto pass = std::make_unique<GrandCentralPass>();
-  pass->companionMode = companionMode;
-  return pass;
 }

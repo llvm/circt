@@ -271,7 +271,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Run this after output directories are (otherwise) assigned,
   // so generated interfaces can be appropriately marked.
   pm.addNestedPass<firrtl::CircuitOp>(
-      firrtl::createGrandCentralPass(opt.getCompanionMode()));
+      firrtl::createGrandCentral({/*companionMode=*/opt.getCompanionMode()}));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()

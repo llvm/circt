@@ -83,9 +83,6 @@ std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
 
 std::unique_ptr<mlir::Pass>
-createGrandCentralPass(CompanionMode companionMode = CompanionMode::Bind);
-
-std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
 
 std::unique_ptr<mlir::Pass>

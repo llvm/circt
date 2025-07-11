@@ -442,7 +442,6 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
     Processes annotations associated with SiFive's Grand Central utility.
   }];
 
-  let constructor = "circt::firrtl::createGrandCentralPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
   let options = [
     Option<"companionMode", "companion-mode", "CompanionMode",
