@@ -1711,11 +1711,44 @@ circuit LayerEnabledModule:
   ; CHECK-SAME: layers = [@A, @B::@C]
   public module LayerEnabledModule enablelayer A enablelayer B.C:
 
+  ; CHECK: firrtl.module @LayerEnabledModule2
+  ; CHECK-SAME: layers = [@A, @B::@C]
+  public module LayerEnabledModule2 enablelayer A, B.C:
+
   ; CHECK: firrtl.module private @UserOfLayerEnabledModule
   ; CHECK-SAME: layers = [@A, @B::@C]
   module UserOfLayerEnabledModule enablelayer A enablelayer B.C:
     ; CHECK: firrtl.instance i interesting_name {layers = [@A, @B::@C]} @LayerEnabledModule()
     inst i of LayerEnabledModule
+
+;// -----
+
+FIRRTL version 5.2.0
+
+; CHECK-LABEL: firrtl.circuit "KnownLayers"
+circuit KnownLayers:
+  layer A, bind:
+  layer B, bind:
+    layer C, bind:
+
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayers
+  ; CHECK-SAME: knownLayers = [@A, @B, @B::@C]}
+  extmodule ExtModuleWithKnownLayers knownlayer A knownlayer B knownlayer B.C:
+
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayers2
+  ; CHECK-SAME: knownLayers = [@A, @B, @B::@C]}
+  extmodule ExtModuleWithKnownLayers2 knownlayer A, B, B.C:
+
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayerAndEnabledLayers()
+  ; CHECK-SAME: knownLayers = [@A, @B::@C]
+  ; CHECK-SAME: layers = [@A, @B]
+  extmodule ExtModuleWithKnownLayerAndEnabledLayers enablelayer A knownlayer A enablelayer B knownlayer B.C:
+
+  public module KnownLayers enablelayer A enablelayer B.C:
+    ; CHECK: firrtl.instance ext1 interesting_name @ExtModuleWithKnownLayers()
+    inst ext1 of ExtModuleWithKnownLayers
+    ; CHECK: firrtl.instance ext2 interesting_name {layers = [@A, @B]} @ExtModuleWithKnownLayerAndEnabledLayers()
+    inst ext2 of ExtModuleWithKnownLayerAndEnabledLayers
 
 ;// -----
 

@@ -94,12 +94,18 @@ static void appendName(StringRef name, SmallString<32> &output,
   output[i] = llvm::toLower(output[i]);
 }
 
+static void appendName(const ArrayRef<FlatSymbolRefAttr> &names,
+                       SmallString<32> &output, bool toLower = false,
+                       Delimiter delimiter = Delimiter::BindFile) {
+  for (auto name : names)
+    appendName(name.getValue(), output, toLower, delimiter);
+}
+
 static void appendName(SymbolRefAttr name, SmallString<32> &output,
                        bool toLower = false,
                        Delimiter delimiter = Delimiter::BindFile) {
   appendName(name.getRootReference(), output, toLower, delimiter);
-  for (auto nested : name.getNestedReferences())
-    appendName(nested.getValue(), output, toLower, delimiter);
+  appendName(name.getNestedReferences(), output, toLower, delimiter);
 }
 
 /// For a layer `@A::@B::@C` in module Module,
@@ -133,16 +139,23 @@ static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
   return result;
 }
 
+static SmallString<32> fileNameForLayer(StringRef moduleName, StringAttr root,
+                                        ArrayRef<FlatSymbolRefAttr> nested) {
+  SmallString<32> result;
+  result.append("layers");
+  appendName(moduleName, result);
+  appendName(root, result);
+  appendName(nested, result);
+  result.append(".sv");
+  return result;
+}
+
 /// For all layerblocks `@A::@B::@C` in a module called Module,
 /// the output filename is `layers-Module-A-B-C.sv`.
 static SmallString<32> fileNameForLayer(StringRef moduleName,
                                         SymbolRefAttr layerName) {
-  SmallString<32> result;
-  result.append("layers");
-  appendName(moduleName, result);
-  appendName(layerName, result);
-  result.append(".sv");
-  return result;
+  return fileNameForLayer(moduleName, layerName.getRootReference(),
+                          layerName.getNestedReferences());
 }
 
 /// For all layerblocks `@A::@B::@C` in a module called Module,
@@ -237,7 +250,15 @@ class LowerLayersPass
 
   /// Build the bindfile skeletons for each module. Set up a table which tells
   /// us for each module/layer pair, where to insert the bind operations.
-  void preprocessModule(CircuitNamespace &ns, InstanceGraphNode *node);
+  void preprocessModuleLike(CircuitNamespace &ns, InstanceGraphNode *node);
+
+  /// Build the bindfile skeleton for a module.
+  void preprocessModule(CircuitNamespace &ns, InstanceGraphNode *node,
+                        FModuleOp module);
+
+  /// Record the supposed bindfiles for any known layers of the ext module.
+  void preprocessExtModule(CircuitNamespace &ns, InstanceGraphNode *node,
+                           FExtModuleOp extModule);
 
   /// Build a bindfile skeleton for a particular module and layer.
   void buildBindFile(CircuitNamespace &ns, InstanceGraphNode *node,
@@ -341,7 +362,13 @@ LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
             removeLayersFromPorts(op);
             return runOnModuleBody(op, innerRefMap);
           })
-          .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
+          .Case<FExtModuleOp>([&](auto op) {
+            op.setKnownLayers({});
+            op.setLayers({});
+            removeLayersFromPorts(op);
+            return success();
+          })
+          .Case<FIntModuleOp, FMemModuleOp>([&](auto op) {
             op.setLayers({});
             removeLayersFromPorts(op);
             return success();
@@ -870,14 +897,8 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
 }
 
 void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
-                                       InstanceGraphNode *node) {
-  auto *op = node->getModule().getOperation();
-  if (!op)
-    return;
-
-  auto module = dyn_cast<FModuleOp>(op);
-  if (!module)
-    return;
+                                       InstanceGraphNode *node,
+                                       FModuleOp module) {
 
   OpBuilder b(&getContext());
   b.setInsertionPointAfter(module);
@@ -931,13 +952,62 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
       buildBindFile(ns, node, b, sym, layer);
 }
 
+void LowerLayersPass::preprocessExtModule(CircuitNamespace &ns,
+                                          InstanceGraphNode *node,
+                                          FExtModuleOp extModule) {
+  // For each known layer of the extmodule, compute and record the bindfile
+  // name. When a layer is known, its parent layers are implicitly known,
+  // so compute bindfiles for parent layers too. Use a set to avoid
+  // repeated work, which can happen if, for example, both a child layer and
+  // a parent layer are explicitly declared to be known.
+  auto known = extModule.getKnownLayersAttr().getAsRange<SymbolRefAttr>();
+  if (known.empty())
+    return;
+
+  auto moduleName = extModule.getModuleName();
+  auto &files = bindFiles[extModule];
+  SmallPtrSet<Operation *, 8> seen;
+
+  for (auto name : known) {
+    auto layer = symbolToLayer[name];
+    auto rootLayerName = name.getRootReference();
+    auto nestedLayerNames = name.getNestedReferences();
+    while (layer && std::get<bool>(seen.insert(layer))) {
+      if (layer.getConvention() == LayerConvention::Bind) {
+        BindFileInfo info;
+        auto filename =
+            fileNameForLayer(moduleName, rootLayerName, nestedLayerNames);
+        info.filename = StringAttr::get(&getContext(), filename);
+        info.body = nullptr;
+        files.insert({layer, info});
+      }
+      layer = layer->getParentOfType<LayerOp>();
+      if (!nestedLayerNames.empty())
+        nestedLayerNames = nestedLayerNames.drop_back();
+    }
+  }
+}
+
+void LowerLayersPass::preprocessModuleLike(CircuitNamespace &ns,
+                                           InstanceGraphNode *node) {
+  auto *op = node->getModule().getOperation();
+  if (!op)
+    return;
+
+  if (auto module = dyn_cast<FModuleOp>(op))
+    return preprocessModule(ns, node, module);
+
+  if (auto extModule = dyn_cast<FExtModuleOp>(op))
+    return preprocessExtModule(ns, node, extModule);
+}
+
 /// Create the bind file skeleton for each layer, for each module.
 void LowerLayersPass::preprocessModules(CircuitNamespace &ns,
                                         InstanceGraph &ig) {
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : ig)
     for (auto *node : llvm::post_order_ext(root, visited))
-      preprocessModule(ns, node);
+      preprocessModuleLike(ns, node);
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level
