@@ -75,7 +75,7 @@ LogicalResult circt::firrtl::applyTraceName(const AnnoPathValue &target,
 
 struct ResolveTracesPass
     : public circt::firrtl::impl::ResolveTracesBase<ResolveTracesPass> {
-  using ResolveTracesBase::outputAnnotationFilename;
+  using Base::Base;
 
   void runOnOperation() override;
 
@@ -423,12 +423,4 @@ void ResolveTracesPass::runOnOperation() {
   });
 
   return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createResolveTracesPass(StringRef outputAnnotationFilename) {
-  auto pass = std::make_unique<ResolveTracesPass>();
-  if (!outputAnnotationFilename.empty())
-    pass->outputAnnotationFilename = outputAnnotationFilename.str();
-  return pass;
 }

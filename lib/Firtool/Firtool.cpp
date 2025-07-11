@@ -284,7 +284,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Remove TraceAnnotations and write their updated paths to an output
   // annotation file.
   pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createResolveTracesPass(opt.getOutputAnnotationFilename()));
+      firrtl::createResolveTraces({opt.getOutputAnnotationFilename().str()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPI());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClasses());

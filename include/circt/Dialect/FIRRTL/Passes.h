@@ -77,9 +77,6 @@ enum class CompanionMode {
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass>
-createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
-
-std::unique_ptr<mlir::Pass>
 createLinkCircuitsPass(mlir::StringRef baseCircuitName = "",
                        bool noMangle = false);
 

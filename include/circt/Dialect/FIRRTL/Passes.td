@@ -676,7 +676,6 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
     Note: this pass and API are expected to be eventually replaced via APIs and
     language bindings that enable users to directly query the MLIR.
   }];
-  let constructor = "circt::firrtl::createResolveTracesPass()";
   let options = [Option<"outputAnnotationFilename", "file", "std::string", "",
       "Output file for the JSON-serialized Trace Annotations">];
   let dependentDialects = ["emit::EmitDialect", "sv::SVDialect"];
