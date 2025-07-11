@@ -80,9 +80,6 @@ std::unique_ptr<mlir::Pass>
 createLowerIntmodulesPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass>
-createRemoveUnusedPortsPass(bool ignoreDontTouch = false);
-
-std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
                                mlir::StringRef replSeqMemFile = "");
 

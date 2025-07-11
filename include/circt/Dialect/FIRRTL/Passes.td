@@ -135,7 +135,10 @@ def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> 
     wise, this pass iterates over the instance graph in a topological order from
     leaves to the top so that we can remove unused ports optimally.
   }];
-  let constructor = "circt::firrtl::createRemoveUnusedPortsPass()";
+  let options = [
+    Option<"ignoreDontTouch", "ignore-dont-touch", "bool", "false",
+           "remove unused ports even if they have a symbol or annotation">
+  ];
   let statistics = [
     Statistic<"numRemovedPorts", "num-removed-ports", "Number of ports erased">,
   ];

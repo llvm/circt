@@ -1124,7 +1124,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<PassReduction, 18>(getContext(), firrtl::createIMConstProp());
   patterns.add<PassReduction, 17>(
       getContext(),
-      firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true));
+      firrtl::createRemoveUnusedPorts({/*ignoreDontTouch=*/true}));
   patterns.add<NodeSymbolRemover, 15>();
   patterns.add<ConnectForwarder, 14>();
   patterns.add<ConnectInvalidator, 13>();
