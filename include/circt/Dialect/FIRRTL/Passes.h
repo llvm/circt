@@ -77,10 +77,6 @@ enum class CompanionMode {
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass>
-createLinkCircuitsPass(mlir::StringRef baseCircuitName = "",
-                       bool noMangle = false);
-
-std::unique_ptr<mlir::Pass>
 createSpecializeOptionPass(bool selectDefaultInstanceChoice = false);
 
 std::unique_ptr<mlir::Pass>

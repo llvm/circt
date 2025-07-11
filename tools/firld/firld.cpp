@@ -154,7 +154,8 @@ static LogicalResult execute(MLIRContext &context) {
     return emitError("Failed to merge MLIR modules");
 
   PassManager pm(&context);
-  pm.addPass(firrtl::createLinkCircuitsPass(baseCircuitName, noMangle));
+  pm.addPass(firrtl::createLinkCircuits(
+      {/*baseCircuitName=*/baseCircuitName, /*noMangle=*/noMangle}));
   if (failed(pm.run(mergedModule.get())))
     return emitError("Failed to link circuits together");
 

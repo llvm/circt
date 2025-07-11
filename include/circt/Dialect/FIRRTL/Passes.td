@@ -783,11 +783,10 @@ def LinkCircuits : Pass<"firrtl-link-circuits", "mlir::ModuleOp"> {
     to find matching public module implementations, replacing them when possible
     and any remaining extmodules are treated as blackboxes.
   }];
-  let constructor = "circt::firrtl::createLinkCircuitsPass()";
   let options = [
     Option<"baseCircuitName", "base-circuit", "std::string", "",
       "The base circuit name.">,
-    Option<"noMangle", "no-mangle", "bool", "",
+    Option<"noMangle", "no-mangle", "bool", "false",
       "Do not perform private symbol mangling.">
   ];
 }
