@@ -98,7 +98,3 @@ void VectorizationPass::runOnOperation() {
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   (void)applyPatternsGreedily(getOperation(), frozenPatterns);
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createVectorizationPass() {
-  return std::make_unique<VectorizationPass>();
-}

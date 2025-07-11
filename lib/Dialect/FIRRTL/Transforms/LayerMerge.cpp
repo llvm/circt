@@ -68,7 +68,3 @@ void LayerMerge::runOnOperation() {
         return WalkResult::advance();
       });
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLayerMergePass() {
-  return std::make_unique<LayerMerge>();
-}

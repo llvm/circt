@@ -797,7 +797,3 @@ struct SpecializeLayersPass
   }
 };
 } // end anonymous namespace
-
-std::unique_ptr<Pass> firrtl::createSpecializeLayersPass() {
-  return std::make_unique<SpecializeLayersPass>();
-}

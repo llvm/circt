@@ -505,11 +505,3 @@ void LayerSinkPass::runOnOperation() {
   else
     markAnalysesPreserved<InstanceGraph>();
 }
-
-//===----------------------------------------------------------------------===//
-// Pass Constructor
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLayerSinkPass() {
-  return std::make_unique<LayerSinkPass>();
-}

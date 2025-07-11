@@ -1101,7 +1101,3 @@ void LowerLayersPass::runOnOperation() {
   hierPathCache = nullptr;
   bindFiles.clear();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerLayersPass() {
-  return std::make_unique<LowerLayersPass>();
-}

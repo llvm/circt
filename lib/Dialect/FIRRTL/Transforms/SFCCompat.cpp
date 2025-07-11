@@ -161,7 +161,3 @@ void SFCCompatPass::runOnOperation() {
   if (!madeModifications)
     return markAllAnalysesPreserved();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createSFCCompatPass() {
-  return std::make_unique<SFCCompatPass>();
-}

@@ -1210,10 +1210,3 @@ void ExtractInstancesPass::createSchema() {
   extractMetadataClass = builderOM.create<ClassOp>(
       builderOM.getStringAttr("ExtractInstancesMetadata"), mports);
 }
-//===----------------------------------------------------------------------===//
-// Pass Creation
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createExtractInstancesPass() {
-  return std::make_unique<ExtractInstancesPass>();
-}

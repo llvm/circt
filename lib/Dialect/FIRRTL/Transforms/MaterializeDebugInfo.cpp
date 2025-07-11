@@ -114,7 +114,3 @@ Value MaterializeDebugInfoPass::convertToDebugAggregates(OpBuilder &builder,
           [&](auto type) { return type.isGround() ? value : Value{}; })
       .Default({});
 }
-
-std::unique_ptr<Pass> firrtl::createMaterializeDebugInfoPass() {
-  return std::make_unique<MaterializeDebugInfoPass>();
-}

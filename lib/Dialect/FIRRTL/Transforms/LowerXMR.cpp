@@ -871,7 +871,3 @@ private:
   /// Per-module helpers for creating operations within modules.
   DenseMap<FModuleOp, ModuleState> moduleStates;
 };
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerXMRPass() {
-  return std::make_unique<LowerXMRPass>();
-}

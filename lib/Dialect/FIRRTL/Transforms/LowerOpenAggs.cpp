@@ -854,8 +854,3 @@ void LowerOpenAggsPass::runOnOperation() {
   if (!madeChanges)
     markAllAnalysesPreserved();
 }
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerOpenAggsPass() {
-  return std::make_unique<LowerOpenAggsPass>();
-}

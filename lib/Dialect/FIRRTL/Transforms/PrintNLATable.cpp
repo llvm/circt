@@ -28,7 +28,7 @@ using namespace firrtl;
 namespace {
 struct PrintNLATablePass
     : public circt::firrtl::impl::PrintNLATableBase<PrintNLATablePass> {
-  PrintNLATablePass(raw_ostream &os) : os(os) {}
+  PrintNLATablePass() : os(llvm::errs()) {}
   void runOnOperation() override {
     auto circuitOp = getOperation();
     auto &nlaTable = getAnalysis<NLATable>();
@@ -47,7 +47,3 @@ struct PrintNLATablePass
   raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createPrintNLATablePass() {
-  return std::make_unique<PrintNLATablePass>(llvm::errs());
-}

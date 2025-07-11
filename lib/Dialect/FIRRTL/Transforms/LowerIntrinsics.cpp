@@ -61,8 +61,3 @@ void LowerIntrinsicsPass::runOnOperation() {
   if (*result == 0)
     markAllAnalysesPreserved();
 }
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerIntrinsicsPass() {
-  return std::make_unique<LowerIntrinsicsPass>();
-}

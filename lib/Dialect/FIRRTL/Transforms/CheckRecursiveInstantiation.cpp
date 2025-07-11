@@ -59,7 +59,3 @@ public:
   }
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createCheckRecursiveInstantiation() {
-  return std::make_unique<CheckRecursiveInstantiationPass>();
-}

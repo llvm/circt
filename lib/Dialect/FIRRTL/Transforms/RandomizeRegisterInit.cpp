@@ -38,10 +38,6 @@ struct RandomizeRegisterInitPass
 
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createRandomizeRegisterInitPass() {
-  return std::make_unique<RandomizeRegisterInitPass>();
-}
-
 /// Create attributes indicating the required size of random initialization
 /// values for each register in the module, and mark which range of these values
 /// each register should consume. The goal is for registers to always read the

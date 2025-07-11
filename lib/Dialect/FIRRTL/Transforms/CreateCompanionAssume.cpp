@@ -71,7 +71,3 @@ struct CreateCompanionAssumePass
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createCreateCompanionAssume() {
-  return std::make_unique<CreateCompanionAssumePass>();
-}

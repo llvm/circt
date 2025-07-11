@@ -427,19 +427,16 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
 def PrintFIRRTLFieldSourcePass
     : Pass<"firrtl-print-field-source", "firrtl::FModuleOp"> {
   let summary = "Print field source information.";
-  let constructor =  "circt::firrtl::createFIRRTLFieldSourcePass()";
 }
 
 def PrintInstanceGraph
     : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
   let summary = "Print a DOT graph of the module hierarchy.";
-  let constructor =  "circt::firrtl::createPrintInstanceGraphPass()";
 }
 
 def PrintNLATable
     : Pass<"firrtl-print-nla-table", "firrtl::CircuitOp"> {
   let summary = "Print the NLA Table.";
-  let constructor =  "circt::firrtl::createPrintNLATablePass()";
 }
 
 def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
@@ -480,12 +477,10 @@ def CheckCombLoops : Pass<"firrtl-check-comb-loops", "firrtl::CircuitOp"> {
   let description = [{
     This pass checks combinational cycles in the IR and emit errors.
   }];
-  let constructor = "circt::firrtl::createCheckCombLoopsPass()";
 }
 
 def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
   let summary = "Perform SFC Compatibility fixes";
-  let constructor = "circt::firrtl::createSFCCompatPass()";
 }
 
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
@@ -499,7 +494,6 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
 
 def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
   let summary = "Transform firrtl primitive operations into vector operations";
-  let constructor = "circt::firrtl::createVectorizationPass()";
 }
 
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
@@ -512,7 +506,6 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
     `AND` expression tree. It then compares the read and write `AND` terms,
     looking for a situation where the read/write is the complement of the write/read.
   }];
-  let constructor = "circt::firrtl::createInferReadWritePass()";
   let statistics = [
     Statistic<"numRWPortMemoriesInferred", "num-rw-port-mems-inferred",
       "Number of memories inferred to use RW port">,
@@ -529,7 +522,6 @@ def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
     DUT, e.g., SRAM extraction, to give the extracted modules a new home that is
     still inside the original DUT.
   }];
-  let constructor = "circt::firrtl::createInjectDUTHierarchyPass()";
 }
 
 def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
@@ -544,7 +536,6 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
     - `ExtractBlackBoxAnnotation`
     - `ExtractClockGatesFileAnnotation`
   }];
-  let constructor = "circt::firrtl::createExtractInstancesPass()";
   let dependentDialects = [
     "emit::EmitDialect",
     "circt::hw::HWDialect",
@@ -621,7 +612,6 @@ def RandomizeRegisterInit :
     This ensures a stable initialization, so registers should always see the
     same initial value for the same seed, regardless of optimization levels.
   }];
-  let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
 }
 
 def CreateCompanionAssume : Pass<"firrtl-create-companion-assume", "firrtl::FModuleOp"> {
@@ -631,7 +621,6 @@ def CreateCompanionAssume : Pass<"firrtl-create-companion-assume", "firrtl::FMod
     If the assertion is UNR only one, a special form of assume (AssumeEdgedPredicateIntrinsicOp)
     is used. Otherwise a concurrent assume is used
   }];
-  let constructor = "circt::firrtl::createCreateCompanionAssume()";
 }
 
 def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
@@ -639,7 +628,6 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   let description = [{
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
-  let constructor = "circt::firrtl::createLowerXMRPass()";
   let dependentDialects = [
     "emit::EmitDialect",
     "sv::SVDialect"
@@ -671,7 +659,6 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
   let description = [{
     This pass lowers generic intrinsic ops to their implementation or op.
   }];
-  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
   let statistics = [
     Statistic<"numConverted", "num-converted", "Number of intrinsic operations lowered">,
   ];
@@ -683,7 +670,6 @@ def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
      This pass lowers aggregates of the more open varieties into their equivalents
      using only hardware types, by pulling out non-hardware to other locations.
   }];
-  let constructor = "circt::firrtl::createLowerOpenAggsPass()";
 }
 
 def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
@@ -711,7 +697,6 @@ def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
     unblock optimizations and removal of the operations which have these unused
     inner symbols.
   }];
-  let constructor = "circt::firrtl::createInnerSymbolDCEPass()";
   let statistics = [
     Statistic<"numInnerRefsFound", "num-inner-refs-found", "Number of inner-refs found">,
     Statistic<"numInnerSymbolsFound", "num-inner-sym-found", "Number of inner symbols found">,
@@ -725,7 +710,6 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
     This pass converts vectors containing bundles, into bundles containing
     vectors.
   }];
-  let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
 def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
@@ -737,7 +721,6 @@ def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
     This simplifies downstream passes and folds so that they do not need to
     take 'const' into account.
   }];
-  let constructor = "circt::firrtl::createDropConstPass()";
 }
 
 def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
@@ -747,7 +730,6 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
     and before firtool emits the final IR. This includes mutations like dropping
     verbatim ops that represent sideband files and are not required in the IR.
   }];
-  let constructor = "circt::firrtl::createFinalizeIRPass()";
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
@@ -760,7 +742,6 @@ def LowerClasses : Pass<"firrtl-lower-classes", "firrtl::CircuitOp"> {
     to FIRRTL output properties. FIRRTL operations are converted to OM
     operations.
   }];
-  let constructor = "circt::firrtl::createLowerClassesPass()";
   let dependentDialects = ["om::OMDialect"];
 }
 
@@ -770,7 +751,6 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
     This pass lowers FIRRTL layers as defined by their convention.  After this
     pass, all layer blocks and layers are removed.
   }];
-  let constructor = "circt::firrtl::createLowerLayersPass()";
   let dependentDialects = ["sv::SVDialect", "emit::EmitDialect"];
 }
 
@@ -780,7 +760,6 @@ def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
     Combine all layer blocks in a module which reference the same layer
     definition.
   }];
-  let constructor = "::circt::firrtl::createLayerMergePass()";
   let statistics = [
     Statistic<"numMerged", "num-merged", "Number of layers merged">,
   ];
@@ -792,7 +771,6 @@ def LayerSink : Pass<"firrtl-layer-sink", "firrtl::CircuitOp"> {
     This pass sinks ops into layers, whenever possible, to minimize unused
     hardware in the design.
   }];
-  let constructor = "::circt::firrtl::createLayerSinkPass()";
 }
 
 def MaterializeDebugInfo :
@@ -804,7 +782,6 @@ def MaterializeDebugInfo :
     can then be used at a later point in the pipeline to obtain a source
     language view into the lowered IR.
   }];
-  let constructor = "circt::firrtl::createMaterializeDebugInfoPass()";
   let dependentDialects = ["debug::DebugDialect"];
 }
 
@@ -854,7 +831,6 @@ def SpecializeLayers : Pass<"firrtl-specialize-layers", "firrtl::CircuitOp"> {
     contents of the layer will be inlined in to the outer context, and probes
     colored by that layer will no longer be colored.
   }];
-  let constructor = "circt::firrtl::createSpecializeLayersPass()";
 }
 
 def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
@@ -881,12 +857,10 @@ def ModuleSummary : Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
   let description = [{
     The pass produces a summary of modules.
   }];
-  let constructor = "circt::firrtl::createModuleSummaryPass()";
 }
 
 def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
     let summary = "Lower DPI intrinsic into Sim DPI operations";
-    let constructor = "circt::firrtl::createLowerDPIPass()";
     let dependentDialects = ["hw::HWDialect", "seq::SeqDialect", "sim::SimDialect"];
   }
 
@@ -926,7 +900,6 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
 
     RWProbes and related operations are not supported.
   }];
-  let constructor = "circt::firrtl::createProbesToSignalsPass()";
 }
 
 def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
@@ -940,7 +913,6 @@ def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
     synthesize. Recursive class instantiation is illegal as it would create an
     infinite loop.
   }];
-  let constructor = "circt::firrtl::createCheckRecursiveInstantiation()";
 }
 
 def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
@@ -949,7 +921,6 @@ def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
     This pass checks for illegal instantiation of a module with a layer
     underneath another layer.
   }];
-  let constructor = "circt::firrtl::createCheckLayers()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

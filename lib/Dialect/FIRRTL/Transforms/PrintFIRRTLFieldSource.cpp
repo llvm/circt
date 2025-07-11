@@ -29,7 +29,7 @@ namespace {
 struct PrintFIRRTLFieldSourcePass
     : public circt::firrtl::impl::PrintFIRRTLFieldSourcePassBase<
           PrintFIRRTLFieldSourcePass> {
-  PrintFIRRTLFieldSourcePass(raw_ostream &os) : os(os) {}
+  PrintFIRRTLFieldSourcePass() : os(llvm::errs()) {}
 
   void visitValue(const FieldSource &fieldRefs, Value v) {
     auto *p = fieldRefs.nodeForValue(v);
@@ -76,7 +76,3 @@ struct PrintFIRRTLFieldSourcePass
   raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createFIRRTLFieldSourcePass() {
-  return std::make_unique<PrintFIRRTLFieldSourcePass>(llvm::errs());
-}

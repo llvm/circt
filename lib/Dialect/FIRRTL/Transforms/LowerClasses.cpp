@@ -960,10 +960,6 @@ void LowerClassesPass::runOnOperation() {
   rtlPortsToCreate.clear();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
-  return std::make_unique<LowerClassesPass>();
-}
-
 // Predicate to check if a module-like needs a Class to be created.
 bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   // Return a memoized result.

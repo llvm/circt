@@ -149,7 +149,3 @@ void ModuleSummaryPass::runOnOperation() {
     }
   markAllAnalysesPreserved();
 }
-
-std::unique_ptr<Pass> firrtl::createModuleSummaryPass() {
-  return std::make_unique<ModuleSummaryPass>();
-}
