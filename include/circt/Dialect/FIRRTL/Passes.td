@@ -636,7 +636,6 @@ def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
 
     Use this before running LowerIntrinsics.
   }];
-  let constructor = "circt::firrtl::createLowerIntmodulesPass()";
   let options = [
     Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
       "Lower `EICG_wrapper` modules into clock gate intrinsics">,

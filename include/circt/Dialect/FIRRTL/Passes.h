@@ -77,9 +77,6 @@ enum class CompanionMode {
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass>
-createLowerIntmodulesPass(bool fixupEICGWrapper = false);
-
-std::unique_ptr<mlir::Pass>
 createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 
 std::unique_ptr<mlir::Pass>

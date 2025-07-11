@@ -44,8 +44,8 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
         firrtl::createMaterializeDebugInfo());
 
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createLowerIntmodulesPass(opt.shouldFixupEICGWrapper()));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntmodules(
+      {/*fixupEICGWrapper=*/opt.shouldFixupEICGWrapper()}));
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
