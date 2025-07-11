@@ -830,8 +830,6 @@ def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
     up to the emitted SystemVerilog, this pass specializes it early on for a
     given choice.
   }];
-  let constructor = "circt::firrtl::createSpecializeOptionPass()";
-
   let options = [
     Option<"selectDefaultInstanceChoice", "select-default-for-unspecified-instance-choice", "bool", "false",
       "Specialize instance choice to default, if no option selected.">,
