@@ -1229,9 +1229,9 @@ hw.module @muxConstantsFold(in %cond: i1, out o: i25) {
 // This handles various cases of mux(cond, x, someop(x, y, z)).
 hw.module @muxCommon(in %cond: i1, in %cond2: i1,
                      in %arg0 : i32, in %arg1 : i32, in %arg2: i32, in %arg3: i32,
-  out o1: i32, out o2: i32, out o3: i32, out o4: i32, 
-  out o5: i32, out orResult: i32, out o6: i32, out o7: i32, out o8 : i1,
-  out o9: i32, out o10: i32) {
+  out o1: i32, out o2: i32, out o3: i32, out o4: i32, out o5: i32,
+  out orResult: i32, out o6: i32, out o7: i32, out o8 : i1, out o9: i32,
+  out o10: i32) {
   // CHECK: [[TRUE:%.+]] = hw.constant true
   // CHECK: [[FALSE:%.+]] = hw.constant false
   %true = hw.constant true
