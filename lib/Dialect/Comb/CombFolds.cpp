@@ -2240,6 +2240,29 @@ static bool foldMuxOfUniformArrays(MuxOp op, PatternRewriter &rewriter) {
   return true;
 }
 
+/// If the mux condition is an operand to the op defining its true or false
+/// value, replace the condition with 1 or 0.
+static bool assumeMuxCondInOperand(Value muxCond, Value muxValue,
+                                   bool constCond, PatternRewriter &rewriter) {
+  if (!muxValue.hasOneUse())
+    return false;
+  auto *op = muxValue.getDefiningOp();
+  if (!op || !isa<CombDialect>(op->getDialect()))
+    return false;
+  if (!llvm::is_contained(op->getOperands(), muxCond))
+    return false;
+  OpBuilder::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPoint(op);
+  auto condValue =
+      rewriter.create<hw::ConstantOp>(muxCond.getLoc(), APInt(1, constCond));
+  rewriter.modifyOpInPlace(op, [&] {
+    for (auto &use : op->getOpOperands())
+      if (use.get() == muxCond)
+        use.set(condValue);
+  });
+  return true;
+}
+
 namespace {
 struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -2485,6 +2508,12 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
 
   // mux(cond, repl(n, a1), repl(n, a2)) -> repl(n, mux(cond, a1, a2))
   if (foldMuxOfUniformArrays(op, rewriter))
+    return success();
+
+  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
+  if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
+    return success();
+  if (assumeMuxCondInOperand(op.getCond(), op.getFalseValue(), false, rewriter))
     return success();
 
   return failure();

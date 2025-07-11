@@ -1668,3 +1668,36 @@ hw.module @mul_0(in %arg0: i0, in %arg1: i0, out out: i0) {
   %0 = comb.mul %arg0, %arg1 : i0
   hw.output %0 : i0
 }
+
+// CHECK-LABEL: @assumeMuxCondInOperand
+func.func @assumeMuxCondInOperand(%arg0: i1, %arg1: i1) -> i2 {
+  // CHECK: [[TV:%.+]] = comb.concat %true, %arg1
+  // CHECK: [[FV:%.+]] = comb.concat %arg1, %false
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = comb.concat %arg0, %arg1 : i1, i1
+  %1 = comb.concat %arg1, %arg0 : i1, i1
+  %2 = comb.mux %arg0, %0, %1 : i2
+  return %2 : i2
+}
+
+// CHECK-LABEL: @dontAssumeMuxCondIfOperandHasOtherUses
+func.func @dontAssumeMuxCondIfOperandHasOtherUses(%arg0: i1, %arg1: i1) -> (i2, i2, i2) {
+  // CHECK: [[TV:%.+]] = comb.concat %arg0, %arg1
+  // CHECK: [[FV:%.+]] = comb.concat %arg1, %arg0
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = comb.concat %arg0, %arg1 : i1, i1
+  %1 = comb.concat %arg1, %arg0 : i1, i1
+  %2 = comb.mux %arg0, %0, %1 : i2
+  return %0, %1, %2 : i2, i2, i2
+}
+
+// CHECK-LABEL: @dontAssumeMuxCondIfOperandIsOtherwiseObservable
+func.func @dontAssumeMuxCondIfOperandIsOtherwiseObservable(%arg0: i1, %arg1: i1) -> i1 {
+  // CHECK: [[TV:%.+]] = hw.wire %arg0
+  // CHECK: [[FV:%.+]] = hw.wire %arg0
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = hw.wire %arg0 sym @s0 : i1
+  %1 = hw.wire %arg0 sym @s1 : i1
+  %2 = comb.mux %arg0, %0, %1 : i1
+  return %2 : i1
+}
