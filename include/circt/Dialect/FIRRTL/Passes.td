@@ -550,7 +550,6 @@ def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
                 "false",
     "ignore the read enable signal, instead of assigning X on read disable">
    ];
-  let constructor = "circt::firrtl::createMemToRegOfVecPass()";
   let statistics = [
     Statistic<"numConvertedMems", "num-converted-mems",
       "Number of memories converted to registers">,
