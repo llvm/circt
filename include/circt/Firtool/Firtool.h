@@ -402,10 +402,13 @@ public:
 
 private:
   std::string outputFilename;
+
+  // LowerFIRRTLAnnotations
   bool disableAnnotationsUnknown;
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
   bool allowAddingPortsOnPublic;
+
   bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
   firrtl::PreserveValues::PreserveMode preserveMode;

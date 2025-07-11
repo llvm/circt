@@ -32,11 +32,10 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     of semi-structured, irregular JSON.  This pass normalizes all supported
     annotations and annotation paths.
   }];
-  let constructor = "circt::firrtl::createLowerFIRRTLAnnotationsPass()";
   let options = [
     Option<"ignoreAnnotationClassless", "disable-annotation-classless", "bool", "false",
       "Ignore classless annotations.">,
-    Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
+    Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "false",
       "Ignore unknown annotations.">,
     Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
       "Create normal ports, not ref type ports.">,

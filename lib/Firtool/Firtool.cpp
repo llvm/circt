@@ -34,11 +34,11 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePaths());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
-      opt.shouldDisableUnknownAnnotations(),
-      opt.shouldDisableClasslessAnnotations(),
-      opt.shouldLowerNoRefTypePortAnnotations(),
-      opt.shouldAllowAddingPortsOnPublic()));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotations(
+      {/*ignoreAnnotationUnknown=*/opt.shouldDisableUnknownAnnotations(),
+       /*ignoreAnnotationClassless=*/opt.shouldDisableClasslessAnnotations(),
+       /*noRefTypePorts=*/opt.shouldLowerNoRefTypePortAnnotations(),
+       /*allowAddingPortsOnPublic=*/opt.shouldAllowAddingPortsOnPublic()}));
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
