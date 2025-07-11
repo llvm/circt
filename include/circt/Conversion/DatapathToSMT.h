@@ -13,7 +13,7 @@
 
 namespace circt {
 
-/// Get the HW to SMT conversion patterns.
+/// Get the Datapath to SMT conversion patterns.
 void populateDatapathToSMTConversionPatterns(TypeConverter &converter,
                                              RewritePatternSet &patterns);
 

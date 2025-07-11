@@ -9,7 +9,6 @@
 #include "circt/Conversion/DatapathToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -51,6 +50,7 @@ struct CompressOpConversion : OpConversionPattern<CompressOp> {
 
     // Create free variables
     SmallVector<Value, 2> newResults;
+    newResults.reserve(results.size());
     for (Value result : results) {
       auto declareFunOp = rewriter.create<smt::DeclareFunOp>(
           op.getLoc(), typeConverter->convertType(result.getType()));
@@ -97,6 +97,7 @@ struct PartialProductOpConversion : OpConversionPattern<PartialProductOp> {
 
     // Create free variables
     SmallVector<Value, 2> newResults;
+    newResults.reserve(results.size());
     for (Value result : results) {
       auto declareFunOp = rewriter.create<smt::DeclareFunOp>(
           op.getLoc(), typeConverter->convertType(result.getType()));
