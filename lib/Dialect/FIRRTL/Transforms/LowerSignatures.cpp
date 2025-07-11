@@ -483,8 +483,3 @@ void LowerSignaturesPass::runOnOperation() {
   parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
                   [&portMap](FModuleOp mod) { lowerModuleBody(mod, portMap); });
 }
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerSignaturesPass() {
-  return std::make_unique<LowerSignaturesPass>();
-}

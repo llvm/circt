@@ -23,7 +23,6 @@ def ResolvePaths : Pass<"firrtl-resolve-paths", "firrtl::CircuitOp"> {
     target strings to actual path operations.  Path operations refer to their
     targets using annotations with a unique identifier.
   }];
-  let constructor = "circt::firrtl::createResolvePathsPass()";
 }
 
 def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp"> {
@@ -103,7 +102,6 @@ def LowerSignatures : Pass<"firrtl-lower-signatures", "firrtl::CircuitOp"> {
     Lower aggregate FIRRTL types in Modules as indicated by the calling
     convention.
   }];
-  let constructor = "circt::firrtl::createLowerSignaturesPass()";
 }
 
 def PassiveWires : Pass<"firrtl-passive-wires", "firrtl::FModuleOp"> {
@@ -111,7 +109,6 @@ def PassiveWires : Pass<"firrtl-passive-wires", "firrtl::FModuleOp"> {
   let description = [{
     Eliminate flips from aggregate types on wires.
   }];
-  let constructor = "circt::firrtl::createPassiveWiresPass()";
 }
 
 
@@ -120,7 +117,6 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let description = [{
     Use optimistic constant propagation to delete ports and unreachable IR.
   }];
-  let constructor = "circt::firrtl::createIMConstPropPass()";
   let statistics = [
     Statistic<"numFoldedOp", "num-folded-op", "Number of operations folded">,
     Statistic<"numErasedOp", "num-erased-op", "Number of operations erased">
@@ -134,7 +130,6 @@ def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
     optimizations are isolated to this pass as they can change the visible
     behavior of the register, especially before reset.
   }];
-  let constructor = "circt::firrtl::createRegisterOptimizerPass()";
 }
 
 def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
@@ -158,7 +153,6 @@ def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
     of public modules or a value with a symbol. We first populate alive values
     into a set, and then propagate the liveness by looking at their dataflow.
   }];
-  let constructor = "circt::firrtl::createIMDeadCodeElimPass()";
   let statistics = [
     Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">,
     Statistic<"numErasedModules", "num-erased-modules", "Number of modules erased">,
@@ -182,7 +176,6 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
       {class = "firrtl.transforms.FlattenAnnotation"}
     ```
   }];
-  let constructor = "circt::firrtl::createInlinerPass()";
   let dependentDialects = ["debug::DebugDialect"];
 }
 
@@ -196,7 +189,6 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
     This pass requires that FIRRTL MemOps have been lowered to modules to add
     the extra ports.
   }];
-  let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
   let dependentDialects = [
     "emit::EmitDialect",
     "sv::SVDialect",
@@ -232,7 +224,6 @@ def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
     This pass flattens the aggregate data of memory into a UInt, and inserts
     appropriate bitcasts to access the data.
   }];
-  let constructor = "circt::firrtl::createFlattenMemoryPass()";
   let statistics = [
     Statistic<"numFlattenedMems", "num-flatten-mems",
       "Number of memories flattened">,
@@ -244,7 +235,6 @@ def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
   let description = [{
     This pass lowers FIRRTL memory operations to generated modules.
   }];
-  let constructor = "circt::firrtl::createLowerMemoryPass()";
   let statistics = [
     Statistic<"numCreatedMemModules", "num-created-mem-modules",
       "Number of modules created">,
@@ -269,7 +259,6 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
     Statistic<"erasedModules", "num-erased-modules",
       "Number of modules which were erased by deduplication">
   ];
-  let constructor = "circt::firrtl::createDedupPass()";
 }
 
 def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
@@ -288,7 +277,6 @@ def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
     Statistic<"complexTypeWires", "num-not-passive-wires",
       "Number of wires not erased due to type issues">
   ];
-  let constructor = "circt::firrtl::createEliminateWiresPass()";
 }
 
 def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
@@ -297,7 +285,6 @@ def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
     Lowers FIRRTL match statements in to when statements, which can later be
     lowered with ExpandWhens.
   }];
-  let constructor = "circt::firrtl::createLowerMatchesPass()";
 }
 
 def ExpandWhens : InterfacePass<"firrtl-expand-whens", "firrtl::FModuleLike"> {
@@ -323,7 +310,6 @@ def ExpandWhens : InterfacePass<"firrtl-expand-whens", "firrtl::FModuleLike"> {
 
     This pass requires that all connects are expanded.
   }];
-  let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
 def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
@@ -356,8 +342,7 @@ def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
       compilation error.
 
   }];
-  let constructor = "circt::firrtl::createLowerCHIRRTLPass()";
-  let statistics = [
+  let statistics =[
     Statistic<"numCreatedMems", "num-created-mems",
       "Number of memories created">,
     Statistic<"numLoweredMems", "num-lowered-mems",
@@ -373,7 +358,6 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
     This pass infers the widths of all types throughout a FIRRTL module, and
     emits diagnostics for types that could not be inferred.
   }];
-  let constructor = "circt::firrtl::createInferWidthsPass()";
 }
 
 def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
@@ -388,7 +372,6 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
     - `sifive.enterprise.firrtl.FullAsyncResetAnnotation` (deprecated)
     - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation` (deprecated)
   }];
-  let constructor = "circt::firrtl::createInferResetsPass()";
 }
 
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {

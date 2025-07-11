@@ -1135,7 +1135,3 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         return WalkResult::advance();
       });
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createIMConstPropPass() {
-  return std::make_unique<IMConstPropPass>();
-}

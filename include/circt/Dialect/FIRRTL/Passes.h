@@ -74,8 +74,6 @@ enum class CompanionMode {
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
 
-std::unique_ptr<mlir::Pass> createResolvePathsPass();
-
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false,
@@ -90,19 +88,13 @@ std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
-std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
-
 std::unique_ptr<mlir::Pass>
 createLowerIntmodulesPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass> createLowerIntrinsicsPass();
 
-std::unique_ptr<mlir::Pass> createIMConstPropPass();
-
 std::unique_ptr<mlir::Pass>
 createRemoveUnusedPortsPass(bool ignoreDontTouch = false);
-
-std::unique_ptr<mlir::Pass> createInlinerPass();
 
 std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
@@ -111,28 +103,6 @@ createCreateSiFiveMetadataPass(bool replSeqMem = false,
                                mlir::StringRef replSeqMemFile = "");
 
 std::unique_ptr<mlir::Pass> createVBToBVPass();
-
-std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
-
-std::unique_ptr<mlir::Pass> createDedupPass();
-
-std::unique_ptr<mlir::Pass> createEliminateWiresPass();
-
-std::unique_ptr<mlir::Pass> createLowerMatchesPass();
-
-std::unique_ptr<mlir::Pass> createLowerSignaturesPass();
-
-std::unique_ptr<mlir::Pass> createPassiveWiresPass();
-
-std::unique_ptr<mlir::Pass> createExpandWhensPass();
-
-std::unique_ptr<mlir::Pass> createFlattenMemoryPass();
-
-std::unique_ptr<mlir::Pass> createInferWidthsPass();
-
-std::unique_ptr<mlir::Pass> createInferResetsPass();
-
-std::unique_ptr<mlir::Pass> createLowerMemoryPass();
 
 std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
@@ -167,11 +137,7 @@ createDropNamesPass(PreserveValues::PreserveMode mode = PreserveValues::None);
 
 std::unique_ptr<mlir::Pass> createExtractInstancesPass();
 
-std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
-
 std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
-
-std::unique_ptr<mlir::Pass> createRegisterOptimizerPass();
 
 std::unique_ptr<mlir::Pass> createLowerXMRPass();
 

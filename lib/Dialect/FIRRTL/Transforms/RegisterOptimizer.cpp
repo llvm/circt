@@ -157,7 +157,3 @@ void RegisterOptimizerPass::runOnOperation() {
   if (!toErase.empty())
     return markAllAnalysesPreserved();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createRegisterOptimizerPass() {
-  return std::make_unique<RegisterOptimizerPass>();
-}

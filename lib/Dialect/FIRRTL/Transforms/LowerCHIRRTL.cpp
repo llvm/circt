@@ -668,7 +668,3 @@ void LowerCHIRRTLPass::runOnOperation() {
   // Clear out any cached data.
   clear();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerCHIRRTLPass() {
-  return std::make_unique<LowerCHIRRTLPass>();
-}

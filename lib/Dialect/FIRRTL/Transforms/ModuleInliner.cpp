@@ -1631,7 +1631,3 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
   }
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInlinerPass() {
-  return std::make_unique<InlinerPass>();
-}

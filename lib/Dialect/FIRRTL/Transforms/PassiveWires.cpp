@@ -88,8 +88,3 @@ void PassiveWiresPass::runOnOperation() {
     r.setType(type_cast<FIRRTLBaseType>(r.getType()).getPassiveType());
   }
 }
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createPassiveWiresPass() {
-  return std::make_unique<PassiveWiresPass>();
-}

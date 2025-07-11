@@ -238,7 +238,3 @@ private:
   }
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createFlattenMemoryPass() {
-  return std::make_unique<FlattenMemoryPass>();
-}

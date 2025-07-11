@@ -524,7 +524,3 @@ void AddSeqMemPortsPass::runOnOperation() {
   else
     markAllAnalysesPreserved();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createAddSeqMemPortsPass() {
-  return std::make_unique<AddSeqMemPortsPass>();
-}

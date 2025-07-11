@@ -256,7 +256,3 @@ void ResolvePathsPass::runOnOperation() {
     signalPassFailure();
   markAnalysesPreserved<InstanceGraph>();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createResolvePathsPass() {
-  return std::make_unique<ResolvePathsPass>();
-}

@@ -568,10 +568,6 @@ void InferResetsPass::runOnOperationInner() {
     return signalPassFailure();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createInferResetsPass() {
-  return std::make_unique<InferResetsPass>();
-}
-
 ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
   ResetDrives &drives = getResetDrives(net);
   ResetSignal bestSignal = *net.begin();

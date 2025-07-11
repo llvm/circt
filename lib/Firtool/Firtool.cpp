@@ -32,7 +32,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   // Legalize away "open" aggregates to hw-only versions.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePaths());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       opt.shouldDisableUnknownAnnotations(),
@@ -58,7 +58,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // then run this pass after all diagnostic passes have run.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOptionPass(
       opt.shouldSelectDefaultInstanceChoice()));
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignatures());
 
   // This pass is _not_ idempotent.  It preserves its controlling annotation for
   // use by ExtractInstances.  This pass should be run before ExtractInstances.
@@ -75,7 +75,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   }
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createPassiveWiresPass());
+      firrtl::createPassiveWires());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createDropNamesPass(opt.getPreserveMode()));
@@ -86,16 +86,16 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Run LowerMatches before InferWidths, as the latter does not support the
   // match statement, but it does support what they lower to.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createLowerMatchesPass());
+      firrtl::createLowerMatches());
 
   // Width inference creates canonicalization opportunities.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
 
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createMemToRegOfVecPass(opt.shouldReplaceSequentialMemories(),
                                       opt.shouldIgnoreReadEnableMemories()));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
 
   if (opt.shouldExportChiselInterface()) {
     StringRef outdir = opt.getChiselInterfaceOutputDirectory();
@@ -112,7 +112,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConstPass());
 
   if (opt.shouldDedup())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup());
 
   if (opt.shouldConvertVecOfBundle()) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
@@ -122,7 +122,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   if (!opt.shouldLowerMemories())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createFlattenMemoryPass());
+        firrtl::createFlattenMemory());
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
@@ -132,7 +132,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(firrtl::createExpandWhensPass());
+    modulePM.addPass(firrtl::createExpandWhens());
     modulePM.addPass(firrtl::createSFCCompatPass());
   }
 
@@ -146,7 +146,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.shouldConvertProbesToSignals())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInliner());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLayerMergePass());
@@ -171,16 +171,16 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
         firrtl::createInferReadWritePass());
 
   if (opt.shouldReplaceSequentialMemories())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemory());
 
   if (opt.shouldAddCompanionAssume())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createCreateCompanionAssume());
 
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstProp());
 
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPorts());
 
   pm.addPass(firrtl::createCreateSiFiveMetadataPass(
       opt.shouldReplaceSequentialMemories(),
@@ -204,17 +204,17 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (!opt.shouldDisableOptimization()) {
     if (!opt.shouldDisableWireElimination())
       pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-          circt::firrtl::createEliminateWiresPass());
+          circt::firrtl::createEliminateWires());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        circt::firrtl::createRegisterOptimizerPass());
+        circt::firrtl::createRegisterOptimizer());
     // Re-run IMConstProp to propagate constants produced by register
     // optimizations.
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstProp());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
-    pm.addPass(firrtl::createIMDeadCodeElimPass());
+    pm.addPass(firrtl::createIMDeadCodeElim());
   }
 
   // Always run this, required for legalization.

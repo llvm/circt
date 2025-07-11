@@ -1887,7 +1887,3 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
   }
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createDedupPass() {
-  return std::make_unique<DedupPass>();
-}

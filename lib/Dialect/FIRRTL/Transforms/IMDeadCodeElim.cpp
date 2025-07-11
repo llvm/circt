@@ -835,7 +835,3 @@ void IMDeadCodeElimPass::eraseEmptyModule(FModuleOp module) {
   module.erase();
   ++numErasedModules;
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createIMDeadCodeElimPass() {
-  return std::make_unique<IMDeadCodeElimPass>();
-}

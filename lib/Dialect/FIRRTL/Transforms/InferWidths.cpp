@@ -2320,7 +2320,3 @@ void InferWidthsPass::runOnOperation() {
   if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
     return signalPassFailure();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsPass() {
-  return std::make_unique<InferWidthsPass>();
-}

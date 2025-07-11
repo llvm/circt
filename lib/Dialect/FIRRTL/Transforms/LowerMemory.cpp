@@ -558,7 +558,3 @@ void LowerMemoryPass::runOnOperation() {
   symbolTable = nullptr;
   memories.clear();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerMemoryPass() {
-  return std::make_unique<LowerMemoryPass>();
-}
