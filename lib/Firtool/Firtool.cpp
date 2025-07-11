@@ -263,8 +263,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   if (outputFilename == "-")
     outputFilename = "";
 
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createAssignOutputDirsPass(outputFilename));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAssignOutputDirs(
+      {/*outputDirOption=*/outputFilename.str()}));
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where

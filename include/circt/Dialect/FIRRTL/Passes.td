@@ -860,7 +860,6 @@ def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
     instance graph to assign these modules to the "deepest" output directory
     possible.
   }];
-  let constructor = "circt::firrtl::createAssignOutputDirsPass()";
   let options = [
     Option<"outputDirOption", "output-dir", "std::string", "",
       "The default output directory.">
