@@ -309,9 +309,11 @@ struct VerifBoundedModelCheckingOpConversion
         auto initVal =
             initialValues[curIndex - oldCircuitInputTy.size() + numRegs];
         if (auto initIntAttr = dyn_cast<IntegerAttr>(initVal)) {
-          inputDecls.push_back(rewriter.create<smt::BVConstantOp>(
-              loc, initIntAttr.getValue().getSExtValue(),
-              cast<smt::BitVectorType>(newTy).getWidth()));
+          const auto &cstInt = initIntAttr.getValue();
+          assert(cstInt.getBitWidth() ==
+                     cast<smt::BitVectorType>(newTy).getWidth() &&
+                 "With mismatch between initial value and target type");
+          inputDecls.push_back(rewriter.create<smt::BVConstantOp>(loc, cstInt));
           continue;
         }
       }
@@ -533,11 +535,21 @@ void ConvertVerifToSMTPass::runOnOperation() {
                               .take_back(bmcOp.getNumRegs());
           for (auto [regType, initVal] :
                llvm::zip(regTypes, bmcOp.getInitialValues())) {
-            if (!isa<IntegerType>(regType) && !isa<UnitAttr>(initVal)) {
-              op->emitError("initial values are currently only supported for "
-                            "registers with integer types");
-              signalPassFailure();
-              return WalkResult::interrupt();
+            if (!isa<UnitAttr>(initVal)) {
+              if (!isa<IntegerType>(regType)) {
+                op->emitError("initial values are currently only supported for "
+                              "registers with integer types");
+                signalPassFailure();
+                return WalkResult::interrupt();
+              } else {
+                auto tyAttr = dyn_cast<TypedAttr>(initVal);
+                if (!tyAttr || tyAttr.getType() != regType) {
+                  op->emitError("type of initial value does not match type of "
+                                "initialized register");
+                  signalPassFailure();
+                  return WalkResult::interrupt();
+                }
+              }
             }
           }
           // Check only one clock is present in the circuit inputs

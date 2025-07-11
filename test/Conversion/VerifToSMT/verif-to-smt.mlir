@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-verif-to-smt --reconcile-unrealized-casts -allow-unregistered-dialect | FileCheck %s
+// RUN: circt-opt %s --convert-verif-to-smt --reconcile-unrealized-casts -allow-unregistered-dialect --split-input-file | FileCheck %s
 
 // CHECK: func.func @lower_assert([[ARG0:%.+]]: i1)
 // CHECK:   [[CAST:%.+]] = builtin.unrealized_conversion_cast [[ARG0]] : i1 to !smt.bv<1>
@@ -186,7 +186,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK1:        scf.yield [[LOOP]]#0, [[F]], [[CIRCUIT]]#1, [[CIRCUIT]]#2, [[CIRCUIT]]#3, [[LOOP]]#1, [[ORI]]
 
 func.func @test_bmc() -> (i1) {
-  %bmc = verif.bmc bound 10 num_regs 3 initial_values [unit, 42, unit]
+  %bmc = verif.bmc bound 10 num_regs 3 initial_values [unit, 42 : i32, unit]
   init {
     %c0_i1 = hw.constant 0 : i1
     %clk = seq.to_clock %c0_i1
@@ -208,6 +208,31 @@ func.func @test_bmc() -> (i1) {
     // %state0 is the result of a seq.compreg taking %0 as input
     %2 = comb.xor %state0, %c-1_i32 : i32
     verif.yield %2, %0, %state1, %state2 : i32, i32, i32, !hw.array<2xi32>
+  }
+  func.return %bmc : i1
+}
+
+// -----
+
+// CHECK-LABEL:  func.func @large_initial_value
+// CHECK:         %[[CST:.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<65>
+// CHECK:         iter_args({{.+}}, %arg2 = %[[CST]],{{.+}})
+func.func @large_initial_value() -> (i1) {
+  %bmc = verif.bmc bound 1 num_regs 1 initial_values [-1 : i65]
+  init {
+    %c0_i1 = hw.constant 0 : i1
+    %clk = seq.to_clock %c0_i1
+    verif.yield %clk : !seq.clock
+  }
+  loop {
+    ^bb0(%clk: !seq.clock):
+    verif.yield %clk: !seq.clock
+  }
+  circuit {
+  ^bb0(%clk: !seq.clock, %arg0: i65):
+    %true = hw.constant true
+    verif.assert %true : i1
+    verif.yield %arg0 : i65
   }
   func.return %bmc : i1
 }
