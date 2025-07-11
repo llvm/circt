@@ -15,8 +15,6 @@
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-#include <memory>
-#include <optional>
 
 namespace mlir {
 class Pass;
@@ -73,8 +71,6 @@ enum class CompanionMode {
 
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
-
-std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
