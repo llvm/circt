@@ -221,8 +221,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   // Always run this, required for legalization.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createMergeConnectionsPass(
-          !opt.shouldDisableAggressiveMergeConnections()));
+      firrtl::createMergeConnections(
+          {/*enableAggressiveMergin=*/!opt
+               .shouldDisableAggressiveMergeConnections()}));
 
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(

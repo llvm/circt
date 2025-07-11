@@ -321,6 +321,8 @@ bool MergeConnection::run() {
 
 struct MergeConnectionsPass
     : public circt::firrtl::impl::MergeConnectionsBase<MergeConnectionsPass> {
+  using Base::Base;
+
   MergeConnectionsPass(bool enableAggressiveMergingFlag) {
     enableAggressiveMerging = enableAggressiveMergingFlag;
   }
@@ -339,9 +341,4 @@ void MergeConnectionsPass::runOnOperation() {
 
   if (!changed)
     return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createMergeConnectionsPass(bool enableAggressiveMerging) {
-  return std::make_unique<MergeConnectionsPass>(enableAggressiveMerging);
 }

@@ -481,7 +481,6 @@ def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
 
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   let summary = "Merge field-level connections into full bundle connections";
-  let constructor = "circt::firrtl::createMergeConnectionsPass()";
   let options = [
     Option<"enableAggressiveMerging", "aggressive-merging", "bool", "false",
       "Merge connections even when source values won't be simplified.">
