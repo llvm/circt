@@ -74,10 +74,6 @@ enum class CompanionMode {
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
 
-std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
-    PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
-    PreserveAggregate::PreserveMode memoryMode = PreserveAggregate::None);
-
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass>

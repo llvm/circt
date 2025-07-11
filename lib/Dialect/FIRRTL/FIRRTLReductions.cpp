@@ -1116,8 +1116,8 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<InstanceStubber, 25>();
   patterns.add<MemoryStubber, 24>();
   patterns.add<EagerInliner, 23>();
-  patterns.add<PassReduction, 22>(
-      getContext(), firrtl::createLowerFIRRTLTypesPass(), true, true);
+  patterns.add<PassReduction, 22>(getContext(),
+                                  firrtl::createLowerFIRRTLTypes(), true, true);
   patterns.add<PassReduction, 21>(getContext(), firrtl::createExpandWhens(),
                                   true, true);
   patterns.add<PassReduction, 20>(getContext(), firrtl::createInliner());

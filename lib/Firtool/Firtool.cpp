@@ -115,8 +115,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup());
 
   if (opt.shouldConvertVecOfBundle()) {
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All));
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypes(
+        {/*preserveAggregate=*/firrtl::PreserveAggregate::All,
+         /*preserveMemories*/ firrtl::PreserveAggregate::All}));
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createVBToBV());
   }
 
@@ -127,8 +128,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   //  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerSignaturesPass());
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-      opt.getPreserveAggregate(), firrtl::PreserveAggregate::None));
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypes(
+      {/*preserveAggregate=*/opt.getPreserveAggregate(),
+       /*preserveMemory=*/firrtl::PreserveAggregate::None}));
 
   {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();

@@ -69,10 +69,7 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
 
     Connect and expansion and canonicalization happen in this pass.
   }];
-  let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
   let options = [
-    Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
-           "Concat all elements of the aggregate data into a single element.">,
     Option<"preserveAggregate", "preserve-aggregate", "PreserveAggregate::PreserveMode",
           "PreserveAggregate::None",
           "Specify aggregate preservation mode",

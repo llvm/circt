@@ -1642,12 +1642,8 @@ bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
 namespace {
 struct LowerTypesPass
     : public circt::firrtl::impl::LowerFIRRTLTypesBase<LowerTypesPass> {
-  LowerTypesPass(
-      circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
-      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag) {
-    preserveAggregate = preserveAggregateFlag;
-    preserveMemories = preserveMemoriesFlag;
-  }
+  using Base::Base;
+
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -1688,11 +1684,4 @@ void LowerTypesPass::runOnOperation() {
 
   if (failed(result))
     signalPassFailure();
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
-    PreserveAggregate::PreserveMode mode,
-    PreserveAggregate::PreserveMode memoryMode) {
-  return std::make_unique<LowerTypesPass>(mode, memoryMode);
 }
