@@ -803,24 +803,13 @@ def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
   ];
 }
 
-def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
-  let summary = "Sink operations into layer blocks";
-  let description = [{
-
-  }];
-  let constructor = "::circt::firrtl::createLayerSinkPass()";
-  let statistics = [
-    Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
-  ];
-}
-
-def AdvancedLayerSink : Pass<"firrtl-advanced-layer-sink", "firrtl::CircuitOp"> {
+def LayerSink : Pass<"firrtl-layer-sink", "firrtl::CircuitOp"> {
   let summary = "Sink operations into layer blocks";
   let description = [{
     This pass sinks ops into layers, whenever possible, to minimize unused
     hardware in the design.
   }];
-  let constructor = "::circt::firrtl::createAdvancedLayerSinkPass()";
+  let constructor = "::circt::firrtl::createLayerSinkPass()";
 }
 
 def MaterializeDebugInfo :
