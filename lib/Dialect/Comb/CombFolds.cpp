@@ -1804,16 +1804,17 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   // mux(0, a, b) -> b
   // mux(1, a, b) -> a
   if (auto pred = dyn_cast_or_null<IntegerAttr>(adaptor.getCond())) {
-    if (pred.getValue().isZero())
+    if (pred.getValue().isZero() && getFalseValue() != getResult())
       return getFalseValue();
-    return getTrueValue();
+    if (pred.getValue().isOne() && getTrueValue() != getResult())
+      return getTrueValue();
   }
 
   // mux(cond, 1, 0) -> cond
   if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
     if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
       if (tv.getValue().isOne() && fv.getValue().isZero() &&
-          hw::getBitWidth(getType()) == 1)
+          hw::getBitWidth(getType()) == 1 && getCond() != getResult())
         return getCond();
 
   return {};

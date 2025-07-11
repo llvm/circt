@@ -1230,7 +1230,12 @@ hw.module @muxConstantsFold(in %cond: i1, out o: i25) {
 hw.module @muxCommon(in %cond: i1, in %cond2: i1,
                      in %arg0 : i32, in %arg1 : i32, in %arg2: i32, in %arg3: i32,
   out o1: i32, out o2: i32, out o3: i32, out o4: i32, 
-  out o5: i32, out orResult: i32, out o6: i32, out o7: i32, out o8 : i1) {
+  out o5: i32, out orResult: i32, out o6: i32, out o7: i32, out o8 : i1,
+  out o9: i32, out o10: i32) {
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[FALSE:%.+]] = hw.constant false
+  %true = hw.constant true
+  %false = hw.constant false
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1278,10 +1283,18 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1,
   /// CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
   %o8 = comb.mux %o8, %o8, %o8 : i1
 
+  // CHECK: [[O9:%.+]] = comb.mux [[TRUE]], [[O9]], %arg0 : i32
+  // CHECK: [[O10:%.+]] = comb.mux [[FALSE]], %arg0, [[O10]] : i32
+  %o9 = comb.mux %true, %o9, %arg0 : i32
+  %o10 = comb.mux %false, %arg0, %o10 : i32
+
+  // CHECK: [[O11:%.+]] = comb.mux [[O11]], %cond, %cond2 : i1
+  %o11 = comb.mux %o11, %cond, %cond2 : i1
+
   // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
-  // CHECK: [[O6]], [[O7]], [[O8]]
-  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8
-    : i32, i32, i32, i32, i32, i32, i32, i32, i1
+  // CHECK: [[O6]], [[O7]], [[O8]], [[O9]], [[O10]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8, %o9, %o10
+    : i32, i32, i32, i32, i32, i32, i32, i32, i1, i32, i32
 }
 
 // CHECK-LABEL: @flatten_multi_use_and
