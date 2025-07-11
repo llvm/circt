@@ -312,7 +312,7 @@ struct VerifBoundedModelCheckingOpConversion
           const auto &cstInt = initIntAttr.getValue();
           assert(cstInt.getBitWidth() ==
                      cast<smt::BitVectorType>(newTy).getWidth() &&
-                 "With mismatch between initial value and target type");
+                 "Width mismatch between initial value and target type");
           inputDecls.push_back(rewriter.create<smt::BVConstantOp>(loc, cstInt));
           continue;
         }
