@@ -1714,3 +1714,90 @@ func.func @dontAssumeMuxCondIfOperandIsOtherwiseObservable(%arg0: i1, %arg1: i1)
   %2 = comb.mux %arg0, %0, %1 : i1
   return %2 : i1
 }
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlTotalShiftOut
+hw.module @ShlTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant 7 : i4
+  %1 = comb.shl %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUTotalShiftOut
+hw.module @ShrUTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant 7 : i4
+  %1 = comb.shru %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSTotalShiftOut
+hw.module @ShrSTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = comb.extract %a from 3
+  // CHECK: [[TMP2:%.+]] = comb.replicate [[TMP1]] : (i1) -> i4
+  %0 = hw.constant 7 : i4
+  %1 = comb.shrs %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlExcessiveShiftConst
+hw.module @ShlExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shl %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUExcessiveShiftConst
+hw.module @ShrUExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shru %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSExcessiveShiftConst
+hw.module @ShrSExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = comb.extract %a from 999
+  // CHECK: [[TMP2:%.+]] = comb.replicate [[TMP1]] : (i1) -> i1000
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shrs %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlWideZeroShift
+hw.module @ShlWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shl %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUWideZeroShift
+hw.module @ShrUWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shru %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSWideZeroShift
+hw.module @ShrSWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shrs %a, %0 : i1000
+  hw.output %1 : i1000
+}

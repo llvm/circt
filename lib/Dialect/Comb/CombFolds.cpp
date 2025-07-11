@@ -307,14 +307,13 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
-    unsigned shift = rhs.getValue().getZExtValue();
-    unsigned width = getType().getIntOrFloatBitWidth();
-    if (shift == 0)
+    if (rhs.getValue().isZero())
       return getOperand(0);
-    if (width <= shift)
+
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (rhs.getValue().uge(width))
       return getIntAttr(APInt::getZero(width), getContext());
   }
-
   return constFoldBinaryOp(adaptor.getOperands(), hw::PEO::Shl);
 }
 
@@ -325,6 +324,8 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
     return failure();
 
   unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+  if (value.ugt(width))
+    value = width;
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
@@ -344,12 +345,11 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
-    unsigned shift = rhs.getValue().getZExtValue();
-    if (shift == 0)
+    if (rhs.getValue().isZero())
       return getOperand(0);
 
     unsigned width = getType().getIntOrFloatBitWidth();
-    if (width <= shift)
+    if (rhs.getValue().uge(width))
       return getIntAttr(APInt::getZero(width), getContext());
   }
   return constFoldBinaryOp(adaptor.getOperands(), hw::PEO::ShrU);
@@ -362,6 +362,8 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
     return failure();
 
   unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+  if (value.ugt(width))
+    value = width;
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
@@ -380,10 +382,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
-  if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
-    if (rhs.getValue().getZExtValue() == 0)
+  if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs()))
+    if (rhs.getValue().isZero())
       return getOperand(0);
-  }
   return constFoldBinaryOp(adaptor.getOperands(), hw::PEO::ShrS);
 }
 
@@ -394,13 +395,15 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
     return failure();
 
   unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+  if (value.ugt(width))
+    value = width;
   unsigned shift = value.getZExtValue();
 
   auto topbit =
       rewriter.createOrFold<ExtractOp>(op.getLoc(), op.getLhs(), width - 1, 1);
   auto sext = rewriter.createOrFold<ReplicateOp>(op.getLoc(), topbit, shift);
 
-  if (width <= shift) {
+  if (width == shift) {
     replaceOpAndCopyNamehint(rewriter, op, {sext});
     return success();
   }
