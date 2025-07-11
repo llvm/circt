@@ -570,7 +570,6 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
     %a = firrtl.node droppable_name %input
     ```
   }];
-  let constructor = "circt::firrtl::createDropNamesPass()";
   let options = [
     Option<"preserveMode", "preserve-values", "PreserveValues::PreserveMode",
            "PreserveValues::None",

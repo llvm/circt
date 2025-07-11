@@ -80,9 +80,6 @@ std::unique_ptr<mlir::Pass>
 createLowerIntmodulesPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass>
-createDropNamesPass(PreserveValues::PreserveMode mode = PreserveValues::None);
-
-std::unique_ptr<mlir::Pass>
 createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
 
 std::unique_ptr<mlir::Pass>

@@ -1104,7 +1104,8 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
   patterns.add<PassReduction, 30>(
-      getContext(), firrtl::createDropNamesPass(PreserveValues::None), false,
+      getContext(),
+      firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
       true);
   patterns.add<PassReduction, 29>(getContext(),
                                   firrtl::createLowerCHIRRTLPass(), true, true);
