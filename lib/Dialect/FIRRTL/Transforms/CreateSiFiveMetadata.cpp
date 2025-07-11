@@ -495,6 +495,8 @@ struct ObjectModelIR {
 class CreateSiFiveMetadataPass
     : public circt::firrtl::impl::CreateSiFiveMetadataBase<
           CreateSiFiveMetadataPass> {
+  using Base::Base;
+
   LogicalResult emitRetimeModulesMetadata(ObjectModelIR &omir);
   LogicalResult emitSitestBlackboxMetadata(ObjectModelIR &omir);
   LogicalResult emitMemoryMetadata(ObjectModelIR &omir);
@@ -968,10 +970,4 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   // Clear pass-global state as required by MLIR pass infrastructure.
   circuitOp = {};
   instanceInfo = {};
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem,
-                                              StringRef replSeqMemFile) {
-  return std::make_unique<CreateSiFiveMetadataPass>(replSeqMem, replSeqMemFile);
 }

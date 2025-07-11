@@ -184,9 +184,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPorts());
 
-  pm.addPass(firrtl::createCreateSiFiveMetadataPass(
-      opt.shouldReplaceSequentialMemories(),
-      opt.getReplaceSequentialMemoriesFile()));
+  pm.addPass(firrtl::createCreateSiFiveMetadata(
+      {/*replSeqMem=*/opt.shouldReplaceSequentialMemories(),
+       /*replSeqMemFile=*/opt.getReplaceSequentialMemoriesFile().str()}));
 
   // This pass must be run after InjectDUTHierarchy.
   //

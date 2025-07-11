@@ -80,10 +80,6 @@ std::unique_ptr<mlir::Pass>
 createLowerIntmodulesPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass>
-createCreateSiFiveMetadataPass(bool replSeqMem = false,
-                               mlir::StringRef replSeqMemFile = "");
-
-std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
 
 std::unique_ptr<mlir::Pass>
