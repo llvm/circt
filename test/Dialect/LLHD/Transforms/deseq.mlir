@@ -132,7 +132,7 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[MUX:%.+]] = comb.mux [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
@@ -169,7 +169,7 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[MUX:%.+]] = comb.mux [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
@@ -422,7 +422,7 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[MUX:%.+]] = comb.mux [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
+  // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
@@ -824,75 +824,75 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
   }
   // CHECK: [[CLK:%.+]] = seq.to_clock %clk
   // CHECK: [[RST:%.+]] = comb.xor %rstn, %true
-  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#1, [[ER]]#0, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#3, [[ER]]#2, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#3, [[ER]]#2, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#5, [[ER]]#4, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#5, [[ER]]#4, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#7, [[ER]]#6, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#7, [[ER]]#6, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux  [[ER]]#9, [[ER]]#8, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#9, [[ER]]#8, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#11, [[ER]]#10, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#11, [[ER]]#10, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#13, [[ER]]#12, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#13, [[ER]]#12, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#15, [[ER]]#14, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#15, [[ER]]#14, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#17, [[ER]]#16, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#17, [[ER]]#16, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#19, [[ER]]#18, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#19, [[ER]]#18, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#21, [[ER]]#20, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#21, [[ER]]#20, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#23, [[ER]]#22, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#23, [[ER]]#22, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#25, [[ER]]#24, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#25, [[ER]]#24, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#27, [[ER]]#26, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#27, [[ER]]#26, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#29, [[ER]]#28, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#29, [[ER]]#28, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#31, [[ER]]#30, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#31, [[ER]]#30, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#33, [[ER]]#32, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#33, [[ER]]#32, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#35, [[ER]]#34, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#35, [[ER]]#34, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#37, [[ER]]#36, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#37, [[ER]]#36, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#39, [[ER]]#38, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#39, [[ER]]#38, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#41, [[ER]]#40, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#41, [[ER]]#40, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#43, [[ER]]#42, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#43, [[ER]]#42, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#45, [[ER]]#44, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#45, [[ER]]#44, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#47, [[ER]]#46, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#47, [[ER]]#46, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#49, [[ER]]#48, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#49, [[ER]]#48, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#51, [[ER]]#50, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#51, [[ER]]#50, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#53, [[ER]]#52, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#53, [[ER]]#52, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#55, [[ER]]#54, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#55, [[ER]]#54, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#57, [[ER]]#56, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#57, [[ER]]#56, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#59, [[ER]]#58, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#59, [[ER]]#58, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#61, [[ER]]#60, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#61, [[ER]]#60, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#63, [[ER]]#62, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#63, [[ER]]#62, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#65, [[ER]]#64, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#65, [[ER]]#64, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#67, [[ER]]#66, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#67, [[ER]]#66, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  // CHECK: [[TMP:%.+]] = comb.mux [[ER]]#69, [[ER]]#68, {{%.+}}
+  // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#69, [[ER]]#68, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
   llhd.drv %mem0, %1#0 after %0 if %1#1 : !hw.inout<i15>
   llhd.drv %mem1, %1#2 after %0 if %1#3 : !hw.inout<i15>
