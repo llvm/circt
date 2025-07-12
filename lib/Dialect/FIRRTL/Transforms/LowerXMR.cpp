@@ -814,7 +814,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
         }
         auto newMem = builder.create<MemOp>(
             resultTypes, mem.getReadLatency(), mem.getWriteLatency(),
-            mem.getDepth(), RUWAttr::Undefined,
+            mem.getDepth(), RUWBehavior::Undefined,
             builder.getArrayAttr(resultNames), mem.getNameAttr(),
             mem.getNameKind(), mem.getAnnotations(),
             builder.getArrayAttr(portAnnotations), mem.getInnerSymAttr(),

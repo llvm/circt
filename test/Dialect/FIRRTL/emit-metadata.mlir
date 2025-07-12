@@ -604,6 +604,7 @@ firrtl.circuit "Foo" {
 // CHECK-NEXT:            firrtl.propassign %readwritePorts, %readwritePorts_in
 // CHECK-NEXT:            firrtl.propassign %writeLatency, %writeLatency_in
 // CHECK-NEXT:            firrtl.propassign %readLatency, %readLatency_in
+// CHECK-NEXT:            firrtl.propassign %ruwBehavior, %ruwBehavior_in
 // CHECK-NEXT:            firrtl.propassign %hierarchy, %hierarchy_in
 // CHECK-NEXT:            firrtl.propassign %inDut, %inDut_in
 // CHECK-NEXT:            firrtl.propassign %extraPorts, %extraPorts_in
@@ -653,15 +654,18 @@ firrtl.circuit "Foo" {
 // CHECK-NEXT:            %27 = firrtl.integer 1
 // CHECK-NEXT:            %28 = firrtl.object.subfield %[[memoryObject]][readLatency_in]
 // CHECK-NEXT:            firrtl.propassign %28, %27
-// CHECK-NEXT:            %29 = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
-// CHECK-NEXT:            firrtl.propassign %29, %3
-// CHECK-NEXT:            %30 = firrtl.bool true
-// CHECK-NEXT:            %31 = firrtl.object.subfield %[[memoryObject]][inDut_in]
-// CHECK-NEXT:            firrtl.propassign %31, %30
-// CHECK-NEXT:            %32 = firrtl.object.subfield %[[memoryObject]][extraPorts_in]
-// CHECK-NEXT:            firrtl.propassign %32, %10
-// CHECK-NEXT:            %33 = firrtl.object.subfield %[[memoryObject]][preExtInstName_in]
-// CHECK-NEXT:            firrtl.propassign %33, %2
+// CHECK-NEXT:            %29 = firrtl.string "Undefined"
+// CHECK-NEXT:            %30 = firrtl.object.subfield %[[memoryObject]][ruwBehavior_in]
+// CHECK-NEXT:            firrtl.propassign %30, %29
+// CHECK-NEXT:            %31 = firrtl.object.subfield %[[memoryObject]][hierarchy_in]
+// CHECK-NEXT:            firrtl.propassign %31, %3
+// CHECK-NEXT:            %32 = firrtl.bool true
+// CHECK-NEXT:            %33 = firrtl.object.subfield %[[memoryObject]][inDut_in]
+// CHECK-NEXT:            firrtl.propassign %33, %32
+// CHECK-NEXT:            %34 = firrtl.object.subfield %[[memoryObject]][extraPorts_in]
+// CHECK-NEXT:            firrtl.propassign %34, %10
+// CHECK-NEXT:            %35 = firrtl.object.subfield %[[memoryObject]][preExtInstName_in]
+// CHECK-NEXT:            firrtl.propassign %35, %2
 // CHECK-NEXT:            firrtl.propassign %[[memoryObject]]_field, %[[memoryObject]]
 
 // (2) Memory JSON -------------------------------------------------------------
@@ -675,6 +679,7 @@ firrtl.circuit "Foo" {
 // CHECK-SAME:              \22read\22: 2
 // CHECK-SAME:              \22write\22: 3
 // CHECK-SAME:              \22readwrite\22: 4
+// CHECK-SAME:              \22ruw_behavior\22: \22Undefined\22
 // CHECK-SAME:              \22extra_ports\22: [
 // CHECK-SAME:                {
 // CHECK-SAME:                  \22name\22: \22user_input\22
@@ -1173,3 +1178,92 @@ firrtl.circuit "Foo" {
 // CHECK-SAME{LITERAL}:     name {{0}} depth 32 width 8 ports read\0A
 // CHECK-SAME{LITERAL}:     name {{1}} depth 16 width 8 ports write\0A
 // CHECK-SAME:              symbols = [@m2, @m1]
+
+
+// -----
+
+// Test defined read-under-write behavior.
+
+firrtl.circuit "RUWOld" {
+  firrtl.memmodule private @mOld() attributes {
+    dataWidth = 8 : ui32,
+    depth = 32 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 1 : ui32,
+    numWritePorts = 1 : ui32,
+    numReadWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32,
+    ruw = #firrtl<ruwbehavior Old>
+  }
+  firrtl.module @RUWOld() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance m sym @mOld @mOld()
+  }
+}
+
+//------------------------------------------------------------------ (1) OM Info
+// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema
+// CHECK:                 %[[#a:]] = firrtl.string "Old"
+// CHECK-NEXT:            %[[#ruw:]] = firrtl.object.subfield %[[memoryObject]][ruwBehavior_in]
+// CHECK-NEXT:            firrtl.propassign %[[#ruw]], %[[#a]]
+
+//-------------------------------------------------------------- (2) Memory JSON
+// CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
+// CHECK-NEXT:            sv.verbatim "[
+// CHECK:                  \22ruw_behavior\22: \22Old\22
+
+//------------------------------------------------------- (3) Configuration File
+// CHECK-LABEL:         emit.file "mems.conf"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME:            ruw Old
+
+// -----
+
+firrtl.circuit "RUWNew" {
+  firrtl.memmodule private @mNew() attributes {
+    dataWidth = 8 : ui32,
+    depth = 32 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 1 : ui32,
+    numWritePorts = 1 : ui32,
+    numReadWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32,
+    ruw = #firrtl<ruwbehavior New>
+  }
+  firrtl.module @RUWNew() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance m sym @mNew @mNew()
+  }
+}
+
+//------------------------------------------------------------------ (1) OM Info
+// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema
+// CHECK:                 %[[#a:]] = firrtl.string "New"
+// CHECK-NEXT:            %[[#ruw:]] = firrtl.object.subfield %[[memoryObject]][ruwBehavior_in]
+// CHECK-NEXT:            firrtl.propassign %[[#ruw]], %[[#a]]
+
+//-------------------------------------------------------------- (2) Memory JSON
+// CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
+// CHECK-NEXT:            sv.verbatim "[
+// CHECK:                  \22ruw_behavior\22: \22New\22
+
+//------------------------------------------------------- (3) Configuration File
+// CHECK-LABEL:         emit.file "mems.conf"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME:            ruw New
