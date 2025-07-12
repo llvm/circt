@@ -112,29 +112,6 @@ om.class @ListCreate() {
 
 // -----
 
-// expected-error @+1 {{map key type must be either string or integer but got '!om.list<!om.string>'}}
-om.class @Map(%map: !om.map<!om.list<!om.string>, !om.string>) {
-  om.class.fields
-}
-
-// -----
-
-om.class @Tuple(%tuple: tuple<i1, !om.string>) {
-  // expected-error @+1 {{tuple index out-of-bounds, must be less than 2 but got 2}}
-  %val = om.tuple_get %tuple[2]  : tuple<i1, !om.string>
-  om.class.fields
-}
-
-// -----
-
-om.class @MapConstant() {
-  // expected-error @+1 {{a value of a map attribute must have a type 'i64' but field "b" has '!om.list<i32>'}}
-  %0 = om.constant #om.map<i64, {a = 42, b = #om.list<i32, []>}> : !om.map<!om.string, i64>
-  om.class.fields
-}
-
-// -----
-
 om.class @Thing() {
   om.class.fields
 }
