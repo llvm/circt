@@ -31,8 +31,8 @@ struct Path;
 
 /// These are the Python types that are represented by the different primitive
 /// OMEvaluatorValues as Attributes.
-using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
-                                     nb::tuple, nb::list, nb::dict>;
+using PythonPrimitive =
+    std::variant<nb::int_, nb::float_, nb::str, nb::bool_, nb::list, nb::dict>;
 
 /// None is used to by nanobind when default initializing a PythonValue. The
 /// order of types in the variant matters here, and we want nanobind to try
