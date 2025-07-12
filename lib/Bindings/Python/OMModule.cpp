@@ -235,6 +235,120 @@ private:
 PythonValue List::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorListGetElement(value, i));
 }
+// Convert a generic MLIR Attribute to a PythonValue. This is basically a C++
+// fast path of the parts of attribute_to_var that we use in the OM dialect.
+static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
+  if (omAttrIsAIntegerAttr(attr)) {
+    auto strRef = omIntegerAttrToString(attr);
+    return nb::int_(nb::str(strRef.data, strRef.length));
+  }
+
+  if (mlirAttributeIsAFloat(attr)) {
+    return nb::float_(mlirFloatAttrGetValueDouble(attr));
+  }
+
+  if (mlirAttributeIsAString(attr)) {
+    auto strRef = mlirStringAttrGetValue(attr);
+    return nb::str(strRef.data, strRef.length);
+  }
+
+  // BoolAttr's are IntegerAttr's, check this first.
+  if (mlirAttributeIsABool(attr)) {
+    return nb::bool_(mlirBoolAttrGetValue(attr));
+  }
+
+  if (mlirAttributeIsAInteger(attr)) {
+    MlirType type = mlirAttributeGetType(attr);
+    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
+      return nb::int_(mlirIntegerAttrGetValueInt(attr));
+    if (mlirIntegerTypeIsSigned(type))
+      return nb::int_(mlirIntegerAttrGetValueSInt(attr));
+    return nb::int_(mlirIntegerAttrGetValueUInt(attr));
+  }
+
+  if (omAttrIsAReferenceAttr(attr)) {
+    auto innerRef = omReferenceAttrGetInnerRef(attr);
+    auto moduleStrRef =
+        mlirStringAttrGetValue(hwInnerRefAttrGetModule(innerRef));
+    auto nameStrRef = mlirStringAttrGetValue(hwInnerRefAttrGetName(innerRef));
+    auto moduleStr = nb::str(moduleStrRef.data, moduleStrRef.length);
+    auto nameStr = nb::str(nameStrRef.data, nameStrRef.length);
+    return nb::make_tuple(moduleStr, nameStr);
+  }
+
+  if (omAttrIsAListAttr(attr)) {
+    nb::list results;
+    for (intptr_t i = 0, e = omListAttrGetNumElements(attr); i < e; ++i)
+      results.append(omPrimitiveToPythonValue(omListAttrGetElement(attr, i)));
+    return results;
+  }
+
+  if (omAttrIsAMapAttr(attr)) {
+    nb::dict results;
+    for (intptr_t i = 0, e = omMapAttrGetNumElements(attr); i < e; ++i) {
+      auto keyStrRef = mlirIdentifierStr(omMapAttrGetElementKey(attr, i));
+      auto key = nb::str(keyStrRef.data, keyStrRef.length);
+      auto value = omPrimitiveToPythonValue(omMapAttrGetElementValue(attr, i));
+      results[key] = value;
+    }
+    return results;
+  }
+
+  mlirAttributeDump(attr);
+  throw nb::type_error("Unexpected OM primitive attribute");
+}
+
+// Convert a primitive PythonValue to a generic MLIR Attribute. This is
+// basically a C++ fast path of the parts of var_to_attribute that we use in the
+// OM dialect.
+static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
+                                              MlirContext ctx) {
+  if (auto *intValue = std::get_if<nb::int_>(&value)) {
+    auto intType = mlirIntegerTypeGet(ctx, 64);
+    auto intAttr = mlirIntegerAttrGet(intType, nb::cast<int64_t>(*intValue));
+    return omIntegerAttrGet(intAttr);
+  }
+
+  if (auto *attr = std::get_if<nb::float_>(&value)) {
+    auto floatType = mlirF64TypeGet(ctx);
+    return mlirFloatAttrDoubleGet(ctx, floatType, nb::cast<double>(*attr));
+  }
+
+  if (auto *attr = std::get_if<nb::str>(&value)) {
+    auto str = nb::cast<std::string>(*attr);
+    auto strRef = mlirStringRefCreate(str.data(), str.length());
+    auto omStringType = omStringTypeGet(ctx);
+    return mlirStringAttrTypedGet(omStringType, strRef);
+  }
+
+  if (auto *attr = std::get_if<nb::bool_>(&value)) {
+    return mlirBoolAttrGet(ctx, nb::cast<bool>(*attr));
+  }
+
+  // For a python list try constructing OM list attribute. The element
+  // type must be uniform.
+  if (auto *attr = std::get_if<nb::list>(&value)) {
+    if (attr->size() == 0)
+      throw nb::type_error("Empty list is prohibited now");
+
+    std::vector<MlirAttribute> attrs;
+    attrs.reserve(attr->size());
+    std::optional<MlirType> elemenType;
+    for (auto v : *attr) {
+      attrs.push_back(
+          omPythonValueToPrimitive(nb::cast<PythonPrimitive>(v), ctx));
+      if (!elemenType)
+        elemenType = mlirAttributeGetType(attrs.back());
+      else if (!mlirTypeEqual(*elemenType,
+                              mlirAttributeGetType(attrs.back()))) {
+        throw nb::type_error("List elements must be of the same type");
+      }
+    }
+    return omListAttrGet(*elemenType, attrs.size(), attrs.data());
+  }
+
+  throw nb::type_error("Unexpected OM primitive value");
+}
 
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
