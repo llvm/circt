@@ -605,13 +605,17 @@ struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
   matchAndRewrite(moore::StringConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     const auto str = op.getValue();
-    const unsigned byteWidth = str.size() * 8;
+    unsigned byteWidth = str.size() * 8;
     const auto resultType =
         typeConverter->convertType(op.getResult().getType());
     if (const auto intType = mlir::dyn_cast<IntegerType>(resultType)) {
       if (intType.getWidth() < byteWidth) {
         return rewriter.notifyMatchFailure(op,
                                            "invalid string constant type size");
+      }
+      // Zero-fill empty string constant to expected type size in bits.
+      if (byteWidth == 0) {
+        byteWidth = intType.getWidth();
       }
     } else {
       return rewriter.notifyMatchFailure(op, "invalid string constant type");

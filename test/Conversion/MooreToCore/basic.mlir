@@ -1049,6 +1049,8 @@ moore.module @StringConstant() {
     %str = moore.string_constant "Test" : i32
     // CHECK: hw.constant 0 : i0
     %str_empty = moore.string_constant "" : i0
+    // CHECK: hw.constant 0 : i8
+    %str_empty_extended = moore.string_constant "" : i8
     moore.return
   }
 }
