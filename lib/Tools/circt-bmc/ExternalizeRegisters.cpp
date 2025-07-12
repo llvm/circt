@@ -186,17 +186,29 @@ void ExternalizeRegistersPass::runOnOperation() {
           addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
           initialValues[module.getSymNameAttr()].push_back(initState);
 
-          regOp.getResult().replaceAllUsesWith(
-              module.appendInput(newInputName, regOp.getType()).second);
+          // Replace the register with newInput and newOutput
+          auto newInput =
+              module.appendInput(newInputName, regOp.getType()).second;
           if (auto reset = regOp.getReset()) {
             auto resetValue = regOp.getResetValue();
+            if (regOp.getIsAsync()) {
+              // Async reset
+              regOp.emitError("seq.firreg with async reset not yet supported");
+              return signalPassFailure();
+            } else {
+              // Sync reset
+              regOp.getResult().replaceAllUsesWith(newInput);
+            }
             auto mux =
                 builder.create<comb::MuxOp>(regOp.getLoc(), regOp.getType(),
                                             reset, resetValue, regOp.getNext());
             module.appendOutput(newOutputName, mux);
           } else {
+            // No reset
+            regOp.getResult().replaceAllUsesWith(newInput);
             module.appendOutput(newOutputName, regOp.getNext());
           }
+
           regOp->erase();
           ++numRegs;
           return;

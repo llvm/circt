@@ -133,12 +133,12 @@ hw.module @named_firregs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out ou
   hw.output %secondreg : i32
 }
 
-// CHECK:  hw.module @firreg_with_reset(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[IN:%.+]] : i32, in [[OLD_REG:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit], num_regs = 1 : i32} {
+// CHECK:  hw.module @firreg_with_sync_reset(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[IN:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit], num_regs = 1 : i32} {
 // CHECK:    [[C0_I32:%.+]] = hw.constant 0 : i32
-// CHECK:    [[MUX:%.+]] = comb.mux [[RST]], [[C0_I32]], [[IN]] : i32
-// CHECK:    hw.output [[OLD_REG]], [[MUX]]
+// CHECK:    [[MUX1:%.+]] = comb.mux [[RST]], [[C0_I32]], [[IN]] : i32
+// CHECK:    hw.output [[OLD_REG1]], [[MUX1]]
 // CHECK:  }
-hw.module @firreg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
+hw.module @firreg_with_sync_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
   %c0_i32 = hw.constant 0 : i32
   %1 = seq.firreg %in clock %clk reset sync %rst, %c0_i32 : i32
   hw.output %1 : i32
