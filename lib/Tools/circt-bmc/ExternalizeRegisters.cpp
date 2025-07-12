@@ -195,10 +195,10 @@ void ExternalizeRegistersPass::runOnOperation() {
               // Async reset
               regOp.emitError("seq.firreg with async reset not yet supported");
               return signalPassFailure();
-            } else {
-              // Sync reset
-              regOp.getResult().replaceAllUsesWith(newInput);
             }
+            // Sync reset
+            regOp.getResult().replaceAllUsesWith(newInput);
+
             auto mux =
                 builder.create<comb::MuxOp>(regOp.getLoc(), regOp.getType(),
                                             reset, resetValue, regOp.getNext());
