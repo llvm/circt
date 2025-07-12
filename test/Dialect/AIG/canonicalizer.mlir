@@ -41,3 +41,23 @@ hw.module @And(in %a: i4, in %b: i4, out o1: i4, out o2: i4,
 
   hw.output %0, %1, %2, %3, %4, %5, %6, %7 : i4, i4, i4, i4, i4, i4, i4, i4
 }
+
+// CHECK-LABEL: @DoubleInversion
+hw.module @DoubleInversion(in %a: i1, in %b: i1, out o1: i1, out o2: i1, out o3: i1) {
+  // CHECK-NEXT: %[[false:.+]] = hw.constant false
+  // CHECK-NEXT: %[[TMP1:.+]] = aig.and_inv not %a, %b : i1
+  // CHECK-NEXT: hw.output %a, %[[TMP1]], %[[false]] : i1, i1, i1
+
+  // Test flattening of double inversion: and_inv(not(and_inv(not a))) -> a
+  %0 = aig.and_inv not %a : i1
+  %1 = aig.and_inv not %0 : i1
+
+  // Test flattening with single inverted input: and_inv(and_inv(not a), b) -> and_inv(not a, b)
+  %2 = aig.and_inv not %a : i1
+  %3 = aig.and_inv %2, %b : i1
+
+  // Test flattening with additional operands: and_inv(not(not a), not a) -> 0
+  %4 = aig.and_inv not %a : i1
+  %5 = aig.and_inv not %4, not %a : i1
+  hw.output %1, %3, %5 : i1, i1, i1
+}
