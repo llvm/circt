@@ -1,3 +1,7 @@
 # Bazel artifacts
 **/bazel-*
 *.bazel.lock
+
+# Coding Tools
+.vscode
+.claude
