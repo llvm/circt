@@ -11,13 +11,12 @@ exports_files([
     "configure.bzl",
 ])
 
-# Alias for main tool
+# Alias for main tools
 alias(
     name = "firtool", 
     actual = "@circt-project//:firtool",
 )
 
-# Aliases for all other tools
 alias(
     name = "arcilator",
     actual = "@circt-project//:arcilator",
@@ -106,4 +105,9 @@ alias(
 alias(
     name = "circt-verilog-lsp-server",
     actual = "@circt-project//:circt-verilog-lsp-server",
+)
+
+alias(
+    name = "circt-rtl-sim",
+    actual = "@circt-project//:circt-rtl-sim",
 ) 

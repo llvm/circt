@@ -1671,6 +1671,43 @@ expand_template(
     },
 )
 
+# Synthesis library
+circt_cc_library(
+    name = "CIRCTSynthesis",
+    srcs = glob([
+        "lib/Synthesis/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Synthesis/*.h",
+        "include/circt-c/Synthesis.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTSupport",
+        ":CIRCTDialects",  # This includes AIG, Comb, HW transforms
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:Transforms",
+        "@llvm-project//mlir:CAPIIR",
+    ],
+)
+
+# OpCount Analysis library
+circt_cc_library(
+    name = "CIRCTOpCountAnalysis",
+    srcs = [
+        "lib/Analysis/OpCountAnalysis.cpp",
+    ],
+    hdrs = [
+        "include/circt/Analysis/OpCountAnalysis.h",
+    ],
+    includes = ["include"],
+    deps = [
+        ":CIRCTSupport",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
 # Support library
 circt_cc_library(
     name = "CIRCTSupport",
@@ -1721,6 +1758,111 @@ gentbl_cc_library(
     ],
 )
 
+# BMC Transforms library
+circt_cc_library(
+    name = "CIRCTBMCTransforms",
+    srcs = [
+        "lib/Tools/circt-bmc/ExternalizeRegisters.cpp",
+        "lib/Tools/circt-bmc/LowerToBMC.cpp",
+    ],
+    hdrs = [
+        "include/circt/Tools/circt-bmc/Passes.h",
+    ],
+    includes = ["include"],
+    deps = [
+        ":CIRCTBMCPassIncGen",
+        ":CIRCTSupport",
+        ":CIRCTDialects",  # This includes all the dialect dependencies
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMDialect",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:Transforms",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Analysis",
+    ],
+)
+
+# LEC Transforms library
+circt_cc_library(
+    name = "CIRCTLECTransforms",
+    srcs = [
+        "lib/Tools/circt-lec/ConstructLEC.cpp",
+    ],
+    hdrs = [
+        "include/circt/Tools/circt-lec/Passes.h",
+    ],
+    includes = ["include"],
+    deps = [
+        ":CIRCTLECPassIncGen",
+        ":CIRCTSupport",
+        ":CIRCTDialects",  # This includes all the dialect dependencies
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMDialect",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:Transforms",
+        "@llvm-project//mlir:TransformUtils",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Analysis",
+    ],
+)
+
+# Scheduling library
+circt_cc_library(
+    name = "CIRCTScheduling",
+    srcs = glob([
+        "lib/Scheduling/*.cpp",
+    ], exclude=[
+        "lib/Scheduling/LPSchedulers.cpp",
+        "lib/Scheduling/CPSATSchedulers.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Scheduling/*.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTSupport",
+        ":CIRCTSSPIncGen",
+        ":CIRCTSeqIncGen",
+        ":CIRCTHWIncGen",
+        ":CIRCTCombIncGen",
+        ":CIRCTVerifIncGen",
+        ":CIRCTArcIncGen",
+        ":CIRCTFIRRTLIncGen",
+        ":CIRCTLTLIncGen",
+        ":CIRCTMooreIncGen",
+        ":CIRCTSVIncGen",
+        ":CIRCTEmitIncGen",
+        ":CIRCTFSMIncGen",
+        ":CIRCTHandshakeIncGen",
+        ":CIRCTCalyxIncGen",
+        ":CIRCTInteropIncGen",
+        ":CIRCTESIIncGen",
+        ":CIRCTOMIncGen",
+        ":CIRCTMSFTIncGen",
+        ":CIRCTDCIncGen",
+        ":CIRCTSimIncGen",
+        ":CIRCTLLHDIncGen",
+        ":CIRCTKanagawaIncGen",
+        ":CIRCTSystemCIncGen",
+        ":CIRCTRTGIncGen",
+        ":CIRCTRTGTestIncGen",
+        ":CIRCTHWArithIncGen",
+        ":CIRCTDatapathIncGen",
+        ":CIRCTDebugIncGen",
+        ":CIRCTAIGIncGen",
+        ":CIRCTPipelineIncGen",
+        ":CIRCTCHIRRTLIncGen",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Analysis",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
 # Combined CIRCT Dialects library to avoid circular dependencies
 circt_cc_library(
     name = "CIRCTDialects",
@@ -1728,10 +1870,13 @@ circt_cc_library(
         "lib/Dialect/**/*.cpp",
         "lib/Reduce/**/*.cpp",
         "lib/Analysis/**/*.cpp",
-        "lib/Conversion/**/*.cpp",
+        "lib/Conversion/ExportAIGER/**/*.cpp",
+        "lib/Conversion/ImportAIGER/**/*.cpp",
     ], exclude=[
-        "lib/Conversion/ImportVerilog/**/*.cpp",
         "lib/Dialect/ESI/runtime/**/*.cpp",
+        "lib/Dialect/Kanagawa/Transforms/KanagawaConvertCFToHandshake.cpp",
+        "lib/Dialect/Kanagawa/Transforms/KanagawaConvertHandshakeToDC.cpp",
+        "lib/Dialect/Kanagawa/Transforms/KanagawaPassPipelines.cpp",
     ]),
     hdrs = glob([
         "include/circt/*.h",
@@ -1846,6 +1991,59 @@ circt_cc_library(
         ":CIRCTBMCPassIncGen",
         ":CIRCTLECPassIncGen",
         ":CIRCTSupport",
+        ":CIRCTScheduling",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:AffineAnalysis",
+        "@llvm-project//mlir:AffineUtils",
+        "@llvm-project//mlir:LLVMCommonConversion",
+        "@llvm-project//mlir:SMTDialect",
+        "@llvm-project//mlir:AffineToStandard",
+        "@llvm-project//mlir:ArithToLLVM",
+        "@llvm-project//mlir:ControlFlowToLLVM",
+        "@llvm-project//mlir:FuncToLLVM",
+        "@llvm-project//mlir:IndexToLLVM",
+        "@llvm-project//mlir:TranslateLib",
+        "@llvm-project//mlir:SCFToControlFlow",
+        "@llvm-project//mlir:EmitCDialect",
+        "@llvm-project//mlir:ReconcileUnrealizedCasts",
+    ],
+)
+
+# CIRCT Conversion library
+circt_cc_library(
+    name = "CIRCTConversion",
+    srcs = glob([
+        "lib/Conversion/**/*.cpp",
+    ], exclude=[
+        "lib/Conversion/ImportVerilog/**/*.cpp",
+        "lib/Conversion/ExportAIGER/**/*.cpp",
+        "lib/Conversion/ImportAIGER/**/*.cpp",
+    ]) + [
+        "lib/Dialect/Kanagawa/Transforms/KanagawaConvertCFToHandshake.cpp",
+        "lib/Dialect/Kanagawa/Transforms/KanagawaConvertHandshakeToDC.cpp",
+        "lib/Dialect/Kanagawa/Transforms/KanagawaPassPipelines.cpp",
+    ],
+    hdrs = glob([
+        "include/circt/Conversion/**/*.h",
+        "lib/Conversion/**/*.h",
+        "include/circt/Dialect/Kanagawa/**/*.h",
+    ], exclude=[
+        "include/circt/Conversion/ImportVerilog/**/*.h",
+        "lib/Conversion/ImportVerilog/**/*.h",
+    ]),
+    includes = [
+        "include",
+        "lib/Conversion/ExportVerilog",
+    ],
+    deps = [
+        ":CIRCTSupport",
+        ":CIRCTDialects",
+        ":CIRCTTransforms",
+        ":CIRCTScheduling",
+        ":CIRCTKanagawaIncGen",
+        ":CIRCTKanagawaInterfacesIncGen",
+        ":CIRCTKanagawaPassIncGen",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:AffineAnalysis",
@@ -1878,6 +2076,7 @@ circt_cc_library(
     deps = [
         ":CIRCTTransformsPassIncGen",
         ":CIRCTSupport",
+        ":CIRCTOpCountAnalysis",
         ":CIRCTDialects",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
@@ -1907,6 +2106,34 @@ circt_cc_library(
     ],
 )
 
+# ExportSystemC library
+circt_cc_library(
+    name = "CIRCTExportSystemC",
+    srcs = glob([
+        "lib/Target/ExportSystemC/*.cpp",
+        "lib/Target/ExportSystemC/Patterns/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Target/ExportSystemC.h",
+        "lib/Target/ExportSystemC/*.h",
+        "lib/Target/ExportSystemC/Patterns/*.h",
+    ]),
+    includes = [
+        "include",
+        "lib/Target/ExportSystemC",
+        "lib/Target/ExportSystemC/Patterns",
+    ],
+    deps = [
+        ":CIRCTSupport",
+        ":CIRCTDialects",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TranslateLib",
+        "@llvm-project//mlir:EmitCDialect",
+        "@llvm-project//llvm:Core",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
 # Firtool library
 circt_cc_library(
     name = "CIRCTFirtool",
@@ -1921,6 +2148,7 @@ circt_cc_library(
         ":CIRCTSupport",
         ":CIRCTDialects",
         ":CIRCTTransforms",
+        ":CIRCTConversion",
         ":CIRCTTargetDebugInfo",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
@@ -1953,9 +2181,11 @@ circt_cc_binary(
     deps = [
         ":CIRCTDialects",
         ":CIRCTSupport",
+        ":CIRCTConversion",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BuiltinToLLVMIRTranslation",
         "@llvm-project//mlir:ControlFlowDialect",
+        "@llvm-project//mlir:ExecutionEngine",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:FuncExtensions",
         "@llvm-project//mlir:IndexDialect",
@@ -1963,7 +2193,7 @@ circt_cc_binary(
         "@llvm-project//mlir:LLVMToLLVMIRTranslation",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:SCFDialect",
-        "@llvm-project//mlir:TargetLLVMIRExport",
+        "@llvm-project//mlir:TargetLLVM",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -1992,8 +2222,10 @@ circt_cc_binary(
         "tools/circt-bmc/*.cpp",
     ]),
     deps = [
+        ":CIRCTConversion",
         ":CIRCTDialects",
         ":CIRCTSupport",
+        ":CIRCTBMCTransforms",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BuiltinToLLVMIRTranslation",
         "@llvm-project//mlir:FuncDialect",
@@ -2002,8 +2234,8 @@ circt_cc_binary(
         "@llvm-project//mlir:LLVMIRTransforms",
         "@llvm-project//mlir:LLVMToLLVMIRTranslation",
         "@llvm-project//mlir:SMTDialect",
-        "@llvm-project//mlir:TargetLLVMIRExport",
-        "@llvm-project//mlir:ExportSMTLIB",
+        "@llvm-project//mlir:TargetLLVM",
+        "@llvm-project//mlir:TargetSMTLIB",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2032,8 +2264,10 @@ circt_cc_binary(
         "tools/circt-lec/*.cpp",
     ]),
     deps = [
+        ":CIRCTConversion",
         ":CIRCTDialects",
         ":CIRCTSupport",
+        ":CIRCTLECTransforms",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BuiltinToLLVMIRTranslation",
         "@llvm-project//mlir:FuncDialect",
@@ -2042,8 +2276,8 @@ circt_cc_binary(
         "@llvm-project//mlir:LLVMIRTransforms",
         "@llvm-project//mlir:LLVMToLLVMIRTranslation",
         "@llvm-project//mlir:SMTDialect",
-        "@llvm-project//mlir:TargetLLVMIRExport",
-        "@llvm-project//mlir:ExportSMTLIB",
+        "@llvm-project//mlir:TargetLLVM",
+        "@llvm-project//mlir:TargetSMTLIB",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2059,13 +2293,14 @@ circt_cc_binary(
         ":CIRCTSupport",
         "@llvm-project//mlir:Analysis",
         "@llvm-project//mlir:Dialect",
-        "@llvm-project//mlir:LspServerLib",
+        "@llvm-project//mlir:MlirLspServerLib",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Transforms",
         "@llvm-project//mlir:TransformUtils",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:AllPassesAndDialects",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2080,6 +2315,11 @@ circt_cc_binary(
         ":CIRCTDialects",
         ":CIRCTSupport",
         ":CIRCTTransforms",
+        ":CIRCTConversion",
+        ":CIRCTBMCTransforms",
+        ":CIRCTLECTransforms",
+        ":CIRCTBMCPassIncGen",
+        ":CIRCTLECPassIncGen",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:MemRefDialect",
@@ -2093,6 +2333,7 @@ circt_cc_binary(
         "@llvm-project//mlir:FuncExtensions",
         "@llvm-project//mlir:VectorDialect",
         "@llvm-project//mlir:IndexDialect",
+        "@llvm-project//mlir:ConversionPasses",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2111,7 +2352,7 @@ circt_cc_binary(
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:Transforms",
-        "@llvm-project//mlir:ReduceLib",
+        "@llvm-project//mlir:MlirReduceLib",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2125,6 +2366,9 @@ circt_cc_binary(
     deps = [
         ":CIRCTDialects",
         ":CIRCTSupport",
+        ":CIRCTSynthesis",
+        ":CIRCTTransforms",
+        ":CIRCTConversion",
         "@llvm-project//mlir:BytecodeWriter",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Parser",
@@ -2141,6 +2385,7 @@ circt_cc_binary(
     deps = [
         ":CIRCTDialects",
         ":CIRCTSupport",
+        ":CIRCTConversion",
         "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:ControlFlowDialect",
@@ -2163,7 +2408,9 @@ circt_cc_binary(
     deps = [
         ":CIRCTDialects",
         ":CIRCTSupport",
-        "@llvm-project//mlir:ExportSMTLIB",
+        ":CIRCTTargetDebugInfo",
+        ":CIRCTExportSystemC",
+        "@llvm-project//mlir:TargetSMTLIB",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TranslateLib",
@@ -2185,6 +2432,7 @@ circt_cc_binary(
         "@llvm-project//mlir:BytecodeWriter",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TransformDialect",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2219,6 +2467,7 @@ circt_cc_binary(
         ":CIRCTDialects",
         ":CIRCTSupport",
         ":CIRCTTransforms",
+        ":CIRCTConversion",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:MemRefDialect",
@@ -2242,6 +2491,7 @@ circt_cc_binary(
         ":CIRCTDialects",
         ":CIRCTSupport",
         ":CIRCTTransforms",
+        ":CIRCTConversion",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:MemRefDialect",
@@ -2264,6 +2514,7 @@ circt_cc_binary(
     deps = [
         ":CIRCTDialects",
         ":CIRCTSupport",
+        ":CIRCTConversion",
         "@llvm-project//mlir:BytecodeReader",
         "@llvm-project//mlir:BytecodeWriter",
         "@llvm-project//mlir:Parser",
@@ -2305,6 +2556,20 @@ circt_cc_binary(
     deps = [
         ":CIRCTDialects",
         ":CIRCTSupport",
+        "@llvm-project//mlir:mlir-lsp-server",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+# circt-rtl-sim binary
+circt_cc_binary(
+    name = "circt-rtl-sim",
+    srcs = glob([
+        "tools/circt-rtl-sim/*.cpp",
+    ]),
+    deps = [
+        ":CIRCTDialects",
+        ":CIRCTSupport",
         "@llvm-project//llvm:Support",
     ],
 )
@@ -2313,7 +2578,7 @@ circt_cc_binary(
 gentbl_cc_library(
     name = "CIRCTBMCPassIncGen",
     tbl_outs = {
-        "include/circt/Tools/circt-bmc/Passes.h.inc": ["-gen-pass-decls"],
+        "include/circt/Tools/circt-bmc/Passes.h.inc": ["-gen-pass-decls", "-name", "BMCTransforms"],
     },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "include/circt/Tools/circt-bmc/Passes.td",
@@ -2326,7 +2591,7 @@ gentbl_cc_library(
 gentbl_cc_library(
     name = "CIRCTLECPassIncGen",
     tbl_outs = {
-        "include/circt/Tools/circt-lec/Passes.h.inc": ["-gen-pass-decls"],
+        "include/circt/Tools/circt-lec/Passes.h.inc": ["-gen-pass-decls", "-name", "LECTransforms"],
     },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "include/circt/Tools/circt-lec/Passes.td",
