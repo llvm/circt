@@ -1,0 +1,1963 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("//utils/bazel:build_defs.bzl", "circt_cc_library", "circt_cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# CIRCT Types td files
+td_library(
+    name = "CIRCTTypesTdFiles",
+    srcs = ["include/circt/Types.td"],
+    includes = ["include"],
+    deps = [
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# Support td files
+td_library(
+    name = "CIRCTSupportTdFiles",
+    srcs = glob([
+        "include/circt/Support/*.td",
+    ]),
+    includes = ["include"],
+)
+
+# Emit dialect td files
+td_library(
+    name = "CIRCTEmitTdFiles",
+    srcs = glob([
+        "include/circt/Dialect/Emit/*.td",
+        "include/circt/Dialect/Emit/**/*.td",
+    ]),
+    includes = ["include"],
+)
+
+gentbl_cc_library(
+    name = "CIRCTEmitIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Emit/Emit.h.inc": ["-gen-op-decls"],
+        "include/circt/Dialect/Emit/Emit.cpp.inc": ["-gen-op-defs"],
+        "include/circt/Dialect/Emit/EmitDialect.h.inc": ["-gen-dialect-decls"],
+        "include/circt/Dialect/Emit/EmitDialect.cpp.inc": ["-gen-dialect-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Emit/Emit.td",
+    deps = [
+        ":CIRCTEmitTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+    ],
+)
+
+# Emit Op Interfaces
+gentbl_cc_library(
+    name = "CIRCTEmitOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Emit/EmitOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Emit/EmitOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Emit/EmitOpInterfaces.td",
+    deps = [
+        ":CIRCTEmitTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# HW dialect td files  
+td_library(
+    name = "CIRCTHWTdFiles",
+    srcs = glob([
+        "include/circt/Dialect/HW/*.td",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTEmitTdFiles",
+        ":CIRCTSupportTdFiles",
+    ],
+)
+
+# HW Type Interfaces
+gentbl_cc_library(
+    name = "CIRCTHWTypeInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HW/HWTypeInterfaces.h.inc": ["-gen-type-interface-decls"],
+        "include/circt/Dialect/HW/HWTypeInterfaces.cpp.inc": ["-gen-type-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HW/HWTypeInterfaces.td",
+    deps = [
+        ":CIRCTHWTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# FIRRTL Op Interfaces
+gentbl_cc_library(
+    name = "CIRCTFIRRTLOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# FIRRTL Type Interfaces
+gentbl_cc_library(
+    name = "CIRCTFIRRTLTypeInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h.inc": ["-gen-type-interface-decls"],
+        "include/circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.cpp.inc": ["-gen-type-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# HW Op Interfaces
+gentbl_cc_library(
+    name = "CIRCTHWOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HW/HWOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/HW/HWOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HW/HWOpInterfaces.td",
+    deps = [
+        ":CIRCTHWTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTHWIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HW/HW.h.inc": ["-gen-op-decls"],
+        "include/circt/Dialect/HW/HW.cpp.inc": ["-gen-op-defs"],
+        "include/circt/Dialect/HW/HWDialect.h.inc": ["-gen-dialect-decls"],
+        "include/circt/Dialect/HW/HWDialect.cpp.inc": ["-gen-dialect-defs"],
+        "include/circt/Dialect/HW/HWAttributes.h.inc": ["-gen-attrdef-decls"],
+        "include/circt/Dialect/HW/HWAttributes.cpp.inc": ["-gen-attrdef-defs"],
+        "include/circt/Dialect/HW/HWTypes.h.inc": ["-gen-typedef-decls"],
+        "include/circt/Dialect/HW/HWTypes.cpp.inc": ["-gen-typedef-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HW/HW.td",
+    deps = [
+        ":CIRCTHWTdFiles",
+        ":CIRCTHWEnumsIncGen",
+        ":CIRCTHWTypeInterfacesIncGen",
+        ":CIRCTHWOpInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:MemorySlotInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTHWEnumsIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HW/HWEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/HW/HWEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HW/HWEnums.td",
+    deps = [
+        ":CIRCTHWTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# HW canonicalization patterns
+gentbl_cc_library(
+    name = "CIRCTHWCanonicalizationIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HW/HWCanonicalization.cpp.inc": ["-gen-rewriters"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HW/HWCanonicalization.td",
+    deps = [
+        ":CIRCTHWTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+    ],
+)
+
+# Combined CIRCT Dialects td files to avoid circular dependencies
+td_library(
+    name = "CIRCTDialectsTdFiles",
+    srcs = glob([
+        "include/circt/Dialect/**/*.td",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTSupportTdFiles",
+        ":CIRCTHWTdFiles",
+        ":CIRCTTypesTdFiles",
+        ":CIRCTEmitTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# TableGen targets for all dialects
+gentbl_cc_library(
+    name = "CIRCTCombIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Comb/Comb.h.inc": ["-gen-op-decls", "-dialect=comb"],
+        "include/circt/Dialect/Comb/Comb.cpp.inc": ["-gen-op-defs", "-dialect=comb"],
+        "include/circt/Dialect/Comb/CombDialect.h.inc": ["-gen-dialect-decls", "-dialect=comb"],
+        "include/circt/Dialect/Comb/CombDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=comb"],
+        "include/circt/Dialect/Comb/CombEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Comb/CombEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Comb/Comb.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTSimIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Sim/Sim.h.inc": ["-gen-op-decls", "-dialect=sim"],
+        "include/circt/Dialect/Sim/Sim.cpp.inc": ["-gen-op-defs", "-dialect=sim"],
+        "include/circt/Dialect/Sim/SimDialect.h.inc": ["-gen-dialect-decls", "-dialect=sim"],
+        "include/circt/Dialect/Sim/SimDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=sim"],
+        "include/circt/Dialect/Sim/SimTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=sim"],
+        "include/circt/Dialect/Sim/SimTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=sim"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Sim/Sim.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTSimPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Sim/SimPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Sim/SimPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Seq interfaces from SeqOpInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTSeqOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Seq/SeqOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Seq/SeqOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Seq/SeqOpInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTSeqIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Seq/Seq.h.inc": ["-gen-op-decls", "-dialect=seq"],
+        "include/circt/Dialect/Seq/Seq.cpp.inc": ["-gen-op-defs", "-dialect=seq"],
+        "include/circt/Dialect/Seq/SeqDialect.h.inc": ["-gen-dialect-decls", "-dialect=seq"],
+        "include/circt/Dialect/Seq/SeqDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=seq"],
+        "include/circt/Dialect/Seq/SeqTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=seq"],
+        "include/circt/Dialect/Seq/SeqTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=seq"],
+        "include/circt/Dialect/Seq/SeqEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Seq/SeqEnums.cpp.inc": ["-gen-enum-defs"],
+        "include/circt/Dialect/Seq/SeqAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=seq"],
+        "include/circt/Dialect/Seq/SeqAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=seq"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Seq/Seq.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTSeqOpInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTLTLIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LTL/LTL.h.inc": ["-gen-op-decls", "-dialect=ltl"],
+        "include/circt/Dialect/LTL/LTL.cpp.inc": ["-gen-op-defs", "-dialect=ltl"],
+        "include/circt/Dialect/LTL/LTLDialect.h.inc": ["-gen-dialect-decls", "-dialect=ltl"],
+        "include/circt/Dialect/LTL/LTLDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=ltl"],
+        "include/circt/Dialect/LTL/LTLTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=ltl"],
+        "include/circt/Dialect/LTL/LTLTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=ltl"],
+        "include/circt/Dialect/LTL/LTLEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/LTL/LTLEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LTL/LTL.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTInteropIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Interop/Interop.h.inc": ["-gen-op-decls", "-dialect=interop"],
+        "include/circt/Dialect/Interop/Interop.cpp.inc": ["-gen-op-defs", "-dialect=interop"],
+        "include/circt/Dialect/Interop/InteropDialect.h.inc": ["-gen-dialect-decls", "-dialect=interop"],
+        "include/circt/Dialect/Interop/InteropDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=interop"],
+        "include/circt/Dialect/Interop/InteropEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Interop/InteropEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Interop/Interop.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTSVIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SV/SV.h.inc": ["-gen-op-decls", "-dialect=sv"],
+        "include/circt/Dialect/SV/SV.cpp.inc": ["-gen-op-defs", "-dialect=sv"],
+        "include/circt/Dialect/SV/SVDialect.h.inc": ["-gen-dialect-decls", "-dialect=sv"],
+        "include/circt/Dialect/SV/SVDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=sv"],
+        "include/circt/Dialect/SV/SVTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=sv"],
+        "include/circt/Dialect/SV/SVTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=sv"],
+        "include/circt/Dialect/SV/SVEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/SV/SVEnums.cpp.inc": ["-gen-enum-defs"],
+        "include/circt/Dialect/SV/SVAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=sv"],
+        "include/circt/Dialect/SV/SVAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=sv"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SV/SV.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTFIRRTLIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FIRRTL/FIRRTL.h.inc": ["-gen-op-decls", "-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTL.cpp.inc": ["-gen-op-defs", "-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTLDialect.h.inc": ["-gen-dialect-decls", "-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTLDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTLTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTLTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTLEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/FIRRTL/FIRRTLEnums.cpp.inc": ["-gen-enum-defs"],
+        "include/circt/Dialect/FIRRTL/FIRRTLAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=firrtl"],
+        "include/circt/Dialect/FIRRTL/FIRRTLAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=firrtl"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FIRRTL/FIRRTL.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTFIRRTLOpInterfacesIncGen",
+        ":CIRCTFIRRTLTypeInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTOMIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/OM/OM.h.inc": ["-gen-op-decls", "-dialect=om"],
+        "include/circt/Dialect/OM/OM.cpp.inc": ["-gen-op-defs", "-dialect=om"],
+        "include/circt/Dialect/OM/OMDialect.h.inc": ["-gen-dialect-decls", "-dialect=om"],
+        "include/circt/Dialect/OM/OMDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=om"],
+        "include/circt/Dialect/OM/OMTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=om"],
+        "include/circt/Dialect/OM/OMTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=om"],
+        "include/circt/Dialect/OM/OMAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=om"],
+        "include/circt/Dialect/OM/OMAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=om"],
+        "include/circt/Dialect/OM/OMEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/OM/OMEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/OM/OM.td",
+    deps = [
+        ":CIRCTOMOpInterfacesIncGen",
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTOMOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/OM/OMOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/OM/OMOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/OM/OMOpInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# Calyx interfaces from CalyxInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTCalyxInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Calyx/CalyxInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Calyx/CalyxInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Calyx/CalyxInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTCalyxIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Calyx/Calyx.h.inc": ["-gen-op-decls", "-dialect=calyx"],
+        "include/circt/Dialect/Calyx/Calyx.cpp.inc": ["-gen-op-defs", "-dialect=calyx"],
+        "include/circt/Dialect/Calyx/CalyxDialect.h.inc": ["-gen-dialect-decls", "-dialect=calyx"],
+        "include/circt/Dialect/Calyx/CalyxDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=calyx"],
+        "include/circt/Dialect/Calyx/CalyxEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Calyx/CalyxEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Calyx/Calyx.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTCalyxInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+    ],
+)
+
+# Calyx passes
+gentbl_cc_library(
+    name = "CIRCTCalyxPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Calyx/CalyxPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Calyx/CalyxPasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Handshake interfaces from HandshakeInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTHandshakeInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Handshake/HandshakeInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Handshake/HandshakeInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Handshake/HandshakeInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTHandshakeIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Handshake/Handshake.h.inc": ["-gen-op-decls", "-dialect=handshake"],
+        "include/circt/Dialect/Handshake/Handshake.cpp.inc": ["-gen-op-defs", "-dialect=handshake"],
+        "include/circt/Dialect/Handshake/HandshakeDialect.h.inc": ["-gen-dialect-decls", "-dialect=handshake"],
+        "include/circt/Dialect/Handshake/HandshakeDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=handshake"],
+        "include/circt/Dialect/Handshake/HandshakeEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Handshake/HandshakeEnums.cpp.inc": ["-gen-enum-defs"],
+        "include/circt/Dialect/Handshake/HandshakeAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=handshake"],
+        "include/circt/Dialect/Handshake/HandshakeAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=handshake"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Handshake/Handshake.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTHandshakeInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+    ],
+)
+
+# Handshake passes
+gentbl_cc_library(
+    name = "CIRCTHandshakePassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Handshake/HandshakePasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Handshake/HandshakePasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# LoopSchedule dialect
+gentbl_cc_library(
+    name = "CIRCTLoopScheduleIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LoopSchedule/LoopSchedule.h.inc": ["-gen-op-decls"],
+        "include/circt/Dialect/LoopSchedule/LoopSchedule.cpp.inc": ["-gen-op-defs"],
+        "include/circt/Dialect/LoopSchedule/LoopScheduleDialect.h.inc": ["-gen-dialect-decls"],
+        "include/circt/Dialect/LoopSchedule/LoopScheduleDialect.cpp.inc": ["-gen-dialect-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LoopSchedule/LoopSchedule.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+    ],
+)
+
+# ESI dialect td files
+td_library(
+    name = "CIRCTESITdFiles",
+    srcs = glob([
+        "include/circt/Dialect/ESI/*.td",
+        "include/circt/Dialect/ESI/**/*.td",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+# ESI dialect
+gentbl_cc_library(
+    name = "CIRCTESIIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/ESI/ESI.h.inc": ["-gen-op-decls"],
+        "include/circt/Dialect/ESI/ESI.cpp.inc": ["-gen-op-defs"],
+        "include/circt/Dialect/ESI/ESIDialect.h.inc": ["-gen-dialect-decls", "-dialect=esi"],
+        "include/circt/Dialect/ESI/ESIDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=esi"],
+        "include/circt/Dialect/ESI/ESITypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=esi"],
+        "include/circt/Dialect/ESI/ESITypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=esi"],
+        "include/circt/Dialect/ESI/ESIEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/ESI/ESIEnums.cpp.inc": ["-gen-enum-defs"],
+        "include/circt/Dialect/ESI/ESIAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=esi"],
+        "include/circt/Dialect/ESI/ESIAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=esi"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/ESI/ESI.td",
+    deps = [
+        ":CIRCTESIInterfacesIncGen",
+        ":CIRCTESITdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTESIInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/ESI/ESIInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/ESI/ESIInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/ESI/ESIInterfaces.td",
+    deps = [
+        ":CIRCTESITdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# ESI passes
+gentbl_cc_library(
+    name = "CIRCTESIPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/ESI/ESIPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/ESI/ESIPasses.td",
+    deps = [
+        ":CIRCTESITdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Verif dialect
+# Verif interfaces from VerifOpInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTVerifOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Verif/VerifOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Verif/VerifOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Verif/VerifOpInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTVerifIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Verif/Verif.h.inc": ["-gen-op-decls"],
+        "include/circt/Dialect/Verif/Verif.cpp.inc": ["-gen-op-defs"],
+        "include/circt/Dialect/Verif/VerifDialect.h.inc": ["-gen-dialect-decls", "-dialect=verif"],
+        "include/circt/Dialect/Verif/VerifDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=verif"],
+        "include/circt/Dialect/Verif/VerifEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Verif/VerifEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Verif/Verif.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTVerifOpInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+# FIRRTL passes
+gentbl_cc_library(
+    name = "CIRCTFIRRTLPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FIRRTL/Passes.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FIRRTL/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Seq passes
+gentbl_cc_library(
+    name = "CIRCTSeqPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Seq/SeqPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Seq/SeqPasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Verif passes
+gentbl_cc_library(
+    name = "CIRCTVerifPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Verif/Passes.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Verif/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Moore dialect
+gentbl_cc_library(
+    name = "CIRCTMooreIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Moore/Moore.h.inc": ["-gen-op-decls", "-dialect=moore"],
+        "include/circt/Dialect/Moore/Moore.cpp.inc": ["-gen-op-defs", "-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreDialect.h.inc": ["-gen-dialect-decls", "-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=moore"],
+        "include/circt/Dialect/Moore/MooreEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Moore/MooreEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Moore/Moore.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:MemorySlotInterfacesTdFiles",
+    ],
+)
+
+# Moore passes
+gentbl_cc_library(
+    name = "CIRCTMoorePassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Moore/MoorePasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Moore/MoorePasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# SV passes
+gentbl_cc_library(
+    name = "CIRCTSVPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SV/SVPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SV/SVPasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# DC passes
+gentbl_cc_library(
+    name = "CIRCTDCPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/DC/DCPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/DC/DCPasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# HW passes
+gentbl_cc_library(
+    name = "CIRCTHWPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HW/Passes.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HW/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# MSFT dialect
+gentbl_cc_library(
+    name = "CIRCTMSFTOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/MSFT/MSFTOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/MSFT/MSFTOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/MSFT/MSFTOpInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTMSFTIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/MSFT/MSFT.h.inc": ["-gen-op-decls", "-dialect=msft"],
+        "include/circt/Dialect/MSFT/MSFT.cpp.inc": ["-gen-op-defs", "-dialect=msft"],
+        "include/circt/Dialect/MSFT/MSFTDialect.h.inc": ["-gen-dialect-decls", "-dialect=msft"],
+        "include/circt/Dialect/MSFT/MSFTDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=msft"],
+        "include/circt/Dialect/MSFT/MSFTAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=msft"],
+        "include/circt/Dialect/MSFT/MSFTAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=msft"],
+        "include/circt/Dialect/MSFT/MSFTEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/MSFT/MSFTEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/MSFT/MSFT.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTMSFTOpInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# OM passes
+gentbl_cc_library(
+    name = "CIRCTOMPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/OM/OMPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/OM/OMPasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Arc interfaces from ArcInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTArcInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Arc/ArcInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Arc/ArcInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Arc/ArcInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:CallInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTArcIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Arc/Arc.h.inc": ["-gen-op-decls", "-dialect=arc"],
+        "include/circt/Dialect/Arc/Arc.cpp.inc": ["-gen-op-defs", "-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcDialect.h.inc": ["-gen-dialect-decls", "-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=arc"],
+        "include/circt/Dialect/Arc/ArcEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Arc/ArcEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Arc/Arc.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTArcInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTDebugIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Debug/Debug.h.inc": ["-gen-op-decls"],
+        "include/circt/Dialect/Debug/Debug.cpp.inc": ["-gen-op-defs"],
+        "include/circt/Dialect/Debug/DebugDialect.h.inc": ["-gen-dialect-decls"],
+        "include/circt/Dialect/Debug/DebugDialect.cpp.inc": ["-gen-dialect-defs"],
+        "include/circt/Dialect/Debug/DebugTypes.h.inc": ["-gen-typedef-decls"],
+        "include/circt/Dialect/Debug/DebugTypes.cpp.inc": ["-gen-typedef-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Debug/Debug.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTAIGIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/AIG/AIG.h.inc": ["-gen-op-decls", "-dialect=aig"],
+        "include/circt/Dialect/AIG/AIG.cpp.inc": ["-gen-op-defs", "-dialect=aig"],
+        "include/circt/Dialect/AIG/AIGDialect.h.inc": ["-gen-dialect-decls", "-dialect=aig"],
+        "include/circt/Dialect/AIG/AIGDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=aig"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/AIG/AIG.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTAIGPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/AIG/AIGPasses.h.inc": ["-gen-pass-decls"],
+        "include/circt/Dialect/AIG/AIGPassesEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/AIG/AIGPassesEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/AIG/AIGPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTArcPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Arc/ArcPasses.h.inc": ["-gen-pass-decls"],
+        "include/circt/Dialect/Arc/ArcPassesEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Arc/ArcPassesEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Arc/ArcPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTMSFTPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/MSFT/MSFTPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/MSFT/MSFTPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTLTLFoldsIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LTL/LTLFolds.cpp.inc": ["-gen-rewriters"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LTL/LTL.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTKanagawaPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Kanagawa/KanagawaPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Kanagawa/KanagawaPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTCombPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Comb/Passes.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Comb/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTEmitPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Emit/EmitPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Emit/EmitPasses.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# FIRRTL TokenKinds helper library
+cc_library(
+    name = "FIRTokenKinds",
+    hdrs = ["lib/Dialect/FIRRTL/Import/FIRTokenKinds.def"],
+    strip_include_prefix = "lib/Dialect/FIRRTL/Import",
+    textual_hdrs = ["lib/Dialect/FIRRTL/Import/FIRTokenKinds.def"],
+)
+
+gentbl_cc_library(
+    name = "CIRCTFIRRTLCanonicalizationIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FIRRTL/FIRRTLCanonicalization.h.inc": ["-gen-rewriters"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FIRRTL/FIRRTLCanonicalization.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:BuiltinAttributeInterfacesIncGen",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+
+gentbl_cc_library(
+    name = "CIRCTHandshakeCanonicalizationIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Handshake/HandshakeCanonicalization.h.inc": ["-gen-rewriters"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Handshake/HandshakeCanonicalization.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:CallInterfacesTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTCHIRRTLIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FIRRTL/CHIRRTLDialect.h.inc": ["-gen-dialect-decls", "-dialect=chirrtl"],
+        "include/circt/Dialect/FIRRTL/CHIRRTLDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=chirrtl"],
+        "include/circt/Dialect/FIRRTL/CHIRRTLTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=chirrtl"],
+        "include/circt/Dialect/FIRRTL/CHIRRTLTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=chirrtl"],
+        "include/circt/Dialect/FIRRTL/CHIRRTL.h.inc": ["-gen-op-decls", "-dialect=chirrtl"],
+        "include/circt/Dialect/FIRRTL/CHIRRTL.cpp.inc": ["-gen-op-defs", "-dialect=chirrtl"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FIRRTL/CHIRRTL.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+# Batch create additional dialect TableGen targets
+# RTG interfaces from RTGInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTRTGOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/IR/RTGOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/RTG/IR/RTGOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/IR/RTGInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:BuiltinAttributeInterfacesIncGen",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTRTGTypeInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/IR/RTGTypeInterfaces.h.inc": ["-gen-type-interface-decls"],
+        "include/circt/Dialect/RTG/IR/RTGTypeInterfaces.cpp.inc": ["-gen-type-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/IR/RTGInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:BuiltinAttributeInterfacesIncGen",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTRTGAttrInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/IR/RTGAttrInterfaces.h.inc": ["-gen-attr-interface-decls"],
+        "include/circt/Dialect/RTG/IR/RTGAttrInterfaces.cpp.inc": ["-gen-attr-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/IR/RTGInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:BuiltinAttributeInterfacesIncGen",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTRTGPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/Transforms/RTGPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/Transforms/RTGPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTPipelineIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Pipeline/Pipeline.h.inc": ["-gen-op-decls", "-dialect=pipeline"],
+        "include/circt/Dialect/Pipeline/Pipeline.cpp.inc": ["-gen-op-defs", "-dialect=pipeline"],
+        "include/circt/Dialect/Pipeline/PipelineDialect.h.inc": ["-gen-dialect-decls", "-dialect=pipeline"],
+        "include/circt/Dialect/Pipeline/PipelineDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=pipeline"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Pipeline/Pipeline.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:CallInterfacesTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:BuiltinTypeInterfacesIncGen",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTPipelinePassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Pipeline/PipelinePasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Pipeline/PipelinePasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# RTG ISA Assembly interfaces from RTGISAAssemblyInterfaces.td
+gentbl_cc_library(
+    name = "CIRCTRTGISAAssemblyInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h.inc": ["-gen-attr-interface-decls"],
+        "include/circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.cpp.inc": ["-gen-attr-interface-defs"],
+        "include/circt/Dialect/RTG/IR/RTGISAAssemblyTypeInterfaces.h.inc": ["-gen-type-interface-decls"],
+        "include/circt/Dialect/RTG/IR/RTGISAAssemblyTypeInterfaces.cpp.inc": ["-gen-type-interface-defs"],
+        "include/circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+    ],
+)
+
+# RTG attributes from RTGAttributes.td
+gentbl_cc_library(
+    name = "CIRCTRTGAttributesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/IR/RTGAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=rtg"],
+        "include/circt/Dialect/RTG/IR/RTGAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=rtg"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/IR/RTGAttributes.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTRTGOpInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+    ],
+)
+
+# Main RTG dialect
+gentbl_cc_library(
+    name = "CIRCTRTGIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTG/IR/RTG.h.inc": ["-gen-op-decls", "-dialect=rtg"],
+        "include/circt/Dialect/RTG/IR/RTG.cpp.inc": ["-gen-op-defs", "-dialect=rtg"],
+        "include/circt/Dialect/RTG/IR/RTGDialect.h.inc": ["-gen-dialect-decls", "-dialect=rtg"],
+        "include/circt/Dialect/RTG/IR/RTGDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=rtg"],
+        "include/circt/Dialect/RTG/IR/RTGTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=rtg"],
+        "include/circt/Dialect/RTG/IR/RTGTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=rtg"],
+
+        "include/circt/Dialect/RTG/IR/RTGEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/RTG/IR/RTGEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTG/IR/RTG.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTFSMIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FSM/FSM.h.inc": ["-gen-op-decls", "-dialect=fsm"],
+        "include/circt/Dialect/FSM/FSM.cpp.inc": ["-gen-op-defs", "-dialect=fsm"],
+        "include/circt/Dialect/FSM/FSMDialect.h.inc": ["-gen-dialect-decls", "-dialect=fsm"],
+        "include/circt/Dialect/FSM/FSMDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=fsm"],
+        "include/circt/Dialect/FSM/FSMTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=fsm"],
+        "include/circt/Dialect/FSM/FSMTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=fsm"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FSM/FSM.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTFSMPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/FSM/Passes.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/FSM/Passes.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTSSPIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SSP/SSP.h.inc": ["-gen-op-decls", "-dialect=ssp"],
+        "include/circt/Dialect/SSP/SSP.cpp.inc": ["-gen-op-defs", "-dialect=ssp"],
+        "include/circt/Dialect/SSP/SSPDialect.h.inc": ["-gen-dialect-decls", "-dialect=ssp"],
+        "include/circt/Dialect/SSP/SSPDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=ssp"],
+        "include/circt/Dialect/SSP/SSPAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=ssp"],
+        "include/circt/Dialect/SSP/SSPAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=ssp"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SSP/SSP.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTSSPPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SSP/SSPPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SSP/SSPPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTLLHDIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LLHD/IR/LLHD.h.inc": ["-gen-op-decls", "-dialect=llhd"],
+        "include/circt/Dialect/LLHD/IR/LLHD.cpp.inc": ["-gen-op-defs", "-dialect=llhd"],
+        "include/circt/Dialect/LLHD/IR/LLHDDialect.h.inc": ["-gen-dialect-decls", "-dialect=llhd"],
+        "include/circt/Dialect/LLHD/IR/LLHDDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=llhd"],
+        "include/circt/Dialect/LLHD/IR/LLHDTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=llhd"],
+        "include/circt/Dialect/LLHD/IR/LLHDTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=llhd"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LLHD/IR/LLHD.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:CallInterfacesTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:MemorySlotInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTLLHDEnumsIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LLHD/IR/LLHDEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LLHD/IR/LLHD.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:CallInterfacesTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:MemorySlotInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTLLHDAttributesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LLHD/IR/LLHDAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=llhd"],
+        "include/circt/Dialect/LLHD/IR/LLHDAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=llhd"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LLHD/IR/LLHD.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:CallInterfacesTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:MemorySlotInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTLLHDPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/LLHD/Transforms/LLHDPasses.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTHWArithIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HWArith/HWArith.h.inc": ["-gen-op-decls", "-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArith.cpp.inc": ["-gen-op-defs", "-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithDialect.h.inc": ["-gen-dialect-decls", "-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=hwarith"],
+        "include/circt/Dialect/HWArith/HWArithEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/HWArith/HWArithEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HWArith/HWArith.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTHWArithCanonicalizationIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/HWArith/HWArithCanonicalizations.h.inc": ["-gen-rewriters"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/HWArith/HWArithCanonicalizations.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTDCIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/DC/DC.h.inc": ["-gen-op-decls", "-dialect=dc"],
+        "include/circt/Dialect/DC/DC.cpp.inc": ["-gen-op-defs", "-dialect=dc"],
+        "include/circt/Dialect/DC/DCDialect.h.inc": ["-gen-dialect-decls", "-dialect=dc"],
+        "include/circt/Dialect/DC/DCDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=dc"],
+        "include/circt/Dialect/DC/DCTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=dc"],
+        "include/circt/Dialect/DC/DCTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=dc"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/DC/DC.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+    ],
+)
+
+# Add remaining dialects in batch
+gentbl_cc_library(
+    name = "CIRCTDatapathIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Datapath/Datapath.h.inc": ["-gen-op-decls", "-dialect=datapath"],
+        "include/circt/Dialect/Datapath/Datapath.cpp.inc": ["-gen-op-defs", "-dialect=datapath"],
+        "include/circt/Dialect/Datapath/DatapathDialect.h.inc": ["-gen-dialect-decls", "-dialect=datapath"],
+        "include/circt/Dialect/Datapath/DatapathDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=datapath"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Datapath/Datapath.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
+    ],
+)
+
+# Kanagawa dialect
+gentbl_cc_library(
+    name = "CIRCTKanagawaInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Kanagawa/KanagawaInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Kanagawa/KanagawaInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Kanagawa/KanagawaInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "CIRCTKanagawaIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/Kanagawa/Kanagawa.h.inc": ["-gen-op-decls", "-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/Kanagawa.cpp.inc": ["-gen-op-defs", "-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaDialect.h.inc": ["-gen-dialect-decls", "-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=kanagawa"],
+        "include/circt/Dialect/Kanagawa/KanagawaEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/Kanagawa/KanagawaEnums.cpp.inc": ["-gen-enum-defs"],
+        "include/circt/Dialect/Kanagawa/KanagawaOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/Kanagawa/KanagawaOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/Kanagawa/Kanagawa.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        ":CIRCTKanagawaInterfacesIncGen",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+    ],
+)
+
+# SystemC dialect
+gentbl_cc_library(
+    name = "CIRCTSystemCIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SystemC/SystemC.h.inc": ["-gen-op-decls", "-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemC.cpp.inc": ["-gen-op-defs", "-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCDialect.h.inc": ["-gen-dialect-decls", "-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=systemc"],
+        "include/circt/Dialect/SystemC/SystemCEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/SystemC/SystemCEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SystemC/SystemC.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:FunctionInterfacesTdFiles",
+        "@llvm-project//mlir:ControlFlowInterfacesTdFiles",
+        "@llvm-project//mlir:EmitCTdFiles",
+    ],
+)
+
+# SystemC Op Interfaces
+gentbl_cc_library(
+    name = "CIRCTSystemCOpInterfacesIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SystemC/SystemCOpInterfaces.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Dialect/SystemC/SystemCOpInterfaces.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SystemC/SystemCOpInterfaces.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# SystemC passes
+gentbl_cc_library(
+    name = "CIRCTSystemCPassIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/SystemC/Passes.h.inc": ["-gen-pass-decls"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/SystemC/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# RTGTest dialect
+gentbl_cc_library(
+    name = "CIRCTRTGTestIncGen",
+    tbl_outs = {
+        "include/circt/Dialect/RTGTest/IR/RTGTest.h.inc": ["-gen-op-decls", "-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTest.cpp.inc": ["-gen-op-defs", "-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestDialect.h.inc": ["-gen-dialect-decls", "-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestDialect.cpp.inc": ["-gen-dialect-defs", "-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestTypes.h.inc": ["-gen-typedef-decls", "-typedefs-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestTypes.cpp.inc": ["-gen-typedef-defs", "-typedefs-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestAttributes.h.inc": ["-gen-attrdef-decls", "-attrdefs-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestAttributes.cpp.inc": ["-gen-attrdef-defs", "-attrdefs-dialect=rtgtest"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestEnums.h.inc": ["-gen-enum-decls"],
+        "include/circt/Dialect/RTGTest/IR/RTGTestEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Dialect/RTGTest/IR/RTGTest.td",
+    deps = [
+        ":CIRCTDialectsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "InstanceGraphInterfaceIncGen",
+    tbl_outs = {
+        "include/circt/Support/InstanceGraphInterface.h.inc": ["-gen-op-interface-decls"],
+        "include/circt/Support/InstanceGraphInterface.cpp.inc": ["-gen-op-interface-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Support/InstanceGraphInterface.td",
+    deps = [
+        ":CIRCTSupportTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+# Create a script to get git information
+genrule(
+    name = "CIRCTVersionScript",
+    outs = ["get_version.sh"],
+    cmd = """
+cat > $@ << 'EOF'
+#!/bin/bash
+cd ../..
+if [ -d ".git" ]; then
+    GIT_HASH=$$(git rev-parse --short=12 HEAD 2>/dev/null || echo "unknown")
+    GIT_DATE=$$(git log -1 --format="%cd" --date=format:"%a %b %d %H:%M:%S %Y" 2>/dev/null || echo "unknown date")
+    echo "CIRCT [$$GIT_HASH] ($$GIT_DATE)"
+else
+    echo "CIRCT [unknown] (unknown date)"
+fi
+EOF
+chmod +x $@
+""",
+)
+
+# Generate Version.cpp
+genrule(
+    name = "CIRCTVersionGen", 
+    srcs = [":CIRCTVersionScript"],
+    outs = ["lib/Support/Version.cpp"],
+    cmd = """
+# Get version string from our script
+VERSION_STR="CIRCT [bazel-build] ($$(date '+%a %b %d %H:%M:%S %Y'))"
+
+cat > $@ << EOF
+#include "circt/Support/Version.h"
+
+const char *circt::getCirctVersion() { return "$$VERSION_STR"; }
+const char *circt::getCirctVersionComment() {
+  return "// Generated by $$VERSION_STR\\n";
+}
+EOF
+""",
+)
+
+# Support library
+circt_cc_library(
+    name = "CIRCTSupport",
+    srcs = glob([
+        "lib/Support/*.cpp",
+    ], exclude=[
+        "lib/Support/Version.cpp.in",
+    ]) + [
+        ":CIRCTVersionGen",
+    ],
+    hdrs = glob([
+        "include/circt/Support/*.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":InstanceGraphInterfaceIncGen",
+        "@llvm-project//mlir:IR", 
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Transforms",
+    ],
+)
+
+# Conversion passes
+gentbl_cc_library(
+    name = "CIRCTConversionPassIncGen",
+    tbl_outs = {
+        "include/circt/Conversion/Passes.h.inc": ["-gen-pass-decls", "-name", "CIRCTConversion"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Conversion/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+# Transforms passes  
+gentbl_cc_library(
+    name = "CIRCTTransformsPassIncGen",
+    tbl_outs = {
+        "include/circt/Transforms/Passes.h.inc": ["-gen-pass-decls", "-name", "CIRCTTransforms"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "include/circt/Transforms/Passes.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+        "@llvm-project//mlir:RewritePassBaseTdFiles",
+    ],
+)
+
+# Combined CIRCT Dialects library to avoid circular dependencies
+circt_cc_library(
+    name = "CIRCTDialects",
+    srcs = glob([
+        "lib/Dialect/**/*.cpp",
+        "lib/Reduce/**/*.cpp",
+        "lib/Analysis/**/*.cpp",
+        "lib/Conversion/**/*.cpp",
+    ], exclude=[
+        "lib/Conversion/ImportVerilog/**/*.cpp",
+        "lib/Dialect/ESI/runtime/**/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Dialect/**/*.h",
+        "include/circt/Reduce/**/*.h",
+        "include/circt/Analysis/**/*.h",
+        "include/circt/Conversion/**/*.h",
+        "include/circt/Scheduling/**/*.h",
+        "include/circt/Transforms/**/*.h",
+        "lib/Conversion/**/*.h",
+        "lib/Dialect/**/*.h",
+    ], exclude=[
+        "include/circt/Conversion/ImportVerilog/**/*.h",
+        "lib/Conversion/ImportVerilog/**/*.h",
+    ]) + [
+        "lib/Dialect/SV/ReservedWords.def",
+    ],
+    includes = [
+        "include",
+        "lib/Conversion/ExportVerilog",
+        "lib/Dialect/SV",
+    ],
+    deps = [
+        ":CIRCTHWIncGen",
+        ":CIRCTHWEnumsIncGen",
+        ":CIRCTHWPassIncGen",
+        ":CIRCTHWTypeInterfacesIncGen",
+        ":CIRCTHWOpInterfacesIncGen",
+        ":CIRCTHWArithIncGen",
+        ":CIRCTHWArithCanonicalizationIncGen",
+        ":CIRCTInteropIncGen",
+        ":CIRCTEmitIncGen",
+        ":CIRCTEmitOpInterfacesIncGen",
+        ":CIRCTEmitPassIncGen",
+        ":CIRCTHWCanonicalizationIncGen",
+        ":CIRCTCombIncGen",
+        ":CIRCTCombPassIncGen",
+        ":CIRCTSeqIncGen",
+        ":CIRCTSeqOpInterfacesIncGen",
+        ":CIRCTSeqPassIncGen",
+        ":CIRCTSimIncGen",
+        ":CIRCTSimPassIncGen",
+        ":CIRCTSVIncGen",
+        ":CIRCTSVPassIncGen",
+        ":CIRCTLTLIncGen",
+        ":CIRCTLTLFoldsIncGen",
+        ":CIRCTFIRRTLIncGen",
+        ":CIRCTFIRRTLOpInterfacesIncGen",
+        ":CIRCTFIRRTLTypeInterfacesIncGen",
+        ":CIRCTFIRRTLPassIncGen",
+        ":CIRCTFIRRTLCanonicalizationIncGen",
+        ":FIRTokenKinds",
+        ":CIRCTOMIncGen",
+        ":CIRCTOMOpInterfacesIncGen",
+        ":CIRCTOMPassIncGen",
+        ":CIRCTCalyxIncGen",
+        ":CIRCTCalyxInterfacesIncGen",
+        ":CIRCTCalyxPassIncGen",
+        ":CIRCTHandshakeIncGen",
+        ":CIRCTHandshakeInterfacesIncGen",
+        ":CIRCTHandshakePassIncGen",
+        ":CIRCTHandshakeCanonicalizationIncGen",
+        ":CIRCTLoopScheduleIncGen",
+        ":CIRCTESIIncGen",
+        ":CIRCTESIInterfacesIncGen",
+        ":CIRCTESIPassIncGen",
+        ":CIRCTVerifIncGen",
+        ":CIRCTVerifOpInterfacesIncGen",
+        ":CIRCTVerifPassIncGen",
+        ":CIRCTMooreIncGen",
+        ":CIRCTMoorePassIncGen",
+        ":CIRCTMSFTIncGen",
+        ":CIRCTMSFTOpInterfacesIncGen",
+        ":CIRCTMSFTPassIncGen",
+        ":CIRCTArcIncGen",
+        ":CIRCTArcInterfacesIncGen",
+        ":CIRCTArcPassIncGen",
+        ":CIRCTDebugIncGen",
+        ":CIRCTAIGIncGen",
+        ":CIRCTAIGPassIncGen",
+        ":CIRCTRTGIncGen",
+        ":CIRCTRTGAttributesIncGen",
+        ":CIRCTRTGOpInterfacesIncGen",
+        ":CIRCTRTGTypeInterfacesIncGen",
+        ":CIRCTRTGAttrInterfacesIncGen",
+        ":CIRCTRTGPassIncGen",
+        ":CIRCTRTGISAAssemblyInterfacesIncGen",
+        ":CIRCTPipelineIncGen",
+        ":CIRCTPipelinePassIncGen",
+        ":CIRCTFSMIncGen",
+        ":CIRCTFSMPassIncGen",
+        ":CIRCTSSPIncGen",
+        ":CIRCTSSPPassIncGen",
+        ":CIRCTLLHDIncGen",
+        ":CIRCTLLHDEnumsIncGen",
+        ":CIRCTLLHDAttributesIncGen",
+        ":CIRCTLLHDPassIncGen",
+        ":CIRCTDCIncGen",
+        ":CIRCTDCPassIncGen",
+        ":CIRCTCHIRRTLIncGen",
+        ":CIRCTDatapathIncGen",
+        ":CIRCTKanagawaIncGen",
+        ":CIRCTKanagawaInterfacesIncGen",
+        ":CIRCTKanagawaPassIncGen",
+        ":CIRCTSystemCIncGen",
+        ":CIRCTSystemCOpInterfacesIncGen",
+        ":CIRCTSystemCPassIncGen",
+        ":CIRCTRTGTestIncGen",
+        ":CIRCTConversionPassIncGen",
+        ":CIRCTTransformsPassIncGen",
+        ":CIRCTSupport",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:AffineAnalysis",
+        "@llvm-project//mlir:AffineUtils",
+        "@llvm-project//mlir:LLVMCommonConversion",
+        "@llvm-project//mlir:SMTDialect",
+        "@llvm-project//mlir:AffineToStandard",
+        "@llvm-project//mlir:ArithToLLVM",
+        "@llvm-project//mlir:ControlFlowToLLVM",
+        "@llvm-project//mlir:FuncToLLVM",
+        "@llvm-project//mlir:IndexToLLVM",
+        "@llvm-project//mlir:TranslateLib",
+        "@llvm-project//mlir:SCFToControlFlow",
+        "@llvm-project//mlir:EmitCDialect",
+        "@llvm-project//mlir:ReconcileUnrealizedCasts",
+    ],
+)
+
+circt_cc_library(
+    name = "CIRCTTransforms",
+    srcs = glob([
+        "lib/Transforms/*.cpp",
+        "lib/Transforms/**/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Transforms/*.h",
+        "include/circt/Transforms/**/*.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTTransformsPassIncGen",
+        ":CIRCTSupport",
+        ":CIRCTDialects",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Transforms",
+        "@llvm-project//mlir:AffineDialect",
+        "@llvm-project//mlir:LLVMCommonConversion",
+    ],
+)
+
+# Target library
+circt_cc_library(
+    name = "CIRCTTargetDebugInfo",
+    srcs = glob([
+        "lib/Target/DebugInfo/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Target/*.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTSupport",
+        ":CIRCTDialects",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TranslateLib",
+        "@llvm-project//llvm:Core",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+# Firtool library
+circt_cc_library(
+    name = "CIRCTFirtool",
+    srcs = glob([
+        "lib/Firtool/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/circt/Firtool/*.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":CIRCTSupport",
+        ":CIRCTDialects",
+        ":CIRCTTransforms",
+        ":CIRCTTargetDebugInfo",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Transforms",
+    ],
+)
+
+# Simple firtool binary
+circt_cc_binary(
+    name = "firtool",
+    srcs = glob([
+        "tools/firtool/*.cpp",
+    ]),
+    deps = [
+        ":CIRCTFirtool",
+        ":CIRCTDialects",
+        ":CIRCTSupport",
+        ":CIRCTTargetDebugInfo",
+        "@llvm-project//mlir:MlirOptLib",
+        "@llvm-project//llvm:Support",
+    ],
+)
+

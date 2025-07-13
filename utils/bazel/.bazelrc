@@ -1,0 +1,51 @@
+# CIRCT Bazel configuration file
+# Provides build configuration options similar to CMake
+
+# Default build configuration
+build --action_env=BAZEL_CXXOPTS=-std=c++17
+build --cxxopt=-std=c++17
+build --cxxopt=-fno-exceptions
+build --cxxopt=-fno-rtti
+
+# GNU source compatibility
+build --cxxopt=-D_GNU_SOURCE
+build --cxxopt=-D__STDC_CONSTANT_MACROS
+build --cxxopt=-D__STDC_FORMAT_MACROS
+build --cxxopt=-D__STDC_LIMIT_MACROS
+
+# Debug build configuration (similar to CMAKE_BUILD_TYPE=DEBUG)
+build:debug --cxxopt=-g
+build:debug --cxxopt=-O0
+build:debug --strip=never
+build:debug --copt=-DDEBUG
+
+# Release build configuration (similar to CMAKE_BUILD_TYPE=RELEASE)  
+build:release --cxxopt=-O3
+build:release --cxxopt=-DNDEBUG
+build:release --strip=always
+
+# Build with assertions enabled (similar to LLVM_ENABLE_ASSERTIONS=ON)
+build:assertions --cxxopt=-UNDEBUG
+build:assertions --cxxopt=-DMLIR_ENABLE_ASSERTIONS
+
+# Verbose output (similar to ninja -v)
+build:verbose --subcommands=pretty_print
+build:verbose --verbose_failures
+
+# Export compile commands (similar to CMAKE_EXPORT_COMPILE_COMMANDS=ON)
+build:compdb --aspects=@bazel_compdb//:aspects.bzl%compilation_database_aspect
+build:compdb --output_groups=compdb_files,default
+
+# Parallel build (similar to ninja -j)
+build --jobs=auto
+
+# Test configuration
+test --test_output=errors
+test --test_summary=short
+
+# Cache configuration
+build --disk_cache=~/.cache/bazel
+build --repository_cache=~/.cache/bazel/repo
+
+# Compatibility settings
+build --incompatible_enable_cc_toolchain_resolution 
