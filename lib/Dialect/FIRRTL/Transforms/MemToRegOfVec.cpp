@@ -430,9 +430,5 @@ struct MemToRegOfVecPass
       for (auto r : debugPorts)
         r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec.getResult()));
   }
-
-private:
-  bool replSeqMem;
-  bool ignoreReadEnable;
 };
 } // end anonymous namespace
