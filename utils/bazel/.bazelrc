@@ -1,7 +1,7 @@
-# CIRCT Bazel configuration file
-# Provides build configuration options similar to CMake
-
 # Default build configuration
+build --action_env=CC=/usr/bin/clang
+build --action_env=CXX=/usr/bin/clang++
+build --action_env=CCACHE_DISABLE=1 
 build --action_env=BAZEL_CXXOPTS=-std=c++17
 build --cxxopt=-std=c++17
 build --cxxopt=-fno-exceptions
@@ -48,4 +48,7 @@ build --disk_cache=~/.cache/bazel
 build --repository_cache=~/.cache/bazel/repo
 
 # Compatibility settings
-build --incompatible_enable_cc_toolchain_resolution 
+build --incompatible_enable_cc_toolchain_resolution
+
+# Sandbox Location configuration
+build --sandbox_base=/dev/shm
