@@ -2561,19 +2561,6 @@ circt_cc_binary(
     ],
 )
 
-# circt-rtl-sim binary
-circt_cc_binary(
-    name = "circt-rtl-sim",
-    srcs = glob([
-        "tools/circt-rtl-sim/*.cpp",
-    ]),
-    deps = [
-        ":CIRCTDialects",
-        ":CIRCTSupport",
-        "@llvm-project//llvm:Support",
-    ],
-)
-
 # CIRCT Tools passes
 gentbl_cc_library(
     name = "CIRCTBMCPassIncGen",

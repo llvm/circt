@@ -21,7 +21,6 @@ tools=(
     "circt-lsp-server"
     "circt-opt"
     "circt-reduce"
-    "circt-rtl-sim"
     "circt-synth"
     "circt-test"
     "circt-translate"

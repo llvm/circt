@@ -106,8 +106,3 @@ alias(
     name = "circt-verilog-lsp-server",
     actual = "@circt-project//:circt-verilog-lsp-server",
 )
-
-alias(
-    name = "circt-rtl-sim",
-    actual = "@circt-project//:circt-rtl-sim",
-) 
