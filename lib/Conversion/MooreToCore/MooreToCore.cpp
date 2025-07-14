@@ -604,29 +604,25 @@ struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
   LogicalResult
   matchAndRewrite(moore::StringConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    const auto str = op.getValue();
-    unsigned byteWidth = str.size() * 8;
     const auto resultType =
         typeConverter->convertType(op.getResult().getType());
-    if (const auto intType = mlir::dyn_cast<IntegerType>(resultType)) {
-      if (intType.getWidth() < byteWidth) {
-        return rewriter.notifyMatchFailure(op,
-                                           "invalid string constant type size");
-      }
-      // Zero-fill empty string constant to expected type size in bits.
-      if (byteWidth == 0) {
-        byteWidth = intType.getWidth();
-      }
-    } else {
+    const auto intType = mlir::dyn_cast<IntegerType>(resultType);
+    if (!intType) {
       return rewriter.notifyMatchFailure(op, "invalid string constant type");
     }
+
+    const auto str = op.getValue();
+    const unsigned byteWidth =
+        std::max(static_cast<size_t>(intType.getWidth()), str.size() * 8);
     APInt value(byteWidth, 0);
     for (size_t i = 0; i < str.size(); ++i) {
       const auto asciiChar = static_cast<uint8_t>(str[i]);
       value |= APInt(byteWidth, asciiChar) << (8 * (str.size() - 1 - i));
     }
+
+    const auto valueType = intType.get(rewriter.getContext(), byteWidth);
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-        op, resultType, rewriter.getIntegerAttr(resultType, value));
+        op, resultType, rewriter.getIntegerAttr(valueType, value));
     return success();
   }
 };

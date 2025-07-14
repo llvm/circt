@@ -10,7 +10,7 @@ func.func @invalidType() {
 // -----
 
 func.func @invalidStringContant() {
-  // expected-error @below {{failed to legalize operation 'moore.string_constant'}}
+  // expected-error @below {{hw.constant attribute bitwidth doesn't match return type}}
   %str = moore.string_constant "Test" : i8
 
   return
