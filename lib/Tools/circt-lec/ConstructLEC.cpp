@@ -35,7 +35,7 @@ struct ConstructLECPass
   void runOnOperation() override;
   hw::HWModuleOp lookupModule(StringRef name);
   Value constructMiter(OpBuilder builder, Location loc, hw::HWModuleOp moduleA,
-                       hw::HWModuleOp moduleB);
+                       hw::HWModuleOp moduleB, bool withResult);
 };
 } // namespace
 
@@ -69,10 +69,13 @@ hw::HWModuleOp ConstructLECPass::lookupModule(StringRef name) {
 
 Value ConstructLECPass::constructMiter(OpBuilder builder, Location loc,
                                        hw::HWModuleOp moduleA,
-                                       hw::HWModuleOp moduleB) {
+                                       hw::HWModuleOp moduleB,
+                                       bool withResult) {
+
   // Create the miter circuit that return equivalence result.
-  auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
-  Value areEquivalent = lecOp.getAreEquivalent();
+  auto lecOp =
+      builder.create<verif::LogicEquivalenceCheckingOp>(loc, withResult);
+
   builder.cloneRegionBefore(moduleA.getBody(), lecOp.getFirstCircuit(),
                             lecOp.getFirstCircuit().end());
   builder.cloneRegionBefore(moduleB.getBody(), lecOp.getSecondCircuit(),
@@ -97,7 +100,7 @@ Value ConstructLECPass::constructMiter(OpBuilder builder, Location loc,
   sortTopologically(&lecOp.getFirstCircuit().front());
   sortTopologically(&lecOp.getSecondCircuit().front());
 
-  return areEquivalent;
+  return withResult ? lecOp.getAreEquivalent() : Value{};
 }
 
 void ConstructLECPass::runOnOperation() {
@@ -121,7 +124,7 @@ void ConstructLECPass::runOnOperation() {
 
   // Only construct the miter with no additional insertions.
   if (insertMode == lec::InsertAdditionalModeEnum::None) {
-    constructMiter(builder, loc, moduleA, moduleB);
+    constructMiter(builder, loc, moduleA, moduleB, /*withResult*/ false);
     return;
   }
 
@@ -157,7 +160,9 @@ void ConstructLECPass::runOnOperation() {
   builder.createBlock(&entryFunc.getBody());
 
   // Create the miter circuit that returns equivalence result.
-  auto areEquivalent = constructMiter(builder, loc, moduleA, moduleB);
+  auto areEquivalent =
+      constructMiter(builder, loc, moduleA, moduleB, /*withResult*/ true);
+  assert(!!areEquivalent && "Expected LEC operation with result.");
 
   // TODO: we should find a more elegant way of reporting the result than
   // already inserting some LLVM here
