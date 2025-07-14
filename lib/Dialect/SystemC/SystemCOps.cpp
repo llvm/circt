@@ -857,7 +857,7 @@ void FuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   assert(type.getNumInputs() == argAttrs.size());
   mlir::call_interface_impl::addArgAndResultAttrs(
       odsBuilder, odsState, argAttrs,
-      /*resultAttrs=*/std::nullopt, FuncOp::getArgAttrsAttrName(odsState.name),
+      /*resultAttrs=*/{}, FuncOp::getArgAttrsAttrName(odsState.name),
       FuncOp::getResAttrsAttrName(odsState.name));
 }
 
