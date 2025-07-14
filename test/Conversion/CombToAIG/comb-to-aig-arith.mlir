@@ -84,9 +84,9 @@ hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
 // ALLOW_ADD-NEXT:    %[[AND2:.+]] = comb.and bin %[[XOR1]], %[[P_2_1]] : i1
 // ALLOW_ADD-NEXT:    %[[SUM_ROW:.+]] = comb.concat %[[XOR2]], %[[XOR0]], %[[P_0_0]] : i1, i1, i1
 // ALLOW_ADD-NEXT:    %[[CARRY_ROW:.+]] = comb.concat %[[AND0]], %false, %false : i1, i1, i1
-// ALLOW-ADD-NEXT:    %[[RESULT]] = comb.add bin %[[SUM_ROW]], %[[CARRY_ROW]] : i3
-// ALLOW-ADD-NEXT:    hw.output %[[RESULT]] : i3
-// ALLOW-ADD-NEXT:  }
+// ALLOW_ADD-NEXT:    %[[RESULT:.+]] = comb.add bin %[[SUM_ROW]], %[[CARRY_ROW]] : i3
+// ALLOW_ADD-NEXT:    hw.output %[[RESULT]] : i3
+// ALLOW_ADD-NEXT:  }
 hw.module @mul(in %lhs: i3, in %rhs: i3, out out: i3) {
   %0 = comb.mul %lhs, %rhs : i3
   hw.output %0 : i3
