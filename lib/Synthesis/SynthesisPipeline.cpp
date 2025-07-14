@@ -50,7 +50,7 @@ void circt::synthesis::buildAIGLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
 
-  pm.addPass(circt::hw::createHWAggregateToCombPass());
+  pm.addPass(circt::hw::createHWAggregateToComb());
   pm.addPass(circt::createConvertCombToAIG());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());

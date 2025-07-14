@@ -181,7 +181,3 @@ void HWAggregateToCombPass::runOnOperation() {
                                           std::move(patterns))))
     return signalPassFailure();
 }
-
-std::unique_ptr<Pass> circt::hw::createHWAggregateToCombPass() {
-  return std::make_unique<HWAggregateToCombPass>();
-}

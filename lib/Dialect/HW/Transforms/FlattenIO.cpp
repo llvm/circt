@@ -544,13 +544,9 @@ static bool flattenIO(ModuleOp module, bool recursive,
 namespace {
 
 class FlattenIOPass : public circt::hw::impl::FlattenIOBase<FlattenIOPass> {
-public:
-  FlattenIOPass(bool recursiveFlag, bool flattenExternFlag, char join) {
-    recursive = recursiveFlag;
-    flattenExtern = flattenExternFlag;
-    joinChar = join;
-  }
+  using Base::Base;
 
+public:
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (!flattenExtern) {
@@ -573,14 +569,3 @@ private:
   StringSet<> externModules;
 };
 } // namespace
-
-//===----------------------------------------------------------------------===//
-// Pass initialization
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<Pass> circt::hw::createFlattenIOPass(bool recursiveFlag,
-                                                     bool flattenExternFlag,
-                                                     char joinChar) {
-  return std::make_unique<FlattenIOPass>(recursiveFlag, flattenExternFlag,
-                                         joinChar);
-}

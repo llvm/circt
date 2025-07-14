@@ -306,7 +306,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   }
 
   // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespace());
 
   // Check OM object fields.
   pm.addPass(om::createVerifyObjectFieldsPass());
@@ -364,7 +364,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   }
 
   // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespace());
 
   // Check OM object fields.
   pm.addPass(om::createVerifyObjectFieldsPass());
@@ -403,7 +403,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
     pm.addPass(sv::createHWExportModuleHierarchyPass());
 
   // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespace());
 
   // Check OM object fields.
   pm.addPass(om::createVerifyObjectFieldsPass());
@@ -455,7 +455,7 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
                                          llvm::raw_ostream &os) {
   pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(circt::verif::createPrepareForFormalPass());
-  pm.addPass(circt::hw::createFlattenModulesPass());
+  pm.addPass(circt::hw::createFlattenModules());
   pm.addPass(circt::createConvertHWToBTOR2Pass(os));
   return success();
 }

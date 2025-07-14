@@ -281,7 +281,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   }
   if (shouldDedup)
     pm.addPass(arc::createDedupPass());
-  pm.addPass(hw::createFlattenModulesPass());
+  pm.addPass(hw::createFlattenModules());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 

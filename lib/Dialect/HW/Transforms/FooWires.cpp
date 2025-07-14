@@ -38,7 +38,3 @@ void FooWiresPass::runOnOperation() {
         wire.setName("foo_" + std::to_string(nWires++)); // Rename said wire
       });
 }
-
-std::unique_ptr<mlir::Pass> circt::hw::createFooWiresPass() {
-  return std::make_unique<FooWiresPass>();
-}
