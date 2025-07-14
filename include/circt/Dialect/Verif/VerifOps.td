@@ -243,7 +243,7 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
     The operation can return an boolean result that is `true` iff equivalence
     of the two circuits has been proven. The result can be omitted for use-cases
-    which do not allow further processing (e.g., SMTLib exporting).
+    which do not allow further processing (e.g., SMT-LIB exporting).
   }];
 
   let results = (outs Optional<I1>:$areEquivalent);
