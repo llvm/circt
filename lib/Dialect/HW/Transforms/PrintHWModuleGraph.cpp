@@ -29,7 +29,8 @@ using namespace hw;
 namespace {
 struct PrintHWModuleGraphPass
     : public circt::hw::impl::PrintHWModuleGraphBase<PrintHWModuleGraphPass> {
-  PrintHWModuleGraphPass(raw_ostream &os) : os(os) {}
+  using Base::Base;
+
   void runOnOperation() override {
     getOperation().walk([&](hw::HWModuleOp module) {
       // We don't really have any other way of forwarding draw arguments to the
@@ -38,13 +39,8 @@ struct PrintHWModuleGraphPass
       module->setAttr("dot_verboseEdges",
                       BoolAttr::get(module.getContext(), verboseEdges));
 
-      llvm::WriteGraph(os, module, /*ShortNames=*/false);
+      llvm::WriteGraph(llvm::errs(), module, /*ShortNames=*/false);
     });
   }
-  raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::hw::createPrintHWModuleGraphPass() {
-  return std::make_unique<PrintHWModuleGraphPass>(llvm::errs());
-}

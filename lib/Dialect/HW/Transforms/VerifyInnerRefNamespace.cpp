@@ -46,7 +46,3 @@ public:
 };
 
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::hw::createVerifyInnerRefNamespacePass() {
-  return std::make_unique<VerifyInnerRefNamespacePass>();
-}

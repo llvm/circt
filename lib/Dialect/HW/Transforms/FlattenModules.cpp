@@ -151,7 +151,3 @@ void FlattenModulesPass::runOnOperation() {
     }
   }
 }
-
-std::unique_ptr<Pass> circt::hw::createFlattenModulesPass() {
-  return std::make_unique<FlattenModulesPass>();
-}
