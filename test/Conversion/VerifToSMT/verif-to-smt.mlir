@@ -54,7 +54,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
   // CHECK: smt.yield [[FALSE]]
   // CHECK: smt.yield [[TRUE]]
   // CHECK: smt.yield [[V8]] :
-  %1 = verif.lec first {
+  %1 = verif.lec : i1 first {
   ^bb0(%arg1: i32, %arg2: i32):
     verif.yield %arg1, %arg2 : i32, i32
   } second {
@@ -67,7 +67,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
   // CHECK: [[V9:%.+]] = smt.declare_fun : !smt.bv<32>
   // CHECK: [[V10:%.+]] = smt.distinct [[V9]], [[V9]] : !smt.bv<32>
   // CHECK: smt.assert [[V10]]
-  %2 = verif.lec first {
+  %2 = verif.lec : i1  first {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
   } second {
@@ -75,7 +75,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
     verif.yield %arg1 : i32
   }
 
-  %3 = verif.lec first {
+  %3 = verif.lec : i1 first {
   ^bb0(%arg1: i32):
     verif.yield
   } second {
@@ -83,7 +83,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
     verif.yield
   }
 
-  %4 = verif.lec first {
+  verif.lec first {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
   } second {

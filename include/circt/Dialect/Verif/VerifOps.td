@@ -236,19 +236,29 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
     done by constructing a miter circuit and testing whether the result is
     satisfiable (can be non-zero for some input), or two canonical BDDs could be
     constructed and compared for identity, etc.
-    
+
     The number and types of the inputs and outputs of the two circuits (and thus
     also the block arguments and yielded values of both regions) have to match.
     Otherwise, the two should be considered trivially non-equivalent.
+
+    The operation can return an boolean result that is `true` iff equivalence
+    of the two circuits has been proven. The result can be omitted for use-cases
+    which do not allow further processing (e.g., SMTLib exporting).
   }];
 
-  let results = (outs I1:$areEquivalent);
+  let results = (outs Optional<I1>:$areEquivalent);
   let regions = (region SizedRegion<1>:$firstCircuit,
                         SizedRegion<1>:$secondCircuit);
 
   let assemblyFormat = [{
-    attr-dict `first` $firstCircuit `second` $secondCircuit
+    attr-dict (`:` type($areEquivalent)^)?
+    `first` $firstCircuit
+    `second` $secondCircuit
   }];
+
+  let builders = [OpBuilder<(ins "bool":$hasResult), [{
+      build($_builder, $_state, hasResult ? $_builder.getI1Type() : Type{} );
+    }]>];
 
   let hasRegionVerifier = true;
 }
