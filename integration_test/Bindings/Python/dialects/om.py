@@ -33,7 +33,7 @@ with Context() as ctx, Location.unknown():
       om.class.fields %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
     }
 
-    om.class @Test(%param: !om.integer) -> (field: !om.integer, child: !om.class.type<@Child>, reference: !om.ref, list: !om.list<!om.string>, tuple: tuple<!om.list<!om.string>, !om.integer>, nest: !om.class.type<@Nest>, map: !om.map<!om.string, !om.integer>, map_create: !om.map<!om.string, !om.integer>, true: i1, false: i1) {
+    om.class @Test(%param: !om.integer) -> (field: !om.integer, child: !om.class.type<@Child>, reference: !om.ref, list: !om.list<!om.string>, nest: !om.class.type<@Nest>, true: i1, false: i1) {
       %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
 
       %c_14 = om.constant #om.integer<14> : !om.integer
@@ -41,13 +41,19 @@ with Context() as ctx, Location.unknown():
 
 
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
-      om.class.field @list, %list : !om.list<!om.string>
 
       %c_15 = om.constant #om.integer<15> : !om.integer
       %1 = om.object @Child(%c_15) : (!om.integer) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
-      om.class.field @nest, %2 : !om.class.type<@Nest>
+
+
+
+
+      %true = om.constant true
+      %false = om.constant false
+
+      om.class.fields %param, %0, %sym, %list, %2, %true, %false : !om.integer, !om.class.type<@Child>, !om.ref, !om.list<!om.string>, !om.class.type<@Nest>, i1, i1
     }
 
     om.class @Child(%0: !om.integer) -> (foo: !om.integer) {
