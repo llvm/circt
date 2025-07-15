@@ -7116,10 +7116,10 @@ struct ExportVerilogPass
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
-    preparePM.addPass(createLegalizeAnonEnumsPass());
-    preparePM.addPass(createHWLowerInstanceChoicesPass());
+    preparePM.addPass(createLegalizeAnonEnums());
+    preparePM.addPass(createHWLowerInstanceChoices());
     auto &modulePM = preparePM.nestAny();
-    modulePM.addPass(createPrepareForEmissionPass());
+    modulePM.addPass(createPrepareForEmission());
     if (failed(runPipeline(preparePM, getOperation())))
       return signalPassFailure();
 
@@ -7298,10 +7298,10 @@ struct ExportSplitVerilogPass
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
-    preparePM.addPass(createHWLowerInstanceChoicesPass());
+    preparePM.addPass(createHWLowerInstanceChoices());
 
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
-    modulePM.addPass(createPrepareForEmissionPass());
+    modulePM.addPass(createPrepareForEmission());
     if (failed(runPipeline(preparePM, getOperation())))
       return signalPassFailure();
 

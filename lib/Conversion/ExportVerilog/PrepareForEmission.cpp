@@ -1404,7 +1404,3 @@ struct PrepareForEmissionPass
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::createPrepareForEmissionPass() {
-  return std::make_unique<PrepareForEmissionPass>();
-}

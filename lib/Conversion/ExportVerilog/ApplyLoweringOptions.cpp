@@ -28,7 +28,8 @@ namespace {
 struct TestApplyLoweringOptionPass
     : public circt::impl::TestApplyLoweringOptionBase<
           TestApplyLoweringOptionPass> {
-  TestApplyLoweringOptionPass() = default;
+  using Base::Base;
+
   void runOnOperation() override {
     if (!optionsString.hasValue()) {
       markAllAnalysesPreserved();
@@ -42,7 +43,3 @@ struct TestApplyLoweringOptionPass
   }
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::createTestApplyLoweringOptionPass() {
-  return std::make_unique<TestApplyLoweringOptionPass>();
-}
