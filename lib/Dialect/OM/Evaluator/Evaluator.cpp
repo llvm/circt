@@ -49,9 +49,8 @@ LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
   finalized = true;
   assert(isFullyEvaluated());
   return llvm::TypeSwitch<EvaluatorValue *, LogicalResult>(this)
-      .Case<AttributeValue, ObjectValue, ListValue, MapValue, ReferenceValue,
-            TupleValue, BasePathValue, PathValue>(
-          [](auto v) { return v->finalizeImpl(); });
+      .Case<AttributeValue, ObjectValue, ListValue, ReferenceValue,
+            BasePathValue, PathValue>([](auto v) { return v->finalizeImpl(); });
 }
 
 Type circt::om::evaluator::EvaluatorValue::getType() const {
@@ -59,9 +58,7 @@ Type circt::om::evaluator::EvaluatorValue::getType() const {
       .Case<AttributeValue>([](auto *attr) -> Type { return attr->getType(); })
       .Case<ObjectValue>([](auto *object) { return object->getObjectType(); })
       .Case<ListValue>([](auto *list) { return list->getListType(); })
-      .Case<MapValue>([](auto *map) { return map->getMapType(); })
       .Case<ReferenceValue>([](auto *ref) { return ref->getValueType(); })
-      .Case<TupleValue>([](auto *tuple) { return tuple->getTupleType(); })
       .Case<BasePathValue>(
           [this](auto *tuple) { return FrozenBasePathType::get(ctx); })
       .Case<PathValue>(
@@ -73,22 +70,11 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
   using namespace circt::om::evaluator;
 
   return TypeSwitch<mlir::Type, FailureOr<evaluator::EvaluatorValuePtr>>(type)
-      .Case([&](circt::om::MapType type) {
-        evaluator::EvaluatorValuePtr result =
-            std::make_shared<evaluator::MapValue>(type, loc);
-        return success(result);
-      })
       .Case([&](circt::om::ListType type) {
         evaluator::EvaluatorValuePtr result =
             std::make_shared<evaluator::ListValue>(type, loc);
         return success(result);
       })
-      .Case([&](mlir::TupleType type) {
-        evaluator::EvaluatorValuePtr result =
-            std::make_shared<evaluator::TupleValue>(type, loc);
-        return success(result);
-      })
-
       .Case([&](circt::om::ClassType type)
                 -> FailureOr<evaluator::EvaluatorValuePtr> {
         ClassOp cls =
@@ -167,12 +153,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp, TupleCreateOp, MapCreateOp,
-                      ObjectFieldOp>([&](auto op) {
+                .Case<ListCreateOp, ListConcatOp, ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
-                })
-                .Case<TupleGetOp>([&](auto op) {
-                  return evaluateTupleGet(op, actualParams, loc);
                 })
                 .Case<ObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
@@ -369,17 +351,8 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
             })
-            .Case([&](TupleCreateOp op) {
-              return evaluateTupleCreate(op, actualParams, loc);
-            })
-            .Case([&](TupleGetOp op) {
-              return evaluateTupleGet(op, actualParams, loc);
-            })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
-            })
-            .Case([&](MapCreateOp op) {
-              return evaluateMapCreate(op, actualParams, loc);
             })
             .Case([&](FrozenBasePathCreateOp op) {
               return evaluateBasePathCreate(op, actualParams, loc);
@@ -635,67 +608,6 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
   return list;
 }
 
-/// Evaluator dispatch function for Tuple creation.
-FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateTupleCreate(TupleCreateOp op,
-                                          ActualParameters actualParams,
-                                          Location loc) {
-  SmallVector<evaluator::EvaluatorValuePtr> values;
-  for (auto operand : op.getOperands()) {
-    auto result = evaluateValue(operand, actualParams, loc);
-    if (failed(result))
-      return result;
-    values.push_back(result.value());
-  }
-
-  // Return the tuple.
-  auto val = getOrCreateValue(op, actualParams, loc);
-  llvm::cast<evaluator::TupleValue>(val.value().get())
-      ->setElements(std::move(values));
-  return val;
-}
-
-/// Evaluator dispatch function for List creation.
-FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateTupleGet(
-    TupleGetOp op, ActualParameters actualParams, Location loc) {
-  auto tuple = evaluateValue(op.getInput(), actualParams, loc);
-  if (failed(tuple))
-    return tuple;
-  evaluator::EvaluatorValuePtr result =
-      cast<evaluator::TupleValue>(tuple.value().get())
-          ->getElements()[op.getIndex()];
-  return result;
-}
-
-/// Evaluator dispatch function for Map creation.
-FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateMapCreate(
-    MapCreateOp op, ActualParameters actualParams, Location loc) {
-  // Evaluate the Object itself, in case it hasn't been evaluated yet.
-  DenseMap<Attribute, evaluator::EvaluatorValuePtr> elements;
-  auto valueResult = getOrCreateValue(op, actualParams, loc).value();
-  for (auto operand : op.getOperands()) {
-    auto result = evaluateValue(operand, actualParams, loc);
-    if (failed(result))
-      return result;
-    // The result is a tuple.
-    auto &value = result.value();
-    if (!value->isFullyEvaluated())
-      return valueResult;
-    const auto &element =
-        llvm::cast<evaluator::TupleValue>(value.get())->getElements();
-    assert(element.size() == 2);
-    auto attr =
-        llvm::cast<evaluator::AttributeValue>(element[0].get())->getAttr();
-    if (!elements.insert({attr, element[1]}).second)
-      return op.emitError() << "map contains duplicated keys";
-  }
-
-  // Return the Map.
-  llvm::cast<evaluator::MapValue>(valueResult.get())
-      ->setElements(std::move(elements));
-  return valueResult;
-}
-
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateBasePathCreate(FrozenBasePathCreateOp op,
                                              ActualParameters actualParams,
@@ -768,36 +680,6 @@ LogicalResult circt::om::evaluator::ObjectValue::finalizeImpl() {
     if (failed(finalizeEvaluatorValue(value)))
       return failure();
 
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// MapValue
-//===----------------------------------------------------------------------===//
-
-/// Return an array of keys in the ascending order.
-ArrayAttr circt::om::evaluator::MapValue::getKeys() {
-  SmallVector<Attribute> attrs;
-  for (auto &[key, _] : elements)
-    attrs.push_back(key);
-
-  std::sort(attrs.begin(), attrs.end(), [](Attribute l, Attribute r) {
-    if (auto lInt = dyn_cast<mlir::IntegerAttr>(l))
-      if (auto rInt = dyn_cast<mlir::IntegerAttr>(r))
-        return lInt.getValue().ult(rInt.getValue());
-
-    assert(isa<StringAttr>(l) && isa<StringAttr>(r) &&
-           "key type should be integer or string");
-    return cast<StringAttr>(l).getValue() < cast<StringAttr>(r).getValue();
-  });
-
-  return ArrayAttr::get(type.getContext(), attrs);
-}
-
-LogicalResult circt::om::evaluator::MapValue::finalizeImpl() {
-  for (auto &&[e, value] : elements)
-    if (failed(finalizeEvaluatorValue(value)))
-      return failure();
   return success();
 }
 
