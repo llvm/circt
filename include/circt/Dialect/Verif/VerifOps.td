@@ -224,14 +224,31 @@ def BoundedModelCheckingOp : VerifOp<"bmc", [
   let hasRegionVerifier = true;
 }
 
-def LogicEquivalenceCheckingOp : VerifOp<"lec", [
-  IsolatedFromAbove,
-  SingleBlockImplicitTerminator<"verif::YieldOp">,
-]> {
+// Attempt to prove a binary relation between two circuits
+class CircuitRelationCheckOp<string mnemonic, list<Trait> traits = []>
+  : VerifOp<mnemonic, !listconcat(traits,
+    [IsolatedFromAbove, SingleBlockImplicitTerminator<"verif::YieldOp">])>
+{
+  let results = (outs Optional<I1>:$isProven);
+  let regions = (region SizedRegion<1>:$firstCircuit,
+                        SizedRegion<1>:$secondCircuit);
+
+  let assemblyFormat = [{
+    attr-dict (`:` type($isProven)^)?
+    `first` $firstCircuit
+    `second` $secondCircuit
+  }];
+
+  let builders = [OpBuilder<(ins "bool":$hasResult), [{
+      build($_builder, $_state, hasResult ? $_builder.getI1Type() : Type{} );
+    }]>];
+}
+
+def LogicEquivalenceCheckingOp : CircuitRelationCheckOp<"lec"> {
   let summary = "represents a logical equivalence checking problem";
   let description = [{
     This operation represents a logic equivalence checking problem explicitly in
-    the IR. There are several possiblities to perform logical equivalence
+    the IR. There are several possibilities to perform logical equivalence
     checking. For example, equivalence checking of combinational circuits can be
     done by constructing a miter circuit and testing whether the result is
     satisfiable (can be non-zero for some input), or two canonical BDDs could be
@@ -241,24 +258,36 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
     also the block arguments and yielded values of both regions) have to match.
     Otherwise, the two should be considered trivially non-equivalent.
 
-    The operation can return an boolean result that is `true` iff equivalence
+    The operation can return a boolean result that is `true` iff equivalence
     of the two circuits has been proven. The result can be omitted for use-cases
     which do not allow further processing (e.g., SMT-LIB exporting).
   }];
 
-  let results = (outs Optional<I1>:$areEquivalent);
-  let regions = (region SizedRegion<1>:$firstCircuit,
-                        SizedRegion<1>:$secondCircuit);
+  let hasRegionVerifier = true;
+}
 
-  let assemblyFormat = [{
-    attr-dict (`:` type($areEquivalent)^)?
-    `first` $firstCircuit
-    `second` $secondCircuit
+def RefinementCheckingOp : CircuitRelationCheckOp<"refines"> {
+  let summary =
+    "check if the second module is a refinement of the first module";
+  let description = [{
+    This operation represents a refinement checking problem explicitly in the
+    IR. Given two (purely combinational) circuits A and B with the same
+    signature, B refines A iff for all inputs the set of possible output
+    values of B is a subset of the possible output values of A given the
+    same input.
+
+    For strictly deterministic circuits the 'refines' relation is identical to
+    logical equivalence. Informally speaking, refining allows maintaining or
+    reducing the non-determinism of a circuit.
+
+    If the signatures of the circuits does not match, the second circuit is
+    trivially assumed to _not_ be a refinement of the first circuit. Sequential
+    elements (i.e., registers and memories) are currently unsupported.
+
+    The operation can return a boolean result that is `true` iff the refinement
+    relation has been proven. The result can be omitted for use-cases which do
+    not allow further processing (e.g., SMT-LIB exporting).
   }];
-
-  let builders = [OpBuilder<(ins "bool":$hasResult), [{
-      build($_builder, $_state, hasResult ? $_builder.getI1Type() : Type{} );
-    }]>];
 
   let hasRegionVerifier = true;
 }
@@ -268,6 +297,7 @@ def YieldOp : VerifOp<"yield", [
   ParentOneOf<[
     "verif::BoundedModelCheckingOp",
     "verif::LogicEquivalenceCheckingOp",
+    "verif::RefinementCheckingOp",
     "verif::SimulationOp",
   ]>
 ]> {
