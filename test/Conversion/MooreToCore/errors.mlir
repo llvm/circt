@@ -6,12 +6,3 @@ func.func @invalidType() {
 
   return
 }
-
-// -----
-
-func.func @invalidStringContant() {
-  // expected-error @below {{hw.constant attribute bitwidth doesn't match return type}}
-  %str = moore.string_constant "Test" : i8
-
-  return
-}

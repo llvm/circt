@@ -612,17 +612,20 @@ struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
     }
 
     const auto str = op.getValue();
-    const unsigned byteWidth =
-        std::max(static_cast<size_t>(intType.getWidth()), str.size() * 8);
+    const unsigned byteWidth = intType.getWidth();
     APInt value(byteWidth, 0);
-    for (size_t i = 0; i < str.size(); ++i) {
-      const auto asciiChar = static_cast<uint8_t>(str[i]);
-      value |= APInt(byteWidth, asciiChar) << (8 * (str.size() - 1 - i));
+
+    // Pack ascii chars from the end of the string, until it fits.
+    const size_t maxChars =
+        std::min(str.size(), static_cast<size_t>(byteWidth / 8));
+    for (size_t i = 0; i < maxChars; i++) {
+      const size_t pos = str.size() - 1 - i;
+      const auto asciiChar = static_cast<uint8_t>(str[pos]);
+      value |= APInt(byteWidth, asciiChar) << (8 * i);
     }
 
-    const auto valueType = intType.get(rewriter.getContext(), byteWidth);
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-        op, resultType, rewriter.getIntegerAttr(valueType, value));
+        op, resultType, rewriter.getIntegerAttr(resultType, value));
     return success();
   }
 };

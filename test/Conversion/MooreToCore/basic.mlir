@@ -1047,10 +1047,18 @@ moore.module @StringConstant() {
   moore.procedure initial {
     // CHECK: hw.constant 1415934836 : i32
     %str = moore.string_constant "Test" : i32
+    // CHECK: hw.constant 1415934836 : i36
+    %str1 = moore.string_constant "Test" : i36
+    // CHECK: hw.constant 116 : i8
+    %str2 = moore.string_constant "Test" : i8
+    // CHECK: hw.constant 0 : i7
+    %str_trunc = moore.string_constant "Test" : i7
+    // CHECK: hw.constant 29556 : i17
+    %str_trunc1 = moore.string_constant "Test" : i17
     // CHECK: hw.constant 0 : i0
     %str_empty = moore.string_constant "" : i0
     // CHECK: hw.constant 0 : i8
-    %str_empty_extended = moore.string_constant "" : i8
+    %str_empty_zext = moore.string_constant "" : i8
     moore.return
   }
 }
