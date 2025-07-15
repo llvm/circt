@@ -1436,7 +1436,7 @@ TEST(EvaluatorTests, ListAttrConcat) {
 
   auto listVal =
       llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
-  ASSERT_EQ(4, listVal.size());
+  ASSERT_EQ(4UL, listVal.size());
   auto checkEq = [](evaluator::EvaluatorValue *val, const char *str) {
     ASSERT_EQ(str, llvm::cast<evaluator::AttributeValue>(val)
                        ->getAs<StringAttr>()
