@@ -478,13 +478,13 @@ rtg.test @labels(singleton = %none: index) {
 // CHECK-LABEL: rtg.test @randomIntegers
 rtg.test @randomIntegers(singleton = %none: index) {
   %lower = index.constant 5
-  %upper = index.constant 10
-  %0 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=0}
+  %upper = index.constant 9
+  %0 = rtg.random_number_in_range [%lower, %upper] {rtg.elaboration_custom_seed=0}
   // CHECK-NEXT: [[V0:%.+]] = index.constant 5
   // CHECK-NEXT: func.call @dummy2([[V0]])
   func.call @dummy2(%0) : (index) -> ()
 
-  %1 = rtg.random_number_in_range [%lower, %upper) {rtg.elaboration_custom_seed=3}
+  %1 = rtg.random_number_in_range [%lower, %upper] {rtg.elaboration_custom_seed=3}
   // CHECK-NEXT: [[V1:%.+]] = index.constant 8
   // CHECK-NEXT: func.call @dummy2([[V1]])
   func.call @dummy2(%1) : (index) -> ()
@@ -799,9 +799,10 @@ rtg.target @singletonTarget : !rtg.dict<singleton: index> {
 func.func @dummy2(%arg0: index) -> () {return}
 
 rtg.test @randomIntegers(singleton = %none: index) {
+  %c4 = index.constant 4
   %c5 = index.constant 5
   // expected-error @below {{cannot select a number from an empty range}}
-  %0 = rtg.random_number_in_range [%c5, %c5)
+  %0 = rtg.random_number_in_range [%c5, %c4]
   func.call @dummy2(%0) : (index) -> ()
 }
 
