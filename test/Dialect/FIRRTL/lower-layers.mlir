@@ -329,9 +329,9 @@ firrtl.circuit "Test" {
   // Inline Layers
   //===--------------------------------------------------------------------===//
 
-  // CHECK:      sv.macro.decl @layer_Test$Inline
-  // CHECK-NEXT: sv.macro.decl @layer_Test$Inline$Inline
-  // CHECK-NEXT: sv.macro.decl @layer_Test$Bound$Inline
+  // CHECK:      sv.macro.decl @layer$Inline
+  // CHECK-NEXT: sv.macro.decl @layer$Inline$Inline
+  // CHECK-NEXT: sv.macro.decl @layer$Bound$Inline
   firrtl.layer @Inline inline {
     firrtl.layer @Inline inline {}
   }
@@ -342,15 +342,15 @@ firrtl.circuit "Test" {
 
   // CHECK:      firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
   // CHECK-NEXT:   %w3 = firrtl.wire
-  // CHECK-NEXT:   sv.ifdef @layer_Test$Bound$Inline {
+  // CHECK-NEXT:   sv.ifdef @layer$Bound$Inline {
   // CHECK-NEXT:     %w4 = firrtl.wire
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
   // CHECK-NEXT: firrtl.module @ModuleWithInlineLayerBlocks() {
-  // CHECK-NEXT:   sv.ifdef @layer_Test$Inline {
+  // CHECK-NEXT:   sv.ifdef @layer$Inline {
   // CHECK-NEXT:     %w1 = firrtl.wire
-  // CHECK-NEXT:     sv.ifdef @layer_Test$Inline$Inline {
+  // CHECK-NEXT:     sv.ifdef @layer$Inline$Inline {
   // CHECK-NEXT:       %w2 = firrtl.wire
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
