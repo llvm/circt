@@ -12,6 +12,7 @@ hw.module private @sf_tagmem_external_mem_a(in %CLK : i1, in %D : i46, in %ADR :
     %5 = seq.to_clock %CLK
     %6 = comb.mux %1, %4, %Q_int : i46
     %Q_int = seq.firreg %6 clock %5 : i46
+    // NOTE: The transformation cannot identify the memory read enable signal.
     %7 = comb.and %ME, %WE : i1
     %8 = hw.array_inject %mem_core[%ADR], %D : !hw.array<8192xi46>, i13
     %9 = comb.mux %7, %8, %mem_core : !hw.array<8192xi46>
