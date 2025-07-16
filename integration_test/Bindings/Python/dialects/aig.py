@@ -75,10 +75,13 @@ with Context() as ctx, Location.unknown():
     # CHECK-NEXT: sum: 128
     print("sum: ", sum(p.delay for p in collection))
 
-    for p in list(collection)[:2]:
+    for p in collection[:2]:
       # CHECK-NEXT: delay 2 : out2[{{[0-9]+}}]
       # CHECK-NEXT: delay 2 : out2[{{[0-9]+}}]
       print("delay", p.delay, ":", p.fan_out)
+
+    # CHECK-NEXT: minus index slice: True
+    print("minus index slice:", len(collection[:-2]) == len(collection) - 2)
 
     # Test framegraph emission.
     # CHECK:      top:test_aig;a[7] 0
