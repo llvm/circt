@@ -504,9 +504,12 @@ else()
   # Lookup python either way as some integration tests use python without the
   # bindings
   find_package(Python3)
-  if(Python3_FOUND)
-    message(STATUS "Found python at ${Python3_EXECUTABLE}")
-  endif()
+endif()
+
+set(Python3_FIND_VIRTUALENV FIRST)
+
+if(Python3_FOUND)
+  message(STATUS "Found python at ${Python3_EXECUTABLE}")
 endif()
 
 #-------------------------------------------------------------------------------
