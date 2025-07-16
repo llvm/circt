@@ -111,11 +111,11 @@ hw.module @one_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
   hw.output %single_reg : i32
 }
 
-// CHECK:  hw.module @combreg_and_firreg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG0:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
+// CHECK:  hw.module @compreg_and_firreg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG0:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
 // CHECK:    hw.output [[OLD_REG1]], [[ADD]], [[OLD_REG0]]
 // CHECK:  }
-hw.module @combreg_and_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
+hw.module @compreg_and_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
   %0 = comb.add %in0, %in1 : i32
   %1 = seq.compreg %0, %clk : i32
   %2 = seq.firreg %1 clock %clk : i32
