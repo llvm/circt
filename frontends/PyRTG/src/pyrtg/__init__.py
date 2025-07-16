@@ -14,7 +14,7 @@ from .sets import Set, SetType
 from .integers import Integer, IntegerType, Bool, BoolType
 from .bags import Bag, BagType
 from .sequences import sequence, Sequence, SequenceType, RandomizedSequence, RandomizedSequenceType
-from .configs import config, Param, Config
+from .configs import config, Param, PythonParam, Config
 from .immediates import Immediate, ImmediateType
 from .resources import IntegerRegister, IntegerRegisterType
 from .arrays import Array, ArrayType
