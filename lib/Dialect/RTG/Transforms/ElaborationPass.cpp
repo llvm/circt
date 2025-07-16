@@ -1549,7 +1549,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
     size_t lower = get<size_t>(op.getLowerBound());
-    size_t upper = get<size_t>(op.getUpperBound()) - 1;
+    size_t upper = get<size_t>(op.getUpperBound());
     if (lower > upper)
       return op->emitError("cannot select a number from an empty range");
 

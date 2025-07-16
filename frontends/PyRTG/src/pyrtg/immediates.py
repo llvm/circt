@@ -27,7 +27,19 @@ class Immediate(Value):
     """
 
     # Note that the upper limit is exclusive
-    return Immediate(width, Integer.random(0, 2**width))
+    return Immediate(width, Integer.random(0, 2**width - 1))
+
+  @staticmethod
+  def umax(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the maximum unsigned value it can
+    hold.
+    """
+
+    return Immediate(width, 2**width - 1)
+
+  def __repr__(self) -> str:
+    return f"Immediate<{self._width}, {self._value}>"
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
@@ -54,6 +66,9 @@ class ImmediateType(Type):
 
   def __eq__(self, other) -> bool:
     return isinstance(other, ImmediateType) and self.width == other.width
+
+  def __repr__(self) -> str:
+    return f"ImmediateType<{self.width}>"
 
   def _codegen(self) -> ir.Type:
     return rtg.ImmediateType.get(self.width)

@@ -629,16 +629,16 @@ def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
   let summary = "returns a number uniformly at random within the given range";
   let description = [{
     This operation computes a random number based on a uniform distribution
-    within the given range. The lower bound is inclusive while the upper bound
-    is exclusive. If the range is empty, compilation will fail.
-    This is (obviously) more performant than inserting all legal numbers into a
-    set and using 'set_select_random', but yields the same behavior.
+    within the given range. Both the lower and upper bounds are inclusive. If
+    the range is empty, compilation will fail. This is (obviously) more
+    performant than inserting all legal numbers into a set and using
+    'set_select_random', but yields the same behavior.
   }];
 
   let arguments = (ins Index:$lowerBound, Index:$upperBound);
   let results = (outs Index:$result);
 
-  let assemblyFormat = "` ` `[` $lowerBound `,` $upperBound `)` attr-dict";
+  let assemblyFormat = "` ` `[` $lowerBound `,` $upperBound `]` attr-dict";
 }
 
 //===- Misc Operations ----------------------------------------------------===//

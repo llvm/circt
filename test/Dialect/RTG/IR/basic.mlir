@@ -154,8 +154,8 @@ rtg.test @test1(num_cpus = %a: i32, num_modes = %b: i32) { }
 
 // CHECK-LABEL: rtg.sequence @integerHandlingOps
 rtg.sequence @integerHandlingOps(%arg0: index, %arg1: index) {
-  // CHECK: rtg.random_number_in_range [%arg0, %arg1)
-  rtg.random_number_in_range [%arg0, %arg1)
+  // CHECK: rtg.random_number_in_range [%arg0, %arg1]
+  rtg.random_number_in_range [%arg0, %arg1]
 }
 
 // CHECK-LABEL: rtg.test @interleaveSequences
