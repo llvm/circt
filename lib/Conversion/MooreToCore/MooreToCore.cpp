@@ -606,10 +606,7 @@ struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     const auto resultType =
         typeConverter->convertType(op.getResult().getType());
-    const auto intType = mlir::dyn_cast<IntegerType>(resultType);
-    if (!intType) {
-      return rewriter.notifyMatchFailure(op, "invalid string constant type");
-    }
+    const auto intType = mlir::cast<IntegerType>(resultType);
 
     const auto str = op.getValue();
     const unsigned byteWidth = intType.getWidth();
