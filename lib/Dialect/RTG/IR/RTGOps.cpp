@@ -688,7 +688,7 @@ LogicalResult TargetOp::verifyRegions() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ValidateOp::verify() {
-  if (!getRef().getType().isValidContentType(getType()))
+  if (!getRef().getType().isValidContentType(getValue().getType()))
     return emitOpError(
         "result type must be a valid content type for the ref value");
 

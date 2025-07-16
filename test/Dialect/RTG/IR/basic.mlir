@@ -220,11 +220,19 @@ rtg.test @template() template "temp_name" target @target { }
 
 // CHECK-LABEL: rtg.test @validation()
 rtg.test @validation() {
+  // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
   %0 = rtg.fixed_reg #rtgtest.t0
   %1 = rtg.constant #rtg.isa.immediate<32, 0>
-  // CHECK: %{{.*}} = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
 
-  // CHECK: %{{.*}} = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]] : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %3 = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+
+  // CHECK: rtg.validate [[V0]], [[V1]] ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %4:3 = rtg.validate %0, %1 (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  
+  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %5:3 = rtg.validate %0, %1, "some_id" (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
 }

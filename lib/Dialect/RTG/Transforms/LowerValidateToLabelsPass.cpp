@@ -52,6 +52,8 @@ void LowerValidateToLabelsPass::runOnOperation() {
         loc, StringAttr::get(&getContext(), intrinsicLabel), ValueRange());
     builder.create<rtg::LabelOp>(loc, rtg::LabelVisibility::global, lbl);
     validateOp.getValue().replaceAllUsesWith(validateOp.getDefaultValue());
+    validateOp.getValues().replaceAllUsesWith(
+        validateOp.getDefaultUsedValues());
 
     pruner.eraseNow(validateOp);
     return WalkResult::advance();
