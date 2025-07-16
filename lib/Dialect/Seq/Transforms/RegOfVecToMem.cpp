@@ -232,7 +232,8 @@ void RegOfVecToMemPass::runOnOperation() {
   // Erase all marked operations
   for (auto *op : opsToErase) {
     LLVM_DEBUG(llvm::dbgs()
-               << "Erasing operation: " << *op << " number of uses:" << "\n");
+               << "Erasing operation: " << *op << " number of uses:"
+               << "\n");
     op->dropAllUses();
     op->erase();
   }
