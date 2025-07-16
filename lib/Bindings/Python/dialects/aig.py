@@ -8,7 +8,7 @@ from .._mlir_libs._circt._aig import _LongestPathAnalysis, _LongestPathCollectio
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 # ============================================================================
 # Core Data Structures for AIG Path Analysis
@@ -290,7 +290,9 @@ class LongestPathCollection:
     """Get the number of paths in the collection."""
     return self.length
 
-  def __getitem__(self, index):
+  def __getitem__(
+      self, index: Union[slice,
+                         int]) -> Union[DataflowPath, List[DataflowPath]]:
     """
         Get a specific path from the collection by index.
         Supports both integer and slice indexing. Integer indices can be negative.
