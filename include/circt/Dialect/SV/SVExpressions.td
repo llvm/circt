@@ -62,11 +62,6 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
                "build(odsBuilder, odsState, resultType, "
                "odsBuilder.getStringAttr(formatString), substitutions,"
                "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "Type":$resultType, "StringAttr":$formatString,
-                CArg<"ValueRange", "{}">:$substitutions),
-               "build(odsBuilder, odsState, resultType, "
-               "formatString, substitutions,"
-               "odsBuilder.getArrayAttr({}));">
   ];
 }
 
