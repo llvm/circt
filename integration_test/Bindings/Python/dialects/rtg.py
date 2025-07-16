@@ -251,3 +251,16 @@ with Context() as ctx, Location.unknown():
   print(f"element_type={arr.element_type}")
   # CHECK: !rtg.array<index>
   print(arr)
+
+  tup = rtg.TupleType.get([indexTy, indexTy])
+  # CHECK: fields=[IndexType(index), IndexType(index)]
+  print(f"fields={tup.fields}")
+
+  # CHECK: !rtg.tuple<index, index>
+  print(tup)
+
+  tup = rtg.TupleType.get([])
+  # CHECK: fields=[]
+  print(f"fields={tup.fields}")
+  # CHECK: !rtg.tuple
+  print(tup)

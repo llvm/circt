@@ -285,7 +285,7 @@ LogicalResult SetCartesianProductOp::inferReturnTypes(
   for (auto operand : operands)
     elementTypes.push_back(cast<SetType>(operand.getType()).getElementType());
   inferredReturnTypes.push_back(
-      SetType::get(TupleType::get(context, elementTypes)));
+      SetType::get(rtg::TupleType::get(context, elementTypes)));
   return success();
 }
 
@@ -369,16 +369,10 @@ LogicalResult TupleCreateOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
-  if (operands.empty()) {
-    if (loc)
-      return mlir::emitError(*loc) << "empty tuples not allowed";
-    return failure();
-  }
-
   SmallVector<Type> elementTypes;
   for (auto operand : operands)
     elementTypes.push_back(operand.getType());
-  inferredReturnTypes.push_back(TupleType::get(context, elementTypes));
+  inferredReturnTypes.push_back(rtg::TupleType::get(context, elementTypes));
   return success();
 }
 
@@ -392,18 +386,24 @@ LogicalResult TupleExtractOp::inferReturnTypes(
     SmallVectorImpl<Type> &inferredReturnTypes) {
   assert(operands.size() == 1 && "must have exactly one operand");
 
-  auto tupleTy = dyn_cast<TupleType>(operands[0].getType());
+  auto tupleTy = dyn_cast<rtg::TupleType>(operands[0].getType());
   size_t idx = properties.as<Properties *>()->getIndex().getInt();
-  if (!tupleTy || tupleTy.getTypes().size() <= idx) {
+  if (!tupleTy) {
+    if (loc)
+      return mlir::emitError(*loc) << "only RTG tuples are supported";
+    return failure();
+  }
+
+  if (tupleTy.getFieldTypes().size() <= idx) {
     if (loc)
       return mlir::emitError(*loc)
              << "index (" << idx
              << ") must be smaller than number of elements in tuple ("
-             << tupleTy.getTypes().size() << ")";
+             << tupleTy.getFieldTypes().size() << ")";
     return failure();
   }
 
-  inferredReturnTypes.push_back(tupleTy.getTypes()[idx]);
+  inferredReturnTypes.push_back(tupleTy.getFieldTypes()[idx]);
   return success();
 }
 

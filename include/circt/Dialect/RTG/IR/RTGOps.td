@@ -602,7 +602,7 @@ def TupleCreateOp : RTGOp<"tuple_create", [
   let summary = "create a tuple";
 
   let arguments = (ins Variadic<AnyType>:$elements);
-  let results = (outs Builtin_Tuple:$result);
+  let results = (outs TupleType:$result);
 
   let assemblyFormat = [{
     ($elements^ `:` qualified(type($elements)))? attr-dict
@@ -615,7 +615,7 @@ def TupleExtractOp : RTGOp<"tuple_extract", [
 ]> {
   let summary = "get an element from a tuple";
 
-  let arguments = (ins Builtin_Tuple:$tuple, IndexAttr:$index);
+  let arguments = (ins TupleType:$tuple, IndexAttr:$index);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{

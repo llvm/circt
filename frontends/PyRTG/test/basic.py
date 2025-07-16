@@ -297,7 +297,7 @@ def test2_labels(config):
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
-# MLIR-NEXT: %idx2097152 = index.constant 2097152
+# MLIR-NEXT: %idx2097151 = index.constant 2097151
 # MLIR-NEXT: %idx0 = index.constant 0
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
 # MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
@@ -313,7 +313,7 @@ def test2_labels(config):
 # MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097152)
+# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: }
@@ -395,7 +395,7 @@ def test7_bools(config):
 
 
 # MLIR-LABEL: rtg.test @test8_random_integer
-# MLIR-NEXT: rtg.random_number_in_range [%a, %b)
+# MLIR-NEXT: rtg.random_number_in_range [%a, %b]
 
 
 @sequence([IntegerType()])
@@ -410,7 +410,7 @@ def test8_random_integer(config):
 
 # MLIR-LABEL: rtg.test @test90_tuples
 # MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
-# MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : tuple<index, i1>
+# MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : !rtg.tuple<index, i1>
 
 
 @config

@@ -29,9 +29,6 @@ class Tuple(Value):
     element must be provided. Each element can be of a different type.
     """
 
-    if len(elements) == 0:
-      raise ValueError("at least one element must be present")
-
     return rtg.TupleCreateOp(elements)
 
   def __getitem__(self, i) -> Value:
@@ -67,4 +64,4 @@ class TupleType(Type):
                       TupleType) and self.element_types == other.element_types
 
   def _codegen(self) -> ir.Type:
-    return ir.TupleType.get_tuple([ty._codegen() for ty in self.element_types])
+    return rtg.TupleType.get([ty._codegen() for ty in self.element_types])
