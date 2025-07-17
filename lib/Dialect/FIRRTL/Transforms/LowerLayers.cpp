@@ -173,8 +173,7 @@ static SmallString<32> guardMacroNameForLayer(StringRef moduleName,
 static SmallString<32>
 macroNameForLayer(StringRef circuitName,
                   ArrayRef<FlatSymbolRefAttr> layerName) {
-  SmallString<32> result("layer_");
-  result.append(circuitName);
+  SmallString<32> result("layer");
   for (auto part : layerName)
     appendName(part, result, /*toLower=*/false,
                /*delimiter=*/Delimiter::InlineMacro);
