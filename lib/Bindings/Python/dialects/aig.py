@@ -248,8 +248,7 @@ class DataflowPath:
 
     # Add the signal name with bit position if applicable
     signal_part = obj.name
-    if obj.bit_pos > 0:
-      signal_part += f"[{obj.bit_pos}]"
+    signal_part += f"[{obj.bit_pos}]"
     parts.append(signal_part)
 
     return ";".join(parts)
