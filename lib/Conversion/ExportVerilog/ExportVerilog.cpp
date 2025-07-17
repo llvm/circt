@@ -5907,6 +5907,11 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   auto type = value.getType();
   auto word = getVerilogDeclWord(op, emitter);
   auto isZeroBit = isZeroBitType(type);
+
+  // LocalParams always need the bitwidth, otherwise they are considered to have
+  // an unknown size.
+  bool singleBitDefaultType = !isa<LocalParamOp>(op);
+
   ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
     unsigned targetColumn = 0;
     unsigned column = 0;
@@ -5930,7 +5935,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     {
       llvm::raw_svector_ostream stringStream(typeString);
       emitter.printPackedType(stripUnpackedTypes(type), stringStream,
-                              op->getLoc());
+                              op->getLoc(), /*optionalAliasType=*/{},
+                              /*implicitIntType=*/true, singleBitDefaultType);
     }
     // Emit the type.
     if (maxTypeWidth > 0)
