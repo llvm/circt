@@ -6,6 +6,8 @@ from .base import ir
 from .core import CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .support import _FromCirctValue
+from .configs import PythonParam
+from .labels import Label
 
 from types import SimpleNamespace
 
@@ -42,7 +44,9 @@ class Test(CodeGenRoot):
         [param.get_type()._codegen() for param in params_sorted])
     new_config = []
     for param, arg in zip(params_sorted, block.arguments):
-      new_config.append((param.get_name(), _FromCirctValue(arg)))
+      new_config.append(
+          (param.get_original_name(), param.get_value() if isinstance(
+              param, PythonParam) else _FromCirctValue(arg)))
 
     with ir.InsertionPoint(block):
       self.test_func(SimpleNamespace(new_config))
