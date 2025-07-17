@@ -118,12 +118,26 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.connect %q, %r : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
-  firrtl.module @AggregateInvalid(out %q: !firrtl.bundle<a:uint<1>>) {
-    %invalid_ui1 = firrtl.invalidvalue : !firrtl.bundle<a:uint<1>>
-    firrtl.connect %q, %invalid_ui1 : !firrtl.bundle<a:uint<1>>, !firrtl.bundle<a:uint<1>>
-    // CHECK: %c0_ui1 = firrtl.constant 0
-    // CHECK-NEXT: %[[CAST:.+]] = firrtl.bitcast %c0_ui1
-    // CHECK-NEXT: %q, %[[CAST]]
+
+  // Check that we properly lower aggregate invalids.
+  firrtl.module @AggregateInvalid() {
+    %bundle = firrtl.wire : !firrtl.bundle<a:uint<1>>
+    %invalid_bundle = firrtl.invalidvalue : !firrtl.bundle<a:uint<1>>
+    firrtl.connect %bundle, %invalid_bundle : !firrtl.bundle<a:uint<1>>, !firrtl.bundle<a:uint<1>>
+    // CHECK: [[CAST:%.+]] = firrtl.bitcast %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>>
+    // CHECK: connect %bundle, [[CAST]]
+
+    %vector = firrtl.wire : !firrtl.vector<uint<1>, 10>
+    %invalid_vector = firrtl.invalidvalue : !firrtl.vector<uint<1>, 10>
+    firrtl.connect %vector, %invalid_vector : !firrtl.vector<uint<1>, 10>, !firrtl.vector<uint<1>, 10>
+    // CHECK: [[CAST:%.+]] = firrtl.bitcast %c0_ui10 : (!firrtl.uint<10>) -> !firrtl.vector<uint<1>, 10>
+    // CHECK: connect %vector, [[CAST]]
+
+    %enum = firrtl.wire : !firrtl.enum<a: uint<1>, b: uint<1>>
+    %invalid_enum = firrtl.invalidvalue : !firrtl.enum<a: uint<1>, b: uint<1>>
+    firrtl.connect %enum, %invalid_enum : !firrtl.enum<a: uint<1>, b: uint<1>>, !firrtl.enum<a: uint<1>, b: uint<1>>
+    // CHECK: [[CAST:%.+]] = firrtl.bitcast %c0_ui2 : (!firrtl.uint<2>) -> !firrtl.enum<a: uint<1>, b: uint<1>>
+    // CHECK: connect %enum, [[CAST]]
   }
 
   // All of these should not error as the register is initialzed to a constant
