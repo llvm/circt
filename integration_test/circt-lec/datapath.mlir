@@ -26,8 +26,8 @@ hw.module @multiplier(in %in1: i4, in %in2: i4, out out: i4) {
   hw.output %sum : i4
 }
 
-hw.module @partial_product(in %in1: i4, in %in2: i4, in %in3 : i4 out out: i4) {
-  %pp:4 = datapath.partial_product %in1, %in2 : 4 x i4
+hw.module @partial_product(in %in1: i4, in %in2: i4, out out: i4) {
+  %pp:4 = datapath.partial_product %in1, %in2 : (i4, i4) -> (i4, i4, i4, i4)
   %sum = comb.add bin %pp#0, %pp#1, %pp#2, %pp#3 : i4
   hw.output %sum : i4
 }
