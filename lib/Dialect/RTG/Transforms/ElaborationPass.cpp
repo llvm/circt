@@ -854,7 +854,7 @@ public:
 
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
-    return builder.create<OpTy>(location, std::forward<Args>(args)...);
+    return OpTy::create(builder, location, std::forward<Args>(args)...);
   }
 
 private:
@@ -878,7 +878,7 @@ private:
     // index dialect.
     if (auto intAttr = dyn_cast<IntegerAttr>(val);
         intAttr && isa<IndexType>(val.getType())) {
-      Value res = builder.create<index::ConstantOp>(loc, intAttr);
+      Value res = index::ConstantOp::create(builder, loc, intAttr);
       materializedValues[val] = res;
       return res;
     }
@@ -902,14 +902,14 @@ private:
 
   Value visit(size_t val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<index::ConstantOp>(loc, val);
+    Value res = index::ConstantOp::create(builder, loc, val);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(bool val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<index::BoolConstantOp>(loc, val);
+    Value res = index::BoolConstantOp::create(builder, loc, val);
     materializedValues[val] = res;
     return res;
   }
@@ -926,7 +926,7 @@ private:
       elements.push_back(materialized);
     }
 
-    Value res = builder.create<ArrayCreateOp>(loc, val->type, elements);
+    Value res = ArrayCreateOp::create(builder, loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -943,7 +943,7 @@ private:
       elements.push_back(materialized);
     }
 
-    auto res = builder.create<SetCreateOp>(loc, val->type, elements);
+    auto res = SetCreateOp::create(builder, loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -963,7 +963,7 @@ private:
       weights.push_back(materializedWeight);
     }
 
-    auto res = builder.create<BagCreateOp>(loc, val->type, values, weights);
+    auto res = BagCreateOp::create(builder, loc, val->type, values, weights);
     materializedValues[val] = res;
     return res;
   }
@@ -971,8 +971,8 @@ private:
   Value visit(MemoryBlockStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
     auto intType = builder.getIntegerType(val->baseAddress.getBitWidth());
-    Value res = builder.create<MemoryBlockDeclareOp>(
-        loc, val->type, IntegerAttr::get(intType, val->baseAddress),
+    Value res = MemoryBlockDeclareOp::create(
+        builder, loc, val->type, IntegerAttr::get(intType, val->baseAddress),
         IntegerAttr::get(intType, val->endAddress));
     materializedValues[val] = res;
     return res;
@@ -986,7 +986,8 @@ private:
     if (!(memBlock && memSize && memAlign))
       return {};
 
-    Value res = builder.create<MemoryAllocOp>(loc, memBlock, memSize, memAlign);
+    Value res =
+        MemoryAllocOp::create(builder, loc, memBlock, memSize, memAlign);
     materializedValues[val] = res;
     return res;
   }
@@ -1022,16 +1023,16 @@ private:
       argTypes.push_back(materialized.getType());
     }
 
-    Value res = builder.create<GetSequenceOp>(
-        loc, SequenceType::get(builder.getContext(), argTypes),
+    Value res = GetSequenceOp::create(
+        builder, loc, SequenceType::get(builder.getContext(), argTypes),
         seqOp.getSymName());
 
     // Only materialize a substitute_sequence op when we have arguments to
     // substitute since this op does not support 0 arguments.
     if (!args.empty())
-      res = builder.create<SubstituteSequenceOp>(loc, res, args);
+      res = SubstituteSequenceOp::create(builder, loc, res, args);
 
-    res = builder.create<RandomizeSequenceOp>(loc, res);
+    res = RandomizeSequenceOp::create(builder, loc, res);
 
     materializedValues[val] = res;
     return res;
@@ -1052,28 +1053,29 @@ private:
       return sequences[0];
 
     Value res =
-        builder.create<InterleaveSequencesOp>(loc, sequences, val->batchSize);
+        InterleaveSequencesOp::create(builder, loc, sequences, val->batchSize);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(VirtualRegisterStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<VirtualRegisterOp>(loc, val->allowedRegs);
+    Value res = VirtualRegisterOp::create(builder, loc, val->allowedRegs);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(UniqueLabelStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<LabelUniqueDeclOp>(loc, val->name, ValueRange());
+    Value res =
+        LabelUniqueDeclOp::create(builder, loc, val->name, ValueRange());
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(const LabelValue &val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<LabelDeclOp>(loc, val.name, ValueRange());
+    Value res = LabelDeclOp::create(builder, loc, val.name, ValueRange());
     materializedValues[val] = res;
     return res;
   }
@@ -1084,7 +1086,7 @@ private:
     materialized.reserve(val->values.size());
     for (auto v : val->values)
       materialized.push_back(materialize(v, loc, emitError));
-    Value res = builder.create<TupleCreateOp>(loc, materialized);
+    Value res = TupleCreateOp::create(builder, loc, materialized);
     materializedValues[val] = res;
     return res;
   }
@@ -1103,8 +1105,8 @@ private:
       usedDefaultValues.push_back(elseMat);
     }
 
-    auto validateOp = builder.create<ValidateOp>(
-        loc, val->type, materialize(val->ref, loc, emitError),
+    auto validateOp = ValidateOp::create(
+        builder, loc, val->type, materialize(val->ref, loc, emitError),
         materialize(val->defaultValue, loc, emitError), val->id,
         usedDefaultValues, elseValues);
     materializedValues[val] = validateOp.getValue();

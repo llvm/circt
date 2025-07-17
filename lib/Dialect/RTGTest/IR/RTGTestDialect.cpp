@@ -49,12 +49,12 @@ Operation *RTGTestDialect::materializeConstant(OpBuilder &builder,
   return TypeSwitch<Attribute, Operation *>(value)
       .Case<CPUAttr>([&](auto attr) -> Operation * {
         if (isa<CPUType>(type))
-          return builder.create<rtg::ConstantOp>(loc, attr);
+          return rtg::ConstantOp::create(builder, loc, attr);
         return nullptr;
       })
       .Case<rtg::RegisterAttrInterface>([&](auto attr) -> Operation * {
         if (isa<rtg::RegisterTypeInterface>(type))
-          return builder.create<rtg::FixedRegisterOp>(loc, attr);
+          return rtg::FixedRegisterOp::create(builder, loc, attr);
         return nullptr;
       })
       .Default([](auto attr) { return nullptr; });

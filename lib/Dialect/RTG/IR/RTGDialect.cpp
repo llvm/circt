@@ -46,7 +46,7 @@ Operation *RTGDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
   if (auto attr = dyn_cast<ImmediateAttr>(value))
     if (type == attr.getType())
-      return builder.create<ConstantOp>(loc, attr);
+      return ConstantOp::create(builder, loc, attr);
 
   return nullptr;
 }
