@@ -540,6 +540,21 @@ def TagExtractOp : FIRRTLExprOp<"tagextract", [InferTypeOpInterface]> {
   let arguments = (ins FEnumType:$input);
   let results = (outs UIntType:$result);
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+
+  let inferTypeDecl = [{
+    static FIRRTLType inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc);
+
+    static FIRRTLType inferReturnType(ValueRange operands,
+                                      DictionaryAttr attrs,
+                                      OpaqueProperties properties,
+                                      mlir::RegionRange regions,
+                                      std::optional<Location> loc) {
+      Adaptor adaptor(operands, attrs, properties, regions);
+      auto input = firrtl::type_cast<FIRRTLType>(adaptor.getInput().getType());
+      return inferReturnType(input, loc);
+    }
+  }];
 }
 
 def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {

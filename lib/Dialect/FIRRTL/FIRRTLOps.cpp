@@ -4860,13 +4860,9 @@ FIRRTLType SubaccessOp::inferReturnType(Type inType, Type indexType,
                                inType);
 }
 
-FIRRTLType TagExtractOp::inferReturnType(ValueRange operands,
-                                         DictionaryAttr attrs,
-                                         OpaqueProperties properties,
-                                         mlir::RegionRange regions,
+FIRRTLType TagExtractOp::inferReturnType(FIRRTLType input,
                                          std::optional<Location> loc) {
-  Adaptor adaptor(operands, attrs, properties, regions);
-  auto inType = type_cast<FEnumType>(adaptor.getInput().getType());
+  auto inType = type_cast<FEnumType>(input);
   auto i = llvm::Log2_32_Ceil(inType.getNumElements());
   return UIntType::get(inType.getContext(), i);
 }
