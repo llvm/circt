@@ -19,8 +19,10 @@ LogicalResult WrapValidReadyOp::fold(FoldAdaptor,
                                      SmallVectorImpl<OpFoldResult> &results) {
   if (!getChanOutput().getUsers().empty())
     return failure();
-  results.push_back(NullChannelAttr::get(
-      getContext(), TypeAttr::get(getChanOutput().getType())));
+  OpBuilder builder(getContext());
+  results.push_back(
+      builder.create<NullSourceOp>(getLoc(), getChanOutput().getType())
+          .getOut());
   results.push_back(IntegerAttr::get(IntegerType::get(getContext(), 1), 1));
   return success();
 }
@@ -44,22 +46,30 @@ LogicalResult UnwrapFIFOOp::canonicalize(UnwrapFIFOOp op,
 
 LogicalResult WrapFIFOOp::fold(FoldAdaptor,
                                SmallVectorImpl<OpFoldResult> &results) {
-  if (getChanOutput().getUsers().empty()) {
-    results.push_back({});
-    results.push_back(IntegerAttr::get(
-        IntegerType::get(getContext(), 1, IntegerType::Signless), 0));
-    return success();
-  }
-  return failure();
+  if (!getChanOutput().getUsers().empty())
+    return failure();
+
+  OpBuilder builder(getContext());
+  results.push_back(
+      builder.create<NullSourceOp>(getLoc(), getChanOutput().getType())
+          .getOut());
+  results.push_back(IntegerAttr::get(
+      IntegerType::get(getContext(), 1, IntegerType::Signless), 0));
+  return success();
 }
 
 LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
                                        PatternRewriter &rewriter) {
-  auto unwrap =
-      dyn_cast_or_null<UnwrapFIFOOp>(*op.getChanOutput().getUsers().begin());
+
+  if (!op.getChanOutput().hasOneUse())
+    return rewriter.notifyMatchFailure(
+        op, "channel output doesn't have exactly one use");
+  auto unwrap = dyn_cast_or_null<UnwrapFIFOOp>(
+      op.getChanOutput().getUses().begin()->getOwner());
   if (succeeded(UnwrapFIFOOp::mergeAndErase(unwrap, op, rewriter)))
     return success();
-  return failure();
+  return rewriter.notifyMatchFailure(
+      op, "could not find corresponding unwrap for wrap");
 }
 
 OpFoldResult WrapWindow::fold(FoldAdaptor) {
