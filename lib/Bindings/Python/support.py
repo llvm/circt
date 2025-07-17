@@ -89,102 +89,54 @@ def type_to_pytype(t) -> ir.Type:
     return t
 
   from .dialects import esi, hw, seq, rtg, rtgtest
-  try:
+  if ir.IntegerType.isinstance(t):
     return ir.IntegerType(t)
-  except ValueError:
-    pass
-  try:
+  if ir.NoneType.isinstance(t):
     return ir.NoneType(t)
-  except ValueError:
-    pass
-  try:
+  if ir.TupleType.isinstance(t):
     return ir.TupleType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.ArrayType.isinstance(t):
     return hw.ArrayType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.StructType.isinstance(t):
     return hw.StructType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.TypeAliasType.isinstance(t):
     return hw.TypeAliasType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.InOutType.isinstance(t):
     return hw.InOutType(t)
-  except ValueError:
-    pass
-  try:
+  if seq.ClockType.isinstance(t):
     return seq.ClockType(t)
-  except ValueError:
-    pass
-  try:
+  if esi.ChannelType.isinstance(t):
     return esi.ChannelType(t)
-  except ValueError:
-    pass
-  try:
+  if esi.AnyType.isinstance(t):
     return esi.AnyType(t)
-  except ValueError:
-    pass
-  try:
+  if esi.BundleType.isinstance(t):
     return esi.BundleType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.LabelType.isinstance(t):
     return rtg.LabelType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.SetType.isinstance(t):
     return rtg.SetType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.BagType.isinstance(t):
     return rtg.BagType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.SequenceType.isinstance(t):
     return rtg.SequenceType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.RandomizedSequenceType.isinstance(t):
     return rtg.RandomizedSequenceType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.DictType.isinstance(t):
     return rtg.DictType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.ImmediateType.isinstance(t):
     return rtg.ImmediateType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.ArrayType.isinstance(t):
     return rtg.ArrayType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.MemoryType.isinstance(t):
     return rtg.MemoryType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.MemoryBlockType.isinstance(t):
     return rtg.MemoryBlockType(t)
-  except ValueError:
-    pass
-  try:
+  if rtg.TupleType.isinstance(t):
     return rtg.TupleType(t)
-  except ValueError:
-    pass
-  try:
+  if rtgtest.IntegerRegisterType.isinstance(t):
     return rtgtest.IntegerRegisterType(t)
-  except ValueError:
-    pass
-  try:
+  if rtgtest.CPUType.isinstance(t):
     return rtgtest.CPUType(t)
-  except ValueError:
-    pass
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
@@ -205,61 +157,35 @@ def attribute_to_var(attr):
     return attr.value
 
   from .dialects import hw, om
-  try:
+  if ir.BoolAttr.isinstance(attr):
     return ir.BoolAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if ir.IntegerAttr.isinstance(attr):
     return ir.IntegerAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if hw.InnerSymAttr.isinstance(attr):
     return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
-  except ValueError:
-    pass
-  try:
+  if ir.StringAttr.isinstance(attr):
     return ir.StringAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if ir.FlatSymbolRefAttr.isinstance(attr):
     return ir.FlatSymbolRefAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if ir.TypeAttr.isinstance(attr):
     return ir.TypeAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if ir.ArrayAttr.isinstance(attr):
     arr = ir.ArrayAttr(attr)
     return [attribute_to_var(x) for x in arr]
-  except ValueError:
-    pass
-  try:
+  if ir.DictAttr.isinstance(attr):
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
-  except ValueError:
-    pass
-  try:
+  if om.ReferenceAttr.isinstance(attr):
     return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
-  except ValueError:
-    pass
-  try:
+  if hw.InnerRefAttr.isinstance(attr):
     ref = hw.InnerRefAttr(attr)
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
-  except ValueError:
-    pass
-  try:
+  if om.ListAttr.isinstance(attr):
     return list(map(attribute_to_var, om.ListAttr(attr)))
-  except ValueError:
-    pass
-  try:
+  if om.OMIntegerAttr.isinstance(attr):
     return int(str(om.OMIntegerAttr(attr)))
-  except ValueError:
-    pass
-  try:
+  if om.PathAttr.isinstance(attr):
     return om.PathAttr(attr).value
-  except ValueError:
-    pass
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
