@@ -84,6 +84,6 @@ with Context() as ctx, Location.unknown():
     print("minus index slice:", len(collection[:-2]) == len(collection) - 2)
 
     # Test framegraph emission.
-    # CHECK:      top:test_aig;a[7] 0
-    # CHECK-NEXT: top:test_aig;out2[7] 2
+    # CHECK:      top:test_aig;a[0] 0
+    # CHECK-NEXT: top:test_aig;out2[0] 2
     print(collection.longest_path.to_flamegraph())

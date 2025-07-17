@@ -1500,7 +1500,7 @@ ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
 // ===----------------------------------------------------------------------===//
 
 void LongestPathCollection::sortInDescendingOrder() {
-  llvm::sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
+  llvm::stable_sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
     return a.getDelay() > b.getDelay();
   });
 }
