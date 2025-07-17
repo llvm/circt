@@ -111,6 +111,23 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return rtgArrayTypeGetElementType(self);
       });
 
+  mlir_type_subclass(m, "TupleType", rtgTypeIsATuple)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, const std::vector<MlirType> &fieldTypes,
+             MlirContext ctxt) {
+            return cls(
+                rtgTupleTypeGet(ctxt, fieldTypes.size(), fieldTypes.data()));
+          },
+          nb::arg("self"), nb::arg("field_types") = std::vector<MlirType>(),
+          nb::arg("ctxt") = nullptr)
+      .def_property_readonly("fields", [](MlirType self) {
+        std::vector<MlirType> fields;
+        for (intptr_t i = 0; i < rtgTypeGetNumFields(self); ++i)
+          fields.push_back(rtgTupleTypeGetFieldType(self, i));
+        return fields;
+      });
+
   // Types for ISA targets
   //===--------------------------------------------------------------------===//
 

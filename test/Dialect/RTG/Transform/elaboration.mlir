@@ -7,9 +7,9 @@ func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rt
 func.func @dummy5(%arg0: i1) -> () {return}
 func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
 func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
-func.func @dummy8(%arg0: tuple<index, index>) -> () {return}
-func.func @dummy9(%arg0: !rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> () {return}
-func.func @dummy10(%arg0: !rtg.set<tuple<index>>) -> () {return}
+func.func @dummy8(%arg0: !rtg.tuple<index, index>) -> () {return}
+func.func @dummy9(%arg0: !rtg.set<!rtg.tuple<index, i1, !rtgtest.ireg>>) -> () {return}
+func.func @dummy10(%arg0: !rtg.set<!rtg.tuple<index>>) -> () {return}
 func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
 func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 func.func @dummy13(%arg0: !rtg.isa.memory_block<32>) -> () {return}
@@ -89,23 +89,23 @@ rtg.test @setCartesianProduct(singleton = %none: index) {
   // CHECK-DAG: [[T6:%.+]] = rtg.tuple_create [[IDX0]], [[FALSE]], [[S0]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[T7:%.+]] = rtg.tuple_create [[IDX1]], [[TRUE]], [[S0]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[T8:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]], [[S0]] : index, i1, !rtgtest.ireg
-  // CHECK-DAG: [[SET:%.+]] = rtg.set_create [[T1]], [[T2]], [[T3]], [[T4]], [[T5]], [[T6]], [[T7]], [[T8]] : tuple<index, i1, !rtgtest.ireg>
-  // CHECK-NEXT: func.call @dummy9([[SET]]) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  // CHECK-DAG: [[SET:%.+]] = rtg.set_create [[T1]], [[T2]], [[T3]], [[T4]], [[T5]], [[T6]], [[T7]], [[T8]] : !rtg.tuple<index, i1, !rtgtest.ireg>
+  // CHECK-NEXT: func.call @dummy9([[SET]]) : (!rtg.set<!rtg.tuple<index, i1, !rtgtest.ireg>>) -> ()
   %3 = rtg.set_cartesian_product %0, %1, %2 : !rtg.set<index>, !rtg.set<i1>, !rtg.set<!rtgtest.ireg>
-  func.call @dummy9(%3) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  func.call @dummy9(%3) : (!rtg.set<!rtg.tuple<index, i1, !rtgtest.ireg>>) -> ()
   
-  // CHECK-NEXT: [[EMPTY:%.+]] = rtg.set_create  : tuple<index, i1, !rtgtest.ireg>
-  // CHECK-NEXT: func.call @dummy9([[EMPTY]]) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  // CHECK-NEXT: [[EMPTY:%.+]] = rtg.set_create  : !rtg.tuple<index, i1, !rtgtest.ireg>
+  // CHECK-NEXT: func.call @dummy9([[EMPTY]]) : (!rtg.set<!rtg.tuple<index, i1, !rtgtest.ireg>>) -> ()
   %4 = rtg.set_create : !rtgtest.ireg
   %5 = rtg.set_cartesian_product %0, %1, %4 : !rtg.set<index>, !rtg.set<i1>, !rtg.set<!rtgtest.ireg>
-  func.call @dummy9(%5) : (!rtg.set<tuple<index, i1, !rtgtest.ireg>>) -> ()
+  func.call @dummy9(%5) : (!rtg.set<!rtg.tuple<index, i1, !rtgtest.ireg>>) -> ()
 
   // CHECK-NEXT: [[T9:%.+]] = rtg.tuple_create [[IDX1]] : index
   // CHECK-NEXT: [[T10:%.+]] = rtg.tuple_create [[IDX0]] : index
-  // CHECK-NEXT: [[SET2:%.+]] = rtg.set_create [[T9]], [[T10]] : tuple<index>
-  // CHECK-NEXT: func.call @dummy10([[SET2]]) : (!rtg.set<tuple<index>>) -> ()
+  // CHECK-NEXT: [[SET2:%.+]] = rtg.set_create [[T9]], [[T10]] : !rtg.tuple<index>
+  // CHECK-NEXT: func.call @dummy10([[SET2]]) : (!rtg.set<!rtg.tuple<index>>) -> ()
   %6 = rtg.set_cartesian_product %0 : !rtg.set<index>
-  func.call @dummy10(%6) : (!rtg.set<tuple<index>>) -> ()
+  func.call @dummy10(%6) : (!rtg.set<!rtg.tuple<index>>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @bagOperations
@@ -675,13 +675,13 @@ rtg.test @tuples(singleton = %none: index) {
   %idx0 = index.constant 0
   %idx1 = index.constant 1
   %0 = rtg.tuple_create %idx1, %idx0 : index, index
-  %1 = rtg.tuple_extract %0 at 1 : tuple<index, index>
+  %1 = rtg.tuple_extract %0 at 1 : !rtg.tuple<index, index>
 
   // CHECK-NEXT: %idx1 = index.constant 1
   // CHECK-NEXT: %idx0 = index.constant 0
   // CHECK-NEXT: [[V0:%.+]] = rtg.tuple_create %idx1, %idx0 : index, index
   // CHECK-NEXT: func.call @dummy8([[V0]])
-  func.call @dummy8(%0) : (tuple<index, index>) -> ()
+  func.call @dummy8(%0) : (!rtg.tuple<index, index>) -> ()
 
   // CHECK-NEXT: func.call @dummy2(%idx0)
   func.call @dummy2(%1) : (index) -> ()

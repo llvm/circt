@@ -148,6 +148,21 @@ def ArrayType : RTGTypeDef<"Array"> {
   ];
 }
 
+def TupleType : RTGTypeDef<"Tuple"> {
+  let summary = "a tuple of zero or more fields";
+  let description = [{
+    This type represents a tuple of zero or more fields. The fields can be
+    of any type. The builtin tuple type is not used because it does not allow
+    zero fields.
+  }];
+
+  let parameters = (ins
+    OptionalArrayRefParameter<"::mlir::Type", "tuple field types">:$fieldTypes);
+
+  let mnemonic = "tuple";
+  let assemblyFormat = "(`<` $fieldTypes^ `>`)?";
+}
+
 //===----------------------------------------------------------------------===//
 // Types for ISA targets
 //===----------------------------------------------------------------------===//

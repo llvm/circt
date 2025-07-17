@@ -62,7 +62,7 @@ rtg.sequence @seqRandomizationAndEmbedding() {
 }
 
 // CHECK-LABEL: @sets
-func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
+func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<!rtg.tuple<i32, i32>> {
   // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
   // CHECK: [[R:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<i32>
   // CHECK: [[EMPTY:%.+]] = rtg.set_create : i32
@@ -80,7 +80,7 @@ func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
   %prod = rtg.set_cartesian_product %set, %set : !rtg.set<i32>, !rtg.set<i32>
   %bag = rtg.set_convert_to_bag %set : !rtg.set<i32>
 
-  return %prod : !rtg.set<tuple<i32, i32>>
+  return %prod : !rtg.set<!rtg.tuple<i32, i32>>
 }
 
 // CHECK-LABEL: @bags
@@ -184,15 +184,18 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
 }
 
 // CHECK-LABEL: rtg.test @tuples
-rtg.test @tuples() {
+// CHECK-SAME: (tup = %{{.*}}: !rtg.tuple)
+rtg.test @tuples(tup = %tup: !rtg.tuple) {
   // CHECK-NEXT: [[IDX0:%.+]] = index.constant 0
   // CHECK-NEXT: [[TRUE:%.+]] = index.bool.constant true
   // CHECK-NEXT: [[TUPLE:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]] : index, i1
-  // CHECK-NEXT: rtg.tuple_extract [[TUPLE]] at 1 : tuple<index, i1>
+  // CHECK-NEXT: rtg.tuple_extract [[TUPLE]] at 1 : !rtg.tuple<index, i1>
+  // CHECK-NEXT: rtg.tuple_create
   %idx0 = index.constant 0
   %true = index.bool.constant true
   %0 = rtg.tuple_create %idx0, %true : index, i1
-  %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
+  %1 = rtg.tuple_extract %0 at 1 : !rtg.tuple<index, i1>
+  rtg.tuple_create
 }
 
 // CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memory_block<32>, mem_size: index>
