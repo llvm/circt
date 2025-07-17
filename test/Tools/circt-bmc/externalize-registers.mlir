@@ -58,8 +58,8 @@ hw.module @nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
   hw.output %0 : i32
 }
 
-// CHECK:  hw.module @nested_nested_reg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in %single_reg_state : i32, in %top_reg_state : i32, out {{.+}} : i32, out single_reg_input : i32, out top_reg_input : i32) attributes {initial_values = [0 : i32, unit], num_regs = 2 : i32} {
-// CHECK:    [[INSTOUT:%.+]], [[INSTREG:%.+]] = hw.instance "nested_reg" @nested_reg(clk: [[CLK]]: !seq.clock, in0: [[IN0]]: i32, in1: [[IN1]]: i32, single_reg_state: %single_reg_state: i32) -> ({{.+}}: i32, single_reg_input: i32)
+// CHECK:  hw.module @nested_nested_reg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in %single_reg_state : i32, in %top_reg_state : i32, out {{.+}} : i32, out single_reg_next : i32, out top_reg_next : i32) attributes {initial_values = [0 : i32, unit], num_regs = 2 : i32} {
+// CHECK:    [[INSTOUT:%.+]], [[INSTREG:%.+]] = hw.instance "nested_reg" @nested_reg(clk: [[CLK]]: !seq.clock, in0: [[IN0]]: i32, in1: [[IN1]]: i32, single_reg_state: %single_reg_state: i32) -> ({{.+}}: i32, single_reg_next: i32)
 // CHECK:    hw.output %top_reg_state, [[INSTREG]], [[INSTOUT]]
 // CHECK:  }
 hw.module @nested_nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -68,7 +68,7 @@ hw.module @nested_nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, ou
   hw.output %top_reg : i32
 }
 
-// CHECK:  hw.module @different_initial_values(in [[CLK:%.+]] : !seq.clock, in [[IN:%.+]] : i32, in %reg0_state : i32, in %reg1_state : i32, in %reg2_state : i32, out reg0_input : i32, out reg1_input : i32, out reg2_input : i32) attributes {initial_values = [0 : i32, 42 : i32, unit], num_regs = 3 : i32} {
+// CHECK:  hw.module @different_initial_values(in [[CLK:%.+]] : !seq.clock, in [[IN:%.+]] : i32, in %reg0_state : i32, in %reg1_state : i32, in %reg2_state : i32, out reg0_next : i32, out reg1_next : i32, out reg2_next : i32) attributes {initial_values = [0 : i32, 42 : i32, unit], num_regs = 3 : i32} {
 // CHECK:    [[INITIAL:%.+]]:2 = seq.initial() {
 // CHECK:      [[C0_I32:%.+]] = hw.constant 0 : i32
 // CHECK:      [[C42_I32:%.+]] = hw.constant 42 : i32

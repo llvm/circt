@@ -228,7 +228,7 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
       initState ? initState : mlir::UnitAttr::get(&getContext()));
 
   StringAttr newInputName(builder.getStringAttr(regName + "_state")),
-      newOutputName(builder.getStringAttr(regName + "_input"));
+      newOutputName(builder.getStringAttr(regName + "_next"));
   addedInputs[module.getSymNameAttr()].push_back(regType);
   addedInputNames[module.getSymNameAttr()].push_back(newInputName);
   addedOutputs[module.getSymNameAttr()].push_back(next.getType());
