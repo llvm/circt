@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --seq-reg-of-vec-to-mem | FileCheck %s
 
-// CHECK-LABEL: hw.module private @sf_tagmem_external_mem_a
-hw.module private @sf_tagmem_external_mem_a(in %CLK : i1, in %D : i46, in %ADR : i13, in %WE : i1, in %ME : i1, out Q : i46) {
+// CHECK-LABEL: hw.module private @complex_mem
+hw.module private @complex_mem(in %CLK : i1, in %D : i46, in %ADR : i13, in %WE : i1, in %ME : i1, out Q : i46) {
     %true = hw.constant true
     %c0_i46 = hw.constant 0 : i46
     %0 = comb.xor %WE, %true : i1
@@ -49,3 +49,30 @@ hw.module @simple_mem(in %clk : i1, in %addr : i2, in %data : i8, in %we : i1, o
 // CHECK-NOT: seq.firreg %{{.*}} : !hw.array<8192xi46>
 // CHECK-NOT: hw.array_get
 // CHECK-NOT: hw.array_inject
+
+// Test that transformation is skipped when mux has multiple uses
+// CHECK-LABEL: hw.module @shared_mux_test(
+hw.module @shared_mux_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, out other_out: !hw.array<4xi8>) {
+  %clock = seq.to_clock %clk
+  %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
+  %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
+  // CHECK: %mem = seq.firreg %{{.*}} clock %{{.*}} : !hw.array<4xi8>
+  %mem = seq.firreg %next clock %clock : !hw.array<4xi8>
+  
+  // Mux result used elsewhere - should prevent transformation
+  hw.output %next : !hw.array<4xi8>
+}
+
+// Test that transformation is skipped when register has multiple uses
+// CHECK-LABEL: hw.module @shared_reg_test(
+hw.module @shared_reg_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, out reg_out: !hw.array<4xi8>, out read_out: i8) {
+  %clock = seq.to_clock %clk
+  %read = hw.array_get %mem[%addr] : !hw.array<4xi8>, i2
+  %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
+  %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
+  // CHECK: %mem = seq.firreg %{{.*}} clock %{{.*}} : !hw.array<4xi8>
+  %mem = seq.firreg %next clock %clock : !hw.array<4xi8>
+  
+  // Register used elsewhere - should prevent transformation
+  hw.output %mem, %read : !hw.array<4xi8>, i8
+}

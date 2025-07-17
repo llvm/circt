@@ -89,6 +89,24 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
   if (!isArrayType(reg.getType()))
     return false;
 
+  ArrayGetOp readAccess;
+  ArrayInjectOp writeAccess;
+  comb::MuxOp writeMux;
+  for (auto *user : reg.getResult().getUsers()) {
+    LLVM_DEBUG(llvm::dbgs() << "  Register user: " << *user << "\n");
+    if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user); !readAccess && arrayGet)
+      readAccess = arrayGet;
+    else if (auto arrayInject = dyn_cast<hw::ArrayInjectOp>(user);
+             !writeAccess && arrayInject)
+      writeAccess = arrayInject;
+    else if (auto mux = dyn_cast<comb::MuxOp>(user); !writeMux && mux)
+      writeMux = mux;
+    else
+      return false;
+  }
+  if (!readAccess || !writeAccess || !writeMux)
+    return false;
+
   pattern.memReg = reg;
   pattern.clock = reg.getClk();
 
@@ -100,6 +118,12 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
 
   LLVM_DEBUG(llvm::dbgs() << "  Found driving mux: " << mux << "\n");
   pattern.writeMux = mux;
+
+  // Check that the mux is only used by this register (safety check)
+  if (!mux.getResult().hasOneUse()) {
+    LLVM_DEBUG(llvm::dbgs() << "  Mux has multiple uses, cannot transform\n");
+    return false;
+  }
 
   // Analyze mux inputs: sel ? write_result : current_memory
   Value writeResult = mux.getTrueValue();
@@ -121,24 +145,20 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
   pattern.writeEnable = mux.getCond();
 
   // Look for read pattern - find array_get users
-  for (auto *user : reg.getResult().getUsers()) {
-    if (auto arrayGet = dyn_cast<hw::ArrayGetOp>(user)) {
-      LLVM_DEBUG(llvm::dbgs() << "  Found array_get: " << arrayGet << "\n");
-      pattern.readAccess = arrayGet;
-      pattern.readAddr = arrayGet.getIndex();
+  auto arrayGet = readAccess;
+  LLVM_DEBUG(llvm::dbgs() << "  Found array_get: " << arrayGet << "\n");
+  pattern.readAccess = arrayGet;
+  pattern.readAddr = arrayGet.getIndex();
 
-      // Check if read goes through output register
-      for (auto *readUser : arrayGet.getResult().getUsers()) {
-        if (auto outputReg = dyn_cast<FirRegOp>(readUser)) {
-          if (outputReg.getClk() == pattern.clock) {
-            LLVM_DEBUG(llvm::dbgs()
-                       << "  Found output register: " << outputReg << "\n");
-            pattern.outputReg = outputReg;
-            break;
-          }
-        }
+  // Check if read goes through output register
+  for (auto *readUser : arrayGet.getResult().getUsers()) {
+    if (auto outputReg = dyn_cast<FirRegOp>(readUser)) {
+      if (outputReg.getClk() == pattern.clock) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  Found output register: " << outputReg << "\n");
+        pattern.outputReg = outputReg;
+        break;
       }
-      break;
     }
   }
 
