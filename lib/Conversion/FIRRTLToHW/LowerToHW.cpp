@@ -1688,6 +1688,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AggregateConstantOp op);
   LogicalResult visitExpr(IsTagOp op);
   LogicalResult visitExpr(SubtagOp op);
+  LogicalResult visitExpr(TagExtractOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) {
     if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
@@ -3278,6 +3279,26 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
   auto input = getLoweredValue(op.getInput());
   auto field = builder.create<hw::StructExtractOp>(input, "body");
   return setLoweringTo<hw::UnionExtractOp>(op, field, tagName);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(TagExtractOp op) {
+  // Zero width values must be lowered to nothing.
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getLoweredValue(op.getInput());
+  if (!input)
+    return failure();
+
+  // If the lowered enum is a struct (has both tag and body), extract the tag
+  // field.
+  if (isa<hw::StructType>(input.getType())) {
+    return setLoweringTo<hw::StructExtractOp>(op, input, "tag");
+  }
+
+  // If the lowered enum is just the tag (simple enum with no data), return it
+  // directly.
+  return setLowering(op, input);
 }
 
 //===----------------------------------------------------------------------===//
