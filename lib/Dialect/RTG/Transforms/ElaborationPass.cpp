@@ -98,6 +98,7 @@ struct TupleStorage;
 struct MemoryStorage;
 struct MemoryBlockStorage;
 struct ValidationValue;
+struct ValidationMuxedValue;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -117,7 +118,8 @@ using ElaboratorValue =
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
                  LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
-                 MemoryBlockStorage *, ValidationValue *>;
+                 MemoryBlockStorage *, ValidationValue *,
+                 ValidationMuxedValue *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -359,6 +361,23 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
+/// Storage object for the 'usedDefault` result of 'rtg.validate'.
+struct ValidationMuxedValue {
+  ValidationMuxedValue(const ValidationValue *value, unsigned idx)
+      : hashcode(llvm::hash_combine(value, idx)), value(value), idx(idx) {}
+
+  bool isEqual(const ValidationMuxedValue *other) const {
+    return hashcode == other->hashcode && value == other->value &&
+           idx == other->idx;
+  }
+
+  // The cached hashcode to avoid repeated computations.
+  const unsigned hashcode;
+
+  const ValidationValue *value;
+  const unsigned idx;
+};
+
 // Values with identity not intended to be internalized.
 //===----------------------------------------------------------------------===//
 
@@ -457,12 +476,18 @@ struct RandomizedSequenceStorage : IdentityValue {
 /// Storage object for an '!rtg.validate' result.
 struct ValidationValue : IdentityValue {
   ValidationValue(Type type, const ElaboratorValue &ref,
-                  const ElaboratorValue &defaultValue, StringAttr id)
-      : IdentityValue(type), ref(ref), defaultValue(defaultValue), id(id) {}
+                  const ElaboratorValue &defaultValue, StringAttr id,
+                  SmallVector<ElaboratorValue> &&defaultUsedValues,
+                  SmallVector<ElaboratorValue> &&elseValues)
+      : IdentityValue(type), ref(ref), defaultValue(defaultValue), id(id),
+        defaultUsedValues(std::move(defaultUsedValues)),
+        elseValues(std::move(elseValues)) {}
 
   const ElaboratorValue ref;
   const ElaboratorValue defaultValue;
   const StringAttr id;
+  const SmallVector<ElaboratorValue> defaultUsedValues;
+  const SmallVector<ElaboratorValue> elseValues;
 };
 
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
@@ -519,6 +544,8 @@ private:
       return internedInterleavedSequences;
     else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
       return internedTuples;
+    else if constexpr (std::is_same_v<StorageTy, ValidationMuxedValue>)
+      return internedValidationMuxedValues;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -545,6 +572,9 @@ private:
       internedInterleavedSequences;
   DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
       internedTuples;
+  DenseSet<HashedStorage<ValidationMuxedValue>,
+           StorageKeyInfo<ValidationMuxedValue>>
+      internedValidationMuxedValues;
 };
 
 } // namespace
@@ -646,6 +676,10 @@ static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
 static void print(const ValidationValue *val, llvm::raw_ostream &os) {
   os << "<validation-value {type=" << val->type << ", ref=" << val->ref
      << ", defaultValue=" << val->defaultValue << "}>";
+}
+
+static void print(const ValidationMuxedValue *val, llvm::raw_ostream &os) {
+  os << "<validation-muxed-value (" << val->value << ") at " << val->idx << ">";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -1057,11 +1091,39 @@ private:
 
   Value visit(ValidationValue *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<ValidateOp>(
+    SmallVector<Value> usedDefaultValues, elseValues;
+    for (auto [dfltVal, elseVal] :
+         llvm::zip(val->defaultUsedValues, val->elseValues)) {
+      auto dfltMat = materialize(dfltVal, loc, emitError);
+      auto elseMat = materialize(elseVal, loc, emitError);
+      if (!dfltMat || !elseMat)
+        return {};
+
+      usedDefaultValues.push_back(dfltMat);
+      usedDefaultValues.push_back(elseMat);
+    }
+
+    auto validateOp = builder.create<ValidateOp>(
         loc, val->type, materialize(val->ref, loc, emitError),
-        materialize(val->defaultValue, loc, emitError), val->id);
-    materializedValues[val] = res;
-    return res;
+        materialize(val->defaultValue, loc, emitError), val->id,
+        usedDefaultValues, elseValues);
+    materializedValues[val] = validateOp.getValue();
+    return validateOp.getValue();
+  }
+
+  Value visit(ValidationMuxedValue *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    Value validateValue =
+        materialize(const_cast<ValidationValue *>(val->value), loc, emitError);
+    if (!validateValue)
+      return {};
+    auto validateOp = validateValue.getDefiningOp<ValidateOp>();
+    if (!validateOp) {
+      emitError() << "expected validate op for validation muxed value";
+      return {};
+    }
+    materializedValues[val] = validateOp.getValues()[val->idx];
+    return validateOp.getValues()[val->idx];
   }
 
 private:
@@ -1705,12 +1767,25 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(ValidateOp op) {
+    SmallVector<ElaboratorValue> defaultUsedValues, elseValues;
+    for (auto v : op.getDefaultUsedValues())
+      defaultUsedValues.push_back(state.at(v));
+
+    for (auto v : op.getElseValues())
+      elseValues.push_back(state.at(v));
+
     auto *validationVal = sharedState.internalizer.create<ValidationValue>(
-        op.getType(), state[op.getRef()], state[op.getDefaultValue()],
-        op.getIdAttr());
+        op.getValue().getType(), state[op.getRef()],
+        state[op.getDefaultValue()], op.getIdAttr(),
+        std::move(defaultUsedValues), std::move(elseValues));
     state[op.getValue()] = validationVal;
     materializer.registerIdentityValue(validationVal);
     materializer.map(validationVal, op.getValue());
+
+    for (auto [i, val] : llvm::enumerate(op.getValues()))
+      state[val] = sharedState.internalizer.internalize<ValidationMuxedValue>(
+          validationVal, i);
+
     return DeletionKind::Keep;
   }
 

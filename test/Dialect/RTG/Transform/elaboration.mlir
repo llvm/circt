@@ -747,6 +747,19 @@ rtg.test @validateOp(singleton = %none: index) {
   %default = rtg.constant #rtg.isa.immediate<32, 0>
   %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   func.call @dummy15(%0) : (!rtg.isa.immediate<32>) -> ()
+
+  // CHECK-NEXT: [[V3:%.+]] = rtg.constant #rtg.isa.immediate<32, 1>
+  // CHECK-NEXT: [[V4:%.+]] = rtg.constant #rtg.isa.immediate<32, 2>
+  // CHECK-NEXT: [[V5:%.+]], [[V6:%.+]]:2 = rtg.validate [[V0]], [[V1]] ([[V3]], [[V4]] else [[V4]], [[V3]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK-NEXT: func.call @dummy15([[V5]])
+  // CHECK-NEXT: func.call @dummy15([[V6]]#0)
+  // CHECK-NEXT: func.call @dummy15([[V6]]#1)
+  %v1 = rtg.constant #rtg.isa.immediate<32, 1>
+  %v2 = rtg.constant #rtg.isa.immediate<32, 2>
+  %1:3 = rtg.validate %reg, %default (%v1, %v2 else %v2, %v1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  func.call @dummy15(%1#0) : (!rtg.isa.immediate<32>) -> ()
+  func.call @dummy15(%1#1) : (!rtg.isa.immediate<32>) -> ()
+  func.call @dummy15(%1#2) : (!rtg.isa.immediate<32>) -> ()
 }
 
 // -----

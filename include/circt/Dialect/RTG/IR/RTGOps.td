@@ -777,7 +777,9 @@ def YieldOp : RTGOp<"yield", [Pure, Terminator]> {
 }
 
 def ValidateOp : RTGOp<"validate", [
-  AllTypesMatch<["defaultValue", "value"]>
+  AllTypesMatch<["defaultValue", "value"]>,
+  AllTypesMatch<["defaultUsedValues", "elseValues", "values"]>,
+  AttrSizedOperandSegments,
 ]> {
   let summary = "validate the value in the given resource";
   let description = [{
@@ -801,16 +803,41 @@ def ValidateOp : RTGOp<"validate", [
     a simple integer). Therefore, it is strongly recommended to not use the
     result value of this operation in situations that expect structural
     equivalence checks such as adding it to sets or bags.
+
+    The 'defaultUsedValues' are forwarded to the 'values' results without any
+    modification whenever the 'defaultValue' is used as replacement for 'value'.
+    Otherwise, the 'elseValues' are forwarded. This can be used to conditionally
+    execute code based on whether the default value was used or a proper value
+    was used as replacement. Note that this is not the most light-weight
+    implementation as, in principle, a single 'i1' result could achieve the same
+    in combination with an 'scf.if' or 'select' operation. However, these
+    operations are fully resolved during elaboration while the 'validate'
+    operation remains until later in the pipeline because the repeated
+    compilation runs to resolve the validate operations should use the same
+    elaboration result which is difficult to achieve with multiple elaboration
+    runs even with the same seed as a different elaboration of the validate op
+    for the different compilation runs can lead to subtle differences in the
+    RNG querrying behavior.
+
+    Another alternative could be a region that is conditionally inlined or
+    deleted. However, this is even more heavy-weight and implies a strategy that
+    involves some instructions to be present in one run but not the other which
+    can lead to different label addresses, etc. and thus more likely to problems
+    with AOT co-simulation.
   }];
 
   let arguments = (ins ValidationTypeInterface:$ref,
                        AnyType:$defaultValue,
-                       OptionalAttr<StrAttr>:$id);
-  let results = (outs AnyType:$value);
+                       OptionalAttr<StrAttr>:$id,
+                       Variadic<AnyType>:$defaultUsedValues,
+                       Variadic<AnyType>:$elseValues);
+  let results = (outs AnyType:$value, Variadic<AnyType>:$values);
 
   let assemblyFormat = [{
-    $ref `,` $defaultValue (`,` $id^)? `:`
-    type($ref) `->` type($value) attr-dict
+    $ref `,` $defaultValue (`,` $id^)?
+    (` ``(` $defaultUsedValues^ `else` $elseValues `:`
+    qualified(type($defaultUsedValues)) `)`)? `:`
+    qualified(type($ref)) `->` qualified(type($defaultValue)) attr-dict
   }];
 
   let hasVerifier = 1;
