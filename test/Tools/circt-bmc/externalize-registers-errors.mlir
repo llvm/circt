@@ -58,7 +58,7 @@ hw.module @reg_with_instance_initial(in %clk: !seq.clock, in %in: i32, out out: 
 // -----
 hw.module @firreg_with_async_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
   %c0_i32 = hw.constant 0 : i32
-  // expected-error @below {{seq.firreg with async reset not yet supported}}
+  // expected-error @below {{registors with async reset not yet supported}}
   %1 = seq.firreg %in clock %clk reset async %rst, %c0_i32 : i32
   hw.output %1 : i32
 }

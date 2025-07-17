@@ -43,17 +43,23 @@ struct ExternalizeRegistersPass
     : public circt::impl::ExternalizeRegistersBase<ExternalizeRegistersPass> {
   using ExternalizeRegistersBase::ExternalizeRegistersBase;
   void runOnOperation() override;
+
+private:
+  DenseMap<StringAttr, SmallVector<Type>> addedInputs;
+  DenseMap<StringAttr, SmallVector<StringAttr>> addedInputNames;
+  DenseMap<StringAttr, SmallVector<Type>> addedOutputs;
+  DenseMap<StringAttr, SmallVector<StringAttr>> addedOutputNames;
+  DenseMap<StringAttr, SmallVector<Attribute>> initialValues;
+
+  LogicalResult externalizeReg(HWModuleOp module, Operation *op, Twine regName,
+                               Value clock, Attribute initState, Value reset,
+                               bool isAsync, Value resetValue, Value next);
 };
 } // namespace
 
 void ExternalizeRegistersPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
   DenseSet<Operation *> handled;
-  DenseMap<StringAttr, SmallVector<Type>> addedInputs;
-  DenseMap<StringAttr, SmallVector<StringAttr>> addedInputNames;
-  DenseMap<StringAttr, SmallVector<Type>> addedOutputs;
-  DenseMap<StringAttr, SmallVector<StringAttr>> addedOutputNames;
-  DenseMap<StringAttr, SmallVector<Attribute>> initialValues;
 
   // Iterate over all instances in the instance graph. This ensures we visit
   // every module, even private top modules (private and never instantiated).
@@ -86,12 +92,7 @@ void ExternalizeRegistersPass::runOnOperation() {
       }
       module->walk([&](Operation *op) {
         if (auto regOp = dyn_cast<seq::CompRegOp>(op)) {
-          if (!isa<BlockArgument>(regOp.getClk())) {
-            regOp.emitError("only clocks directly given as block arguments "
-                            "are supported");
-            return signalPassFailure();
-          }
-          mlir::Attribute initState;
+          mlir::Attribute initState = {};
           if (auto initVal = regOp.getInitialValue()) {
             // Find the constant op that defines the reset value in an initial
             // block (if it exists)
@@ -111,104 +112,37 @@ void ExternalizeRegistersPass::runOnOperation() {
                               "not yet supported");
               return signalPassFailure();
             }
-          } else {
-            // If there's no initial value just add a unit attribute to maintain
-            // one-to-one correspondence with module ports
-            initState = mlir::UnitAttr::get(&getContext());
           }
-          addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
-          addedOutputs[module.getSymNameAttr()].push_back(
-              regOp.getInput().getType());
-          OpBuilder builder(regOp);
-          auto regName = regOp.getName();
-          StringAttr newInputName, newOutputName;
-          if (regName && !regName.value().empty()) {
-            newInputName = builder.getStringAttr(regName.value() + "_state");
-            newOutputName = builder.getStringAttr(regName.value() + "_input");
-          } else {
-            newInputName =
-                builder.getStringAttr("reg_" + Twine(numRegs) + "_state");
-            newOutputName =
-                builder.getStringAttr("reg_" + Twine(numRegs) + "_input");
-          }
-          addedInputNames[module.getSymNameAttr()].push_back(newInputName);
-          addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
-          initialValues[module.getSymNameAttr()].push_back(initState);
+          Twine regName = regOp.getName() && !(regOp.getName().value().empty())
+                              ? regOp.getName().value()
+                              : "reg_" + Twine(numRegs);
 
-          regOp.getResult().replaceAllUsesWith(
-              module.appendInput(newInputName, regOp.getType()).second);
-          if (auto reset = regOp.getReset()) {
-            auto resetValue = regOp.getResetValue();
-            auto mux = builder.create<comb::MuxOp>(
-                regOp.getLoc(), regOp.getType(), reset, resetValue,
-                regOp.getInput());
-            module.appendOutput(newOutputName, mux);
-          } else {
-            module.appendOutput(newOutputName, regOp.getInput());
+          if (failed(externalizeReg(module, op, regName, regOp.getClk(),
+                                    initState, regOp.getReset(), false,
+                                    regOp.getResetValue(), regOp.getInput()))) {
+            return signalPassFailure();
           }
           regOp->erase();
           ++numRegs;
           return;
         }
         if (auto regOp = dyn_cast<seq::FirRegOp>(op)) {
-          if (!isa<BlockArgument>(regOp.getClk())) {
-            regOp.emitError("only clocks directly given as block arguments "
-                            "are supported");
-            return signalPassFailure();
-          }
-          mlir::Attribute initState;
+          mlir::Attribute initState = {};
           if (auto preset = regOp.getPreset()) {
             // Get preset value as initState
             initState = mlir::IntegerAttr::get(
                 mlir::IntegerType::get(&getContext(), preset->getBitWidth()),
                 *preset);
-          } else {
-            // If there's no preset value just add a unit attribute to maintain
-            // one-to-one correspondence with module ports
-            initState = mlir::UnitAttr::get(&getContext());
           }
-          addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
-          addedOutputs[module.getSymNameAttr()].push_back(
-              regOp.getNext().getType());
-          OpBuilder builder(regOp);
-          auto regName = regOp.getName();
-          StringAttr newInputName, newOutputName;
-          if (!regName.empty()) {
-            newInputName = builder.getStringAttr(regName + "_state");
-            newOutputName = builder.getStringAttr(regName + "_input");
-          } else {
-            newInputName =
-                builder.getStringAttr("reg_" + Twine(numRegs) + "_state");
-            newOutputName =
-                builder.getStringAttr("reg_" + Twine(numRegs) + "_input");
+          Twine regName = regOp.getName().empty() ? "reg_" + Twine(numRegs)
+                                                  : regOp.getName();
+
+          if (failed(externalizeReg(module, op, regName, regOp.getClk(),
+                                    initState, regOp.getReset(),
+                                    regOp.getIsAsync(), regOp.getResetValue(),
+                                    regOp.getNext()))) {
+            return signalPassFailure();
           }
-          addedInputNames[module.getSymNameAttr()].push_back(newInputName);
-          addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
-          initialValues[module.getSymNameAttr()].push_back(initState);
-
-          // Replace the register with newInput and newOutput
-          auto newInput =
-              module.appendInput(newInputName, regOp.getType()).second;
-          if (auto reset = regOp.getReset()) {
-            auto resetValue = regOp.getResetValue();
-            if (regOp.getIsAsync()) {
-              // Async reset
-              regOp.emitError("seq.firreg with async reset not yet supported");
-              return signalPassFailure();
-            }
-            // Sync reset
-            regOp.getResult().replaceAllUsesWith(newInput);
-
-            auto mux =
-                builder.create<comb::MuxOp>(regOp.getLoc(), regOp.getType(),
-                                            reset, resetValue, regOp.getNext());
-            module.appendOutput(newOutputName, mux);
-          } else {
-            // No reset
-            regOp.getResult().replaceAllUsesWith(newInput);
-            module.appendOutput(newOutputName, regOp.getNext());
-          }
-
           regOp->erase();
           ++numRegs;
           return;
@@ -272,4 +206,53 @@ void ExternalizeRegistersPass::runOnOperation() {
                                      initialValues[module.getSymNameAttr()]));
     }
   }
+}
+
+LogicalResult ExternalizeRegistersPass::externalizeReg(
+    HWModuleOp module, Operation *op, Twine regName, Value clock,
+    Attribute initState, Value reset, bool isAsync, Value resetValue,
+    Value next) {
+  if (!isa<BlockArgument>(clock)) {
+    op->emitError("only clocks directly given as block arguments "
+                  "are supported");
+    return failure();
+  }
+
+  OpBuilder builder(op);
+  auto result = op->getResult(0);
+  auto regType = result.getType();
+
+  // If there's no initial value just add a unit attribute to maintain
+  // one-to-one correspondence with module ports
+  initialValues[module.getSymNameAttr()].push_back(
+      initState ? initState : mlir::UnitAttr::get(&getContext()));
+
+  StringAttr newInputName(builder.getStringAttr(regName + "_state")),
+      newOutputName(builder.getStringAttr(regName + "_input"));
+  addedInputs[module.getSymNameAttr()].push_back(regType);
+  addedInputNames[module.getSymNameAttr()].push_back(newInputName);
+  addedOutputs[module.getSymNameAttr()].push_back(next.getType());
+  addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
+
+  // Replace the register with newInput and newOutput
+  auto newInput = module.appendInput(newInputName, regType).second;
+  if (reset) {
+    if (isAsync) {
+      // Async reset
+      op->emitError("registors with async reset not yet supported");
+      return failure();
+    }
+    // Sync reset
+    result.replaceAllUsesWith(newInput);
+
+    auto mux = builder.create<comb::MuxOp>(op->getLoc(), regType, reset,
+                                           resetValue, next);
+    module.appendOutput(newOutputName, mux);
+  } else {
+    // No reset
+    result.replaceAllUsesWith(newInput);
+    module.appendOutput(newOutputName, next);
+  }
+
+  return success();
 }
