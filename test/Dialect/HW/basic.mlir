@@ -270,3 +270,9 @@ hw.module @aggregate_const(out o : !hw.array<1x!seq.clock>) {
   %0 = hw.aggregate_constant [#seq<clock_constant high> : !seq.clock] : !hw.array<1x!seq.clock>
   hw.output %0 : !hw.array<1x!seq.clock>
 }
+
+// CHECK-LABEL: hw.donttouch <@DontTouch::@a>
+hw.donttouch <@DontTouch::@a>
+hw.module public @DontTouch() {
+  %0 = sv.wire sym @a : !hw.inout<i1>
+}
