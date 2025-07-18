@@ -881,6 +881,8 @@ def ConcatImmediateOp : RTGISAOp<"concat_immediate", [
   let results = (outs ImmediateType:$result);
 
   let assemblyFormat = "$operands `:` qualified(type($operands)) attr-dict";
+
+  let hasFolder = 1;
 }
 
 def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
@@ -901,6 +903,7 @@ def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
   }];
   
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 //===- ISA Memory Block Operations ----------------------------------------===//

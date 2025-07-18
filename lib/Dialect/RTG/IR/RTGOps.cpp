@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -868,6 +869,25 @@ LogicalResult ConcatImmediateOp::inferReturnTypes(
   return success();
 }
 
+OpFoldResult ConcatImmediateOp::fold(FoldAdaptor adaptor) {
+  // concat(x) -> x
+  if (getOperands().size() == 1)
+    return getOperands()[0];
+
+  // If all operands are constants, fold into a single constant
+  if (llvm::all_of(adaptor.getOperands(), [](Attribute attr) {
+        return isa_and_nonnull<ImmediateAttr>(attr);
+      })) {
+    auto result = APInt::getZeroWidth();
+    for (auto attr : adaptor.getOperands())
+      result = result.concat(cast<ImmediateAttr>(attr).getValue());
+
+    return ImmediateAttr::get(getContext(), result);
+  }
+
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // SliceImmediateOp
 //===----------------------------------------------------------------------===//
@@ -887,6 +907,16 @@ LogicalResult SliceImmediateOp::verify() {
            << " bits are available)";
 
   return success();
+}
+
+OpFoldResult SliceImmediateOp::fold(FoldAdaptor adaptor) {
+  if (auto inputAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getInput())) {
+    auto resultWidth = getType().getWidth();
+    APInt sliced = inputAttr.getValue().extractBits(resultWidth, getLowBit());
+    return ImmediateAttr::get(getContext(), sliced);
+  }
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
