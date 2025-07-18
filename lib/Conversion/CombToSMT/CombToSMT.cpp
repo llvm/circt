@@ -57,50 +57,55 @@ struct IcmpOpConversion : OpConversionPattern<ICmpOp> {
       return rewriter.notifyMatchFailure(op,
                                          "comparison predicate not supported");
 
+    Value result;
     if (adaptor.getPredicate() == ICmpPredicate::eq) {
-      rewriter.replaceOpWithNewOp<smt::EqOp>(op, adaptor.getLhs(),
-                                             adaptor.getRhs());
-      return success();
+      result = rewriter.create<smt::EqOp>(op.getLoc(), adaptor.getLhs(),
+                                          adaptor.getRhs());
+    } else if (adaptor.getPredicate() == ICmpPredicate::ne) {
+      result = rewriter.create<smt::DistinctOp>(op.getLoc(), adaptor.getLhs(),
+                                                adaptor.getRhs());
+    } else {
+      smt::BVCmpPredicate pred;
+      switch (adaptor.getPredicate()) {
+      case ICmpPredicate::sge:
+        pred = smt::BVCmpPredicate::sge;
+        break;
+      case ICmpPredicate::sgt:
+        pred = smt::BVCmpPredicate::sgt;
+        break;
+      case ICmpPredicate::sle:
+        pred = smt::BVCmpPredicate::sle;
+        break;
+      case ICmpPredicate::slt:
+        pred = smt::BVCmpPredicate::slt;
+        break;
+      case ICmpPredicate::uge:
+        pred = smt::BVCmpPredicate::uge;
+        break;
+      case ICmpPredicate::ugt:
+        pred = smt::BVCmpPredicate::ugt;
+        break;
+      case ICmpPredicate::ule:
+        pred = smt::BVCmpPredicate::ule;
+        break;
+      case ICmpPredicate::ult:
+        pred = smt::BVCmpPredicate::ult;
+        break;
+      default:
+        llvm_unreachable("all cases handled above");
+      }
+
+      result = rewriter.create<smt::BVCmpOp>(
+          op.getLoc(), pred, adaptor.getLhs(), adaptor.getRhs());
     }
 
-    if (adaptor.getPredicate() == ICmpPredicate::ne) {
-      rewriter.replaceOpWithNewOp<smt::DistinctOp>(op, adaptor.getLhs(),
-                                                   adaptor.getRhs());
-      return success();
-    }
+    Value convVal = typeConverter->materializeTargetConversion(
+        rewriter, op.getLoc(), typeConverter->convertType(op.getType()),
+        result);
+    if (!convVal)
+      return failure();
 
-    smt::BVCmpPredicate pred;
-    switch (adaptor.getPredicate()) {
-    case ICmpPredicate::sge:
-      pred = smt::BVCmpPredicate::sge;
-      break;
-    case ICmpPredicate::sgt:
-      pred = smt::BVCmpPredicate::sgt;
-      break;
-    case ICmpPredicate::sle:
-      pred = smt::BVCmpPredicate::sle;
-      break;
-    case ICmpPredicate::slt:
-      pred = smt::BVCmpPredicate::slt;
-      break;
-    case ICmpPredicate::uge:
-      pred = smt::BVCmpPredicate::uge;
-      break;
-    case ICmpPredicate::ugt:
-      pred = smt::BVCmpPredicate::ugt;
-      break;
-    case ICmpPredicate::ule:
-      pred = smt::BVCmpPredicate::ule;
-      break;
-    case ICmpPredicate::ult:
-      pred = smt::BVCmpPredicate::ult;
-      break;
-    default:
-      llvm_unreachable("all cases handled above");
-    }
-
-    rewriter.replaceOpWithNewOp<smt::BVCmpOp>(op, pred, adaptor.getLhs(),
-                                              adaptor.getRhs());
+    rewriter.replaceOp(op, convVal);
     return success();
   }
 };
