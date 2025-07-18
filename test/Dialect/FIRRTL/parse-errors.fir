@@ -355,6 +355,13 @@ circuit circuit:
 
 ;// -----
 
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A = -1|} ; expected-error {{enum tag value must be non-negative}}
+
+;// -----
+
 FIRRTL version 4.0.0
 circuit NonAscii:
   public module NonAscii:

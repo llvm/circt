@@ -809,7 +809,6 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
                  "expected leading '{|' in enumeration type"))
     return failure();
   SmallVector<StringAttr> names;
-  SmallPtrSet<StringAttr, 4> nameSet;
   SmallVector<APInt> values;
   SmallVector<FIRRTLBaseType> types;
   std::optional<APInt> previous;
@@ -825,11 +824,6 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
         auto name = StringAttr::get(getContext(), nameStr);
         names.push_back(name);
 
-        // Verify that the names of each variant are unique.
-        if (!nameSet.insert(name).second)
-          return emitError(fieldLoc, "duplicate variant name in enum: " +
-                                         name.getValue());
-
         // Parse the integer value if it exists. If its the first element of the
         // enum, it implicitly has a value of 0, otherwise it has the previous
         // value + 1.
@@ -837,6 +831,8 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
         if (consumeIf(FIRToken::equal)) {
           if (parseIntLit(value, "expected integer value for enumeration tag"))
             return failure();
+          if (value.isNegative())
+            return emitError(fieldLoc, "enum tag value must be non-negative");
         } else if (!previous) {
           value = APInt(1, 0);
         } else {
@@ -869,6 +865,13 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
         return success();
       }))
     return failure();
+
+  // Verify that the names of each variant are unique.
+  SmallPtrSet<StringAttr, 4> nameSet;
+  for (auto [name, loc] : llvm::zip(names, locs))
+    if (!nameSet.insert(name).second)
+      return emitError(loc,
+                       "duplicate variant name in enum: " + name.getValue());
 
   // Find the bitwidth of the enum.
   unsigned bitwidth = 0;
