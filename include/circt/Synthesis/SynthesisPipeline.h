@@ -38,6 +38,10 @@ struct AIGOptimizationPipelineOptions
       *this, "ignore-abc-failures",
       llvm::cl::desc("Continue on ABC failure instead of aborting"),
       llvm::cl::init(false)};
+
+  PassOptions::Option<bool> disableWordToBits{
+      *this, "disable-word-to-bits",
+      llvm::cl::desc("Disable LowerWordToBits pass"), llvm::cl::init(false)};
 };
 
 //===----------------------------------------------------------------------===//

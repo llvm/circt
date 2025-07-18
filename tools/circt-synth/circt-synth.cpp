@@ -24,6 +24,7 @@
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -144,6 +145,10 @@ static cl::opt<bool>
                       cl::desc("Continue on ABC failure instead of aborting"),
                       cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> disableWordToBits("disable-word-to-bits",
+                                       cl::desc("Disable LowerWordToBits pass"),
+                                       cl::init(false), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -174,6 +179,11 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
 
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
+  // ExtractTestCode is used to move verification code from design to
+  // remove registers/logic used only for verification.
+  pm.addPass(sv::createSVExtractTestCodePass(
+      /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
+      /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
     circt::synthesis::buildAIGLoweringPipeline(pm);
     if (untilReached(UntilAIGLowering))
@@ -183,6 +193,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     options.abcCommands = abcCommands;
     options.abcPath.setValue(abcPath);
     options.ignoreAbcFailures.setValue(ignoreAbcFailures);
+    options.disableWordToBits.setValue(disableWordToBits);
 
     circt::synthesis::buildAIGOptimizationPipeline(pm, options);
   };

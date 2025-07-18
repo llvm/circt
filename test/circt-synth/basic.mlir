@@ -3,12 +3,14 @@
 // RUN: circt-synth %s --top and --emit-bytecode -f | circt-opt | FileCheck %s --check-prefix=CHECK
 // RUN: circt-synth %s --until-before aig-lowering | FileCheck %s --check-prefix=AIG
 // RUN: circt-synth %s --until-before aig-lowering --convert-to-comb | FileCheck %s --check-prefix=COMB
+// RUN: circt-synth %s --top and --disable-word-to-bits | FileCheck %s --check-prefix=DISABLE_WORD
 
 // TOP-LABEL: module attributes {"aig.longest-path-analysis-top" = @and}
-// AIG-LABEL: @and
-// CHECK-LABEL: @and
-// COMB-LABEL: @and
-hw.module @and(in %a: i2, in %b: i2, in %c: i2, out and: i2) {
+// AIG-LABEL: @and(
+// CHECK-LABEL: @and(
+// COMB-LABEL: @and(
+// DISABLE_WORD-LABEL: @and(
+hw.module @and(in %a: i2, in %b: i2, in %c: i2, in %d: i1, out and: i2) {
   // AIG-NEXT:  %[[AND_INV:.+]] = aig.and_inv %a, %b, %c : i2
   // AIG-NEXT: dbg.variable
   // AIG-NEXT: hw.output %[[AND_INV]] : i2
@@ -26,9 +28,20 @@ hw.module @and(in %a: i2, in %b: i2, in %c: i2, out and: i2) {
   // CHECK-NEXT: dbg.variable
   // CHECK-NEXT: hw.output %[[CONCAT]] : i2
   // COMB-NOT: aig.and_inv
+  // DISABLE_WORD-NOT: comb.extract
+  // DISABLE_WORD-NOT: comb.concat
   %0 = comb.and %a, %b, %c : i2
   dbg.variable "test", %0 : i2
   hw.output %0 : i2
+}
+
+// CHECK-LABEL: @verification(
+// CHECK-NOT: sv.assert
+hw.module @verification(in %a: i1, out result: i1) {
+  sv.initial {
+    sv.assert %a, immediate
+  }
+  hw.output %a : i1
 }
 
 // TOP-LABEL: hw.module @unrelated
