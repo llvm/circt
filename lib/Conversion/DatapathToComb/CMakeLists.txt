@@ -4,12 +4,9 @@ add_circt_conversion_library(CIRCTDatapathToComb
   DEPENDS
   CIRCTConversionPassIncGen
 
-  LINK_COMPONENTS
-  Core
-
   LINK_LIBS PUBLIC
-  CIRCTDatapath
   CIRCTComb
+  CIRCTDatapath
   CIRCTHW
   MLIRIR
   MLIRPass

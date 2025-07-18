@@ -13,7 +13,6 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/PointerUnion.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "datapath-to-comb"
@@ -23,7 +22,6 @@ namespace circt {
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
-// using namespace mlir;
 using namespace circt;
 using namespace datapath;
 
@@ -55,6 +53,9 @@ std::pair<Value, Value> fullAdder(ConversionPatternRewriter &rewriter,
   return {sum, carry};
 }
 
+// Replace compressor by an adder of the inputs and zero for the other results:
+// compress(a,b,c,d) -> {a+b+c+d, 0}
+// Facilitates use of downstream compression algorithms e.g. Yosys
 struct DatapathCompressOpAddConversion : OpConversionPattern<CompressOp> {
   using OpConversionPattern<CompressOp>::OpConversionPattern;
   LogicalResult
@@ -63,14 +64,18 @@ struct DatapathCompressOpAddConversion : OpConversionPattern<CompressOp> {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
     unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
+    // Sum all the inputs - set that to result value 0
     auto addOp = rewriter.create<comb::AddOp>(loc, inputs, true);
+    // Replace remaining results with zeros
     auto zeroOp = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
-
-    rewriter.replaceOp(op, {addOp, zeroOp});
+    SmallVector<Value> results(op.getNumResults() - 1, zeroOp);
+    results.push_back(addOp);
+    rewriter.replaceOp(op, results);
     return success();
   }
 };
 
+// Replace compressor by a wallace tree of full-adders
 struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
   using OpConversionPattern<CompressOp>::OpConversionPattern;
   LogicalResult
@@ -79,19 +84,21 @@ struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
     unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
-    // TODO - implement a more efficient compression algorithm to compete with
-    // yosys's `compress` pass.
 
-    auto falseValue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
-    SmallVector<SmallVector<Value>> partialProducts;
+    SmallVector<SmallVector<Value>> addends;
     for (auto input : inputs) {
-      partialProducts.push_back(
+      addends.push_back(
           extractBits(rewriter, input)); // Extract bits from each input
     }
 
     // Wallace tree reduction
-    rewriter.replaceOp(op, wallaceReduction(falseValue, width, rewriter, loc,
-                                            partialProducts));
+    // TODO - implement a more efficient compression algorithm to compete with
+    // yosys's `alumacc` lowering - a coarse grained timing model would help to
+    // sort the inputs according to arrival time.
+    auto falseValue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
+    auto targetAddends = op.getNumResults();
+    rewriter.replaceOp(op, wallaceReduction(falseValue, width, targetAddends,
+                                            rewriter, loc, addends));
     return success();
   }
 
@@ -99,24 +106,24 @@ private:
   // Perform Wallace tree reduction on partial products.
   // See https://en.wikipedia.org/wiki/Wallace_tree
   static SmallVector<Value>
-  wallaceReduction(Value falseValue, size_t width,
+  wallaceReduction(Value falseValue, size_t width, size_t targetAddends,
                    ConversionPatternRewriter &rewriter, Location loc,
-                   SmallVector<SmallVector<Value>> &partialProducts) {
-    SmallVector<SmallVector<Value>> newPartialProducts;
-    newPartialProducts.reserve(partialProducts.size());
+                   SmallVector<SmallVector<Value>> &addends) {
+    SmallVector<SmallVector<Value>> newAddends;
+    newAddends.reserve(addends.size());
     // Continue reduction until we have only two rows. The length of
-    // `partialProducts` is reduced by 1/3 in each iteration.
+    // `addends` is reduced by 1/3 in each iteration.
     auto numReductionStages = 0;
-    while (partialProducts.size() > 2) {
-      newPartialProducts.clear();
+    while (addends.size() > targetAddends) {
+      newAddends.clear();
       ++numReductionStages;
       // Take three rows at a time and reduce to two rows(sum and carry).
-      for (unsigned i = 0; i < partialProducts.size(); i += 3) {
-        if (i + 2 < partialProducts.size()) {
+      for (unsigned i = 0; i < addends.size(); i += 3) {
+        if (i + 2 < addends.size()) {
           // We have three rows to reduce
-          auto &row1 = partialProducts[i];
-          auto &row2 = partialProducts[i + 1];
-          auto &row3 = partialProducts[i + 2];
+          auto &row1 = addends[i];
+          auto &row2 = addends[i + 1];
+          auto &row3 = addends[i + 2];
 
           assert(row1.size() == width && row2.size() == width &&
                  row3.size() == width);
@@ -136,29 +143,32 @@ private:
               carryRow.push_back(carry);
           }
 
-          newPartialProducts.push_back(std::move(sumRow));
-          newPartialProducts.push_back(std::move(carryRow));
+          newAddends.push_back(std::move(sumRow));
+          newAddends.push_back(std::move(carryRow));
         } else {
           // Add remaining rows as is
-          newPartialProducts.append(partialProducts.begin() + i,
-                                    partialProducts.end());
+          newAddends.append(addends.begin() + i, addends.end());
         }
       }
-
-      std::swap(newPartialProducts, partialProducts);
+      std::swap(newAddends, addends);
     }
 
     LLVM_DEBUG(llvm::dbgs() << "Wallace tree reduction completed in "
                             << numReductionStages << " stages\n");
 
-    assert(partialProducts.size() == 2);
+    assert(addends.size() <= targetAddends);
     SmallVector<Value> carrySave;
-    for (auto partialProduct : partialProducts) {
+    for (auto addend : addends) {
       // Reverse the order of the bits
-      std::reverse(partialProduct.begin(), partialProduct.end());
-      carrySave.push_back(rewriter.create<comb::ConcatOp>(loc, partialProduct));
+      std::reverse(addend.begin(), addend.end());
+      carrySave.push_back(rewriter.create<comb::ConcatOp>(loc, addend));
     }
-    // Use comb.add for the final addition.
+
+    // Pad with zeros
+    auto zero = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+    while (carrySave.size() < targetAddends)
+      carrySave.push_back(zero);
+
     return carrySave;
   }
 };
@@ -181,130 +191,124 @@ struct DatapathPartialProductOpConversion
       return success();
     }
 
-    // Extract individual bits from operands
-    SmallVector<Value> aBits = extractBits(rewriter, a);
+    // Use width as a heuristic to guide partial product implementation
+    if (width <= 16)
+      return lowerAndArray(rewriter, a, b, op, width);
+    else
+      return lowerBoothArray(rewriter, a, b, op, width);
+  }
+
+private:
+  static LogicalResult lowerAndArray(ConversionPatternRewriter &rewriter,
+                                     Value a, Value b, PartialProductOp op,
+                                     unsigned width) {
+
+    Location loc = op.getLoc();
+    // Keep a as a bitvector - multiply by each digit of b
+    SmallVector<Value> bBits = extractBits(rewriter, b);
+
+    SmallVector<Value> partialProducts;
+    partialProducts.reserve(width);
+    // AND Array Construction:
+    // partialProducts[i] = ({b[i],..., b[i]} & a) << i
+    assert(op.getNumResults() <= width &&
+           "Cannot return more results than the operator width");
+
+    for (unsigned i = 0; i < op.getNumResults(); ++i) {
+      auto repl = rewriter.create<comb::ReplicateOp>(loc, bBits[i], width);
+      auto ppRow = rewriter.create<comb::AndOp>(loc, repl, a);
+      auto shiftBy = rewriter.create<hw::ConstantOp>(loc, APInt(width, i));
+      auto ppAlign = rewriter.create<comb::ShlOp>(loc, ppRow, shiftBy);
+      partialProducts.push_back(ppAlign);
+    }
+
+    rewriter.replaceOp(op, partialProducts);
+    return success();
+  }
+
+  static LogicalResult lowerBoothArray(ConversionPatternRewriter &rewriter,
+                                       Value a, Value b, PartialProductOp op,
+                                       unsigned width) {
+    Location loc = op.getLoc();
+    auto zeroFalse = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
+    auto zeroWidth = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+    auto oneWidth = rewriter.create<hw::ConstantOp>(loc, APInt(width, 1));
+    Value twoA = rewriter.create<comb::ShlOp>(loc, a, oneWidth);
+
     SmallVector<Value> bBits = extractBits(rewriter, b);
 
     SmallVector<Value> partialProducts;
     partialProducts.reserve(width);
 
-    // Implement a basic and array
-    if (width <= 16)
-      lowerAndArray(rewriter, op, partialProducts, aBits, bBits, width);
-    else
-      lowerBoothArray(rewriter, op, partialProducts, aBits, bBits, width);
-
-    return success();
-  }
-
-  void lowerAndArray(ConversionPatternRewriter &rewriter, PartialProductOp op,
-                     SmallVector<Value> partialProducts,
-                     SmallVector<Value> &aBits, SmallVector<Value> &bBits,
-                     unsigned width) const {
-
-    Location loc = op.getLoc();
-    Value a = op.getOperand(0);
-
-    // Generate partial products
-
-    for (unsigned i = 0; i < width; ++i) {
-      auto repl = rewriter.create<comb::ReplicateOp>(loc, bBits[i], width);
-      auto ppRow = rewriter.create<comb::AndOp>(loc, repl, a);
-      Value shiftBy = rewriter.create<hw::ConstantOp>(loc, APInt(width, i));
-      Value ppAlign = rewriter.create<comb::ShlOp>(loc, ppRow, shiftBy);
-      partialProducts.push_back(ppAlign);
-      if (partialProducts.size() == op.getNumResults())
-        break;
-    }
-    if (partialProducts.size() != op.getNumResults()) {
-      llvm::errs() << "Expected " << op.getNumResults()
-                   << " partial products, but got " << partialProducts.size()
-                   << " width " << width << "\n";
-      assert(false && "Expected width number of booth partial products");
-    }
-    rewriter.replaceOp(op, partialProducts);
-  }
-
-  void lowerBoothArray(ConversionPatternRewriter &rewriter, PartialProductOp op,
-                       SmallVector<Value> &partialProducts,
-                       SmallVector<Value> &aBits, SmallVector<Value> &bBits,
-                       unsigned width) const {
-    Location loc = op.getLoc();
-    auto zeroFalse = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
-    auto zeroWidth = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
-    auto oneWidth = rewriter.create<hw::ConstantOp>(loc, APInt(width, 1));
-    Value a = op.getOperand(0);
-    Value twoA = rewriter.create<comb::ShlOp>(loc, a, oneWidth);
-
-    // Booth encoding: examine b[i+1:i-1] for each i
-    // We need width/2 partial products for radix-2 Booth
-    Value cplPrev;
+    // Booth encoding halves array height by grouping three bits at a time:
+    // // partialProducts[i] = a * (-2*b[2*i+1] + b[2*i] + b[2*i-1] << 2*i
+    Value encNegPrev;
     for (unsigned i = 0; i < width; i += 2) {
       // Get Booth bits: b[i+1], b[i], b[i-1] (b[-1] = 0)
-      Value b_i = (i < width) ? bBits[i] : zeroFalse;
-      Value b_ip1 = (i + 1 < width) ? bBits[i + 1] : zeroFalse;
-      Value b_im1 = (i == 0) ? zeroFalse : bBits[i - 1];
+      Value bim1 = (i == 0) ? zeroFalse : bBits[i - 1];
+      Value bi = (i < width) ? bBits[i] : zeroFalse;
+      Value bip1 = (i + 1 < width) ? bBits[i + 1] : zeroFalse;
 
       // Is the encoding zero or negative (an approximation)
-      Value cpl = b_ip1;
-      // Is the encoding one = b_i xor b_im1
-      Value one = rewriter.create<comb::XorOp>(loc, b_i, b_im1, true);
+      Value encNeg = bip1;
+      // Is the encoding one = b[i] xor b[i-1]
+      Value encOne = rewriter.create<comb::XorOp>(loc, bi, bim1, true);
       // Is the encoding two = (b_ip1 & ~b_i & ~b_im1) | (~b_ip1 & b_i & b_im1)
-      Value const_one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
-      Value b_i_inv = rewriter.create<comb::XorOp>(loc, b_i, const_one, true);
-      Value b_ip1_inv =
-          rewriter.create<comb::XorOp>(loc, b_ip1, const_one, true);
-      Value b_im1_inv =
-          rewriter.create<comb::XorOp>(loc, b_im1, const_one, true);
-      Value andLeft = rewriter.create<comb::AndOp>(
-          loc, ValueRange{b_ip1_inv, b_i, b_im1}, true);
-      Value andRight = rewriter.create<comb::AndOp>(
-          loc, ValueRange{b_ip1, b_i_inv, b_im1_inv}, true);
-      Value two = rewriter.create<comb::OrOp>(loc, andLeft, andRight, true);
+      Value constOne = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+      Value biInv = rewriter.create<comb::XorOp>(loc, bi, constOne, true);
+      Value bip1Inv = rewriter.create<comb::XorOp>(loc, bip1, constOne, true);
+      Value bim1Inv = rewriter.create<comb::XorOp>(loc, bim1, constOne, true);
 
-      Value cpl_repl = rewriter.create<comb::ReplicateOp>(loc, cpl, width);
-      Value one_repl = rewriter.create<comb::ReplicateOp>(loc, one, width);
-      Value two_repl = rewriter.create<comb::ReplicateOp>(loc, two, width);
+      Value andLeft = rewriter.create<comb::AndOp>(
+          loc, ValueRange{bip1Inv, bi, bim1}, true);
+      Value andRight = rewriter.create<comb::AndOp>(
+          loc, ValueRange{bip1, biInv, bim1Inv}, true);
+      Value encTwo = rewriter.create<comb::OrOp>(loc, andLeft, andRight, true);
+
+      Value encNegRepl = rewriter.create<comb::ReplicateOp>(loc, encNeg, width);
+      Value encOneRepl = rewriter.create<comb::ReplicateOp>(loc, encOne, width);
+      Value encTwoRepl = rewriter.create<comb::ReplicateOp>(loc, encTwo, width);
 
       // Select between 2*a or 1*a or 0*a
-      Value selTwoA = rewriter.create<comb::AndOp>(loc, two_repl, twoA);
-      Value selOneA = rewriter.create<comb::AndOp>(loc, one_repl, a);
+      Value selTwoA = rewriter.create<comb::AndOp>(loc, encTwoRepl, twoA);
+      Value selOneA = rewriter.create<comb::AndOp>(loc, encOneRepl, a);
       Value magA = rewriter.create<comb::OrOp>(loc, selTwoA, selOneA, true);
 
       // Conditionally invert the row
-      Value ppRow = rewriter.create<comb::XorOp>(loc, magA, cpl_repl, true);
+      Value ppRow = rewriter.create<comb::XorOp>(loc, magA, encNegRepl, true);
+
+      // No sign-correction in the first row
       if (i == 0) {
         partialProducts.push_back(ppRow);
-        cplPrev = cpl;
+        encNegPrev = encNeg;
         continue;
       }
+
+      // Insert a sign-correction from the previous row
       assert(i >= 2 && "Expected i to be at least 2 for sign correction");
+      // {ppRow, 0, encNegPrev} << 2*(i-1)
       Value withSignCorrection = rewriter.create<comb::ConcatOp>(
-          loc, ValueRange{ppRow, zeroFalse, cplPrev});
+          loc, ValueRange{ppRow, zeroFalse, encNegPrev});
       Value ppAlignPre =
           rewriter.create<comb::ExtractOp>(loc, withSignCorrection, 0, width);
       Value shiftBy = rewriter.create<hw::ConstantOp>(loc, APInt(width, i - 2));
       Value ppAlign = rewriter.create<comb::ShlOp>(loc, ppAlignPre, shiftBy);
       partialProducts.push_back(ppAlign);
-      cplPrev = cpl;
+      encNegPrev = encNeg;
 
       if (partialProducts.size() == op.getNumResults())
         break;
     }
 
+    // Zero-pad to match the required output width
     while (partialProducts.size() < op.getNumResults())
       partialProducts.push_back(zeroWidth);
 
-    if (partialProducts.size() != op.getNumResults()) {
-      llvm::errs() << "Expected " << op.getNumResults()
-                   << " partial products, but got " << partialProducts.size()
-                   << "width " << width << "\n";
-      assert(false && "Expected width number of booth partial products");
-    }
     assert(partialProducts.size() == op.getNumResults() &&
-           "Expected width number of booth partial products");
+           "Expected number of booth partial products to match results");
 
     rewriter.replaceOp(op, partialProducts);
+    return success();
   }
 };
 } // namespace
@@ -328,8 +332,10 @@ populateDatapathToCombConversionPatterns(RewritePatternSet &patterns,
   patterns.add<DatapathPartialProductOpConversion>(patterns.getContext());
 
   if (lowerCompressToAdd)
+    // Lower compressors to simple add operations for downstream optimisations
     patterns.add<DatapathCompressOpAddConversion>(patterns.getContext());
   else
+    // Lower compressors to a complete gate-level implementation
     patterns.add<DatapathCompressOpConversion>(patterns.getContext());
 }
 
@@ -337,7 +343,7 @@ void ConvertDatapathToCombPass::runOnOperation() {
   ConversionTarget target(getContext());
 
   target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-  target.addIllegalDialect<datapath::DatapathDialect>();
+  target.addIllegalDialect<DatapathDialect>();
 
   RewritePatternSet patterns(&getContext());
   populateDatapathToCombConversionPatterns(patterns, lowerCompressToAdd);
