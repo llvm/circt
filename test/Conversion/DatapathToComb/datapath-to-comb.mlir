@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-datapath-to-smt | FileCheck %s
+// RUN: circt-opt %s --convert-datapath-to-comb | FileCheck %s
 
 // CHECK-LABEL: @compressor
 hw.module @compressor(in %a : i2, in %b : i2, in %c : i2, out carry : i2, out save : i2) {

@@ -878,8 +878,7 @@ def ConvertDatapathToSMT : Pass<"convert-datapath-to-smt"> {
 def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
   let summary = "Convert Datapath ops to Comb ops";
     let dependentDialects = [
-    "circt::comb::CombDialect",
-    "circt::datapath::DatapathDialect",
+    "circt::comb::CombDialect", "circt::datapath::DatapathDialect",
     "circt::hw::HWDialect"
   ];
   let options = [
