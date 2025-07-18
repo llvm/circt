@@ -168,3 +168,23 @@ func.func @wrong_initial_type() -> (i1) {
   }
   func.return %bmc : i1
 }
+
+// -----
+
+func.func @refines_non_primitive_free_var() -> () {
+  // expected-error @below {{failed to legalize operation 'verif.refines' that was explicitly marked illegal}}
+  verif.refines first {
+  ^bb0(%arg0: !smt.bv<4>):
+    // expected-error @below {{Uninterpreted function of non-primitive type cannot be converted.}}
+    %nondetar = smt.declare_fun : !smt.array<[!smt.bv<4> -> !smt.bv<32>]>
+    %sel = smt.array.select %nondetar[%arg0] : !smt.array<[!smt.bv<4> -> !smt.bv<32>]>
+    %cc = builtin.unrealized_conversion_cast %sel : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  } second {
+  ^bb0(%arg0: !smt.bv<4>):
+    %const = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %const : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  }
+  return
+}
