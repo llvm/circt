@@ -862,6 +862,18 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
         }
         types.push_back(type);
 
+        auto r = type.getRecursiveTypeProperties();
+        if (!r.isPassive)
+          return emitError(fieldLoc) << "enum field " << name << " not passive";
+        if (r.containsAnalog)
+          return emitError(fieldLoc)
+                 << "enum field " << name << " contains analog";
+        if (r.hasUninferredWidth)
+          return emitError(fieldLoc)
+                 << "enum field " << name << " has uninferred width";
+        if (r.hasUninferredReset)
+          return emitError(fieldLoc)
+                 << "enum field " << name << " has uninferred reset";
         return success();
       }))
     return failure();

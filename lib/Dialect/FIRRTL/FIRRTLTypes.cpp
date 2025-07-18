@@ -2374,9 +2374,15 @@ LogicalResult FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   for (auto &elt : elements) {
     auto r = elt.type.getRecursiveTypeProperties();
     if (!r.isPassive)
-      return emitErrorFn() << "enum field '" << elt.name << "' not passive";
+      return emitErrorFn() << "enum field " << elt.name << " not passive";
     if (r.containsAnalog)
-      return emitErrorFn() << "enum field '" << elt.name << "' contains analog";
+      return emitErrorFn() << "enum field " << elt.name << " contains analog";
+    if (r.hasUninferredWidth)
+      return emitErrorFn() << "enum field " << elt.name
+                           << " has uninferred width";
+    if (r.hasUninferredReset)
+      return emitErrorFn() << "enum field " << elt.name
+                           << " has uninferred reset";
     if (r.containsConst && !isConst)
       return emitErrorFn() << "enum with 'const' elements must be 'const'";
     // Ensure that each tag has a unique name.

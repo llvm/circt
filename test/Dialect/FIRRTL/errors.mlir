@@ -975,20 +975,6 @@ firrtl.circuit "MismatchedRegister" {
 
 // -----
 
-firrtl.circuit "DupVarNameEnum" {
-  // expected-error @+1 {{duplicate variant name "a" in enum}}
-  firrtl.module @DupVarNameEnum(in %enum : !firrtl.enum<a, a>) { }
-}
-
-// -----
-
-firrtl.circuit "DupVarValueEnum" {
-  // expected-error @+1 {{enum variant "b" has value 0 : ui0 which is not greater than previous variant 0 : ui0}}
-  firrtl.module @DupVarNameEnum(in %enum : !firrtl.enum<a, b=0>) { }
-}
-
-// -----
-
 firrtl.circuit "EnumOutOfRange" {
   firrtl.module @EnumSameCase(in %enum : !firrtl.enum<a : uint<8>>) {
     // expected-error @+1 {{the tag index 1 is out of the range of valid tags in '!firrtl.enum<a: uint<8>>'}}
@@ -1799,7 +1785,7 @@ firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
 
 // Enum types must be passive
 firrtl.circuit "EnumNonPassive" {
-  // expected-error @+1 {{enum field '"a"' not passive}}
+  // expected-error @+1 {{enum field "a" not passive}}
   firrtl.module @EnumNonPassive(in %a : !firrtl.enum<a: bundle<a flip: uint<1>>>) {
   }
 }
@@ -1808,9 +1794,23 @@ firrtl.circuit "EnumNonPassive" {
 
 // Enum types must not contain analog
 firrtl.circuit "EnumAnalog" {
-  // expected-error @+1 {{enum field '"a"' contains analog}}
+  // expected-error @+1 {{enum field "a" contains analog}}
   firrtl.module @EnumAnalog(in %a : !firrtl.enum<a: analog<1>>) {
   }
+}
+
+// -----
+
+firrtl.circuit "EnumUninferredWidth" {
+  // expected-error @+1 {{enum field "a" has uninferred width}}
+  firrtl.module @EnumUninferredWidth(in %enum : !firrtl.enum<a: uint>) { }
+}
+
+// -----
+
+firrtl.circuit "EnumUninferredReset" {
+  // expected-error @+1 {{enum field "a" has uninferred reset}}
+  firrtl.module @EnumUninferredReset(in %enum : !firrtl.enum<a: reset>) { }
 }
 
 // -----
@@ -1819,6 +1819,20 @@ firrtl.circuit "EnumAnalog" {
 firrtl.circuit "NonConstEnumConstElements" {
 // expected-error @+1 {{enum with 'const' elements must be 'const'}}
 firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some: const.uint<1>>) {}
+}
+
+// -----
+
+firrtl.circuit "EnumDupVarName" {
+  // expected-error @+1 {{duplicate variant name "a" in enum}}
+  firrtl.module @EnumDupVarName(in %enum : !firrtl.enum<a, a>) { }
+}
+
+// -----
+
+firrtl.circuit "EnumDupVarValue" {
+  // expected-error @+1 {{enum variant "b" has value 0 : ui0 which is not greater than previous variant 0 : ui0}}
+  firrtl.module @EnumDupVarValue(in %enum : !firrtl.enum<a, b=0>) { }
 }
 
 // -----
