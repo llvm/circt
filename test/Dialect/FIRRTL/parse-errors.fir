@@ -348,6 +348,27 @@ circuit circuit:
 
 ;// -----
 
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A, A|} ; expected-error {{duplicate variant name in enum: A}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A, B = 0|} ; expected-error {{duplicate variant value in enum: 0 : ui0}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A = -1|} ; expected-error {{enum tag value must be non-negative}}
+
+;// -----
+
 FIRRTL version 4.0.0
 circuit NonAscii:
   public module NonAscii:

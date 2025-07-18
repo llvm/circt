@@ -802,20 +802,50 @@ ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
   return success();
 }
 
-/// enum-field ::= Id ( ':' type )? ;
+/// enum-field ::= Id ( '=' int )? ( ':' type )? ;
 /// enum-type  ::= '{|' enum-field* '|}'
 ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
   if (parseToken(FIRToken::l_brace_bar,
                  "expected leading '{|' in enumeration type"))
     return failure();
-  SmallVector<FEnumType::EnumElement> elements;
+  SmallVector<StringAttr> names;
+  SmallVector<APInt> values;
+  SmallVector<FIRRTLBaseType> types;
+  SmallVector<SMLoc> locs;
   if (parseListUntil(FIRToken::r_brace_bar, [&]() -> ParseResult {
         auto fieldLoc = getToken().getLoc();
+        locs.push_back(fieldLoc);
 
         // Parse the name of the tag.
-        StringRef name;
-        if (parseId(name, "expected valid identifier for enumeration tag"))
+        StringRef nameStr;
+        if (parseId(nameStr, "expected valid identifier for enumeration tag"))
           return failure();
+        auto name = StringAttr::get(getContext(), nameStr);
+        names.push_back(name);
+
+        // Parse the integer value if it exists. If its the first element of the
+        // enum, it implicitly has a value of 0, otherwise it has the previous
+        // value + 1.
+        APInt value;
+        if (consumeIf(FIRToken::equal)) {
+          if (parseIntLit(value, "expected integer value for enumeration tag"))
+            return failure();
+          if (value.isNegative())
+            return emitError(fieldLoc, "enum tag value must be non-negative");
+        } else if (values.empty()) {
+          // This is the first enum variant, so it defaults to 0.
+          value = APInt(1, 0);
+        } else {
+          // This value is not specified, so it defaults to the previous value
+          // + 1.
+          auto &prev = values.back();
+          if (prev.isMaxValue())
+            value = prev.zext(prev.getBitWidth() + 1);
+          else
+            value = prev;
+          ++value;
+        }
+        values.push_back(std::move(value));
 
         // Parse an optional type ascription.
         FIRRTLBaseType type;
@@ -830,10 +860,40 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
           // If there is no type specified, default to UInt<0>.
           type = UIntType::get(getContext(), 0);
         }
-        elements.emplace_back(StringAttr::get(getContext(), name), type);
+        types.push_back(type);
+
         return success();
       }))
     return failure();
+
+  // Verify that the names of each variant are unique.
+  SmallPtrSet<StringAttr, 4> nameSet;
+  for (auto [name, loc] : llvm::zip(names, locs))
+    if (!nameSet.insert(name).second)
+      return emitError(loc,
+                       "duplicate variant name in enum: " + name.getValue());
+
+  // Find the bitwidth of the enum.
+  unsigned bitwidth = 0;
+  for (auto &value : values)
+    bitwidth = std::max(bitwidth, value.getActiveBits());
+  auto tagType =
+      IntegerType::get(getContext(), bitwidth, IntegerType::Unsigned);
+
+  // Extend all tag values to the same width, and check that they are all
+  // unique.
+  SmallPtrSet<IntegerAttr, 4> valueSet;
+  SmallVector<FEnumType::EnumElement, 4> elements;
+  for (auto [name, value, type, loc] : llvm::zip(names, values, types, locs)) {
+    auto tagValue = value.zextOrTrunc(bitwidth);
+    auto attr = IntegerAttr::get(tagType, tagValue);
+    // Verify that the names of each variant are unique.
+    if (!valueSet.insert(attr).second)
+      return emitError(loc, "duplicate variant value in enum: ") << attr;
+    elements.push_back({name, attr, type});
+  }
+
+  llvm::sort(elements);
   result = FEnumType::get(getContext(), elements);
   return success();
 }

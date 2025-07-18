@@ -975,6 +975,20 @@ firrtl.circuit "MismatchedRegister" {
 
 // -----
 
+firrtl.circuit "DupVarNameEnum" {
+  // expected-error @+1 {{duplicate variant name "a" in enum}}
+  firrtl.module @DupVarNameEnum(in %enum : !firrtl.enum<a, a>) { }
+}
+
+// -----
+
+firrtl.circuit "DupVarValueEnum" {
+  // expected-error @+1 {{enum variant "b" has value 0 : ui0 which is not greater than previous variant 0 : ui0}}
+  firrtl.module @DupVarNameEnum(in %enum : !firrtl.enum<a, b=0>) { }
+}
+
+// -----
+
 firrtl.circuit "EnumOutOfRange" {
   firrtl.module @EnumSameCase(in %enum : !firrtl.enum<a : uint<8>>) {
     // expected-error @+1 {{the tag index 1 is out of the range of valid tags in '!firrtl.enum<a: uint<8>>'}}

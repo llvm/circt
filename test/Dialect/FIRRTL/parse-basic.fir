@@ -919,20 +919,33 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: firrtl.module private @EnumTypes
   module EnumTypes:
-    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: !firrtl.enum<>
+    wire a : {||}
+    ; CHECK: !firrtl.enum<a>
+    wire b : {|a|}
+    ; CHECK: !firrtl.enum<a = 1>
+    wire c : {|a = 1|}
+    ; CHECK: !firrtl.enum<a: uint<8>>
+    wire d : {|a : UInt<8>|}
+    ; CHECK: !firrtl.enum<a = 1: uint<8>>
+    wire e : {|a = 1 : UInt<8>|}
+  
+  ; CHECK-LABEL: firrtl.module private @EnumValue
+  module EnumValues:
+    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None>
     input i : {| Some : UInt<8>, None |}
     output o : UInt<8>
 
     ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
-    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
-    ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None>
+    ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None>
     node some = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
     ; CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.const.uint<0>
-    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
-    ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None>
+    ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None>
     node none = {|Some : UInt<8>, None|}(None)
 
-    ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
+    ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None> {
     match i:
       ; CHECK: case Some(%arg0) {
       ; CHECK:   firrtl.matchingconnect %o, %arg0 : !firrtl.uint<8>

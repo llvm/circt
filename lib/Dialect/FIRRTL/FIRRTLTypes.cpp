@@ -89,12 +89,38 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<FEnumType>([&](auto fenumType) {
         os << "enum<";
-        llvm::interleaveComma(fenumType, os,
-                              [&](FEnumType::EnumElement element) {
-                                os << element.name.getValue();
-                                os << ": ";
-                                printNestedType(element.type, os);
-                              });
+        std::optional<APInt> previous;
+        llvm::interleaveComma(
+            fenumType, os, [&](FEnumType::EnumElement element) {
+              // Print the variant name.
+              os << element.name.getValue();
+
+              // Print the variant value.
+              auto value = element.value.getValue();
+              if (previous) {
+                // This APInt should have enough space to
+                // safely add 1 without overflowing.
+                *previous += 1;
+                if (value != previous) {
+                  os << " = ";
+                  os.printAttributeWithoutType(element.value);
+                }
+              } else if (!element.value.getValue().isZero()) {
+                os << " = ";
+                os.printAttributeWithoutType(element.value);
+              }
+              previous = value;
+
+              // Print the data type.
+              bool skipType = false;
+              if (auto type = dyn_cast<UIntType>(element.type))
+                if (type.getWidth() == 0)
+                  skipType = true;
+              if (!skipType) {
+                os << ": ";
+                printNestedType(element.type, os);
+              }
+            });
         os << '>';
       })
       .Case<FVectorType, OpenVectorType>([&](auto vectorType) {
@@ -280,33 +306,74 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   }
 
   if (name == "enum") {
-    SmallVector<FEnumType::EnumElement, 4> elements;
-
+    SmallVector<StringAttr> names;
+    SmallVector<APInt> values;
+    SmallVector<FIRRTLBaseType> types;
     auto parseEnumElement = [&]() -> ParseResult {
+      // Parse the variant tag.
       std::string nameStr;
-      StringRef name;
-      FIRRTLBaseType type;
-
       if (failed(parser.parseKeywordOrString(&nameStr)))
         return failure();
-      name = nameStr;
+      names.push_back(StringAttr::get(context, nameStr));
 
-      if (parser.parseColon() || parseNestedBaseType(type, parser))
-        return failure();
+      // Parse the integer value if it exists. If its the first element of the
+      // enum, it implicitly has a value of 0, otherwise it defaults to the
+      // previous value + 1.
+      APInt value;
+      if (succeeded(parser.parseOptionalEqual())) {
+        if (parser.parseInteger(value))
+          return failure();
+      } else if (values.empty()) {
+        // This is the first enum variant, so it defaults to 0.
+        value = APInt(1, 0);
+      } else {
+        // This value is not specified, so it defaults to the previous value
+        // + 1.
+        auto &prev = values.back();
+        if (prev.isMaxValue())
+          value = prev.zext(prev.getBitWidth() + 1);
+        else
+          value = prev;
+        ++value;
+      }
+      values.push_back(std::move(value));
 
-      elements.push_back({StringAttr::get(context, name), type});
+      // Parse the type of the variant data.
+      FIRRTLBaseType type;
+      if (succeeded(parser.parseOptionalColon())) {
+        if (parseNestedBaseType(type, parser))
+          return failure();
+      } else {
+        type = UIntType::get(parser.getContext(), 0);
+      }
+      types.push_back(type);
+
       return success();
     };
 
     if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
                                        parseEnumElement))
       return failure();
+
+    // Find the bitwidth of the enum.
+    unsigned bitwidth = 0;
+    for (auto &value : values)
+      bitwidth = std::max(bitwidth, value.getActiveBits());
+    auto tagType = IntegerType::get(context, bitwidth, IntegerType::Unsigned);
+
+    SmallVector<FEnumType::EnumElement, 4> elements;
+    for (auto [name, value, type] : llvm::zip(names, values, types)) {
+      auto tagValue = value.zextOrTrunc(bitwidth);
+      elements.push_back({name, IntegerAttr::get(tagType, tagValue), type});
+    }
+
     if (failed(FEnumType::verify(
             [&]() { return parser.emitError(parser.getNameLoc()); }, elements,
             isConst)))
       return failure();
 
-    return result = FEnumType::get(context, elements, isConst), success();
+    result = parser.getChecked<FEnumType>(context, elements, isConst);
+    return failure(!result);
   }
 
   if (name == "vector") {
@@ -795,7 +862,8 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
         SmallVector<FEnumType::EnumElement, 4> newElements;
         newElements.reserve(a.getNumElements());
         for (auto elt : a)
-          newElements.push_back({elt.name, elt.type.getWidthlessType()});
+          newElements.push_back(
+              {elt.name, elt.value, elt.type.getWidthlessType()});
         return FEnumType::get(this->getContext(), newElements, a.isConst());
       })
       .Case<BaseTypeAliasType>([](BaseTypeAliasType type) {
@@ -2178,6 +2246,14 @@ std::optional<unsigned> FEnumType::getElementIndex(StringAttr name) {
   return std::nullopt;
 }
 
+/// Get the width of the the tag field.
+size_t FEnumType::getTagWidth() {
+  if (getElements().size() == 0)
+    return 0;
+  // Each tag has the same type.
+  return cast<IntegerType>(getElements()[0].value.getType()).getWidth();
+}
+
 std::optional<unsigned> FEnumType::getElementIndex(StringRef name) {
   for (const auto &it : llvm::enumerate(getElements())) {
     auto element = it.value();
@@ -2196,6 +2272,18 @@ StringAttr FEnumType::getElementNameAttr(size_t index) {
 
 StringRef FEnumType::getElementName(size_t index) {
   return getElementNameAttr(index).getValue();
+}
+
+IntegerAttr FEnumType::getElementValueAttr(size_t index) {
+  return getElements()[index].value;
+}
+
+APInt FEnumType::getElementValue(size_t index) {
+  return getElementValueAttr(index).getValue();
+}
+
+FIRRTLBaseType FEnumType::getElementType(size_t index) {
+  return getElements()[index].type;
 }
 
 std::optional<FEnumType::EnumElement> FEnumType::getElement(StringAttr name) {
@@ -2277,9 +2365,12 @@ FEnumType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
-auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                       ArrayRef<EnumElement> elements, bool isConst)
-    -> LogicalResult {
+LogicalResult FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                                ArrayRef<EnumElement> elements, bool isConst) {
+  bool first = true;
+  IntegerAttr previous;
+  SmallPtrSet<Attribute, 4> nameSet;
+
   for (auto &elt : elements) {
     auto r = elt.type.getRecursiveTypeProperties();
     if (!r.isPassive)
@@ -2288,6 +2379,32 @@ auto FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
       return emitErrorFn() << "enum field '" << elt.name << "' contains analog";
     if (r.containsConst && !isConst)
       return emitErrorFn() << "enum with 'const' elements must be 'const'";
+    // Ensure that each tag has a unique name.
+    if (!nameSet.insert(elt.name).second)
+      return emitErrorFn() << "duplicate variant name " << elt.name
+                           << " in enum";
+    // Ensure that each tag is increasing and unique.
+    if (first) {
+      previous = elt.value;
+      first = false;
+    } else {
+      auto current = elt.value;
+      if (previous.getType() != current.getType())
+        return emitErrorFn() << "enum variant " << elt.name << " has type"
+                             << current.getType()
+                             << " which is different than previous variant "
+                             << previous.getType();
+
+      if (previous.getValue().getBitWidth() != current.getValue().getBitWidth())
+        return emitErrorFn() << "enum variant " << elt.name << " has bitwidth"
+                             << current.getValue().getBitWidth()
+                             << " which is different than previous variant "
+                             << previous.getValue().getBitWidth();
+      if (previous.getValue().uge(current.getValue()))
+        return emitErrorFn()
+               << "enum variant " << elt.name << " has value " << current
+               << " which is not greater than previous variant " << previous;
+    }
     // TODO: exclude reference containing
   }
   return success();
@@ -2306,7 +2423,8 @@ FIRRTLBaseType FEnumType::getAnonymousType() {
   SmallVector<FEnumType::EnumElement, 4> elements;
 
   for (auto element : getElements())
-    elements.push_back({element.name, element.type.getAnonymousType()});
+    elements.push_back(
+        {element.name, element.value, element.type.getAnonymousType()});
   return impl->anonymousType = FEnumType::get(getContext(), elements);
 }
 
@@ -2730,7 +2848,7 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
               return std::nullopt;
             width = std::max(width, *w);
           }
-          return width + llvm::Log2_32_Ceil(fenum.getNumElements());
+          return width + fenum.getTagWidth();
         })
         .Case<FVectorType>([&](auto vector) -> std::optional<int64_t> {
           auto w = getBitWidth(vector.getElementType());

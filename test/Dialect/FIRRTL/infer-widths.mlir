@@ -40,7 +40,7 @@ firrtl.circuit "Foo" {
     // CHECK: firrtl.invalidvalue : !firrtl.uint<0>
     // CHECK: firrtl.invalidvalue : !firrtl.bundle<x: uint<0>>
     // CHECK: firrtl.invalidvalue : !firrtl.vector<uint<0>, 2>
-    // CHECK: firrtl.invalidvalue : !firrtl.enum<a: uint<0>>
+    // CHECK: firrtl.invalidvalue : !firrtl.enum<a>
     %invalid_0 = firrtl.invalidvalue : !firrtl.uint
     %invalid_1 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
     %invalid_2 = firrtl.invalidvalue : !firrtl.vector<uint, 2>
