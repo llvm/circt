@@ -100,7 +100,7 @@ Value ConstructLECPass::constructMiter(OpBuilder builder, Location loc,
   sortTopologically(&lecOp.getFirstCircuit().front());
   sortTopologically(&lecOp.getSecondCircuit().front());
 
-  return withResult ? lecOp.getAreEquivalent() : Value{};
+  return withResult ? lecOp.getIsProven() : Value{};
 }
 
 void ConstructLECPass::runOnOperation() {

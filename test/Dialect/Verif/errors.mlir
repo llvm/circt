@@ -22,6 +22,28 @@ verif.lec first {
 
 // -----
 
+// expected-error @below {{types of the yielded values of both regions must match}}
+verif.refines first {
+^bb0(%arg0: i32):
+  verif.yield %arg0 : i32
+} second {
+^bb0(%arg0: i32):
+  verif.yield
+}
+
+// -----
+
+// expected-error @below {{block argument types of both regions must match}}
+verif.refines first {
+^bb0(%arg0: i32, %arg1: i32):
+  verif.yield %arg0 : i32
+} second {
+^bb0(%arg0: i32):
+  verif.yield %arg0 : i32
+}
+
+// -----
+
 // expected-error @below {{init region must have no arguments}}
 verif.bmc bound 10 num_regs 0 initial_values [] init {
 ^bb0(%clk: !seq.clock):
