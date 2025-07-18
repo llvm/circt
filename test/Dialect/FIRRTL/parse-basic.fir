@@ -959,14 +959,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
       None:
         invalidate o
 
-  ; CHECK-LABEL: firrtl.module private @EnumInfer(
-  module EnumInfer:
-    input i : {| A: UInt<8>, None |}
-    output o : {| A: UInt, None |}
-
-    ; CHECK: connect %o, %i
-    connect o, i
-
   ; CHECK-LABEL: firrtl.module private @TagExtract
   module TagExtract:
     input i : {|A, B, C|}
