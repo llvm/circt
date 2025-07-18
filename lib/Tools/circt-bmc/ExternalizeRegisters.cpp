@@ -239,7 +239,7 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
   if (reset) {
     if (isAsync) {
       // Async reset
-      op->emitError("registors with async reset not yet supported");
+      op->emitError("registers with an async reset are not yet supported");
       return failure();
     }
     // Sync reset
