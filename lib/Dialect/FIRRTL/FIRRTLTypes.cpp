@@ -308,8 +308,6 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     SmallVector<StringAttr> names;
     SmallVector<APInt> values;
     SmallVector<FIRRTLBaseType> types;
-
-    std::optional<APInt> previous;
     auto parseEnumElement = [&]() -> ParseResult {
       // Parse the variant tag.
       std::string nameStr;
@@ -324,19 +322,20 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       if (succeeded(parser.parseOptionalEqual())) {
         if (parser.parseInteger(value))
           return failure();
-      } else if (!previous) {
+      } else if (values.empty()) {
+        // This is the first enum variant, so it defaults to 0.
         value = APInt(1, 0);
       } else {
-        // Make sure we have enough bits to represent the previous value + 1.
-        if (previous->isMaxValue())
-          previous = previous->zext(previous->getBitWidth() + 1);
-        *previous += 1;
-        value = *previous;
+        // This value is not specified, so it defaults to the previous value
+        // + 1.
+        auto &prev = values.back();
+        if (prev.isMaxValue())
+          value = prev.zext(prev.getBitWidth() + 1);
+        else
+          value = prev;
+        ++value;
       }
-      values.push_back(value);
-
-      // Stash the value for the next iteration.
-      previous = value;
+      values.push_back(std::move(value));
 
       // Parse the type of the variant data.
       FIRRTLBaseType type;
