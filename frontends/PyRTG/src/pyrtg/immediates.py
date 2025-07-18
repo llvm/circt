@@ -29,6 +29,39 @@ class Immediate(Value):
     # Note that the upper limit is exclusive
     return Immediate(width, Integer.random(0, 2**width - 1))
 
+  def concat(self, *others: Immediate) -> Immediate:
+    """
+    Concatenates this immediate with the provided immediates. The operands are
+    concatenated in order, with this immediate becoming the most significant
+    bits of the result.
+    """
+
+    return rtg.ConcatImmediateOp([self, *others])
+
+  def __getitem__(self, slice_range) -> Immediate:
+    """
+    Extracts bits from the immediate using Python slice notation.
+    The least significant bit has index 0.
+    """
+
+    if isinstance(slice_range, slice):
+      start = slice_range.start if slice_range.start is not None else 0
+      stop = slice_range.stop if slice_range.stop is not None else self._width
+      if slice_range.step is not None and slice_range.step != 1:
+        raise ValueError("Step value other than 1 is not supported")
+      if start < 0 or stop > self._width or start >= stop:
+        raise ValueError(
+            f"Invalid slice range [{start}:{stop}] for width {self._width}")
+      return rtg.SliceImmediateOp(ImmediateType(stop - start), self, start)
+
+    if isinstance(slice_range, int):
+      if slice_range < 0 or slice_range >= self._width:
+        raise ValueError(
+            f"Index {slice_range} out of range for width {self._width}")
+      return rtg.SliceImmediateOp(ImmediateType(1), self, slice_range)
+
+    raise TypeError("Slice must be an integer or slice object")
+
   @staticmethod
   def umax(width: int) -> Immediate:
     """

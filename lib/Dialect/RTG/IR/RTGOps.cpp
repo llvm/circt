@@ -839,6 +839,57 @@ LogicalResult MemoryBaseAddressOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ConcatImmediateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatImmediateOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (operands.empty()) {
+    if (loc)
+      return mlir::emitError(*loc) << "at least one operand must be provided";
+    return failure();
+  }
+
+  unsigned totalWidth = 0;
+  for (auto operand : operands) {
+    auto immType = dyn_cast<ImmediateType>(operand.getType());
+    if (!immType) {
+      if (loc)
+        return mlir::emitError(*loc)
+               << "all operands must be of immediate type";
+      return failure();
+    }
+    totalWidth += immType.getWidth();
+  }
+
+  inferredReturnTypes.push_back(ImmediateType::get(context, totalWidth));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SliceImmediateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SliceImmediateOp::verify() {
+  auto srcWidth = getInput().getType().getWidth();
+  auto dstWidth = getResult().getType().getWidth();
+
+  if (getLowBit() >= srcWidth)
+    return emitOpError("from bit too large for input (got ")
+           << getLowBit() << ", but input width is " << srcWidth << ")";
+
+  if (srcWidth - getLowBit() < dstWidth)
+    return emitOpError("slice does not fit in input (trying to extract ")
+           << dstWidth << " bits starting at index " << getLowBit()
+           << ", but only " << (srcWidth - getLowBit())
+           << " bits are available)";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

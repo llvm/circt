@@ -1943,6 +1943,25 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(ConcatImmediateOp op) {
+    auto result = APInt::getZeroWidth();
+    for (auto operand : op.getOperands())
+      result = result.concat(
+          cast<ImmediateAttr>(get<TypedAttr>(operand)).getValue());
+
+    state[op.getResult()] = ImmediateAttr::get(op.getContext(), result);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(SliceImmediateOp op) {
+    auto inputValue =
+        cast<ImmediateAttr>(get<TypedAttr>(op.getInput())).getValue();
+    auto sliced = inputValue.extractBits(op.getResult().getType().getWidth(),
+                                         op.getLowBit());
+    state[op.getResult()] = ImmediateAttr::get(op.getContext(), sliced);
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
         .Case<
