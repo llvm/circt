@@ -967,6 +967,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: connect %o, %i
     connect o, i
 
+  ; CHECK-LABEL: firrtl.module private @TagExtract
+  module TagExtract:
+    input i : {|A, B, C|}
+    output o : UInt<2>
+    ; CHECK: %0 = firrtl.tagextract %i : !firrtl.enum<A, B, C>
+    ; CHECK: firrtl.matchingconnect %o, %0 : !firrtl.uint<2>
+    connect o, tagExtract(i)
+
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out %rw: !firrtl.rwprobe<uint<1>>
