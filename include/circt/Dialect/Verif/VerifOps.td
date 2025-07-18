@@ -280,7 +280,7 @@ def RefinementCheckingOp : CircuitRelationCheckOp<"refines"> {
     logical equivalence. Informally speaking, refining allows maintaining or
     reducing the non-determinism of a circuit.
 
-    If the signatures of the circuits does not match, the second circuit is
+    If the signatures of the circuits do not match, the second circuit is
     trivially assumed to _not_ be a refinement of the first circuit. Sequential
     elements (i.e., registers and memories) are currently unsupported.
 
