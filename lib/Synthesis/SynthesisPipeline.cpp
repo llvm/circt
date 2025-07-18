@@ -62,10 +62,11 @@ void circt::synthesis::buildAIGOptimizationPipeline(
 
   pm.addPass(aig::createLowerVariadic());
 
-  // TODO: LowerWordToBits is not scalable for large designs. Change to
-  // conditionally enable the pass once the rest of the pipeline was able
-  // to handle multibit operands properly.
-  pm.addPass(aig::createLowerWordToBits());
+  // LowerWordToBits may not be scalable for large designs so conditionally
+  // disable it. It's also worth considering keeping word-level representation
+  // for faster synthesis.
+  if (!options.disableWordToBits)
+    pm.addPass(aig::createLowerWordToBits());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
 
