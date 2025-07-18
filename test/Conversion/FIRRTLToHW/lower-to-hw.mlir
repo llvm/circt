@@ -863,6 +863,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %sink, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
+  // CHECK-LABEL:  hw.module private @TagExtractSimpleEnum(in %source : i2, out tag : i2) {
+  // CHECK-NEXT:    hw.output %source : i2
+  // CHECK-NEXT:  }
+  firrtl.module private @TagExtractSimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
+                                             out %tag: !firrtl.uint<2>) {
+    %0 = firrtl.tagextract %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+    firrtl.matchingconnect %tag, %0 : !firrtl.uint<2>
+  }
+
+  // CHECK-LABEL:  hw.module private @TagExtractDataEnum(in %source : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>, out tag : i2) {
+  // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:    hw.output %tag : i2
+  // CHECK-NEXT:  }
+  firrtl.module private @TagExtractDataEnum(in %source: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>,
+                                           out %tag: !firrtl.uint<2>) {
+    %0 = firrtl.tagextract %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    firrtl.matchingconnect %tag, %0 : !firrtl.uint<2>
+  }
+
   // CHECK-LABEL: hw.module private @DataEnumCreate(in %input : i2, out sink : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>) {
   // CHECK-NEXT:   %a = sv.localparam {value = 0 : i2} : i2
   // CHECK-NEXT:   %0 = hw.union_create "a", %input : !hw.union<a: i2, b: i1, c: i32>
