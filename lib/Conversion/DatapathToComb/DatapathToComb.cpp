@@ -241,7 +241,10 @@ private:
     partialProducts.reserve(width);
 
     // Booth encoding halves array height by grouping three bits at a time:
-    // // partialProducts[i] = a * (-2*b[2*i+1] + b[2*i] + b[2*i-1] << 2*i
+    // partialProducts[i] = a * (-2*b[2*i+1] + b[2*i] + b[2*i-1]) << 2*i
+    // encNeg \approx (-2*b[2*i+1] + b[2*i] + b[2*i-1]) <= 0
+    // encOne = (-2*b[2*i+1] + b[2*i] + b[2*i-1]) == +/- 1
+    // encTwo = (-2*b[2*i+1] + b[2*i] + b[2*i-1]) == +/- 2
     Value encNegPrev;
     for (unsigned i = 0; i < width; i += 2) {
       // Get Booth bits: b[i+1], b[i], b[i-1] (b[-1] = 0)
@@ -253,7 +256,7 @@ private:
       Value encNeg = bip1;
       // Is the encoding one = b[i] xor b[i-1]
       Value encOne = rewriter.create<comb::XorOp>(loc, bi, bim1, true);
-      // Is the encoding two = (b_ip1 & ~b_i & ~b_im1) | (~b_ip1 & b_i & b_im1)
+      // Is the encoding two = (bip1 & ~bi & ~bim1) | (~bip1 & bi & bim1)
       Value constOne = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
       Value biInv = rewriter.create<comb::XorOp>(loc, bi, constOne, true);
       Value bip1Inv = rewriter.create<comb::XorOp>(loc, bip1, constOne, true);
