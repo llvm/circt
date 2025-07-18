@@ -180,4 +180,21 @@ def LowerValidateToLabelsPass : Pass<"rtg-lower-validate-to-labels"> {
   }];
 }
 
+def PrintTestNamesPass : Pass<"rtg-print-test-names", "mlir::ModuleOp"> {
+  let summary = "print the names of all tests to the given file";
+  let description = [{
+    Prints the names of all tests in the module to the given file.
+    A CSV format is used with the first column being the properly uniqued name
+    of the test and the second column being the original name of the test as it
+    appeared in the frontend. The original name of a test may occur several
+    times because the test might have been duplicated for multiple targets or
+    because multiple elaborations of the same test/target pair were requested.
+  }];
+
+  let options = [
+    Option<"filename", "filename", "std::string", "\"-\"",
+           "The file to print the test names to.">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD

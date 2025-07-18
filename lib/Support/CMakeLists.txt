@@ -27,6 +27,7 @@ add_circt_library(CIRCTSupport
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRSupport
   MLIRTransforms
   MLIRTransformUtils
   )
