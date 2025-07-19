@@ -788,6 +788,19 @@ rtg.test @immediateOps(singleton = %none: index) {
   %3 = rtg.constant #rtg.isa.immediate<8, 175>
   %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
   func.call @dummy6(%4) : (!rtg.isa.immediate<2>) -> ()
+
+  // CHECK: [[V1:%.+]] = rtg.validate {{.*}}, {{.*}}, "val1" :
+  // CHECK-NEXT: [[CONCAT:%.+]] = rtg.isa.concat_immediate [[V1]], [[V1]] :
+  // CHECK-NEXT: func.call @dummy16([[CONCAT]]) :
+  // CHECK-NEXT: [[SLICE:%.+]] = rtg.isa.slice_immediate [[V1]] from 4 :
+  // CHECK-NEXT: func.call @dummy6([[SLICE]]) :
+  %reg = rtg.fixed_reg #rtgtest.t0
+  %def1 = rtg.constant #rtg.isa.immediate<6, 0>
+  %val1 = rtg.validate %reg, %def1, "val1" : !rtgtest.ireg -> !rtg.isa.immediate<6>
+  %concat = rtg.isa.concat_immediate %val1, %val1 : !rtg.isa.immediate<6>, !rtg.isa.immediate<6>
+  func.call @dummy16(%concat) : (!rtg.isa.immediate<12>) -> ()
+  %slice = rtg.isa.slice_immediate %val1 from 4 : !rtg.isa.immediate<6> -> !rtg.isa.immediate<2>
+  func.call @dummy6(%slice) : (!rtg.isa.immediate<2>) -> ()
 }
 
 // -----
