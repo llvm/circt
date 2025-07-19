@@ -15,6 +15,8 @@ func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 func.func @dummy13(%arg0: !rtg.isa.memory_block<32>) -> () {return}
 func.func @dummy14(%arg0: !rtg.isa.memory<32>) -> () {return}
 func.func @dummy15(%arg0: !rtg.isa.immediate<32>) -> () {return}
+func.func @dummy16(%arg0: !rtg.isa.immediate<12>) -> () {return}
+func.func @dummy17(%arg0: !rtg.isa.immediate<3>) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
@@ -760,6 +762,22 @@ rtg.test @validateOp(singleton = %none: index) {
   func.call @dummy15(%1#0) : (!rtg.isa.immediate<32>) -> ()
   func.call @dummy15(%1#1) : (!rtg.isa.immediate<32>) -> ()
   func.call @dummy15(%1#2) : (!rtg.isa.immediate<32>) -> ()
+}
+
+// CHECK-LABEL: @immediateOps
+rtg.test @immediateOps(singleton = %none: index) {
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<12, -81>
+  // CHECK-NEXT: func.call @dummy16([[V0]]) : (!rtg.isa.immediate<12>) -> ()
+  %0 = rtg.constant #rtg.isa.immediate<4, 15>
+  %1 = rtg.constant #rtg.isa.immediate<8, 175>
+  %2 = rtg.isa.concat_immediate %0, %1 : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
+  func.call @dummy16(%2) : (!rtg.isa.immediate<12>) -> ()
+
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<2, -2>
+  // CHECK-NEXT: func.call @dummy6([[V1]]) : (!rtg.isa.immediate<2>) -> ()
+  %3 = rtg.constant #rtg.isa.immediate<8, 175>
+  %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
+  func.call @dummy6(%4) : (!rtg.isa.immediate<2>) -> ()
 }
 
 // -----

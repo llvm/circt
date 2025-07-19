@@ -58,7 +58,7 @@ public:
             // Tuples
             TupleCreateOp, TupleExtractOp,
             // Immediates
-            IntToImmediateOp,
+            IntToImmediateOp, ConcatImmediateOp, SliceImmediateOp,
             // Memories
             MemoryAllocOp, MemoryBaseAddressOp, MemorySizeOp,
             // Memory Blocks
@@ -136,6 +136,8 @@ public:
   HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);
+  HANDLE(ConcatImmediateOp, Unhandled);
+  HANDLE(SliceImmediateOp, Unhandled);
   HANDLE(MemoryBlockDeclareOp, Unhandled);
   HANDLE(MemoryAllocOp, Unhandled);
   HANDLE(MemoryBaseAddressOp, Unhandled);

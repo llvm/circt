@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -466,6 +466,28 @@ class PythonParams(Config):
 @test(PythonParams)
 def test92_python_params(config):
   Label.declare("python_" + str(config.xlen)).place()
+
+
+# MLIR-LABEL: rtg.test @test93_immediate_ops
+# MLIR-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
+# MLIR-NEXT: [[IMM2:%.+]] = rtg.constant #rtg.isa.immediate<8, 4>
+# MLIR-NEXT: [[CONCAT:%.+]] = rtg.isa.concat_immediate [[IMM1]], [[IMM2]], [[IMM2]] : !rtg.isa.immediate<12>, !rtg.isa.immediate<8>, !rtg.isa.immediate<8>
+# MLIR-NEXT: [[SLICE:%.+]] = rtg.isa.slice_immediate [[CONCAT]] from 8 : (!rtg.isa.immediate<28>) -> !rtg.isa.immediate<4>
+# MLIR: rtg.substitute_sequence {{%.+}}([[SLICE]]) : !rtg.sequence<!rtg.isa.immediate<4>>
+
+
+@sequence([ImmediateType(4)])
+def immediate_consumer(imm: Immediate):
+  pass
+
+
+@test(Singleton)
+def test93_immediate_ops(config):
+  imm1 = Immediate(12, 8)
+  imm2 = Immediate(8, 4)
+  concat = Immediate.concat(imm1, imm2, imm2)
+  slice = concat[8:12]
+  immediate_consumer(slice)
 
 
 # MLIR-LABEL: rtg.sequence @seq0

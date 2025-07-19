@@ -866,6 +866,43 @@ def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
   let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
 }
 
+def ConcatImmediateOp : RTGISAOp<"concat_immediate", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "concatenate immediates";
+  let description = [{
+    This operation concatenates a variadic number of immediates into a single
+    immediate. The operands are concatenated in order, with the first operand
+    becoming the most significant bits of the result.
+  }];
+
+  let arguments = (ins Variadic<ImmediateType>:$operands);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = "$operands `:` qualified(type($operands)) attr-dict";
+}
+
+def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
+  let summary = "extract a slice from an immediate";
+  let description = [{
+    This operation extracts a contiguous slice of bits from an immediate value.
+    The slice is specified by a low bit index (inclusive) and the width of the
+    slice is determined by the result type. The slice must fit within the input
+    immediate's width.
+  }];
+
+  let arguments = (ins ImmediateType:$input, I32Attr:$lowBit);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = [{
+    $input `from` $lowBit `:`
+    qualified(type($input)) `->` qualified(type($result)) attr-dict
+  }];
+  
+  let hasVerifier = 1;
+}
+
 //===- ISA Memory Block Operations ----------------------------------------===//
 
 def MemoryBlockDeclareOp : RTGISAOp<"memory_block_declare", [
