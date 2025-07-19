@@ -215,9 +215,13 @@ private:
                 return false;
             return true;
           })
-          .Case<IntType>([&](auto iType) {
-            results.push_back({iType});
-            return iType.getWidth().has_value();
+          .Case<IntType>([&](IntType type) {
+            results.push_back(type);
+            return type.getWidth().has_value();
+          })
+          .Case<FEnumType>([&](FEnumType type) {
+            results.emplace_back(type);
+            return true;
           })
           .Default([&](auto) { return false; });
     };
