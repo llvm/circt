@@ -99,6 +99,8 @@ struct MemoryStorage;
 struct MemoryBlockStorage;
 struct ValidationValue;
 struct ValidationMuxedValue;
+struct ImmediateConcatStorage;
+struct ImmediateSliceStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -113,13 +115,12 @@ struct LabelValue {
 };
 
 /// The abstract base class for elaborated values.
-using ElaboratorValue =
-    std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
-                 RandomizedSequenceStorage *, InterleavedSequenceStorage *,
-                 SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
-                 MemoryBlockStorage *, ValidationValue *,
-                 ValidationMuxedValue *>;
+using ElaboratorValue = std::variant<
+    TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
+    RandomizedSequenceStorage *, InterleavedSequenceStorage *, SetStorage *,
+    VirtualRegisterStorage *, UniqueLabelStorage *, LabelValue, ArrayStorage *,
+    TupleStorage *, MemoryStorage *, MemoryBlockStorage *, ValidationValue *,
+    ValidationMuxedValue *, ImmediateConcatStorage *, ImmediateSliceStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -361,6 +362,39 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
+/// Storage object for immediate concatenation operations.
+/// FIXME: opaque values should be handled generically
+struct ImmediateConcatStorage {
+  ImmediateConcatStorage(SmallVector<ElaboratorValue> &&operands)
+      : hashcode(llvm::hash_combine_range(operands.begin(), operands.end())),
+        operands(std::move(operands)) {}
+
+  bool isEqual(const ImmediateConcatStorage *other) const {
+    return hashcode == other->hashcode && operands == other->operands;
+  }
+
+  const unsigned hashcode;
+  const SmallVector<ElaboratorValue> operands;
+};
+
+/// Storage object for immediate slice operations.
+/// FIXME: opaque values should be handled generically
+struct ImmediateSliceStorage {
+  ImmediateSliceStorage(ElaboratorValue input, unsigned lowBit, Type type)
+      : hashcode(llvm::hash_combine(input, lowBit, type)), input(input),
+        lowBit(lowBit), type(type) {}
+
+  bool isEqual(const ImmediateSliceStorage *other) const {
+    return hashcode == other->hashcode && input == other->input &&
+           lowBit == other->lowBit && type == other->type;
+  }
+
+  const unsigned hashcode;
+  const ElaboratorValue input;
+  const unsigned lowBit;
+  const Type type;
+};
+
 // Values with identity not intended to be internalized.
 //===----------------------------------------------------------------------===//
 
@@ -536,6 +570,10 @@ private:
       return internedInterleavedSequences;
     else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
       return internedTuples;
+    else if constexpr (std::is_same_v<StorageTy, ImmediateConcatStorage>)
+      return internedImmediateConcatValues;
+    else if constexpr (std::is_same_v<StorageTy, ImmediateSliceStorage>)
+      return internedImmediateSliceValues;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -562,6 +600,12 @@ private:
       internedInterleavedSequences;
   DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
       internedTuples;
+  DenseSet<HashedStorage<ImmediateConcatStorage>,
+           StorageKeyInfo<ImmediateConcatStorage>>
+      internedImmediateConcatValues;
+  DenseSet<HashedStorage<ImmediateSliceStorage>,
+           StorageKeyInfo<ImmediateSliceStorage>>
+      internedImmediateSliceValues;
 };
 
 } // namespace
@@ -667,6 +711,17 @@ static void print(const ValidationValue *val, llvm::raw_ostream &os) {
 
 static void print(const ValidationMuxedValue *val, llvm::raw_ostream &os) {
   os << "<validation-muxed-value (" << val->value << ") at " << val->idx << ">";
+}
+
+static void print(const ImmediateConcatStorage *val, llvm::raw_ostream &os) {
+  os << "<immediate-concat [";
+  llvm::interleaveComma(val->operands, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << "]>";
+}
+
+static void print(const ImmediateSliceStorage *val, llvm::raw_ostream &os) {
+  os << "<immediate-slice " << val->input << " from " << val->lowBit << ">";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -1116,6 +1171,34 @@ private:
     }
     materializedValues[val] = validateOp.getValues()[val->idx];
     return validateOp.getValues()[val->idx];
+  }
+
+  Value visit(ImmediateConcatStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> operands;
+    for (auto operand : val->operands) {
+      auto materialized = materialize(operand, loc, emitError);
+      if (!materialized)
+        return {};
+
+      operands.push_back(materialized);
+    }
+
+    Value res = ConcatImmediateOp::create(builder, loc, operands);
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(ImmediateSliceStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    Value input = materialize(val->input, loc, emitError);
+    if (!input)
+      return {};
+
+    Value res =
+        SliceImmediateOp::create(builder, loc, val->type, input, val->lowBit);
+    materializedValues[val] = res;
+    return res;
   }
 
 private:
@@ -1938,6 +2021,23 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(ConcatImmediateOp op) {
+    bool anyValidationValues =
+        llvm::any_of(op.getOperands(), [&](auto operand) {
+          return std::holds_alternative<ValidationValue *>(state[operand]);
+        });
+
+    // FIXME: this is a hack and this case should be handled generically for all
+    // operations
+    if (anyValidationValues) {
+      SmallVector<ElaboratorValue> operands;
+      for (auto operand : op.getOperands())
+        operands.push_back(state[operand]);
+      state[op.getResult()] =
+          sharedState.internalizer.internalize<ImmediateConcatStorage>(
+              std::move(operands));
+      return DeletionKind::Delete;
+    }
+
     auto result = APInt::getZeroWidth();
     for (auto operand : op.getOperands())
       result = result.concat(
@@ -1948,6 +2048,15 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(SliceImmediateOp op) {
+    // FIXME: this is a hack and this case should be handled generically for all
+    // operations
+    if (std::holds_alternative<ValidationValue *>(state[op.getInput()])) {
+      state[op.getResult()] =
+          sharedState.internalizer.internalize<ImmediateSliceStorage>(
+              state[op.getInput()], op.getLowBit(), op.getResult().getType());
+      return DeletionKind::Delete;
+    }
+
     auto inputValue =
         cast<ImmediateAttr>(get<TypedAttr>(op.getInput())).getValue();
     auto sliced = inputValue.extractBits(op.getResult().getType().getWidth(),
