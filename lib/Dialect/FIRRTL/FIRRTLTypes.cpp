@@ -886,7 +886,8 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
           [&](IntType intType) { return intType.getWidthOrSentinel(); })
       .Case<AnalogType>(
           [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
-      .Case<BundleType, FVectorType, FEnumType>([](Type) { return -2; })
+      .Case<FEnumType>([&](FEnumType fenum) { return fenum.getBitWidth(); })
+      .Case<BundleType, FVectorType>([](Type) { return -2; })
       .Case<BaseTypeAliasType>([](BaseTypeAliasType type) {
         // It's faster to use its anonymous type.
         return type.getAnonymousType().getBitWidthOrSentinel();
@@ -2161,24 +2162,15 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
         elements(elements.begin(), elements.end()) {
     RecursiveTypeProperties props{true,  false, false, isConst,
                                   false, false, false};
-    uint64_t fieldID = 0;
-    fieldIDs.reserve(elements.size());
+    dataSize = 0;
     for (auto &element : elements) {
       auto type = element.type;
       auto eltInfo = type.getRecursiveTypeProperties();
-      props.isPassive &= eltInfo.isPassive;
-      props.containsAnalog |= eltInfo.containsAnalog;
       props.containsConst |= eltInfo.containsConst;
-      props.containsReference |= eltInfo.containsReference;
       props.containsTypeAlias |= eltInfo.containsTypeAlias;
-      props.hasUninferredReset |= eltInfo.hasUninferredReset;
-      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
-      fieldID += 1;
-      fieldIDs.push_back(fieldID);
-      // Increment the field ID for the next field by the number of subfields.
-      fieldID += hw::FieldIdImpl::getMaxFieldID(type);
+
+      dataSize = std::max((size_t)type.getBitWidthOrSentinel(), dataSize);
     }
-    maxFieldID = fieldID;
     recProps = props;
   }
 
@@ -2199,10 +2191,8 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   }
 
   SmallVector<FEnumType::EnumElement, 4> elements;
-  SmallVector<uint64_t, 4> fieldIDs;
-  uint64_t maxFieldID;
-
   RecursiveTypeProperties recProps;
+  size_t dataSize;
   FIRRTLBaseType anonymousType;
 };
 
@@ -2246,7 +2236,10 @@ std::optional<unsigned> FEnumType::getElementIndex(StringAttr name) {
   return std::nullopt;
 }
 
-/// Get the width of the the tag field.
+size_t FEnumType::getBitWidth() { return getDataWidth() + getTagWidth(); }
+
+size_t FEnumType::getDataWidth() { return getImpl()->dataSize; }
+
 size_t FEnumType::getTagWidth() {
   if (getElements().size() == 0)
     return 0;
@@ -2324,45 +2317,6 @@ FIRRTLBaseType FEnumType::getElementType(size_t index) const {
 FIRRTLBaseType FEnumType::getElementTypePreservingConst(size_t index) {
   auto type = getElementType(index);
   return type.getConstType(type.isConst() || isConst());
-}
-
-uint64_t FEnumType::getFieldID(uint64_t index) const {
-  return getImpl()->fieldIDs[index];
-}
-
-uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) const {
-  assert(!getElements().empty() && "Enum must have >0 fields");
-  auto fieldIDs = getImpl()->fieldIDs;
-  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
-  return std::distance(fieldIDs.begin(), it);
-}
-
-std::pair<uint64_t, uint64_t>
-FEnumType::getIndexAndSubfieldID(uint64_t fieldID) const {
-  auto index = getIndexForFieldID(fieldID);
-  auto elementFieldID = getFieldID(index);
-  return {index, fieldID - elementFieldID};
-}
-
-std::pair<Type, uint64_t>
-FEnumType::getSubTypeByFieldID(uint64_t fieldID) const {
-  if (fieldID == 0)
-    return {*this, 0};
-  auto subfieldIndex = getIndexForFieldID(fieldID);
-  auto subfieldType = getElementType(subfieldIndex);
-  auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {subfieldType, subfieldID};
-}
-
-uint64_t FEnumType::getMaxFieldID() const { return getImpl()->maxFieldID; }
-
-std::pair<uint64_t, bool>
-FEnumType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
-  auto childRoot = getFieldID(index);
-  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
-                                                : (getFieldID(index + 1) - 1);
-  return std::make_pair(fieldID - childRoot,
-                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 LogicalResult FEnumType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,

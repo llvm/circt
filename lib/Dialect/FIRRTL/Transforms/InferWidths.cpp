@@ -1427,13 +1427,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 1),
                    op.getType());
       })
-      .Case<SubtagOp>([&](auto op) {
-        FEnumType enumType = op.getInput().getType();
-        auto fieldID = enumType.getFieldID(op.getFieldIndex());
-        unifyTypes(FieldRef(op.getResult(), 0),
-                   FieldRef(op.getInput(), fieldID), op.getType());
-      })
-
       .Case<RefSubOp>([&](RefSubOp op) {
         uint64_t fieldID = TypeSwitch<FIRRTLBaseType, uint64_t>(
                                op.getInput().getType().getType())
@@ -1782,10 +1775,6 @@ void InferenceMapping::declareVars(Value value, bool isDerived) {
       declare(vecType.getElementType());
       // Skip past the rest of the elements
       fieldID = save + vecType.getMaxFieldID();
-    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
-      fieldID++;
-      for (auto &element : enumType.getElements())
-        declare(element.type);
     } else {
       llvm_unreachable("Unknown type inside a bundle!");
     }
@@ -1813,9 +1802,10 @@ void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
         maximize(vecType.getElementType());
       fieldID = save + vecType.getMaxFieldID();
     } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
+      auto *e = solver.max(getExpr(FieldRef(rhs, fieldID)),
+                           getExpr(FieldRef(lhs, fieldID)));
+      setExpr(FieldRef(result, fieldID), e);
       fieldID++;
-      for (auto &element : enumType.getElements())
-        maximize(element.type);
     } else if (type.isGround()) {
       auto *e = solver.max(getExpr(FieldRef(rhs, fieldID)),
                            getExpr(FieldRef(lhs, fieldID)));
@@ -1861,9 +1851,9 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller, bool equal) {
           }
           fieldID = save + vecType.getMaxFieldID();
         } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
+          constrainTypes(getExpr(FieldRef(larger, fieldID)),
+                         getExpr(FieldRef(smaller, fieldID)), false, equal);
           fieldID++;
-          for (auto &element : enumType.getElements())
-            constrain(element.type, larger, smaller);
         } else if (type.isGround()) {
           // Leaf element, look up their expressions, and create the constraint.
           constrainTypes(getExpr(FieldRef(larger, fieldID)),
@@ -1972,9 +1962,13 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       }
       fieldID = save + vecType.getMaxFieldID();
     } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
+      FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
+      FieldRef rhsFieldRef(rhs.getValue(), rhs.getFieldID() + fieldID);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Unify " << getFieldName(lhsFieldRef).first << " = "
+                 << getFieldName(rhsFieldRef).first << "\n");
+      setExpr(lhsFieldRef, getExpr(rhsFieldRef));
       fieldID++;
-      for (auto &element : enumType.getElements())
-        unify(element.type);
     } else {
       llvm_unreachable("Unknown type inside a bundle!");
     }
@@ -2233,17 +2227,6 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
       }
       // If this is a 0 length vector return the original type.
       return type;
-    }
-    if (auto enumType = type_dyn_cast<FEnumType>(type)) {
-      fieldID++;
-      llvm::SmallVector<FEnumType::EnumElement> elements;
-      for (auto &element : enumType.getElements()) {
-        auto updatedBase = updateBase(element.type);
-        if (!updatedBase)
-          return {};
-        elements.emplace_back(element.name, element.value, updatedBase);
-      }
-      return FEnumType::get(context, elements, enumType.isConst());
     }
     llvm_unreachable("Unknown type inside a bundle!");
   };
