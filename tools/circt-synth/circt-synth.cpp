@@ -17,6 +17,7 @@
 #include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -30,7 +31,8 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
-#include "circt/Synthesis/SynthesisPipeline.h"
+#include "circt/Synthesis/Transforms/Passes.h"
+#include "circt/Synthesis/Transforms/SynthesisPipeline.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Diagnostics.h"
@@ -92,10 +94,11 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
-enum Until { UntilAIGLowering, UntilEnd };
+enum Until { UntilAIGLowering, UntilMapping, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
     clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
+    clEnumValN(UntilMapping, "mapping", "Run technology/lut mapping"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 
 static llvm::cl::opt<Until> runUntilBefore(
@@ -148,6 +151,21 @@ static cl::opt<bool>
 static cl::opt<bool> disableWordToBits("disable-word-to-bits",
                                        cl::desc("Disable LowerWordToBits pass"),
                                        cl::init(false), cl::cat(mainCategory));
+static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
+                                      cl::desc("Maximum cut size per root"),
+                                      cl::init(8), cl::cat(mainCategory));
+
+enum SynthesisStrategy {
+  Area,
+  Timing
+  // TODO: Add power, etc.
+};
+
+static cl::opt<SynthesisStrategy> synthesisStrategy(
+    "synthesis-strategy", cl::desc("Synthesis strategy to use"),
+    cl::values(clEnumValN(Area, "area", "Area optimization"),
+               clEnumValN(Timing, "timing", "Timing optimization")),
+    cl::init(Timing), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -199,6 +217,12 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
   };
 
   nestOrAddToHierarchicalRunner(pm, pipeline, topName);
+
+  if (!untilReached(UntilMapping)) {
+    circt::synthesis::TechMapperOptions options;
+    options.maxCutsPerRoot = maxCutSizePerRoot;
+    pm.addPass(circt::synthesis::createTechMapper(options));
+  }
 
   // Run analysis if requested.
   if (!outputLongestPath.empty()) {

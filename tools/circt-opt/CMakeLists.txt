@@ -24,6 +24,7 @@ target_link_libraries(circt-opt
   CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTLECTransforms
+  CIRCTSynthesisTransforms
   CIRCTTransforms
 
   MLIRIR

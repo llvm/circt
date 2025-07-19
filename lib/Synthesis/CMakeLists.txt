@@ -1,13 +1,12 @@
 add_circt_library(CIRCTSynthesis
-  SynthesisPipeline.cpp
+  CutRewriter.cpp
 
   LINK_LIBS PUBLIC
-  CIRCTAIGTransforms
-  CIRCTCombToAIG
-  CIRCTHWTransforms
   CIRCTSupport
 
   MLIRIR
   MLIRSupport
   MLIRTransforms
 )
+
+add_subdirectory(Transforms)

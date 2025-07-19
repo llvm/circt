@@ -54,7 +54,7 @@ void buildAIGOptimizationPipeline(
     mlir::OpPassManager &pm, const AIGOptimizationPipelineOptions &options);
 
 /// Register the synthesis pipelines.
-void registerSynthesisPipeline();
+void registerPipelines();
 
 } // namespace synthesis
 } // namespace circt
