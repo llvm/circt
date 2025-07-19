@@ -259,7 +259,3 @@ void RegOfVecToMemPass::runOnOperation() {
   }
   opsToErase.clear();
 }
-
-std::unique_ptr<mlir::Pass> circt::seq::createRegOfVecToMemPass() {
-  return std::make_unique<RegOfVecToMemPass>();
-}

@@ -121,7 +121,6 @@ def RegOfVecToMem : Pass<"seq-reg-of-vec-to-mem", "hw::HWModuleOp"> {
     3. Updates are controlled by enable signals through mux operations
     4. Read and write operations use the same clock
   }];
-  let constructor = "circt::seq::createRegOfVecToMemPass()";
 }
 
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
