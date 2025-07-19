@@ -162,7 +162,11 @@ set(ESIPythonRuntimeSources
 )
 
 IF(MSVC)
-    set(CMAKE_CXX_FLAGS "/EHa")
+    # ESI runtime requires exceptions. Purge any exception-related flags from
+    # CXX_FLAGS, and add /EHa.
+    string(REGEX REPLACE "/EH[a-zA-Z-]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
