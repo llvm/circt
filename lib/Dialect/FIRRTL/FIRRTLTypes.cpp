@@ -813,7 +813,7 @@ FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
 FIRRTLBaseType FIRRTLBaseType::getMaskType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) {
+            AnalogType, FEnumType>([&](Type) {
         return UIntType::get(this->getContext(), 1, this->isConst());
       })
       .Case<BundleType>([&](BundleType bundleType) {
