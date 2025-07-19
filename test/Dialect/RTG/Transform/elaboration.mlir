@@ -755,13 +755,23 @@ rtg.test @validateOp(singleton = %none: index) {
   // CHECK-NEXT: [[V5:%.+]], [[V6:%.+]]:2 = rtg.validate [[V0]], [[V1]] ([[V3]], [[V4]] else [[V4]], [[V3]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
   // CHECK-NEXT: func.call @dummy15([[V5]])
   // CHECK-NEXT: func.call @dummy15([[V6]]#0)
-  // CHECK-NEXT: func.call @dummy15([[V6]]#1)
+  // CHECK-NEXT: [[V7:%.+]] = rtg.get_sequence @validateSeq
+  // CHECK-NEXT: [[V8:%.+]] = rtg.substitute_sequence [[V7]]([[V6]]#1)
+  // CHECK-NEXT: [[V9:%.+]] = rtg.randomize_sequence [[V8]]
+  // CHECK-NEXT: rtg.embed_sequence [[V9]]
   %v1 = rtg.constant #rtg.isa.immediate<32, 1>
   %v2 = rtg.constant #rtg.isa.immediate<32, 2>
   %1:3 = rtg.validate %reg, %default (%v1, %v2 else %v2, %v1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
   func.call @dummy15(%1#0) : (!rtg.isa.immediate<32>) -> ()
   func.call @dummy15(%1#1) : (!rtg.isa.immediate<32>) -> ()
-  func.call @dummy15(%1#2) : (!rtg.isa.immediate<32>) -> ()
+  %2 = rtg.get_sequence @validateSeq : !rtg.sequence<!rtg.isa.immediate<32>>
+  %3 = rtg.substitute_sequence %2(%1#2) : !rtg.sequence<!rtg.isa.immediate<32>>
+  %4 = rtg.randomize_sequence %3
+  rtg.embed_sequence %4
+}
+
+rtg.sequence @validateSeq(%arg0: !rtg.isa.immediate<32>) {
+  func.call @dummy15(%arg0) : (!rtg.isa.immediate<32>) -> ()
 }
 
 // CHECK-LABEL: @immediateOps

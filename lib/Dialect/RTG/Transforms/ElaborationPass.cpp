@@ -361,23 +361,6 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
-/// Storage object for the 'usedDefault` result of 'rtg.validate'.
-struct ValidationMuxedValue {
-  ValidationMuxedValue(const ValidationValue *value, unsigned idx)
-      : hashcode(llvm::hash_combine(value, idx)), value(value), idx(idx) {}
-
-  bool isEqual(const ValidationMuxedValue *other) const {
-    return hashcode == other->hashcode && value == other->value &&
-           idx == other->idx;
-  }
-
-  // The cached hashcode to avoid repeated computations.
-  const unsigned hashcode;
-
-  const ValidationValue *value;
-  const unsigned idx;
-};
-
 // Values with identity not intended to be internalized.
 //===----------------------------------------------------------------------===//
 
@@ -490,6 +473,15 @@ struct ValidationValue : IdentityValue {
   const SmallVector<ElaboratorValue> elseValues;
 };
 
+/// Storage object for the 'values' results of 'rtg.validate'.
+struct ValidationMuxedValue : IdentityValue {
+  ValidationMuxedValue(Type type, const ValidationValue *value, unsigned idx)
+      : IdentityValue(type), value(value), idx(idx) {}
+
+  const ValidationValue *value;
+  const unsigned idx;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -544,8 +536,6 @@ private:
       return internedInterleavedSequences;
     else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
       return internedTuples;
-    else if constexpr (std::is_same_v<StorageTy, ValidationMuxedValue>)
-      return internedValidationMuxedValues;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -572,9 +562,6 @@ private:
       internedInterleavedSequences;
   DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
       internedTuples;
-  DenseSet<HashedStorage<ValidationMuxedValue>,
-           StorageKeyInfo<ValidationMuxedValue>>
-      internedValidationMuxedValues;
 };
 
 } // namespace
@@ -1121,7 +1108,10 @@ private:
       return {};
     auto validateOp = validateValue.getDefiningOp<ValidateOp>();
     if (!validateOp) {
-      emitError() << "expected validate op for validation muxed value";
+      auto *defOp = validateValue.getDefiningOp();
+      emitError()
+          << "expected validate op for validation muxed value, but found "
+          << (defOp ? defOp->getName().getStringRef() : "block argument");
       return {};
     }
     materializedValues[val] = validateOp.getValues()[val->idx];
@@ -1784,9 +1774,13 @@ public:
     materializer.registerIdentityValue(validationVal);
     materializer.map(validationVal, op.getValue());
 
-    for (auto [i, val] : llvm::enumerate(op.getValues()))
-      state[val] = sharedState.internalizer.internalize<ValidationMuxedValue>(
-          validationVal, i);
+    for (auto [i, val] : llvm::enumerate(op.getValues())) {
+      auto *muxVal = sharedState.internalizer.create<ValidationMuxedValue>(
+          val.getType(), validationVal, i);
+      state[val] = muxVal;
+      materializer.registerIdentityValue(muxVal);
+      materializer.map(muxVal, val);
+    }
 
     return DeletionKind::Keep;
   }
