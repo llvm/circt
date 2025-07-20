@@ -41,7 +41,7 @@ with Context() as ctx, Location.unknown():
     # CHECK-LABEL:      LongestPathAnalysis created successfully!
     print("LongestPathAnalysis created successfully!")
 
-    # CHECK:      Total paths: 96
+    # CHECK:      Total paths: 128
     # CHECK-NEXT: Max delay: 2
     # CHECK-NEXT: Min delay: 1
     # CHECK-NEXT: 50th percentile delay: 1
@@ -62,17 +62,17 @@ with Context() as ctx, Location.unknown():
         DataflowPath.from_json_string(
             collection.collection.get_path(5)) == collection[5])
     # Check that len and get_size are the same
-    # CHECK-NEXT: 96 96
+    # CHECK-NEXT: 128 128
     print(len(collection), collection.collection.get_size())
 
     try:
-      print(collection[96])
+      print(collection[128])
     except IndexError:
       # CHECK-NEXT: IndexError correctly raised
       print("IndexError correctly raised")
 
     # Check that iterator works
-    # CHECK-NEXT: sum: 128
+    # CHECK-NEXT: sum: 192
     print("sum: ", sum(p.delay for p in collection))
 
     for p in collection[:2]:
