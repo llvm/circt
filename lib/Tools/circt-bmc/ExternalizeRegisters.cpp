@@ -236,6 +236,7 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
 
   // Replace the register with newInput and newOutput
   auto newInput = module.appendInput(newInputName, regType).second;
+  result.replaceAllUsesWith(newInput);
   if (reset) {
     if (isAsync) {
       // Async reset
@@ -243,14 +244,11 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
       return failure();
     }
     // Sync reset
-    result.replaceAllUsesWith(newInput);
-
     auto mux = builder.create<comb::MuxOp>(op->getLoc(), regType, reset,
                                            resetValue, next);
     module.appendOutput(newOutputName, mux);
   } else {
     // No reset
-    result.replaceAllUsesWith(newInput);
     module.appendOutput(newOutputName, next);
   }
 
