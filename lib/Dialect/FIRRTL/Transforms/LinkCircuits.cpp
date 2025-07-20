@@ -41,6 +41,8 @@ using namespace firrtl;
 namespace {
 struct LinkCircuitsPass
     : public circt::firrtl::impl::LinkCircuitsBase<LinkCircuitsPass> {
+  using Base::Base;
+
   void runOnOperation() override;
   LogicalResult mergeCircuits();
   LinkCircuitsPass(StringRef baseCircuitNameOption, bool noMangleOption) {
@@ -247,10 +249,4 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
 void LinkCircuitsPass::runOnOperation() {
   if (failed(mergeCircuits()))
     signalPassFailure();
-}
-
-std::unique_ptr<Pass>
-circt::firrtl::createLinkCircuitsPass(StringRef baseCircuitName,
-                                      bool noMangle) {
-  return std::make_unique<LinkCircuitsPass>(baseCircuitName, noMangle);
 }

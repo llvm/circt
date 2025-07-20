@@ -391,6 +391,15 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %out, %in: !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>, !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>
   }
 
+  // Test enum lowering. Currently leaves enumerations untouched.
+  // CHECK-LABEL: @LowerEnums
+  // CHECK: %a: !firrtl.enum<a: uint<1>>
+  // CHECK: %b: !firrtl.enum<a: uint<1>>
+  firrtl.module private @LowerEnums(in %a: !firrtl.enum<a: uint<1>>, out %b: !firrtl.enum<a: uint<1>>) {
+    // CHECK: firrtl.matchingconnect %b, %a : !firrtl.enum<a: uint<1>>
+    firrtl.matchingconnect %b, %a : !firrtl.enum<a: uint<1>>
+  }
+
   // COMMON-LABEL: firrtl.extmodule @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
   firrtl.extmodule @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   firrtl.module private @Test() {

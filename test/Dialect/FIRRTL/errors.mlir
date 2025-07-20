@@ -352,9 +352,38 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 
 // -----
 
+firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
+  // expected-error @below {{op knows undefined layer '@A'}}
+  firrtl.extmodule @Ext() attributes {knownLayers=[@A]}
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUsesUnknownLayerInProbeColor" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layers}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext(out p: !firrtl.probe<uint<1>, @A>)
+
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUseUnkownLayerInEnableLayerSpec" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layers}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext() attributes {layers=[@A]}
+}
+
+// -----
+
 firrtl.circuit "InstanceMissingLayers" {
+  firrtl.layer @A bind {}
   // expected-note @below {{original module declared here}}
-  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {knownLayers = [@A], layers = [@A]}
   firrtl.module @InstanceMissingLayers() {
     // expected-error @below {{'firrtl.instance' op layers must be [@A], but got []}}
     %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1>)
@@ -1756,7 +1785,7 @@ firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
 
 // Enum types must be passive
 firrtl.circuit "EnumNonPassive" {
-  // expected-error @+1 {{enum field '"a"' not passive}}
+  // expected-error @+1 {{enum field "a" not passive}}
   firrtl.module @EnumNonPassive(in %a : !firrtl.enum<a: bundle<a flip: uint<1>>>) {
   }
 }
@@ -1765,9 +1794,23 @@ firrtl.circuit "EnumNonPassive" {
 
 // Enum types must not contain analog
 firrtl.circuit "EnumAnalog" {
-  // expected-error @+1 {{enum field '"a"' contains analog}}
+  // expected-error @+1 {{enum field "a" contains analog}}
   firrtl.module @EnumAnalog(in %a : !firrtl.enum<a: analog<1>>) {
   }
+}
+
+// -----
+
+firrtl.circuit "EnumUninferredWidth" {
+  // expected-error @+1 {{enum field "a" has uninferred width}}
+  firrtl.module @EnumUninferredWidth(in %enum : !firrtl.enum<a: uint>) { }
+}
+
+// -----
+
+firrtl.circuit "EnumUninferredReset" {
+  // expected-error @+1 {{enum field "a" has uninferred reset}}
+  firrtl.module @EnumUninferredReset(in %enum : !firrtl.enum<a: reset>) { }
 }
 
 // -----
@@ -1779,11 +1822,41 @@ firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some
 }
 
 // -----
+
+firrtl.circuit "EnumDupVarName" {
+  // expected-error @+1 {{duplicate variant name "a" in enum}}
+  firrtl.module @EnumDupVarName(in %enum : !firrtl.enum<a, a>) { }
+}
+
+// -----
+
+firrtl.circuit "EnumDupVarValue" {
+  // expected-error @+1 {{enum variant "b" has value 0 : ui0 which is not greater than previous variant 0 : ui0}}
+  firrtl.module @EnumDupVarValue(in %enum : !firrtl.enum<a, b=0>) { }
+}
+
+// -----
 // No const with probes within.
 
 firrtl.circuit "ConstOpenVector" {
   // expected-error @below {{vector cannot be const with references}}
   firrtl.extmodule @ConstOpenVector(out out : !firrtl.const.openvector<probe<uint<1>>, 2>)
+}
+
+// -----
+// No duplicate fields within.
+
+firrtl.circuit "DupFieldsBundle" {
+  // expected-error @below {{duplicate field name "a" in bundle}}
+  firrtl.extmodule @DupFieldsBundle(out out : !firrtl.bundle<a: uint<1>, a: uint<1>>)
+}
+
+// -----
+// No duplicate fields within.
+
+firrtl.circuit "DupFieldsOpenBundle" {
+  // expected-error @below {{duplicate field name "a" in openbundle}}
+  firrtl.extmodule @DupFieldsOpenBundle(out out : !firrtl.openbundle<a: uint<1>, a: uint<1>>)
 }
 
 // -----
@@ -1983,7 +2056,7 @@ firrtl.circuit "InvalidProbeAssociationWire_SymbolIsNotALayer" {
 // -----
 
 firrtl.circuit "UnknownEnabledLayer" {
-  // expected-error @below {{'firrtl.module' op enables unknown layer '@A'}}
+  // expected-error @below {{'firrtl.module' op enables undefined layer '@A'}}
   firrtl.module @UnknownEnabledLayer() attributes {layers = [@A]} {}
 }
 

@@ -93,12 +93,12 @@ struct LogicEquivalenceCheckingOpConversion
       return success();
     }
 
-    auto unusedResult = op.use_empty();
+    auto hasNoResult = op.getNumResults() == 0;
 
     // Solver will only return a result when it is used to check the returned
     // value.
     smt::SolverOp solver;
-    if (unusedResult)
+    if (hasNoResult)
       solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
     else
       solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
@@ -163,7 +163,7 @@ struct LogicEquivalenceCheckingOpConversion
     // operations empty. If the result is used, we create a check operation with
     // the result type of the operation and yield the result of the check
     // operation.
-    if (unusedResult) {
+    if (hasNoResult) {
       auto checkOp = rewriter.create<smt::CheckOp>(loc, TypeRange{});
       rewriter.createBlock(&checkOp.getSatRegion());
       rewriter.create<smt::YieldOp>(loc);
@@ -309,9 +309,11 @@ struct VerifBoundedModelCheckingOpConversion
         auto initVal =
             initialValues[curIndex - oldCircuitInputTy.size() + numRegs];
         if (auto initIntAttr = dyn_cast<IntegerAttr>(initVal)) {
-          inputDecls.push_back(rewriter.create<smt::BVConstantOp>(
-              loc, initIntAttr.getValue().getSExtValue(),
-              cast<smt::BitVectorType>(newTy).getWidth()));
+          const auto &cstInt = initIntAttr.getValue();
+          assert(cstInt.getBitWidth() ==
+                     cast<smt::BitVectorType>(newTy).getWidth() &&
+                 "Width mismatch between initial value and target type");
+          inputDecls.push_back(rewriter.create<smt::BVConstantOp>(loc, cstInt));
           continue;
         }
       }
@@ -533,11 +535,21 @@ void ConvertVerifToSMTPass::runOnOperation() {
                               .take_back(bmcOp.getNumRegs());
           for (auto [regType, initVal] :
                llvm::zip(regTypes, bmcOp.getInitialValues())) {
-            if (!isa<IntegerType>(regType) && !isa<UnitAttr>(initVal)) {
-              op->emitError("initial values are currently only supported for "
-                            "registers with integer types");
-              signalPassFailure();
-              return WalkResult::interrupt();
+            if (!isa<UnitAttr>(initVal)) {
+              if (!isa<IntegerType>(regType)) {
+                op->emitError("initial values are currently only supported for "
+                              "registers with integer types");
+                signalPassFailure();
+                return WalkResult::interrupt();
+              } else {
+                auto tyAttr = dyn_cast<TypedAttr>(initVal);
+                if (!tyAttr || tyAttr.getType() != regType) {
+                  op->emitError("type of initial value does not match type of "
+                                "initialized register");
+                  signalPassFailure();
+                  return WalkResult::interrupt();
+                }
+              }
             }
           }
           // Check only one clock is present in the circuit inputs

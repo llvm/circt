@@ -1254,7 +1254,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   uint64_t signBit = 1ULL << (bitwidth - 1);
   uint64_t absMask = ~signBit & ((1ULL << bitwidth) - 1); // clear sign bit
 
-  Value maskOp = rewriter.create<arith::ConstantIntOp>(loc, absMask, intTy);
+  Value maskOp = rewriter.create<arith::ConstantIntOp>(loc, intTy, absMask);
 
   auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, absFOp);
   rewriter.setInsertionPointToStart(combGroup.getBodyBlock());

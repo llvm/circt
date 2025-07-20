@@ -48,10 +48,13 @@ void LowerValidateToLabelsPass::runOnOperation() {
     OpBuilder builder(validateOp);
     auto intrinsicLabel = validateOp.getRef().getType().getIntrinsicLabel(
         regOp.getReg(), validateOp.getId().value());
-    Value lbl = builder.create<rtg::LabelDeclOp>(
-        loc, StringAttr::get(&getContext(), intrinsicLabel), ValueRange());
-    builder.create<rtg::LabelOp>(loc, rtg::LabelVisibility::global, lbl);
+    Value lbl = rtg::LabelDeclOp::create(
+        builder, loc, StringAttr::get(&getContext(), intrinsicLabel),
+        ValueRange());
+    rtg::LabelOp::create(builder, loc, rtg::LabelVisibility::global, lbl);
     validateOp.getValue().replaceAllUsesWith(validateOp.getDefaultValue());
+    validateOp.getValues().replaceAllUsesWith(
+        validateOp.getDefaultUsedValues());
 
     pruner.eraseNow(validateOp);
     return WalkResult::advance();

@@ -106,7 +106,3 @@ class DropConstPass : public circt::firrtl::impl::DropConstBase<DropConstPass> {
   }
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createDropConstPass() {
-  return std::make_unique<DropConstPass>();
-}

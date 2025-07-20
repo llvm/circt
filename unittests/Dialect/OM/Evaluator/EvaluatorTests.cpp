@@ -1323,40 +1323,6 @@ TEST(EvaluatorTests, ListConcatPartialCycle) {
   ASSERT_EQ(2U, id2->getAs<circt::om::IntegerAttr>().getValue().getValue());
 }
 
-TEST(EvaluatorTests, TupleGet) {
-  StringRef mod = "om.class @Tuple() -> (val: !om.string) {"
-                  "  %int = om.constant 1 : i1"
-                  "  %str = om.constant \"foo\" : !om.string"
-                  "  %tuple = om.tuple_create %int, %str  : i1, !om.string"
-                  "  %val = om.tuple_get %tuple[1]  : tuple<i1, !om.string>"
-                  "  om.class.fields %val : !om.string"
-                  "}";
-
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
-
-  auto result = evaluator.instantiate(StringAttr::get(&context, "Tuple"), {});
-
-  ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("val")
-                        .value();
-
-  ASSERT_EQ("foo", llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                       ->getAs<StringAttr>()
-                       .getValue()
-                       .str());
-}
-
 TEST(EvaluatorTests, NestedReferenceValue) {
   StringRef mod =
       "om.class @Empty() {"
@@ -1470,7 +1436,7 @@ TEST(EvaluatorTests, ListAttrConcat) {
 
   auto listVal =
       llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
-  ASSERT_EQ(4, listVal.size());
+  ASSERT_EQ(4UL, listVal.size());
   auto checkEq = [](evaluator::EvaluatorValue *val, const char *str) {
     ASSERT_EQ(str, llvm::cast<evaluator::AttributeValue>(val)
                        ->getAs<StringAttr>()

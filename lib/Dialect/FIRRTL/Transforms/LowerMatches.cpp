@@ -91,7 +91,3 @@ void LowerMatchesPass::runOnOperation() {
     return markAllAnalysesPreserved();
   markAnalysesPreserved<InstanceGraph>();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerMatchesPass() {
-  return std::make_unique<LowerMatchesPass>();
-}

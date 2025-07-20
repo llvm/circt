@@ -87,19 +87,24 @@ deduplicatePathsImpl(SmallVectorImpl<T> &results, size_t startIndex,
                      llvm::function_ref<Key(const T &)> keyFn,
                      llvm::function_ref<int64_t(const T &)> delayFn) {
   // Take only maximum for each path destination.
-  DenseMap<Key, size_t> saved;
-  for (auto [i, path] :
-       llvm::enumerate(ArrayRef(results).drop_front(startIndex))) {
-    auto &slot = saved[keyFn(path)];
-    if (slot == 0) {
-      slot = startIndex + i + 1;
+  DenseMap<Key, size_t> keyToIndex;
+  for (size_t i = startIndex; i < results.size(); ++i) {
+    auto &path = results[i];
+    auto key = keyFn(path);
+    auto delay = delayFn(path);
+    auto it = keyToIndex.find(key);
+    if (it == keyToIndex.end()) {
+      // Insert a new entry.
+      size_t newIndex = keyToIndex.size() + startIndex;
+      keyToIndex[key] = newIndex;
+      results[newIndex] = std::move(results[i]);
       continue;
     }
-    if (delayFn(results[slot - 1]) < delayFn(path))
-      results[slot - 1] = path;
+    if (delay > delayFn(results[it->second]))
+      results[it->second] = std::move(results[i]);
   }
 
-  results.resize(saved.size() + startIndex);
+  results.resize(keyToIndex.size() + startIndex);
 }
 
 static void deduplicatePaths(SmallVectorImpl<OpenPath> &results,
@@ -1500,7 +1505,7 @@ ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
 // ===----------------------------------------------------------------------===//
 
 void LongestPathCollection::sortInDescendingOrder() {
-  llvm::sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
+  llvm::stable_sort(paths, [](const DataflowPath &a, const DataflowPath &b) {
     return a.getDelay() > b.getDelay();
   });
 }

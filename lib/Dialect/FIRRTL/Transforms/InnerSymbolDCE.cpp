@@ -135,7 +135,3 @@ void InnerSymbolDCEPass::runOnOperation() {
   parallelForEach(&getContext(), modules,
                   [&](FModuleLike mod) { removeInnerSyms(mod); });
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInnerSymbolDCEPass() {
-  return std::make_unique<InnerSymbolDCEPass>();
-}

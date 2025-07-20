@@ -6,12 +6,3 @@ func.func @invalidType() {
 
   return
 }
-
-// -----
-
-func.func @invalidStringContant() {
-  // expected-error @below {{failed to legalize operation 'moore.string_constant'}}
-  %str = moore.string_constant "Test" : i8
-
-  return
-}

@@ -603,6 +603,12 @@ void SeqToSVPass::runOnOperation() {
     }
   }
 
+  // Any register that is "buried" inside an ifdef, will need a hierpath for
+  // building the initialization/randomization IR. Do that here. This path
+  // table will be used by the per-module FirRegLowering routine. This is done
+  // single-threaded to ensure symbol names are deterministic.
+  auto pathTable = FirRegLowering::createPaths(circuit);
+
   // Lower memories and registers in modules in parallel.
   std::atomic<bool> needsRegRandomization = false;
   std::atomic<bool> needsMemRandomization = false;
@@ -617,7 +623,7 @@ void SeqToSVPass::runOnOperation() {
         auto &state = moduleAndState.second;
         auto module = state.module;
         SeqToSVTypeConverter typeConverter;
-        FirRegLowering regLowering(typeConverter, module,
+        FirRegLowering regLowering(typeConverter, module, pathTable,
                                    disableRegRandomization,
                                    emitSeparateAlwaysBlocks);
         regLowering.lower();

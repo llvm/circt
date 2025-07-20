@@ -145,7 +145,3 @@ public:
     markAllAnalysesPreserved();
   }
 };
-
-std::unique_ptr<Pass> circt::firrtl::createCheckLayers() {
-  return std::make_unique<CheckLayersPass>();
-}

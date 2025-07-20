@@ -100,7 +100,6 @@ public:
             // destination and the second is the source.
             for (auto [dest, source] : df.computeDataFlow())
               addDrivenBy(dest, source);
-
           })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
@@ -719,7 +718,3 @@ public:
     markAllAnalysesPreserved();
   }
 };
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createCheckCombLoopsPass() {
-  return std::make_unique<CheckCombLoopsPass>();
-}

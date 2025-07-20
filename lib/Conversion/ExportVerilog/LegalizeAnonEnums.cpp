@@ -205,7 +205,3 @@ struct LegalizeAnonEnums
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::createLegalizeAnonEnumsPass() {
-  return std::make_unique<LegalizeAnonEnums>();
-}

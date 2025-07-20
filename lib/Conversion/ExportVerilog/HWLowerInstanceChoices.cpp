@@ -111,7 +111,3 @@ void HWLowerInstanceChoicesPass::runOnOperation() {
   if (failed(lowerHWInstanceChoices(module)))
     signalPassFailure();
 }
-
-std::unique_ptr<mlir::Pass> circt::createHWLowerInstanceChoicesPass() {
-  return std::make_unique<HWLowerInstanceChoicesPass>();
-}

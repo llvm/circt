@@ -45,7 +45,7 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.ImmediateType):
     from .immediates import Immediate
     return Immediate(type.width, value)
-  if isinstance(type, ir.TupleType):
+  if isinstance(type, rtg.TupleType):
     from .tuples import Tuple
     return Tuple(value)
   if isinstance(type, rtg.MemoryType):
@@ -99,10 +99,9 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
   if isinstance(type, rtgtest.CPUType):
     from .contexts import CPUCoreType
     return CPUCoreType()
-  if isinstance(type, ir.TupleType):
+  if isinstance(type, rtg.TupleType):
     from .tuples import TupleType
-    return TupleType(
-        [_FromCirctType(type.get_type(i)) for i in range(type.num_types)])
+    return TupleType([_FromCirctType(ty) for ty in type.fields])
   if isinstance(type, rtg.MemoryType):
     from .memories import MemoryType
     return MemoryType(type.address_width)

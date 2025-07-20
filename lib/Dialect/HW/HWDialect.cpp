@@ -81,7 +81,7 @@ void HWDialect::initialize() {
   addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
 }
 
-// Registered hook to materialize a single constant operation from a given
+/// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
 /// the provided builder to create the operation without changing the
 /// insertion position. The generated operation is expected to be constant
@@ -97,12 +97,15 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
   // Aggregate constants.
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
-    if (isa<StructType, ArrayType, UnpackedArrayType>(type))
+    if (type_isa<StructType, ArrayType, UnpackedArrayType>(type))
       return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
   }
 
   // Parameter expressions materialize into hw.param.value.
-  auto parentOp = builder.getBlock()->getParentOp();
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+  auto parentOp = block->getParentOp();
   auto curModule = dyn_cast<HWModuleOp>(parentOp);
   if (!curModule)
     curModule = parentOp->getParentOfType<HWModuleOp>();

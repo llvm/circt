@@ -1229,8 +1229,13 @@ hw.module @muxConstantsFold(in %cond: i1, out o: i25) {
 // This handles various cases of mux(cond, x, someop(x, y, z)).
 hw.module @muxCommon(in %cond: i1, in %cond2: i1,
                      in %arg0 : i32, in %arg1 : i32, in %arg2: i32, in %arg3: i32,
-  out o1: i32, out o2: i32, out o3: i32, out o4: i32, 
-  out o5: i32, out orResult: i32, out o6: i32, out o7: i32, out o8 : i1) {
+  out o1: i32, out o2: i32, out o3: i32, out o4: i32, out o5: i32,
+  out orResult: i32, out o6: i32, out o7: i32, out o8 : i1, out o9: i32,
+  out o10: i32) {
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[FALSE:%.+]] = hw.constant false
+  %true = hw.constant true
+  %false = hw.constant false
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1275,13 +1280,21 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1,
   %1 = comb.mux %cond, %arg1, %arg0 : i32
   %o7 = comb.mux %cond2, %1, %arg0 : i32
 
-  /// CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
+  // CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
   %o8 = comb.mux %o8, %o8, %o8 : i1
 
+  // CHECK: [[O9:%.+]] = comb.mux [[TRUE]], [[O9]], %arg0 : i32
+  // CHECK: [[O10:%.+]] = comb.mux [[FALSE]], %arg0, [[O10]] : i32
+  %o9 = comb.mux %true, %o9, %arg0 : i32
+  %o10 = comb.mux %false, %arg0, %o10 : i32
+
+  // CHECK: [[O11:%.+]] = comb.mux [[O11]], %cond, %cond2 : i1
+  %o11 = comb.mux %o11, %cond, %cond2 : i1
+
   // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
-  // CHECK: [[O6]], [[O7]], [[O8]]
-  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8
-    : i32, i32, i32, i32, i32, i32, i32, i32, i1
+  // CHECK: [[O6]], [[O7]], [[O8]], [[O9]], [[O10]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8, %o9, %o10
+    : i32, i32, i32, i32, i32, i32, i32, i32, i1, i32, i32
 }
 
 // CHECK-LABEL: @flatten_multi_use_and
@@ -1667,4 +1680,124 @@ hw.module @mul_0(in %arg0: i0, in %arg1: i0, out out: i0) {
   // CHECK: hw.output %[[C0]]
   %0 = comb.mul %arg0, %arg1 : i0
   hw.output %0 : i0
+}
+
+// CHECK-LABEL: @assumeMuxCondInOperand
+func.func @assumeMuxCondInOperand(%arg0: i1, %arg1: i1) -> i2 {
+  // CHECK: [[TV:%.+]] = comb.concat %true, %arg1
+  // CHECK: [[FV:%.+]] = comb.concat %arg1, %false
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = comb.concat %arg0, %arg1 : i1, i1
+  %1 = comb.concat %arg1, %arg0 : i1, i1
+  %2 = comb.mux %arg0, %0, %1 : i2
+  return %2 : i2
+}
+
+// CHECK-LABEL: @dontAssumeMuxCondIfOperandHasOtherUses
+func.func @dontAssumeMuxCondIfOperandHasOtherUses(%arg0: i1, %arg1: i1) -> (i2, i2, i2) {
+  // CHECK: [[TV:%.+]] = comb.concat %arg0, %arg1
+  // CHECK: [[FV:%.+]] = comb.concat %arg1, %arg0
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = comb.concat %arg0, %arg1 : i1, i1
+  %1 = comb.concat %arg1, %arg0 : i1, i1
+  %2 = comb.mux %arg0, %0, %1 : i2
+  return %0, %1, %2 : i2, i2, i2
+}
+
+// CHECK-LABEL: @dontAssumeMuxCondIfOperandIsOtherwiseObservable
+func.func @dontAssumeMuxCondIfOperandIsOtherwiseObservable(%arg0: i1, %arg1: i1) -> i1 {
+  // CHECK: [[TV:%.+]] = hw.wire %arg0
+  // CHECK: [[FV:%.+]] = hw.wire %arg0
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = hw.wire %arg0 sym @s0 : i1
+  %1 = hw.wire %arg0 sym @s1 : i1
+  %2 = comb.mux %arg0, %0, %1 : i1
+  return %2 : i1
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlTotalShiftOut
+hw.module @ShlTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant 7 : i4
+  %1 = comb.shl %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUTotalShiftOut
+hw.module @ShrUTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant 7 : i4
+  %1 = comb.shru %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSTotalShiftOut
+hw.module @ShrSTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = comb.extract %a from 3
+  // CHECK: [[TMP2:%.+]] = comb.replicate [[TMP1]] : (i1) -> i4
+  %0 = hw.constant 7 : i4
+  %1 = comb.shrs %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlExcessiveShiftConst
+hw.module @ShlExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shl %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUExcessiveShiftConst
+hw.module @ShrUExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shru %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSExcessiveShiftConst
+hw.module @ShrSExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = comb.extract %a from 999
+  // CHECK: [[TMP2:%.+]] = comb.replicate [[TMP1]] : (i1) -> i1000
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shrs %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlWideZeroShift
+hw.module @ShlWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shl %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUWideZeroShift
+hw.module @ShrUWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shru %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSWideZeroShift
+hw.module @ShrSWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shrs %a, %0 : i1000
+  hw.output %1 : i1000
 }

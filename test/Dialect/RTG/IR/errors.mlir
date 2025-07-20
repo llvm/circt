@@ -176,7 +176,7 @@ rtg.sequence @seq() {
 rtg.sequence @setCartesianProduct() {
   // expected-error @below {{at least one set must be provided}}
   // expected-error @below {{failed to infer returned types}}
-  %0 = "rtg.set_cartesian_product"() : () -> (!rtg.set<tuple<index>>)
+  %0 = "rtg.set_cartesian_product"() : () -> (!rtg.set<!rtg.tuple<index>>)
 }
 
 // -----
@@ -250,16 +250,16 @@ rtg.test @test(a = %a: i32, b = %b: index) {
 
 // -----
 
-rtg.test @emptyTuple() {
-  // expected-error @below {{empty tuples not allowed}}
-  %0 = rtg.tuple_create
+rtg.test @incorrect_tuple_type(tup = %tup : tuple<index, i1>) {
+  // expected-error @below {{only RTG tuples are supported}}
+  rtg.tuple_extract %tup at 2 : tuple<index, i1>
 }
 
 // -----
 
-rtg.test @tupleExtractOOB(tup = %tup : tuple<index, i1>) {
+rtg.test @tupleExtractOOB(tup = %tup : !rtg.tuple<index, i1>) {
   // expected-error @below {{index (2) must be smaller than number of elements in tuple (2)}}
-  rtg.tuple_extract %tup at 2 : tuple<index, i1>
+  rtg.tuple_extract %tup at 2 : !rtg.tuple<index, i1>
 }
 
 // -----
@@ -296,4 +296,36 @@ rtg.test @validate() {
   %0 = rtg.fixed_reg #rtgtest.t0
   // expected-error @below {{result type must be a valid content type for the ref value}}
   %2 = rtg.validate %0, %0 : !rtgtest.ireg -> !rtgtest.ireg
+}
+
+// -----
+
+rtg.test @sliceImmediateLowBitTooLarge() {
+  %0 = rtg.constant #rtg.isa.immediate<4, 5>
+  // expected-error @below {{from bit too large for input (got 4, but input width is 4)}}
+  %1 = rtg.isa.slice_immediate %0 from 4 : !rtg.isa.immediate<4> -> !rtg.isa.immediate<2>
+}
+
+// -----
+
+rtg.test @sliceImmediateSliceDoesNotFit() {
+  %0 = rtg.constant #rtg.isa.immediate<4, 5>
+  // expected-error @below {{slice does not fit in input (trying to extract 3 bits starting at index 2, but only 2 bits are available)}}
+  %1 = rtg.isa.slice_immediate %0 from 2 : !rtg.isa.immediate<4> -> !rtg.isa.immediate<3>
+}
+
+// -----
+
+rtg.test @concatImmediateNoOperands() {
+  // expected-error @below {{at least one operand must be provided}}
+  // expected-error @below {{failed to infer returned types}}
+  %0 = "rtg.isa.concat_immediate"() : () -> !rtg.isa.immediate<0>
+}
+
+// -----
+
+rtg.test @concatImmediateNonImmediateOperand() {
+  %0 = index.constant 42
+  // expected-error @below {{all operands must be of immediate type}}
+  %1 = rtg.isa.concat_immediate %0 : index
 }

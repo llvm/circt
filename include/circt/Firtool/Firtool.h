@@ -99,7 +99,6 @@ public:
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
   bool shouldDisableLayerSink() const { return disableLayerSink; }
   bool shouldDisableOptimization() const { return disableOptimization; }
-  bool shouldAdvancedLayerSink() const { return advancedLayerSink; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
@@ -237,11 +236,6 @@ public:
 
   FirtoolOptions &setDisableAggressiveMergeConnections(bool value) {
     disableAggressiveMergeConnections = value;
-    return *this;
-  }
-
-  FirtoolOptions &setAdvancedLayerSink(bool value) {
-    advancedLayerSink = value;
     return *this;
   }
 
@@ -408,10 +402,13 @@ public:
 
 private:
   std::string outputFilename;
+
+  // LowerFIRRTLAnnotations
   bool disableAnnotationsUnknown;
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
   bool allowAddingPortsOnPublic;
+
   bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
   firrtl::PreserveValues::PreserveMode preserveMode;
@@ -425,7 +422,6 @@ private:
   bool noDedup;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
-  bool advancedLayerSink;
   bool lowerMemories;
   std::string blackBoxRootPath;
   bool replSeqMem;

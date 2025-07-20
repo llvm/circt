@@ -1,4 +1,4 @@
-; RUN: firtool --disable-all-randomization --advanced-layer-sink %s | FileCheck %s
+; RUN: firtool --disable-all-randomization %s | FileCheck %s
 
 ; Check that there is no probe wire in the output example.
 

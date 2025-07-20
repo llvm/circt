@@ -29,7 +29,7 @@ AnyType AnyType::get(MLIRContext *context) { return Base::get(context); }
 /// which is lazily constructed.
 static auto getChannelConsumers(mlir::TypedValue<ChannelType> chan) {
   return llvm::make_filter_range(chan.getUses(), [](auto &use) {
-    return !isa<SnoopValidReadyOp>(use.getOwner());
+    return !isa<SnoopValidReadyOp, SnoopTransactionOp>(use.getOwner());
   });
 }
 SmallVector<std::reference_wrapper<OpOperand>, 4>

@@ -41,7 +41,3 @@ void FinalizeIRPass::runOnOperation() {
           outputFile.getExcludeFromFilelist().getValue())
         verbatim.erase();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createFinalizeIRPass() {
-  return std::make_unique<FinalizeIRPass>();
-}

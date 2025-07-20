@@ -31,14 +31,6 @@ class HWEmittableModuleLike;
 } // namespace hw
 
 std::unique_ptr<mlir::Pass>
-createTestApplyLoweringOptionPass(llvm::StringRef options);
-std::unique_ptr<mlir::Pass> createTestApplyLoweringOptionPass();
-
-std::unique_ptr<mlir::Pass> createHWLowerInstanceChoicesPass();
-std::unique_ptr<mlir::Pass> createPrepareForEmissionPass();
-std::unique_ptr<mlir::Pass> createLegalizeAnonEnumsPass();
-
-std::unique_ptr<mlir::Pass>
 createExportVerilogPass(std::unique_ptr<llvm::raw_ostream> os);
 std::unique_ptr<mlir::Pass> createExportVerilogPass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createExportVerilogPass();

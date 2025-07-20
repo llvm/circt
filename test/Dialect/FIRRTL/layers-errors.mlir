@@ -46,7 +46,7 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.layer @A bind {}
   firrtl.layer @B bind {}
-  firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @B>)
+  firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @B>) attributes {knownLayers =[@B]}
   firrtl.module @Top(out %o : !firrtl.probe<uint<1>, @B>) {
     firrtl.layerblock @A {
       %foo_o = firrtl.instance foo @Foo(out o : !firrtl.probe<uint<1>, @B>)
@@ -139,7 +139,7 @@ firrtl.circuit "Top" {
 // ourselves whether this is actually safe and can be lowered.
 firrtl.circuit "Top" {
   firrtl.layer @A bind {}
-  firrtl.extmodule @WithInputProp(in i : !firrtl.string) attributes {layers=[@A]}
+  firrtl.extmodule @WithInputProp(in i : !firrtl.string) attributes {knownLayers=[@A], layers=[@A]}
   firrtl.module @Top(out %o : !firrtl.probe<uint<1>>) {
     // expected-note @below {{operand is defined here}}
     %str = firrtl.string "whatever"
@@ -157,7 +157,7 @@ firrtl.circuit "Top" {
 // Driving an outer property from inside a layerblock is not allowed.
 firrtl.circuit "Top" {
   firrtl.layer @A bind {}
-  firrtl.extmodule @WithInputProp(in i : !firrtl.string) attributes {layers=[@A]}
+  firrtl.extmodule @WithInputProp(in i : !firrtl.string) attributes {knownLayers=[@A], layers=[@A]}
   firrtl.module @Top(out %o : !firrtl.probe<uint<1>>) {
     // expected-note @below {{operand is defined here}}
     %foo_in = firrtl.instance foo @WithInputProp(in i : !firrtl.string)

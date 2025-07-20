@@ -721,15 +721,13 @@ namespace {
 struct LowerAnnotationsPass
     : public circt::firrtl::impl::LowerFIRRTLAnnotationsBase<
           LowerAnnotationsPass> {
+  using Base::Base;
+
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
   LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
-  using LowerFIRRTLAnnotationsBase::allowAddingPortsOnPublic;
-  using LowerFIRRTLAnnotationsBase::ignoreAnnotationClassless;
-  using LowerFIRRTLAnnotationsBase::ignoreAnnotationUnknown;
-  using LowerFIRRTLAnnotationsBase::noRefTypePorts;
   SmallVector<DictionaryAttr> worklistAttrs;
 };
 } // end anonymous namespace
@@ -1264,16 +1262,4 @@ void LowerAnnotationsPass::runOnOperation() {
 
   if (numFailures)
     signalPassFailure();
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
-    bool ignoreAnnotationUnknown, bool ignoreAnnotationClassless,
-    bool noRefTypePorts, bool allowAddingPortsOnPublic) {
-  auto pass = std::make_unique<LowerAnnotationsPass>();
-  pass->ignoreAnnotationUnknown = ignoreAnnotationUnknown;
-  pass->ignoreAnnotationClassless = ignoreAnnotationClassless;
-  pass->noRefTypePorts = noRefTypePorts;
-  pass->allowAddingPortsOnPublic = allowAddingPortsOnPublic;
-  return pass;
 }

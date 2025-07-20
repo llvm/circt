@@ -989,7 +989,3 @@ void VBToBVPass::runOnOperation() {
   if (result.failed())
     signalPassFailure();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createVBToBVPass() {
-  return std::make_unique<VBToBVPass>();
-}

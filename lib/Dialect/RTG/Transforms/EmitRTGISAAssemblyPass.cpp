@@ -178,30 +178,6 @@ parseUnsupportedInstructionsFile(MLIRContext *ctxt,
   }
 }
 
-static std::unique_ptr<llvm::ToolOutputFile>
-createOutputFile(StringRef filename, StringRef dirname,
-                 function_ref<InFlightDiagnostic()> emitError) {
-  // Determine the output path from the output directory and filename.
-  SmallString<128> outputFilename(dirname);
-  appendPossiblyAbsolutePath(outputFilename, filename);
-  auto outputDir = llvm::sys::path::parent_path(outputFilename);
-
-  // Create the output directory if needed.
-  std::error_code error = llvm::sys::fs::create_directories(outputDir);
-  if (error) {
-    emitError() << "cannot create output directory \"" << outputDir
-                << "\": " << error.message();
-    return {};
-  }
-
-  // Open the output file.
-  std::string errorMessage;
-  auto output = mlir::openOutputFile(outputFilename, &errorMessage);
-  if (!output)
-    emitError() << errorMessage;
-  return output;
-}
-
 //===----------------------------------------------------------------------===//
 // EmitRTGISAAssemblyPass
 //===----------------------------------------------------------------------===//

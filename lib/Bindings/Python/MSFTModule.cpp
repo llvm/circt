@@ -222,7 +222,7 @@ void circt::python::populateDialectMSFTSubmodule(nb::module_ &m) {
                 locs.push_back({nullptr});
               else
                 locs.push_back(mlirPythonCapsuleToAttribute(
-                    mlirApiObjectToCapsule(attrHandle).ptr()));
+                    mlirApiObjectToCapsule(attrHandle)->ptr()));
             return cls(circtMSFTLocationVectorAttrGet(ctxt, type, locs.size(),
                                                       locs.data()));
           },

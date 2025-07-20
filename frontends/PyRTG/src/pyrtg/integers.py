@@ -30,7 +30,7 @@ class Integer(Value):
   def random(lower_bound: Union[int, Integer],
              upper_bound: Union[int, Integer]) -> Integer:
     """
-    Get a random number in the given range (lower inclusive, upper exclusive).
+    Get a random number in the given range (lower and upper inclusive).
     """
 
     if isinstance(lower_bound, int):
@@ -78,7 +78,18 @@ class Integer(Value):
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
-      self = index.ConstantOp(self._value)
+      # The MLIR index type (more precisely the attribute) does not support integers with more than 64 bits.
+      if self._value >= 2**64:
+        raise ValueError("Integer value out of range")
+
+      # The Python Bindings use an 'int64_t' and the bounds of this type are
+      # checked and enforced. However, that integer ends up in a signless APInt
+      # anyway, so we can compute the signed integer that matches the bitvector
+      # of the unsigned integer and use that.
+      if self._value >= 2**63:
+        self = index.ConstantOp(self._value - 2**64)
+      else:
+        self = index.ConstantOp(self._value)
 
     return self._value
 

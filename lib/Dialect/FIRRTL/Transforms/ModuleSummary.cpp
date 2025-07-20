@@ -42,7 +42,7 @@ static size_t knownWidths(Type type) {
             auto w = getWidth(elt.type);
             width = std::max(width, w);
           }
-          return width + llvm::Log2_32_Ceil(fenum.getNumElements());
+          return width + fenum.getTagWidth();
         })
         .Case<FVectorType>([&](auto vector) -> size_t {
           auto w = getWidth(vector.getElementType());
@@ -148,8 +148,4 @@ void ModuleSummaryPass::runOnOperation() {
                    << "," << p.second[0].getName() << "\n";
     }
   markAllAnalysesPreserved();
-}
-
-std::unique_ptr<Pass> firrtl::createModuleSummaryPass() {
-  return std::make_unique<ModuleSummaryPass>();
 }

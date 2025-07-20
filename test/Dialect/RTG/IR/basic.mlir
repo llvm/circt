@@ -62,7 +62,7 @@ rtg.sequence @seqRandomizationAndEmbedding() {
 }
 
 // CHECK-LABEL: @sets
-func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
+func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<!rtg.tuple<i32, i32>> {
   // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
   // CHECK: [[R:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<i32>
   // CHECK: [[EMPTY:%.+]] = rtg.set_create : i32
@@ -80,7 +80,7 @@ func.func @sets(%arg0: i32, %arg1: i32) -> !rtg.set<tuple<i32, i32>> {
   %prod = rtg.set_cartesian_product %set, %set : !rtg.set<i32>, !rtg.set<i32>
   %bag = rtg.set_convert_to_bag %set : !rtg.set<i32>
 
-  return %prod : !rtg.set<tuple<i32, i32>>
+  return %prod : !rtg.set<!rtg.tuple<i32, i32>>
 }
 
 // CHECK-LABEL: @bags
@@ -154,8 +154,8 @@ rtg.test @test1(num_cpus = %a: i32, num_modes = %b: i32) { }
 
 // CHECK-LABEL: rtg.sequence @integerHandlingOps
 rtg.sequence @integerHandlingOps(%arg0: index, %arg1: index) {
-  // CHECK: rtg.random_number_in_range [%arg0, %arg1)
-  rtg.random_number_in_range [%arg0, %arg1)
+  // CHECK: rtg.random_number_in_range [%arg0, %arg1]
+  rtg.random_number_in_range [%arg0, %arg1]
 }
 
 // CHECK-LABEL: rtg.test @interleaveSequences
@@ -184,15 +184,18 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
 }
 
 // CHECK-LABEL: rtg.test @tuples
-rtg.test @tuples() {
+// CHECK-SAME: (tup = %{{.*}}: !rtg.tuple)
+rtg.test @tuples(tup = %tup: !rtg.tuple) {
   // CHECK-NEXT: [[IDX0:%.+]] = index.constant 0
   // CHECK-NEXT: [[TRUE:%.+]] = index.bool.constant true
   // CHECK-NEXT: [[TUPLE:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]] : index, i1
-  // CHECK-NEXT: rtg.tuple_extract [[TUPLE]] at 1 : tuple<index, i1>
+  // CHECK-NEXT: rtg.tuple_extract [[TUPLE]] at 1 : !rtg.tuple<index, i1>
+  // CHECK-NEXT: rtg.tuple_create
   %idx0 = index.constant 0
   %true = index.bool.constant true
   %0 = rtg.tuple_create %idx0, %true : index, i1
-  %1 = rtg.tuple_extract %0 at 1 : tuple<index, i1>
+  %1 = rtg.tuple_extract %0 at 1 : !rtg.tuple<index, i1>
+  rtg.tuple_create
 }
 
 // CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memory_block<32>, mem_size: index>
@@ -217,11 +220,30 @@ rtg.test @template() template "temp_name" target @target { }
 
 // CHECK-LABEL: rtg.test @validation()
 rtg.test @validation() {
+  // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
   %0 = rtg.fixed_reg #rtgtest.t0
   %1 = rtg.constant #rtg.isa.immediate<32, 0>
-  // CHECK: %{{.*}} = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
 
-  // CHECK: %{{.*}} = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]] : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %3 = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+
+  // CHECK: rtg.validate [[V0]], [[V1]] ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %4:3 = rtg.validate %0, %1 (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  
+  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %5:3 = rtg.validate %0, %1, "some_id" (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+}
+// CHECK-LABEL: @immediateOps
+rtg.test @immediateOps() {
+  // CHECK: rtg.isa.concat_immediate {{.*}}, {{.*}} : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
+  %0 = rtg.constant #rtg.isa.immediate<4, 15>
+  %1 = rtg.constant #rtg.isa.immediate<8, 175>
+  %2 = rtg.isa.concat_immediate %0, %1 : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
+
+  // CHECK: rtg.isa.slice_immediate {{.*}} from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
+  %3 = rtg.constant #rtg.isa.immediate<8, 175>
+  %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
 }

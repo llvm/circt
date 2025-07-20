@@ -99,6 +99,21 @@ MLIR_CAPI_EXPORTED bool rtgTypeIsAArray(MlirType type);
 /// Returns the element type of the RTG array.
 MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGetElementType(MlirType type);
 
+/// Creates an RTG tuple type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgTupleTypeGet(MlirContext ctxt,
+                                            intptr_t numFields,
+                                            MlirType const *fieldTypes);
+
+/// If the type is an RTG tuple.
+MLIR_CAPI_EXPORTED bool rtgTypeIsATuple(MlirType type);
+
+/// Returns the number of fields in the RTG tuple.
+MLIR_CAPI_EXPORTED intptr_t rtgTypeGetNumFields(MlirType type);
+
+/// Returns a field type of the RTG tuple.
+MLIR_CAPI_EXPORTED MlirType rtgTupleTypeGetFieldType(MlirType type,
+                                                     intptr_t idx);
+
 /// If the type is an RTG memory.
 MLIR_CAPI_EXPORTED bool rtgTypeIsAMemory(MlirType type);
 

@@ -115,6 +115,27 @@ static void testArrayType(MlirContext ctx) {
   mlirTypeDump(arrayTy);
 }
 
+static void testTupleType(MlirContext ctx) {
+  MlirType i32Type = mlirIntegerTypeGet(ctx, 32);
+  MlirType tupleTy = rtgTupleTypeGet(ctx, 2, (MlirType[]){i32Type, i32Type});
+
+  // CHECK: is_tuple
+  fprintf(stderr, rtgTypeIsATuple(tupleTy) ? "is_tuple\n" : "isnot_tuple\n");
+  // CHECK: 2
+  fprintf(stderr, "%ld\n", rtgTypeGetNumFields(tupleTy));
+  // CHECK: i32
+  mlirTypeDump(rtgTupleTypeGetFieldType(tupleTy, 1));
+  // CHECK: !rtg.tuple<i32, i32>
+  mlirTypeDump(tupleTy);
+
+  MlirType emptyTupleTy = rtgTupleTypeGet(ctx, 0, NULL);
+  // CHECK: is_tuple
+  fprintf(stderr,
+          rtgTypeIsATuple(emptyTupleTy) ? "is_tuple\n" : "isnot_tuple\n");
+  // CHECK: !rtg.tuple
+  mlirTypeDump(emptyTupleTy);
+}
+
 static void testLabelVisibilityAttr(MlirContext ctx) {
   MlirAttribute labelVisibility =
       rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
@@ -219,6 +240,7 @@ int main(int argc, char **argv) {
   testBagType(ctx);
   testDictType(ctx);
   testArrayType(ctx);
+  testTupleType(ctx);
 
   testLabelVisibilityAttr(ctx);
   testContextAttrs(ctx);

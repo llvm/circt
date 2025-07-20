@@ -894,7 +894,3 @@ void ExpandWhensPass::runOnOperation() {
   if (failed(visitor.checkInitialization()))
     signalPassFailure();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createExpandWhensPass() {
-  return std::make_unique<ExpandWhensPass>();
-}

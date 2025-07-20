@@ -32,6 +32,8 @@ using namespace firrtl;
 namespace {
 struct RemoveUnusedPortsPass
     : public circt::firrtl::impl::RemoveUnusedPortsBase<RemoveUnusedPortsPass> {
+  using Base::Base;
+
   void runOnOperation() override;
   void removeUnusedModulePorts(FModuleOp module,
                                InstanceGraphNode *instanceGraphNode);
@@ -203,11 +205,4 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   }
 
   numRemovedPorts += removalPortIndexes.count();
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createRemoveUnusedPortsPass(bool ignoreDontTouch) {
-  auto pass = std::make_unique<RemoveUnusedPortsPass>();
-  pass->ignoreDontTouch = ignoreDontTouch;
-  return pass;
 }

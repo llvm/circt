@@ -602,7 +602,3 @@ private:
   llvm::DenseMap<Value, SmallVector<Value>> valueBitsSrc;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInferReadWritePass() {
-  return std::make_unique<InferReadWritePass>();
-}

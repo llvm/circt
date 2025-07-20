@@ -15,7 +15,6 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "llvm/Support/Parallel.h"
 
 namespace circt {
 namespace hw {
@@ -282,38 +281,6 @@ Type lowerType(
 std::pair<bool, std::optional<mlir::LocationAttr>> maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context);
-
-//===----------------------------------------------------------------------===//
-// Parallel utilities
-//===----------------------------------------------------------------------===//
-
-/// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
-/// serially when MLIR multi-threading is disabled.
-/// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
-template <class IterTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, IterTy begin, IterTy end,
-                                ResultTy init, ReduceFuncTy reduce,
-                                TransformFuncTy transform) {
-  // Parallel when enabled
-  if (context->isMultithreadingEnabled())
-    return llvm::parallelTransformReduce(begin, end, init, reduce, transform);
-
-  // Serial fallback (from llvm::parallelTransformReduce)
-  for (IterTy i = begin; i != end; ++i)
-    init = reduce(std::move(init), transform(*i));
-  return std::move(init);
-}
-
-/// Range wrapper
-template <class RangeTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
-                                ResultTy init, ReduceFuncTy reduce,
-                                TransformFuncTy transform) {
-  return transformReduce(context, std::begin(r), std::end(r), init, reduce,
-                         transform);
-}
 
 //===----------------------------------------------------------------------===//
 // File utilities

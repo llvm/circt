@@ -98,6 +98,9 @@ struct TupleStorage;
 struct MemoryStorage;
 struct MemoryBlockStorage;
 struct ValidationValue;
+struct ValidationMuxedValue;
+struct ImmediateConcatStorage;
+struct ImmediateSliceStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -112,12 +115,12 @@ struct LabelValue {
 };
 
 /// The abstract base class for elaborated values.
-using ElaboratorValue =
-    std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
-                 RandomizedSequenceStorage *, InterleavedSequenceStorage *,
-                 SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
-                 MemoryBlockStorage *, ValidationValue *>;
+using ElaboratorValue = std::variant<
+    TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
+    RandomizedSequenceStorage *, InterleavedSequenceStorage *, SetStorage *,
+    VirtualRegisterStorage *, UniqueLabelStorage *, LabelValue, ArrayStorage *,
+    TupleStorage *, MemoryStorage *, MemoryBlockStorage *, ValidationValue *,
+    ValidationMuxedValue *, ImmediateConcatStorage *, ImmediateSliceStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -359,6 +362,39 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
+/// Storage object for immediate concatenation operations.
+/// FIXME: opaque values should be handled generically
+struct ImmediateConcatStorage {
+  ImmediateConcatStorage(SmallVector<ElaboratorValue> &&operands)
+      : hashcode(llvm::hash_combine_range(operands.begin(), operands.end())),
+        operands(std::move(operands)) {}
+
+  bool isEqual(const ImmediateConcatStorage *other) const {
+    return hashcode == other->hashcode && operands == other->operands;
+  }
+
+  const unsigned hashcode;
+  const SmallVector<ElaboratorValue> operands;
+};
+
+/// Storage object for immediate slice operations.
+/// FIXME: opaque values should be handled generically
+struct ImmediateSliceStorage {
+  ImmediateSliceStorage(ElaboratorValue input, unsigned lowBit, Type type)
+      : hashcode(llvm::hash_combine(input, lowBit, type)), input(input),
+        lowBit(lowBit), type(type) {}
+
+  bool isEqual(const ImmediateSliceStorage *other) const {
+    return hashcode == other->hashcode && input == other->input &&
+           lowBit == other->lowBit && type == other->type;
+  }
+
+  const unsigned hashcode;
+  const ElaboratorValue input;
+  const unsigned lowBit;
+  const Type type;
+};
+
 // Values with identity not intended to be internalized.
 //===----------------------------------------------------------------------===//
 
@@ -457,12 +493,27 @@ struct RandomizedSequenceStorage : IdentityValue {
 /// Storage object for an '!rtg.validate' result.
 struct ValidationValue : IdentityValue {
   ValidationValue(Type type, const ElaboratorValue &ref,
-                  const ElaboratorValue &defaultValue, StringAttr id)
-      : IdentityValue(type), ref(ref), defaultValue(defaultValue), id(id) {}
+                  const ElaboratorValue &defaultValue, StringAttr id,
+                  SmallVector<ElaboratorValue> &&defaultUsedValues,
+                  SmallVector<ElaboratorValue> &&elseValues)
+      : IdentityValue(type), ref(ref), defaultValue(defaultValue), id(id),
+        defaultUsedValues(std::move(defaultUsedValues)),
+        elseValues(std::move(elseValues)) {}
 
   const ElaboratorValue ref;
   const ElaboratorValue defaultValue;
   const StringAttr id;
+  const SmallVector<ElaboratorValue> defaultUsedValues;
+  const SmallVector<ElaboratorValue> elseValues;
+};
+
+/// Storage object for the 'values' results of 'rtg.validate'.
+struct ValidationMuxedValue : IdentityValue {
+  ValidationMuxedValue(Type type, const ValidationValue *value, unsigned idx)
+      : IdentityValue(type), value(value), idx(idx) {}
+
+  const ValidationValue *value;
+  const unsigned idx;
 };
 
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
@@ -519,6 +570,10 @@ private:
       return internedInterleavedSequences;
     else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
       return internedTuples;
+    else if constexpr (std::is_same_v<StorageTy, ImmediateConcatStorage>)
+      return internedImmediateConcatValues;
+    else if constexpr (std::is_same_v<StorageTy, ImmediateSliceStorage>)
+      return internedImmediateSliceValues;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -545,6 +600,12 @@ private:
       internedInterleavedSequences;
   DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
       internedTuples;
+  DenseSet<HashedStorage<ImmediateConcatStorage>,
+           StorageKeyInfo<ImmediateConcatStorage>>
+      internedImmediateConcatValues;
+  DenseSet<HashedStorage<ImmediateSliceStorage>,
+           StorageKeyInfo<ImmediateSliceStorage>>
+      internedImmediateSliceValues;
 };
 
 } // namespace
@@ -646,6 +707,21 @@ static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
 static void print(const ValidationValue *val, llvm::raw_ostream &os) {
   os << "<validation-value {type=" << val->type << ", ref=" << val->ref
      << ", defaultValue=" << val->defaultValue << "}>";
+}
+
+static void print(const ValidationMuxedValue *val, llvm::raw_ostream &os) {
+  os << "<validation-muxed-value (" << val->value << ") at " << val->idx << ">";
+}
+
+static void print(const ImmediateConcatStorage *val, llvm::raw_ostream &os) {
+  os << "<immediate-concat [";
+  llvm::interleaveComma(val->operands, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << "]>";
+}
+
+static void print(const ImmediateSliceStorage *val, llvm::raw_ostream &os) {
+  os << "<immediate-slice " << val->input << " from " << val->lowBit << ">";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -820,7 +896,7 @@ public:
 
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
-    return builder.create<OpTy>(location, std::forward<Args>(args)...);
+    return OpTy::create(builder, location, std::forward<Args>(args)...);
   }
 
 private:
@@ -844,7 +920,7 @@ private:
     // index dialect.
     if (auto intAttr = dyn_cast<IntegerAttr>(val);
         intAttr && isa<IndexType>(val.getType())) {
-      Value res = builder.create<index::ConstantOp>(loc, intAttr);
+      Value res = index::ConstantOp::create(builder, loc, intAttr);
       materializedValues[val] = res;
       return res;
     }
@@ -868,14 +944,14 @@ private:
 
   Value visit(size_t val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<index::ConstantOp>(loc, val);
+    Value res = index::ConstantOp::create(builder, loc, val);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(bool val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<index::BoolConstantOp>(loc, val);
+    Value res = index::BoolConstantOp::create(builder, loc, val);
     materializedValues[val] = res;
     return res;
   }
@@ -892,7 +968,7 @@ private:
       elements.push_back(materialized);
     }
 
-    Value res = builder.create<ArrayCreateOp>(loc, val->type, elements);
+    Value res = ArrayCreateOp::create(builder, loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -909,7 +985,7 @@ private:
       elements.push_back(materialized);
     }
 
-    auto res = builder.create<SetCreateOp>(loc, val->type, elements);
+    auto res = SetCreateOp::create(builder, loc, val->type, elements);
     materializedValues[val] = res;
     return res;
   }
@@ -929,7 +1005,7 @@ private:
       weights.push_back(materializedWeight);
     }
 
-    auto res = builder.create<BagCreateOp>(loc, val->type, values, weights);
+    auto res = BagCreateOp::create(builder, loc, val->type, values, weights);
     materializedValues[val] = res;
     return res;
   }
@@ -937,8 +1013,8 @@ private:
   Value visit(MemoryBlockStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
     auto intType = builder.getIntegerType(val->baseAddress.getBitWidth());
-    Value res = builder.create<MemoryBlockDeclareOp>(
-        loc, val->type, IntegerAttr::get(intType, val->baseAddress),
+    Value res = MemoryBlockDeclareOp::create(
+        builder, loc, val->type, IntegerAttr::get(intType, val->baseAddress),
         IntegerAttr::get(intType, val->endAddress));
     materializedValues[val] = res;
     return res;
@@ -952,7 +1028,8 @@ private:
     if (!(memBlock && memSize && memAlign))
       return {};
 
-    Value res = builder.create<MemoryAllocOp>(loc, memBlock, memSize, memAlign);
+    Value res =
+        MemoryAllocOp::create(builder, loc, memBlock, memSize, memAlign);
     materializedValues[val] = res;
     return res;
   }
@@ -988,16 +1065,16 @@ private:
       argTypes.push_back(materialized.getType());
     }
 
-    Value res = builder.create<GetSequenceOp>(
-        loc, SequenceType::get(builder.getContext(), argTypes),
+    Value res = GetSequenceOp::create(
+        builder, loc, SequenceType::get(builder.getContext(), argTypes),
         seqOp.getSymName());
 
     // Only materialize a substitute_sequence op when we have arguments to
     // substitute since this op does not support 0 arguments.
     if (!args.empty())
-      res = builder.create<SubstituteSequenceOp>(loc, res, args);
+      res = SubstituteSequenceOp::create(builder, loc, res, args);
 
-    res = builder.create<RandomizeSequenceOp>(loc, res);
+    res = RandomizeSequenceOp::create(builder, loc, res);
 
     materializedValues[val] = res;
     return res;
@@ -1018,28 +1095,29 @@ private:
       return sequences[0];
 
     Value res =
-        builder.create<InterleaveSequencesOp>(loc, sequences, val->batchSize);
+        InterleaveSequencesOp::create(builder, loc, sequences, val->batchSize);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(VirtualRegisterStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<VirtualRegisterOp>(loc, val->allowedRegs);
+    Value res = VirtualRegisterOp::create(builder, loc, val->allowedRegs);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(UniqueLabelStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<LabelUniqueDeclOp>(loc, val->name, ValueRange());
+    Value res =
+        LabelUniqueDeclOp::create(builder, loc, val->name, ValueRange());
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(const LabelValue &val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<LabelDeclOp>(loc, val.name, ValueRange());
+    Value res = LabelDeclOp::create(builder, loc, val.name, ValueRange());
     materializedValues[val] = res;
     return res;
   }
@@ -1050,16 +1128,75 @@ private:
     materialized.reserve(val->values.size());
     for (auto v : val->values)
       materialized.push_back(materialize(v, loc, emitError));
-    Value res = builder.create<TupleCreateOp>(loc, materialized);
+    Value res = TupleCreateOp::create(builder, loc, materialized);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(ValidationValue *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = builder.create<ValidateOp>(
-        loc, val->type, materialize(val->ref, loc, emitError),
-        materialize(val->defaultValue, loc, emitError), val->id);
+    SmallVector<Value> usedDefaultValues, elseValues;
+    for (auto [dfltVal, elseVal] :
+         llvm::zip(val->defaultUsedValues, val->elseValues)) {
+      auto dfltMat = materialize(dfltVal, loc, emitError);
+      auto elseMat = materialize(elseVal, loc, emitError);
+      if (!dfltMat || !elseMat)
+        return {};
+
+      usedDefaultValues.push_back(dfltMat);
+      usedDefaultValues.push_back(elseMat);
+    }
+
+    auto validateOp = ValidateOp::create(
+        builder, loc, val->type, materialize(val->ref, loc, emitError),
+        materialize(val->defaultValue, loc, emitError), val->id,
+        usedDefaultValues, elseValues);
+    materializedValues[val] = validateOp.getValue();
+    return validateOp.getValue();
+  }
+
+  Value visit(ValidationMuxedValue *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    Value validateValue =
+        materialize(const_cast<ValidationValue *>(val->value), loc, emitError);
+    if (!validateValue)
+      return {};
+    auto validateOp = validateValue.getDefiningOp<ValidateOp>();
+    if (!validateOp) {
+      auto *defOp = validateValue.getDefiningOp();
+      emitError()
+          << "expected validate op for validation muxed value, but found "
+          << (defOp ? defOp->getName().getStringRef() : "block argument");
+      return {};
+    }
+    materializedValues[val] = validateOp.getValues()[val->idx];
+    return validateOp.getValues()[val->idx];
+  }
+
+  Value visit(ImmediateConcatStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    SmallVector<Value> operands;
+    for (auto operand : val->operands) {
+      auto materialized = materialize(operand, loc, emitError);
+      if (!materialized)
+        return {};
+
+      operands.push_back(materialized);
+    }
+
+    Value res = ConcatImmediateOp::create(builder, loc, operands);
+    materializedValues[val] = res;
+    return res;
+  }
+
+  Value visit(ImmediateSliceStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    Value input = materialize(val->input, loc, emitError);
+    if (!input)
+      return {};
+
+    Value res =
+        SliceImmediateOp::create(builder, loc, val->type, input, val->lowBit);
     materializedValues[val] = res;
     return res;
   }
@@ -1549,7 +1686,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
     size_t lower = get<size_t>(op.getLowerBound());
-    size_t upper = get<size_t>(op.getUpperBound()) - 1;
+    size_t upper = get<size_t>(op.getUpperBound());
     if (lower > upper)
       return op->emitError("cannot select a number from an empty range");
 
@@ -1705,12 +1842,29 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(ValidateOp op) {
+    SmallVector<ElaboratorValue> defaultUsedValues, elseValues;
+    for (auto v : op.getDefaultUsedValues())
+      defaultUsedValues.push_back(state.at(v));
+
+    for (auto v : op.getElseValues())
+      elseValues.push_back(state.at(v));
+
     auto *validationVal = sharedState.internalizer.create<ValidationValue>(
-        op.getType(), state[op.getRef()], state[op.getDefaultValue()],
-        op.getIdAttr());
+        op.getValue().getType(), state[op.getRef()],
+        state[op.getDefaultValue()], op.getIdAttr(),
+        std::move(defaultUsedValues), std::move(elseValues));
     state[op.getValue()] = validationVal;
     materializer.registerIdentityValue(validationVal);
     materializer.map(validationVal, op.getValue());
+
+    for (auto [i, val] : llvm::enumerate(op.getValues())) {
+      auto *muxVal = sharedState.internalizer.create<ValidationMuxedValue>(
+          val.getType(), validationVal, i);
+      state[val] = muxVal;
+      materializer.registerIdentityValue(muxVal);
+      materializer.map(muxVal, val);
+    }
+
     return DeletionKind::Keep;
   }
 
@@ -1863,6 +2017,51 @@ public:
       return op->emitOpError("elaboration not supported");
     }
     state[op.getResult()] = result;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(ConcatImmediateOp op) {
+    bool anyValidationValues =
+        llvm::any_of(op.getOperands(), [&](auto operand) {
+          return std::holds_alternative<ValidationValue *>(state[operand]);
+        });
+
+    // FIXME: this is a hack and this case should be handled generically for all
+    // operations
+    if (anyValidationValues) {
+      SmallVector<ElaboratorValue> operands;
+      for (auto operand : op.getOperands())
+        operands.push_back(state[operand]);
+      state[op.getResult()] =
+          sharedState.internalizer.internalize<ImmediateConcatStorage>(
+              std::move(operands));
+      return DeletionKind::Delete;
+    }
+
+    auto result = APInt::getZeroWidth();
+    for (auto operand : op.getOperands())
+      result = result.concat(
+          cast<ImmediateAttr>(get<TypedAttr>(operand)).getValue());
+
+    state[op.getResult()] = ImmediateAttr::get(op.getContext(), result);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(SliceImmediateOp op) {
+    // FIXME: this is a hack and this case should be handled generically for all
+    // operations
+    if (std::holds_alternative<ValidationValue *>(state[op.getInput()])) {
+      state[op.getResult()] =
+          sharedState.internalizer.internalize<ImmediateSliceStorage>(
+              state[op.getInput()], op.getLowBit(), op.getResult().getType());
+      return DeletionKind::Delete;
+    }
+
+    auto inputValue =
+        cast<ImmediateAttr>(get<TypedAttr>(op.getInput())).getValue();
+    auto sliced = inputValue.extractBits(op.getResult().getType().getWidth(),
+                                         op.getLowBit());
+    state[op.getResult()] = ImmediateAttr::get(op.getContext(), sliced);
     return DeletionKind::Delete;
   }
 

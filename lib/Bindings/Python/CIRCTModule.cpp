@@ -26,6 +26,7 @@
 #include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/Pipeline.h"
 #include "circt-c/Dialect/RTG.h"
+#include "circt-c/Synthesis.h"
 #include "circt-c/Transforms.h"
 #ifdef CIRCT_INCLUDE_TESTS
 #include "circt-c/Dialect/RTGTest.h"
@@ -63,6 +64,7 @@ static void registerPasses() {
   registerHandshakePasses();
   registerKanagawaPasses();
   registerPipelinePasses();
+  registerSynthesisPipeline();
   mlirRegisterCIRCTConversionPasses();
   mlirRegisterCIRCTTransformsPasses();
   mlirRegisterTransformsCSE();

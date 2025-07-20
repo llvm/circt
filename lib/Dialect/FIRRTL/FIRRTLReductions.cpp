@@ -196,7 +196,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getConventionAttr(), module.getPorts(), StringRef(),
+        module.getConventionAttr(), module.getPorts(), ArrayAttr(), StringRef(),
         module.getAnnotationsAttr());
     module->erase();
     return success();
@@ -1104,28 +1104,28 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
   patterns.add<PassReduction, 30>(
-      getContext(), firrtl::createDropNamesPass(PreserveValues::None), false,
+      getContext(),
+      firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
       true);
   patterns.add<PassReduction, 29>(getContext(),
                                   firrtl::createLowerCHIRRTLPass(), true, true);
-  patterns.add<PassReduction, 28>(getContext(), firrtl::createInferWidthsPass(),
+  patterns.add<PassReduction, 28>(getContext(), firrtl::createInferWidths(),
                                   true, true);
-  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferResetsPass(),
+  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferResets(),
                                   true, true);
   patterns.add<FIRRTLModuleExternalizer, 26>();
   patterns.add<InstanceStubber, 25>();
   patterns.add<MemoryStubber, 24>();
   patterns.add<EagerInliner, 23>();
-  patterns.add<PassReduction, 22>(
-      getContext(), firrtl::createLowerFIRRTLTypesPass(), true, true);
-  patterns.add<PassReduction, 21>(getContext(), firrtl::createExpandWhensPass(),
+  patterns.add<PassReduction, 22>(getContext(),
+                                  firrtl::createLowerFIRRTLTypes(), true, true);
+  patterns.add<PassReduction, 21>(getContext(), firrtl::createExpandWhens(),
                                   true, true);
-  patterns.add<PassReduction, 20>(getContext(), firrtl::createInlinerPass());
-  patterns.add<PassReduction, 18>(getContext(),
-                                  firrtl::createIMConstPropPass());
+  patterns.add<PassReduction, 20>(getContext(), firrtl::createInliner());
+  patterns.add<PassReduction, 18>(getContext(), firrtl::createIMConstProp());
   patterns.add<PassReduction, 17>(
       getContext(),
-      firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true));
+      firrtl::createRemoveUnusedPorts({/*ignoreDontTouch=*/true}));
   patterns.add<NodeSymbolRemover, 15>();
   patterns.add<ConnectForwarder, 14>();
   patterns.add<ConnectInvalidator, 13>();

@@ -49,7 +49,8 @@ public:
   /// Return the users of the provided symbol operation.
   ArrayRef<Operation *> getUsers(Operation *symbol) const {
     auto it = userMap.find(symbol);
-    return it != userMap.end() ? it->second.getArrayRef() : std::nullopt;
+    return it != userMap.end() ? it->second.getArrayRef()
+                               : ArrayRef<Operation *>();
   }
 
   /// Return true if the given symbol has no uses.

@@ -92,8 +92,3 @@ void EliminateWiresPass::runOnOperation() {
     ++erasedWires;
   }
 }
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createEliminateWiresPass() {
-  return std::make_unique<EliminateWiresPass>();
-}

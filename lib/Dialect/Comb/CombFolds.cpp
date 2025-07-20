@@ -307,14 +307,13 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
-    unsigned shift = rhs.getValue().getZExtValue();
-    unsigned width = getType().getIntOrFloatBitWidth();
-    if (shift == 0)
+    if (rhs.getValue().isZero())
       return getOperand(0);
-    if (width <= shift)
+
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (rhs.getValue().uge(width))
       return getIntAttr(APInt::getZero(width), getContext());
   }
-
   return constFoldBinaryOp(adaptor.getOperands(), hw::PEO::Shl);
 }
 
@@ -325,6 +324,8 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
     return failure();
 
   unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+  if (value.ugt(width))
+    value = width;
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
@@ -344,12 +345,11 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
-    unsigned shift = rhs.getValue().getZExtValue();
-    if (shift == 0)
+    if (rhs.getValue().isZero())
       return getOperand(0);
 
     unsigned width = getType().getIntOrFloatBitWidth();
-    if (width <= shift)
+    if (rhs.getValue().uge(width))
       return getIntAttr(APInt::getZero(width), getContext());
   }
   return constFoldBinaryOp(adaptor.getOperands(), hw::PEO::ShrU);
@@ -362,6 +362,8 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
     return failure();
 
   unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+  if (value.ugt(width))
+    value = width;
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
@@ -380,10 +382,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
-  if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
-    if (rhs.getValue().getZExtValue() == 0)
+  if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs()))
+    if (rhs.getValue().isZero())
       return getOperand(0);
-  }
   return constFoldBinaryOp(adaptor.getOperands(), hw::PEO::ShrS);
 }
 
@@ -394,13 +395,15 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
     return failure();
 
   unsigned width = cast<IntegerType>(op.getLhs().getType()).getWidth();
+  if (value.ugt(width))
+    value = width;
   unsigned shift = value.getZExtValue();
 
   auto topbit =
       rewriter.createOrFold<ExtractOp>(op.getLoc(), op.getLhs(), width - 1, 1);
   auto sext = rewriter.createOrFold<ReplicateOp>(op.getLoc(), topbit, shift);
 
-  if (width <= shift) {
+  if (width == shift) {
     replaceOpAndCopyNamehint(rewriter, op, {sext});
     return success();
   }
@@ -1804,16 +1807,17 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   // mux(0, a, b) -> b
   // mux(1, a, b) -> a
   if (auto pred = dyn_cast_or_null<IntegerAttr>(adaptor.getCond())) {
-    if (pred.getValue().isZero())
+    if (pred.getValue().isZero() && getFalseValue() != getResult())
       return getFalseValue();
-    return getTrueValue();
+    if (pred.getValue().isOne() && getTrueValue() != getResult())
+      return getTrueValue();
   }
 
   // mux(cond, 1, 0) -> cond
   if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
     if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
       if (tv.getValue().isOne() && fv.getValue().isZero() &&
-          hw::getBitWidth(getType()) == 1)
+          hw::getBitWidth(getType()) == 1 && getCond() != getResult())
         return getCond();
 
   return {};
@@ -2240,6 +2244,29 @@ static bool foldMuxOfUniformArrays(MuxOp op, PatternRewriter &rewriter) {
   return true;
 }
 
+/// If the mux condition is an operand to the op defining its true or false
+/// value, replace the condition with 1 or 0.
+static bool assumeMuxCondInOperand(Value muxCond, Value muxValue,
+                                   bool constCond, PatternRewriter &rewriter) {
+  if (!muxValue.hasOneUse())
+    return false;
+  auto *op = muxValue.getDefiningOp();
+  if (!op || !isa<CombDialect>(op->getDialect()))
+    return false;
+  if (!llvm::is_contained(op->getOperands(), muxCond))
+    return false;
+  OpBuilder::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPoint(op);
+  auto condValue =
+      rewriter.create<hw::ConstantOp>(muxCond.getLoc(), APInt(1, constCond));
+  rewriter.modifyOpInPlace(op, [&] {
+    for (auto &use : op->getOpOperands())
+      if (use.get() == muxCond)
+        use.set(condValue);
+  });
+  return true;
+}
+
 namespace {
 struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -2485,6 +2512,12 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
 
   // mux(cond, repl(n, a1), repl(n, a2)) -> repl(n, mux(cond, a1, a2))
   if (foldMuxOfUniformArrays(op, rewriter))
+    return success();
+
+  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
+  if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
+    return success();
+  if (assumeMuxCondInOperand(op.getCond(), op.getFalseValue(), false, rewriter))
     return success();
 
   return failure();

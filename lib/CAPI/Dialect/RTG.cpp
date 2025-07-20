@@ -136,6 +136,29 @@ MlirType rtgArrayTypeGetElementType(MlirType type) {
   return wrap(cast<ArrayType>(unwrap(type)).getElementType());
 }
 
+// TupleType
+//===----------------------------------------------------------------------===//
+
+MlirType rtgTupleTypeGet(MlirContext ctxt, intptr_t numFields,
+                         MlirType const *fieldTypes) {
+  SmallVector<Type> types;
+  for (unsigned i = 0; i < numFields; ++i)
+    types.emplace_back(unwrap(fieldTypes[i]));
+  return wrap(rtg::TupleType::get(unwrap(ctxt), types));
+}
+
+bool rtgTypeIsATuple(MlirType type) {
+  return isa<rtg::TupleType>(unwrap(type));
+}
+
+intptr_t rtgTypeGetNumFields(MlirType type) {
+  return cast<rtg::TupleType>(unwrap(type)).getFieldTypes().size();
+}
+
+MlirType rtgTupleTypeGetFieldType(MlirType type, intptr_t idx) {
+  return wrap(cast<rtg::TupleType>(unwrap(type)).getFieldTypes()[idx]);
+}
+
 // ImmediateType
 //===----------------------------------------------------------------------===//
 

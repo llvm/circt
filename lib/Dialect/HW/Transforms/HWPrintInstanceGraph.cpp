@@ -29,7 +29,7 @@ using namespace hw;
 namespace {
 struct PrintInstanceGraphPass
     : public circt::hw::impl::PrintInstanceGraphBase<PrintInstanceGraphPass> {
-  PrintInstanceGraphPass(raw_ostream &os) : os(os) {}
+  PrintInstanceGraphPass() : os(llvm::errs()) {}
   void runOnOperation() override {
     InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
     llvm::WriteGraph(os, &instanceGraph, /*ShortNames=*/false);
@@ -38,7 +38,3 @@ struct PrintInstanceGraphPass
   raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::hw::createPrintInstanceGraphPass() {
-  return std::make_unique<PrintInstanceGraphPass>(llvm::errs());
-}

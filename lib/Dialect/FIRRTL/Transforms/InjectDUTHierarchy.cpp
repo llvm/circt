@@ -422,11 +422,3 @@ void InjectDUTHierarchy::runOnOperation() {
                                             rwp.getTarget().getName()));
   });
 }
-
-//===----------------------------------------------------------------------===//
-// Pass Creation
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInjectDUTHierarchyPass() {
-  return std::make_unique<InjectDUTHierarchy>();
-}

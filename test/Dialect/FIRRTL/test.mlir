@@ -188,6 +188,26 @@ firrtl.module @InnerSymAttr() {
   // CHECK: %w3, %w3_ref = firrtl.wire sym [<@syh2,0,public>, <@x2,1,private>, <@w3,2,public>]
 }
 
+// CHECK-LABEL: @EnumsTypes
+firrtl.module @EnumsTypes() {
+  // CHECK: %0 = firrtl.wire : !firrtl.enum<>
+  %0 = firrtl.wire : !firrtl.enum<>
+  // CHECK: %1 = firrtl.wire : !firrtl.enum<a>
+  %1 = firrtl.wire : !firrtl.enum<a>
+  // CHECK: %2 = firrtl.wire : !firrtl.enum<a>
+  %2 = firrtl.wire : !firrtl.enum<a = 0>
+  // CHECK: %3 = firrtl.wire : !firrtl.enum<a = 1>
+  %3 = firrtl.wire : !firrtl.enum<a = 1>
+  // CHECK: %4 = firrtl.wire : !firrtl.enum<a>
+  %4 = firrtl.wire : !firrtl.enum<a : uint<0>>
+  // CHECK: %5 = firrtl.wire : !firrtl.enum<a: uint<1>>
+  %5 = firrtl.wire : !firrtl.enum<a : uint<1>>
+  // CHECK: %6 = firrtl.wire : !firrtl.enum<a = 1: uint<1>>
+  %6 = firrtl.wire : !firrtl.enum<a = 1: uint<1>>
+  // CHECK: %7 = firrtl.wire : !firrtl.enum<a = 1, b>
+  %7 = firrtl.wire : !firrtl.enum<a = 1, b = 2 : uint<0>>
+}
+
 // CHECK-LABEL: firrtl.module @EnumTest
 firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
                         out %out : !firrtl.uint<2>, out %tag : !firrtl.uint<1>) {
@@ -204,8 +224,8 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
   // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
 
   %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-  %some = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
-  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None: uint<0>, Some: uint<8>>
+  %some = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None, Some: uint<8>>
+  // CHECK: = firrtl.enumcreate Some(%c1_ui8) : (!firrtl.uint<8>) -> !firrtl.enum<None, Some: uint<8>>
 
   firrtl.match %in : !firrtl.enum<a: uint<1>, b: uint<2>> {
     case a(%arg0) {

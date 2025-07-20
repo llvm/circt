@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -297,7 +297,7 @@ def test2_labels(config):
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
-# MLIR-NEXT: %idx2097152 = index.constant 2097152
+# MLIR-NEXT: %idx2097151 = index.constant 2097151
 # MLIR-NEXT: %idx0 = index.constant 0
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
 # MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
@@ -313,7 +313,7 @@ def test2_labels(config):
 # MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097152)
+# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
 # MLIR-NEXT: }
@@ -395,7 +395,7 @@ def test7_bools(config):
 
 
 # MLIR-LABEL: rtg.test @test8_random_integer
-# MLIR-NEXT: rtg.random_number_in_range [%a, %b)
+# MLIR-NEXT: rtg.random_number_in_range [%a, %b]
 
 
 @sequence([IntegerType()])
@@ -410,7 +410,7 @@ def test8_random_integer(config):
 
 # MLIR-LABEL: rtg.test @test90_tuples
 # MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
-# MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : tuple<index, i1>
+# MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : !rtg.tuple<index, i1>
 
 
 @config
@@ -446,6 +446,48 @@ def test91_sets(config):
   seq2(Set.cartesian_product(config.a, config.b))
   int_consumer(config.c.to_set().get_random())
   int_consumer(config.a.to_bag().get_random())
+
+
+# MLIR-LABEL: rtg.target @PythonParams : !rtg.dict<xlen_64: !rtg.tuple>
+# MLIR-NEXT: [[TUP:%.+]] = rtg.tuple_create
+# MLIR-NEXT: rtg.yield [[TUP]] : !rtg.tuple
+
+
+@config
+class PythonParams(Config):
+  xlen = PythonParam(64)
+
+
+# MLIR-LABEL: rtg.test @test92_python_params
+# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "python_64"
+# MLIR-NEXT: rtg.label local [[LBL]]
+
+
+@test(PythonParams)
+def test92_python_params(config):
+  Label.declare("python_" + str(config.xlen)).place()
+
+
+# MLIR-LABEL: rtg.test @test93_immediate_ops
+# MLIR-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
+# MLIR-NEXT: [[IMM2:%.+]] = rtg.constant #rtg.isa.immediate<8, 4>
+# MLIR-NEXT: [[CONCAT:%.+]] = rtg.isa.concat_immediate [[IMM1]], [[IMM2]], [[IMM2]] : !rtg.isa.immediate<12>, !rtg.isa.immediate<8>, !rtg.isa.immediate<8>
+# MLIR-NEXT: [[SLICE:%.+]] = rtg.isa.slice_immediate [[CONCAT]] from 8 : (!rtg.isa.immediate<28>) -> !rtg.isa.immediate<4>
+# MLIR: rtg.substitute_sequence {{%.+}}([[SLICE]]) : !rtg.sequence<!rtg.isa.immediate<4>>
+
+
+@sequence([ImmediateType(4)])
+def immediate_consumer(imm: Immediate):
+  pass
+
+
+@test(Singleton)
+def test93_immediate_ops(config):
+  imm1 = Immediate(12, 8)
+  imm2 = Immediate(8, 4)
+  concat = Immediate.concat(imm1, imm2, imm2)
+  slice = concat[8:12]
+  immediate_consumer(slice)
 
 
 # MLIR-LABEL: rtg.sequence @seq0

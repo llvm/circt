@@ -65,10 +65,10 @@ LogicalResult EmbedValidationValuesPass::parseFile(
       continue;
 
     auto valueAttr =
-        op.getRef().getType().parseContentValue(value, op.getType());
+        op.getRef().getType().parseContentValue(value, op.getValue().getType());
     if (!valueAttr)
       return emitError(valueLoc)
-             << "cannot parse value of type " << op.getType()
+             << "cannot parse value of type " << op.getValue().getType()
              << " from string '" << value << "'";
 
     if (!valueMap.insert({idAttr, valueAttr}).second)
@@ -117,6 +117,7 @@ void EmbedValidationValuesPass::runOnOperation() {
     }
 
     op.getValue().replaceAllUsesWith(constOp->getResult(0));
+    op.getValues().replaceAllUsesWith(op.getElseValues());
     pruner.eraseNow(op);
   }
 

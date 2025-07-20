@@ -30,7 +30,7 @@ namespace {
 struct PrintInstanceGraphPass
     : public circt::firrtl::impl::PrintInstanceGraphBase<
           PrintInstanceGraphPass> {
-  PrintInstanceGraphPass(raw_ostream &os) : os(os) {}
+  PrintInstanceGraphPass() : os(llvm::errs()) {}
   void runOnOperation() override {
     auto circuitOp = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
@@ -41,7 +41,3 @@ struct PrintInstanceGraphPass
   raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createPrintInstanceGraphPass() {
-  return std::make_unique<PrintInstanceGraphPass>(llvm::errs());
-}

@@ -167,6 +167,32 @@ verif.lec {verif.some_attr} first {
 }
 
 //===----------------------------------------------------------------------===//
+// Refinement Checking related operations
+//===----------------------------------------------------------------------===//
+
+// CHECK: verif.refines first {
+// CHECK: } second {
+// CHECK: }
+verif.refines first {
+} second {
+}
+
+// CHECK: verif.refines {verif.some_attr} first {
+// CHECK: ^bb0(%{{.*}}: i32, %{{.*}}: i32):
+// CHECK:   verif.yield %{{.*}}, %{{.*}} : i32, i32 {verif.some_attr}
+// CHECK: } second {
+// CHECK: ^bb0(%{{.*}}: i32, %{{.*}}: i32):
+// CHECK:   verif.yield %{{.*}}, %{{.*}} : i32, i32 {verif.some_attr}
+// CHECK: }
+verif.refines {verif.some_attr} first {
+^bb0(%arg0: i32, %arg1: i32):
+  verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
+} second {
+^bb0(%arg0: i32, %arg1: i32):
+  verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
+}
+
+//===----------------------------------------------------------------------===//
 // Bounded Model Checking related operations
 //===----------------------------------------------------------------------===//
 

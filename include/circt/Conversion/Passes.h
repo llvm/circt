@@ -26,6 +26,7 @@
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Conversion/DCToHW.h"
+#include "circt/Conversion/DatapathToSMT.h"
 #include "circt/Conversion/ExportChiselInterface.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"

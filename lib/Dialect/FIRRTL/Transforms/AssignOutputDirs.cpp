@@ -72,6 +72,8 @@ static OutputFileAttr getOutputFile(igraph::ModuleOpInterface op) {
 namespace {
 struct AssignOutputDirsPass
     : public circt::firrtl::impl::AssignOutputDirsBase<AssignOutputDirsPass> {
+  using Base::Base;
+
   AssignOutputDirsPass(StringRef outputDir) {
     if (!outputDir.empty())
       outputDirOption = std::string(outputDir);
@@ -149,9 +151,4 @@ void AssignOutputDirsPass::runOnOperation() {
   if (!changed)
     markAllAnalysesPreserved();
   LLVM_DEBUG(debugFooter() << "\n");
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createAssignOutputDirsPass(StringRef outputDir) {
-  return std::make_unique<AssignOutputDirsPass>(outputDir);
 }

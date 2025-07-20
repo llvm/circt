@@ -434,7 +434,3 @@ void HWSpecializePass::runOnOperation() {
 }
 
 } // namespace
-
-std::unique_ptr<Pass> circt::hw::createHWSpecializePass() {
-  return std::make_unique<HWSpecializePass>();
-}

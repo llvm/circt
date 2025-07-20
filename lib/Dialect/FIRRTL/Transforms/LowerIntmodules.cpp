@@ -35,8 +35,9 @@ using namespace firrtl;
 namespace {
 struct LowerIntmodulesPass
     : public circt::firrtl::impl::LowerIntmodulesBase<LowerIntmodulesPass> {
+  using Base::Base;
+
   void runOnOperation() override;
-  using LowerIntmodulesBase::fixupEICGWrapper;
 };
 } // namespace
 
@@ -217,12 +218,4 @@ void LowerIntmodulesPass::runOnOperation() {
 
   if (!changed)
     markAllAnalysesPreserved();
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerIntmodulesPass(bool fixupEICGWrapper) {
-  auto pass = std::make_unique<LowerIntmodulesPass>();
-  pass->fixupEICGWrapper = fixupEICGWrapper;
-  return pass;
 }

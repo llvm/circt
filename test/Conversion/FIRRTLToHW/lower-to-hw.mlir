@@ -407,23 +407,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
     // CHECK-NEXT:       sv.fwrite %[[STDERR]], "[%0t]: %d %m"([[TIME]], %a) : i64, i4
     // CHECK-NEXT:     }
-    // CEHCK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CEHCK-NEXT:     %[[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CEHCK-NEXT:     sv.if %[[AND]] {
-    // CEHCK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CEHCK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"(%[[TIME]], %a) : i64, i4
-    // CEHCK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[STR]]) : (!hw.string) -> i32
-    // CEHCK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CEHCK-NEXT:       sv.fwrite %[[FD]], "[%0t]: dynamic file name\0A"(%[[TIME]]) : i64
-    // CEHCK-NEXT:     }
-    // CEHCK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CEHCK-NEXT:     %[[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CEHCK-NEXT:     sv.if %[[AND]] {
-    // CEHCK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
-    // CEHCK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"(%[[TIME]], %a) : i64, i4
-    // CEHCK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[STR]]) : (!hw.string) -> i32
-    // CEHCK-NEXT:       sv.fflush fd %[[FD]]
-    // CEHCK-NEXT:     }
+    // CHECK-NEXT:     sv.if %reset {
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[STR]]) : (!hw.string) -> i32
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       sv.fwrite [[FD]], "[%0t]: dynamic file name\0A"([[TIME]]) : i64
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[STR]]) : (!hw.string) -> i32
+    // CHECK-NEXT:       sv.fflush fd [[FD]]
+    // CHECK-NEXT:     }
     firrtl.printf %clock, %reset, "No operands and literal: %%\0A" : !firrtl.clock, !firrtl.uint<1>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
@@ -831,21 +825,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %fldout, %2 : !firrtl.uint<64>, !firrtl.uint<64>
   }
 
-  // CHECK-LABEL: hw.module private @SimpleEnum(in %source : !hw.enum<valid, ready, data>, out sink : !hw.enum<valid, ready, data>) {
-  // CHECK-NEXT:    %valid = hw.enum.constant valid : !hw.enum<valid, ready, data
-  // CHECK-NEXT:    %0 = hw.enum.cmp %source, %valid : !hw.enum<valid, ready, data>, !hw.enum<valid, ready, data>
-  // CHECK-NEXT:    hw.output %source : !hw.enum<valid, ready, data>
+  // CHECK-LABEL:  hw.module private @SimpleEnum(in %source : i2, out sink : i2) {
+  // CHECK-NEXT:    %valid = sv.localparam {value = 0 : i2} : i2
+  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2 
+  // CHECK-NEXT:    hw.output %source : i2
   // CHECK-NEXT:  }
   firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
                               out %sink: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>) {
     %0 = firrtl.istag %source valid : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
     %1 = firrtl.subtag %source[valid] : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+    %2 = firrtl.mux (%0, %source, %source) : (!firrtl.uint<1>, !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>, !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>) -> !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
     firrtl.matchingconnect %sink, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
   }
 
-  // CHECK-LABEL: hw.module private @SimpleEnumCreate(out sink : !hw.enum<a, b, c>) {
-  // CHECK-NEXT:   %a = hw.enum.constant a : !hw.enum<a, b, c>
-  // CHECK-NEXT:   hw.output %a : !hw.enum<a, b, c>
+  // CHECK-LABEL:  hw.module private @SimpleEnumCreate(out sink : i2) {
+  // CHECK-NEXT:   %a = sv.localparam {value = 0 : i2} : i2
+  // CHECK-NEXT:   hw.output %a : i2
   // CHECK-NEXT: }
   firrtl.module private @SimpleEnumCreate(in %input: !firrtl.uint<0>,
                                          out %sink: !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>) {
@@ -853,13 +848,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %sink, %0 : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
   }
 
-  // CHECK-LABEL:  hw.module private @DataEnum(in %source : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>, out sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
-  // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
-  // CHECK-NEXT:    %a = hw.enum.constant a : !hw.enum<a, b, c>
-  // CHECK-NEXT:    %0 = hw.enum.cmp %tag, %a : !hw.enum<a, b, c>, !hw.enum<a, b, c>
-  // CHECK-NEXT:    %body = hw.struct_extract %source["body"] : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-LABEL:  hw.module private @DataEnum(in %source : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>, out sink : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>) {
+  // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:    %a = sv.localparam {value = 0 : i2} : i2
+  // CHECK-NEXT:    %0 = comb.icmp bin eq %tag, %a : i2
+  // CHECK-NEXT:    %body = hw.struct_extract %source["body"] : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
   // CHECK-NEXT:    %1 = hw.union_extract %body["a"] : !hw.union<a: i2, b: i1, c: i32>
-  // CHECK-NEXT:    hw.output %source : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:    hw.output %source : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
   // CHECK-NEXT:  }
   firrtl.module private @DataEnum(in %source: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>,
                               out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
@@ -868,11 +863,30 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %sink, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
-  // CHECK-LABEL: hw.module private @DataEnumCreate(in %input : i2, out sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
-  // CHECK-NEXT:   %a = hw.enum.constant a : !hw.enum<a, b, c>
+  // CHECK-LABEL:  hw.module private @TagExtractSimpleEnum(in %source : i2, out tag : i2) {
+  // CHECK-NEXT:    hw.output %source : i2
+  // CHECK-NEXT:  }
+  firrtl.module private @TagExtractSimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
+                                             out %tag: !firrtl.uint<2>) {
+    %0 = firrtl.tagextract %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+    firrtl.matchingconnect %tag, %0 : !firrtl.uint<2>
+  }
+
+  // CHECK-LABEL:  hw.module private @TagExtractDataEnum(in %source : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>, out tag : i2) {
+  // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:    hw.output %tag : i2
+  // CHECK-NEXT:  }
+  firrtl.module private @TagExtractDataEnum(in %source: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>,
+                                           out %tag: !firrtl.uint<2>) {
+    %0 = firrtl.tagextract %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    firrtl.matchingconnect %tag, %0 : !firrtl.uint<2>
+  }
+
+  // CHECK-LABEL: hw.module private @DataEnumCreate(in %input : i2, out sink : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>) {
+  // CHECK-NEXT:   %a = sv.localparam {value = 0 : i2} : i2
   // CHECK-NEXT:   %0 = hw.union_create "a", %input : !hw.union<a: i2, b: i1, c: i32>
-  // CHECK-NEXT:   %1 = hw.struct_create (%a, %0) : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
-  // CHECK-NEXT:   hw.output %1 : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:   %1 = hw.struct_create (%a, %0) : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
+  // CHECK-NEXT:   hw.output %1 : !hw.struct<tag: i2, body: !hw.union<a: i2, b: i1, c: i32>>
   // CHECK-NEXT: }
   firrtl.module private @DataEnumCreate(in %input: !firrtl.uint<2>,
                                        out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {

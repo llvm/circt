@@ -247,6 +247,76 @@ public:
 } // anonymous namespace
 
 namespace {
+/// Eliminate snoop transaction operations in wrap-unwrap pairs.
+struct RemoveSnoopTransactionOp
+    : public OpConversionPattern<SnoopTransactionOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SnoopTransactionOp op, SnoopTransactionOpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    Operation *defOp = op.getInput().getDefiningOp();
+    if (!defOp)
+      return rewriter.notifyMatchFailure(op,
+                                         "snoop input is not defined by an op");
+
+    // Handle ValidReady signaling
+    if (auto wrapVR = dyn_cast<WrapValidReadyOp>(defOp)) {
+      auto *unwrapOpOperand =
+          ChannelType::getSingleConsumer(wrapVR.getChanOutput());
+      if (!unwrapOpOperand)
+        return rewriter.notifyMatchFailure(
+            defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                   "Could not find sole consumer.");
+      auto unwrapVR = dyn_cast<UnwrapValidReadyOp>(unwrapOpOperand->getOwner());
+      if (!unwrapVR)
+        return rewriter.notifyMatchFailure(
+            defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                   "Could not find 'unwrap'.");
+
+      // Create transaction signal as valid AND ready
+      auto validAndReady = rewriter.create<comb::AndOp>(
+          op.getLoc(), wrapVR.getValid(), unwrapVR.getReady());
+
+      rewriter.replaceOp(op, {validAndReady, wrapVR.getRawInput()});
+      return success();
+    }
+
+    // Handle FIFO signaling
+    if (auto wrapFIFO = dyn_cast<WrapFIFOOp>(defOp)) {
+      auto *unwrapOpOperand =
+          ChannelType::getSingleConsumer(wrapFIFO.getChanOutput());
+      if (!unwrapOpOperand)
+        return rewriter.notifyMatchFailure(
+            defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                   "Could not find sole consumer.");
+      auto unwrapFIFO = dyn_cast<UnwrapFIFOOp>(unwrapOpOperand->getOwner());
+      if (!unwrapFIFO)
+        return rewriter.notifyMatchFailure(
+            defOp, "This conversion only supports wrap-unwrap back-to-back. "
+                   "Could not find 'unwrap'.");
+
+      // Create transaction signal as !empty AND rden
+      auto notEmpty = rewriter.create<comb::XorOp>(
+          op.getLoc(), wrapFIFO.getEmpty(),
+          rewriter.create<hw::ConstantOp>(op.getLoc(),
+                                          rewriter.getBoolAttr(true)));
+      auto transaction = rewriter.create<comb::AndOp>(op.getLoc(), notEmpty,
+                                                      unwrapFIFO.getRden());
+
+      rewriter.replaceOp(op, {transaction, wrapFIFO.getData()});
+      return success();
+    }
+
+    return rewriter.notifyMatchFailure(
+        defOp, "This conversion only supports wrap-unwrap back-to-back for "
+               "ValidReady and FIFO signaling.");
+  }
+};
+} // anonymous namespace
+
+namespace {
 /// Use the op canonicalizer to lower away the op. Assumes the canonicalizer
 /// deletes the op.
 template <typename Op>
@@ -687,6 +757,7 @@ void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
 
+  // Lower all the bundles.
   ConversionTarget noBundlesTarget(*ctxt);
   noBundlesTarget.markUnknownOpDynamicallyLegal(
       [](Operation *) { return true; });
@@ -696,8 +767,10 @@ void ESItoHWPass::runOnOperation() {
   bundlePatterns.add<CanonicalizerOpLowering<PackBundleOp>>(&getContext());
   bundlePatterns.add<CanonicalizerOpLowering<UnpackBundleOp>>(&getContext());
   if (failed(applyPartialConversion(getOperation(), noBundlesTarget,
-                                    std::move(bundlePatterns))))
+                                    std::move(bundlePatterns)))) {
     signalPassFailure();
+    return;
+  }
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
@@ -705,7 +778,9 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<HWDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalDialect<seq::SeqDialect>();
-  pass1Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp>();
+  pass1Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp, WrapFIFOOp,
+                         UnwrapFIFOOp>();
+  pass1Target.addLegalOp<SnoopTransactionOp, SnoopValidReadyOp>();
 
   pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();
   pass1Target.addIllegalOp<PipelineStageOp>();
@@ -730,22 +805,41 @@ void ESItoHWPass::runOnOperation() {
 
   // Run the conversion.
   if (failed(
-          applyPartialConversion(top, pass1Target, std::move(pass1Patterns))))
+          applyPartialConversion(top, pass1Target, std::move(pass1Patterns)))) {
     signalPassFailure();
+    return;
+  }
 
+  // Lower all the snoop operations.
   ConversionTarget pass2Target(*ctxt);
   pass2Target.addLegalDialect<comb::CombDialect>();
   pass2Target.addLegalDialect<HWDialect>();
   pass2Target.addLegalDialect<SVDialect>();
-  pass2Target.addIllegalDialect<ESIDialect>();
-
+  pass2Target.addIllegalOp<SnoopTransactionOp, SnoopValidReadyOp>();
+  pass2Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp, WrapFIFOOp,
+                         UnwrapFIFOOp>();
   RewritePatternSet pass2Patterns(ctxt);
-  pass2Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
-  pass2Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
-  pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
   pass2Patterns.insert<RemoveSnoopOp>(ctxt);
+  pass2Patterns.insert<RemoveSnoopTransactionOp>(ctxt);
   if (failed(
-          applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
+          applyPartialConversion(top, pass2Target, std::move(pass2Patterns)))) {
+    signalPassFailure();
+    return;
+  }
+
+  // Lower the channel operations.
+  ConversionTarget pass3Target(*ctxt);
+  pass3Target.addLegalDialect<comb::CombDialect>();
+  pass3Target.addLegalDialect<HWDialect>();
+  pass3Target.addLegalDialect<SVDialect>();
+  pass3Target.addIllegalDialect<ESIDialect>();
+
+  RewritePatternSet pass3Patterns(ctxt);
+  pass3Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
+  pass3Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
+  pass3Patterns.insert<RemoveWrapUnwrap>(ctxt);
+  if (failed(
+          applyPartialConversion(top, pass3Target, std::move(pass3Patterns))))
     signalPassFailure();
 }
 

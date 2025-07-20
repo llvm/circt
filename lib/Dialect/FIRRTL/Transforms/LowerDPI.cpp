@@ -290,7 +290,3 @@ void LowerDPIPass::runOnOperation() {
   if (!lowerDPI.changed())
     return markAllAnalysesPreserved();
 }
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerDPIPass() {
-  return std::make_unique<LowerDPIPass>();
-}

@@ -83,7 +83,6 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
     construction.
   }];
 
-  let constructor = "createTestApplyLoweringOptionPass()";
   let dependentDialects = [
     "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
   ];
@@ -98,7 +97,6 @@ def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
     This pass transforms all anonymous enumeration types into typedecls to work
     around difference in how anonymous enumerations work in SystemVerilog.
   }];
-  let constructor = "createLegalizeAnonEnumsPass()";
   let dependentDialects = [
     "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
   ];
@@ -111,8 +109,6 @@ def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
     This pass runs as part of verilog emission.
     It introduces the macros & file lists to which instance choices lower to.
   }];
-
-  let constructor = "createHWLowerInstanceChoicesPass()";
   let dependentDialects = [
     "circt::sv::SVDialect", "circt::hw::HWDialect"
   ];
@@ -125,8 +121,6 @@ def PrepareForEmission : Pass<"prepare-for-emission"> {
     It is not necessary for users to run this pass explicitly since
     ExportVerilog internally runs PrepareForEmission.
   }];
-
-  let constructor = "createPrepareForEmissionPass()";
   let dependentDialects = [
     "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
   ];
@@ -856,13 +850,24 @@ def ConvertAIGToComb: Pass<"convert-aig-to-comb", "hw::HWModuleOp"> {
 def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
   let summary = "Lower Comb ops to Datapath ops";
   let description = [{
-    This pass converts arithmetic Comb operations into Datapath operations that 
+    This pass converts arithmetic Comb operations into Datapath operations that
     leverage redundant number representations (carry save). Primarily for use
     in the circt-synth flow.
   }];
   let dependentDialects = [
     "circt::comb::CombDialect", "circt::datapath::DatapathDialect",
     "circt::hw::HWDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertDatapathToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertDatapathToSMT : Pass<"convert-datapath-to-smt"> {
+  let summary = "Convert datapath ops to SMT ops";
+  let dependentDialects = [
+    "mlir::smt::SMTDialect"
   ];
 }
 

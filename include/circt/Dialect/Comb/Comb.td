@@ -29,6 +29,7 @@ def CombDialect : Dialect {
   }];
   let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::comb";
+  let dependentDialects = ["hw::HWDialect"];
 }
 
 // Base class for the operation in this dialect.

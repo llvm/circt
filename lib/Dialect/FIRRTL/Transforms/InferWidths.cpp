@@ -2241,7 +2241,7 @@ FailureOr<bool> InferenceTypeUpdate::updateValue(Value value) {
         auto updatedBase = updateBase(element.type);
         if (!updatedBase)
           return {};
-        elements.emplace_back(element.name, updatedBase);
+        elements.emplace_back(element.name, element.value, updatedBase);
       }
       return FEnumType::get(context, elements, enumType.isConst());
     }
@@ -2319,8 +2319,4 @@ void InferWidthsPass::runOnOperation() {
   // Update the types with the inferred widths.
   if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
     return signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsPass() {
-  return std::make_unique<InferWidthsPass>();
 }

@@ -27,9 +27,7 @@ using namespace firrtl;
 
 namespace {
 struct DropNamesPass : public circt::firrtl::impl::DropNameBase<DropNamesPass> {
-  DropNamesPass(PreserveValues::PreserveMode preserveMode) {
-    this->preserveMode = preserveMode;
-  }
+  using Base::Base;
 
   enum ModAction { Drop, Keep, Demote };
 
@@ -96,8 +94,3 @@ private:
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createDropNamesPass(PreserveValues::PreserveMode mode) {
-  return std::make_unique<DropNamesPass>(mode);
-}

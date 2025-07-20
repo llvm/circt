@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, MapAttr, OMIntegerAttr
+from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OMIntegerAttr
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -28,12 +28,6 @@ def wrap_mlir_object(value):
   if isinstance(value, BaseList):
     return List(value)
 
-  if isinstance(value, BaseTuple):
-    return Tuple(value)
-
-  if isinstance(value, BaseMap):
-    return Map(value)
-
   if isinstance(value, BaseBasePath):
     return BasePath(value)
 
@@ -55,12 +49,6 @@ def unwrap_python_object(value):
   # Check if the value is any of our container or custom types.
   if isinstance(value, List):
     return BaseList(value)
-
-  if isinstance(value, Tuple):
-    return BaseTuple(value)
-
-  if isinstance(value, Map):
-    return BaseMap(value)
 
   if isinstance(value, BasePath):
     return BaseBasePath(value)
@@ -88,47 +76,6 @@ class List(BaseList):
   def __iter__(self):
     for i in range(0, self.__len__()):
       yield self.__getitem__(i)
-
-
-class Tuple(BaseTuple):
-
-  def __init__(self, obj: BaseTuple) -> None:
-    super().__init__(obj)
-
-  def __getitem__(self, i):
-    val = super().__getitem__(i)
-    return wrap_mlir_object(val)
-
-  # Support iterating over a Tuple by yielding its elements.
-  def __iter__(self):
-    for i in range(0, self.__len__()):
-      yield self.__getitem__(i)
-
-
-class Map(BaseMap):
-
-  def __init__(self, obj: BaseMap) -> None:
-    super().__init__(obj)
-
-  def __getitem__(self, key):
-    val = super().__getitem__(key)
-    return wrap_mlir_object(val)
-
-  def keys(self):
-    return [wrap_mlir_object(arg) for arg in super().keys()]
-
-  def items(self):
-    for i in self:
-      yield i
-
-  def values(self):
-    for (_, v) in self:
-      yield v
-
-  # Support iterating over a Map
-  def __iter__(self):
-    for i in super().keys():
-      yield (wrap_mlir_object(i), self.__getitem__(i))
 
 
 class BasePath(BaseBasePath):

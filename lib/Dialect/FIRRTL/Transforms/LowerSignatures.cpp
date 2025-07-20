@@ -227,7 +227,6 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         }
         return success();
       })
-      .Case<FEnumType>([&](FEnumType fenum) { return failure(); })
       .Default([&](FIRRTLType type) {
         // Properties and other types wind up here.
         newPorts.push_back(
@@ -482,9 +481,4 @@ void LowerSignaturesPass::runOnOperation() {
   }
   parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
                   [&portMap](FModuleOp mod) { lowerModuleBody(mod, portMap); });
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerSignaturesPass() {
-  return std::make_unique<LowerSignaturesPass>();
 }

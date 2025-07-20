@@ -74,3 +74,28 @@ rtg.test @unmached_validate_stays() {
   %exp_val = rtg.validate %reg, %imm, "id10" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
 }
+
+//--- test6.mlir
+// RUN: circt-opt %t/test6.mlir --rtg-embed-validation-values=filename=%S/validation-values-0.txt | FileCheck %s --check-prefix=CHECK-TEST6
+
+// CHECK-TEST6-LABEL: rtg.test @embed_value
+rtg.test @embed_value() {
+  // CHECK-TEST6-NEXT: [[REG:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK-TEST6-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 4>
+  // CHECK-TEST6-NEXT: [[V2:%.+]] = rtg.constant #rtg.isa.immediate<32, 5>
+  // CHECK-TEST6-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 8192>
+  // CHECK-TEST6-NEXT: rtgtest.rv32i.lui [[REG]], [[V0]] :
+  // CHECK-TEST6-NEXT: rtgtest.rv32i.lui [[REG]], [[V1]] :
+  // CHECK-TEST6-NEXT: rtgtest.rv32i.lui [[REG]], [[V2]] :
+  // CHECK-TEST6-NEXT: }
+  %0 = rtg.fixed_reg #rtgtest.t0
+  %1 = rtg.constant #rtg.isa.immediate<32, 1>
+  %2 = rtg.constant #rtg.isa.immediate<32, 2>
+  %3 = rtg.constant #rtg.isa.immediate<32, 3>
+  %4 = rtg.constant #rtg.isa.immediate<32, 4>
+  %5 = rtg.constant #rtg.isa.immediate<32, 5>
+  %6:3 = rtg.validate %0, %1, "id1" (%2, %3 else %4, %5 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  rtgtest.rv32i.lui %0, %6#0 : !rtg.isa.immediate<32>
+  rtgtest.rv32i.lui %0, %6#1 : !rtg.isa.immediate<32>
+  rtgtest.rv32i.lui %0, %6#2 : !rtg.isa.immediate<32>
+}

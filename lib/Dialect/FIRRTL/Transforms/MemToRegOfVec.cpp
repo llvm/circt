@@ -35,8 +35,7 @@ using namespace firrtl;
 namespace {
 struct MemToRegOfVecPass
     : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
-  MemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable)
-      : replSeqMem(replSeqMem), ignoreReadEnable(ignoreReadEnable){};
+  using Base::Base;
 
   void runOnOperation() override {
     auto circtOp = getOperation();
@@ -431,14 +430,5 @@ struct MemToRegOfVecPass
       for (auto r : debugPorts)
         r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec.getResult()));
   }
-
-private:
-  bool replSeqMem;
-  bool ignoreReadEnable;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createMemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable) {
-  return std::make_unique<MemToRegOfVecPass>(replSeqMem, ignoreReadEnable);
-}
