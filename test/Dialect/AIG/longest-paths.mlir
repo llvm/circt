@@ -103,3 +103,10 @@ hw.module private @comb(in %cond : i1, in %a : i1, in %b : i1, out x : i1) {
   %r = comb.mux %cond, %a, %b : i1
   hw.output %r : i1
 }
+
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=2, history=[{{.+}}])}}
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.b[0], delay=2, history=[{{.+}}])}}
+hw.module private @fix_duplication(in %a : i1, in %b : i1, out x : i1) {
+  %0 = aig.and_inv %a, %a, %b : i1
+  hw.output %0 : i1
+}
