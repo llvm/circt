@@ -237,17 +237,17 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
   // Replace the register with newInput and newOutput
   auto newInput = module.appendInput(newInputName, regType).second;
   if (reset) {
-    if (!isAsync) {
-      // Sync reset
-      result.replaceAllUsesWith(newInput);
-      auto mux = builder.create<comb::MuxOp>(op->getLoc(), regType, reset,
-                                             resetValue, next);
-      module.appendOutput(newOutputName, mux);
-    } else {
+    if (isAsync) {
       // Async reset
       op->emitError("registers with an async reset are not yet supported");
       return failure();
     }
+    // Sync reset
+    result.replaceAllUsesWith(newInput);
+
+    auto mux = builder.create<comb::MuxOp>(op->getLoc(), regType, reset,
+                                           resetValue, next);
+    module.appendOutput(newOutputName, mux);
   } else {
     // No reset
     result.replaceAllUsesWith(newInput);
