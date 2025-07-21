@@ -299,9 +299,9 @@ struct CondBranchOpConversion
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
+ matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
+    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
       op, adaptor.getCondition(),
       op.getTrueDest(), adaptor.getTrueDestOperands(),
       op.getFalseDest(), adaptor.getFalseDestOperands());
