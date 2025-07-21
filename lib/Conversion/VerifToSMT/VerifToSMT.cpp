@@ -231,25 +231,26 @@ struct RefinementCheckingOpConversion
   matchAndRewrite(verif::RefinementCheckingOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    // Find non-deterministic values (free variables) in the LHS circuit.
-    SmallVector<Value> lhsNonDetValues;
-    bool onlyPrimitiveNd = true;
+    // Find non-deterministic values (free variables) in the source circuit.
+    // For now, only support quantification over 'primitive' types.
+    SmallVector<Value> srcNonDetValues;
+    bool canBind = true;
     for (auto ndOp : op.getFirstCircuit().getOps<smt::DeclareFunOp>()) {
       if (!isa<smt::IntType, smt::BoolType, smt::BitVectorType>(
               ndOp.getType())) {
         ndOp.emitError("Uninterpreted function of non-primitive type cannot be "
                        "converted.");
-        onlyPrimitiveNd = false;
+        canBind = false;
       }
-      lhsNonDetValues.push_back(ndOp.getResult());
+      srcNonDetValues.push_back(ndOp.getResult());
     }
-    if (!onlyPrimitiveNd)
+    if (!canBind)
       return failure();
 
-    if (lhsNonDetValues.empty()) {
-      // If there is no non-determinism in the LHS circuit, the refinement check
-      // becomes an equivalence check, which does not need quantified
-      // expressions.
+    if (srcNonDetValues.empty()) {
+      // If there is no non-determinism in the source circuit, the
+      // refinement check becomes an equivalence check, which does not
+      // need quantified expressions.
       auto eqOp = rewriter.create<verif::LogicEquivalenceCheckingOp>(
           op.getLoc(), op.getNumResults() != 0);
       rewriter.moveBlockBefore(&op.getFirstCircuit().front(),
@@ -298,27 +299,28 @@ struct RefinementCheckingOpConversion
     for (auto arg : adaptor.getFirstCircuit().getArguments())
       inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
 
-    // Inline the blocks
+    // Inline the target circuit. Free variables remain free variables.
     rewriter.mergeBlocks(&adaptor.getSecondCircuit().front(), solver.getBody(),
                          inputs);
     rewriter.setInsertionPointToEnd(solver.getBody());
 
-    // Create the universally quantified expression containing the LHS circuit.
-    // Free variables in the circuit's body become bound variables.
+    // Create the universally quantified expression containing the source
+    // circuit. Free variables in the circuit's body become bound variables.
     auto forallOp = rewriter.create<smt::ForallOp>(
-        op.getLoc(), TypeRange(lhsNonDetValues),
+        op.getLoc(), TypeRange(srcNonDetValues),
         [&](OpBuilder &builder, auto, ValueRange args) -> Value {
+          // Inline the source circuit
           Block *body = builder.getBlock();
           rewriter.mergeBlocks(&adaptor.getFirstCircuit().front(), body,
                                inputs);
-          rewriter.setInsertionPointToEnd(body);
 
           // Replace non-deterministic values with the quantifier's bound
           // variables
-          for (auto [freeVar, boundVar] : llvm::zip(lhsNonDetValues, args))
+          for (auto [freeVar, boundVar] : llvm::zip(srcNonDetValues, args))
             rewriter.replaceOp(freeVar.getDefiningOp(), boundVar);
 
           // Compare the output values
+          rewriter.setInsertionPointToEnd(body);
           SmallVector<Value> outputsDifferent;
           createOutputsDifferentOps(firstOutputs, secondOutputs, loc, rewriter,
                                     outputsDifferent);

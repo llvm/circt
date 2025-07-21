@@ -247,19 +247,19 @@ func.func @large_initial_value() -> (i1) {
 
 // -----
 
-// CHECK-LABEL: func @test_refines
+// CHECK-LABEL: func @test_refines_noreturn
+
+// CHECK:     smt.solver() : () -> () {
+// CHECK:       [[V0:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK:       [[V1:%.+]] = smt.distinct [[V0]], [[V0]] : !smt.bv<32>
+// CHECK:       smt.assert [[V1]]
+// CHECK:       smt.check sat {
+// CHECK-NEXT:   } unknown {
+// CHECK-NEXT:   } unsat {
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+
 func.func @test_refines_noreturn() -> () {
-
-  // CHECK:     smt.solver() : () -> () {
-  // CHECK:       [[V0:%.+]] = smt.declare_fun : !smt.bv<32>
-  // CHECK:       [[V1:%.+]] = smt.distinct [[V0]], [[V0]] : !smt.bv<32>
-  // CHECK:       smt.assert [[V1]]
-  // CHECK:       smt.check sat {
-  // CHECK-NEXT:   } unknown {
-  // CHECK-NEXT:   } unsat {
-  // CHECK-NEXT:   }
-  // CHECK-NEXT: }
-
   verif.refines first {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
@@ -267,29 +267,31 @@ func.func @test_refines_noreturn() -> () {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
   }
-
   return
 }
 
 // -----
 
-func.func @test_refines_withreturn() -> i1 {
-  // CHECK:     [[RT0:%.+]] = smt.solver() : () -> i1 {
-  // CHECK:       [[V0:%.+]] = smt.declare_fun : !smt.bv<32>
-  // CHECK:       [[V1:%.+]] = smt.distinct [[V0]], [[V0]] : !smt.bv<32>
-  // CHECK:       smt.assert [[V1]]
-  // CHECK-DAG:   [[TRUE:%.+]]  = arith.constant true
-  // CHECK-DAG:   [[FALSE:%.+]] = arith.constant false
-  // CHECK:       [[V2:%.+]] = smt.check sat {
-  // CHECK-NEXT:     smt.yield [[FALSE]]
-  // CHECK-NEXT:   } unknown {
-  // CHECK-NEXT:     smt.yield [[FALSE]]
-  // CHECK-NEXT:   } unsat {
-  // CHECK-NEXT:     smt.yield [[TRUE]]
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   smt.yield [[V2]]
-  // CHECK-NEXT: }
+// CHECK-LABEL: func.func @test_refines_withreturn
 
+// CHECK:     [[RT0:%.+]] = smt.solver() : () -> i1 {
+// CHECK:       [[V0:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK:       [[V1:%.+]] = smt.distinct [[V0]], [[V0]] : !smt.bv<32>
+// CHECK:       smt.assert [[V1]]
+// CHECK-DAG:   [[TRUE:%.+]]  = arith.constant true
+// CHECK-DAG:   [[FALSE:%.+]] = arith.constant false
+// CHECK:       [[V2:%.+]] = smt.check sat {
+// CHECK-NEXT:     smt.yield [[FALSE]]
+// CHECK-NEXT:   } unknown {
+// CHECK-NEXT:     smt.yield [[FALSE]]
+// CHECK-NEXT:   } unsat {
+// CHECK-NEXT:     smt.yield [[TRUE]]
+// CHECK-NEXT:   }
+// CHECK-NEXT:   smt.yield [[V2]]
+// CHECK-NEXT: }
+// CHECK: return [[RT0]] : i1
+
+func.func @test_refines_withreturn() -> i1 {
   %0 = verif.refines : i1 first {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
@@ -297,12 +299,14 @@ func.func @test_refines_withreturn() -> i1 {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
   }
-
-  // CHECK: return [[RT0]] : i1
   return %0 : i1
 }
 
 // -----
+
+// Source circuit non-deterministic
+
+// CHECK-LABEL: func.func @nondet_to_det
 
 // CHECK:     smt.solver()
 // CHECK:       [[BVCST:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
@@ -314,23 +318,27 @@ func.func @test_refines_withreturn() -> i1 {
 // CHECK-NEXT:  smt.assert [[ALLQ]]
 // CHECK-NEXT:  smt.check
 
-// First circuit non-deterministic
 
-verif.refines first {
-^bb0():
-  %nondet = smt.declare_fun : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
-  verif.yield %cc : i32
-} second {
-^bb0():
-  %const = smt.bv.constant #smt.bv<0> : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %const : !smt.bv<32> to i32
-  verif.yield %cc : i32
+func.func @nondet_to_det() -> () {
+  verif.refines first {
+  ^bb0():
+    %nondet = smt.declare_fun : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  } second {
+  ^bb0():
+    %const = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %const : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  }
+  return
 }
 
 // -----
 
-// Second circuit non-deterministic
+// Target circuit non-deterministic
+
+// CHECK-LABEL: func.func @det_to_nondet
 
 // CHECK:     smt.solver()
 // CHECK-DAG:   [[BVCST:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
@@ -339,20 +347,25 @@ verif.refines first {
 // CHECK-NEXT:  smt.assert [[V0]]
 // CHECK-NEXT:  smt.check
 
-verif.refines first {
-^bb0():
-  %const = smt.bv.constant #smt.bv<0> : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %const : !smt.bv<32> to i32
-  verif.yield %cc : i32
-} second {
-^bb0():
-  %nondet = smt.declare_fun : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
-  verif.yield %cc : i32
+func.func @det_to_nondet() -> () {
+  verif.refines first {
+  ^bb0():
+    %const = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %const : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  } second {
+  ^bb0():
+    %nondet = smt.declare_fun : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  }
+  return
 }
 // -----
 
 // Both circuits non-deterministic
+
+// CHECK-LABEL: func.func @nondet_to_nondet
 
 // CHECK:     smt.solver()
 // CHECK:       [[FREEVAR:%.+]] = smt.declare_fun : !smt.bv<32>
@@ -364,22 +377,26 @@ verif.refines first {
 // CHECK-NEXT:  smt.assert [[ALLQ]]
 // CHECK-NEXT:  smt.check
 
-verif.refines first {
-^bb0():
-  %nondet = smt.declare_fun : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
-  verif.yield %cc : i32
-} second {
-^bb0():
-  %nondet = smt.declare_fun : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
-  verif.yield %cc : i32
+func.func @nondet_to_nondet() -> () {
+  verif.refines first {
+  ^bb0():
+    %nondet = smt.declare_fun : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  } second {
+  ^bb0():
+    %nondet = smt.declare_fun : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
+    verif.yield %cc : i32
+  }
+  return
 }
 
 // -----
 
-// Multiple non-deterministic values in the first circuit
+// Multiple non-deterministic values in the source circuit
 
+// CHECK-LABEL: func.func @multi_nondet
 // CHECK:     smt.solver()
 // CHECK:       [[FREEVAR:%.+]] = smt.declare_fun : !smt.bv<32>
 // CHECK:       [[ALLQ:%.+]] = smt.forall {
@@ -392,16 +409,19 @@ verif.refines first {
 // CHECK-NEXT:  smt.assert [[ALLQ]]
 // CHECK-NEXT:  smt.check
 
-verif.refines first {
-^bb0():
-  %nondet0 = smt.declare_fun : !smt.bv<32>
-  %cc0 = builtin.unrealized_conversion_cast %nondet0 : !smt.bv<32> to i32
-  %nondet1 = smt.declare_fun : !smt.bv<32>
-  %cc1 = builtin.unrealized_conversion_cast %nondet1 : !smt.bv<32> to i32
-  verif.yield %cc0, %cc1 : i32, i32
-} second {
-^bb0():
-  %nondet = smt.declare_fun : !smt.bv<32>
-  %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
-  verif.yield %cc, %cc : i32, i32
+func.func @multi_nondet() -> () {
+  verif.refines first {
+  ^bb0():
+    %nondet0 = smt.declare_fun : !smt.bv<32>
+    %cc0 = builtin.unrealized_conversion_cast %nondet0 : !smt.bv<32> to i32
+    %nondet1 = smt.declare_fun : !smt.bv<32>
+    %cc1 = builtin.unrealized_conversion_cast %nondet1 : !smt.bv<32> to i32
+    verif.yield %cc0, %cc1 : i32, i32
+  } second {
+  ^bb0():
+    %nondet = smt.declare_fun : !smt.bv<32>
+    %cc = builtin.unrealized_conversion_cast %nondet : !smt.bv<32> to i32
+    verif.yield %cc, %cc : i32, i32
+  }
+  return
 }
