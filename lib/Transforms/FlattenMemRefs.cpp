@@ -299,12 +299,12 @@ struct CondBranchOpConversion
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
- matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
-      op, adaptor.getCondition(),
-      op.getTrueDest(), adaptor.getTrueDestOperands(),
-      op.getFalseDest(), adaptor.getFalseDestOperands());
+        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
+        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
+        op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };
