@@ -5730,25 +5730,43 @@ LogicalResult HWStructCastOp::verify() {
 LogicalResult BitCastOp::verify() {
   auto inTypeBits = getBitWidth(getInput().getType(), /*ignoreFlip=*/true);
   auto resTypeBits = getBitWidth(getType());
-  if (inTypeBits.has_value() && resTypeBits.has_value()) {
-    // Bitwidths must match for valid bit
-    if (*inTypeBits == *resTypeBits) {
-      // non-'const' cannot be casted to 'const'
-      if (containsConst(getType()) && !isConst(getOperand().getType()))
-        return emitError("cannot cast non-'const' input type ")
-               << getOperand().getType() << " to 'const' result type "
-               << getType();
-      return success();
-    }
-    return emitError("the bitwidth of input (")
-           << *inTypeBits << ") and result (" << *resTypeBits
-           << ") don't match";
-  }
   if (!inTypeBits.has_value())
     return emitError("bitwidth cannot be determined for input operand type ")
            << getInput().getType();
-  return emitError("bitwidth cannot be determined for result type ")
-         << getType();
+  if (!resTypeBits.has_value())
+    return emitError("bitwidth cannot be determined for result type ")
+           << getType();
+  // Bitwidths must match for valid bit
+  if (*inTypeBits != *resTypeBits)
+    return emitError("the bitwidth of input (")
+           << *inTypeBits << ") and result (" << *resTypeBits
+           << ") don't match";
+
+  // non-'const' cannot be casted to 'const'
+  if (containsConst(getType()) && !isConst(getOperand().getType()))
+    return emitError("cannot cast non-'const' input type ")
+           << getOperand().getType() << " to 'const' result type " << getType();
+
+  if (auto bundleType = dyn_cast<BundleType>(getInput().getType())) {
+    auto elts = bundleType.getElements();
+    if (any_of(elts, [&](BundleType::BundleElement elt) {
+          return elt.isFlip != elts.front().isFlip;
+        }))
+      return emitError("cannot cast input bundle type with elements in "
+                       "different directions ")
+             << getInput().getType();
+  }
+  if (auto openBundleType = dyn_cast<OpenBundleType>(getInput().getType())) {
+    auto elts = openBundleType.getElements();
+    if (any_of(elts, [&](OpenBundleType::BundleElement elt) {
+          return elt.isFlip != elts.front().isFlip;
+        }))
+      return emitError("cannot cast input open bundle type with elements in "
+                       "different directions ")
+             << getInput().getType();
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
