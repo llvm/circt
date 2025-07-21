@@ -2078,6 +2078,17 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
       return false;
     }
 
+    auto isARecursiveMux = [](Value v) {
+      if (v.getDefiningOp())
+        if (auto muxOp = dyn_cast<MuxOp>(v.getDefiningOp()))
+          return muxOp.getTrueValue() == v || muxOp.getFalseValue() == v;
+      return false;
+    };
+
+    // Avoid infinitely recursing canonicalizations
+    if (isARecursiveMux(otherValue) || isARecursiveMux(subCond))
+      return false;
+
     // Invert the outer cond if needed, and combine the mux conditions.
     if (!isTrueOperand)
       cond = createOrFoldNot(op.getLoc(), cond, rewriter);
