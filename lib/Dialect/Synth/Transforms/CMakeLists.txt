@@ -6,11 +6,16 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-add_circt_library(CIRCTSynthTransforms
+add_circt_dialect_library(CIRCTSynthTransforms
+  CutRewriter.cpp
   SynthesisPipeline.cpp
+  TestPriorityCuts.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Synth
+
+  DEPENDS
+  CIRCTSynthTransformsIncGen
 
   LINK_COMPONENTS
   Support
