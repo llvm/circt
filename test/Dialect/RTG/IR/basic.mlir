@@ -247,3 +247,11 @@ rtg.test @immediateOps() {
   %3 = rtg.constant #rtg.isa.immediate<8, 175>
   %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
 }
+
+// CHECK-LABEL: rtg.test @testReportOps
+rtg.test @testReportOps() {
+  // CHECK-NEXT: rtg.test.success
+  rtg.test.success
+  // CHECK-NEXT: rtg.test.failure "error message"
+  rtg.test.failure "error message"
+}

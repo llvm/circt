@@ -727,6 +727,10 @@ def TestOp : RTGOp<"test", [
     The arguments must match the fields of the dict type in the target attribute
     exactly. The test must not have any additional arguments and cannot be
     referenced by an `rtg.get_sequence` operation.
+
+    If the end of the test is reached without executing an `rtg.test.success`
+    or `rtg.test.failure` it is as if an `rtg.test.success` is executed at the
+    very end.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$templateName,
@@ -736,6 +740,19 @@ def TestOp : RTGOp<"test", [
   let hasCustomAssemblyFormat = 1;
   let hasRegionVerifier = 1;
   let hasVerifier = 1;
+}
+
+def TestSuccessOp : RTGOp<"test.success", []> {
+  let summary = "exit the test and report success";
+
+  let assemblyFormat = "attr-dict";
+}
+
+def TestFailureOp : RTGOp<"test.failure", []> {
+  let summary = "exit the test and report failure";
+
+  let arguments = (ins StrAttr:$errorMessage);
+  let assemblyFormat = "$errorMessage attr-dict";
 }
 
 def TargetOp : RTGOp<"target", [

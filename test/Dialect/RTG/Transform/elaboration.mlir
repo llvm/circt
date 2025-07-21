@@ -803,6 +803,14 @@ rtg.test @immediateOps(singleton = %none: index) {
   func.call @dummy6(%slice) : (!rtg.isa.immediate<2>) -> ()
 }
 
+// CHECK-LABEL: rtg.test @testSuccessAndFailure
+rtg.test @testSuccessAndFailure(singleton = %none: index) {
+  // CHECK-NEXT: rtg.test.success
+  rtg.test.success
+  // CHECK-NEXT: rtg.test.failure "Error Message"
+  rtg.test.failure "Error Message"
+}
+
 // -----
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {

@@ -7,7 +7,6 @@ from .core import CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .support import _FromCirctValue
 from .configs import PythonParam
-from .labels import Label
 
 from types import SimpleNamespace
 
@@ -69,3 +68,19 @@ def embed_comment(comment: str) -> None:
   """
 
   rtg.CommentOp(comment)
+
+
+def report_success() -> None:
+  """
+  Exit this test and report a success.
+  """
+
+  rtg.TestSuccessOp()
+
+
+def report_failure(message: str) -> None:
+  """
+  Exit this test and report a failure with the provided error message.
+  """
+
+  rtg.TestFailureOp(message)

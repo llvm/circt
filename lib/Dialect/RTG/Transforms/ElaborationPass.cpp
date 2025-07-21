@@ -1684,6 +1684,14 @@ public:
 
   FailureOr<DeletionKind> visitOp(LabelOp op) { return DeletionKind::Keep; }
 
+  FailureOr<DeletionKind> visitOp(TestSuccessOp op) {
+    return DeletionKind::Keep;
+  }
+
+  FailureOr<DeletionKind> visitOp(TestFailureOp op) {
+    return DeletionKind::Keep;
+  }
+
   FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
     size_t lower = get<size_t>(op.getLowerBound());
     size_t upper = get<size_t>(op.getUpperBound());
