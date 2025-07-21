@@ -301,10 +301,10 @@ struct CondBranchOpConversion
   LogicalResult
   matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
-        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
-        op.getTrueDest(), op.getFalseDest());
+      rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
+      op, adaptor.getCondition(),
+      op.getTrueDest(), adaptor.getTrueDestOperands(),
+      op.getFalseDest(), adaptor.getFalseDestOperands());
     return success();
   }
 };
