@@ -2526,10 +2526,16 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     return success();
 
   // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
-  if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
-    return success();
-  if (assumeMuxCondInOperand(op.getCond(), op.getFalseValue(), false, rewriter))
-    return success();
+  if (op.getTrueValue().getDefiningOp() &&
+      op.getTrueValue().getDefiningOp() != op)
+    if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
+      return success();
+  if (op.getFalseValue().getDefiningOp() &&
+      op.getFalseValue().getDefiningOp() != op)
+
+    if (assumeMuxCondInOperand(op.getCond(), op.getFalseValue(), false,
+                               rewriter))
+      return success();
 
   return failure();
 }
