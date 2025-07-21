@@ -191,3 +191,25 @@ module {
     }
   }
 }
+
+// Test the usage of operations defined inside `transition` region but outside `guard region`
+module {
+  fsm.machine @mbx_fsm(%arg0: i1) -> (i1) attributes {initialState = "MbxIdle"} {
+    %false = hw.constant false
+    fsm.state @MbxIdle output {
+      %false_0 = hw.constant false
+      fsm.output %false_0: i1
+    }
+    fsm.state @MbxWaitFinalWord output {
+      fsm.output %false : i1
+    } transitions {
+      %false_0 = hw.constant false
+      fsm.transition @MbxError guard {
+        fsm.return %false_0
+      }
+    }
+    fsm.state @MbxError output {
+      fsm.output %false : i1
+    }
+  }
+}
