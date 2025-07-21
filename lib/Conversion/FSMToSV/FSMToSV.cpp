@@ -670,8 +670,8 @@ MachineOpConverter::convertState(StateOp state) {
     if (auto transOp = dyn_cast<TransitionOp>(op)) {
       transitions.push_back(transOp);
     } else {
-      // Clone operations which are inside `transitions` region but outside `guard`
-      // region.
+      // Clone operations which are inside `transitions` region but outside
+      // `guard` region.
       auto opClone = b.clone(op);
       for (auto [i, res] : llvm::enumerate(op.getResults()))
         res.replaceAllUsesWith(opClone->getResult(i));
