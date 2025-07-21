@@ -469,11 +469,8 @@ def test92_python_params(config):
 
 
 # MLIR-LABEL: rtg.test @test93_immediate_ops
-# MLIR-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
-# MLIR-NEXT: [[IMM2:%.+]] = rtg.constant #rtg.isa.immediate<8, 4>
-# MLIR-NEXT: [[CONCAT:%.+]] = rtg.isa.concat_immediate [[IMM1]], [[IMM2]], [[IMM2]] : !rtg.isa.immediate<12>, !rtg.isa.immediate<8>, !rtg.isa.immediate<8>
-# MLIR-NEXT: [[SLICE:%.+]] = rtg.isa.slice_immediate [[CONCAT]] from 8 : (!rtg.isa.immediate<28>) -> !rtg.isa.immediate<4>
-# MLIR: rtg.substitute_sequence {{%.+}}([[SLICE]]) : !rtg.sequence<!rtg.isa.immediate<4>>
+# MLIR-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<4, 4>
+# MLIR: rtg.substitute_sequence {{%.+}}([[IMM]]) : !rtg.sequence<!rtg.isa.immediate<4>>
 
 
 @sequence([ImmediateType(4)])
