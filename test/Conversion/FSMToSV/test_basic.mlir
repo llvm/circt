@@ -192,24 +192,42 @@ module {
   }
 }
 
+
+// -----
+
 // Test the usage of operations defined inside `transition` region but outside `guard region`
+// CHECK-LABEL: hw.module @OpsInTransition(in %in0 : i1, out out0 : i1, in %clk : !seq.clock, in %rst : i1) attributes {emit.fragments = [@FSM_ENUM_TYPEDEFS]} {
+// CHECK:   sv.alwayscomb {
+// CHECK-NEXT:     sv.case %state_reg : !hw.typealias<@fsm_enum_typedecls::@OpsInTransition_state_t, !hw.enum<State1, State2>>
+// CHECK-NEXT:     case State1: {
+// CHECK-NEXT:       sv.bpassign %state_next, %0 : !hw.typealias<@fsm_enum_typedecls::@OpsInTransition_state_t, !hw.enum<State1, State2>>
+// CHECK-NEXT:       sv.bpassign %output_0, %false_0 : i1
+// CHECK-NEXT:     }
+// CHECK-NEXT:     case State2: {
+// CHECK-NEXT:       sv.bpassign %state_next, %3 : !hw.typealias<@fsm_enum_typedecls::@OpsInTransition_state_t, !hw.enum<State1, State2>>
+// CHECK-NEXT:       sv.bpassign %output_0, %false : i1
+// CHECK-NEXT:     }
+// CHECK-NEXT:     default: {
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+// CHECK-NEXT:   %4 = sv.read_inout %output_0 : !hw.inout<i1>
+// CHECK-NEXT:   hw.output %4 : i1
+// CHECK-NEXT: }
+
 module {
-  fsm.machine @mbx_fsm(%arg0: i1) -> (i1) attributes {initialState = "MbxIdle"} {
+  fsm.machine @OpsInTransition(%arg0: i1) -> (i1) attributes {initialState = "State1"} {
     %false = hw.constant false
-    fsm.state @MbxIdle output {
+    fsm.state @State1 output {
       %false_0 = hw.constant false
       fsm.output %false_0: i1
     }
-    fsm.state @MbxWaitFinalWord output {
+    fsm.state @State2 output {
       fsm.output %false : i1
     } transitions {
       %false_0 = hw.constant false
-      fsm.transition @MbxError guard {
+      fsm.transition @State1 guard {
         fsm.return %false_0
       }
-    }
-    fsm.state @MbxError output {
-      fsm.output %false : i1
     }
   }
 }

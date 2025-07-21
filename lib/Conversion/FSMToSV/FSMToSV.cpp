@@ -664,19 +664,17 @@ MachineOpConverter::convertState(StateOp state) {
     OutputOp outputOp = cast<fsm::OutputOp>(*outputOpRes);
     res.outputs = outputOp.getOperands(); // 3.2
   }
-  // Clone operations which are inside `transitions` region but outside `guard` region.
   SmallVector<TransitionOp> transitions;
   for (auto &op : state.getTransitions().getOps()) {
     if (auto transOp = dyn_cast<TransitionOp>(op)) {
       transitions.push_back(transOp);
     } else {
+      // Clone operations which are inside `transitions` region but outside `guard` region.
       auto opClone = b.clone(op);
       for (auto [i, res] : llvm::enumerate(op.getResults()))
         res.replaceAllUsesWith(opClone->getResult(i));
     }
   }
-  auto transitions = llvm::SmallVector<TransitionOp>(
-      state.getTransitions().getOps<TransitionOp>());
   // 3.3, 3.4) Convert the transitions and record the next-state value
   // derived from the transitions being selected in a priority-encoded manner.
   auto nextStateRes = convertTransitions(state, transitions);
