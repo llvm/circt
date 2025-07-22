@@ -297,7 +297,7 @@ def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLTyp
   let genVerifyDecl = 1;
 }
 
-def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def FEnumImpl : FIRRTLImplType<"FEnum"> {
   let summary = "a sum type of named elements.";
   let parameters = (ins "ArrayRef<EnumElement>":$elements, "bool":$isConst);
   let storageClass = "FEnumTypeStorage";
@@ -344,6 +344,12 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
 
     /// Return this type with any type alias types recursively removed from itself.
     FIRRTLBaseType getAnonymousType();
+    
+    /// Get the width of this
+    size_t getBitWidth();
+    
+    /// Get the width of the data. Equal to the width of the largest element.
+    size_t getDataWidth();
 
     /// Get the width of the the tag field.
     size_t getTagWidth();
