@@ -495,6 +495,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   ; CHECK-LABEL: firrtl.module private @constant_implicit_cse(
   module constant_implicit_cse :
     input cond : UInt<1>
+    input enum : {|A|}
 
     ; CHECK: [[CST15:%.+]] = firrtl.constant 15 : !firrtl.const.uint<4>
     ; CHECK: %a = firrtl.node interesting_name [[CST15]]
@@ -520,6 +521,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK:  %f = firrtl.node interesting_name [[CST15]]
     node f = UInt<4>(15)
     node g = UInt<4>(7)
+
+    ; Should be able to use the constant cache under a match without crashing.
+    ; CHECK: [[CST8:%.+]] = firrtl.constant 8 : !firrtl.const.uint<4>
+    match enum:
+      A:
+        ; CHECK:  %h = firrtl.node interesting_name [[CST7]]
+        node h = UInt<4>(7)
+         ; CHECK: %i = firrtl.node interesting_name [[CST8]]
+        node i = UInt<4>(8)
 
   ; CHECK-LABEL: firrtl.module private @subfield_implicit_cse
   module subfield_implicit_cse :
@@ -909,20 +919,33 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: firrtl.module private @EnumTypes
   module EnumTypes:
-    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: !firrtl.enum<>
+    wire a : {||}
+    ; CHECK: !firrtl.enum<a>
+    wire b : {|a|}
+    ; CHECK: !firrtl.enum<a = 1>
+    wire c : {|a = 1|}
+    ; CHECK: !firrtl.enum<a: uint<8>>
+    wire d : {|a : UInt<8>|}
+    ; CHECK: !firrtl.enum<a = 1: uint<8>>
+    wire e : {|a = 1 : UInt<8>|}
+  
+  ; CHECK-LABEL: firrtl.module private @EnumValue
+  module EnumValues:
+    ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None>
     input i : {| Some : UInt<8>, None |}
     output o : UInt<8>
 
     ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
-    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
-    ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None>
+    ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None>
     node some = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
     ; CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.const.uint<0>
-    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
-    ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None>
+    ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None>
     node none = {|Some : UInt<8>, None|}(None)
 
-    ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
+    ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None> {
     match i:
       ; CHECK: case Some(%arg0) {
       ; CHECK:   firrtl.matchingconnect %o, %arg0 : !firrtl.uint<8>
@@ -936,13 +959,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
       None:
         invalidate o
 
-  ; CHECK-LABEL: firrtl.module private @EnumInfer(
-  module EnumInfer:
-    input i : {| A: UInt<8>, None |}
-    output o : {| A: UInt, None |}
-
-    ; CHECK: connect %o, %i
-    connect o, i
+  ; CHECK-LABEL: firrtl.module private @TagExtract
+  module TagExtract:
+    input i : {|A, B, C|}
+    output o : UInt<2>
+    ; CHECK: %0 = firrtl.tagextract %i : !firrtl.enum<A, B, C>
+    ; CHECK: firrtl.matchingconnect %o, %0 : !firrtl.uint<2>
+    connect o, tagExtract(i)
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>

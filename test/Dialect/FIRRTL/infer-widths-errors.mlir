@@ -158,15 +158,6 @@ firrtl.circuit "Foo" {
 }
 
 // -----
-// https://github.com/llvm/circt/issues/5324
-
-firrtl.circuit "NoWidthEnum" {
-  // expected-error @below {{uninferred width: port "o.Some" is unconstrained}}
-  firrtl.module @NoWidthEnum(out %o: !firrtl.enum<Some: uint>) {
-  }
-}
-
-// -----
 
 firrtl.circuit "MuxSelBackProp" {
   firrtl.module @MuxSelBackProp() {

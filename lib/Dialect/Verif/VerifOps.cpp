@@ -94,19 +94,37 @@ LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// CircuitRelationCheckOp
+//===----------------------------------------------------------------------===//
+
+template <typename OpTy>
+static LogicalResult verifyCircuitRelationCheckOpRegions(OpTy &op) {
+  if (op.getFirstCircuit().getArgumentTypes() !=
+      op.getSecondCircuit().getArgumentTypes())
+    return op.emitOpError()
+           << "block argument types of both regions must match";
+  if (op.getFirstCircuit().front().getTerminator()->getOperandTypes() !=
+      op.getSecondCircuit().front().getTerminator()->getOperandTypes())
+    return op.emitOpError()
+           << "types of the yielded values of both regions must match";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // LogicalEquivalenceCheckingOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult LogicEquivalenceCheckingOp::verifyRegions() {
-  if (getFirstCircuit().getArgumentTypes() !=
-      getSecondCircuit().getArgumentTypes())
-    return emitOpError() << "block argument types of both regions must match";
-  if (getFirstCircuit().front().getTerminator()->getOperandTypes() !=
-      getSecondCircuit().front().getTerminator()->getOperandTypes())
-    return emitOpError()
-           << "types of the yielded values of both regions must match";
+  return verifyCircuitRelationCheckOpRegions(*this);
+}
 
-  return success();
+//===----------------------------------------------------------------------===//
+// RefinementCheckingOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult RefinementCheckingOp::verifyRegions() {
+  return verifyCircuitRelationCheckOpRegions(*this);
 }
 
 //===----------------------------------------------------------------------===//

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTG/IR/RTGOps.h"
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -836,6 +837,86 @@ LogicalResult MemoryBaseAddressOp::inferReturnTypes(
   inferredReturnTypes.push_back(
       ImmediateType::get(context, memTy.getAddressWidth()));
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ConcatImmediateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatImmediateOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  if (operands.empty()) {
+    if (loc)
+      return mlir::emitError(*loc) << "at least one operand must be provided";
+    return failure();
+  }
+
+  unsigned totalWidth = 0;
+  for (auto operand : operands) {
+    auto immType = dyn_cast<ImmediateType>(operand.getType());
+    if (!immType) {
+      if (loc)
+        return mlir::emitError(*loc)
+               << "all operands must be of immediate type";
+      return failure();
+    }
+    totalWidth += immType.getWidth();
+  }
+
+  inferredReturnTypes.push_back(ImmediateType::get(context, totalWidth));
+  return success();
+}
+
+OpFoldResult ConcatImmediateOp::fold(FoldAdaptor adaptor) {
+  // concat(x) -> x
+  if (getOperands().size() == 1)
+    return getOperands()[0];
+
+  // If all operands are constants, fold into a single constant
+  if (llvm::all_of(adaptor.getOperands(), [](Attribute attr) {
+        return isa_and_nonnull<ImmediateAttr>(attr);
+      })) {
+    auto result = APInt::getZeroWidth();
+    for (auto attr : adaptor.getOperands())
+      result = result.concat(cast<ImmediateAttr>(attr).getValue());
+
+    return ImmediateAttr::get(getContext(), result);
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// SliceImmediateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SliceImmediateOp::verify() {
+  auto srcWidth = getInput().getType().getWidth();
+  auto dstWidth = getResult().getType().getWidth();
+
+  if (getLowBit() >= srcWidth)
+    return emitOpError("from bit too large for input (got ")
+           << getLowBit() << ", but input width is " << srcWidth << ")";
+
+  if (srcWidth - getLowBit() < dstWidth)
+    return emitOpError("slice does not fit in input (trying to extract ")
+           << dstWidth << " bits starting at index " << getLowBit()
+           << ", but only " << (srcWidth - getLowBit())
+           << " bits are available)";
+
+  return success();
+}
+
+OpFoldResult SliceImmediateOp::fold(FoldAdaptor adaptor) {
+  if (auto inputAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getInput())) {
+    auto resultWidth = getType().getWidth();
+    APInt sliced = inputAttr.getValue().extractBits(resultWidth, getLowBit());
+    return ImmediateAttr::get(getContext(), sliced);
+  }
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

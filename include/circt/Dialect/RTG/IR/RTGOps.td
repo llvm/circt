@@ -727,6 +727,10 @@ def TestOp : RTGOp<"test", [
     The arguments must match the fields of the dict type in the target attribute
     exactly. The test must not have any additional arguments and cannot be
     referenced by an `rtg.get_sequence` operation.
+
+    If the end of the test is reached without executing an `rtg.test.success`
+    or `rtg.test.failure` it is as if an `rtg.test.success` is executed at the
+    very end.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$templateName,
@@ -736,6 +740,19 @@ def TestOp : RTGOp<"test", [
   let hasCustomAssemblyFormat = 1;
   let hasRegionVerifier = 1;
   let hasVerifier = 1;
+}
+
+def TestSuccessOp : RTGOp<"test.success", []> {
+  let summary = "exit the test and report success";
+
+  let assemblyFormat = "attr-dict";
+}
+
+def TestFailureOp : RTGOp<"test.failure", []> {
+  let summary = "exit the test and report failure";
+
+  let arguments = (ins StrAttr:$errorMessage);
+  let assemblyFormat = "$errorMessage attr-dict";
 }
 
 def TargetOp : RTGOp<"target", [
@@ -864,6 +881,46 @@ def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
   let results = (outs ImmediateType:$result);
 
   let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
+}
+
+def ConcatImmediateOp : RTGISAOp<"concat_immediate", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "concatenate immediates";
+  let description = [{
+    This operation concatenates a variadic number of immediates into a single
+    immediate. The operands are concatenated in order, with the first operand
+    becoming the most significant bits of the result.
+  }];
+
+  let arguments = (ins Variadic<ImmediateType>:$operands);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = "$operands `:` qualified(type($operands)) attr-dict";
+
+  let hasFolder = 1;
+}
+
+def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
+  let summary = "extract a slice from an immediate";
+  let description = [{
+    This operation extracts a contiguous slice of bits from an immediate value.
+    The slice is specified by a low bit index (inclusive) and the width of the
+    slice is determined by the result type. The slice must fit within the input
+    immediate's width.
+  }];
+
+  let arguments = (ins ImmediateType:$input, I32Attr:$lowBit);
+  let results = (outs ImmediateType:$result);
+
+  let assemblyFormat = [{
+    $input `from` $lowBit `:`
+    qualified(type($input)) `->` qualified(type($result)) attr-dict
+  }];
+  
+  let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 //===- ISA Memory Block Operations ----------------------------------------===//

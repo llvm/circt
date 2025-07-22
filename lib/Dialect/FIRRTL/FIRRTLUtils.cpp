@@ -1030,20 +1030,16 @@ Type circt::firrtl::lowerType(
   }
   if (auto fenum = type_dyn_cast<FEnumType>(firType)) {
     mlir::SmallVector<hw::UnionType::FieldInfo, 8> hwfields;
-    SmallVector<Attribute> names;
     bool simple = true;
     for (auto element : fenum) {
       Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});
-      names.push_back(element.name);
-      if (!isa<UIntType>(element.type) ||
-          element.type.getBitWidthOrSentinel() != 0)
+      if (element.type.getBitWidthOrSentinel() != 0)
         simple = false;
     }
-    auto tagTy = hw::EnumType::get(type.getContext(),
-                                   ArrayAttr::get(type.getContext(), names));
+    auto tagTy = IntegerType::get(type.getContext(), fenum.getTagWidth());
     if (simple)
       return tagTy;
     auto bodyTy = hw::UnionType::get(type.getContext(), hwfields);

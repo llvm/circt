@@ -41,14 +41,11 @@ void ESIDialect::initialize() {
 
 Operation *ESIDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
-  // Integer constants.
-  if (auto intType = dyn_cast<IntegerType>(type))
-    if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return builder.create<hw::ConstantOp>(loc, attrValue.getType(),
-                                            attrValue);
   if (isa<mlir::UnitAttr>(value))
     return builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
-  return nullptr;
+  return builder.getContext()
+      ->getOrLoadDialect<hw::HWDialect>()
+      ->materializeConstant(builder, value, type, loc);
 }
 
 // Provide implementations for the enums we use.

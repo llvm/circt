@@ -1688,6 +1688,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AggregateConstantOp op);
   LogicalResult visitExpr(IsTagOp op);
   LogicalResult visitExpr(SubtagOp op);
+  LogicalResult visitExpr(TagExtractOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) {
     if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
@@ -2423,87 +2424,81 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
 ///
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.
-Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
-  assert(type_isa<FIRRTLBaseType>(value.getType()) &&
-         type_isa<FIRRTLBaseType>(destType) &&
-         "input/output value should be FIRRTL");
+Value FIRRTLLowering::getLoweredAndExtendedValue(Value src, Type target) {
+  auto srcType = cast<FIRRTLBaseType>(src.getType());
+  auto dstType = cast<FIRRTLBaseType>(target);
+  auto loweredSrc = getLoweredValue(src);
 
   // We only know how to extend integer types with known width.
-  auto destWidth = type_cast<FIRRTLBaseType>(destType).getBitWidthOrSentinel();
-  if (destWidth == -1)
+  auto dstWidth = dstType.getBitWidthOrSentinel();
+  if (dstWidth == -1)
     return {};
 
-  auto result = getLoweredValue(value);
-  if (!result) {
+  // Handle zero width FIRRTL values which have been removed.
+  if (!loweredSrc) {
     // If this was a zero bit operand being extended, then produce a zero of
     // the right result type.  If it is just a failure, fail.
-    if (!isZeroBitFIRRTLType(value.getType()))
+    if (!isZeroBitFIRRTLType(src.getType()))
       return {};
     // Zero bit results have to be returned as null.  The caller can handle
     // this if they want to.
-    if (destWidth == 0)
+    if (dstWidth == 0)
       return {};
     // Otherwise, FIRRTL semantics is that an extension from a zero bit value
     // always produces a zero value in the destination width.
-    return getOrCreateIntConstant(destWidth, 0);
+    return getOrCreateIntConstant(dstWidth, 0);
   }
 
-  if (destWidth ==
-      cast<FIRRTLBaseType>(value.getType()).getBitWidthOrSentinel()) {
+  auto loweredSrcType = loweredSrc.getType();
+  auto loweredDstType = lowerType(dstType);
+
+  // If the two types are the same we do not have to extend.
+  if (loweredSrcType == loweredDstType)
+    return loweredSrc;
+
+  // Handle type aliases.
+  if (dstWidth == srcType.getBitWidthOrSentinel()) {
     // Lookup the lowered type of dest.
-    auto loweredDstType = lowerType(destType);
-    if (result.getType() != loweredDstType &&
-        (isa<hw::TypeAliasType>(result.getType()) ||
+    if (loweredSrcType != loweredDstType &&
+        (isa<hw::TypeAliasType>(loweredSrcType) ||
          isa<hw::TypeAliasType>(loweredDstType))) {
-      return builder.createOrFold<hw::BitcastOp>(loweredDstType, result);
+      return builder.createOrFold<hw::BitcastOp>(loweredDstType, loweredSrc);
     }
   }
-  // Aggregates values
-  if (isa<hw::ArrayType, hw::StructType>(result.getType())) {
-    // Types already match.
-    if (destType == value.getType())
-      return result;
 
-    return getExtOrTruncAggregateValue(
-        result, type_cast<FIRRTLBaseType>(value.getType()),
-        type_cast<FIRRTLBaseType>(destType),
-        /* allowTruncate */ false);
-  }
+  // Aggregates values.
+  if (isa<hw::ArrayType, hw::StructType>(loweredSrcType))
+    return getExtOrTruncAggregateValue(loweredSrc, srcType, dstType,
+                                       /* allowTruncate */ false);
 
-  if (isa<seq::ClockType>(result.getType())) {
-    // Types already match.
-    if (destType == value.getType())
-      return result;
+  if (isa<seq::ClockType>(loweredSrcType)) {
     builder.emitError("cannot use clock type as an integer");
     return {};
   }
 
-  auto intResultType = dyn_cast<IntegerType>(result.getType());
-  if (!intResultType) {
+  auto intSourceType = dyn_cast<IntegerType>(loweredSrcType);
+  if (!intSourceType) {
     builder.emitError("operand of type ")
-        << result.getType() << " cannot be used as an integer";
+        << loweredSrcType << " cannot be used as an integer";
     return {};
   }
 
-  auto srcWidth = intResultType.getWidth();
-  if (srcWidth == unsigned(destWidth))
-    return result;
+  auto loweredSrcWidth = intSourceType.getWidth();
+  if (loweredSrcWidth == unsigned(dstWidth))
+    return loweredSrc;
 
-  if (srcWidth > unsigned(destWidth)) {
+  if (loweredSrcWidth > unsigned(dstWidth)) {
     builder.emitError("operand should not be a truncation");
     return {};
   }
 
-  auto resultType = builder.getIntegerType(destWidth);
-
-  // Extension follows the sign of the source value, not the destination.
-  auto valueFIRType =
-      type_cast<FIRRTLBaseType>(value.getType()).getPassiveType();
+  // Extension follows the sign of the src value, not the destination.
+  auto valueFIRType = type_cast<FIRRTLBaseType>(src.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(result, resultType, builder);
+    return comb::createOrFoldSExt(loweredSrc, loweredDstType, builder);
 
-  auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
-  return builder.createOrFold<comb::ConcatOp>(zero, result);
+  auto zero = getOrCreateIntConstant(dstWidth - loweredSrcWidth, 0);
+  return builder.createOrFold<comb::ConcatOp>(zero, loweredSrc);
 }
 
 /// Return the lowered value corresponding to the specified original value and
@@ -3228,20 +3223,22 @@ LogicalResult FIRRTLLowering::visitExpr(FEnumCreateOp op) {
 
   auto input = getLoweredValue(op.getInput());
   auto tagName = op.getFieldNameAttr();
-  auto type = lowerType(op.getType());
+  auto oldType = op.getType().base();
+  auto newType = lowerType(oldType);
+  auto element = *oldType.getElement(op.getFieldNameAttr());
 
-  if (auto structType = dyn_cast<hw::StructType>(type)) {
-    auto enumType = structType.getFieldType("tag");
-    auto enumAttr = hw::EnumFieldAttr::get(op.getLoc(), tagName, enumType);
-    auto enumOp = builder.create<hw::EnumConstantOp>(enumAttr);
-    auto unionType = structType.getFieldType("body");
-    auto unionOp = builder.create<hw::UnionCreateOp>(unionType, tagName, input);
-    SmallVector<Value> operands = {enumOp.getResult(), unionOp.getResult()};
+  if (auto structType = dyn_cast<hw::StructType>(newType)) {
+    auto tagType = structType.getFieldType("tag");
+    auto tagValue = IntegerAttr::get(tagType, element.value.getValue());
+    auto tag = builder.create<sv::LocalParamOp>(op.getLoc(), tagType, tagValue,
+                                                tagName);
+    auto bodyType = structType.getFieldType("body");
+    auto body = builder.create<hw::UnionCreateOp>(bodyType, tagName, input);
+    SmallVector<Value> operands = {tag.getResult(), body.getResult()};
     return setLoweringTo<hw::StructCreateOp>(op, structType, operands);
   }
-
-  return setLoweringTo<hw::EnumConstantOp>(
-      op, hw::EnumFieldAttr::get(op.getLoc(), tagName, type));
+  auto tagValue = IntegerAttr::get(newType, element.value.getValue());
+  return setLoweringTo<sv::LocalParamOp>(op, newType, tagValue, tagName);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
@@ -3254,13 +3251,23 @@ LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(IsTagOp op) {
+
   auto tagName = op.getFieldNameAttr();
   auto lhs = getLoweredValue(op.getInput());
   if (isa<hw::StructType>(lhs.getType()))
     lhs = builder.create<hw::StructExtractOp>(lhs, "tag");
-  auto enumField = hw::EnumFieldAttr::get(op.getLoc(), tagName, lhs.getType());
-  auto rhs = builder.create<hw::EnumConstantOp>(enumField);
-  return setLoweringTo<hw::EnumCmpOp>(op, lhs, rhs);
+
+  auto index = op.getFieldIndex();
+  auto enumType = op.getInput().getType().base();
+  auto tagValue = enumType.getElementValueAttr(index);
+  auto tagValueType = IntegerType::get(op.getContext(), enumType.getTagWidth());
+  auto loweredTagValue = IntegerAttr::get(tagValueType, tagValue.getValue());
+  auto rhs = builder.create<sv::LocalParamOp>(op.getLoc(), tagValueType,
+                                              loweredTagValue, tagName);
+
+  Type resultType = builder.getIntegerType(1);
+  return setLoweringTo<comb::ICmpOp>(op, resultType, ICmpPredicate::eq, lhs,
+                                     rhs, true);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
@@ -3272,6 +3279,26 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
   auto input = getLoweredValue(op.getInput());
   auto field = builder.create<hw::StructExtractOp>(input, "body");
   return setLoweringTo<hw::UnionExtractOp>(op, field, tagName);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(TagExtractOp op) {
+  // Zero width values must be lowered to nothing.
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getLoweredValue(op.getInput());
+  if (!input)
+    return failure();
+
+  // If the lowered enum is a struct (has both tag and body), extract the tag
+  // field.
+  if (isa<hw::StructType>(input.getType())) {
+    return setLoweringTo<hw::StructExtractOp>(op, input, "tag");
+  }
+
+  // If the lowered enum is just the tag (simple enum with no data), return it
+  // directly.
+  return setLowering(op, input);
 }
 
 //===----------------------------------------------------------------------===//

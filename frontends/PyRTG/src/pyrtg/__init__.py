@@ -4,7 +4,7 @@
 
 from . import tests
 from . import core
-from .tests import test, embed_comment
+from .tests import test, embed_comment, report_success, report_failure
 from .labels import Label, LabelType
 from .rtg import rtg
 from .rtgtest import rtgtest
@@ -14,7 +14,7 @@ from .sets import Set, SetType
 from .integers import Integer, IntegerType, Bool, BoolType
 from .bags import Bag, BagType
 from .sequences import sequence, Sequence, SequenceType, RandomizedSequence, RandomizedSequenceType
-from .configs import config, Param, Config
+from .configs import config, Param, PythonParam, Config
 from .immediates import Immediate, ImmediateType
 from .resources import IntegerRegister, IntegerRegisterType
 from .arrays import Array, ArrayType

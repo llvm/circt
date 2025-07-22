@@ -335,9 +335,65 @@ circuit circuit:
 FIRRTL version 4.0.0
 circuit circuit:
   public module circuit :
+    input in: {a: UInt, a: UInt} ; expected-error {{duplicate field name in bundle: a}}
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit circuit:
+  public module circuit :
     input in: UInt<80>
     inst xyz of circuit
     node n = xyz.foo   ; expected-error {{use of invalid field name 'foo' on bundle value}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A : {flip a: UInt<1>}|} ; expected-error {{enum field "A" not passive}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A : Analog|} ; expected-error {{enum field "A" contains analog}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A : UInt|} ; expected-error {{enum field "A" has uninferred width}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A : Reset|} ; expected-error {{enum field "A" has uninferred reset}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A, A|} ; expected-error {{duplicate variant name in enum: A}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A, B = 0|} ; expected-error {{duplicate variant value in enum: 0 : ui0}}
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit circuit:
+  public module circuit :
+    input in: {|A = -1|} ; expected-error {{enum tag value must be non-negative}}
 
 ;// -----
 

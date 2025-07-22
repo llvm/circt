@@ -53,6 +53,8 @@ struct Object {
   Object &prependPaths(circt::igraph::InstancePathCache &cache,
                        circt::igraph::InstancePath path);
 
+  StringAttr getName() const;
+
   circt::igraph::InstancePath instancePath;
   Value value;
   size_t bitPos;
@@ -116,7 +118,7 @@ public:
   // FanOut can be either an internal circuit object or a module output port
   // This flexibility allows representing both closed paths
   // (register-to-register) and open paths (register-to-output) in a unified way
-  using OutputPort = std::pair<size_t, size_t>;
+  using OutputPort = std::tuple<hw::HWModuleOp, size_t, size_t>;
   using FanOutType = std::variant<Object, OutputPort>;
 
   // Constructor for paths with Object fanout (internal circuit nodes)
@@ -309,4 +311,5 @@ struct DenseMapInfo<circt::aig::Object> {
   }
 };
 } // namespace llvm
+
 #endif // CIRCT_ANALYSIS_AIG_ANALYSIS_H

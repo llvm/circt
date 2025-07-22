@@ -227,7 +227,6 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         }
         return success();
       })
-      .Case<FEnumType>([&](FEnumType fenum) { return failure(); })
       .Default([&](FIRRTLType type) {
         // Properties and other types wind up here.
         newPorts.push_back(

@@ -87,19 +87,24 @@ deduplicatePathsImpl(SmallVectorImpl<T> &results, size_t startIndex,
                      llvm::function_ref<Key(const T &)> keyFn,
                      llvm::function_ref<int64_t(const T &)> delayFn) {
   // Take only maximum for each path destination.
-  DenseMap<Key, size_t> saved;
-  for (auto [i, path] :
-       llvm::enumerate(ArrayRef(results).drop_front(startIndex))) {
-    auto &slot = saved[keyFn(path)];
-    if (slot == 0) {
-      slot = startIndex + i + 1;
+  DenseMap<Key, size_t> keyToIndex;
+  for (size_t i = startIndex; i < results.size(); ++i) {
+    auto &path = results[i];
+    auto key = keyFn(path);
+    auto delay = delayFn(path);
+    auto it = keyToIndex.find(key);
+    if (it == keyToIndex.end()) {
+      // Insert a new entry.
+      size_t newIndex = keyToIndex.size() + startIndex;
+      keyToIndex[key] = newIndex;
+      results[newIndex] = std::move(results[i]);
       continue;
     }
-    if (delayFn(results[slot - 1]) < delayFn(path))
-      results[slot - 1] = path;
+    if (delay > delayFn(results[it->second]))
+      results[it->second] = std::move(results[i]);
   }
 
-  results.resize(saved.size() + startIndex);
+  results.resize(keyToIndex.size() + startIndex);
 }
 
 static void deduplicatePaths(SmallVectorImpl<OpenPath> &results,
@@ -194,8 +199,8 @@ static void printObjectImpl(llvm::raw_ostream &os, const Object &object,
   std::string pathString;
   llvm::raw_string_ostream osPath(pathString);
   object.instancePath.print(osPath);
-  os << "Object(" << pathString << "." << getNameImpl(object.value).getValue()
-     << "[" << object.bitPos << "]";
+  os << "Object(" << pathString << "." << object.getName().getValue() << "["
+     << object.bitPos << "]";
   if (delay != -1)
     os << ", delay=" << delay;
   if (!history.isEmpty()) {
@@ -225,12 +230,14 @@ void DebugPoint::print(llvm::raw_ostream &os) const {
 
 void Object::print(llvm::raw_ostream &os) const { printObjectImpl(os, *this); }
 
+StringAttr Object::getName() const { return getNameImpl(value); }
+
 void DataflowPath::printFanOut(llvm::raw_ostream &os) {
   if (auto *object = std::get_if<Object>(&fanOut)) {
     object->print(os);
   } else {
-    auto &[resultNumber, bitPos] =
-        *std::get_if<std::pair<size_t, size_t>>(&fanOut);
+    auto &[module, resultNumber, bitPos] =
+        *std::get_if<DataflowPath::OutputPort>(&fanOut);
     auto outputPortName = root.getOutputName(resultNumber);
     os << "Object($root." << outputPortName << "[" << bitPos << "])";
   }
@@ -297,7 +304,9 @@ Location DataflowPath::getFanOutLoc() {
     return object->value.getLoc();
 
   // Return output port location.
-  return root.getOutputLoc(std::get<std::pair<size_t, size_t>>(fanOut).first);
+  auto &[module, resultNumber, bitPos] =
+      *std::get_if<DataflowPath::OutputPort>(&fanOut);
+  return module.getOutputLoc(resultNumber);
 }
 
 //===----------------------------------------------------------------------===//
@@ -318,7 +327,7 @@ static llvm::json::Value toJSON(const circt::igraph::InstancePath &path) {
 static llvm::json::Value toJSON(const circt::aig::Object &object) {
   return llvm::json::Object{
       {"instance_path", toJSON(object.instancePath)},
-      {"name", getNameImpl(object.value).getValue()},
+      {"name", object.getName().getValue()},
       {"bit_pos", object.bitPos},
   };
 }
@@ -329,7 +338,8 @@ static llvm::json::Value toJSON(const DataflowPath::FanOutType &path,
   if (auto *object = std::get_if<circt::aig::Object>(&path))
     return toJSON(*object);
 
-  auto &[resultNumber, bitPos] = *std::get_if<std::pair<size_t, size_t>>(&path);
+  auto &[module, resultNumber, bitPos] =
+      *std::get_if<DataflowPath::OutputPort>(&path);
   return llvm::json::Object{
       {"instance_path", {}}, // Instance path is empty for output ports.
       {"name", root.getOutputName(resultNumber)},
@@ -1282,9 +1292,10 @@ LogicalResult LongestPathAnalysis::Impl::getOpenPathsFromInternalToOutputPorts(
     for (auto [point, delayAndHistory] : value) {
       auto [path, start, startBitPos] = point;
       auto [delay, history] = delayAndHistory;
-      results.emplace_back(std::make_pair(resultNum, bitPos),
-                           OpenPath(path, start, startBitPos, delay, history),
-                           visitor->getHWModuleOp());
+      results.emplace_back(
+          std::make_tuple(visitor->getHWModuleOp(), resultNum, bitPos),
+          OpenPath(path, start, startBitPos, delay, history),
+          visitor->getHWModuleOp());
     }
   }
 

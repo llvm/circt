@@ -13,7 +13,7 @@ circuit RegUnderInlineLayer:
     input data: UInt<1>
     output probe: Probe<UInt<1>, A>
 
-    ; CHECK: `ifdef layer_RegUnderInlineLayer$A
+    ; CHECK: `ifdef layer$A
     ; CHECK:   reg  myreg;
     ; CHECK:   wire myreg_probe = myreg;
     ; CHECK:   always @(posedge clock) begin
@@ -22,14 +22,14 @@ circuit RegUnderInlineLayer:
     ; CHECK:     else
     ; CHECK:       myreg <= data;
     ; CHECK:   end // always @(posedge)
-    ; CHECK: `endif // layer_RegUnderInlineLayer$A
+    ; CHECK: `endif // layer$A
 
     ; CHECK: initial begin
     ; CHECK:   automatic logic [31:0] _RANDOM[0:0];
     ; CHECK:   _RANDOM[/*Zero width*/ 1'b0] = `RANDOM;
-    ; CHECK:   `ifdef layer_RegUnderInlineLayer$A
+    ; CHECK:   `ifdef layer$A
     ; CHECK:     RegUnderInlineLayer.myreg = _RANDOM[/*Zero width*/ 1'b0][0];
-    ; CHECK:   `endif // layer_RegUnderInlineLayer$A
+    ; CHECK:   `endif // layer$A
     ; CHECK:    end // initial
     layerblock A:
       regreset myreg : UInt<1>, clock, reset, UInt<1>(0)
@@ -52,8 +52,8 @@ circuit RegUnderInlineLayer:
     input data: UInt<1>
     output probe: Probe<UInt<1>, A.B>
 
-    ; CHECK: `ifdef layer_RegUnderInlineLayer$A
-    ; CHECK:   `ifdef layer_RegUnderInlineLayer$A$B
+    ; CHECK: `ifdef layer$A
+    ; CHECK:   `ifdef layer$A$B
     ; CHECK:     reg  myreg;
     ; CHECK:     wire myreg_probe = myreg;
     ; CHECK:     always @(posedge clock) begin
@@ -62,17 +62,17 @@ circuit RegUnderInlineLayer:
     ; CHECK:       else
     ; CHECK:         myreg <= data;
     ; CHECK:     end // always @(posedge)
-    ; CHECK:   `endif // layer_RegUnderInlineLayer$A$B
-    ; CHECK: `endif // layer_RegUnderInlineLayer$A
+    ; CHECK:   `endif // layer$A$B
+    ; CHECK: `endif // layer$A
 
     ; CHECK: initial begin
     ; CHECK:   automatic logic [31:0] _RANDOM[0:0];
     ; CHECK:   _RANDOM[/*Zero width*/ 1'b0] = `RANDOM;
-    ; CHECK:   `ifdef layer_RegUnderInlineLayer$A
-    ; CHECK:     `ifdef layer_RegUnderInlineLayer$A$B
+    ; CHECK:   `ifdef layer$A
+    ; CHECK:     `ifdef layer$A$B
     ; CHECK:       RegUnderInlineLayer.myreg = _RANDOM[/*Zero width*/ 1'b0][0];
-    ; CHECK:     `endif // layer_RegUnderInlineLayer$A$B
-    ; CHECK:   `endif // layer_RegUnderInlineLayer$A
+    ; CHECK:     `endif // layer$A$B
+    ; CHECK:   `endif // layer$A
     ; CHECK:    end // initial
     layerblock A:
       layerblock B:
@@ -94,7 +94,7 @@ circuit RegUnderInlineLayer:
   ; the register and its initialization.
 
   ; CHECK: module RegUnderInlineLayer_A();
-  ; CHECK:   `ifdef layer_RegUnderInlineLayer$A$B
+  ; CHECK:   `ifdef layer$A$B
   ; CHECK:     reg  myreg;
   ; CHECK:     wire myreg_probe = myreg;
   ; CHECK:     always @(posedge RegUnderInlineLayer.clock) begin
@@ -103,14 +103,14 @@ circuit RegUnderInlineLayer:
   ; CHECK:       else
   ; CHECK:         myreg <= RegUnderInlineLayer.data;
   ; CHECK:     end // always @(posedge)
-  ; CHECK:   `endif // layer_RegUnderInlineLayer$A$B
+  ; CHECK:   `endif // layer$A$B
   ; CHECK:     initial begin
   ; CHECK:       automatic logic [31:0] _RANDOM[0:0];
   ; CHECK:       `ifdef RANDOMIZE_REG_INIT
   ; CHECK:         _RANDOM[/*Zero width*/ 1'b0] = `RANDOM;
-  ; CHECK:         `ifdef layer_RegUnderInlineLayer$A$B
+  ; CHECK:         `ifdef layer$A$B
   ; CHECK:           RegUnderInlineLayer_A.myreg = _RANDOM[/*Zero width*/ 1'b0][0];
-  ; CHECK:         `endif // layer_RegUnderInlineLayer$A$B
+  ; CHECK:         `endif // layer$A$B
   ; CHECK:       `endif // RANDOMIZE_REG_INIT
   ; CHECK:     end // initial
   ; CHECK: endmodule

@@ -802,20 +802,50 @@ ParseResult FIRParser::parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
   return success();
 }
 
-/// enum-field ::= Id ( ':' type )? ;
+/// enum-field ::= Id ( '=' int )? ( ':' type )? ;
 /// enum-type  ::= '{|' enum-field* '|}'
 ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
   if (parseToken(FIRToken::l_brace_bar,
                  "expected leading '{|' in enumeration type"))
     return failure();
-  SmallVector<FEnumType::EnumElement> elements;
+  SmallVector<StringAttr> names;
+  SmallVector<APInt> values;
+  SmallVector<FIRRTLBaseType> types;
+  SmallVector<SMLoc> locs;
   if (parseListUntil(FIRToken::r_brace_bar, [&]() -> ParseResult {
         auto fieldLoc = getToken().getLoc();
+        locs.push_back(fieldLoc);
 
         // Parse the name of the tag.
-        StringRef name;
-        if (parseId(name, "expected valid identifier for enumeration tag"))
+        StringRef nameStr;
+        if (parseId(nameStr, "expected valid identifier for enumeration tag"))
           return failure();
+        auto name = StringAttr::get(getContext(), nameStr);
+        names.push_back(name);
+
+        // Parse the integer value if it exists. If its the first element of the
+        // enum, it implicitly has a value of 0, otherwise it has the previous
+        // value + 1.
+        APInt value;
+        if (consumeIf(FIRToken::equal)) {
+          if (parseIntLit(value, "expected integer value for enumeration tag"))
+            return failure();
+          if (value.isNegative())
+            return emitError(fieldLoc, "enum tag value must be non-negative");
+        } else if (values.empty()) {
+          // This is the first enum variant, so it defaults to 0.
+          value = APInt(1, 0);
+        } else {
+          // This value is not specified, so it defaults to the previous value
+          // + 1.
+          auto &prev = values.back();
+          if (prev.isMaxValue())
+            value = prev.zext(prev.getBitWidth() + 1);
+          else
+            value = prev;
+          ++value;
+        }
+        values.push_back(std::move(value));
 
         // Parse an optional type ascription.
         FIRRTLBaseType type;
@@ -830,10 +860,52 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
           // If there is no type specified, default to UInt<0>.
           type = UIntType::get(getContext(), 0);
         }
-        elements.emplace_back(StringAttr::get(getContext(), name), type);
+        types.push_back(type);
+
+        auto r = type.getRecursiveTypeProperties();
+        if (!r.isPassive)
+          return emitError(fieldLoc) << "enum field " << name << " not passive";
+        if (r.containsAnalog)
+          return emitError(fieldLoc)
+                 << "enum field " << name << " contains analog";
+        if (r.hasUninferredWidth)
+          return emitError(fieldLoc)
+                 << "enum field " << name << " has uninferred width";
+        if (r.hasUninferredReset)
+          return emitError(fieldLoc)
+                 << "enum field " << name << " has uninferred reset";
         return success();
       }))
     return failure();
+
+  // Verify that the names of each variant are unique.
+  SmallPtrSet<StringAttr, 4> nameSet;
+  for (auto [name, loc] : llvm::zip(names, locs))
+    if (!nameSet.insert(name).second)
+      return emitError(loc,
+                       "duplicate variant name in enum: " + name.getValue());
+
+  // Find the bitwidth of the enum.
+  unsigned bitwidth = 0;
+  for (auto &value : values)
+    bitwidth = std::max(bitwidth, value.getActiveBits());
+  auto tagType =
+      IntegerType::get(getContext(), bitwidth, IntegerType::Unsigned);
+
+  // Extend all tag values to the same width, and check that they are all
+  // unique.
+  SmallPtrSet<IntegerAttr, 4> valueSet;
+  SmallVector<FEnumType::EnumElement, 4> elements;
+  for (auto [name, value, type, loc] : llvm::zip(names, values, types, locs)) {
+    auto tagValue = value.zextOrTrunc(bitwidth);
+    auto attr = IntegerAttr::get(tagType, tagValue);
+    // Verify that the names of each variant are unique.
+    if (!valueSet.insert(attr).second)
+      return emitError(loc, "duplicate variant value in enum: ") << attr;
+    elements.push_back({name, attr, type});
+  }
+
+  llvm::sort(elements);
   result = FEnumType::get(getContext(), elements);
   return success();
 }
@@ -1020,20 +1092,28 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::l_brace);
 
     SmallVector<OpenBundleType::BundleElement, 4> elements;
+    SmallPtrSet<StringAttr, 4> nameSet;
     bool bundleCompatible = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
-          StringRef fieldName;
-          FIRRTLType type;
-          if (parseFieldId(fieldName, "expected bundle field name") ||
+          auto loc = getToken().getLoc();
+          StringRef fieldNameStr;
+          if (parseFieldId(fieldNameStr, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle"))
             return failure();
+          auto fieldName = StringAttr::get(getContext(), fieldNameStr);
+
+          // Verify that the names of each field are unique.
+          if (!nameSet.insert(fieldName).second)
+            return emitError(loc, "duplicate field name in bundle: " +
+                                      fieldName.getValue());
+
+          FIRRTLType type;
           if (parseType(type, "expected bundle field type"))
             return failure();
 
-          elements.push_back(
-              {StringAttr::get(getContext(), fieldName), isFlipped, type});
+          elements.push_back({fieldName, isFlipped, type});
           bundleCompatible &= isa<BundleType::ElementType>(type);
 
           return success();
@@ -1361,15 +1441,10 @@ namespace {
 /// This struct provides context information that is global to the module we're
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
-  explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
+  explicit FIRModuleContext(Block *topLevelBlock,
+                            SharedParserConstants &constants, FIRLexer &lexer,
                             FIRVersion version)
-      : FIRParser(constants, lexer, version) {}
-
-  // The expression-oriented nature of firrtl syntax produces tons of constant
-  // nodes which are obviously redundant.  Instead of literally producing them
-  // in the parser, do an implicit CSE to reduce parse time and silliness in the
-  // resulting IR.
-  llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+      : FIRParser(constants, lexer, version), topLevelBlock(topLevelBlock) {}
 
   /// Get a cached constant.
   template <typename OpTy = ConstantOp, typename... Args>
@@ -1383,12 +1458,22 @@ struct FIRModuleContext : public FIRParser {
     // dominance.
     OpBuilder::InsertPoint savedIP;
 
-    auto *parentOp = builder.getInsertionBlock()->getParentOp();
-    if (!isa<FModuleLike>(parentOp)) {
+    // Find the insertion point.
+    if (builder.getInsertionBlock() != topLevelBlock) {
       savedIP = builder.saveInsertionPoint();
-      while (!isa<FModuleLike>(parentOp)) {
-        builder.setInsertionPoint(parentOp);
-        parentOp = builder.getInsertionBlock()->getParentOp();
+      auto *block = builder.getInsertionBlock();
+      while (true) {
+        auto *op = block->getParentOp();
+        if (!op || !op->getBlock()) {
+          // We are inserting into an unknown region.
+          builder.setInsertionPointToEnd(topLevelBlock);
+          break;
+        }
+        if (op->getBlock() == topLevelBlock) {
+          builder.setInsertionPoint(op);
+          break;
+        }
+        block = op->getBlock();
       }
     }
 
@@ -1494,6 +1579,15 @@ struct FIRModuleContext : public FIRParser {
   };
 
 private:
+  /// The top level block in which we insert cached constants.
+  Block *topLevelBlock;
+
+  /// The expression-oriented nature of firrtl syntax produces tons of constant
+  /// nodes which are obviously redundant.  Instead of literally producing them
+  /// in the parser, do an implicit CSE to reduce parse time and silliness in
+  /// the resulting IR.
+  llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+
   /// This symbol table holds the names of ports, wires, and other local decls.
   /// This is scoped because conditional statements introduce subscopes.
   ModuleSymbolTable symbolTable;
@@ -2081,8 +2175,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   switch (kind) {
     // Handle all primitive's.
-#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS, NUMATTRIBUTES)        \
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS, NUMATTRIBUTES,        \
+                           VERSION, FEATURE)                                   \
   case FIRToken::lp_##SPELLING:                                                \
+    if (requireFeature(VERSION, FEATURE))                                      \
+      return failure();                                                        \
     if (parsePrimExp<CLASS, NUMOPERANDS, NUMATTRIBUTES>(result))               \
       return failure();                                                        \
     break;
@@ -2506,14 +2603,6 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   Type attrType =
       IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
   auto attr = builder.getIntegerAttr(attrType, value);
-
-  // Check to see if we've already created this constant.  If so, reuse it.
-  auto &entry = moduleContext.constantCache[{attr, type}];
-  if (entry) {
-    // If we already had an entry, reuse it.
-    result = entry;
-    return success();
-  }
 
   locationProcessor.setLoc(loc);
   result = moduleContext.getCachedConstant(builder, attr, type, attr);
@@ -6035,7 +6124,8 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
   // Reset the parser/lexer state back to right after the port list.
   deferredModule.lexerCursor.restore(moduleBodyLexer);
 
-  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer, version);
+  FIRModuleContext moduleContext(&body, getConstants(), moduleBodyLexer,
+                                 version);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.

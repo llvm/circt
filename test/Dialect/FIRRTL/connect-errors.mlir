@@ -389,9 +389,9 @@ firrtl.module @test(in %a: !firrtl.enum<a: uint<1>>, out %b: !firrtl.enum<a: uin
 // Check that different data types causes the enumeration to not match.
 
 firrtl.circuit "test"  {
-firrtl.module @test(in %a: !firrtl.enum<a: uint<0>>, out %b: !firrtl.enum<b: uint<0>>) {
-  // expected-error @below {{type mismatch between destination '!firrtl.enum<b: uint<0>>' and source '!firrtl.enum<a: uint<0>>'}}
-  firrtl.connect %b, %a : !firrtl.enum<b: uint<0>>, !firrtl.enum<a: uint<0>>
+firrtl.module @test(in %a: !firrtl.enum<a>, out %b: !firrtl.enum<b>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<b>' and source '!firrtl.enum<a>'}}
+  firrtl.connect %b, %a : !firrtl.enum<b>, !firrtl.enum<a>
 }
 }
 

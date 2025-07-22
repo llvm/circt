@@ -12,6 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/Path.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/Support/FileUtilities.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
 using namespace circt;
@@ -28,4 +31,28 @@ void circt::appendPossiblyAbsolutePath(llvm::SmallVectorImpl<char> &base,
   } else {
     llvm::sys::path::append(base, suffix);
   }
+}
+
+std::unique_ptr<llvm::ToolOutputFile>
+circt::createOutputFile(StringRef filename, StringRef dirname,
+                        function_ref<InFlightDiagnostic()> emitError) {
+  // Determine the output path from the output directory and filename.
+  SmallString<128> outputFilename(dirname);
+  appendPossiblyAbsolutePath(outputFilename, filename);
+  auto outputDir = llvm::sys::path::parent_path(outputFilename);
+
+  // Create the output directory if needed.
+  std::error_code error = llvm::sys::fs::create_directories(outputDir);
+  if (error) {
+    emitError() << "cannot create output directory \"" << outputDir
+                << "\": " << error.message();
+    return {};
+  }
+
+  // Open the output file.
+  std::string errorMessage;
+  auto output = mlir::openOutputFile(outputFilename, &errorMessage);
+  if (!output)
+    emitError() << errorMessage;
+  return output;
 }

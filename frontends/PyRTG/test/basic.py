@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -446,6 +446,45 @@ def test91_sets(config):
   seq2(Set.cartesian_product(config.a, config.b))
   int_consumer(config.c.to_set().get_random())
   int_consumer(config.a.to_bag().get_random())
+
+
+# MLIR-LABEL: rtg.target @PythonParams : !rtg.dict<xlen_64: !rtg.tuple>
+# MLIR-NEXT: [[TUP:%.+]] = rtg.tuple_create
+# MLIR-NEXT: rtg.yield [[TUP]] : !rtg.tuple
+
+
+@config
+class PythonParams(Config):
+  xlen = PythonParam(64)
+
+
+# MLIR-LABEL: rtg.test @test92_python_params
+# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "python_64"
+# MLIR-NEXT: rtg.label local [[LBL]]
+
+
+@test(PythonParams)
+def test92_python_params(config):
+  Label.declare("python_" + str(config.xlen)).place()
+
+
+# MLIR-LABEL: rtg.test @test93_immediate_ops
+# MLIR-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<4, 4>
+# MLIR: rtg.substitute_sequence {{%.+}}([[IMM]]) : !rtg.sequence<!rtg.isa.immediate<4>>
+
+
+@sequence([ImmediateType(4)])
+def immediate_consumer(imm: Immediate):
+  pass
+
+
+@test(Singleton)
+def test93_immediate_ops(config):
+  imm1 = Immediate(12, 8)
+  imm2 = Immediate(8, 4)
+  concat = Immediate.concat(imm1, imm2, imm2)
+  slice = concat[8:12]
+  immediate_consumer(slice)
 
 
 # MLIR-LABEL: rtg.sequence @seq0

@@ -4,12 +4,36 @@
 
 from __future__ import annotations
 
-from .core import CodeGenRoot, Type
+from .core import CodeGenRoot, Type, Value
 from .base import ir
 from .rtg import rtg
+from .tuples import Tuple, TupleType
 
 
-class Param:
+class ParamBase:
+
+  def get_name(self) -> str:
+    """Get the name of the parameter to be used in the config dictionary"""
+
+    raise NotImplementedError("must be implemented by subclass")
+
+  def get_type(self) -> Type:
+    """IR type of the parameter"""
+
+    raise NotImplementedError("must be implemented by subclass")
+
+  def get_original_name(self) -> str:
+    """The original name the user used to define the parameter"""
+
+    raise NotImplementedError("must be implemented by subclass")
+
+  def load_and_get_value(self) -> Value:
+    """Get an IR Value representing this parameter"""
+
+    raise NotImplementedError("must be implemented by subclass")
+
+
+class Param(ParamBase):
   """
   This class represents a configuration parameter. An instance of this class
   should be added as an attribute to a config class (i.e., a class that
@@ -33,9 +57,11 @@ class Param:
   will be used as the name.
   """
 
-  def __init__(self, **kwargs) -> Param:
+  def __init__(self, **kwargs):
     if "value" in kwargs:
       self._value = kwargs["value"]
+      if not isinstance(self._value, Value):
+        raise TypeError("value must be an instance of Value")
 
     if "loader" in kwargs:
       self._loader = kwargs["loader"]
@@ -54,10 +80,65 @@ class Param:
 
     return self._value.get_type()
 
+  def load_and_get_value(self) -> Value:
+    if not hasattr(self, "_value"):
+      self._value = self._loader()
+
+    return self._value
+
   def get_name(self) -> str:
     if not hasattr(self, "_name"):
       raise AttributeError(
-          "name can only be accesses after the config has been loaded")
+          "name inference failed, must provide name explicitly")
+
+    return self._name
+
+  def get_original_name(self) -> str:
+    if not hasattr(self, "_name"):
+      raise AttributeError(
+          "name inference failed, must provide name explicitly")
+
+    return self._name
+
+
+class PythonParam(ParamBase):
+  """
+  This class represents a configuration parameter of a Python type.
+  If config A inherits from config B and config B defines a PythonParam, the
+  value of that PythonParam cannot be overriden in config A.
+  """
+
+  def __init__(self, value, **kwargs):
+    self._value = value
+    if "name" in kwargs:
+      self._name = kwargs["name"]
+
+    if "uniquification_tag" in kwargs:
+      self._uniquification_tag = kwargs["uniquification_tag"]
+
+  def get_type(self):
+    return TupleType([])
+
+  def get_value(self):
+    return self._value
+
+  def load_and_get_value(self):
+    return Tuple.create()
+
+  def get_name(self) -> str:
+    if hasattr(self, "_uniquification_tag"):
+      return self._uniquification_tag
+
+    if not hasattr(self, "_name"):
+      raise AttributeError(
+          "name inference failed, must provide name explicitly")
+
+    return self._name + "_" + str(self._value)
+
+  def get_original_name(self) -> str:
+    if not hasattr(self, "_name"):
+      raise AttributeError(
+          "name inference failed, must provide name explicitly")
 
     return self._name
 
@@ -70,7 +151,7 @@ def config(cls):
 
   inst = cls()
   for attr_name, attr in cls.__dict__.items():
-    if isinstance(attr, Param):
+    if isinstance(attr, ParamBase):
       setattr(inst, attr_name, attr)
   inst._name = cls.__name__
   return inst
@@ -82,14 +163,14 @@ class Config(CodeGenRoot):
   characteristics of a specific test target.
   """
 
-  def get_params(self) -> list[Param]:
+  def get_params(self) -> list[ParamBase]:
     if not self._already_generated:
       raise RuntimeError(
           "can only get params once the config has been generated")
 
     params = []
     for attr_name, attr in self.__dict__.items():
-      if isinstance(attr, Param):
+      if isinstance(attr, ParamBase):
         if not hasattr(attr, "_name"):
           attr._name = attr_name
         params.append(attr)
@@ -107,12 +188,8 @@ class Config(CodeGenRoot):
         self.load()
 
       params = self.get_params()
-      for param in params:
-        if not hasattr(param, "_value"):
-          param._value = param._loader()
-
       params.sort(key=lambda param: param.get_name())
-      rtg.YieldOp([param._value for param in params])
+      rtg.YieldOp([param.load_and_get_value() for param in params])
 
       dict_entries = [(ir.StringAttr.get(param.get_name()),
                        param.get_type()._codegen()) for param in params]

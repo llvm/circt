@@ -6,6 +6,7 @@ from .base import ir
 from .core import CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .support import _FromCirctValue
+from .configs import PythonParam
 
 from types import SimpleNamespace
 
@@ -42,7 +43,9 @@ class Test(CodeGenRoot):
         [param.get_type()._codegen() for param in params_sorted])
     new_config = []
     for param, arg in zip(params_sorted, block.arguments):
-      new_config.append((param.get_name(), _FromCirctValue(arg)))
+      new_config.append(
+          (param.get_original_name(), param.get_value() if isinstance(
+              param, PythonParam) else _FromCirctValue(arg)))
 
     with ir.InsertionPoint(block):
       self.test_func(SimpleNamespace(new_config))
@@ -65,3 +68,19 @@ def embed_comment(comment: str) -> None:
   """
 
   rtg.CommentOp(comment)
+
+
+def report_success() -> None:
+  """
+  Exit this test and report a success.
+  """
+
+  rtg.TestSuccessOp()
+
+
+def report_failure(message: str) -> None:
+  """
+  Exit this test and report a failure with the provided error message.
+  """
+
+  rtg.TestFailureOp(message)

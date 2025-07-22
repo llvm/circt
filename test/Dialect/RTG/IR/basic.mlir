@@ -236,3 +236,22 @@ rtg.test @validation() {
   // CHECK: rtg.validate [[V0]], [[V1]], "some_id" ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %5:3 = rtg.validate %0, %1, "some_id" (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
 }
+// CHECK-LABEL: @immediateOps
+rtg.test @immediateOps() {
+  // CHECK: rtg.isa.concat_immediate {{.*}}, {{.*}} : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
+  %0 = rtg.constant #rtg.isa.immediate<4, 15>
+  %1 = rtg.constant #rtg.isa.immediate<8, 175>
+  %2 = rtg.isa.concat_immediate %0, %1 : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
+
+  // CHECK: rtg.isa.slice_immediate {{.*}} from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
+  %3 = rtg.constant #rtg.isa.immediate<8, 175>
+  %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
+}
+
+// CHECK-LABEL: rtg.test @testReportOps
+rtg.test @testReportOps() {
+  // CHECK-NEXT: rtg.test.success
+  rtg.test.success
+  // CHECK-NEXT: rtg.test.failure "error message"
+  rtg.test.failure "error message"
+}

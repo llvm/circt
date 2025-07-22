@@ -143,7 +143,7 @@ void SFCCompatPass::runOnOperation() {
             .Case<IntType>([&](IntType type) -> Value {
               return builder.create<ConstantOp>(type, getIntZerosAttr(type));
             })
-            .Case<BundleType, FVectorType>([&](auto type) -> Value {
+            .Case<FEnumType, BundleType, FVectorType>([&](auto type) -> Value {
               auto width = circt::firrtl::getBitWidth(type);
               assert(width && "width must be inferred");
               auto zero = builder.create<ConstantOp>(APSInt(*width));
