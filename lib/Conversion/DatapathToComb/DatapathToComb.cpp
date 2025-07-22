@@ -79,11 +79,9 @@ struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
     // TODO - implement a more efficient compression algorithm to compete with
     // yosys's `alumacc` lowering - a coarse grained timing model would help to
     // sort the inputs according to arrival time.
-    auto falseValue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
     auto targetAddends = op.getNumResults();
-    rewriter.replaceOp(op,
-                       comb::wallaceReduction(falseValue, width, targetAddends,
-                                              rewriter, loc, addends));
+    rewriter.replaceOp(op, comb::wallaceReduction(rewriter, loc, width,
+                                                  targetAddends, addends));
     return success();
   }
 };
@@ -95,9 +93,8 @@ struct DatapathPartialProductOpConversion
   matchAndRewrite(PartialProductOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    auto inputs = op.getOperands();
-    Value a = inputs[0];
-    Value b = inputs[1];
+    Value a = op.getLhs();
+    Value b = op.getRhs();
     unsigned width = a.getType().getIntOrFloatBitWidth();
 
     // Skip a zero width value.
@@ -164,7 +161,7 @@ private:
     for (unsigned i = 0; i < width; i += 2) {
       // Get Booth bits: b[i+1], b[i], b[i-1] (b[-1] = 0)
       Value bim1 = (i == 0) ? zeroFalse : bBits[i - 1];
-      Value bi = (i < width) ? bBits[i] : zeroFalse;
+      Value bi = bBits[i];
       Value bip1 = (i + 1 < width) ? bBits[i + 1] : zeroFalse;
 
       // Is the encoding zero or negative (an approximation)

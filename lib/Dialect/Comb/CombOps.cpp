@@ -217,16 +217,15 @@ Value comb::createInject(OpBuilder &builder, Location loc, Value value,
 }
 
 // Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> comb::fullAdder(ConversionPatternRewriter &rewriter,
-                                        Location loc, Value a, Value b,
-                                        Value c) {
-  auto aXorB = rewriter.createOrFold<comb::XorOp>(loc, a, b, true);
-  Value sum = rewriter.createOrFold<comb::XorOp>(loc, aXorB, c, true);
+std::pair<Value, Value> comb::fullAdder(OpBuilder &builder, Location loc,
+                                        Value a, Value b, Value c) {
+  auto aXorB = builder.createOrFold<comb::XorOp>(loc, a, b, true);
+  Value sum = builder.createOrFold<comb::XorOp>(loc, aXorB, c, true);
 
-  auto carry = rewriter.createOrFold<comb::OrOp>(
+  auto carry = builder.createOrFold<comb::OrOp>(
       loc,
-      ArrayRef<Value>{rewriter.createOrFold<comb::AndOp>(loc, a, b, true),
-                      rewriter.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
+      ArrayRef<Value>{builder.createOrFold<comb::AndOp>(loc, a, b, true),
+                      builder.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
       true);
 
   return {sum, carry};
@@ -235,9 +234,10 @@ std::pair<Value, Value> comb::fullAdder(ConversionPatternRewriter &rewriter,
 // Perform Wallace tree reduction on partial products.
 // See https://en.wikipedia.org/wiki/Wallace_tree
 SmallVector<Value>
-comb::wallaceReduction(Value falseValue, size_t width, size_t targetAddends,
-                       ConversionPatternRewriter &rewriter, Location loc,
+comb::wallaceReduction(OpBuilder &builder, Location loc, size_t width,
+                       size_t targetAddends,
                        SmallVector<SmallVector<Value>> &addends) {
+  auto falseValue = builder.create<hw::ConstantOp>(loc, APInt(1, 0));
   SmallVector<SmallVector<Value>> newAddends;
   newAddends.reserve(addends.size());
   // Continue reduction until we have only two rows. The length of
@@ -264,7 +264,7 @@ comb::wallaceReduction(Value falseValue, size_t width, size_t targetAddends,
         for (unsigned j = 0; j < width; ++j) {
           // Full adder logic
           auto [sum, carry] =
-              comb::fullAdder(rewriter, loc, row1[j], row2[j], row3[j]);
+              comb::fullAdder(builder, loc, row1[j], row2[j], row3[j]);
           sumRow.push_back(sum);
           if (j + 1 < width)
             carryRow.push_back(carry);
@@ -282,14 +282,14 @@ comb::wallaceReduction(Value falseValue, size_t width, size_t targetAddends,
 
   assert(addends.size() <= targetAddends);
   SmallVector<Value> carrySave;
-  for (auto addend : addends) {
+  for (auto &addend : addends) {
     // Reverse the order of the bits
     std::reverse(addend.begin(), addend.end());
-    carrySave.push_back(rewriter.create<comb::ConcatOp>(loc, addend));
+    carrySave.push_back(builder.create<comb::ConcatOp>(loc, addend));
   }
 
   // Pad with zeros
-  auto zero = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+  auto zero = builder.create<hw::ConstantOp>(loc, APInt(width, 0));
   while (carrySave.size() < targetAddends)
     carrySave.push_back(zero);
 

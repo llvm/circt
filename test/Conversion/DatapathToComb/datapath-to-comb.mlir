@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --convert-datapath-to-comb | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-datapath-to-comb{lower-compress-to-add=true}))" | FileCheck %s --check-prefix=ALLOW_ADD
 
 // CHECK-LABEL: @compressor
 hw.module @compressor(in %a : i2, in %b : i2, in %c : i2, out carry : i2, out save : i2) {
@@ -25,6 +26,16 @@ hw.module @compressor(in %a : i2, in %b : i2, in %c : i2, out carry : i2, out sa
   hw.output %0#0, %0#1 : i2, i2
 }
 
+// CHECK-LABEL: @compressor_add
+// TO-ADD-LABEL: @compressor_add
+// TO-ADD-NEXT: %[[ADD:.+]] = comb.add bin %a, %b, %c : i2
+// TO-ADD-NEXT: %c0_i2 = hw.constant 0 : i2
+// TO-ADD-NEXT: hw.output %c0_i2, %[[ADD]] : i2, i2
+hw.module @compressor_add(in %a : i2, in %b : i2, in %c : i2, out carry : i2, out save : i2) {
+  %0:2 = datapath.compress %a, %b, %c : i2 [3 -> 2]
+  hw.output %0#0, %0#1 : i2, i2
+}
+
 // CHECK-LABEL: @partial_product
 hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
   // CHECK-NEXT: %[[B0:.+]] = comb.extract %b from 0 : (i3) -> i1
@@ -44,4 +55,18 @@ hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, o
   // CHECK-NEXT: comb.shl %[[PP2]], %c2_i3 : i3
   %0:3 = datapath.partial_product %a, %b : (i3, i3) -> (i3, i3, i3)
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
+}
+
+// CHECK-LABEL: @partial_product_24
+hw.module @partial_product_24(in %a : i24, in %b : i24, out sum : i24) {
+  %0:24 = datapath.partial_product %a, %b : (i24, i24) -> (i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24)
+  %1 = comb.add bin %0#0, %0#1, %0#2, %0#3, %0#4, %0#5, %0#6, %0#7, %0#8, %0#9, %0#10, %0#11, %0#12, %0#13, %0#14, %0#15, %0#16, %0#17, %0#18, %0#19, %0#20, %0#21, %0#22, %0#23 : i24
+  hw.output %1 : i24
+}
+
+// CHECK-LABEL: @partial_product_25
+hw.module @partial_product_25(in %a : i25, in %b : i25, out sum : i25) {
+  %0:25 = datapath.partial_product %a, %b : (i25, i25) -> (i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25, i25)
+  %1 = comb.add bin %0#0, %0#1, %0#2, %0#3, %0#4, %0#5, %0#6, %0#7, %0#8, %0#9, %0#10, %0#11, %0#12, %0#13, %0#14, %0#15, %0#16, %0#17, %0#18, %0#19, %0#20, %0#21, %0#22, %0#23 : i25
+  hw.output %1 : i25
 }
