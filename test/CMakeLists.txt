@@ -26,6 +26,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-rtg-pipelines-test
   circt-capi-rtg-test
   circt-capi-rtgtest-test
+  circt-capi-support-test
   circt-as
   circt-bmc
   circt-dis
