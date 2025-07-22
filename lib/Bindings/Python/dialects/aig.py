@@ -2,11 +2,10 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from . import aig
+from . import aig, hw
 from ._aig_ops_gen import *
-from .._mlir_libs._circt._aig import _LongestPathAnalysis, _LongestPathCollection
+from .._mlir_libs._circt._aig import _LongestPathAnalysis, _LongestPathCollection, _LongestPathDataflowPath, _LongestPathHistory, _LongestPathObject
 
-import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 
@@ -16,7 +15,7 @@ from typing import Any, Dict, List, Union
 
 
 @dataclass
-class InstancePathElement:
+class Instance:
   """
     Represents a single element in a hierarchical instance path.
     In hardware design, modules are instantiated hierarchically. This class
@@ -26,15 +25,18 @@ class InstancePathElement:
         instance_name: The name of this specific instance
         module_name: The type/name of the module being instantiated
     """
+  _instance: hw.InstanceOp
 
-  instance_name: str
-  module_name: str
+  def __init__(self, instance: hw.InstanceOp):
+    self._instance = instance
 
-  @classmethod
-  def from_dict(cls, data: Dict[str, Any]) -> "InstancePathElement":
-    """Create an InstancePathElement from a dictionary representation."""
-    return cls(instance_name=data["instance_name"],
-               module_name=data["module_name"])
+  @property
+  def instance_name(self) -> str:
+    return self._instance.attributes["instanceName"].value
+
+  @property
+  def module_name(self) -> str:
+    return self._instance.attributes["moduleName"].value
 
 
 @dataclass
@@ -50,9 +52,7 @@ class Object:
         bit_pos: Bit position for multi-bit signals (0 for single-bit)
     """
 
-  instance_path: List[InstancePathElement]
-  name: str
-  bit_pos: int
+  _object: _LongestPathObject
 
   # TODO: Associate with an MLIR value/op
 
@@ -65,15 +65,25 @@ class Object:
                     for elem in self.instance_path)
     return f"{path} {self.name}[{self.bit_pos}]"
 
-  @classmethod
-  def from_dict(cls, data: Dict[str, Any]) -> "Object":
-    """Create an Object from a dictionary representation."""
-    instance_path = [
-        InstancePathElement.from_dict(elem) for elem in data["instance_path"]
-    ]
-    return cls(instance_path=instance_path,
-               name=data["name"],
-               bit_pos=data["bit_pos"])
+  def __repr__(self) -> str:
+    return f"Object({self.instance_path}, {self.name}, {self.bit_pos})"
+
+  @property
+  def instance_path(self) -> List[Instance]:
+    """Get the hierarchical instance path to this object."""
+    operations = self._object.instance_path
+
+    return [Instance(op) for op in operations]
+
+  @property
+  def name(self) -> str:
+    """Get the name of this signal/port."""
+    return self._object.name
+
+  @property
+  def bit_pos(self) -> int:
+    """Get the bit position for multi-bit signals."""
+    return self._object.bit_pos
 
 
 @dataclass
@@ -104,34 +114,6 @@ class DebugPoint:
 
 
 @dataclass
-class OpenPath:
-  """
-    Represents an open timing path with detailed history.
-    An open path represents a timing path that hasn't reached its final
-    destination yet. It contains the current fan-in point, accumulated delay,
-    and a history of debug points showing how the signal propagated.
-    Attributes:
-        fan_in: The input signal/object where this path segment begins
-        delay: Total accumulated delay for this path segment
-        history: Chronological list of debug points along the path
-    """
-
-  fan_in: Object
-  delay: int
-  history: List[DebugPoint]
-
-  @classmethod
-  def from_dict(cls, data: Dict[str, Any]) -> "OpenPath":
-    """Create an OpenPath from a dictionary representation."""
-    history = [DebugPoint.from_dict(point) for point in data["history"]]
-    return cls(
-        fan_in=Object.from_dict(data["fan_in"]),
-        delay=data["delay"],
-        history=history,
-    )
-
-
-@dataclass
 class DataflowPath:
   """
     Represents a complete dataflow path from fan-out to fan-in.
@@ -144,43 +126,32 @@ class DataflowPath:
         root: The root module name for this analysis
     """
 
-  fan_out: Object  # Output endpoint of the path
-  path: OpenPath  # Detailed path information with history
-  root: str  # Root module name
-
-  # ========================================================================
-  # Factory Methods for Object Creation
-  # ========================================================================
-
-  @classmethod
-  def from_dict(cls, data: Dict[str, Any]) -> "DataflowPath":
-    """Create a DataflowPath from a dictionary representation."""
-    return cls(
-        fan_out=Object.from_dict(data["fan_out"]),
-        path=OpenPath.from_dict(data["path"]),
-        root=data["root"],
-    )
-
-  @classmethod
-  def from_json_string(cls, json_str: str) -> "DataflowPath":
-    """Create a DataflowPath from a JSON string representation."""
-    data = json.loads(json_str)
-    return cls.from_dict(data)
+  _path: _LongestPathDataflowPath
 
   @property
   def delay(self) -> int:
     """Get the total delay of this path in timing units."""
-    return self.path.delay
+    return self._path.delay
 
   @property
-  def fan_in(self) -> "DataflowPath":
+  def fan_in(self) -> Object:
     """Get the input signal/object where this path begins."""
-    return self.path.fan_in
+    return Object(self._path.fan_in)
+
+  @property
+  def fan_out(self) -> Object:
+    """Get the output signal/object where this path ends."""
+    return Object(self._path.fan_out)
 
   @property
   def history(self) -> List[DebugPoint]:
     """Get the history of debug points along this path."""
-    return self.path.history
+    return [i for i in LongestPathHistory(self._path.history)]
+
+  @property
+  def root(self) -> str:
+    """Get the root module name for this analysis."""
+    return self._path.root.attributes["sym_name"].value
 
   # ========================================================================
   # Visualization and Analysis Methods
@@ -244,7 +215,7 @@ class DataflowPath:
 
     # Add each level of the instance hierarchy
     for elem in obj.instance_path:
-      parts.append(f"{elem.module_name}:{elem.instance_name}")
+      parts.append(f"{elem.instance_name}:{elem.module_name}")
 
     # Add the signal name with bit position if applicable
     signal_part = obj.name
@@ -268,7 +239,6 @@ class LongestPathCollection:
     Attributes:
         collection: The underlying C++ collection object
         length: Number of paths in the collection
-        cache: Cache for parsed DataflowPath objects to avoid re-parsing JSON
     """
 
   def __init__(self, collection):
@@ -279,7 +249,6 @@ class LongestPathCollection:
         """
     self.collection = collection
     self.length = self.collection.get_size()
-    self.cache = [None for _ in range(self.length)]
 
   # ========================================================================
   # Collection Interface Methods
@@ -295,7 +264,6 @@ class LongestPathCollection:
     """
         Get a specific path from the collection by index.
         Supports both integer and slice indexing. Integer indices can be negative.
-        Results are cached to avoid expensive JSON parsing on repeated access.
 
         Args:
             index: Integer index or slice object to access paths
@@ -305,7 +273,7 @@ class LongestPathCollection:
 
         Raises:
             IndexError: If index is out of range
-        """
+    """
     if isinstance(index, slice):
       return [self[i] for i in range(*index.indices(len(self)))]
 
@@ -315,14 +283,7 @@ class LongestPathCollection:
     if index < 0 or index >= self.length:
       raise IndexError("Index out of range")
 
-    # Use cache to avoid expensive JSON parsing
-    if self.cache[index] is not None:
-      return self.cache[index]
-
-    # Parse JSON and cache the result
-    json_str = self.collection.get_path(index)
-    self.cache[index] = DataflowPath.from_json_string(json_str)
-    return self.cache[index]
+    return DataflowPath(self.collection.get_path(index))
 
   # ========================================================================
   # Analysis and Query Methods
@@ -387,7 +348,9 @@ class LongestPathAnalysis:
         """
     self.analysis = aig._LongestPathAnalysis(module, trace_debug_points)
 
-  def get_all_paths(self, module_name: str) -> LongestPathCollection:
+  def get_all_paths(self,
+                    module_name: str,
+                    elaborate_paths: bool = True) -> LongestPathCollection:
     """
         Perform longest path analysis and return all timing paths.
         This method analyzes the specified module and returns a collection
@@ -397,4 +360,24 @@ class LongestPathAnalysis:
         Returns:
             LongestPathCollection containing all paths sorted by delay
         """
-    return LongestPathCollection(self.analysis.get_all_paths(module_name, True))
+    return LongestPathCollection(
+        self.analysis.get_all_paths(module_name, elaborate_paths))
+
+
+@dataclass
+class LongestPathHistory:
+  """
+    Represents the history of a timing path, including intermediate debug points.
+    This class provides a Python wrapper around the C++ LongestPathHistory,
+    enabling iteration over the path's history and access to debug points.
+    Attributes:
+        history: The underlying C++ history object
+    """
+  history: _LongestPathHistory
+
+  def __iter__(self):
+    """Iterate over the debug points in the history."""
+    while not self.history.empty:
+      object, delay, comment = self.history.head
+      yield DebugPoint(Object(object), delay, comment)
+      self.history = self.history.tail

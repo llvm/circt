@@ -42,14 +42,14 @@ void testLongestPathAnalysis(void) {
 
   // clang-format off
   const char *moduleStr =
-      "hw.module private @ch(in %c : !seq.clock, in %a: i1, out x: i1) {\n"
-      "  %p = seq.compreg %q, %c : i1\n"
-      "  %q = aig.and_inv %p, %p {sv.namehint = \"q\"}: i1\n"
-      "  hw.output %p: i1\n"
+      "hw.module private @ch(in %c : !seq.clock, in %a: i2, out x: i2) {\n"
+      "  %p = seq.compreg %q, %c : i2\n"
+      "  %q = aig.and_inv %p, %p {sv.namehint = \"q\"}: i2\n"
+      "  hw.output %p: i2\n"
       "}\n"
-      "hw.module private @top(in %c : !seq.clock, in %a: i1) {\n"
-      "  %0 = hw.instance \"i1\" @ch(c: %c: !seq.clock, a: %a: i1) -> (x: i1)\n"
-      "  %1 = hw.instance \"i2\" @ch(c: %c: !seq.clock, a: %a: i1) -> (x: i1)\n"
+      "hw.module private @top(in %c : !seq.clock, in %a: i2) {\n"
+      "  %0 = hw.instance \"i2\" @ch(c: %c: !seq.clock, a: %a: i2) -> (x: i2)\n"
+      "  %1 = hw.instance \"i2\" @ch(c: %c: !seq.clock, a: %a: i2) -> (x: i2)\n"
       "}\n";
   // clang-format on
 
@@ -71,19 +71,78 @@ void testLongestPathAnalysis(void) {
 
     size_t pathCount = aigLongestPathCollectionGetSize(collection1);
     printf("Path count with elaboration: %zu\n", pathCount);
-    // CHECK: Path count with elaboration: 2
+    // CHECK: Path count with elaboration: 4
 
     pathCount = aigLongestPathCollectionGetSize(collection2);
     printf("Path count without elaboration: %zu\n", pathCount);
-    // CHECK: Path count without elaboration: 1
+    // CHECK: Path count without elaboration: 2
 
-    // Test getting individual paths
+    // Test DataflowPath API
+    if (pathCount > 0) {
+      AIGLongestPathDataflowPath path =
+          aigLongestPathCollectionGetDataflowPath(collection1, 0);
 
-    // Test multiple path access
-    MlirStringRef pathJson = aigLongestPathCollectionGetPath(collection1, 1);
-    printf("Path: %.*s\n", (int)pathJson.length, pathJson.data);
-    // CHECK: Path: {"fan_out":{"bit_pos":
-    // CHECK-SAME: "history":[{
+      int64_t delay = aigLongestPathDataflowPathGetDelay(path);
+      printf("Path delay: %lld\n", (long long)delay);
+      // CHECK: Path delay: 1
+
+      AIGLongestPathObject fanIn = aigLongestPathDataflowPathGetFanIn(path);
+      AIGLongestPathObject fanOut = aigLongestPathDataflowPathGetFanOut(path);
+
+      // Test Object API
+      MlirStringRef fanInName = aigLongestPathObjectName(fanIn);
+      MlirStringRef fanOutName = aigLongestPathObjectName(fanOut);
+      size_t fanInBitPos = aigLongestPathObjectBitPos(fanIn);
+      size_t fanOutBitPos = aigLongestPathObjectBitPos(fanOut);
+
+      printf("FanIn: %.*s[%zu]\n", (int)fanInName.length, fanInName.data,
+             fanInBitPos);
+      printf("FanOut: %.*s[%zu]\n", (int)fanOutName.length, fanOutName.data,
+             fanOutBitPos);
+      // CHECK: FanIn: p[[[BIT:[0-9]]]]
+      // CHECK: FanOut: p[[[BIT]]]
+
+      // Test instance path
+      IgraphInstancePath fanInPath = aigLongestPathObjectGetInstancePath(fanIn);
+      IgraphInstancePath fanOutPath =
+          aigLongestPathObjectGetInstancePath(fanOut);
+      printf("FanIn instance path size: %zu\n", fanInPath.size);
+      printf("FanOut instance path size: %zu\n", fanOutPath.size);
+      // CHECK: FanIn instance path size: 1
+      // CHECK: FanOut instance path size: 1
+
+      // Test History API
+      AIGLongestPathHistory history =
+          aigLongestPathDataflowPathGetHistory(path);
+      bool isEmpty = aigLongestPathHistoryIsEmpty(history);
+      printf("History is empty: %s\n", isEmpty ? "true" : "false");
+      // CHECK: History is empty: false
+
+      if (!isEmpty) {
+        AIGLongestPathObject historyObject;
+        int64_t historyDelay;
+        MlirStringRef historyComment;
+
+        aigLongestPathHistoryGetHead(history, &historyObject, &historyDelay,
+                                     &historyComment);
+        printf("History head delay: %lld\n", (long long)historyDelay);
+        printf("History head comment: %.*s\n", (int)historyComment.length,
+               historyComment.data);
+        // CHECK: History head delay: 1
+        // CHECK: History head comment: namehint
+
+        AIGLongestPathHistory tail = aigLongestPathHistoryGetTail(history);
+        bool tailIsEmpty = aigLongestPathHistoryIsEmpty(tail);
+        printf("History tail is empty: %s\n", tailIsEmpty ? "true" : "false");
+        // CHECK: History tail is empty: true
+      }
+
+      // Test root operation
+      MlirOperation root = aigLongestPathDataflowPathGetRoot(path);
+      printf("Root operation is null: %s\n",
+             mlirOperationIsNull(root) ? "true" : "false");
+      // CHECK: Root operation is null: false
+    }
 
     // Cleanup
     aigLongestPathCollectionDestroy(collection1);
@@ -103,9 +162,20 @@ void testLongestPathAnalysis(void) {
     AIGLongestPathCollection collection =
         aigLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
 
-    MlirStringRef pathJson = aigLongestPathCollectionGetPath(collection, 1);
-    printf("Path: %.*s\n", (int)pathJson.length, pathJson.data);
-    // CHECK: "history":[]
+    if (!aigLongestPathCollectionIsNull(collection)) {
+      size_t size = aigLongestPathCollectionGetSize(collection);
+      if (size > 1) {
+        AIGLongestPathDataflowPath path =
+            aigLongestPathCollectionGetDataflowPath(collection, 1);
+
+        AIGLongestPathHistory history =
+            aigLongestPathDataflowPathGetHistory(path);
+        bool isEmpty = aigLongestPathHistoryIsEmpty(history);
+        printf("History without debug points is empty: %s\n",
+               isEmpty ? "true" : "false");
+        // CHECK: History without debug points is empty: true
+      }
+    }
 
     // Cleanup
     aigLongestPathCollectionDestroy(collection);
@@ -146,17 +216,7 @@ void testErrorHandling(void) {
     printf("Invalid module name handling: PASS\n");
   }
 
-  MlirStringRef moduleName = mlirStringRefCreateFromCString("test");
-  AIGLongestPathCollection collection =
-      aigLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
-  MlirStringRef invalidPath = aigLongestPathCollectionGetPath(collection, 100);
-  if (invalidPath.length == 0) {
-    printf("Invalid path index handling: PASS\n");
-    // CHECK: Invalid path index handling: PASS
-  }
-
   // Cleanup
-  aigLongestPathCollectionDestroy(collection);
   aigLongestPathAnalysisDestroy(analysis);
   mlirModuleDestroy(module);
   mlirContextDestroy(ctx);

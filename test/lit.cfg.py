@@ -61,9 +61,10 @@ tools = [
     'arcilator', 'circt-as', 'circt-bmc', 'circt-capi-aig-test',
     'circt-capi-ir-test', 'circt-capi-om-test', 'circt-capi-firrtl-test',
     'circt-capi-firtool-test', 'circt-capi-rtg-pipelines-test',
-    'circt-capi-rtg-test', 'circt-capi-rtgtest-test', 'circt-dis', 'circt-lec',
-    'circt-reduce', 'circt-synth', 'circt-test', 'circt-translate', 'firld',
-    'firtool', 'hlstool', 'om-linker', 'kanagawatool'
+    'circt-capi-rtg-test', 'circt-capi-rtgtest-test', 'circt-capi-support-test',
+    'circt-dis', 'circt-lec', 'circt-reduce', 'circt-synth', 'circt-test',
+    'circt-translate', 'firld', 'firtool', 'hlstool', 'om-linker',
+    'kanagawatool'
 ]
 
 if "CIRCT_OPT_CHECK_IR_ROUNDTRIP" in os.environ:

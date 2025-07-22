@@ -9,6 +9,7 @@
 #ifndef CIRCT_C_DIALECT_AIG_H
 #define CIRCT_C_DIALECT_AIG_H
 
+#include "circt-c/Support/InstanceGraph.h"
 #include "mlir-c/IR.h"
 
 #ifdef __cplusplus
@@ -27,6 +28,15 @@ MLIR_CAPI_EXPORTED void registerAIGPasses(void);
 //===----------------------------------------------------------------------===//
 // LongestPathAnalysis
 //===----------------------------------------------------------------------===//
+
+// Opaque handle to LongestPathObject
+DEFINE_C_API_STRUCT(AIGLongestPathObject, void);
+
+// Opaque handle to LongestPathHistory
+DEFINE_C_API_STRUCT(AIGLongestPathHistory, void);
+
+// Opaque handle to LongestPathDataflowPath
+DEFINE_C_API_STRUCT(AIGLongestPathDataflowPath, void);
 
 // Opaque handle to LongestPathAnalysis
 DEFINE_C_API_STRUCT(AIGLongestPathAnalysis, void);
@@ -64,9 +74,57 @@ aigLongestPathCollectionDestroy(AIGLongestPathCollection collection);
 MLIR_CAPI_EXPORTED size_t
 aigLongestPathCollectionGetSize(AIGLongestPathCollection collection);
 
-// Get a specific path from the collection as JSON
-MLIR_CAPI_EXPORTED MlirStringRef aigLongestPathCollectionGetPath(
-    AIGLongestPathCollection collection, int pathIndex);
+// Get a specific path from the collection as DataflowPath object
+MLIR_CAPI_EXPORTED AIGLongestPathDataflowPath
+aigLongestPathCollectionGetDataflowPath(AIGLongestPathCollection collection,
+                                        size_t pathIndex);
+
+//===----------------------------------------------------------------------===//
+// DataflowPath API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED int64_t
+aigLongestPathDataflowPathGetDelay(AIGLongestPathDataflowPath dataflowPath);
+
+MLIR_CAPI_EXPORTED AIGLongestPathObject
+aigLongestPathDataflowPathGetFanIn(AIGLongestPathDataflowPath dataflowPath);
+
+MLIR_CAPI_EXPORTED AIGLongestPathObject
+aigLongestPathDataflowPathGetFanOut(AIGLongestPathDataflowPath dataflowPath);
+
+MLIR_CAPI_EXPORTED AIGLongestPathHistory
+aigLongestPathDataflowPathGetHistory(AIGLongestPathDataflowPath dataflowPath);
+
+MLIR_CAPI_EXPORTED MlirOperation
+aigLongestPathDataflowPathGetRoot(AIGLongestPathDataflowPath dataflowPath);
+
+//===----------------------------------------------------------------------===//
+// History API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool
+aigLongestPathHistoryIsEmpty(AIGLongestPathHistory history);
+
+MLIR_CAPI_EXPORTED void
+aigLongestPathHistoryGetHead(AIGLongestPathHistory history,
+                             AIGLongestPathObject *object, int64_t *delay,
+                             MlirStringRef *comment);
+
+MLIR_CAPI_EXPORTED AIGLongestPathHistory
+aigLongestPathHistoryGetTail(AIGLongestPathHistory history);
+
+//===----------------------------------------------------------------------===//
+// Object API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED IgraphInstancePath
+aigLongestPathObjectGetInstancePath(AIGLongestPathObject object);
+
+MLIR_CAPI_EXPORTED MlirStringRef
+aigLongestPathObjectName(AIGLongestPathObject object);
+
+MLIR_CAPI_EXPORTED size_t
+aigLongestPathObjectBitPos(AIGLongestPathObject object);
 
 #ifdef __cplusplus
 }
