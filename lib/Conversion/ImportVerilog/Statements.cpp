@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/Compilation.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -258,6 +259,7 @@ struct StmtVisitor {
 
   /// Handle case statements.
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
+    using slang::ast::AttributeSymbol;
     using slang::ast::CaseStatementCondition;
     auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
     if (!caseExpr)
@@ -335,6 +337,12 @@ struct StmtVisitor {
       }
     }
 
+    const auto caseStmtAttrs = context.compilation.getAttributes(caseStmt);
+    const bool hasFullCaseAttr =
+        llvm::find_if(caseStmtAttrs, [](const AttributeSymbol *attr) {
+          return attr->name == "full_case";
+        }) != caseStmtAttrs.end();
+
     // Check if the case statement looks exhaustive assuming two-state values.
     // We use this information to work around a common bug in input Verilog
     // where a case statement enumerates all possible two-state values of the
@@ -369,7 +377,13 @@ struct StmtVisitor {
     // If the case statement is exhaustive assuming two-state values, don't
     // generate the default case. Instead, branch to the last match block. This
     // will essentially make the last case item the "default".
-    if (twoStateExhaustive && lastMatchBlock &&
+    //
+    // Alternatively, if the case statement has an (* full_case *) attribute
+    // but no default case, it indicates that the developer has intentionally
+    // covered all known possible values. Hence, the last match block is
+    // treated as the implicit "default" case.
+    if ((twoStateExhaustive || (hasFullCaseAttr && !caseStmt.defaultCase)) &&
+        lastMatchBlock &&
         caseStmt.condition == CaseStatementCondition::Normal) {
       builder.create<mlir::cf::BranchOp>(loc, lastMatchBlock);
     } else {
