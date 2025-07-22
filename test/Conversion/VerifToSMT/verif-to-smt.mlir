@@ -85,6 +85,14 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 
   verif.lec first {
   ^bb0(%arg1: i32):
+    verif.yield
+  } second {
+  ^bb0(%arg1: i32):
+    verif.yield
+  }
+
+  verif.lec first {
+  ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
   } second {
   ^bb0(%arg2: i32):
