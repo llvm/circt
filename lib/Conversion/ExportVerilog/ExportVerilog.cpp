@@ -2599,7 +2599,6 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      SubExprSignRequirement signRequirement,
                                      bool isSelfDeterminedUnsignedValue,
                                      bool isAssignmentLikeContext) {
-
   // `verif.contract` ops act as no-ops.
   if (auto result = dyn_cast<OpResult>(exp))
     if (auto contract = dyn_cast<verif::ContractOp>(result.getOwner()))
