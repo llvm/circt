@@ -203,6 +203,17 @@ firrtl.module @ElementwiseMixedConstOperandsNonConstResult(in %a: !firrtl.const.
 }
 
 // Mux result is const when all inputs are const.
+// CHECK: firrtl.module @MuxConstConditionConstEnumsConstResult(in %p: !firrtl.const.uint<1>, 
+firrtl.module @MuxConstConditionConstEnumsConstResult(in %p: !firrtl.const.uint<1>, 
+                                                        in %a: !firrtl.const.enum<a: const.uint<1>>, 
+                                                        in %b: !firrtl.const.enum<a: uint<1>>) {
+  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
+                                 !firrtl.const.enum<a: const.uint<1>>, 
+                                 !firrtl.const.enum<a: uint<1>>) 
+                                  -> !firrtl.const.enum<a: uint<1>>
+}
+
+// Mux result is const when all inputs are const.
 firrtl.module @MuxConstConditionConstBundlesConstResult(in %p: !firrtl.const.uint<1>, 
                                                         in %a: !firrtl.const.bundle<a: uint<1>>, 
                                                         in %b: !firrtl.const.bundle<a: uint<1>>) {
