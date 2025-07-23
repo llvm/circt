@@ -154,6 +154,40 @@ struct ArrayGetOpConversion : OpConversionPattern<ArrayGetOp> {
   }
 };
 
+/// Lower a hw::ArrayInjectOp operation to smt::ArrayStoreOp.
+struct ArrayInjectOpConversion : OpConversionPattern<ArrayInjectOp> {
+  using OpConversionPattern<ArrayInjectOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    unsigned numElements =
+        cast<hw::ArrayType>(op.getInput().getType()).getNumElements();
+
+    Type arrType = typeConverter->convertType(op.getType());
+    if (!arrType)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unsupported array type");
+
+    // Check if the index is within bounds
+    Value numElementsVal = rewriter.create<mlir::smt::BVConstantOp>(
+        loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
+    Value inBounds =
+        rewriter.create<mlir::smt::BVCmpOp>(loc, mlir::smt::BVCmpPredicate::ule,
+                                            adaptor.getIndex(), numElementsVal);
+
+    // Store the element at the given index
+    Value stored = rewriter.create<mlir::smt::ArrayStoreOp>(
+        loc, adaptor.getInput(), adaptor.getIndex(), adaptor.getElement());
+
+    // Return the original array if out of bounds, otherwise return the new
+    // array
+    rewriter.replaceOpWithNewOp<mlir::smt::IteOp>(op, inBounds, stored,
+                                                  adaptor.getInput());
+    return success();
+  }
+};
+
 /// Remove redundant (seq::FromClock and seq::ToClock) ops.
 template <typename OpTy>
 struct ReplaceWithInput : OpConversionPattern<OpTy> {
@@ -291,7 +325,8 @@ void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,
   patterns.add<HWConstantOpConversion, HWModuleOpConversion, OutputOpConversion,
                InstanceOpConversion, ReplaceWithInput<seq::ToClockOp>,
                ReplaceWithInput<seq::FromClockOp>, ArrayCreateOpConversion,
-               ArrayGetOpConversion>(converter, patterns.getContext());
+               ArrayGetOpConversion, ArrayInjectOpConversion>(
+      converter, patterns.getContext());
 }
 
 void ConvertHWToSMTPass::runOnOperation() {
