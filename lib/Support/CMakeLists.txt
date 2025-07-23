@@ -16,6 +16,7 @@ add_circt_library(CIRCTSupport
   JSON.cpp
   LoweringOptions.cpp
   Naming.cpp
+  NPNClass.cpp
   ParsingUtils.cpp
   Passes.cpp
   Path.cpp
