@@ -222,6 +222,132 @@ struct LogicEquivalenceCheckingOpConversion
   }
 };
 
+struct RefinementCheckingOpConversion
+    : CircuitRelationCheckOpConversion<verif::RefinementCheckingOp> {
+  using CircuitRelationCheckOpConversion<
+      verif::RefinementCheckingOp>::CircuitRelationCheckOpConversion;
+
+  LogicalResult
+  matchAndRewrite(verif::RefinementCheckingOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    // Find non-deterministic values (free variables) in the source circuit.
+    // For now, only support quantification over 'primitive' types.
+    SmallVector<Value> srcNonDetValues;
+    bool canBind = true;
+    for (auto ndOp : op.getFirstCircuit().getOps<smt::DeclareFunOp>()) {
+      if (!isa<smt::IntType, smt::BoolType, smt::BitVectorType>(
+              ndOp.getType())) {
+        ndOp.emitError("Uninterpreted function of non-primitive type cannot be "
+                       "converted.");
+        canBind = false;
+      }
+      srcNonDetValues.push_back(ndOp.getResult());
+    }
+    if (!canBind)
+      return failure();
+
+    if (srcNonDetValues.empty()) {
+      // If there is no non-determinism in the source circuit, the
+      // refinement check becomes an equivalence check, which does not
+      // need quantified expressions.
+      auto eqOp = rewriter.create<verif::LogicEquivalenceCheckingOp>(
+          op.getLoc(), op.getNumResults() != 0);
+      rewriter.moveBlockBefore(&op.getFirstCircuit().front(),
+                               &eqOp.getFirstCircuit(),
+                               eqOp.getFirstCircuit().end());
+      rewriter.moveBlockBefore(&op.getSecondCircuit().front(),
+                               &eqOp.getSecondCircuit(),
+                               eqOp.getSecondCircuit().end());
+      rewriter.replaceOp(op, eqOp);
+      return success();
+    }
+
+    Location loc = op.getLoc();
+    auto *firstOutputs = adaptor.getFirstCircuit().front().getTerminator();
+    auto *secondOutputs = adaptor.getSecondCircuit().front().getTerminator();
+
+    auto hasNoResult = op.getNumResults() == 0;
+
+    if (firstOutputs->getNumOperands() == 0) {
+      // Trivially equivalent
+      if (hasNoResult) {
+        rewriter.eraseOp(op);
+      } else {
+        Value trueVal =
+            rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        rewriter.replaceOp(op, trueVal);
+      }
+      return success();
+    }
+
+    // Solver will only return a result when it is used to check the returned
+    // value.
+    smt::SolverOp solver;
+    if (hasNoResult)
+      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
+    else
+      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
+                                              ValueRange{});
+    rewriter.createBlock(&solver.getBodyRegion());
+
+    // Convert the block arguments of the miter bodies.
+    if (failed(rewriter.convertRegionTypes(&adaptor.getFirstCircuit(),
+                                           *typeConverter)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&adaptor.getSecondCircuit(),
+                                           *typeConverter)))
+      return failure();
+
+    // Create the symbolic values we replace the block arguments with
+    SmallVector<Value> inputs;
+    for (auto arg : adaptor.getFirstCircuit().getArguments())
+      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
+
+    // Inline the target circuit. Free variables remain free variables.
+    rewriter.mergeBlocks(&adaptor.getSecondCircuit().front(), solver.getBody(),
+                         inputs);
+    rewriter.setInsertionPointToEnd(solver.getBody());
+
+    // Create the universally quantified expression containing the source
+    // circuit. Free variables in the circuit's body become bound variables.
+    auto forallOp = rewriter.create<smt::ForallOp>(
+        op.getLoc(), TypeRange(srcNonDetValues),
+        [&](OpBuilder &builder, auto, ValueRange args) -> Value {
+          // Inline the source circuit
+          Block *body = builder.getBlock();
+          rewriter.mergeBlocks(&adaptor.getFirstCircuit().front(), body,
+                               inputs);
+
+          // Replace non-deterministic values with the quantifier's bound
+          // variables
+          for (auto [freeVar, boundVar] : llvm::zip(srcNonDetValues, args))
+            rewriter.replaceOp(freeVar.getDefiningOp(), boundVar);
+
+          // Compare the output values
+          rewriter.setInsertionPointToEnd(body);
+          SmallVector<Value> outputsDifferent;
+          createOutputsDifferentOps(firstOutputs, secondOutputs, loc, rewriter,
+                                    outputsDifferent);
+          if (outputsDifferent.size() == 1)
+            return outputsDifferent[0];
+          else
+            return rewriter.createOrFold<smt::OrOp>(loc, outputsDifferent);
+        });
+
+    rewriter.eraseOp(firstOutputs);
+    rewriter.eraseOp(secondOutputs);
+
+    // Assert the quantified expression
+    rewriter.setInsertionPointAfter(forallOp);
+    rewriter.create<smt::AssertOp>(op.getLoc(), forallOp.getResult());
+
+    // Check for satisfiability and report the result back.
+    replaceOpWithSatCheck(op, loc, rewriter, solver);
+    return success();
+  }
+};
+
 /// Lower a verif::BMCOp operation to an MLIR program that performs the bounded
 /// model check
 struct VerifBoundedModelCheckingOpConversion
@@ -534,8 +660,9 @@ void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
                                                  Namespace &names,
                                                  bool risingClocksOnly) {
   patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
-               LogicEquivalenceCheckingOpConversion>(converter,
-                                                     patterns.getContext());
+               LogicEquivalenceCheckingOpConversion,
+               RefinementCheckingOpConversion>(converter,
+                                               patterns.getContext());
   patterns.add<VerifBoundedModelCheckingOpConversion>(
       converter, patterns.getContext(), names, risingClocksOnly);
 }
