@@ -2379,7 +2379,7 @@ private:
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
   SubExprInfo visitComb(MuxOp op);
-  SubExprInfo visitComb(ReverseOp op); 
+  SubExprInfo visitComb(ReverseOp op);
   SubExprInfo visitComb(AddOp op) {
     assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
     return emitBinary(op, Addition, "+");
@@ -3306,7 +3306,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   });
 }
 
-SubExprInfo ExprEmitter::visitComb(ReverseOp op){
+SubExprInfo ExprEmitter::visitComb(ReverseOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 

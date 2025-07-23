@@ -423,7 +423,8 @@ LogicalResult ConcatOp::inferReturnTypes(
 // ReverseOp
 //===----------------------------------------------------------------------===//
 
-// Folding of ReverseOp: if the input is constant, compute the reverse at compile time.
+// Folding of ReverseOp: if the input is constant, compute the reverse at
+// compile time.
 OpFoldResult comb::ReverseOp::fold(FoldAdaptor adaptor) {
   // Try to cast the input attribute to an IntegerAttr.
   auto cstInput = llvm::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getInput());
@@ -450,7 +451,7 @@ struct ReverseOfReverse : public OpRewritePattern<comb::ReverseOp> {
     return success();
   }
 };
-} 
+} // namespace
 
 void comb::ReverseOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                   MLIRContext *context) {
