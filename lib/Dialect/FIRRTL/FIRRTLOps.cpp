@@ -4863,8 +4863,7 @@ FIRRTLType SubaccessOp::inferReturnType(Type inType, Type indexType,
 FIRRTLType TagExtractOp::inferReturnType(FIRRTLType input,
                                          std::optional<Location> loc) {
   auto inType = type_cast<FEnumType>(input);
-  auto i = llvm::Log2_32_Ceil(inType.getNumElements());
-  return UIntType::get(inType.getContext(), i);
+  return UIntType::get(inType.getContext(), inType.getTagWidth());
 }
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
