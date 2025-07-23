@@ -710,14 +710,14 @@ bool FIRRTLType::isGround() {
       });
 }
 
-bool FIRRTLType::isConst() {
+bool FIRRTLType::isConst() const {
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<FIRRTLBaseType, OpenBundleType, OpenVectorType>(
           [](auto type) { return type.isConst(); })
       .Default(false);
 }
 
-bool FIRRTLBaseType::isConst() { return getImpl()->isConst; }
+bool FIRRTLBaseType::isConst() const { return getImpl()->isConst; }
 
 RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
   return TypeSwitch<FIRRTLType, RecursiveTypeProperties>(*this)
@@ -784,7 +784,7 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
 }
 
 /// Return a 'const' or non-'const' version of this type.
-FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) {
+FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) const {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
             UIntType, BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
@@ -1333,7 +1333,7 @@ struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
   int32_t width;
 };
 
-IntType IntType::getConstType(bool isConst) {
+IntType IntType::getConstType(bool isConst) const {
 
   if (auto sIntType = type_dyn_cast<SIntType>(*this))
     return sIntType.getConstType(isConst);
@@ -1360,7 +1360,7 @@ LogicalResult SIntType::verify(function_ref<InFlightDiagnostic()> emitError,
 
 int32_t SIntType::getWidthOrSentinel() const { return getImpl()->width; }
 
-SIntType SIntType::getConstType(bool isConst) {
+SIntType SIntType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getWidthOrSentinel(), isConst);
@@ -1386,7 +1386,7 @@ LogicalResult UIntType::verify(function_ref<InFlightDiagnostic()> emitError,
 
 int32_t UIntType::getWidthOrSentinel() const { return getImpl()->width; }
 
-UIntType UIntType::getConstType(bool isConst) {
+UIntType UIntType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getWidthOrSentinel(), isConst);
@@ -1492,7 +1492,7 @@ FIRRTLBaseType BundleType::getPassiveType() {
   return passiveType;
 }
 
-BundleType BundleType::getConstType(bool isConst) {
+BundleType BundleType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getElements(), isConst);
@@ -1616,7 +1616,7 @@ BundleType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
-bool BundleType::isConst() { return getImpl()->isConst; }
+bool BundleType::isConst() const { return getImpl()->isConst; }
 
 BundleType::ElementType
 BundleType::getElementTypePreservingConst(size_t index) {
@@ -1740,7 +1740,7 @@ RecursiveTypeProperties OpenBundleType::getRecursiveTypeProperties() const {
   return getImpl()->props;
 }
 
-OpenBundleType OpenBundleType::getConstType(bool isConst) {
+OpenBundleType OpenBundleType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getElements(), isConst);
@@ -1852,7 +1852,7 @@ OpenBundleType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
-bool OpenBundleType::isConst() { return getImpl()->isConst; }
+bool OpenBundleType::isConst() const { return getImpl()->isConst; }
 
 OpenBundleType::ElementType
 OpenBundleType::getElementTypePreservingConst(size_t index) {
@@ -1957,7 +1957,7 @@ FIRRTLBaseType FVectorType::getPassiveType() {
   return passiveType;
 }
 
-FVectorType FVectorType::getConstType(bool isConst) {
+FVectorType FVectorType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getElementType(), getNumElements(), isConst);
@@ -2026,7 +2026,7 @@ FVectorType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
-bool FVectorType::isConst() { return getImpl()->isConst; }
+bool FVectorType::isConst() const { return getImpl()->isConst; }
 
 FVectorType::ElementType FVectorType::getElementTypePreservingConst() {
   auto type = getElementType();
@@ -2082,7 +2082,7 @@ RecursiveTypeProperties OpenVectorType::getRecursiveTypeProperties() const {
   return getImpl()->props;
 }
 
-OpenVectorType OpenVectorType::getConstType(bool isConst) {
+OpenVectorType OpenVectorType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getElementType(), getNumElements(), isConst);
@@ -2127,7 +2127,7 @@ OpenVectorType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
-bool OpenVectorType::isConst() { return getImpl()->isConst; }
+bool OpenVectorType::isConst() const { return getImpl()->isConst; }
 
 OpenVectorType::ElementType OpenVectorType::getElementTypePreservingConst() {
   auto type = getElementType();
@@ -2205,7 +2205,7 @@ ArrayRef<FEnumType::EnumElement> FEnumType::getElements() const {
   return getImpl()->elements;
 }
 
-FEnumType FEnumType::getConstType(bool isConst) {
+FEnumType FEnumType::getConstType(bool isConst) const {
   return get(getContext(), getElements(), isConst);
 }
 
@@ -2450,7 +2450,8 @@ RecursiveTypeProperties BaseTypeAliasType::getRecursiveTypeProperties() const {
 
 // If a given `newInnerType` is identical to innerType, return `*this`
 // because we can reuse the type alias. Otherwise return `newInnerType`.
-FIRRTLBaseType BaseTypeAliasType::getModifiedType(FIRRTLBaseType newInnerType) {
+FIRRTLBaseType
+BaseTypeAliasType::getModifiedType(FIRRTLBaseType newInnerType) const {
   if (newInnerType == getInnerType())
     return *this;
   return newInnerType;
@@ -2461,7 +2462,7 @@ FIRRTLBaseType BaseTypeAliasType::getAllConstDroppedType() {
   return getModifiedType(getInnerType().getAllConstDroppedType());
 }
 
-FIRRTLBaseType BaseTypeAliasType::getConstType(bool isConst) {
+FIRRTLBaseType BaseTypeAliasType::getConstType(bool isConst) const {
   return getModifiedType(getInnerType().getConstType(isConst));
 }
 
@@ -2565,7 +2566,7 @@ LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
 
 int32_t AnalogType::getWidthOrSentinel() const { return getImpl()->width; }
 
-AnalogType AnalogType::getConstType(bool isConst) {
+AnalogType AnalogType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getWidthOrSentinel(), isConst);
@@ -2575,7 +2576,7 @@ AnalogType AnalogType::getConstType(bool isConst) {
 // ClockType
 //===----------------------------------------------------------------------===//
 
-ClockType ClockType::getConstType(bool isConst) {
+ClockType ClockType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), isConst);
@@ -2585,7 +2586,7 @@ ClockType ClockType::getConstType(bool isConst) {
 // ResetType
 //===----------------------------------------------------------------------===//
 
-ResetType ResetType::getConstType(bool isConst) {
+ResetType ResetType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), isConst);
@@ -2595,7 +2596,7 @@ ResetType ResetType::getConstType(bool isConst) {
 // AsyncResetType
 //===----------------------------------------------------------------------===//
 
-AsyncResetType AsyncResetType::getConstType(bool isConst) {
+AsyncResetType AsyncResetType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), isConst);

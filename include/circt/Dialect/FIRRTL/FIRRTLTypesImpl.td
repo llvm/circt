@@ -52,7 +52,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
-    SIntType getConstType(bool isConst);
+    SIntType getConstType(bool isConst) const;
   }];
 }
 
@@ -72,7 +72,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
-    UIntType getConstType(bool isConst);
+    UIntType getConstType(bool isConst) const;
   }];
 }
 
@@ -87,7 +87,7 @@ def ClockTypeImpl : FIRRTLImplType<"Clock"> {
     }]>
   ];
   let extraClassDeclaration = [{
-    ClockType getConstType(bool isConst);
+    ClockType getConstType(bool isConst) const;
   }];
 }
 
@@ -102,7 +102,7 @@ def ResetTypeImpl : FIRRTLImplType<"Reset"> {
     }]>
   ];
   let extraClassDeclaration = [{
-    ResetType getConstType(bool isConst);
+    ResetType getConstType(bool isConst) const;
   }];
 }
 
@@ -117,7 +117,7 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
     }]>
   ];
   let extraClassDeclaration = [{
-    AsyncResetType getConstType(bool isConst);
+    AsyncResetType getConstType(bool isConst) const;
   }];
 }
 
@@ -133,7 +133,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   ];
   let extraClassDeclaration = [{
     int32_t getWidthOrSentinel() const;
-    AnalogType getConstType(bool isConst);
+    AnalogType getConstType(bool isConst) const;
   }];
   let genVerifyDecl = true;
 }
@@ -169,11 +169,11 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
     RecursiveTypeProperties getRecursiveTypeProperties() const;
 
     /// Const support.
-    bool isConst();
+    bool isConst() const;
     ElementType getElementTypePreservingConst();
 
     /// Return a 'const' or non-'const' version of this type.
-    }] # name # [{Type getConstType(bool isConst);
+    }] # name # [{Type getConstType(bool isConst) const;
 
   }] # firrtlExtraClassDeclaration;
 }
@@ -268,11 +268,11 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     iterator end() const { return getElements().end(); }
 
     /// Const support.
-    bool isConst();
+    bool isConst() const;
     ElementType getElementTypePreservingConst(size_t index);
 
     /// Return a 'const' or non-'const' version of this type.
-    }] # name # [{Type getConstType(bool isConst);
+    }] # name # [{Type getConstType(bool isConst) const;
 
   }] # firrtlExtraClassDeclaration;
 }
@@ -337,7 +337,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum"> {
 
     size_t getNumElements() const { return getElements().size(); }
 
-    FEnumType getConstType(bool isConst);
+    FEnumType getConstType(bool isConst) const;
 
     /// Return this type with a 'const' modifiers dropped
     FEnumType getAllConstDroppedType();
@@ -472,7 +472,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
       // FIRRTLBaseType utils.
       FIRRTLBaseType getAnonymousType();
       FIRRTLBaseType getPassiveType();
-      FIRRTLBaseType getConstType(bool isConst);
+      FIRRTLBaseType getConstType(bool isConst) const;
       FIRRTLBaseType getAllConstDroppedType();
 
       /// Return the recursive properties of the type.
@@ -480,7 +480,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
 
       // If a given `newInnerType` is identical to innerType, return `*this`
       // because we can reuse the type alias. Otherwise return `newInnerType`.
-      FIRRTLBaseType getModifiedType(FIRRTLBaseType newInnerType);
+      FIRRTLBaseType getModifiedType(FIRRTLBaseType newInnerType) const;
   }];
 
   let builders = [
