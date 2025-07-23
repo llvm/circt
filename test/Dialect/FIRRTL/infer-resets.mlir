@@ -495,6 +495,12 @@ firrtl.circuit "Top" {
     // CHECK: firrtl.matchingconnect %10, %c0_ui8_0
     // CHECK: %reg_vector = firrtl.regreset %clock, %reset, %6
     %reg_vector = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<8>, 4>
+    // CHECK: [[ENUMCREATE:%[0-9]+]] = firrtl.enumcreate a(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.const.enum<a>
+    // CHECK: %reg_enum_0 = firrtl.regreset %clock, %reset, [[ENUMCREATE]] : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a>, !firrtl.enum<a>
+    %reg_enum_0 = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a>
+    // CHECK: [[BITCAST:%[0-9]+]] = firrtl.bitcast %c0_ui1 : (!firrtl.const.uint<1>) -> !firrtl.const.enum<a = 1>
+    // CHECK: %reg_enum_1 = firrtl.regreset %clock, %reset, [[BITCAST]] : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a = 1>, !firrtl.enum<a = 1>
+    %reg_enum_1 = firrtl.reg %clock : !firrtl.clock, !firrtl.enum<a = 1>
   }
 }
 
