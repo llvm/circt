@@ -16,6 +16,7 @@ hw.module @no_ports() {
 }
 
 // CHECK-LABEL: module Expressions(
+// CHECK-NEXT:    input  [7:0]  in8,
 // CHECK-NEXT:    input  [3:0]  in4,
 // CHECK-NEXT:    input         clock,
 // CHECK-NEXT:    output        out1a,
@@ -31,15 +32,15 @@ hw.module @no_ports() {
 // CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
 // CHECK-NEXT:    output [1:0]  orvout,
+// CHECK-NEXT:    output [7:0]  out_reverse,
 // CHECK-NEXT:           [63:0] outTime,
 // CHECK-NEXT:           [31:0] outSTime
 // CHECK-NEXT:  );
-
-hw.module @Expressions(in %in4: i4, in %clock: i1,
+hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   out out1a: i1, out out1b: i1, out out1c: i1,
   out out1d: i1, out out1e: i1, out out1f: i1, out out1g: i1,
   out out4: i4, out out4s: i4, out out16: i16, out out16s: i16,
-  out sext17: i17, out orvout: i2, out outTime: i64, out outSTime:i32) {
+  out sext17: i17, out orvout: i2, out out_reverse: i8, out outTime: i64, out outSTime:i32) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -84,7 +85,7 @@ hw.module @Expressions(in %in4: i4, in %clock: i1,
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : i2, i4
 
-  // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
+  // CHECK: wire [15:0] w2 = {6'h0, in4, clock, clock, in4};
   // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
   %tmp = comb.extract %in4 from 3 : (i4) -> i1
   %tmp2 = comb.replicate %tmp : (i1) -> i2
@@ -123,12 +124,12 @@ hw.module @Expressions(in %in4: i4, in %clock: i1,
   %w3_use = sv.read_inout %w3 : !hw.inout<i16>
 
 
- // CHECK: assign out1a = ^in4;
-  %0 = comb.parity %in4 : i4
+  // CHECK: assign out1a = ^in4;
+  %p_res = comb.parity %in4 : i4
   // CHECK: assign out1b = &in4;
-  %1 = comb.icmp eq %in4, %c-1_i4 : i4
+  %and_res = comb.icmp eq %in4, %c-1_i4 : i4
   // CHECK: assign out1c = |in4;
-  %2 = comb.icmp ne %in4, %c0_i4 : i4
+  %or_res = comb.icmp ne %in4, %c0_i4 : i4
 
   // CHECK: assign out1d = in4 === 4'h0;
   %cmp3 = comb.icmp ceq %in4, %c0_i4 : i4
@@ -151,13 +152,17 @@ hw.module @Expressions(in %in4: i4, in %clock: i1,
   %orpre3 = comb.extract %in4 from 1 : (i4) -> i2
   %orv = comb.or %orpre1, %orpre2, %orpre3 {sv.namehint = "hintyhint"}: i2
 
+  // Test for comb.reverse 
+  // CHECK: assign out_reverse = {<<{in8}};
+  %rev8 = comb.reverse %in8 : i8
+
   // Time system functions
   // CHECK: assign outTime = $time;
   %time = sv.system.time : i64
   // CHECK: assign outSTime = $stime;
   %stime = sv.system.stime : i32
 
-  hw.output %0, %1, %2, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv, %time, %stime : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2, i64, i32
+  hw.output %p_res, %and_res, %or_res, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv, %rev8, %time, %stime : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2, i8, i64, i32
 }
 
 // CHECK-LABEL: module Precedence(

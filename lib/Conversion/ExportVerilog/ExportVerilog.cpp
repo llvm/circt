@@ -2379,6 +2379,7 @@ private:
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
   SubExprInfo visitComb(MuxOp op);
+  SubExprInfo visitComb(ReverseOp op); 
   SubExprInfo visitComb(AddOp op) {
     assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
     return emitBinary(op, Addition, "+");
@@ -2599,13 +2600,6 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      bool isSelfDeterminedUnsignedValue,
                                      bool isAssignmentLikeContext) {
 
-  if (auto reverseOp = dyn_cast_or_null<comb::ReverseOp>(exp.getDefiningOp())) {
-    ps << "{<<{";
-    emitSubExpr(reverseOp.getInput(), LowestPrecedence);
-    ps << "}}";
-    emittedExprs.insert(reverseOp);
-    return {Symbol, IsUnsigned};
-  }
   // `verif.contract` ops act as no-ops.
   if (auto result = dyn_cast<OpResult>(exp))
     if (auto contract = dyn_cast<verif::ContractOp>(result.getOwner()))
@@ -3310,6 +3304,17 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
 
     return {Conditional, signedness};
   });
+}
+
+SubExprInfo ExprEmitter::visitComb(ReverseOp op){
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  ps << "{<<{";
+  emitSubExpr(op.getInput(), LowestPrecedence);
+  ps << "}}";
+
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::printStructCreate(

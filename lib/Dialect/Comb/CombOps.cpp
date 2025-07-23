@@ -457,17 +457,6 @@ void comb::ReverseOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<ReverseOfReverse>(context);
 }
 
-mlir::LogicalResult comb::ReverseOp::verify() {
-  return mlir::success();
-}
-
-void comb::ReverseOp::inferResultRanges(
-    llvm::ArrayRef<mlir::ConstantIntRanges> operandRanges,
-    llvm::function_ref<void(mlir::Value, const mlir::ConstantIntRanges &)>
-        setResultRangeFn) {
-  setResultRangeFn(getResult(), operandRanges.front());
-}
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//

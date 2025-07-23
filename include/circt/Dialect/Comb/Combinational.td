@@ -334,7 +334,6 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
 
 def ReverseOp : CombOp<"reverse", [
     SameOperandsAndResultType,
-    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>,
     Pure
 ]> {
   let summary = "Reverses the bit order of an integer value";
@@ -354,7 +353,6 @@ def ReverseOp : CombOp<"reverse", [
 
   let hasFolder = 1;
   let hasCanonicalizer = 1;
-  let hasVerifier = 1;
 
-  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
