@@ -3,7 +3,7 @@
 
 import circt
 from circt.dialects import aig, hw
-from circt.ir import Context, Location, Module, InsertionPoint, IntegerType
+from circt.ir import Context, Location, Module, InsertionPoint, IntegerType, ArrayAttr
 from circt.dialects.aig import LongestPathAnalysis, LongestPathCollection, DataflowPath
 
 with Context() as ctx, Location.unknown():
@@ -15,7 +15,7 @@ with Context() as ctx, Location.unknown():
     i32 = IntegerType.get_signless(32)
 
     # Create a simple hardware module with AIG operations
-    def build_module(module):
+    def build_child(module):
       a, b = module.entry_block.arguments
 
       result1 = aig.and_inv([a, b], [False, True])
@@ -23,10 +23,29 @@ with Context() as ctx, Location.unknown():
 
       hw.OutputOp([result1, result2])
 
-    hw.HWModuleOp(name="test_aig",
+    hw.HWModuleOp(name="test_child",
                   input_ports=[("a", i32), ("b", i32)],
                   output_ports=[("out1", i32), ("out2", i32)],
-                  body_builder=build_module)
+                  body_builder=build_child)
+
+    def build_top(module):
+      a, b = module.entry_block.arguments
+      out1, out2 = hw.instance(
+          [i32, i32],
+          "child",
+          "test_child",
+          [a, b],
+          ["a", "b"],
+          ["out1", "out2"],
+          parameters=ArrayAttr.get([]),
+      )
+      hw.OutputOp([out1, out2])
+
+    hw.HWModuleOp(name="test_aig",
+                  input_ports=[("c", i32), ("d", i32)],
+                  output_ports=[("out1", i32), ("out2", i32)],
+                  body_builder=build_top)
+
     # CHECK-LABEL: AIG dialect registration and basic operations successful!
     print("AIG dialect registration and basic operations successful!")
     # Test aig.and_inv operation
@@ -47,6 +66,7 @@ with Context() as ctx, Location.unknown():
     # CHECK-NEXT: 50th percentile delay: 1
     # CHECK-NEXT: 90th percentile delay: 2
     # CHECK-NEXT: 95th percentile delay: 2
+
     # CHECK-NEXT: 99th percentile delay: 2
     # CHECK-NEXT: 99.9th percentile delay: 2
     collection.print_summary()
@@ -56,11 +76,6 @@ with Context() as ctx, Location.unknown():
     # CHECK-NEXT: index -1 delay: 1
     print("index 1 delay:", collection[1].delay)
     print("index -1 delay:", collection[-1].delay)
-    # CHECK-NEXT: collection.get_path(5) == collection[5]: True
-    print(
-        "collection.get_path(5) == collection[5]:",
-        DataflowPath.from_json_string(
-            collection.collection.get_path(5)) == collection[5])
     # Check that len and get_size are the same
     # CHECK-NEXT: 128 128
     print(len(collection), collection.collection.get_size())
@@ -84,6 +99,6 @@ with Context() as ctx, Location.unknown():
     print("minus index slice:", len(collection[:-2]) == len(collection) - 2)
 
     # Test framegraph emission.
-    # CHECK:      top:test_aig;a[0] 0
-    # CHECK-NEXT: top:test_aig;out2[0] 2
+    # CHECK: top:test_aig;c[0] 0
+    # CHECK: top:test_aig;child:test_child;a[0] 2
     print(collection.longest_path.to_flamegraph())

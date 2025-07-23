@@ -2853,6 +2853,44 @@ function void seeminglyExhaustiveCase(logic [1:0] a);
   endcase
 endfunction
 
+// Check that ImportVerilog recognizes case statements with (* full_case *)
+// attribute, assuming the case expression uses a two-state values (0 and 1).
+// The (* full_case *) attribute informs the synthesis tool that all possible
+// cases are explicitly covered, even without a default clause, thereby
+// preventing latch inference.
+// CHECK-LABEL: @verifyFullCaseSupport
+function void verifyFullCaseSupport(logic [1:0] a);
+  // CHECK: [[Z:%.+]] = moore.variable
+  logic [2:0] z;
+  // CHECK: moore.constant 0 : i2
+  // CHECK: cf.cond_br {{%.+}}, [[CASE0:\^.+]], [[ELSE0:\^.+]]
+  (* full_case *)
+  case (a)
+    // CHECK: [[CASE0]]:
+    // CHECK: moore.constant 1 : i3
+    // CHECK: cf.br [[EXIT:\^.+]]
+    2'd0: z = 3'b001;
+    // CHECK: [[ELSE0]]:
+    // CHECK: moore.constant 1 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE1:\^.+]], [[ELSE1:\^.+]]
+    // CHECK: [[CASE1]]:
+    // CHECK: moore.constant 2 : i3
+    // CHECK: cf.br [[EXIT]]
+    2'd1: z = 3'b010;
+    // CHECK: [[ELSE1]]:
+    // CHECK: moore.constant -2 : i2
+    // CHECK: cf.cond_br {{%.+}}, [[CASE2:\^.+]], [[ELSE2:\^.+]]
+    // CHECK: [[CASE2]]:
+    // CHECK: moore.constant -4 : i3
+    // CHECK: cf.br [[EXIT]]
+    2'd2: z = 3'b100;
+    // Branch to the final item. This trivial basic block would be removed
+    // later during CFG simplification.
+    // CHECK: [[ELSE2]]:
+    // CHECK-NEXT: cf.br [[CASE2]]
+  endcase
+endfunction
+
 // Regression test for #8657.
 // CHECK-LABEL: rvalueAndLvalueElementSelect
 module rvalueAndLvalueElementSelect(

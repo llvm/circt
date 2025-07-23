@@ -125,3 +125,19 @@ target_link_libraries(circt-capi-aig-test
   CIRCTCAPIHW
   CIRCTCAPISeq
 )
+
+add_llvm_executable(circt-capi-support-test
+  PARTIAL_SOURCES_INTENDED
+  support.c
+)
+llvm_update_compile_flags(circt-capi-support-test)
+
+target_link_libraries(circt-capi-support-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIAIG
+  CIRCTCAPIHW
+  CIRCTCAPISeq
+  CIRCTCAPISupport
+)

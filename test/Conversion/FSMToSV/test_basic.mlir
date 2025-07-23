@@ -191,3 +191,38 @@ module {
     }
   }
 }
+
+
+// -----
+
+// Test the usage of operations defined inside `transition` region but outside `guard region`
+// CHECK-LABEL:  hw.module @OpsInTransition(in %clk : !seq.clock, in %rst : i1) attributes {emit.fragments = [@FSM_ENUM_TYPEDEFS]} {
+// CHECK:   sv.alwayscomb {
+// CHECK-NEXT:     sv.case %[[R:.*]] : !hw.typealias<@fsm_enum_typedecls::@OpsInTransition_state_t, !hw.enum<State1, State2>>
+// CHECK-NEXT:     case State1: {
+// CHECK-NEXT:       sv.bpassign %[[STATE_NEXT:.*]], %[[B:.*]] : !hw.typealias<@fsm_enum_typedecls::@OpsInTransition_state_t, !hw.enum<State1, State2>>
+// CHECK-NEXT:     }
+// CHECK-NEXT:     case State2: {
+// CHECK-NEXT:       sv.bpassign %[[STATE_NEXT:.*]], %[[A:.*]] : !hw.typealias<@fsm_enum_typedecls::@OpsInTransition_state_t, !hw.enum<State1, State2>>
+// CHECK-NEXT:     }
+// CHECK-NEXT:     default: {
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+// CHECK-NEXT:   hw.output
+// CHECK-NEXT: }
+
+module {
+  fsm.machine @OpsInTransition() -> () attributes {initialState = "State1"} {
+    fsm.state @State1 output {
+      fsm.output
+    } transitions {
+      %false = hw.constant false
+      fsm.transition @State1 guard {
+        fsm.return %false
+      }
+    }
+    fsm.state @State2 output {
+      fsm.output
+    }
+  }
+}

@@ -68,75 +68,20 @@ struct VerifAssumeOpConversion : OpConversionPattern<verif::AssumeOp> {
   }
 };
 
-/// Lower a verif::LecOp operation to a miter circuit encoded in SMT.
-/// More information on miter circuits can be found, e.g., in this paper:
-/// Brand, D., 1993, November. Verification of large synthesized designs. In
-/// Proceedings of 1993 International Conference on Computer Aided Design
-/// (ICCAD) (pp. 534-537). IEEE.
-struct LogicEquivalenceCheckingOpConversion
-    : OpConversionPattern<verif::LogicEquivalenceCheckingOp> {
-  using OpConversionPattern<
-      verif::LogicEquivalenceCheckingOp>::OpConversionPattern;
+template <typename OpTy>
+struct CircuitRelationCheckOpConversion : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(verif::LogicEquivalenceCheckingOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    auto *firstOutputs = adaptor.getFirstCircuit().front().getTerminator();
-    auto *secondOutputs = adaptor.getSecondCircuit().front().getTerminator();
-
-    if (firstOutputs->getNumOperands() == 0) {
-      // Trivially equivalent
-      Value trueVal =
-          rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
-      rewriter.replaceOp(op, trueVal);
-      return success();
-    }
-
-    auto hasNoResult = op.getNumResults() == 0;
-
-    // Solver will only return a result when it is used to check the returned
-    // value.
-    smt::SolverOp solver;
-    if (hasNoResult)
-      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
-    else
-      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
-                                              ValueRange{});
-
-    rewriter.createBlock(&solver.getBodyRegion());
-
-    // First, convert the block arguments of the miter bodies.
-    if (failed(rewriter.convertRegionTypes(&adaptor.getFirstCircuit(),
-                                           *typeConverter)))
-      return failure();
-    if (failed(rewriter.convertRegionTypes(&adaptor.getSecondCircuit(),
-                                           *typeConverter)))
-      return failure();
-
-    // Second, create the symbolic values we replace the block arguments with
-    SmallVector<Value> inputs;
-    for (auto arg : adaptor.getFirstCircuit().getArguments())
-      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
-
-    // Third, inline the blocks
-    // Note: the argument value replacement does not happen immediately, but
-    // only after all the operations are already legalized.
-    // Also, it has to be ensured that the original argument type and the type
-    // of the value with which is is to be replaced match. The value is looked
-    // up (transitively) in the replacement map at the time the replacement
-    // pattern is committed.
-    rewriter.mergeBlocks(&adaptor.getFirstCircuit().front(), solver.getBody(),
-                         inputs);
-    rewriter.mergeBlocks(&adaptor.getSecondCircuit().front(), solver.getBody(),
-                         inputs);
-    rewriter.setInsertionPointToEnd(solver.getBody());
-
-    // Fourth, convert the yielded values back to the source type system (since
+protected:
+  using ConversionPattern::typeConverter;
+  void
+  createOutputsDifferentOps(Operation *firstOutputs, Operation *secondOutputs,
+                            Location &loc, ConversionPatternRewriter &rewriter,
+                            SmallVectorImpl<Value> &outputsDifferent) const {
+    // Convert the yielded values back to the source type system (since
     // the operations of the inlined blocks will be converted by other patterns
     // later on and we should make sure the IR is well-typed after each pattern
-    // application), and build the 'assert'.
-    SmallVector<Value> outputsDifferent;
+    // application), and compare the output values.
     for (auto [out1, out2] :
          llvm::zip(firstOutputs->getOperands(), secondOutputs->getOperands())) {
       Value o1 = typeConverter->materializeTargetConversion(
@@ -146,24 +91,16 @@ struct LogicEquivalenceCheckingOpConversion
       outputsDifferent.emplace_back(
           rewriter.create<smt::DistinctOp>(loc, o1, o2));
     }
+  }
 
-    rewriter.eraseOp(firstOutputs);
-    rewriter.eraseOp(secondOutputs);
-
-    Value toAssert;
-    if (outputsDifferent.size() == 1)
-      toAssert = outputsDifferent[0];
-    else
-      toAssert = rewriter.create<smt::OrOp>(loc, outputsDifferent);
-
-    rewriter.create<smt::AssertOp>(loc, toAssert);
-
-    // Fifth, check for satisfiablility and report the result back.
+  void replaceOpWithSatCheck(OpTy &op, Location &loc,
+                             ConversionPatternRewriter &rewriter,
+                             smt::SolverOp &solver) const {
     // If no operation uses the result of this solver, we leave our check
     // operations empty. If the result is used, we create a check operation with
     // the result type of the operation and yield the result of the check
     // operation.
-    if (hasNoResult) {
+    if (op.getNumResults() == 0) {
       auto checkOp = rewriter.create<smt::CheckOp>(loc, TypeRange{});
       rewriter.createBlock(&checkOp.getSatRegion());
       rewriter.create<smt::YieldOp>(loc);
@@ -193,7 +130,220 @@ struct LogicEquivalenceCheckingOpConversion
 
       rewriter.replaceOp(op, solver->getResults());
     }
+  }
+};
 
+/// Lower a verif::LecOp operation to a miter circuit encoded in SMT.
+/// More information on miter circuits can be found, e.g., in this paper:
+/// Brand, D., 1993, November. Verification of large synthesized designs. In
+/// Proceedings of 1993 International Conference on Computer Aided Design
+/// (ICCAD) (pp. 534-537). IEEE.
+struct LogicEquivalenceCheckingOpConversion
+    : CircuitRelationCheckOpConversion<verif::LogicEquivalenceCheckingOp> {
+  using CircuitRelationCheckOpConversion<
+      verif::LogicEquivalenceCheckingOp>::CircuitRelationCheckOpConversion;
+
+  LogicalResult
+  matchAndRewrite(verif::LogicEquivalenceCheckingOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto *firstOutputs = adaptor.getFirstCircuit().front().getTerminator();
+    auto *secondOutputs = adaptor.getSecondCircuit().front().getTerminator();
+
+    auto hasNoResult = op.getNumResults() == 0;
+
+    if (firstOutputs->getNumOperands() == 0) {
+      // Trivially equivalent
+      if (hasNoResult) {
+        rewriter.eraseOp(op);
+      } else {
+        Value trueVal =
+            rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        rewriter.replaceOp(op, trueVal);
+      }
+      return success();
+    }
+
+    // Solver will only return a result when it is used to check the returned
+    // value.
+    smt::SolverOp solver;
+    if (hasNoResult)
+      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
+    else
+      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
+                                              ValueRange{});
+    rewriter.createBlock(&solver.getBodyRegion());
+
+    // First, convert the block arguments of the miter bodies.
+    if (failed(rewriter.convertRegionTypes(&adaptor.getFirstCircuit(),
+                                           *typeConverter)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&adaptor.getSecondCircuit(),
+                                           *typeConverter)))
+      return failure();
+
+    // Second, create the symbolic values we replace the block arguments with
+    SmallVector<Value> inputs;
+    for (auto arg : adaptor.getFirstCircuit().getArguments())
+      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
+
+    // Third, inline the blocks
+    // Note: the argument value replacement does not happen immediately, but
+    // only after all the operations are already legalized.
+    // Also, it has to be ensured that the original argument type and the type
+    // of the value with which is is to be replaced match. The value is looked
+    // up (transitively) in the replacement map at the time the replacement
+    // pattern is committed.
+    rewriter.mergeBlocks(&adaptor.getFirstCircuit().front(), solver.getBody(),
+                         inputs);
+    rewriter.mergeBlocks(&adaptor.getSecondCircuit().front(), solver.getBody(),
+                         inputs);
+    rewriter.setInsertionPointToEnd(solver.getBody());
+
+    // Fourth, build the assertion.
+    SmallVector<Value> outputsDifferent;
+    createOutputsDifferentOps(firstOutputs, secondOutputs, loc, rewriter,
+                              outputsDifferent);
+
+    rewriter.eraseOp(firstOutputs);
+    rewriter.eraseOp(secondOutputs);
+
+    Value toAssert;
+    if (outputsDifferent.size() == 1)
+      toAssert = outputsDifferent[0];
+    else
+      toAssert = rewriter.create<smt::OrOp>(loc, outputsDifferent);
+
+    rewriter.create<smt::AssertOp>(loc, toAssert);
+
+    // Fifth, check for satisfiablility and report the result back.
+    replaceOpWithSatCheck(op, loc, rewriter, solver);
+    return success();
+  }
+};
+
+struct RefinementCheckingOpConversion
+    : CircuitRelationCheckOpConversion<verif::RefinementCheckingOp> {
+  using CircuitRelationCheckOpConversion<
+      verif::RefinementCheckingOp>::CircuitRelationCheckOpConversion;
+
+  LogicalResult
+  matchAndRewrite(verif::RefinementCheckingOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    // Find non-deterministic values (free variables) in the source circuit.
+    // For now, only support quantification over 'primitive' types.
+    SmallVector<Value> srcNonDetValues;
+    bool canBind = true;
+    for (auto ndOp : op.getFirstCircuit().getOps<smt::DeclareFunOp>()) {
+      if (!isa<smt::IntType, smt::BoolType, smt::BitVectorType>(
+              ndOp.getType())) {
+        ndOp.emitError("Uninterpreted function of non-primitive type cannot be "
+                       "converted.");
+        canBind = false;
+      }
+      srcNonDetValues.push_back(ndOp.getResult());
+    }
+    if (!canBind)
+      return failure();
+
+    if (srcNonDetValues.empty()) {
+      // If there is no non-determinism in the source circuit, the
+      // refinement check becomes an equivalence check, which does not
+      // need quantified expressions.
+      auto eqOp = rewriter.create<verif::LogicEquivalenceCheckingOp>(
+          op.getLoc(), op.getNumResults() != 0);
+      rewriter.moveBlockBefore(&op.getFirstCircuit().front(),
+                               &eqOp.getFirstCircuit(),
+                               eqOp.getFirstCircuit().end());
+      rewriter.moveBlockBefore(&op.getSecondCircuit().front(),
+                               &eqOp.getSecondCircuit(),
+                               eqOp.getSecondCircuit().end());
+      rewriter.replaceOp(op, eqOp);
+      return success();
+    }
+
+    Location loc = op.getLoc();
+    auto *firstOutputs = adaptor.getFirstCircuit().front().getTerminator();
+    auto *secondOutputs = adaptor.getSecondCircuit().front().getTerminator();
+
+    auto hasNoResult = op.getNumResults() == 0;
+
+    if (firstOutputs->getNumOperands() == 0) {
+      // Trivially equivalent
+      if (hasNoResult) {
+        rewriter.eraseOp(op);
+      } else {
+        Value trueVal =
+            rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        rewriter.replaceOp(op, trueVal);
+      }
+      return success();
+    }
+
+    // Solver will only return a result when it is used to check the returned
+    // value.
+    smt::SolverOp solver;
+    if (hasNoResult)
+      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
+    else
+      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
+                                              ValueRange{});
+    rewriter.createBlock(&solver.getBodyRegion());
+
+    // Convert the block arguments of the miter bodies.
+    if (failed(rewriter.convertRegionTypes(&adaptor.getFirstCircuit(),
+                                           *typeConverter)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&adaptor.getSecondCircuit(),
+                                           *typeConverter)))
+      return failure();
+
+    // Create the symbolic values we replace the block arguments with
+    SmallVector<Value> inputs;
+    for (auto arg : adaptor.getFirstCircuit().getArguments())
+      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
+
+    // Inline the target circuit. Free variables remain free variables.
+    rewriter.mergeBlocks(&adaptor.getSecondCircuit().front(), solver.getBody(),
+                         inputs);
+    rewriter.setInsertionPointToEnd(solver.getBody());
+
+    // Create the universally quantified expression containing the source
+    // circuit. Free variables in the circuit's body become bound variables.
+    auto forallOp = rewriter.create<smt::ForallOp>(
+        op.getLoc(), TypeRange(srcNonDetValues),
+        [&](OpBuilder &builder, auto, ValueRange args) -> Value {
+          // Inline the source circuit
+          Block *body = builder.getBlock();
+          rewriter.mergeBlocks(&adaptor.getFirstCircuit().front(), body,
+                               inputs);
+
+          // Replace non-deterministic values with the quantifier's bound
+          // variables
+          for (auto [freeVar, boundVar] : llvm::zip(srcNonDetValues, args))
+            rewriter.replaceOp(freeVar.getDefiningOp(), boundVar);
+
+          // Compare the output values
+          rewriter.setInsertionPointToEnd(body);
+          SmallVector<Value> outputsDifferent;
+          createOutputsDifferentOps(firstOutputs, secondOutputs, loc, rewriter,
+                                    outputsDifferent);
+          if (outputsDifferent.size() == 1)
+            return outputsDifferent[0];
+          else
+            return rewriter.createOrFold<smt::OrOp>(loc, outputsDifferent);
+        });
+
+    rewriter.eraseOp(firstOutputs);
+    rewriter.eraseOp(secondOutputs);
+
+    // Assert the quantified expression
+    rewriter.setInsertionPointAfter(forallOp);
+    rewriter.create<smt::AssertOp>(op.getLoc(), forallOp.getResult());
+
+    // Check for satisfiability and report the result back.
+    replaceOpWithSatCheck(op, loc, rewriter, solver);
     return success();
   }
 };
@@ -510,8 +660,9 @@ void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
                                                  Namespace &names,
                                                  bool risingClocksOnly) {
   patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
-               LogicEquivalenceCheckingOpConversion>(converter,
-                                                     patterns.getContext());
+               LogicEquivalenceCheckingOpConversion,
+               RefinementCheckingOpConversion>(converter,
+                                               patterns.getContext());
   patterns.add<VerifBoundedModelCheckingOpConversion>(
       converter, patterns.getContext(), names, risingClocksOnly);
 }
