@@ -267,6 +267,17 @@ func.func @test_refines_noreturn() -> () {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
   }
+
+  // CHECK-NOT: smt.solver
+  // CHECK:     return
+  verif.refines first {
+  ^bb0():
+    verif.yield
+  } second {
+  ^bb0():
+    verif.yield
+  }
+
   return
 }
 
@@ -298,6 +309,25 @@ func.func @test_refines_withreturn() -> i1 {
   } second {
   ^bb0(%arg1: i32):
     verif.yield %arg1 : i32
+  }
+  return %0 : i1
+}
+
+// -----
+
+// CHECK-LABEL: func.func @test_refines_trivialreturn
+
+// CHECK-NOT: smt.solver
+// CHECK: [[CST:%.+]] = arith.constant true
+// CHECK: return [[CST]] : i1
+
+func.func @test_refines_trivialreturn() -> i1 {
+  %0 = verif.refines : i1 first {
+  ^bb0():
+    verif.yield
+  } second {
+  ^bb0():
+    verif.yield
   }
   return %0 : i1
 }

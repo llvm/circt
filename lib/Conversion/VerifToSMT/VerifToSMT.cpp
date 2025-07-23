@@ -267,18 +267,23 @@ struct RefinementCheckingOpConversion
     auto *firstOutputs = adaptor.getFirstCircuit().front().getTerminator();
     auto *secondOutputs = adaptor.getSecondCircuit().front().getTerminator();
 
+    auto hasNoResult = op.getNumResults() == 0;
+
     if (firstOutputs->getNumOperands() == 0) {
       // Trivially equivalent
-      Value trueVal =
-          rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
-      rewriter.replaceOp(op, trueVal);
+      if (hasNoResult) {
+        rewriter.eraseOp(op);
+      } else {
+        Value trueVal =
+            rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        rewriter.replaceOp(op, trueVal);
+      }
       return success();
     }
 
     // Solver will only return a result when it is used to check the returned
     // value.
     smt::SolverOp solver;
-    auto hasNoResult = op.getNumResults() == 0;
     if (hasNoResult)
       solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
     else
