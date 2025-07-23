@@ -23,6 +23,7 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
@@ -128,6 +129,11 @@ struct CLOptions {
       "always-at-star-as-comb",
       cl::desc("Interpret `always @(*)` as `always_comb`"), cl::init(true),
       cl::cat(cat)};
+
+  cl::opt<bool> detectMemories{
+      "detect-memories",
+      cl::desc("Detect memories and lower them to `seq.firmem`"),
+      cl::init(true), cl::cat(cat)};
 
   //===--------------------------------------------------------------------===//
   // Include paths
@@ -354,6 +360,14 @@ static void populateLLHDLowering(PassManager &pm) {
   modulePM.addPass(llhd::createSig2Reg());
   modulePM.addPass(mlir::createCSEPass());
   modulePM.addPass(mlir::createCanonicalizerPass());
+
+  // Map `seq.firreg` with array type and `hw.array_inject` self-feedback to
+  // `seq.firmem` ops.
+  if (opts.detectMemories) {
+    modulePM.addPass(seq::createRegOfVecToMem());
+    modulePM.addPass(mlir::createCSEPass());
+    modulePM.addPass(mlir::createCanonicalizerPass());
+  }
 }
 
 /// Populate the given pass manager with transformations as configured by the
