@@ -58,7 +58,7 @@ hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, o
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
 
-// CHECK-LABEL: @partial_product
+// CHECK-LABEL: @partial_product_booth
 // FORCE-BOOTH-LABEL: @partial_product_booth
 // Constants
 // FORCE-BOOTH-NEXT: %true = hw.constant true
