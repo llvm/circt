@@ -153,7 +153,7 @@ public:
   void visitComb(comb::ReplicateOp op) { visitInvalidComb(op); }
   void visitComb(comb::ExtractOp op) { visitInvalidComb(op); }
   void visitComb(comb::MuxOp op) { visitInvalidComb(op); }
-   void visitComb(comb::ReverseOp op) { visitInvalidComb(op); } 
+  void visitComb(comb::ReverseOp op) { visitInvalidComb(op); } 
 
 private:
   DenseMap<Value, APInt> results;
