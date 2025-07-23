@@ -15,7 +15,8 @@ namespace circt {
 
 void populateDatapathToCombConversionPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns,
-                                              bool lowerCompressToAdd);
+                                              bool lowerCompressToAdd,
+                                              bool forceBooth);
 
 #define GEN_PASS_DECL_CONVERTDATAPATHTOCOMB
 #include "circt/Conversion/Passes.h.inc"

@@ -89,6 +89,13 @@ struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
 struct DatapathPartialProductOpConversion
     : OpConversionPattern<PartialProductOp> {
   using OpConversionPattern<PartialProductOp>::OpConversionPattern;
+
+  DatapathPartialProductOpConversion(MLIRContext *context, bool forceBooth)
+      : OpConversionPattern<PartialProductOp>(context),
+        forceBooth(forceBooth) {};
+
+  const bool forceBooth;
+
   LogicalResult
   matchAndRewrite(PartialProductOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -104,10 +111,10 @@ struct DatapathPartialProductOpConversion
     }
 
     // Use width as a heuristic to guide partial product implementation
-    if (width <= 16)
-      return lowerAndArray(rewriter, a, b, op, width);
-    else
+    if (width > 16 || forceBooth)
       return lowerBoothArray(rewriter, a, b, op, width);
+    else
+      return lowerAndArray(rewriter, a, b, op, width);
   }
 
 private:
@@ -158,10 +165,12 @@ private:
     // encOne = (-2*b[2*i+1] + b[2*i] + b[2*i-1]) == +/- 1
     // encTwo = (-2*b[2*i+1] + b[2*i] + b[2*i-1]) == +/- 2
     Value encNegPrev;
-    for (unsigned i = 0; i < width; i += 2) {
+
+    // For even width - additional row contains the final sign correction
+    for (unsigned i = 0; i <= width; i += 2) {
       // Get Booth bits: b[i+1], b[i], b[i-1] (b[-1] = 0)
       Value bim1 = (i == 0) ? zeroFalse : bBits[i - 1];
-      Value bi = bBits[i];
+      Value bi = (i < width) ? bBits[i] : zeroFalse;
       Value bip1 = (i + 1 < width) ? bBits[i + 1] : zeroFalse;
 
       // Is the encoding zero or negative (an approximation)
@@ -241,10 +250,10 @@ struct ConvertDatapathToCombPass
 };
 } // namespace
 
-static void
-populateDatapathToCombConversionPatterns(RewritePatternSet &patterns,
-                                         bool lowerCompressToAdd) {
-  patterns.add<DatapathPartialProductOpConversion>(patterns.getContext());
+static void populateDatapathToCombConversionPatterns(
+    RewritePatternSet &patterns, bool lowerCompressToAdd, bool forceBooth) {
+  patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
+                                                   forceBooth);
 
   if (lowerCompressToAdd)
     // Lower compressors to simple add operations for downstream optimisations
@@ -261,7 +270,8 @@ void ConvertDatapathToCombPass::runOnOperation() {
   target.addIllegalDialect<DatapathDialect>();
 
   RewritePatternSet patterns(&getContext());
-  populateDatapathToCombConversionPatterns(patterns, lowerCompressToAdd);
+  populateDatapathToCombConversionPatterns(patterns, lowerCompressToAdd,
+                                           forceBooth);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
