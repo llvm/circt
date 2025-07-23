@@ -93,6 +93,10 @@ struct BinaryTruthTable {
 /// 2. Permuting the inputs
 /// 3. Negating some outputs (post-negation)
 ///
+/// Example: The function ab+c is NPN equivalent to !a + b(!c) since we can
+/// transform the first function into the second by negating inputs 'a' and 'c',
+/// then reordering the inputs appropriately.
+///
 /// This canonical form is used to efficiently match cuts against library
 /// patterns, as functions in the same NPN class can be implemented by the
 /// same circuit with appropriate input/output inversions.
@@ -123,20 +127,20 @@ struct NPNClass {
   /// instead.
   static NPNClass computeNPNCanonicalForm(const BinaryTruthTable &tt);
 
-  /// Get input mapping from this NPN class to another equivalent NPN class.
+  /// Get input permutation from this NPN class to another equivalent NPN class.
   ///
   /// When two NPN classes are equivalent, they may have different input
-  /// permutations. This function computes a mapping that allows transforming
-  /// input indices from the target NPN class to input indices of this NPN
-  /// class.
+  /// permutations. This function computes a permutation that allows
+  /// transforming input indices from the target NPN class to input indices of
+  /// this NPN class.
   ///
-  /// Returns a vector where result[i] gives the input index in this NPN class
-  /// that corresponds to input i in the target NPN class.
+  /// Returns a permutation vector where result[i] gives the input index in this
+  /// NPN class that corresponds to input i in the target NPN class.
   ///
   /// Example: If this has permutation [2,0,1] and target has [1,2,0],
   /// the mapping allows connecting target inputs to this inputs correctly.
-  llvm::SmallVector<unsigned>
-  getInputMappingTo(const NPNClass &targetNPN) const;
+  void getInputPermutation(const NPNClass &targetNPN,
+                           llvm::SmallVectorImpl<unsigned> &permutation) const;
 
   /// Equality comparison for NPN classes.
   bool equivalentOtherThanPermutation(const NPNClass &other) const {

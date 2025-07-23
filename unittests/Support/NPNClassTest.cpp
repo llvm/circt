@@ -1,4 +1,4 @@
-//===- NPNClassTest.cpp - NPNClass unit tests ---------------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -87,7 +87,7 @@ TEST(BinaryTruthTableTest, InputNegation) {
   original.setOutput(APInt(2, 2), output0); // f(1,0) = 0
   original.setOutput(APInt(2, 3), output1); // f(1,1) = 1
 
-  // Apply input negation mask 1 (negate the the second)
+  // Apply input negation mask 1 (negate the second)
   BinaryTruthTable negated = original.applyInputNegation(1);
 
   APInt result00 = negated.getOutput(APInt(2, 0));
@@ -95,13 +95,12 @@ TEST(BinaryTruthTableTest, InputNegation) {
   APInt result10 = negated.getOutput(APInt(2, 2));
   APInt result11 = negated.getOutput(APInt(2, 3));
 
-  // For input negation mask 1 (note that the second input is negated in this
-  // notation), the mapping is:
+  // For input negation mask 1 (negates the last input), the mapping is:
   // clang-format off
-  // g(0,0) gets the output from f(0,1) = 0
-  // g(1,0) gets the output from f(1,1) = 1
-  // g(0,1) gets the output from f(0,0) = 1
-  // g(1,1) gets the output from f(1,0) = 0
+  // g(0,0) gets the output from f(0,!0) = f(0,1) = 0
+  // g(0,1) gets the output from f(0,!1) = f(0,0) = 0
+  // g(1,0) gets the output from f(1,!0) = f(1,1) = 1
+  // g(1,1) gets the output from f(1,!1) = f(1,0) = 0
   // clang-format on
   EXPECT_EQ(result00, output0); // g(0,0) = 0
   EXPECT_EQ(result01, output0); // g(0,1) = 0
@@ -196,10 +195,10 @@ TEST(NPNClassTest, InputMapping) {
   NPNClass npn1(tt, {2, 0, 1}, 0, 0); // Permutation [2,0,1]
   NPNClass npn2(tt, {1, 2, 0}, 0, 0); // Permutation [1,2,0]
 
-  auto mapping = npn1.getInputMappingTo(npn2);
-
+  SmallVector<unsigned> permutation;
+  npn1.getInputPermutation(npn2, permutation);
   // Verify the mapping is correct
-  EXPECT_EQ(mapping.size(), 3u);
+  EXPECT_EQ(permutation.size(), 3u);
 
   // For each target input position i, mapping[i] should give us the input
   // position in npn1 that corresponds to the same canonical position
@@ -207,7 +206,7 @@ TEST(NPNClassTest, InputMapping) {
     // Target input i maps to canonical position npn2.inputPermutation[i]
     unsigned targetCanonicalPos = npn2.inputPermutation[i];
     // npn1's input mapping[i] should map to the same canonical position
-    unsigned npn1CanonicalPos = npn1.inputPermutation[mapping[i]];
+    unsigned npn1CanonicalPos = npn1.inputPermutation[permutation[i]];
     EXPECT_EQ(targetCanonicalPos, npn1CanonicalPos);
   }
 }
@@ -313,18 +312,18 @@ TEST(BinaryTruthTableTest, MultiBitOutputNegation) {
   BinaryTruthTable negated = original.applyOutputNegation(1);
 
   // Check that only the first bit of each output is negated
-  EXPECT_EQ(negated.getOutput(APInt(2, 0)), APInt(2, 1)); // 00 -> 10
+  EXPECT_EQ(negated.getOutput(APInt(2, 0)), APInt(2, 1)); // 00 -> 01
   EXPECT_EQ(negated.getOutput(APInt(2, 1)), APInt(2, 0)); // 01 -> 00
   EXPECT_EQ(negated.getOutput(APInt(2, 2)), APInt(2, 3)); // 10 -> 11
-  EXPECT_EQ(negated.getOutput(APInt(2, 3)), APInt(2, 2)); // 11 -> 01
+  EXPECT_EQ(negated.getOutput(APInt(2, 3)), APInt(2, 2)); // 11 -> 10
 
   // Apply output negation mask 2 (negate second output bit)
   BinaryTruthTable negated2 = original.applyOutputNegation(2);
 
-  EXPECT_EQ(negated2.getOutput(APInt(2, 0)), APInt(2, 2)); // 00 -> 01
+  EXPECT_EQ(negated2.getOutput(APInt(2, 0)), APInt(2, 2)); // 00 -> 10
   EXPECT_EQ(negated2.getOutput(APInt(2, 1)), APInt(2, 3)); // 01 -> 11
   EXPECT_EQ(negated2.getOutput(APInt(2, 2)), APInt(2, 0)); // 10 -> 00
-  EXPECT_EQ(negated2.getOutput(APInt(2, 3)), APInt(2, 1)); // 11 -> 10
+  EXPECT_EQ(negated2.getOutput(APInt(2, 3)), APInt(2, 1)); // 11 -> 01
 
   // Apply output negation mask 3 (negate both output bits)
   BinaryTruthTable negated3 = original.applyOutputNegation(3);
@@ -389,13 +388,14 @@ TEST(NPNClassTest, MultiBitOutputMapping) {
   NPNClass npn1(tt, {0, 1}, 0, 0); // Identity permutation
   NPNClass npn2(tt, {1, 0}, 0, 0); // Swapped permutation
 
-  auto mapping = npn1.getInputMappingTo(npn2);
-  EXPECT_EQ(mapping.size(), 2u);
+  SmallVector<unsigned> permutation;
+  npn1.getInputPermutation(npn2, permutation);
+  EXPECT_EQ(permutation.size(), 2u);
 
   // Verify the mapping relationship
   for (unsigned i = 0; i < 2; ++i) {
     unsigned targetCanonicalPos = npn2.inputPermutation[i];
-    unsigned npn1CanonicalPos = npn1.inputPermutation[mapping[i]];
+    unsigned npn1CanonicalPos = npn1.inputPermutation[permutation[i]];
     EXPECT_EQ(targetCanonicalPos, npn1CanonicalPos);
   }
 }

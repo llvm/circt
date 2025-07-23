@@ -33,6 +33,7 @@ void BinaryTruthTable::setOutput(const llvm::APInt &input,
                                  const llvm::APInt &output) {
   assert(input.getBitWidth() == numInputs && "Input width mismatch");
   assert(output.getBitWidth() == numOutputs && "Output width mismatch");
+  assert(input.getBitWidth() < 32 && "Input width too large");
   unsigned offset = input.getZExtValue() * numOutputs;
   for (unsigned i = 0; i < numOutputs; ++i)
     table.setBitVal(offset + i, output[i]);
@@ -45,11 +46,13 @@ BinaryTruthTable::applyPermutation(ArrayRef<unsigned> permutation) const {
 
   for (unsigned i = 0; i < (1u << numInputs); ++i) {
     llvm::APInt input(numInputs, i);
-    llvm::APInt permutedInput(numInputs, 0);
+    llvm::APInt permutedInput = input;
 
     // Apply permutation
-    for (unsigned j = 0; j < numInputs; ++j)
-      permutedInput.setBitVal(j, input[permutation[j]]);
+    for (unsigned j = 0; j < numInputs; ++j) {
+      if (permutation[j] != j)
+        permutedInput.setBitVal(j, input[permutation[j]]);
+    }
 
     result.setOutput(permutedInput, getOutput(input));
   }
@@ -62,11 +65,9 @@ BinaryTruthTable BinaryTruthTable::applyInputNegation(unsigned mask) const {
 
   for (unsigned i = 0; i < (1u << numInputs); ++i) {
     llvm::APInt input(numInputs, i);
-    llvm::APInt negatedInput(numInputs, 0);
 
-    // Apply negation
-    for (unsigned j = 0; j < numInputs; ++j)
-      negatedInput.setBitVal(j, (mask & (1u << j)) ? !input[j] : input[j]);
+    // Apply negation using bitwise XOR
+    llvm::APInt negatedInput = input ^ llvm::APInt(numInputs, mask);
 
     result.setOutput(negatedInput, getOutput(input));
   }
@@ -81,12 +82,9 @@ BinaryTruthTable::applyOutputNegation(unsigned negation) const {
   for (unsigned i = 0; i < (1u << numInputs); ++i) {
     llvm::APInt input(numInputs, i);
     llvm::APInt output = getOutput(input);
-    llvm::APInt negatedOutput(numOutputs, 0);
 
-    // Apply negation
-    for (unsigned j = 0; j < numOutputs; ++j)
-      negatedOutput.setBitVal(j,
-                              (negation & (1u << j)) ? !output[j] : output[j]);
+    // Apply negation using bitwise XOR
+    llvm::APInt negatedOutput = output ^ llvm::APInt(numOutputs, negation);
 
     result.setOutput(input, negatedOutput);
   }
@@ -186,8 +184,9 @@ llvm::SmallVector<unsigned> invertPermutation(ArrayRef<unsigned> permutation) {
 
 } // anonymous namespace
 
-llvm::SmallVector<unsigned>
-NPNClass::getInputMappingTo(const NPNClass &targetNPN) const {
+void NPNClass::getInputPermutation(
+    const NPNClass &targetNPN,
+    llvm::SmallVectorImpl<unsigned> &permutation) const {
   assert(inputPermutation.size() == targetNPN.inputPermutation.size() &&
          "NPN classes must have the same number of inputs");
   assert(equivalentOtherThanPermutation(targetNPN) &&
@@ -198,23 +197,21 @@ NPNClass::getInputMappingTo(const NPNClass &targetNPN) const {
 
   // For each input position in the target NPN class, find the corresponding
   // input position in this NPN class
-  llvm::SmallVector<unsigned> mapping(targetNPN.inputPermutation.size());
+  permutation.reserve(targetNPN.inputPermutation.size());
   for (unsigned i = 0; i < targetNPN.inputPermutation.size(); ++i) {
     // Target input i maps to canonical position targetNPN.inputPermutation[i]
     // We need the input in this NPN class that maps to the same canonical
     // position
     unsigned canonicalPos = targetNPN.inputPermutation[i];
-    mapping[i] = thisInverse[canonicalPos];
+    permutation.push_back(thisInverse[canonicalPos]);
   }
-
-  return mapping;
 }
 
 NPNClass NPNClass::computeNPNCanonicalForm(const BinaryTruthTable &tt) {
   NPNClass canonical(tt);
   // Initialize permutation with identity
   canonical.inputPermutation = identityPermutation(tt.numInputs);
-  assert(tt.numInputs <= 8 && "Too many inputs for input negation mask");
+  assert(tt.numInputs <= 8 && "Inputs are too large");
   // Try all possible tables and pick the lexicographically smallest.
   // FIXME: The time complexity is O(n! * 2^(n + m)) where n is the number
   // of inputs and m is the number of outputs. This is not scalable so
@@ -263,7 +260,7 @@ void NPNClass::dump(llvm::raw_ostream &os) const {
   }
   os << "]\n";
   os << "  Input negation: 0b";
-  for (int i = inputPermutation.size() - 1; i >= 0; --i) {
+  for (int i = truthTable.numInputs - 1; i >= 0; --i) {
     os << ((inputNegation >> i) & 1);
   }
   os << "\n";
