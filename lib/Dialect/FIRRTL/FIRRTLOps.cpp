@@ -5403,6 +5403,33 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
     return (lowWidth > highWidth ? low : high).getConstType(outerTypeIsConst);
   }
 
+  // Two different Enum types can be compatible if one is the constant version
+  // of the other.
+  auto highEnum = type_dyn_cast<FEnumType>(high);
+  auto lowEnum = type_dyn_cast<FEnumType>(low);
+  if (lowEnum && highEnum) {
+    if (lowEnum.getNumElements() != highEnum.getNumElements())
+      return emitInferRetTypeError<FIRRTLBaseType>(
+          loc, "incompatible mux operand types, true value type: ", high,
+          ", false value type: ", low);
+    SmallVector<FEnumType::EnumElement> elements;
+    for (auto [high, low] : llvm::zip_equal(highEnum, lowEnum)) {
+      // Variants should have the same name and value.
+      if (high.name != low.name || high.value != low.value)
+        return emitInferRetTypeError<FIRRTLBaseType>(
+            loc, "incompatible mux operand types, true value type: ", highEnum,
+            ", false value type: ", lowEnum);
+      // Enumerations can only have constant variants only if the whole
+      // enumeration is constant, so this logic can differ a bit from bundles.
+      auto inner =
+          inferMuxReturnType(high.type, low.type, isConstCondition, loc);
+      if (!inner)
+        return {};
+      elements.emplace_back(high.name, high.value, inner);
+    }
+    return FEnumType::get(high.getContext(), elements, outerTypeIsConst);
+  }
+
   // Infer vector types by comparing the element types.
   auto highVector = type_dyn_cast<FVectorType>(high);
   auto lowVector = type_dyn_cast<FVectorType>(low);
