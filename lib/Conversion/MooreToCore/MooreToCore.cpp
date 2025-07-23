@@ -81,14 +81,13 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
   size_t inputNum = 0;
   size_t resultNum = 0;
   auto moduleTy = op.getModuleType();
-  SmallVector<hw::PortInfo> inputs, outputs;
-  inputs.reserve(moduleTy.getNumInputs());
-  outputs.reserve(moduleTy.getNumOutputs());
+  SmallVector<hw::PortInfo> ports;
+  ports.reserve(moduleTy.getNumPorts());
 
   for (auto port : moduleTy.getPorts()) {
     Type portTy = typeConverter.convertType(port.type);
     if (auto ioTy = dyn_cast_or_null<hw::InOutType>(portTy)) {
-      inputs.push_back(hw::PortInfo(
+      ports.push_back(hw::PortInfo(
           {{port.name, ioTy.getElementType(), hw::ModulePort::InOut},
            inputNum++,
            {}}));
@@ -96,7 +95,7 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
     }
 
     if (port.dir == hw::ModulePort::Direction::Output) {
-      outputs.push_back(
+      ports.push_back(
           hw::PortInfo({{port.name, portTy, port.dir}, resultNum++, {}}));
     } else {
       // FIXME: Once we support net<...>, ref<...> type to represent type of
@@ -104,12 +103,12 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
       // port. It can change to generate corresponding types for direction of
       // port or do specified operation to it. Now inout and ref port is treated
       // as input port.
-      inputs.push_back(
+      ports.push_back(
           hw::PortInfo({{port.name, portTy, port.dir}, inputNum++, {}}));
     }
   }
 
-  return hw::ModulePortInfo(inputs, outputs);
+  return hw::ModulePortInfo(ports);
 }
 
 //===----------------------------------------------------------------------===//
