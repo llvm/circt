@@ -92,7 +92,7 @@ struct DatapathPartialProductOpConversion
 
   DatapathPartialProductOpConversion(MLIRContext *context, bool forceBooth)
       : OpConversionPattern<PartialProductOp>(context),
-        forceBooth(forceBooth){};
+        forceBooth(forceBooth) {};
 
   const bool forceBooth;
 
@@ -250,8 +250,14 @@ struct ConvertDatapathToCombPass
 };
 } // namespace
 
-static void populateDatapathToCombConversionPatterns(
-    RewritePatternSet &patterns, bool lowerCompressToAdd, bool forceBooth) {
+void ConvertDatapathToCombPass::runOnOperation() {
+  ConversionTarget target(getContext());
+
+  target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
+  target.addIllegalDialect<DatapathDialect>();
+
+  RewritePatternSet patterns(&getContext());
+
   patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
                                                    forceBooth);
 
@@ -261,17 +267,6 @@ static void populateDatapathToCombConversionPatterns(
   else
     // Lower compressors to a complete gate-level implementation
     patterns.add<DatapathCompressOpConversion>(patterns.getContext());
-}
-
-void ConvertDatapathToCombPass::runOnOperation() {
-  ConversionTarget target(getContext());
-
-  target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-  target.addIllegalDialect<DatapathDialect>();
-
-  RewritePatternSet patterns(&getContext());
-  populateDatapathToCombConversionPatterns(patterns, lowerCompressToAdd,
-                                           forceBooth);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
