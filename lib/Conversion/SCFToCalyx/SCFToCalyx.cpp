@@ -32,7 +32,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_os_ostream.h"
-#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -2668,7 +2667,10 @@ public:
       }
     }
 
-    return createOptNewTopLevelFn(moduleOp, topLevelFunction);
+    if (failed(modifyTopLevelFuncInPlace(moduleOp, topLevelFunction)))
+      return failure();
+
+    return propagateExternalMemToTopLevelFunc(moduleOp, topLevelFunction);
   }
 
   struct LoweringPattern {
@@ -2766,187 +2768,198 @@ private:
   LogicalResult partialPatternRes;
   std::shared_ptr<calyx::CalyxLoweringState> loweringState = nullptr;
 
-  /// Creates a new new top-level function based on `baseName`.
-  FuncOp createNewTopLevelFn(ModuleOp moduleOp, std::string &baseName) {
-    std::string newName = "main";
-
-    if (auto *existingMainOp = SymbolTable::lookupSymbolIn(moduleOp, newName)) {
-      auto existingMainFunc = dyn_cast<FuncOp>(existingMainOp);
-      if (existingMainFunc == nullptr) {
-        moduleOp.emitError() << "Symbol 'main' exists but is not a function";
-        return nullptr;
-      }
-      unsigned counter = 0;
-      std::string newOldName = baseName;
-      while (SymbolTable::lookupSymbolIn(moduleOp, newOldName))
-        newOldName = llvm::join_items("_", baseName, std::to_string(++counter));
-      existingMainFunc.setName(newOldName);
-      if (baseName == "main")
-        baseName = newOldName;
-    }
-
-    // Create the new "main" function
-    OpBuilder builder(moduleOp.getContext());
-    builder.setInsertionPointToStart(moduleOp.getBody());
-
-    FunctionType funcType = builder.getFunctionType({}, {});
-
-    if (auto newFunc =
-            builder.create<FuncOp>(moduleOp.getLoc(), newName, funcType))
-      return newFunc;
-
-    return nullptr;
-  }
-
-  /// Insert a call from the newly created top-level function/`caller` to the
-  /// old top-level function/`callee`; and create `memref.alloc`s inside the new
-  /// top-level function for arguments with `memref` types and for the
-  /// `memref.alloc`s inside `callee`.
-  void insertCallFromNewTopLevel(OpBuilder &builder, FuncOp caller,
-                                 FuncOp callee) {
-    if (caller.getBody().empty()) {
-      caller.addEntryBlock();
-    }
-
-    Block *callerEntryBlock = &caller.getBody().front();
-    builder.setInsertionPointToStart(callerEntryBlock);
-
-    // For those non-memref arguments passing to the original top-level
-    // function, we need to copy them to the new top-level function.
-    SmallVector<Type, 4> nonMemRefCalleeArgTypes;
-    for (auto arg : callee.getArguments()) {
-      if (!isa<MemRefType>(arg.getType())) {
-        nonMemRefCalleeArgTypes.push_back(arg.getType());
-      }
-    }
-
-    for (Type type : nonMemRefCalleeArgTypes) {
-      callerEntryBlock->addArgument(type, caller.getLoc());
-    }
-
-    FunctionType callerFnType = caller.getFunctionType();
-    SmallVector<Type, 4> updatedCallerArgTypes(
-        caller.getFunctionType().getInputs());
-    updatedCallerArgTypes.append(nonMemRefCalleeArgTypes.begin(),
-                                 nonMemRefCalleeArgTypes.end());
-    caller.setType(FunctionType::get(caller.getContext(), updatedCallerArgTypes,
-                                     callerFnType.getResults()));
-
-    Block *calleeFnBody = &callee.getBody().front();
-    unsigned originalCalleeArgNum = callee.getArguments().size();
-
-    SmallVector<Value, 4> extraMemRefArgs;
-    SmallVector<Type, 4> extraMemRefArgTypes;
-    SmallVector<Value, 4> extraMemRefOperands;
-    SmallVector<Operation *, 4> opsToModify;
-    for (auto &op : callee.getBody().getOps()) {
-      if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(op))
-        opsToModify.push_back(&op);
-    }
-
-    // Replace `alloc`/`getGlobal` in the original top-level with new
-    // corresponding operations in the new top-level.
-    builder.setInsertionPointToEnd(callerEntryBlock);
-    for (auto *op : opsToModify) {
-      // TODO (https://github.com/llvm/circt/issues/7764)
-      Value newOpRes;
-      TypeSwitch<Operation *>(op)
-          .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
-            newOpRes = builder.create<memref::AllocaOp>(callee.getLoc(),
-                                                        allocaOp.getType());
-          })
-          .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
-            newOpRes = builder.create<memref::AllocOp>(callee.getLoc(),
-                                                       allocOp.getType());
-          })
-          .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
-            newOpRes = builder.create<memref::GetGlobalOp>(
-                caller.getLoc(), getGlobalOp.getType(), getGlobalOp.getName());
-          })
-          .Default([&](Operation *defaultOp) {
-            llvm::report_fatal_error("Unsupported operation in TypeSwitch");
-          });
-      extraMemRefOperands.push_back(newOpRes);
-
-      calleeFnBody->addArgument(newOpRes.getType(), callee.getLoc());
-      BlockArgument newBodyArg = calleeFnBody->getArguments().back();
-      op->getResult(0).replaceAllUsesWith(newBodyArg);
-      op->erase();
-      extraMemRefArgs.push_back(newBodyArg);
-      extraMemRefArgTypes.push_back(newBodyArg.getType());
-    }
-
-    SmallVector<Type, 4> updatedCalleeArgTypes(
-        callee.getFunctionType().getInputs());
-    updatedCalleeArgTypes.append(extraMemRefArgTypes.begin(),
-                                 extraMemRefArgTypes.end());
-    callee.setType(FunctionType::get(callee.getContext(), updatedCalleeArgTypes,
-                                     callee.getFunctionType().getResults()));
-
-    unsigned otherArgsCount = 0;
-    SmallVector<Value, 4> calleeArgFnOperands;
-    builder.setInsertionPointToStart(callerEntryBlock);
-    for (auto arg : callee.getArguments().take_front(originalCalleeArgNum)) {
-      if (isa<MemRefType>(arg.getType())) {
-        auto memrefType = cast<MemRefType>(arg.getType());
-        auto allocOp =
-            builder.create<memref::AllocOp>(callee.getLoc(), memrefType);
-        calleeArgFnOperands.push_back(allocOp);
-      } else {
-        auto callerArg = callerEntryBlock->getArgument(otherArgsCount++);
-        calleeArgFnOperands.push_back(callerArg);
-      }
-    }
-
-    SmallVector<Value, 4> fnOperands;
-    fnOperands.append(calleeArgFnOperands.begin(), calleeArgFnOperands.end());
-    fnOperands.append(extraMemRefOperands.begin(), extraMemRefOperands.end());
-    auto calleeName =
-        SymbolRefAttr::get(builder.getContext(), callee.getSymName());
-    auto resultTypes = callee.getResultTypes();
-
-    builder.setInsertionPointToEnd(callerEntryBlock);
-    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
-                           fnOperands);
-    builder.create<ReturnOp>(caller.getLoc());
-  }
-
-  /// Conditionally creates an optional new top-level function; and inserts a
-  /// call from the new top-level function to the old top-level function if we
-  /// did create one
-  LogicalResult createOptNewTopLevelFn(ModuleOp moduleOp,
-                                       std::string &topLevelFunction) {
+  /// Modifies the top-level function in-place if it has `memref` function
+  /// arguments. Concretely, we convert those arguments to `memref.alloc`s in
+  /// the function body.
+  LogicalResult modifyTopLevelFuncInPlace(ModuleOp moduleOp,
+                                          std::string &topLevelFunction) {
     auto hasMemrefArguments = [](FuncOp func) {
       return std::any_of(
           func.getArguments().begin(), func.getArguments().end(),
           [](BlockArgument arg) { return isa<MemRefType>(arg.getType()); });
     };
 
-    /// We only create a new top-level function and call the original top-level
-    /// function from the new one if the original top-level has `memref` in its
-    /// argument
-    auto funcOps = moduleOp.getOps<FuncOp>();
-    bool hasMemrefArgsInTopLevel =
-        std::any_of(funcOps.begin(), funcOps.end(), [&](auto funcOp) {
-          return funcOp.getName() == topLevelFunction &&
-                 hasMemrefArguments(funcOp);
-        });
+    if (auto topLevelFuncOp = dyn_cast<FuncOp>(
+            SymbolTable::lookupSymbolIn(moduleOp, topLevelFunction))) {
+      if (!hasMemrefArguments(topLevelFuncOp))
+        return success();
 
-    if (hasMemrefArgsInTopLevel) {
-      auto newTopLevelFunc = createNewTopLevelFn(moduleOp, topLevelFunction);
-      if (!newTopLevelFunc)
-        return failure();
+      OpBuilder builder(topLevelFuncOp);
+      Location loc = topLevelFuncOp.getLoc();
+      builder.setInsertionPointToStart(&topLevelFuncOp.getBody().front());
 
-      OpBuilder builder(moduleOp.getContext());
-      Operation *oldTopLevelFuncOp =
-          SymbolTable::lookupSymbolIn(moduleOp, topLevelFunction);
-      if (auto oldTopLevelFunc = dyn_cast<FuncOp>(oldTopLevelFuncOp))
-        insertCallFromNewTopLevel(builder, newTopLevelFunc, oldTopLevelFunc);
-      else {
-        moduleOp.emitOpError("Original top-level function not found!");
-        return failure();
+      // First collect the MemRef arguments to replace with their indices
+      SmallVector<std::pair<BlockArgument, unsigned>, 4> argsToReplace;
+      for (auto funcArg : topLevelFuncOp.getArguments()) {
+        if (isa<MemRefType>(funcArg.getType()))
+          argsToReplace.push_back({funcArg, funcArg.getArgNumber()});
       }
-      topLevelFunction = "main";
+
+      unsigned numErased = 0;
+      for (auto &argPair : argsToReplace) {
+        auto funcArg = argPair.first;
+        auto originalIndex = argPair.second;
+
+        // Adjust the index based on how many arguments we've already erased
+        unsigned adjustedIndex = originalIndex - numErased;
+
+        auto newlyCreatedAllocOp = builder.create<memref::AllocOp>(
+            loc, cast<MemRefType>(funcArg.getType()));
+
+        funcArg.replaceAllUsesWith(newlyCreatedAllocOp);
+
+        topLevelFuncOp.eraseArgument(adjustedIndex);
+        numErased++;
+      }
+    } else {
+      moduleOp.emitOpError("Original top-level function '" + topLevelFunction +
+                           "' not found!");
+      return failure();
+    }
+
+    return success();
+  }
+
+  std::optional<SmallVector<Operation *, 4>>
+  extractExternalMemoryAllocs(FuncOp funcOp) {
+    SmallVector<Operation *, 4> externalMemoryAllocs;
+    funcOp.walk([&](Operation *op) {
+      if (isa<memref::AllocOp, memref::AllocaOp, memref::GetGlobalOp>(op))
+        externalMemoryAllocs.push_back(op);
+    });
+
+    if (externalMemoryAllocs.empty())
+      return std::nullopt;
+    return externalMemoryAllocs;
+  }
+
+  /// Find the unique CallOp that calls `funcOp`. Fails if there is none or
+  /// multiple.
+  FailureOr<std::pair<CallOp, FuncOp>> findUniqueCaller(ModuleOp moduleOp,
+                                                        FuncOp funcOp) {
+    SmallVector<CallOp, 2> callOps;
+    moduleOp.walk([&](CallOp callOp) {
+      if (callOp.getCallee() == funcOp.getSymName())
+        callOps.push_back(callOp);
+    });
+
+    if (callOps.empty()) {
+      funcOp.emitError("Function has no callers.");
+      return failure();
+    }
+
+    if (callOps.size() > 1) {
+      funcOp.emitError(
+          "Currently do not support a callee called by multiple callers.");
+      return failure();
+    }
+
+    return std::make_pair(callOps.front(),
+                          callOps.front()->getParentOfType<FuncOp>());
+  }
+
+  /// Propagates `externalMemoryAllocs` from `callee` to the caller and modifies
+  /// the corresponding `CallOp`. If the caller is top-level function, we move
+  /// `externalMemoryAllocs` to it; otherwise, we propagate through function
+  /// arguments.
+  LogicalResult propagateExternalMemToTopLevelFuncHelper(
+      ModuleOp moduleOp, FuncOp callee, std::pair<CallOp, FuncOp> callOpCaller,
+      const std::string &topLevelFunction,
+      SmallVector<Operation *, 4> &externalMemoryAllocs) {
+    auto callOp = callOpCaller.first;
+    auto caller = callOpCaller.second;
+    Block &callerEntryBlock = caller.getFunctionBody().front();
+    SmallVector<Value, 4> externalMemoryValues;
+    bool isTopLevelCaller = (caller.getSymName() == topLevelFunction);
+    for (auto *externalMemory : externalMemoryAllocs) {
+      Value memResult = externalMemory->getResult(0);
+      Type externalMemoryType = memResult.getType();
+      if (isTopLevelCaller) {
+        // Track the order of memory allocations so that it's easier to identify
+        // the corresponding one in the JSON file that will be written to.
+        Operation *lastAllocOp = nullptr;
+        for (Operation &op : callOp->getBlock()->getOperations()) {
+          if (&op == callOp.getOperation())
+            break;
+
+          if (isa<memref::AllocOp, memref::AllocaOp, memref::GetGlobalOp>(&op))
+            lastAllocOp = &op;
+        }
+
+        if (lastAllocOp)
+          externalMemory->moveBefore(lastAllocOp->getBlock(),
+                                     std::next(lastAllocOp->getIterator()));
+        else
+          externalMemory->moveBefore(callOp->getBlock(),
+                                     std::next(callOp->getIterator()));
+
+        externalMemoryValues.push_back(memResult);
+      } else {
+        // Non-top-level: propagate by function arguments
+        externalMemoryValues.push_back(
+            callerEntryBlock.addArgument(externalMemoryType, caller.getLoc()));
+      }
+      // Add a corresponding function argument to `callee`.
+      auto memArg = callee.getFunctionBody().front().addArgument(
+          externalMemoryType, caller.getLoc());
+      SmallVector<Type, 4> updatedCalleeArgTypes(
+          callee.getFunctionType().getInputs());
+      updatedCalleeArgTypes.push_back(externalMemoryType);
+      callee.setType(FunctionType::get(callee.getContext(),
+                                       updatedCalleeArgTypes,
+                                       callee.getFunctionType().getResults()));
+      memResult.replaceAllUsesWith(memArg);
+    }
+
+    SmallVector<Value, 4> newOperands(callOp.getOperands().begin(),
+                                      callOp.getOperands().end());
+    newOperands.append(externalMemoryValues.begin(),
+                       externalMemoryValues.end());
+    callOp.getOperation()->setOperands(newOperands);
+
+    // If not top-level, recursively propagate further.
+    if (!isTopLevelCaller) {
+      auto callerLookup = findUniqueCaller(moduleOp, caller);
+
+      if (failed(callerLookup))
+        return failure();
+
+      auto [callerCallOp, callerCallerFunc] = *callerLookup;
+
+      if (auto newExternalMemoryAllocs = extractExternalMemoryAllocs(caller))
+        externalMemoryAllocs.append(newExternalMemoryAllocs->begin(),
+                                    newExternalMemoryAllocs->end());
+
+      if (failed(propagateExternalMemToTopLevelFuncHelper(
+              moduleOp, caller, {callerCallOp, callerCallerFunc},
+              topLevelFunction, externalMemoryAllocs)))
+        return failure();
+    }
+
+    return success();
+  }
+
+  /// Propagates external memory allocations from non-top-level functions to the
+  /// top-level function.
+  LogicalResult
+  propagateExternalMemToTopLevelFunc(ModuleOp moduleOp,
+                                     const std::string &topLevelFunction) {
+    for (auto funcOp : moduleOp.getOps<FuncOp>()) {
+      if (funcOp.getSymName().str() == topLevelFunction)
+        // We don't need to propagate anymore.
+        continue;
+
+      if (auto externalMemoryAllocs = extractExternalMemoryAllocs(funcOp)) {
+        auto callerLookup = findUniqueCaller(moduleOp, funcOp);
+        if (failed(callerLookup))
+          return failure();
+
+        auto [callOp, callerFunc] = *callerLookup;
+        if (failed(propagateExternalMemToTopLevelFuncHelper(
+                moduleOp, funcOp, {callOp, callerFunc}, topLevelFunction,
+                *externalMemoryAllocs)))
+          return failure();
+      }
     }
 
     return success();

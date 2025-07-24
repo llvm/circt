@@ -90,3 +90,27 @@ module {
     return %ret1 : i32
   }
 }
+
+// -----
+
+// Test non-top-level function has external memory allocation.
+
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.invoke @callee_instance[arg_mem_0 = mem_0, arg_mem_1 = mem_1]() -> ()
+// CHECK:             }
+// CHECK:           }
+
+module {
+  func.func @callee(%arg0 : memref<5xi32>) {
+    %idx = arith.constant 0 : index
+    %alloc = memref.alloc() : memref<6xi32>
+    %val = memref.load %alloc[%idx] : memref<6xi32>
+    memref.store %val, %arg0[%idx] : memref<5xi32>
+    return
+  }
+  func.func @main(%arg0: memref<5xi32>) {
+    func.call @callee(%arg0) : (memref<5xi32>) -> ()
+    return
+  }
+}
