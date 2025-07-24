@@ -92,7 +92,7 @@ struct DatapathPartialProductOpConversion
 
   DatapathPartialProductOpConversion(MLIRContext *context, bool forceBooth)
       : OpConversionPattern<PartialProductOp>(context),
-        forceBooth(forceBooth) {};
+        forceBooth(forceBooth){};
 
   const bool forceBooth;
 
