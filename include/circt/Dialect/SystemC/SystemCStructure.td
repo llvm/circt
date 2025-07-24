@@ -447,7 +447,7 @@ def ReturnOp : SystemCOp<"cpp.return", [
   let arguments = (ins Variadic<AnyType>:$returnValues);
 
   let builders = [OpBuilder<(ins), [{
-    build($_builder, $_state, std::nullopt);
+    build($_builder, $_state, mlir::ValueRange());
   }]>];
 
   let assemblyFormat = "attr-dict ($returnValues^ `:` type($returnValues))?";

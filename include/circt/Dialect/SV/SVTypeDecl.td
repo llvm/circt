@@ -235,7 +235,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, std::nullopt);
+      return build($_builder, $_state, result, mlir::ValueRange());
     }]>
   ];
 
