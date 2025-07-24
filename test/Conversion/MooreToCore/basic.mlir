@@ -425,6 +425,26 @@ moore.module private @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : 
   moore.output %0 : !moore.l1
 }
 
+// CHECK-LABEL: hw.module @PreservePortOrderTop(
+// CHECK-SAME:    out a : i42,
+// CHECK-SAME:    in %b : i42
+// CHECK-SAME:  ) {
+moore.module @PreservePortOrderTop(out a: !moore.i42, in %b: !moore.i42) {
+  // CHECK: [[TMP:%.+]] = hw.instance "inst" @PreservePortOrder(x: %b: i42, z: %b: i42) -> (y: i42)
+  // CHECK: hw.output [[TMP]] : i42
+  %0 = moore.instance "inst" @PreservePortOrder(x: %b: !moore.i42, z: %b: !moore.i42) -> (y: !moore.i42)
+  moore.output %0 : !moore.i42
+}
+
+// CHECK-LABEL: hw.module private @PreservePortOrder(
+// CHECK-SAME:    in %x : i42,
+// CHECK-SAME:    out y : i42,
+// CHECK-SAME:    in %z : i42
+// CHECK-SAME:  ) {
+moore.module private @PreservePortOrder(in %x: !moore.i42, out y: !moore.i42, in %z: !moore.i42) {
+  moore.output %x : !moore.i42
+}
+
 // CHECK-LABEL: hw.module @Variable
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32

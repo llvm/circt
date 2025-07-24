@@ -141,6 +141,21 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
             return builder.create<ConstantOp>(
                 type, APInt::getZero(type.getWidth().value_or(1)));
           })
+          .Case<FEnumType>([&](auto type) -> Value {
+            // There might not be a variant that corresponds to 0, in which case
+            // we have to create a 0 value and bitcast it to the enum.
+            if (type.getNumElements() != 0 &&
+                type.getElement(0).value.getValue().isZero()) {
+              const auto &element = type.getElement(0);
+              auto value = createZeroValue(builder, element.type, cache);
+              return builder.create<FEnumCreateOp>(type, element.name, value);
+            }
+            auto value = builder.create<ConstantOp>(
+                UIntType::get(builder.getContext(), type.getBitWidth(),
+                              /*isConst=*/true),
+                APInt::getZero(type.getBitWidth()));
+            return builder.create<BitCastOp>(type, value);
+          })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {

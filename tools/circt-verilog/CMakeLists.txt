@@ -9,6 +9,7 @@ set(libs
   CIRCTMooreToCore
   CIRCTMooreTransforms
   CIRCTSeq
+  CIRCTSeqTransforms
   CIRCTSim
   CIRCTSupport
   CIRCTTransforms
