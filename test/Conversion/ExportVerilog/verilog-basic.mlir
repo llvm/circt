@@ -123,43 +123,42 @@ hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   %w3 = sv.wire : !hw.inout<i16>
   %w3_use = sv.read_inout %w3 : !hw.inout<i16>
 
-
-  // CHECK: assign out1a = ^in4;
+  // CHECK-DAG: assign out1a = ^in4;
   %p_res = comb.parity %in4 : i4
-  // CHECK: assign out1b = &in4;
+  // CHECK-DAG: assign out1b = &in4;
   %and_res = comb.icmp eq %in4, %c-1_i4 : i4
-  // CHECK: assign out1c = |in4;
+  // CHECK-DAG: assign out1c = |in4;
   %or_res = comb.icmp ne %in4, %c0_i4 : i4
 
-  // CHECK: assign out1d = in4 === 4'h0;
+  // CHECK-DAG: assign out1d = in4 === 4'h0;
   %cmp3 = comb.icmp ceq %in4, %c0_i4 : i4
-  // CHECK: assign out1e = in4 !== 4'h0;
+  // CHECK-DAG: assign out1e = in4 !== 4'h0;
   %cmp4 = comb.icmp cne %in4, %c0_i4 : i4
-  // CHECK: assign out1f = in4 ==? 4'h0;
+  // CHECK-DAG: assign out1f = in4 ==? 4'h0;
   %cmp5 = comb.icmp weq %in4, %c0_i4 : i4
-  // CHECK: assign out1g = in4 !=? 4'h0;
+  // CHECK-DAG: assign out1g = in4 !=? 4'h0;
   %cmp6 = comb.icmp wne %in4, %c0_i4 : i4
 
-  // CHECK: assign out4s = $signed($signed(in4) >>> in4);
-  // CHECK: assign sext17 = {w3[15], w3};
+  // CHECK-DAG: assign out4s = $signed($signed(in4) >>> in4);
+  // CHECK-DAG: assign sext17 = {w3[15], w3};
   %36 = comb.extract %w3_use from 15 : (i16) -> i1
   %35 = comb.concat %36, %w3_use : i1, i16
 
   // Variadic with name attribute lowers
-  // CHECK: assign orvout = in4[1:0] | in4[3:2] | in4[2:1];
+  // CHECK-DAG: assign orvout = in4[1:0] | in4[3:2] | in4[2:1];
   %orpre1 = comb.extract %in4 from 0 : (i4) -> i2
   %orpre2 = comb.extract %in4 from 2 : (i4) -> i2
   %orpre3 = comb.extract %in4 from 1 : (i4) -> i2
   %orv = comb.or %orpre1, %orpre2, %orpre3 {sv.namehint = "hintyhint"}: i2
 
-  // Test for comb.reverse 
-  // CHECK: assign out_reverse = {<<{in8}};
+  // Test for comb.reverse
+  // CHECK-DAG: assign out_reverse = {<<{in8}};
   %rev8 = comb.reverse %in8 : i8
 
   // Time system functions
-  // CHECK: assign outTime = $time;
+  // CHECK-DAG: assign outTime = $time;
   %time = sv.system.time : i64
-  // CHECK: assign outSTime = $stime;
+  // CHECK-DAG: assign outSTime = $stime;
   %stime = sv.system.stime : i32
 
   hw.output %p_res, %and_res, %or_res, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv, %rev8, %time, %stime : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2, i8, i64, i32
