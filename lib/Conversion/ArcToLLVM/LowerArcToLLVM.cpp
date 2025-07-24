@@ -505,7 +505,7 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
 
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, std::nullopt, evalFunc,
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, mlir::TypeRange(), evalFunc,
                                               adaptor.getInstance());
 
     return success();
