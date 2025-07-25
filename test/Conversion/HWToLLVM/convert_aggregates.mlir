@@ -125,10 +125,13 @@ func.func @convertConstArray(%arg0 : i1, %arg1 : i32) {
   // CHECK-NEXT: {{%.+}} = llvm.load %[[VAL_9]] : !llvm.ptr -> !llvm.array<2 x struct<(i1, i32)>>
   %4 = hw.aggregate_constant [[0 : i32, 1 : i1], [2 : i32, 0 : i1]] : !hw.array<2x!hw.struct<a: i32, b: i1>>
 
+  // CHECK-NEXT: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[ALLOCA:.*]] = llvm.alloca %[[ONE]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[VAL_3]], %[[ALLOCA]] : !llvm.array<2 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[VAL_10:.*]] = llvm.zext %arg0 : i1 to i2
-  // CHECK-NEXT: %[[VAL_11:.*]] = llvm.getelementptr %[[VAL_2]][0, %[[VAL_10]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[VAL_11:.*]] = llvm.getelementptr %[[ALLOCA]][0, %[[VAL_10]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.store %arg1, %[[VAL_11]] : i32, !llvm.ptr
-  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_2]] : !llvm.ptr -> !llvm.array<2 x i32>
+  // CHECK-NEXT: %{{.+}} = llvm.load %[[ALLOCA]] : !llvm.ptr -> !llvm.array<2 x i32>
   %5 = hw.array_inject %0[%arg0], %arg1 : !hw.array<2xi32>, i1
 
   return
