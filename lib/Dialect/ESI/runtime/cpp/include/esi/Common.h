@@ -105,12 +105,23 @@ public:
   /// Adopts the data vector buffer.
   MessageData() = default;
   MessageData(std::vector<uint8_t> &data) : data(std::move(data)) {}
+  MessageData(std::vector<uint8_t> &&data) : data(std::move(data)) {}
   MessageData(const uint8_t *data, size_t size) : data(data, data + size) {}
   ~MessageData() = default;
 
   const uint8_t *getBytes() const { return data.data(); }
+
+  /// Get the data as a vector of bytes.
+  const std::vector<uint8_t> &getData() const { return data; }
+
+  /// Move the data out of this object.
+  std::vector<uint8_t> takeData() { return std::move(data); }
+
   /// Get the size of the data in bytes.
   size_t getSize() const { return data.size(); }
+
+  /// Returns true if this message contains no data.
+  bool empty() const { return data.empty(); }
 
   /// Cast to a type. Throws if the size of the data does not match the size of
   /// the message. The lifetime of the resulting pointer is tied to the lifetime
