@@ -67,7 +67,6 @@ hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
 // ALLOW_ADD-NEXT:    %[[RHS0:.+]] = comb.extract %rhs from 0 : (i3) -> i1
 // ALLOW_ADD-NEXT:    %[[RHS1:.+]] = comb.extract %rhs from 1 : (i3) -> i1
 // ALLOW_ADD-NEXT:    %[[RHS2:.+]] = comb.extract %rhs from 2 : (i3) -> i1
-// ALLOW_ADD-NEXT:    %false = hw.constant false
 //                    Partial Products
 // ALLOW_ADD-NEXT:    %[[P_0_0:.+]] = comb.and %[[LHS0]], %[[RHS0]] : i1
 // ALLOW_ADD-NEXT:    %[[P_1_0:.+]] = comb.and %[[LHS1]], %[[RHS0]] : i1
@@ -76,6 +75,7 @@ hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
 // ALLOW_ADD-NEXT:    %[[P_1_1:.+]] = comb.and %[[LHS1]], %[[RHS1]] : i1
 // ALLOW_ADD-NEXT:    %[[P_2_1:.+]] = comb.and %[[LHS0]], %[[RHS2]] : i1
 //                    Wallace Tree Reduction
+// ALLOW_ADD-NEXT:    %false = hw.constant false
 // ALLOW_ADD-NEXT:    %[[XOR0:.+]] = comb.xor bin %[[P_1_0]], %[[P_0_1]] : i1
 // ALLOW_ADD-NEXT:    %[[AND0:.+]] = comb.and bin %[[P_1_0]], %[[P_0_1]] : i1
 // ALLOW_ADD-NEXT:    %[[XOR1:.+]] = comb.xor bin %[[P_2_0]], %[[P_1_1]] : i1

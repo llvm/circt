@@ -668,21 +668,6 @@ struct CombSubOpConversion : OpConversionPattern<SubOp> {
   }
 };
 
-// Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> fullAdder(ConversionPatternRewriter &rewriter,
-                                  Location loc, Value a, Value b, Value c) {
-  auto aXorB = rewriter.createOrFold<comb::XorOp>(loc, a, b, true);
-  Value sum = rewriter.createOrFold<comb::XorOp>(loc, aXorB, c, true);
-
-  auto carry = rewriter.createOrFold<comb::OrOp>(
-      loc,
-      ArrayRef<Value>{rewriter.createOrFold<comb::AndOp>(loc, a, b, true),
-                      rewriter.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
-      true);
-
-  return {sum, carry};
-}
-
 struct CombMulOpConversion : OpConversionPattern<MulOp> {
   using OpConversionPattern<MulOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
@@ -729,73 +714,13 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
       return success();
     }
 
-    // Wallace tree reduction
-    replaceOpAndCopyNamehint(
-        rewriter, op,
-        wallaceReduction(falseValue, width, rewriter, loc, partialProducts));
+    // Wallace tree reduction - reduce to two addends.
+    auto addends =
+        comb::wallaceReduction(rewriter, loc, width, 2, partialProducts);
+    // Sum the two addends using a carry-propagate adder
+    auto newAdd = rewriter.create<comb::AddOp>(loc, addends, true);
+    replaceOpAndCopyNamehint(rewriter, op, newAdd);
     return success();
-  }
-
-private:
-  // Perform Wallace tree reduction on partial products.
-  // See https://en.wikipedia.org/wiki/Wallace_tree
-  static Value
-  wallaceReduction(Value falseValue, size_t width,
-                   ConversionPatternRewriter &rewriter, Location loc,
-                   SmallVector<SmallVector<Value>> &partialProducts) {
-    SmallVector<SmallVector<Value>> newPartialProducts;
-    newPartialProducts.reserve(partialProducts.size());
-    // Continue reduction until we have only two rows. The length of
-    // `partialProducts` is reduced by 1/3 in each iteration.
-    while (partialProducts.size() > 2) {
-      newPartialProducts.clear();
-      // Take three rows at a time and reduce to two rows(sum and carry).
-      for (unsigned i = 0; i < partialProducts.size(); i += 3) {
-        if (i + 2 < partialProducts.size()) {
-          // We have three rows to reduce
-          auto &row1 = partialProducts[i];
-          auto &row2 = partialProducts[i + 1];
-          auto &row3 = partialProducts[i + 2];
-
-          assert(row1.size() == width && row2.size() == width &&
-                 row3.size() == width);
-
-          SmallVector<Value> sumRow, carryRow;
-          sumRow.reserve(width);
-          carryRow.reserve(width);
-          carryRow.push_back(falseValue);
-
-          // Process each bit position
-          for (unsigned j = 0; j < width; ++j) {
-            // Full adder logic
-            auto [sum, carry] =
-                fullAdder(rewriter, loc, row1[j], row2[j], row3[j]);
-            sumRow.push_back(sum);
-            if (j + 1 < width)
-              carryRow.push_back(carry);
-          }
-
-          newPartialProducts.push_back(std::move(sumRow));
-          newPartialProducts.push_back(std::move(carryRow));
-        } else {
-          // Add remaining rows as is
-          newPartialProducts.append(partialProducts.begin() + i,
-                                    partialProducts.end());
-        }
-      }
-
-      std::swap(newPartialProducts, partialProducts);
-    }
-
-    assert(partialProducts.size() == 2);
-    // Reverse the order of the bits
-    std::reverse(partialProducts[0].begin(), partialProducts[0].end());
-    std::reverse(partialProducts[1].begin(), partialProducts[1].end());
-    auto lhs = rewriter.create<comb::ConcatOp>(loc, partialProducts[0]);
-    auto rhs = rewriter.create<comb::ConcatOp>(loc, partialProducts[1]);
-
-    // Use comb.add for the final addition.
-    return rewriter.create<comb::AddOp>(loc, ArrayRef<Value>{lhs, rhs}, true);
   }
 };
 

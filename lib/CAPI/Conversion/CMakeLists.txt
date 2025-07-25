@@ -14,6 +14,7 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTCombToLLVM
   CIRCTCombToSMT
   CIRCTConvertToArcs
+  CIRCTDatapathToComb
   CIRCTDatapathToSMT
   CIRCTDCToHW
   CIRCTExportChiselInterface
