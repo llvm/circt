@@ -2079,9 +2079,8 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
     }
 
     auto isARecursiveMux = [](Value v) {
-      if (v.getDefiningOp())
-        if (auto muxOp = dyn_cast<MuxOp>(v.getDefiningOp()))
-          return muxOp.getTrueValue() == v || muxOp.getFalseValue() == v;
+      if (auto muxOp = v.getDefiningOp<MuxOp>())
+        return muxOp.getTrueValue() == v || muxOp.getFalseValue() == v;
       return false;
     };
 
