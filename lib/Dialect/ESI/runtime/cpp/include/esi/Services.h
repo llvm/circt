@@ -284,6 +284,7 @@ public:
     std::mutex callMutex;
     WriteChannelPort *arg;
     ReadChannelPort *result;
+    bool connected = false;
   };
 
 private:
