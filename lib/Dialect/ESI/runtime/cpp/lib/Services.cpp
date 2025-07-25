@@ -240,7 +240,8 @@ CallService::Callback::Callback(AcceleratorConnection &acc, AppID id,
     : ServicePort(id, type, channels), acc(acc) {}
 
 CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
-                                                  AppID id, BundleType *type,
+                                                  AppID id,
+                                                  const BundleType *type,
                                                   WriteChannelPort &result,
                                                   ReadChannelPort &arg) {
   return new Callback(acc, id, type, {{"arg", arg}, {"result", result}});

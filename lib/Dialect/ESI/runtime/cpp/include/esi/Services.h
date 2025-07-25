@@ -308,8 +308,9 @@ public:
              PortMap channels);
 
   public:
-    static Callback *get(AcceleratorConnection &acc, AppID id, BundleType *type,
-                         WriteChannelPort &result, ReadChannelPort &arg);
+    static Callback *get(AcceleratorConnection &acc, AppID id,
+                         const BundleType *type, WriteChannelPort &result,
+                         ReadChannelPort &arg);
 
     /// Connect a callback to code which will be executed when the accelerator
     /// invokes the callback. The 'quick' flag indicates that the callback is
