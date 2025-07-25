@@ -86,8 +86,8 @@ struct LowerCHIRRTLPass
 
   MemDirAttr inferMemoryPortKind(MemoryPortOp memPort);
 
-  void replaceMem(Operation *op, StringRef name, bool isSequential, RUWAttr ruw,
-                  ArrayAttr annotations);
+  void replaceMem(Operation *op, StringRef name, bool isSequential,
+                  RUWBehavior ruw, ArrayAttr annotations);
 
   template <typename OpType, typename... T>
   void cloneSubindexOpForMemory(OpType op, Value input, T... operands);
@@ -274,7 +274,7 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
 }
 
 void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
-                                  bool isSequential, RUWAttr ruw,
+                                  bool isSequential, RUWBehavior ruw,
                                   ArrayAttr annotations) {
   assert(isa<CombMemOp>(cmem) || isa<SeqMemOp>(cmem));
 
@@ -497,7 +497,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
 void LowerCHIRRTLPass::visitCHIRRTL(CombMemOp combmem) {
   replaceMem(combmem, combmem.getName(), /*isSequential*/ false,
-             RUWAttr::Undefined, combmem.getAnnotations());
+             RUWBehavior::Undefined, combmem.getAnnotations());
 }
 
 void LowerCHIRRTLPass::visitCHIRRTL(SeqMemOp seqmem) {

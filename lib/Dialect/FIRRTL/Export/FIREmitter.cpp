@@ -193,7 +193,7 @@ struct Emitter {
 
   // Attributes
   void emitAttribute(MemDirAttr attr);
-  void emitAttribute(RUWAttr attr);
+  void emitAttribute(RUWBehaviorAttr attr);
 
   // Types
   void emitType(Type type, bool includeConst = true);
@@ -1198,7 +1198,7 @@ void Emitter::emitStatement(MemOp op) {
       ps << "readwriter => " << readwriter << PP::newline;
 
     ps << "read-under-write => ";
-    emitAttribute(op.getRuw());
+    emitAttribute(op.getRuwAttr());
     setPendingNewline();
   });
 }
@@ -1209,7 +1209,7 @@ void Emitter::emitStatement(SeqMemOp op) {
     ps << "smem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
     ps << "," << PP::space;
-    emitAttribute(op.getRuw());
+    emitAttribute(op.getRuwAttr());
   });
   emitLocationAndNewLine(op);
 }
@@ -1645,15 +1645,15 @@ void Emitter::emitAttribute(MemDirAttr attr) {
   }
 }
 
-void Emitter::emitAttribute(RUWAttr attr) {
-  switch (attr) {
-  case RUWAttr::Undefined:
+void Emitter::emitAttribute(RUWBehaviorAttr attr) {
+  switch (attr.getValue()) {
+  case RUWBehavior::Undefined:
     ps << "undefined";
     break;
-  case RUWAttr::Old:
+  case RUWBehavior::Old:
     ps << "old";
     break;
-  case RUWAttr::New:
+  case RUWBehavior::New:
     ps << "new";
     break;
   }
