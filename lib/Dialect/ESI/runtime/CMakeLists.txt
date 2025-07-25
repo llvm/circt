@@ -283,9 +283,7 @@ add_dependencies(ESIRuntime esitester)
 ##===----------------------------------------------------------------------===//
 
 # Pybind11 is used to wrap the ESICppRuntime APIs.
-if(NOT DEFINED Python3_FOUND)
-  find_package(Python3 COMPONENTS Interpreter Development)
-endif()
+find_package(Python3 COMPONENTS Interpreter Development)
 if(Python3_FOUND)
   IF(MSVC)
     # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
