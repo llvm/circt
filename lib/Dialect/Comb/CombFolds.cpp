@@ -2078,6 +2078,16 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
       return false;
     }
 
+    auto isARecursiveMux = [](Value v) {
+      if (auto muxOp = v.getDefiningOp<MuxOp>())
+        return muxOp.getTrueValue() == v || muxOp.getFalseValue() == v;
+      return false;
+    };
+
+    // Avoid infinitely recursing canonicalizations
+    if (isARecursiveMux(otherValue) || isARecursiveMux(subCond))
+      return false;
+
     // Invert the outer cond if needed, and combine the mux conditions.
     if (!isTrueOperand)
       cond = createOrFoldNot(op.getLoc(), cond, rewriter);
@@ -2515,10 +2525,16 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     return success();
 
   // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
-  if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
-    return success();
-  if (assumeMuxCondInOperand(op.getCond(), op.getFalseValue(), false, rewriter))
-    return success();
+  if (op.getTrueValue().getDefiningOp() &&
+      op.getTrueValue().getDefiningOp() != op)
+    if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
+      return success();
+  if (op.getFalseValue().getDefiningOp() &&
+      op.getFalseValue().getDefiningOp() != op)
+
+    if (assumeMuxCondInOperand(op.getCond(), op.getFalseValue(), false,
+                               rewriter))
+      return success();
 
   return failure();
 }
