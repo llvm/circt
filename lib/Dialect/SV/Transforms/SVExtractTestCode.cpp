@@ -227,8 +227,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   }
 
   // Create the module, setting the output path if indicated.
-  auto newMod = b.create<hw::HWModuleOp>(
-      op.getLoc(),
+  auto newMod = hw::HWModuleOp::create(
+      b, op.getLoc(),
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (path)
     newMod->setAttr("output_file", path);
@@ -247,8 +247,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
 
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
-  auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
+  auto inst = hw::InstanceOp::create(
+      b, op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
       hw::InnerSymAttr::get(b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix)
               .str())));
@@ -256,8 +256,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
-  auto bindOp = b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(),
-                                     inst.getInnerSymAttr().getSymName());
+  auto bindOp = sv::BindOp::create(b, op.getLoc(), op.getNameAttr(),
+                                   inst.getInnerSymAttr().getSymName());
   bindTable[op.getNameAttr()][inst.getInnerSymAttr().getSymName()] = bindOp;
   if (fileName)
     bindOp->setAttr("output_file", fileName);

@@ -57,9 +57,9 @@ struct BlockConversionPattern : public OpConversionPattern<StaticBlockOp> {
     getExternallyDefinedOperands(blockOp, mapping);
     Block *bodyBlock = blockOp.getBodyBlock();
 
-    auto isolatedBlock = rewriter.create<IsolatedStaticBlockOp>(
-        blockOp.getLoc(), blockOp.getResultTypes(), blockOp.getOperands(),
-        blockOp.getMaxThreadsAttr());
+    auto isolatedBlock = IsolatedStaticBlockOp::create(
+        rewriter, blockOp.getLoc(), blockOp.getResultTypes(),
+        blockOp.getOperands(), blockOp.getMaxThreadsAttr());
     // Erase the default terminator.
     Block *isolatedBlockBody = isolatedBlock.getBodyBlock();
     rewriter.eraseOp(isolatedBlockBody->getTerminator());

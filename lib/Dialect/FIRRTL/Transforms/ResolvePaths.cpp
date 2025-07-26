@@ -114,7 +114,7 @@ struct PathResolver {
       // - i.e. the id is not attached to any target.
       auto targetKind = TargetKindAttr::get(context, TargetKind::Reference);
       auto id = DistinctAttr::create(UnitAttr::get(context));
-      auto resolved = b.create<PathOp>(targetKind, id);
+      auto resolved = PathOp::create(b, targetKind, id);
       unresolved->replaceAllUsesWith(resolved);
       unresolved.erase();
       return success();
@@ -209,7 +209,7 @@ struct PathResolver {
     // Create a PathOp using the id in the annotation we added to the target.
     auto dictAttr = cast<DictionaryAttr>(annotation);
     auto id = cast<DistinctAttr>(dictAttr.get("id"));
-    auto resolved = b.create<PathOp>(targetKindAttr, id);
+    auto resolved = PathOp::create(b, targetKindAttr, id);
 
     // Replace the unresolved path with the PathOp.
     unresolved->replaceAllUsesWith(resolved);

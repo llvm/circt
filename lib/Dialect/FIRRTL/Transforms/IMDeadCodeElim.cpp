@@ -307,7 +307,7 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
       assert(ports[index].isOutput() && "must be an output port");
 
       // Replace the port with the constant.
-      result.replaceAllUsesWith(builder.create<ConstantOp>(constant));
+      result.replaceAllUsesWith(ConstantOp::create(builder, constant));
     }
   }
 }
@@ -629,15 +629,15 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
     if (isAssumedDead(result)) {
       // If the result is dead, replace the result with an unrealized conversion
       // cast which works as a dummy placeholder.
-      auto wire = builder
-                      .create<mlir::UnrealizedConversionCastOp>(
-                          ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
-                      ->getResult(0);
+      auto wire =
+          mlir::UnrealizedConversionCastOp::create(
+              builder, ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
+              ->getResult(0);
       result.replaceAllUsesWith(wire);
       return;
     }
 
-    Value wire = builder.create<WireOp>(result.getType()).getResult();
+    Value wire = WireOp::create(builder, result.getType()).getResult();
     result.replaceAllUsesWith(wire);
     // If a module port is dead but its instance result is alive, the port
     // is used as a temporary wire so make sure that a replaced wire is
@@ -698,7 +698,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
       // Ok, this port is used only within its defined module. So we can replace
       // the port with a wire.
-      auto wire = builder.create<WireOp>(argument.getType()).getResult();
+      auto wire = WireOp::create(builder, argument.getType()).getResult();
 
       // Since `liveSet` contains the port, we have to erase it from the set.
       liveElements.erase(argument);
@@ -710,10 +710,10 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
     // Replace the port with a dummy wire. This wire should be erased within
     // `rewriteModuleBody`.
-    Value wire = builder
-                     .create<mlir::UnrealizedConversionCastOp>(
-                         ArrayRef<Type>{argument.getType()}, ArrayRef<Value>{})
-                     ->getResult(0);
+    Value wire =
+        mlir::UnrealizedConversionCastOp::create(
+            builder, ArrayRef<Type>{argument.getType()}, ArrayRef<Value>{})
+            ->getResult(0);
 
     argument.replaceAllUsesWith(wire);
     assert(isAssumedDead(wire) && "dummy wire must be dead");

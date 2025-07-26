@@ -103,16 +103,18 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
   // If a referred function is not in the same module, create an external
   // function declaration.
   if (!func) {
-    func = builder.create<func::FuncOp>(simFunc.getVerilogName()
-                                            ? *simFunc.getVerilogName()
-                                            : simFunc.getSymName(),
-                                        funcType);
+    func = func::FuncOp::create(builder,
+                                simFunc.getVerilogName()
+                                    ? *simFunc.getVerilogName()
+                                    : simFunc.getSymName(),
+                                funcType);
     // External function needs to be private.
     func.setPrivate();
   }
 
   // Create a wrapper module that calls a DPI function.
-  auto funcOp = builder.create<func::FuncOp>(
+  auto funcOp = func::FuncOp::create(
+      builder,
       loweringState.nameSpace.newName(simFunc.getSymName() + "_wrapper"),
       moduleType.getFuncType());
 
@@ -133,22 +135,23 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
       ++inputIndex;
     } else {
       // Allocate an output placeholder.
-      auto one = builder.create<LLVM::ConstantOp>(builder.getI64IntegerAttr(1));
-      auto alloca = builder.create<LLVM::AllocaOp>(
-          builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
+      auto one =
+          LLVM::ConstantOp::create(builder, builder.getI64IntegerAttr(1));
+      auto alloca = LLVM::AllocaOp::create(
+          builder, builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
       functionInputs.push_back(alloca);
       functionOutputAllocas.push_back(alloca);
     }
   }
 
-  builder.create<func::CallOp>(func, functionInputs);
+  func::CallOp::create(builder, func, functionInputs);
 
   SmallVector<Value> results;
   for (auto functionOutputAlloca : functionOutputAllocas)
-    results.push_back(builder.create<LLVM::LoadOp>(
-        functionOutputAlloca.getElemType(), functionOutputAlloca));
+    results.push_back(LLVM::LoadOp::create(
+        builder, functionOutputAlloca.getElemType(), functionOutputAlloca));
 
-  builder.create<func::ReturnOp>(results);
+  func::ReturnOp::create(builder, results);
 
   simFunc.erase();
   return success();

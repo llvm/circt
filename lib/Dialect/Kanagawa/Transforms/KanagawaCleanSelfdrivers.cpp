@@ -151,8 +151,8 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
     }
 
     // Create a `hw.wire` to ensure that the input port name is maintained.
-    auto wire = rewriter.create<hw::WireOp>(op.getLoc(), writer.getValue(),
-                                            op.getInnerSymAttrName());
+    auto wire = hw::WireOp::create(rewriter, op.getLoc(), writer.getValue(),
+                                   op.getInnerSymAttrName());
 
     // Replace all reads of the input port with the wire.
     for (auto reader : readers)
@@ -176,9 +176,10 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
       });
 
       if (anyOutsideReads) {
-        auto outputPort = rewriter.create<OutputPortOp>(
-            op.getLoc(), op.getInnerSym(), op.getType(), op.getNameAttr());
-        rewriter.create<PortWriteOp>(op.getLoc(), outputPort, wire);
+        auto outputPort =
+            OutputPortOp::create(rewriter, op.getLoc(), op.getInnerSym(),
+                                 op.getType(), op.getNameAttr());
+        PortWriteOp::create(rewriter, op.getLoc(), outputPort, wire);
       }
     }
 

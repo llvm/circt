@@ -178,12 +178,12 @@ void ExternalizeRegistersPass::runOnOperation() {
           }
           SmallVector<Type> resTypes(instanceOp->getResultTypes());
           resTypes.append(newOutputs);
-          auto newInst = builder.create<InstanceOp>(
-              instanceOp.getLoc(), resTypes, instanceOp.getInstanceNameAttr(),
-              instanceOp.getModuleNameAttr(), instanceOp.getInputs(),
-              builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
-              instanceOp.getParametersAttr(), instanceOp.getInnerSymAttr(),
-              instanceOp.getDoNotPrintAttr());
+          auto newInst = InstanceOp::create(
+              builder, instanceOp.getLoc(), resTypes,
+              instanceOp.getInstanceNameAttr(), instanceOp.getModuleNameAttr(),
+              instanceOp.getInputs(), builder.getArrayAttr(argNames),
+              builder.getArrayAttr(resultNames), instanceOp.getParametersAttr(),
+              instanceOp.getInnerSymAttr(), instanceOp.getDoNotPrintAttr());
           for (auto [output, name] :
                zip(newInst->getResults().take_back(newOutputs.size()),
                    newOutputNames))
@@ -244,8 +244,8 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
       return failure();
     }
     // Sync reset
-    auto mux = builder.create<comb::MuxOp>(op->getLoc(), regType, reset,
-                                           resetValue, next);
+    auto mux = comb::MuxOp::create(builder, op->getLoc(), regType, reset,
+                                   resetValue, next);
     module.appendOutput(newOutputName, mux);
   } else {
     // No reset

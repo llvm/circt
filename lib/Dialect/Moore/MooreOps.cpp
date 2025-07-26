@@ -268,7 +268,7 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
   if (initial && mlir::mayHaveSSADominance(*op->getParentRegion())) {
     rewriter.modifyOpInPlace(op, [&] { op.getInitialMutable().clear(); });
     rewriter.setInsertionPointAfter(op);
-    rewriter.create<BlockingAssignOp>(initial.getLoc(), op, initial);
+    BlockingAssignOp::create(rewriter, initial.getLoc(), op, initial);
     return success();
   }
 
@@ -301,8 +301,8 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
   // replacement. Otherwise substitute the assigned value directly.
   Value assignedValue = uniqueAssignOp.getSrc();
   if (auto name = op.getNameAttr(); name && !name.empty())
-    assignedValue = rewriter.create<AssignedVariableOp>(
-        op.getLoc(), name, uniqueAssignOp.getSrc());
+    assignedValue = AssignedVariableOp::create(rewriter, op.getLoc(), name,
+                                               uniqueAssignOp.getSrc());
 
   // Remove the assign op and replace all reads with the new assigned var op.
   rewriter.eraseOp(uniqueAssignOp);
@@ -341,11 +341,11 @@ Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
   auto fvint = packedType.getDomain() == Domain::FourValued
                    ? FVInt::getAllX(*bitWidth)
                    : FVInt::getZero(*bitWidth);
-  Value value = builder.create<ConstantOp>(
-      getLoc(), IntType::get(getContext(), *bitWidth, packedType.getDomain()),
-      fvint);
+  Value value = ConstantOp::create(
+      builder, getLoc(),
+      IntType::get(getContext(), *bitWidth, packedType.getDomain()), fvint);
   if (value.getType() != packedType)
-    builder.create<ConversionOp>(getLoc(), packedType, value);
+    ConversionOp::create(builder, getLoc(), packedType, value);
   return value;
 }
 
@@ -398,7 +398,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
       varName = StringAttr::get(
           getContext(), (*name) + "." + cast<StringAttr>(index).getValue());
     auto varOp =
-        builder.create<VariableOp>(getLoc(), elemType, varName, Value());
+        VariableOp::create(builder, getLoc(), elemType, varName, Value());
     newAllocators.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(index, {varOp.getResult(), elemType});
   }
@@ -467,8 +467,8 @@ LogicalResult NetOp::canonicalize(NetOp op, PatternRewriter &rewriter) {
     // replacement. Otherwise substitute the assigned value directly.
     auto assignedValue = op.getAssignment();
     if (auto name = op.getNameAttr(); name && !name.empty())
-      assignedValue =
-          rewriter.create<AssignedVariableOp>(op.getLoc(), name, assignedValue);
+      assignedValue = AssignedVariableOp::create(rewriter, op.getLoc(), name,
+                                                 assignedValue);
 
     // Replace all reads with the new assigned var op and remove the original
     // net op.
@@ -908,8 +908,8 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
   // of field values contains the last assigned value for each field.
   for (auto member : members)
     if (auto value = fieldValues.lookup(member.name))
-      input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
-                                              member.name, value);
+      input = StructInjectOp::create(rewriter, op.getLoc(), op.getType(), input,
+                                     member.name, value);
   rewriter.replaceOp(op, input);
   return success();
 }
@@ -1147,18 +1147,18 @@ LogicalResult PowSOp::canonicalize(PowSOp op, PatternRewriter &rewriter) {
   auto intType = cast<IntType>(op.getRhs().getType());
   if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
     if (baseOp.getValue() == 2) {
-      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
-      Value constZero = rewriter.create<ConstantOp>(loc, intType, 0);
-      Value shift = rewriter.create<ShlOp>(loc, constOne, op.getRhs());
-      Value isNegative = rewriter.create<SltOp>(loc, op.getRhs(), constZero);
+      Value constOne = ConstantOp::create(rewriter, loc, intType, 1);
+      Value constZero = ConstantOp::create(rewriter, loc, intType, 0);
+      Value shift = ShlOp::create(rewriter, loc, constOne, op.getRhs());
+      Value isNegative = SltOp::create(rewriter, loc, op.getRhs(), constZero);
       auto condOp = rewriter.replaceOpWithNewOp<ConditionalOp>(
           op, op.getLhs().getType(), isNegative);
       Block *thenBlock = rewriter.createBlock(&condOp.getTrueRegion());
       rewriter.setInsertionPointToStart(thenBlock);
-      rewriter.create<YieldOp>(loc, constZero);
+      YieldOp::create(rewriter, loc, constZero);
       Block *elseBlock = rewriter.createBlock(&condOp.getFalseRegion());
       rewriter.setInsertionPointToStart(elseBlock);
-      rewriter.create<YieldOp>(loc, shift);
+      YieldOp::create(rewriter, loc, shift);
       return success();
     }
   }
@@ -1179,7 +1179,7 @@ LogicalResult PowUOp::canonicalize(PowUOp op, PatternRewriter &rewriter) {
   auto intType = cast<IntType>(op.getRhs().getType());
   if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
     if (baseOp.getValue() == 2) {
-      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      Value constOne = ConstantOp::create(rewriter, loc, intType, 1);
       rewriter.replaceOpWithNewOp<ShlOp>(op, constOne, op.getRhs());
       return success();
     }

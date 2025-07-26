@@ -63,12 +63,13 @@ void SimplifyProceduresPass::runOnOperation() {
                 nestedOp.getOperand(0).getDefiningOp())) {
           auto resultType = varOp.getResult().getType();
           builder.setInsertionPointToStart(&procedureOp.getBody().front());
-          auto readOp = builder.create<ReadOp>(
-              nestedOp.getLoc(), cast<RefType>(resultType).getNestedType(),
-              varOp.getResult());
-          auto newVarOp = builder.create<VariableOp>(
-              nestedOp.getLoc(), resultType, StringAttr{}, Value{});
-          builder.create<BlockingAssignOp>(nestedOp.getLoc(), newVarOp, readOp);
+          auto readOp = ReadOp::create(
+              builder, nestedOp.getLoc(),
+              cast<RefType>(resultType).getNestedType(), varOp.getResult());
+          auto newVarOp = VariableOp::create(builder, nestedOp.getLoc(),
+                                             resultType, StringAttr{}, Value{});
+          BlockingAssignOp::create(builder, nestedOp.getLoc(), newVarOp,
+                                   readOp);
           builder.clearInsertionPoint();
 
           // Replace the users of the global variable with a corresponding
@@ -86,8 +87,8 @@ void SimplifyProceduresPass::runOnOperation() {
       // has a new value.
       for (auto [assignOp, localVar, var] : assignOps) {
         builder.setInsertionPointAfter(assignOp);
-        auto readOp = builder.create<ReadOp>(assignOp.getLoc(), localVar);
-        builder.create<BlockingAssignOp>(assignOp.getLoc(), var, readOp);
+        auto readOp = ReadOp::create(builder, assignOp.getLoc(), localVar);
+        BlockingAssignOp::create(builder, assignOp.getLoc(), var, readOp);
         builder.clearInsertionPoint();
       }
     });

@@ -186,8 +186,8 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
   // Create FirMem
   auto memType =
       FirMemType::get(builder.getContext(), depth, width, /*maskWidth=*/1);
-  auto firMem = builder.create<seq::FirMemOp>(
-      memType, /*readLatency=*/0, /*writeLatency=*/1,
+  auto firMem = seq::FirMemOp::create(
+      builder, memType, /*readLatency=*/0, /*writeLatency=*/1,
       /*readUnderWrite=*/seq::RUW::Undefined,
       /*writeUnderWrite=*/seq::WUW::Undefined,
       /*name=*/builder.getStringAttr("mem"), /*innerSym=*/hw::InnerSymAttr{},
@@ -195,17 +195,17 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
       /*outputFile=*/Attribute{});
 
   // Create read port
-  Value readData = builder.create<FirMemReadOp>(
-      firMem, pattern.readAddr, pattern.clock,
-      /*enable=*/builder.create<hw::ConstantOp>(builder.getI1Type(), 1));
+  Value readData = FirMemReadOp::create(
+      builder, firMem, pattern.readAddr, pattern.clock,
+      /*enable=*/hw::ConstantOp::create(builder, builder.getI1Type(), 1));
 
   LLVM_DEBUG(llvm::dbgs() << "  Created read port\n"
                           << firMem << "\n " << readData);
 
   Value mask;
   // Create write port
-  builder.create<FirMemWriteOp>(firMem, pattern.writeAddr, pattern.clock,
-                                pattern.writeEnable, pattern.writeData, mask);
+  FirMemWriteOp::create(builder, firMem, pattern.writeAddr, pattern.clock,
+                        pattern.writeEnable, pattern.writeData, mask);
 
   LLVM_DEBUG(llvm::dbgs() << "  Created write port\n");
 

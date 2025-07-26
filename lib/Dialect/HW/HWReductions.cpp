@@ -68,9 +68,8 @@ struct ModuleExternalizer : public OpReduction<HWModuleOp> {
 
   LogicalResult rewrite(HWModuleOp op) override {
     OpBuilder builder(op);
-    builder.create<HWModuleExternOp>(op->getLoc(), op.getModuleNameAttr(),
-                                     op.getPortList(), StringRef(),
-                                     op.getParameters());
+    HWModuleExternOp::create(builder, op->getLoc(), op.getModuleNameAttr(),
+                             op.getPortList(), StringRef(), op.getParameters());
     op->erase();
     return success();
   }
@@ -126,7 +125,7 @@ struct HWConstantifier : public Reduction {
     OpBuilder builder(op);
     for (auto result : op->getResults()) {
       auto type = cast<IntegerType>(result.getType());
-      auto newOp = builder.create<hw::ConstantOp>(op->getLoc(), type, 0);
+      auto newOp = hw::ConstantOp::create(builder, op->getLoc(), type, 0);
       result.replaceAllUsesWith(newOp);
     }
     reduce::pruneUnusedOps(op, *this);

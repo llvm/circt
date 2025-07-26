@@ -56,7 +56,7 @@ public:
     Location loc = affineParallelOp.getLoc();
     SmallVector<Value, 8> steps;
     for (int64_t step : affineParallelSteps)
-      steps.push_back(rewriter.create<arith::ConstantIndexOp>(loc, step));
+      steps.push_back(arith::ConstantIndexOp::create(rewriter, loc, step));
 
     auto upperBoundTuple = mlir::affine::expandAffineMap(
         rewriter, loc, affineParallelOp.getUpperBoundsMap(),
@@ -69,8 +69,8 @@ public:
     auto affineParallelTerminator = cast<affine::AffineYieldOp>(
         affineParallelOp.getBody()->getTerminator());
 
-    scf::ParallelOp scfParallelOp = rewriter.create<scf::ParallelOp>(
-        loc, *lowerBoundTuple, *upperBoundTuple, steps,
+    scf::ParallelOp scfParallelOp = scf::ParallelOp::create(
+        rewriter, loc, *lowerBoundTuple, *upperBoundTuple, steps,
         /*bodyBuilderFn=*/nullptr);
     scfParallelOp->setAttr("calyx.unroll",
                            affineParallelOp->getAttr("calyx.unroll"));

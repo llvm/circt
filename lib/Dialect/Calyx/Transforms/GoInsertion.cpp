@@ -43,13 +43,13 @@ void GoInsertionPass::runOnOperation() {
 
   OpBuilder builder(wiresOp->getRegion(0));
   auto undefinedOp =
-      builder.create<UndefinedOp>(wiresOp->getLoc(), builder.getI1Type());
+      UndefinedOp::create(builder, wiresOp->getLoc(), builder.getI1Type());
 
   wiresOp.walk([&](GroupOp group) {
     OpBuilder builder(group->getRegion(0));
     // Since the source of a GroupOp's go signal isn't set until the
     // the Compile Control pass, use an undefined value.
-    auto goOp = builder.create<GroupGoOp>(group->getLoc(), undefinedOp);
+    auto goOp = GroupGoOp::create(builder, group->getLoc(), undefinedOp);
 
     updateGroupAssignmentGuards(builder, group, goOp);
   });

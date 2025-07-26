@@ -432,8 +432,8 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   Value lowerBound = lowerAffineLowerBound(innerLoop, builder);
   Value upperBound = lowerAffineUpperBound(innerLoop, builder);
   int64_t stepValue = innerLoop.getStep().getSExtValue();
-  auto step = builder.create<arith::ConstantOp>(
-      IntegerAttr::get(builder.getIndexType(), stepValue));
+  auto step = arith::ConstantOp::create(
+      builder, IntegerAttr::get(builder.getIndexType(), stepValue));
 
   // Create the pipeline op, with the same result types as the inner loop. An
   // iter arg is created for the induction variable.
@@ -451,16 +451,16 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   if (auto tripCount = getConstantTripCount(forOp))
     tripCountAttr = builder.getI64IntegerAttr(*tripCount);
 
-  auto pipeline = builder.create<LoopSchedulePipelineOp>(
-      resultTypes, ii, tripCountAttr, iterArgs);
+  auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
+                                                 tripCountAttr, iterArgs);
 
   // Create the condition, which currently just compares the induction variable
   // to the upper bound.
   Block &condBlock = pipeline.getCondBlock();
   builder.setInsertionPointToStart(&condBlock);
-  auto cmpResult = builder.create<arith::CmpIOp>(
-      builder.getI1Type(), arith::CmpIPredicate::ult, condBlock.getArgument(0),
-      upperBound);
+  auto cmpResult = arith::CmpIOp::create(builder, builder.getI1Type(),
+                                         arith::CmpIPredicate::ult,
+                                         condBlock.getArgument(0), upperBound);
   condBlock.getTerminator()->insertOperands(0, {cmpResult});
 
   // Add the non-yield operations to their start time groups.
@@ -581,7 +581,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
     auto startTimeAttr = builder.getIntegerAttr(
         builder.getIntegerType(64, /*isSigned=*/true), startTime);
     auto stage =
-        builder.create<LoopSchedulePipelineStageOp>(stageTypes, startTimeAttr);
+        LoopSchedulePipelineStageOp::create(builder, stageTypes, startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();
     builder.setInsertionPointToStart(&stageBlock);
@@ -620,7 +620,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
     // Add the induction variable increment to the first stage.
     if (startTime == 0) {
       auto incResult =
-          builder.create<arith::AddIOp>(stagesBlock.getArgument(0), step);
+          arith::AddIOp::create(builder, stagesBlock.getArgument(0), step);
       stageTerminator->insertOperands(stageTerminator->getNumOperands(),
                                       incResult->getResults());
     }

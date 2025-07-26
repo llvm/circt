@@ -190,9 +190,9 @@ LogicalResult ModuleLowering::run() {
 
   // Create the replacement `ModelOp`.
   auto modelOp =
-      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
-                              TypeAttr::get(moduleOp.getModuleType()),
-                              FlatSymbolRefAttr{}, FlatSymbolRefAttr{});
+      ModelOp::create(builder, moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
+                      TypeAttr::get(moduleOp.getModuleType()),
+                      FlatSymbolRefAttr{}, FlatSymbolRefAttr{});
   auto &modelBlock = modelOp.getBody().emplaceBlock();
   storageArg = modelBlock.addArgument(
       StorageType::get(builder.getContext(), {}), modelOp.getLoc());
@@ -200,11 +200,11 @@ LogicalResult ModuleLowering::run() {
 
   // Create the `arc.initial` op to contain the ops for the initialization
   // phase.
-  auto initialOp = builder.create<InitialOp>(moduleOp.getLoc());
+  auto initialOp = InitialOp::create(builder, moduleOp.getLoc());
   initialBuilder.setInsertionPointToStart(&initialOp.getBody().emplaceBlock());
 
   // Create the `arc.final` op to contain the ops for the finalization phase.
-  auto finalOp = builder.create<FinalOp>(moduleOp.getLoc());
+  auto finalOp = FinalOp::create(builder, moduleOp.getLoc());
   finalBuilder.setInsertionPointToStart(&finalOp.getBody().emplaceBlock());
 
   // Position the alloc builder such that allocation ops get inserted above the
@@ -214,8 +214,9 @@ LogicalResult ModuleLowering::run() {
   // Allocate storage for the inputs.
   for (auto arg : moduleOp.getBodyBlock()->getArguments()) {
     auto name = moduleOp.getArgName(arg.getArgNumber());
-    auto state = allocBuilder.create<RootInputOp>(
-        arg.getLoc(), StateType::get(arg.getType()), name, storageArg);
+    auto state =
+        RootInputOp::create(allocBuilder, arg.getLoc(),
+                            StateType::get(arg.getType()), name, storageArg);
     allocatedInputs.push_back(state);
   }
 
@@ -315,15 +316,17 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
 
   // Handle memories.
   if (auto memOp = dyn_cast<MemoryOp>(result.getOwner())) {
-    auto alloc = allocBuilder.create<AllocMemoryOp>(
-        memOp.getLoc(), memOp.getType(), storageArg, memOp->getAttrs());
+    auto alloc =
+        AllocMemoryOp::create(allocBuilder, memOp.getLoc(), memOp.getType(),
+                              storageArg, memOp->getAttrs());
     allocatedStates.insert({result, alloc});
     return alloc;
   }
 
   // Create the allocation op.
-  auto alloc = allocBuilder.create<AllocStateOp>(
-      result.getLoc(), StateType::get(result.getType()), storageArg);
+  auto alloc =
+      AllocStateOp::create(allocBuilder, result.getLoc(),
+                           StateType::get(result.getType()), storageArg);
   allocatedStates.insert({result, alloc});
 
   // HACK: If the result comes from an instance op, add the instance and port
@@ -351,20 +354,20 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
 Value ModuleLowering::detectPosedge(Value clock) {
   auto loc = clock.getLoc();
   if (isa<seq::ClockType>(clock.getType()))
-    clock = builder.create<seq::FromClockOp>(loc, clock);
+    clock = seq::FromClockOp::create(builder, loc, clock);
 
   // Allocate storage to store the previous clock value.
-  auto oldStorage = allocBuilder.create<AllocStateOp>(
-      loc, StateType::get(builder.getI1Type()), storageArg);
+  auto oldStorage = AllocStateOp::create(
+      allocBuilder, loc, StateType::get(builder.getI1Type()), storageArg);
 
   // Read the old clock value from storage and write the new clock value to
   // storage.
-  auto oldClock = builder.create<StateReadOp>(loc, oldStorage);
-  builder.create<StateWriteOp>(loc, oldStorage, clock, Value{});
+  auto oldClock = StateReadOp::create(builder, loc, oldStorage);
+  StateWriteOp::create(builder, loc, oldStorage, clock, Value{});
 
   // Detect a rising edge.
-  auto edge = builder.create<comb::XorOp>(loc, oldClock, clock);
-  return builder.create<comb::AndOp>(loc, edge, clock);
+  auto edge = comb::XorOp::create(builder, loc, oldClock, clock);
+  return comb::AndOp::create(builder, loc, edge, clock);
 }
 
 /// Get the builder appropriate for the given phase.
@@ -402,7 +405,7 @@ static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
     if (auto ifOp = dyn_cast<scf::IfOp>(*std::prev(ip)))
       if (ifOp.getCondition() == condition)
         return ifOp;
-  return builder.create<scf::IfOp>(condition.getLoc(), condition, withElse);
+  return scf::IfOp::create(builder, condition.getLoc(), condition, withElse);
 }
 
 /// This function is called from the lowering worklist in order to perform a
@@ -483,8 +486,8 @@ LogicalResult OpLowering::lower(StateOp op) {
       auto state = module.getAllocatedState(result);
       if (!state)
         return failure();
-      module.initialBuilder.create<StateWriteOp>(value.getLoc(), state, value,
-                                                 Value{});
+      StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value,
+                           Value{});
     }
     return success();
   }
@@ -500,9 +503,9 @@ LogicalResult OpLowering::lower(StateOp op) {
 
   return lowerStateful(op.getClock(), op.getEnable(), op.getReset(),
                        op.getInputs(), op.getResults(), [&](ValueRange inputs) {
-                         return module.builder
-                             .create<CallOp>(op.getLoc(), op.getResultTypes(),
-                                             op.getArc(), inputs)
+                         return CallOp::create(module.builder, op.getLoc(),
+                                               op.getResultTypes(), op.getArc(),
+                                               inputs)
                              .getResults();
                        });
 }
@@ -526,8 +529,9 @@ LogicalResult OpLowering::lower(sim::DPICallOp op) {
       return op.emitOpError() << "without clock cannot have an enable";
 
     // Lower the op to a regular function call.
-    auto callOp = module.getBuilder(phase).create<func::CallOp>(
-        op.getLoc(), op.getCalleeAttr(), op.getResultTypes(), inputs);
+    auto callOp =
+        func::CallOp::create(module.getBuilder(phase), op.getLoc(),
+                             op.getCalleeAttr(), op.getResultTypes(), inputs);
     for (auto [oldResult, newResult] :
          llvm::zip(op.getResults(), callOp.getResults()))
       module.loweredValues[{oldResult, phase}] = newResult;
@@ -538,10 +542,10 @@ LogicalResult OpLowering::lower(sim::DPICallOp op) {
 
   return lowerStateful(op.getClock(), op.getEnable(), /*reset=*/{},
                        op.getInputs(), op.getResults(), [&](ValueRange inputs) {
-                         return module.builder
-                             .create<func::CallOp>(op.getLoc(),
-                                                   op.getCalleeAttr(),
-                                                   op.getResultTypes(), inputs)
+                         return func::CallOp::create(
+                                    module.builder, op.getLoc(),
+                                    op.getCalleeAttr(), op.getResultTypes(),
+                                    inputs)
                              .getResults();
                        });
 }
@@ -607,14 +611,14 @@ LogicalResult OpLowering::lowerStateful(
     // Generate the zero value writes.
     for (auto state : states) {
       auto type = cast<StateType>(state.getType()).getType();
-      Value value = module.builder.create<ConstantOp>(
-          loweredReset.getLoc(),
+      Value value = ConstantOp::create(
+          module.builder, loweredReset.getLoc(),
           module.builder.getIntegerType(hw::getBitWidth(type)), 0);
       if (value.getType() != type)
-        value = module.builder.create<BitcastOp>(loweredReset.getLoc(), type,
-                                                 value);
-      module.builder.create<StateWriteOp>(loweredReset.getLoc(), state, value,
-                                          Value{});
+        value = BitcastOp::create(module.builder, loweredReset.getLoc(), type,
+                                  value);
+      StateWriteOp::create(module.builder, loweredReset.getLoc(), state, value,
+                           Value{});
     }
     module.builder.setInsertionPoint(ifResetOp.elseYield());
   }
@@ -649,14 +653,14 @@ LogicalResult OpLowering::lowerStateful(
   // Compute the transfer function and write its results to the state's storage.
   auto loweredResults = createMapping(loweredInputs);
   for (auto [state, value] : llvm::zip(states, loweredResults))
-    module.builder.create<StateWriteOp>(value.getLoc(), state, value, Value{});
+    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
 
   // Since we just wrote the new state value to storage, insert read ops just
   // before the if op that keep the old value around for any later ops that
   // still need it.
   module.builder.setInsertionPoint(ifClockOp);
   for (auto [state, result] : llvm::zip(states, results)) {
-    auto oldValue = module.builder.create<StateReadOp>(result.getLoc(), state);
+    auto oldValue = StateReadOp::create(module.builder, result.getLoc(), state);
     module.loweredValues[{result, Phase::Old}] = oldValue;
   }
 
@@ -734,8 +738,9 @@ LogicalResult OpLowering::lower(MemoryOp op) {
         return failure();
       inputs.push_back(lowered);
     }
-    auto callOp = module.builder.create<CallOp>(
-        write.getLoc(), write.getArcResultTypes(), write.getArc(), inputs);
+    auto callOp =
+        CallOp::create(module.builder, write.getLoc(),
+                       write.getArcResultTypes(), write.getArc(), inputs);
 
     // If the write has an enable, wrap the remaining logic in an if op.
     if (write.getEnable()) {
@@ -752,21 +757,22 @@ LogicalResult OpLowering::lower(MemoryOp op) {
       auto mask = callOp.getResult(write.getMaskIdx(write.getEnable()));
       auto maskInv = module.builder.createOrFold<comb::XorOp>(
           write.getLoc(), mask,
-          module.builder.create<ConstantOp>(write.getLoc(), mask.getType(), -1),
+          ConstantOp::create(module.builder, write.getLoc(), mask.getType(),
+                             -1),
           true);
       auto oldData =
-          module.builder.create<MemoryReadOp>(write.getLoc(), state, address);
-      auto oldMasked = module.builder.create<comb::AndOp>(
-          write.getLoc(), maskInv, oldData, true);
+          MemoryReadOp::create(module.builder, write.getLoc(), state, address);
+      auto oldMasked = comb::AndOp::create(module.builder, write.getLoc(),
+                                           maskInv, oldData, true);
       auto newMasked =
-          module.builder.create<comb::AndOp>(write.getLoc(), mask, data, true);
-      data = module.builder.create<comb::OrOp>(write.getLoc(), oldMasked,
-                                               newMasked, true);
+          comb::AndOp::create(module.builder, write.getLoc(), mask, data, true);
+      data = comb::OrOp::create(module.builder, write.getLoc(), oldMasked,
+                                newMasked, true);
     }
 
     // Actually write to the memory.
-    module.builder.create<MemoryWriteOp>(write.getLoc(), state, address,
-                                         Value{}, data);
+    MemoryWriteOp::create(module.builder, write.getLoc(), state, address,
+                          Value{}, data);
   }
 
   return success();
@@ -785,12 +791,13 @@ LogicalResult OpLowering::lower(TapOp op) {
 
   auto &state = module.allocatedTaps[op];
   if (!state) {
-    auto alloc = module.allocBuilder.create<AllocStateOp>(
-        op.getLoc(), StateType::get(value.getType()), module.storageArg, true);
+    auto alloc = AllocStateOp::create(module.allocBuilder, op.getLoc(),
+                                      StateType::get(value.getType()),
+                                      module.storageArg, true);
     alloc->setAttr("name", op.getNameAttr());
     state = alloc;
   }
-  module.builder.create<StateWriteOp>(op.getLoc(), state, value, Value{});
+  StateWriteOp::create(module.builder, op.getLoc(), state, value, Value{});
   return success();
 }
 
@@ -812,12 +819,13 @@ LogicalResult OpLowering::lower(InstanceOp op) {
   // Then allocate storage for each instance input and assign the corresponding
   // value.
   for (auto [value, name] : llvm::zip(values, op.getArgNames())) {
-    auto state = module.allocBuilder.create<AllocStateOp>(
-        value.getLoc(), StateType::get(value.getType()), module.storageArg);
+    auto state = AllocStateOp::create(module.allocBuilder, value.getLoc(),
+                                      StateType::get(value.getType()),
+                                      module.storageArg);
     state->setAttr("name", module.builder.getStringAttr(
                                op.getInstanceName() + "/" +
                                cast<StringAttr>(name).getValue()));
-    module.builder.create<StateWriteOp>(value.getLoc(), state, value, Value{});
+    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
   }
 
   // HACK: Also ensure that storage has been allocated for all outputs.
@@ -847,10 +855,10 @@ LogicalResult OpLowering::lower(hw::OutputOp op) {
   // Then allocate storage for each output and assign the corresponding value.
   for (auto [value, name] :
        llvm::zip(values, module.moduleOp.getOutputNames())) {
-    auto state = module.allocBuilder.create<RootOutputOp>(
-        value.getLoc(), StateType::get(value.getType()), cast<StringAttr>(name),
-        module.storageArg);
-    module.builder.create<StateWriteOp>(value.getLoc(), state, value, Value{});
+    auto state = RootOutputOp::create(
+        module.allocBuilder, value.getLoc(), StateType::get(value.getType()),
+        cast<StringAttr>(name), module.storageArg);
+    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
   }
   return success();
 }
@@ -947,12 +955,13 @@ LogicalResult OpLowering::lower(llhd::FinalOp op) {
 
   // Create a new `scf.execute_region` op and clone the entire `llhd.final` body
   // region into it. Replace `llhd.halt` ops with `scf.yield`.
-  auto executeOp = module.finalBuilder.create<scf::ExecuteRegionOp>(
-      op.getLoc(), TypeRange{});
+  auto executeOp = scf::ExecuteRegionOp::create(module.finalBuilder,
+                                                op.getLoc(), TypeRange{});
   module.finalBuilder.cloneRegionBefore(op.getBody(), executeOp.getRegion(),
                                         executeOp.getRegion().begin(), mapping);
   executeOp.walk([&](llhd::HaltOp op) {
-    OpBuilder(op).create<scf::YieldOp>(op.getLoc());
+    auto builder = OpBuilder(op);
+    scf::YieldOp::create(builder, op.getLoc());
     op.erase();
   });
 
@@ -988,7 +997,7 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
     if (initial)
       return {};
     auto state = module.allocatedInputs[arg.getArgNumber()];
-    return module.getBuilder(phase).create<StateReadOp>(arg.getLoc(), state);
+    return StateReadOp::create(module.getBuilder(phase), arg.getLoc(), state);
   }
 
   // Check if the value has already been lowered.
@@ -1031,7 +1040,7 @@ Value OpLowering::lowerValue(InstanceOp op, OpResult result, Phase phase) {
   if (initial)
     return {};
   auto state = module.getAllocatedState(result);
-  return module.getBuilder(phase).create<StateReadOp>(result.getLoc(), state);
+  return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
 }
 
 /// Handle uses of a state. This creates an `arc.state_read` op to read from the
@@ -1053,7 +1062,7 @@ Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
            "need old value but new value already written");
 
   auto state = module.getAllocatedState(result);
-  return module.getBuilder(phase).create<StateReadOp>(result.getLoc(), state);
+  return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
 }
 
 /// Handle uses of a DPI call. This creates an `arc.state_read` op to read from
@@ -1075,7 +1084,7 @@ Value OpLowering::lowerValue(sim::DPICallOp op, OpResult result, Phase phase) {
            "need old value but new value already written");
 
   auto state = module.getAllocatedState(result);
-  return module.getBuilder(phase).create<StateReadOp>(result.getLoc(), state);
+  return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
 }
 
 /// Handle uses of a memory read operation. This creates an `arc.memory_read` op
@@ -1109,8 +1118,8 @@ Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
   }
 
   auto state = module.getAllocatedState(memOp->getResult(0));
-  return module.getBuilder(phase).create<MemoryReadOp>(result.getLoc(), state,
-                                                       address);
+  return MemoryReadOp::create(module.getBuilder(phase), result.getLoc(), state,
+                              address);
 }
 
 /// Handle uses of `seq.initial` values computed during the initial phase. This
@@ -1137,16 +1146,17 @@ Value OpLowering::lowerValue(seq::InitialOp op, OpResult result, Phase phase) {
   // initial phase.
   auto &state = module.allocatedInitials[result];
   if (!state) {
-    state = module.allocBuilder.create<AllocStateOp>(
-        value.getLoc(), StateType::get(value.getType()), module.storageArg);
+    state = AllocStateOp::create(module.allocBuilder, value.getLoc(),
+                                 StateType::get(value.getType()),
+                                 module.storageArg);
     OpBuilder::InsertionGuard guard(module.initialBuilder);
     module.initialBuilder.setInsertionPointAfterValue(value);
-    module.initialBuilder.create<StateWriteOp>(value.getLoc(), state, value,
-                                               Value{});
+    StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value,
+                         Value{});
   }
 
   // Read back the value computed during the initial phase.
-  return module.getBuilder(phase).create<StateReadOp>(state.getLoc(), state);
+  return StateReadOp::create(module.getBuilder(phase), state.getLoc(), state);
 }
 
 /// The `seq.from_immutable` cast is just a passthrough.

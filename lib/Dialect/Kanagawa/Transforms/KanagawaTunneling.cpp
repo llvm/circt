@@ -214,12 +214,13 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
   // provides a writeable input port, and assign the wire output to the
   // output port.
   if (requestedDir == Direction::Input) {
-    auto wireOp = rewriter.create<InputWireOp>(
-        op.getLoc(), rewriter.getStringAttr(*actualPort.getInnerName() + ".wr"),
+    auto wireOp = InputWireOp::create(
+        rewriter, op.getLoc(),
+        rewriter.getStringAttr(*actualPort.getInnerName() + ".wr"),
         portInfo.getInnerType());
 
-    rewriter.create<PortWriteOp>(op.getLoc(), actualPort.getPort(),
-                                 wireOp.getOutput());
+    PortWriteOp::create(rewriter, op.getLoc(), actualPort.getPort(),
+                        wireOp.getOutput());
     return wireOp.getPort();
   }
 
@@ -228,9 +229,9 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
   // provides a readable output port, and read the input port as the value
   // of the wire.
   Value inputValue =
-      rewriter.create<PortReadOp>(op.getLoc(), actualPort.getPort());
-  auto wireOp = rewriter.create<OutputWireOp>(
-      op.getLoc(),
+      PortReadOp::create(rewriter, op.getLoc(), actualPort.getPort());
+  auto wireOp = OutputWireOp::create(
+      rewriter, op.getLoc(),
       hw::InnerSymAttr::get(
           rewriter.getStringAttr(*actualPort.getInnerName() + ".rd")),
       inputValue, rewriter.getStringAttr(actualPort.getNameHint() + ".rd"));
@@ -282,8 +283,8 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
     rewriter.setInsertionPointAfter(tunnelInstance);
     for (PortInfo &pi : portInfos) {
       auto targetGetPortOp =
-          rewriter.create<GetPortOp>(op.getLoc(), pi.getType(), tunnelInstance,
-                                     pi.getPortOp.getPortSymbol());
+          GetPortOp::create(rewriter, op.getLoc(), pi.getType(), tunnelInstance,
+                            pi.getPortOp.getPortSymbol());
       portMapping[&pi] = targetGetPortOp.getResult();
     }
     return success();
@@ -298,9 +299,9 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
   llvm::DenseMap<StringAttr, OutputPortOp> outputPortOps;
   for (PortInfo &pi : portInfos) {
-    outputPortOps[pi.portName] = rewriter.create<OutputPortOp>(
-        op.getLoc(), circt::hw::InnerSymAttr::get(pi.portName), pi.getType(),
-        pi.portName);
+    outputPortOps[pi.portName] = OutputPortOp::create(
+        rewriter, op.getLoc(), circt::hw::InnerSymAttr::get(pi.portName),
+        pi.getType(), pi.portName);
   }
 
   // Recurse into the tunnel instance container.
@@ -313,17 +314,17 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
 
     // Write the target value to the output port.
     rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
-    rewriter.create<PortWriteOp>(op.getLoc(), outputPortOps[portInfo.portName],
-                                 res);
+    PortWriteOp::create(rewriter, op.getLoc(), outputPortOps[portInfo.portName],
+                        res);
 
     // Back in the current container, read the new output port of the child
     // instance and assign it to the port mapping.
     rewriter.setInsertionPointAfter(tunnelInstance);
-    auto getPortOp = rewriter.create<GetPortOp>(
-        op.getLoc(), tunnelInstance, portInfo.portName, portInfo.getType(),
-        Direction::Output);
+    auto getPortOp = GetPortOp::create(rewriter, op.getLoc(), tunnelInstance,
+                                       portInfo.portName, portInfo.getType(),
+                                       Direction::Output);
     portMapping[pi] =
-        rewriter.create<PortReadOp>(op.getLoc(), getPortOp).getResult();
+        PortReadOp::create(rewriter, op.getLoc(), getPortOp).getResult();
   }
 
   return success();
@@ -368,23 +369,24 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
     auto instance = use->getInstance<ContainerInstanceOp>();
     rewriter.setInsertionPointAfter(instance);
     for (PortInfo &pi : portInfos) {
-      auto getPortOp = rewriter.create<GetPortOp>(
-          op.getLoc(), instance, pi.portName, pi.getType(), Direction::Input);
-      rewriter.create<PortWriteOp>(op.getLoc(), getPortOp,
-                                   targetPortMapping[&pi]);
+      auto getPortOp =
+          GetPortOp::create(rewriter, op.getLoc(), instance, pi.portName,
+                            pi.getType(), Direction::Input);
+      PortWriteOp::create(rewriter, op.getLoc(), getPortOp,
+                          targetPortMapping[&pi]);
     }
   }
 
   // Create input ports for the requested portrefs.
   rewriter.setInsertionPointToEnd(scopeOp.getBodyBlock());
   for (PortInfo &pi : portInfos) {
-    auto inputPort = rewriter.create<InputPortOp>(
-        op.getLoc(), hw::InnerSymAttr::get(pi.portName), pi.getType(),
-        pi.portName);
+    auto inputPort = InputPortOp::create(rewriter, op.getLoc(),
+                                         hw::InnerSymAttr::get(pi.portName),
+                                         pi.getType(), pi.portName);
     // Read the input port of the current container to forward the portref.
 
     portMapping[&pi] =
-        rewriter.create<PortReadOp>(op.getLoc(), inputPort.getResult())
+        PortReadOp::create(rewriter, op.getLoc(), inputPort.getResult())
             .getResult();
   }
 

@@ -67,7 +67,7 @@ struct LowerCHIRRTLPass
       auto module = getOperation();
       auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
       auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1);
-      value = builder.create<ConstantOp>(module.getLoc(), u1Type, APInt(1, c));
+      value = ConstantOp::create(builder, module.getLoc(), u1Type, APInt(1, c));
     }
     return value;
   }
@@ -133,10 +133,10 @@ static void forEachLeaf(ImplicitLocOpBuilder &builder, Value value,
   auto type = value.getType();
   if (auto bundleType = type_dyn_cast<BundleType>(type)) {
     for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i)
-      forEachLeaf(builder, builder.create<SubfieldOp>(value, i), func);
+      forEachLeaf(builder, SubfieldOp::create(builder, value, i), func);
   } else if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
     for (size_t i = 0, e = vectorType.getNumElements(); i != e; ++i)
-      forEachLeaf(builder, builder.create<SubindexOp>(value, i), func);
+      forEachLeaf(builder, SubindexOp::create(builder, value, i), func);
   } else {
     func(value);
   }
@@ -158,7 +158,7 @@ void LowerCHIRRTLPass::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
   auto &invalid = invalidCache[type];
   if (!invalid) {
     auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
-    invalid = builder.create<InvalidValueOp>(getOperation().getLoc(), type);
+    invalid = InvalidValueOp::create(builder, getOperation().getLoc(), type);
   }
   emitConnect(builder, value, invalid);
 }
@@ -356,8 +356,8 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   // Create the memory.
   ImplicitLocOpBuilder memBuilder(cmem->getLoc(), cmem);
   auto symOp = cast<hw::InnerSymbolOpInterface>(cmem);
-  auto memory = memBuilder.create<MemOp>(
-      resultTypes, readLatency, writeLatency, depth, ruw,
+  auto memory = MemOp::create(
+      memBuilder, resultTypes, readLatency, writeLatency, depth, ruw,
       memBuilder.getArrayAttr(resultNames), name,
       cmem->getAttrOfType<firrtl::NameKindEnumAttr>("nameKind").getValue(),
       annotations, memBuilder.getArrayAttr(portAnnotations),
@@ -385,11 +385,11 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     // Initialization at the MemoryOp.
     ImplicitLocOpBuilder portBuilder(cmemoryPortAccess.getLoc(),
                                      cmemoryPortAccess);
-    auto address = memBuilder.create<SubfieldOp>(memoryPort, "addr");
+    auto address = SubfieldOp::create(memBuilder, memoryPort, "addr");
     emitInvalid(memBuilder, address);
-    auto enable = memBuilder.create<SubfieldOp>(memoryPort, "en");
+    auto enable = SubfieldOp::create(memBuilder, memoryPort, "en");
     emitConnect(memBuilder, enable, getConst(0));
-    auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
+    auto clock = SubfieldOp::create(memBuilder, memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
     // Initialization at the MemoryPortOp.
@@ -410,13 +410,13 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
     if (portKind == MemOp::PortKind::Read) {
       // Store the read information for updating subfield ops.
-      auto data = memBuilder.create<SubfieldOp>(memoryPort, "data");
+      auto data = SubfieldOp::create(memBuilder, memoryPort, "data");
       rdataValues[cmemoryPort.getData()] = data;
     } else if (portKind == MemOp::PortKind::Write) {
       // Initialization at the MemoryOp.
-      auto data = memBuilder.create<SubfieldOp>(memoryPort, "data");
+      auto data = SubfieldOp::create(memBuilder, memoryPort, "data");
       emitInvalid(memBuilder, data);
-      auto mask = memBuilder.create<SubfieldOp>(memoryPort, "mask");
+      auto mask = SubfieldOp::create(memBuilder, memoryPort, "mask");
       emitInvalid(memBuilder, mask);
 
       // Initialization at the MemoryPortOp.
@@ -426,12 +426,12 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       wdataValues[cmemoryPort.getData()] = {data, mask, nullptr};
     } else if (portKind == MemOp::PortKind::ReadWrite) {
       // Initialization at the MemoryOp.
-      auto rdata = memBuilder.create<SubfieldOp>(memoryPort, "rdata");
-      auto wmode = memBuilder.create<SubfieldOp>(memoryPort, "wmode");
+      auto rdata = SubfieldOp::create(memBuilder, memoryPort, "rdata");
+      auto wmode = SubfieldOp::create(memBuilder, memoryPort, "wmode");
       emitConnect(memBuilder, wmode, getConst(0));
-      auto wdata = memBuilder.create<SubfieldOp>(memoryPort, "wdata");
+      auto wdata = SubfieldOp::create(memBuilder, memoryPort, "wdata");
       emitInvalid(memBuilder, wdata);
-      auto wmask = memBuilder.create<SubfieldOp>(memoryPort, "wmask");
+      auto wmask = SubfieldOp::create(memBuilder, memoryPort, "wmask");
       emitInvalid(memBuilder, wmask);
 
       // Initialization at the MemoryPortOp.
@@ -586,7 +586,8 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
     if (iter != rdataValues.end()) {
       opsToDelete.push_back(op);
       ImplicitLocOpBuilder builder(op->getLoc(), op);
-      rdataValues[op] = builder.create<OpType>(rdataValues[input], operands...);
+      rdataValues[op] =
+          OpType::create(builder, rdataValues[input], operands...);
     }
     return;
   }
@@ -603,15 +604,15 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
   // If the subaccess operation is used to read from a memory port, we need to
   // clone it to read from the rdata field.
   if (direction == MemDirAttr::Read || direction == MemDirAttr::ReadWrite) {
-    rdataValues[op] = builder.create<OpType>(rdataValues[input], operands...);
+    rdataValues[op] = OpType::create(builder, rdataValues[input], operands...);
   }
 
   // If the subaccess operation is used to write to the memory, we need to clone
   // it to write to the wdata and the wmask fields.
   if (direction == MemDirAttr::Write || direction == MemDirAttr::ReadWrite) {
     auto writeData = wdataValues[input];
-    auto write = builder.create<OpType>(writeData.data, operands...);
-    auto mask = builder.create<OpType>(writeData.mask, operands...);
+    auto write = OpType::create(builder, writeData.data, operands...);
+    auto mask = OpType::create(builder, writeData.mask, operands...);
     wdataValues[op] = {write, mask, writeData.mode};
   }
 }

@@ -67,7 +67,7 @@ struct EventControlVisitor {
       if (!condition)
         return failure();
     }
-    builder.create<moore::DetectEventOp>(loc, edge, expr, condition);
+    moore::DetectEventOp::create(builder, loc, edge, expr, condition);
     return success();
   }
 
@@ -125,7 +125,7 @@ struct LTLClockControlVisitor {
     expr = context.convertToI1(expr);
     if (!expr)
       return Value{};
-    return builder.create<ltl::ClockOp>(loc, seqOrPro, edge, expr);
+    return ltl::ClockOp::create(builder, loc, seqOrPro, edge, expr);
   }
 
   template <typename T>
@@ -168,13 +168,13 @@ static LogicalResult handleRoot(Context &context,
     // empty wait op and let `Context::convertTimingControl` populate it once
     // the statement has been lowered.
   case TimingControlKind::ImplicitEvent:
-    implicitWaitOp = builder.create<moore::WaitEventOp>(loc);
+    implicitWaitOp = moore::WaitEventOp::create(builder, loc);
     return success();
 
     // Handle event control.
   case TimingControlKind::SignalEvent:
   case TimingControlKind::EventList: {
-    auto waitOp = builder.create<moore::WaitEventOp>(loc);
+    auto waitOp = moore::WaitEventOp::create(builder, loc);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&waitOp.getBody().emplaceBlock());
     EventControlVisitor visitor{context, loc, builder};
@@ -242,9 +242,9 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
     builder.setInsertionPointToStart(&implicitWaitOp.getBody().emplaceBlock());
     for (auto readValue : readValues) {
       auto value =
-          builder.create<moore::ReadOp>(implicitWaitOp.getLoc(), readValue);
-      builder.create<moore::DetectEventOp>(
-          implicitWaitOp.getLoc(), moore::Edge::AnyChange, value, Value{});
+          moore::ReadOp::create(builder, implicitWaitOp.getLoc(), readValue);
+      moore::DetectEventOp::create(builder, implicitWaitOp.getLoc(),
+                                   moore::Edge::AnyChange, value, Value{});
     }
   }
 

@@ -460,26 +460,28 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
     // Handle integers.
     if (auto intType = dyn_cast<IntegerType>(type)) {
       assert(slice.length > 0);
-      slice.value = builder.create<comb::ExtractOp>(
-          builder.getIntegerType(slice.length), defaultValue, slice.offset);
+      slice.value =
+          comb::ExtractOp::create(builder, builder.getIntegerType(slice.length),
+                                  defaultValue, slice.offset);
       continue;
     }
 
     // Handle structs.
     if (auto structType = dyn_cast<hw::StructType>(type)) {
       assert(slice.length == 0);
-      slice.value = builder.create<hw::StructExtractOp>(
-          defaultValue, structType.getElements()[slice.offset]);
+      slice.value = hw::StructExtractOp::create(
+          builder, defaultValue, structType.getElements()[slice.offset]);
       continue;
     }
 
     // Handle arrays.
     if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
       assert(slice.length > 0);
-      auto offset = builder.create<hw::ConstantOp>(
+      auto offset = hw::ConstantOp::create(
+          builder,
           APInt(llvm::Log2_64_Ceil(arrayType.getNumElements()), slice.offset));
-      slice.value = builder.create<hw::ArraySliceOp>(
-          hw::ArrayType::get(arrayType.getElementType(), slice.length),
+      slice.value = hw::ArraySliceOp::create(
+          builder, hw::ArrayType::get(arrayType.getElementType(), slice.length),
           defaultValue, offset);
       continue;
     }
@@ -548,7 +550,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     for (auto slice : slices)
       operands.push_back(slice.value);
     std::reverse(operands.begin(), operands.end()); // why, just why
-    result = builder.create<comb::ConcatOp>(operands);
+    result = comb::ConcatOp::create(builder, operands);
     LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
   }
 
@@ -559,7 +561,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     SmallVector<Value> operands;
     for (auto slice : slices)
       operands.push_back(slice.value);
-    result = builder.create<hw::StructCreateOp>(structType, operands);
+    result = hw::StructCreateOp::create(builder, structType, operands);
     LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
   }
 
@@ -574,7 +576,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
       if (scalars.empty())
         return;
       std::reverse(scalars.begin(), scalars.end()); // why, just why
-      auto aggregate = builder.create<hw::ArrayCreateOp>(scalars);
+      auto aggregate = hw::ArrayCreateOp::create(builder, scalars);
       aggregates.push_back(aggregate);
       scalars.clear();
       LLVM_DEBUG(llvm::dbgs() << "  - Created " << aggregate << "\n");
@@ -594,7 +596,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
     result = aggregates.back();
     if (aggregates.size() != 1) {
       std::reverse(aggregates.begin(), aggregates.end()); // why, just why
-      result = builder.create<hw::ArrayConcatOp>(aggregates);
+      result = hw::ArrayConcatOp::create(builder, aggregates);
       LLVM_DEBUG(llvm::dbgs() << "  - Created " << result << "\n");
     }
   }
@@ -602,7 +604,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   // Create the single drive with the aggregate result.
   assert(result);
   auto driveOp =
-      builder.create<DrvOp>(signal.value, result, driveDelay, driveEnable);
+      DrvOp::create(builder, signal.value, result, driveDelay, driveEnable);
   signal.completeDrives.push_back(driveOp);
   LLVM_DEBUG(llvm::dbgs() << "  - Created " << driveOp << "\n");
 

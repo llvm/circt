@@ -53,8 +53,9 @@ HierPathOp HierPathCache::getOrCreatePath(ArrayAttr pathArray, Location loc,
   // Create the new HierPathOp and insert it into the pathCache.
   hw::HierPathOp path =
       pathCache
-          .insert({pathArray, builder.create<hw::HierPathOp>(
-                                  loc, ns->newName(nameHint), pathArray)})
+          .insert({pathArray,
+                   hw::HierPathOp::create(builder, loc, ns->newName(nameHint),
+                                          pathArray)})
           .first->second;
   path.setVisibility(SymbolTable::Visibility::Private);
 

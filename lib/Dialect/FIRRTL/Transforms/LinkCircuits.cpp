@@ -194,8 +194,9 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
 
   auto builder = OpBuilder(module);
   builder.setInsertionPointToEnd(module.getBody());
-  auto mergedCircuit = builder.create<CircuitOp>(
-      module.getLoc(), StringAttr::get(&getContext(), baseCircuitName));
+  auto mergedCircuit =
+      CircuitOp::create(builder, module.getLoc(),
+                        StringAttr::get(&getContext(), baseCircuitName));
   SmallVector<Attribute> mergedAnnotations;
 
   for (auto circuit : circuits) {

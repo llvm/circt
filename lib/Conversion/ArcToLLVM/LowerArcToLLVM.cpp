@@ -64,14 +64,14 @@ struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
     {
       IRRewriter::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToEnd(&op.getBodyBlock());
-      rewriter.create<func::ReturnOp>(op.getLoc());
+      func::ReturnOp::create(rewriter, op.getLoc());
     }
     auto funcName =
         rewriter.getStringAttr(evalSymbolFromModelName(op.getName()));
     auto funcType =
         rewriter.getFunctionType(op.getBody().getArgumentTypes(), {});
     auto func =
-        rewriter.create<mlir::func::FuncOp>(op.getLoc(), funcName, funcType);
+        mlir::func::FuncOp::create(rewriter, op.getLoc(), funcName, funcType);
     rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
     rewriter.eraseOp(op);
     return success();
@@ -107,9 +107,9 @@ struct AllocStateLikeOpLowering : public OpConversionPattern<ConcreteOp> {
     auto offsetAttr = op->template getAttrOfType<IntegerAttr>("offset");
     if (!offsetAttr)
       return failure();
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
-        adaptor.getStorage(),
+    Value ptr = LLVM::GEPOp::create(
+        rewriter, op->getLoc(), adaptor.getStorage().getType(),
+        rewriter.getI8Type(), adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
     rewriter.replaceOp(op, ptr);
     return success();
@@ -135,9 +135,9 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
     if (adaptor.getCondition()) {
       rewriter.replaceOpWithNewOp<scf::IfOp>(
           op, adaptor.getCondition(), [&](auto &builder, auto loc) {
-            builder.template create<LLVM::StoreOp>(loc, adaptor.getValue(),
-                                                   adaptor.getState());
-            builder.template create<scf::YieldOp>(loc);
+            LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
+                                  adaptor.getState());
+            scf::YieldOp::create(builder, loc);
           });
     } else {
       rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
@@ -155,9 +155,9 @@ struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
     auto offsetAttr = op->getAttrOfType<IntegerAttr>("offset");
     if (!offsetAttr)
       return failure();
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
-        adaptor.getStorage(),
+    Value ptr = LLVM::GEPOp::create(
+        rewriter, op.getLoc(), adaptor.getStorage().getType(),
+        rewriter.getI8Type(), adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
 
     rewriter.replaceOp(op, ptr);
@@ -170,11 +170,11 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
   LogicalResult
   matchAndRewrite(arc::StorageGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    Value offset = rewriter.create<LLVM::ConstantOp>(
-        op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
-        adaptor.getStorage(), offset);
+    Value offset = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
+    Value ptr = LLVM::GEPOp::create(
+        rewriter, op.getLoc(), adaptor.getStorage().getType(),
+        rewriter.getI8Type(), adaptor.getStorage(), offset);
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -190,13 +190,14 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
                                         ConversionPatternRewriter &rewriter) {
   auto zextAddrType = rewriter.getIntegerType(
       cast<IntegerType>(address.getType()).getWidth() + 1);
-  Value addr = rewriter.create<LLVM::ZExtOp>(loc, zextAddrType, address);
-  Value addrLimit = rewriter.create<LLVM::ConstantOp>(
-      loc, zextAddrType, rewriter.getI32IntegerAttr(type.getNumWords()));
-  Value withinBounds = rewriter.create<LLVM::ICmpOp>(
-      loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
-  Value ptr = rewriter.create<LLVM::GEPOp>(
-      loc, LLVM::LLVMPointerType::get(memory.getContext()),
+  Value addr = LLVM::ZExtOp::create(rewriter, loc, zextAddrType, address);
+  Value addrLimit =
+      LLVM::ConstantOp::create(rewriter, loc, zextAddrType,
+                               rewriter.getI32IntegerAttr(type.getNumWords()));
+  Value withinBounds = LLVM::ICmpOp::create(
+      rewriter, loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
+  Value ptr = LLVM::GEPOp::create(
+      rewriter, loc, LLVM::LLVMPointerType::get(memory.getContext()),
       rewriter.getIntegerType(type.getStride() * 8), memory, ValueRange{addr});
   return {ptr, withinBounds};
 }
@@ -217,14 +218,14 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, access.withinBounds,
         [&](auto &builder, auto loc) {
-          Value loadOp = builder.template create<LLVM::LoadOp>(
-              loc, memoryType.getWordType(), access.ptr);
-          builder.template create<scf::YieldOp>(loc, loadOp);
+          Value loadOp = LLVM::LoadOp::create(
+              builder, loc, memoryType.getWordType(), access.ptr);
+          scf::YieldOp::create(builder, loc, loadOp);
         },
         [&](auto &builder, auto loc) {
-          Value zeroValue = builder.template create<LLVM::ConstantOp>(
-              loc, type, builder.getI64IntegerAttr(0));
-          builder.template create<scf::YieldOp>(loc, zeroValue);
+          Value zeroValue = LLVM::ConstantOp::create(
+              builder, loc, type, builder.getI64IntegerAttr(0));
+          scf::YieldOp::create(builder, loc, zeroValue);
         });
     return success();
   }
@@ -240,15 +241,14 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
         cast<MemoryType>(op.getMemory().getType()), rewriter);
     auto enable = access.withinBounds;
     if (adaptor.getEnable())
-      enable = rewriter.create<LLVM::AndOp>(op.getLoc(), adaptor.getEnable(),
-                                            enable);
+      enable = LLVM::AndOp::create(rewriter, op.getLoc(), adaptor.getEnable(),
+                                   enable);
 
     // Only attempt to write the memory if the address is within bounds.
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, enable, [&](auto &builder, auto loc) {
-          builder.template create<LLVM::StoreOp>(loc, adaptor.getData(),
-                                                 access.ptr);
-          builder.template create<scf::YieldOp>(loc);
+          LLVM::StoreOp::create(builder, loc, adaptor.getData(), access.ptr);
+          scf::YieldOp::create(builder, loc);
         });
     return success();
   }
@@ -272,8 +272,8 @@ struct ClockInvOpLowering : public OpConversionPattern<seq::ClockInverterOp> {
   LogicalResult
   matchAndRewrite(seq::ClockInverterOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto constTrue = rewriter.create<LLVM::ConstantOp>(op->getLoc(),
-                                                       rewriter.getI1Type(), 1);
+    auto constTrue = LLVM::ConstantOp::create(rewriter, op->getLoc(),
+                                              rewriter.getI1Type(), 1);
     rewriter.replaceOpWithNewOp<LLVM::XOrOp>(op, adaptor.getInput(), constTrue);
     return success();
   }
@@ -348,9 +348,9 @@ protected:
   Value createPtrToPortState(ConversionPatternRewriter &rewriter, Location loc,
                              Value state, const StateInfo &port) const {
     MLIRContext *ctx = rewriter.getContext();
-    return rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(ctx),
-                                        IntegerType::get(ctx, 8), state,
-                                        LLVM::GEPArg(port.offset));
+    return LLVM::GEPOp::create(rewriter, loc, LLVM::LLVMPointerType::get(ctx),
+                               IntegerType::get(ctx, 8), state,
+                               LLVM::GEPArg(port.offset));
   }
 
   llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo;
@@ -392,23 +392,23 @@ struct SimInstantiateOpLowering
       return freeFunc;
 
     Location loc = op.getLoc();
-    Value numStateBytes = rewriter.create<LLVM::ConstantOp>(
-        loc, convertedIndex, model.numStateBytes);
-    Value allocated = rewriter
-                          .create<LLVM::CallOp>(loc, mallocFunc.value(),
-                                                ValueRange{numStateBytes})
+    Value numStateBytes = LLVM::ConstantOp::create(
+        rewriter, loc, convertedIndex, model.numStateBytes);
+    Value allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
+                                           ValueRange{numStateBytes})
                           .getResult();
     Value zero =
-        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
-    rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
+        LLVM::ConstantOp::create(rewriter, loc, rewriter.getI8Type(), 0);
+    LLVM::MemsetOp::create(rewriter, loc, allocated, zero, numStateBytes,
+                           false);
 
     // Call the model's 'initial' function if present.
     if (model.initialFnSymbol) {
       auto initialFnType = LLVM::LLVMFunctionType::get(
           LLVM::LLVMVoidType::get(op.getContext()),
           {LLVM::LLVMPointerType::get(op.getContext())});
-      rewriter.create<LLVM::CallOp>(loc, initialFnType, model.initialFnSymbol,
-                                    ValueRange{allocated});
+      LLVM::CallOp::create(rewriter, loc, initialFnType, model.initialFnSymbol,
+                           ValueRange{allocated});
     }
 
     // Execute the body.
@@ -420,11 +420,12 @@ struct SimInstantiateOpLowering
       auto finalFnType = LLVM::LLVMFunctionType::get(
           LLVM::LLVMVoidType::get(op.getContext()),
           {LLVM::LLVMPointerType::get(op.getContext())});
-      rewriter.create<LLVM::CallOp>(loc, finalFnType, model.finalFnSymbol,
-                                    ValueRange{allocated});
+      LLVM::CallOp::create(rewriter, loc, finalFnType, model.finalFnSymbol,
+                           ValueRange{allocated});
     }
 
-    rewriter.create<LLVM::CallOp>(loc, freeFunc.value(), ValueRange{allocated});
+    LLVM::CallOp::create(rewriter, loc, freeFunc.value(),
+                         ValueRange{allocated});
     rewriter.eraseOp(op);
 
     return success();
@@ -543,14 +544,14 @@ struct SimEmitValueOpLowering
            sizeOfSizeT.getFixedValue() <= std::numeric_limits<unsigned>::max());
     bool truncated = false;
     if (valueType.getWidth() > sizeOfSizeT) {
-      toPrint = rewriter.create<LLVM::TruncOp>(
-          loc, IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()),
-          toPrint);
+      toPrint = LLVM::TruncOp::create(
+          rewriter, loc,
+          IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()), toPrint);
       truncated = true;
     } else if (valueType.getWidth() < sizeOfSizeT)
-      toPrint = rewriter.create<LLVM::ZExtOp>(
-          loc, IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()),
-          toPrint);
+      toPrint = LLVM::ZExtOp::create(
+          rewriter, loc,
+          IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()), toPrint);
 
     // Lookup of create printf function symbol.
     auto printfFunc = LLVM::lookupOrCreateFn(
@@ -579,14 +580,15 @@ struct SimEmitValueOpLowering
       rewriter.setInsertionPointToStart(moduleOp.getBody());
       auto globalType =
           LLVM::LLVMArrayType::get(rewriter.getI8Type(), formatStrVec.size());
-      formatStrGlobal = rewriter.create<LLVM::GlobalOp>(
-          loc, globalType, /*isConstant=*/true, LLVM::Linkage::Internal,
+      formatStrGlobal = LLVM::GlobalOp::create(
+          rewriter, loc, globalType, /*isConstant=*/true,
+          LLVM::Linkage::Internal,
           /*name=*/formatStrName, rewriter.getStringAttr(formatStrVec),
           /*alignment=*/0);
     }
 
     Value formatStrGlobalPtr =
-        rewriter.create<LLVM::AddressOfOp>(loc, formatStrGlobal);
+        LLVM::AddressOfOp::create(rewriter, loc, formatStrGlobal);
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(
         op, printfFunc.value(), ValueRange{formatStrGlobalPtr, toPrint});
 

@@ -125,14 +125,14 @@ public:
       break;
     case StageKind::Stallable:
       stageValid =
-          builder.create<comb::AndOp>(loc, args.enable, getOrSetNotStalled());
+          comb::AndOp::create(builder, loc, args.enable, getOrSetNotStalled());
       stageValid.getDefiningOp()->setAttr("sv.namehint", validSignalName);
       break;
     case StageKind::Runoff:
       assert(args.lnsEn && "Expected an LNS signal if this was a runoff stage");
-      stageValid = builder.create<comb::AndOp>(
-          loc, args.enable,
-          builder.create<comb::OrOp>(loc, args.lnsEn, getOrSetNotStalled()));
+      stageValid = comb::AndOp::create(
+          builder, loc, args.enable,
+          comb::OrOp::create(builder, loc, args.lnsEn, getOrSetNotStalled()));
       stageValid.getDefiningOp()->setAttr("sv.namehint", validSignalName);
       break;
     }
@@ -156,8 +156,8 @@ public:
     Value notStalledClockGate;
     if (this->clockGateRegs) {
       // Create the top-level clock gate.
-      notStalledClockGate = builder.create<seq::ClockGateOp>(
-          loc, args.clock, stageValid, /*test_enable=*/Value(),
+      notStalledClockGate = seq::ClockGateOp::create(
+          builder, loc, args.clock, stageValid, /*test_enable=*/Value(),
           /*inner_sym=*/hw::InnerSymAttr());
     }
 
@@ -172,23 +172,24 @@ public:
         Value currClockGate = notStalledClockGate;
         for (auto hierClockGateEnable : stageOp.getClockGatesForReg(regIdx)) {
           // Create clock gates for any hierarchically nested clock gates.
-          currClockGate = builder.create<seq::ClockGateOp>(
-              loc, currClockGate, hierClockGateEnable,
+          currClockGate = seq::ClockGateOp::create(
+              builder, loc, currClockGate, hierClockGateEnable,
               /*test_enable=*/Value(),
               /*inner_sym=*/hw::InnerSymAttr());
         }
-        dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
-                                                 currClockGate, regName);
+        dataReg = seq::CompRegOp::create(builder, stageOp->getLoc(), regIn,
+                                         currClockGate, regName);
       } else {
         // Only clock-enable the register if the pipeline is stallable.
         // For non-stallable (continuous) pipelines, a data register can always
         // be clocked.
         if (isStallablePipeline) {
-          dataReg = builder.create<seq::CompRegClockEnabledOp>(
-              stageOp->getLoc(), regIn, args.clock, stageValid, regName);
+          dataReg = seq::CompRegClockEnabledOp::create(
+              builder, stageOp->getLoc(), regIn, args.clock, stageValid,
+              regName);
         } else {
-          dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
-                                                   args.clock, regName);
+          dataReg = seq::CompRegOp::create(builder, stageOp->getLoc(), regIn,
+                                           args.clock, regName);
         }
       }
       rets.regs.push_back(dataReg);
@@ -381,30 +382,30 @@ public:
       Value enableRegResetVal;
       if (args.reset)
         enableRegResetVal =
-            builder.create<hw::ConstantOp>(loc, APInt(1, 0, false)).getResult();
+            hw::ConstantOp::create(builder, loc, APInt(1, 0, false))
+                .getResult();
 
       switch (stageKind) {
       case StageKind::Continuous:
         LLVM_FALLTHROUGH;
       case StageKind::NonStallable:
-        stageEnabled = builder.create<seq::CompRegOp>(
-            loc, args.enable, args.clock, args.reset, enableRegResetVal,
-            enableRegName);
+        stageEnabled = seq::CompRegOp::create(builder, loc, args.enable,
+                                              args.clock, args.reset,
+                                              enableRegResetVal, enableRegName);
         break;
       case StageKind::Stallable:
-        stageEnabled = builder.create<seq::CompRegClockEnabledOp>(
-            loc, args.enable, args.clock,
+        stageEnabled = seq::CompRegClockEnabledOp::create(
+            builder, loc, args.enable, args.clock,
             comb::createOrFoldNot(loc, args.stall, builder), args.reset,
             enableRegResetVal, enableRegName);
         break;
       case StageKind::Runoff:
         assert(args.lnsEn &&
                "Expected an LNS signal if this was a runoff stage");
-        stageEnabled = builder.create<seq::CompRegClockEnabledOp>(
-            loc, args.enable, args.clock,
-            builder.create<comb::OrOp>(
-                loc, args.lnsEn,
-                comb::createOrFoldNot(loc, args.stall, builder)),
+        stageEnabled = seq::CompRegClockEnabledOp::create(
+            builder, loc, args.enable, args.clock,
+            comb::OrOp::create(builder, loc, args.lnsEn,
+                               comb::createOrFoldNot(loc, args.stall, builder)),
             args.reset, enableRegResetVal, enableRegName);
         break;
       }

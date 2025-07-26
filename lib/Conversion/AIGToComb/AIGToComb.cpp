@@ -39,7 +39,7 @@ struct AIGAndInverterOpConversion : OpConversionPattern<aig::AndInverterOp> {
     // Convert to comb.and + comb.xor + hw.constant
     auto width = op.getResult().getType().getIntOrFloatBitWidth();
     auto allOnes =
-        rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getAllOnes(width));
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getAllOnes(width));
     SmallVector<Value> operands;
     operands.reserve(op.getNumOperands());
     for (auto [input, inverted] : llvm::zip(op.getOperands(), op.getInverted()))

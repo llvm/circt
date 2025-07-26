@@ -445,7 +445,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   assert(newFieldIndex.has_value());
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubfieldOp>(newInput, *newFieldIndex);
+  auto newOp = SubfieldOp::create(builder, newInput, *newFieldIndex);
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
@@ -485,7 +485,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   assert(newInput);
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubindexOp>(newInput, op.getIndex());
+  auto newOp = SubindexOp::create(builder, newInput, op.getIndex());
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
@@ -667,19 +667,16 @@ LogicalResult Visitor::visitDecl(WireOp op) {
   // Create the new HW wire.
   if (mappings.hwType)
     hwOnlyAggMap[op.getResult()] =
-        builder
-            .create<WireOp>(mappings.hwType, op.getName(), op.getNameKind(),
-                            op.getAnnotations(), mappings.newSym,
-                            op.getForceable())
+        WireOp::create(builder, mappings.hwType, op.getName(), op.getNameKind(),
+                       op.getAnnotations(), mappings.newSym, op.getForceable())
             .getResult();
 
   // Create the non-HW wires.  Non-HW wire names are always droppable.
   for (auto &[type, fieldID, _, suffix] : mappings.fields)
     nonHWValues[FieldRef(op.getResult(), fieldID)] =
-        builder
-            .create<WireOp>(type,
-                            builder.getStringAttr(Twine(op.getName()) + suffix),
-                            NameKindEnum::DroppableName)
+        WireOp::create(builder, type,
+                       builder.getStringAttr(Twine(op.getName()) + suffix),
+                       NameKindEnum::DroppableName)
             .getResult();
 
   for (auto fieldID : mappings.mapToNullInteriors)

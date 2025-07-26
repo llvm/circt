@@ -151,8 +151,8 @@ void MemoryToBlockArgumentPass::runOnProcess(llhd::ProcessOp operation) {
       for (Block *pred : jp->getPredecessors()) {
         // Set insertion point before terminator to insert the load operation
         builder.setInsertionPoint(pred->getTerminator());
-        Value load = builder.create<llhd::LoadOp>(
-            pred->getTerminator()->getLoc(),
+        Value load = llhd::LoadOp::create(
+            builder, pred->getTerminator()->getLoc(),
             cast<llhd::PtrType>(var.getType()).getElementType(), var);
         // Add the loaded value as additional block argument
         addBlockOperandToTerminator(pred->getTerminator(), jp, load);
@@ -160,7 +160,7 @@ void MemoryToBlockArgumentPass::runOnProcess(llhd::ProcessOp operation) {
       // Insert a store at the beginning of the join point to make removal of
       // all the memory operations easier later on
       builder.setInsertionPointToStart(jp);
-      builder.create<llhd::StoreOp>(jp->front().getLoc(), var, phi);
+      llhd::StoreOp::create(builder, jp->front().getLoc(), var, phi);
     }
 
     // Basically reaching definitions analysis and replacing the loaded values

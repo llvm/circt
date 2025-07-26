@@ -203,8 +203,8 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
   // Insert the memory module just above the current module.
   OpBuilder b(op->getParentOfType<FModuleOp>());
   ++numCreatedMemModules;
-  auto moduleOp = b.create<FMemModuleOp>(
-      mem.loc, moduleName, ports, mem.numReadPorts, mem.numWritePorts,
+  auto moduleOp = FMemModuleOp::create(
+      b, mem.loc, moduleName, ports, mem.numReadPorts, mem.numWritePorts,
       mem.numReadWritePorts, mem.dataWidth, mem.maskBits, mem.readLatency,
       mem.writeLatency, mem.depth);
   SymbolTable::setSymbolVisibility(moduleOp, SymbolTable::Visibility::Private);
@@ -250,8 +250,8 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create the wrapper module, inserting it just before the current module.
   OpBuilder b(mem->getParentOfType<FModuleOp>());
-  auto wrapper = b.create<FModuleOp>(
-      mem->getLoc(), wrapperName,
+  auto wrapper = FModuleOp::create(
+      b, mem->getLoc(), wrapperName,
       ConventionAttr::get(context, Convention::Internal), ports);
   SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
@@ -259,17 +259,17 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   // same name as the target module.
   auto memModule = getOrCreateMemModule(mem, summary, ports, shouldDedup);
   b.setInsertionPointToStart(wrapper.getBodyBlock());
-  auto memInst = b.create<InstanceOp>(
-      mem->getLoc(), memModule, (mem.getName() + "_ext").str(),
+  auto memInst = InstanceOp::create(
+      b, mem->getLoc(), memModule, (mem.getName() + "_ext").str(),
       mem.getNameKind(), mem.getAnnotations().getValue());
 
   // Wire all the ports together.
   for (auto [dst, src] : llvm::zip(wrapper.getBodyBlock()->getArguments(),
                                    memInst.getResults())) {
     if (wrapper.getPortDirection(dst.getArgNumber()) == Direction::Out)
-      b.create<MatchingConnectOp>(mem->getLoc(), dst, src);
+      MatchingConnectOp::create(b, mem->getLoc(), dst, src);
     else
-      b.create<MatchingConnectOp>(mem->getLoc(), src, dst);
+      MatchingConnectOp::create(b, mem->getLoc(), src, dst);
   }
 
   // Create an instance of the wrapper memory module, which will replace the
@@ -445,8 +445,9 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         if (domInfo.dominates(maskConnect, enConnect))
           b.setInsertionPoint(enConnect);
         // 'and' the enable and mask signals together and use it as the enable.
-        auto andOp = b.create<AndPrimOp>(
-            op->getLoc(), maskConnect->getOperand(1), enConnect->getOperand(1));
+        auto andOp =
+            AndPrimOp::create(b, op->getLoc(), maskConnect->getOperand(1),
+                              enConnect->getOperand(1));
         enConnect->setOperand(1, andOp);
         enConnect->moveAfter(andOp);
         // Erase the old mask connect.
@@ -491,9 +492,9 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   // Create the instance to replace the memop. The instance name matches the
   // name of the original memory module before deduplication.
   // TODO: how do we lower port annotations?
-  auto inst = builder.create<InstanceOp>(
-      op.getLoc(), portTypes, module.getNameAttr(), summary.getFirMemoryName(),
-      op.getNameKind(), portDirections, portNames,
+  auto inst = InstanceOp::create(
+      builder, op.getLoc(), portTypes, module.getNameAttr(),
+      summary.getFirMemoryName(), op.getNameKind(), portDirections, portNames,
       /*annotations=*/ArrayRef<Attribute>(),
       /*portAnnotations=*/ArrayRef<Attribute>(),
       /*layers=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,

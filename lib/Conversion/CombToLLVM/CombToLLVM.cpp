@@ -36,7 +36,7 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
     auto parityOp = cast<comb::ParityOp>(op);
 
     auto popCount =
-        rewriter.create<LLVM::CtPopOp>(op->getLoc(), parityOp.getInput());
+        LLVM::CtPopOp::create(rewriter, op->getLoc(), parityOp.getInput());
     rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
         op, IntegerType::get(rewriter.getContext(), 1), popCount);
 

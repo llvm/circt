@@ -142,9 +142,8 @@ struct Def {
 Value Def::getValueOrPlaceholder() {
   if (!value) {
     auto builder = OpBuilder::atBlockBegin(block);
-    value = builder
-                .create<UnrealizedConversionCastOp>(builder.getUnknownLoc(),
-                                                    type, ValueRange{})
+    value = UnrealizedConversionCastOp::create(builder, builder.getUnknownLoc(),
+                                               type, ValueRange{})
                 .getResult(0);
     valueIsPlaceholder = true;
   }
@@ -160,17 +159,16 @@ Value Def::getConditionOrPlaceholder() {
     auto builder = OpBuilder::atBlockBegin(block);
     Value value;
     if (condition.isNever()) {
-      value = builder.create<hw::ConstantOp>(builder.getUnknownLoc(),
-                                             builder.getI1Type(), 0);
+      value = hw::ConstantOp::create(builder, builder.getUnknownLoc(),
+                                     builder.getI1Type(), 0);
     } else if (condition.isAlways()) {
-      value = builder.create<hw::ConstantOp>(builder.getUnknownLoc(),
-                                             builder.getI1Type(), 1);
+      value = hw::ConstantOp::create(builder, builder.getUnknownLoc(),
+                                     builder.getI1Type(), 1);
     } else {
-      value = builder
-                  .create<UnrealizedConversionCastOp>(builder.getUnknownLoc(),
-                                                      builder.getI1Type(),
-                                                      ValueRange{})
-                  .getResult(0);
+      value =
+          UnrealizedConversionCastOp::create(builder, builder.getUnknownLoc(),
+                                             builder.getI1Type(), ValueRange{})
+              .getResult(0);
       conditionIsPlaceholder = true;
     }
     condition.setCondition(value);
@@ -1256,8 +1254,8 @@ void Promoter::insertProbeBlocks() {
     auto *newBlock = builder.createBlock(successor->block);
     for (auto oldArg : successor->block->getArguments())
       newBlock->addArgument(oldArg.getType(), oldArg.getLoc());
-    builder.create<cf::BranchOp>(predecessor->terminator->getLoc(),
-                                 successor->block, newBlock->getArguments());
+    cf::BranchOp::create(builder, predecessor->terminator->getLoc(),
+                         successor->block, newBlock->getArguments());
     for (auto &blockOp : predecessor->terminator->getBlockOperands())
       if (blockOp.get() == successor->block)
         blockOp.set(newBlock);
@@ -1304,7 +1302,7 @@ void Promoter::insertProbes(BlockEntry *node) {
       if (op->getBlock() == node->block)
         builder.setInsertionPointAfterValue(neededDef);
     }
-    auto value = builder.create<PrbOp>(neededDef.getLoc(), neededDef);
+    auto value = PrbOp::create(builder, neededDef.getLoc(), neededDef);
     auto *def = lattice.createDef(value, DriveCondition::never());
     node->insertedProbes.push_back({neededDef, def});
   }
@@ -1346,8 +1344,8 @@ void Promoter::insertDriveBlocks() {
     auto *newBlock = builder.createBlock(successor->block);
     for (auto oldArg : successor->block->getArguments())
       newBlock->addArgument(oldArg.getType(), oldArg.getLoc());
-    builder.create<cf::BranchOp>(predecessor->terminator->getLoc(),
-                                 successor->block, newBlock->getArguments());
+    cf::BranchOp::create(builder, predecessor->terminator->getLoc(),
+                         successor->block, newBlock->getArguments());
     for (auto &blockOp : predecessor->terminator->getBlockOperands())
       if (blockOp.get() == successor->block)
         blockOp.set(newBlock);
@@ -1387,13 +1385,13 @@ void Promoter::insertDrives(BlockExit *node) {
   auto getTime = [&](bool delta) {
     if (delta) {
       if (!deltaTime)
-        deltaTime = builder.create<ConstantTimeOp>(node->terminator->getLoc(),
-                                                   0, "ns", 1, 0);
+        deltaTime = ConstantTimeOp::create(builder, node->terminator->getLoc(),
+                                           0, "ns", 1, 0);
       return deltaTime;
     }
     if (!epsilonTime)
-      epsilonTime = builder.create<ConstantTimeOp>(node->terminator->getLoc(),
-                                                   0, "ns", 0, 1);
+      epsilonTime = ConstantTimeOp::create(builder, node->terminator->getLoc(),
+                                           0, "ns", 0, 1);
     return epsilonTime;
   };
 
@@ -1414,7 +1412,7 @@ void Promoter::insertDrives(BlockExit *node) {
     auto enable = reachingDef->condition.isConditional()
                       ? reachingDef->getConditionOrPlaceholder()
                       : Value{};
-    builder.create<DrvOp>(getLoc(slot), getSlot(slot), value, time, enable);
+    DrvOp::create(builder, getLoc(slot), getSlot(slot), value, time, enable);
   };
 
   for (auto slot : slots)
@@ -1658,9 +1656,9 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
           auto type = getStoredType(slot);
           auto flatType = builder.getIntegerType(hw::getBitWidth(type));
           Value value =
-              builder.create<hw::ConstantOp>(getLoc(slot), flatType, 0);
+              hw::ConstantOp::create(builder, getLoc(slot), flatType, 0);
           if (type != flatType)
-            value = builder.create<hw::BitcastOp>(getLoc(slot), type, value);
+            value = hw::BitcastOp::create(builder, getLoc(slot), type, value);
           args.push_back(value);
         }
         break;
@@ -1668,8 +1666,8 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
         if (def) {
           args.push_back(def->getConditionOrPlaceholder());
         } else {
-          args.push_back(builder.create<hw::ConstantOp>(
-              getLoc(slot), builder.getI1Type(), 0));
+          args.push_back(hw::ConstantOp::create(builder, getLoc(slot),
+                                                builder.getI1Type(), 0));
         }
         break;
       }

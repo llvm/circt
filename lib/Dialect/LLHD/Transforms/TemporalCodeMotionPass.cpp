@@ -49,7 +49,7 @@ getBranchDecisionsFromDominatorToTarget(OpBuilder &builder, Block *driveBlock,
 
     if (curr == dominator || curr->getPredecessors().empty()) {
       if (!mem.count(curr))
-        mem[curr] = builder.create<hw::ConstantOp>(loc, APInt(1, 1));
+        mem[curr] = hw::ConstantOp::create(builder, loc, APInt(1, 1));
 
       worklist.pop_back();
       continue;
@@ -66,19 +66,19 @@ getBranchDecisionsFromDominatorToTarget(OpBuilder &builder, Block *driveBlock,
     if (addedSomething)
       continue;
 
-    Value runner = builder.create<hw::ConstantOp>(loc, APInt(1, 0));
+    Value runner = hw::ConstantOp::create(builder, loc, APInt(1, 0));
     for (auto *predBlock : curr->getPredecessors()) {
       if (predBlock->getTerminator()->getNumSuccessors() != 1) {
         auto condBr = cast<cf::CondBranchOp>(predBlock->getTerminator());
         Value cond = condBr.getCondition();
         if (condBr.getFalseDest() == curr) {
-          Value trueVal = builder.create<hw::ConstantOp>(loc, APInt(1, 1));
-          cond = builder.create<comb::XorOp>(loc, cond, trueVal);
+          Value trueVal = hw::ConstantOp::create(builder, loc, APInt(1, 1));
+          cond = comb::XorOp::create(builder, loc, cond, trueVal);
         }
-        Value next = builder.create<comb::AndOp>(loc, mem[predBlock], cond);
-        runner = builder.create<comb::OrOp>(loc, runner, next);
+        Value next = comb::AndOp::create(builder, loc, mem[predBlock], cond);
+        runner = comb::OrOp::create(builder, loc, runner, next);
       } else {
-        runner = builder.create<comb::OrOp>(loc, runner, mem[predBlock]);
+        runner = comb::OrOp::create(builder, loc, runner, mem[predBlock]);
       }
     }
     mem[curr] = runner;
@@ -103,8 +103,8 @@ static void moveDriveOpBefore(llhd::DrvOp drvOp, Block *dominator,
       builder, drvParentBlock, dominator, mem);
 
   if (drvOp.getEnable())
-    finalValue = builder.create<comb::AndOp>(drvOp.getLoc(), drvOp.getEnable(),
-                                             finalValue);
+    finalValue = comb::AndOp::create(builder, drvOp.getLoc(), drvOp.getEnable(),
+                                     finalValue);
 
   drvOp.getEnableMutable().assign(finalValue);
   drvOp->moveBefore(moveBefore);
@@ -251,8 +251,8 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
     // temporal region entry block
     OpBuilder b(procOp);
     b.setInsertionPointToEnd(auxBlock);
-    b.create<cf::BranchOp>(procOp.getLoc(), succTREntry,
-                           auxBlock->getArguments());
+    cf::BranchOp::create(b, procOp.getLoc(), succTREntry,
+                         auxBlock->getArguments());
   }
 
   //===--------------------------------------------------------------------===//
@@ -366,14 +366,15 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
       if (op.getEnable()) {
         // Multiplex value to be driven
         auto firstDrive = sigToDrv[sigTimePair];
-        Value muxValue = builder.create<comb::MuxOp>(
-            op.getLoc(), op.getEnable(), op.getValue(), firstDrive.getValue());
+        Value muxValue =
+            comb::MuxOp::create(builder, op.getLoc(), op.getEnable(),
+                                op.getValue(), firstDrive.getValue());
         op.getValueMutable().assign(muxValue);
 
         // Take the disjunction of the enable conditions
         if (firstDrive.getEnable()) {
-          Value orVal = builder.create<comb::OrOp>(op.getLoc(), op.getEnable(),
-                                                   firstDrive.getEnable());
+          Value orVal = comb::OrOp::create(builder, op.getLoc(), op.getEnable(),
+                                           firstDrive.getEnable());
           op.getEnableMutable().assign(orVal);
         } else {
           // No enable is equivalent to a constant 'true' enable

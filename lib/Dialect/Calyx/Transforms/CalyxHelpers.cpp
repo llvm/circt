@@ -24,7 +24,7 @@ calyx::RegisterOp createRegister(Location loc, OpBuilder &builder,
                                  Twine prefix) {
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(component.getBodyBlock());
-  return builder.create<RegisterOp>(loc, (prefix + "_reg").str(), width);
+  return RegisterOp::create(builder, loc, (prefix + "_reg").str(), width);
 }
 
 hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
@@ -32,8 +32,8 @@ hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
                               size_t value) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(component.getBodyBlock());
-  return builder.create<hw::ConstantOp>(
-      loc, APInt(width, value, /*isSigned=*/false));
+  return hw::ConstantOp::create(builder, loc,
+                                APInt(width, value, /*isSigned=*/false));
 }
 
 calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
@@ -43,8 +43,8 @@ calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
                                  StringRef componentName) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(component.getBodyBlock());
-  return builder.create<InstanceOp>(loc, resultTypes, instanceName,
-                                    componentName);
+  return InstanceOp::create(builder, loc, resultTypes, instanceName,
+                            componentName);
 }
 
 std::string getInstanceName(mlir::func::CallOp callOp) {

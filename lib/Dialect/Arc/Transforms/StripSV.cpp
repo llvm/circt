@@ -138,9 +138,8 @@ void StripSVPass::runOnOperation() {
         Value next;
         // Note: this register will have an sync reset regardless.
         if (reg.hasReset())
-          next = builder.create<comb::MuxOp>(reg.getLoc(), reg.getReset(),
-                                             reg.getResetValue(), reg.getNext(),
-                                             false);
+          next = comb::MuxOp::create(builder, reg.getLoc(), reg.getReset(),
+                                     reg.getResetValue(), reg.getNext(), false);
         else
           next = reg.getNext();
 
@@ -154,9 +153,9 @@ void StripSVPass::runOnOperation() {
               IntegerAttr::get(reg.getType(), *reg.getPreset()));
         }
 
-        Value compReg = builder.create<seq::CompRegOp>(
-            reg.getLoc(), next.getType(), next, reg.getClk(), reg.getNameAttr(),
-            Value{}, Value{}, /*initialValue*/ presetValue,
+        Value compReg = seq::CompRegOp::create(
+            builder, reg.getLoc(), next.getType(), next, reg.getClk(),
+            reg.getNameAttr(), Value{}, Value{}, /*initialValue*/ presetValue,
             reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
@@ -169,9 +168,9 @@ void StripSVPass::runOnOperation() {
         auto modName = instOp.getModuleNameAttr().getAttr();
         ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
         if (clockGateModuleNames.contains(modName)) {
-          auto gated = builder.create<seq::ClockGateOp>(
-              instOp.getOperand(0), instOp.getOperand(1), instOp.getOperand(2),
-              hw::InnerSymAttr{});
+          auto gated = seq::ClockGateOp::create(
+              builder, instOp.getOperand(0), instOp.getOperand(1),
+              instOp.getOperand(2), hw::InnerSymAttr{});
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         }

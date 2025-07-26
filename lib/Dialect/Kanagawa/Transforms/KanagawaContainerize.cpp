@@ -53,16 +53,16 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
     StringAttr newContainerName = rewriter.getStringAttr(
         ns.newName(parentClass.getInnerNameAttr().strref() + "_" +
                    op.getInnerNameAttr().strref()));
-    auto newContainer = rewriter.create<ContainerOp>(
-        op.getLoc(), newContainerName, /*isTopLevel=*/false);
+    auto newContainer = ContainerOp::create(
+        rewriter, op.getLoc(), newContainerName, /*isTopLevel=*/false);
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
 
     // Create a container instance op in the parent class.
     rewriter.setInsertionPoint(op);
-    rewriter.create<ContainerInstanceOp>(
-        parentClass.getLoc(), hw::InnerSymAttr::get(newContainerName),
-        newContainer.getInnerRef());
+    ContainerInstanceOp::create(rewriter, parentClass.getLoc(),
+                                hw::InnerSymAttr::get(newContainerName),
+                                newContainer.getInnerRef());
     rewriter.eraseOp(op);
     return success();
   }
@@ -78,8 +78,8 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSymAttr(),
-                                     /*topLevel*/ false, op.getNameAttr());
+        ContainerOp::create(rewriter, op.getLoc(), op.getInnerSymAttr(),
+                            /*topLevel*/ false, op.getNameAttr());
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();

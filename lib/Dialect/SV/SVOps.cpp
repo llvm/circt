@@ -1112,9 +1112,9 @@ void ForOp::build(OpBuilder &builder, OperationState &result,
                   int64_t lowerBound, int64_t upperBound, int64_t step,
                   IntegerType type, StringRef name,
                   llvm::function_ref<void(BlockArgument)> body) {
-  auto lb = builder.create<hw::ConstantOp>(result.location, type, lowerBound);
-  auto ub = builder.create<hw::ConstantOp>(result.location, type, upperBound);
-  auto st = builder.create<hw::ConstantOp>(result.location, type, step);
+  auto lb = hw::ConstantOp::create(builder, result.location, type, lowerBound);
+  auto ub = hw::ConstantOp::create(builder, result.location, type, upperBound);
+  auto st = hw::ConstantOp::create(builder, result.location, type, step);
   build(builder, result, lb, ub, st, name, body);
 }
 void ForOp::build(OpBuilder &builder, OperationState &result, Value lowerBound,
@@ -1338,10 +1338,10 @@ static LogicalResult mergeNeiboringAssignments(AssignTy op,
   auto resultType = hw::ArrayType::get(
       hw::type_cast<hw::ArrayType>(src.array.getType()).getElementType(),
       src.size);
-  auto newDest = rewriter.create<sv::IndexedPartSelectInOutOp>(
-      op.getLoc(), dest.array, dest.start, dest.size);
-  auto newSrc = rewriter.create<hw::ArraySliceOp>(op.getLoc(), resultType,
-                                                  src.array, src.start);
+  auto newDest = sv::IndexedPartSelectInOutOp::create(
+      rewriter, op.getLoc(), dest.array, dest.start, dest.size);
+  auto newSrc = hw::ArraySliceOp::create(rewriter, op.getLoc(), resultType,
+                                         src.array, src.start);
   auto newLoc = rewriter.getFusedLoc(loc);
   auto newOp = rewriter.replaceOpWithNewOp<AssignTy>(op, newDest, newSrc);
   newOp->setLoc(newLoc);
@@ -1391,7 +1391,7 @@ Type InterfaceOp::getSignalType(StringRef signalName) {
 static ParseResult parseModportStructs(OpAsmParser &parser,
                                        ArrayAttr &portsAttr) {
 
-  auto context = parser.getBuilder().getContext();
+  auto *context = parser.getBuilder().getContext();
 
   SmallVector<Attribute, 8> ports;
   auto parseElement = [&]() -> ParseResult {
@@ -1670,8 +1670,8 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // If no write and only reads, then replace with ZOp.
     // SV 6.6: "If no driver is connected to a net, its
     // value shall be high-impedance (z) unless the net is a trireg"
-    connected = rewriter.create<ConstantZOp>(
-        wire.getLoc(),
+    connected = ConstantZOp::create(
+        rewriter, wire.getLoc(),
         cast<InOutType>(wire.getResult().getType()).getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.getSrc();
@@ -1930,7 +1930,7 @@ BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult
 BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto parentOp =
+  auto *parentOp =
       symbolTable.lookupNearestSymbolFrom(*this, getInstance().getModule());
   if (!parentOp)
     return emitError("Referenced module doesn't exist ")

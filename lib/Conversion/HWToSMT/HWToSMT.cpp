@@ -59,8 +59,8 @@ struct HWModuleOpConversion : OpConversionPattern<HWModuleOp> {
       return failure();
     if (failed(rewriter.convertRegionTypes(&op.getBody(), *typeConverter)))
       return failure();
-    auto funcOp = rewriter.create<mlir::func::FuncOp>(
-        op.getLoc(), adaptor.getSymNameAttr(),
+    auto funcOp = mlir::func::FuncOp::create(
+        rewriter, op.getLoc(), adaptor.getSymNameAttr(),
         rewriter.getFunctionType(inputTypes, resultTypes));
     rewriter.inlineRegionBefore(op.getBody(), funcOp.getBody(), funcOp.end());
     rewriter.eraseOp(op);
@@ -112,11 +112,11 @@ struct ArrayCreateOpConversion : OpConversionPattern<ArrayCreateOp> {
 
     unsigned width = adaptor.getInputs().size();
 
-    Value arr = rewriter.create<mlir::smt::DeclareFunOp>(loc, arrTy);
+    Value arr = mlir::smt::DeclareFunOp::create(rewriter, loc, arrTy);
     for (auto [i, el] : llvm::enumerate(adaptor.getInputs())) {
-      Value idx = rewriter.create<mlir::smt::BVConstantOp>(
-          loc, width - i - 1, llvm::Log2_64_Ceil(width));
-      arr = rewriter.create<mlir::smt::ArrayStoreOp>(loc, arr, idx, el);
+      Value idx = mlir::smt::BVConstantOp::create(rewriter, loc, width - i - 1,
+                                                  llvm::Log2_64_Ceil(width));
+      arr = mlir::smt::ArrayStoreOp::create(rewriter, loc, arr, idx, el);
     }
 
     rewriter.replaceOp(op, arr);
@@ -140,14 +140,14 @@ struct ArrayGetOpConversion : OpConversionPattern<ArrayGetOp> {
       return rewriter.notifyMatchFailure(op.getLoc(),
                                          "unsupported array element type");
 
-    Value oobVal = rewriter.create<mlir::smt::DeclareFunOp>(loc, type);
-    Value numElementsVal = rewriter.create<mlir::smt::BVConstantOp>(
-        loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
-    Value inBounds =
-        rewriter.create<mlir::smt::BVCmpOp>(loc, mlir::smt::BVCmpPredicate::ule,
-                                            adaptor.getIndex(), numElementsVal);
-    Value indexed = rewriter.create<mlir::smt::ArraySelectOp>(
-        loc, adaptor.getInput(), adaptor.getIndex());
+    Value oobVal = mlir::smt::DeclareFunOp::create(rewriter, loc, type);
+    Value numElementsVal = mlir::smt::BVConstantOp::create(
+        rewriter, loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
+    Value inBounds = mlir::smt::BVCmpOp::create(
+        rewriter, loc, mlir::smt::BVCmpPredicate::ule, adaptor.getIndex(),
+        numElementsVal);
+    Value indexed = mlir::smt::ArraySelectOp::create(
+        rewriter, loc, adaptor.getInput(), adaptor.getIndex());
     rewriter.replaceOpWithNewOp<mlir::smt::IteOp>(op, inBounds, indexed,
                                                   oobVal);
     return success();
@@ -170,15 +170,16 @@ struct ArrayInjectOpConversion : OpConversionPattern<ArrayInjectOp> {
       return rewriter.notifyMatchFailure(op.getLoc(), "unsupported array type");
 
     // Check if the index is within bounds
-    Value numElementsVal = rewriter.create<mlir::smt::BVConstantOp>(
-        loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
-    Value inBounds =
-        rewriter.create<mlir::smt::BVCmpOp>(loc, mlir::smt::BVCmpPredicate::ule,
-                                            adaptor.getIndex(), numElementsVal);
+    Value numElementsVal = mlir::smt::BVConstantOp::create(
+        rewriter, loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
+    Value inBounds = mlir::smt::BVCmpOp::create(
+        rewriter, loc, mlir::smt::BVCmpPredicate::ule, adaptor.getIndex(),
+        numElementsVal);
 
     // Store the element at the given index
-    Value stored = rewriter.create<mlir::smt::ArrayStoreOp>(
-        loc, adaptor.getInput(), adaptor.getIndex(), adaptor.getElement());
+    Value stored = mlir::smt::ArrayStoreOp::create(
+        rewriter, loc, adaptor.getInput(), adaptor.getIndex(),
+        adaptor.getElement());
 
     // Return the original array if out of bounds, otherwise return the new
     // array
@@ -245,8 +246,8 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   converter.addTargetMaterialization([&](OpBuilder &builder, Type resultType,
                                          ValueRange inputs,
                                          Location loc) -> Value {
-    return builder
-        .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
+    return mlir::UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                    inputs)
         ->getResult(0);
   });
 
@@ -262,10 +263,11 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
 
         unsigned width = resultType.getWidth();
         Value constZero =
-            builder.create<mlir::smt::BVConstantOp>(loc, 0, width);
-        Value constOne = builder.create<mlir::smt::BVConstantOp>(loc, 1, width);
-        return builder.create<mlir::smt::IteOp>(loc, inputs[0], constOne,
-                                                constZero);
+            mlir::smt::BVConstantOp::create(builder, loc, 0, width);
+        Value constOne =
+            mlir::smt::BVConstantOp::create(builder, loc, 1, width);
+        return mlir::smt::IteOp::create(builder, loc, inputs[0], constOne,
+                                        constZero);
       });
 
   // Convert an unrealized conversion cast from 'smt.bool' to i1
@@ -288,10 +290,10 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         if (!isa<mlir::smt::BoolType>(castOp.getInputs()[0].getType()))
           return Value();
 
-        Value constZero = builder.create<mlir::smt::BVConstantOp>(loc, 0, 1);
-        Value constOne = builder.create<mlir::smt::BVConstantOp>(loc, 1, 1);
-        return builder.create<mlir::smt::IteOp>(loc, castOp.getInputs()[0],
-                                                constOne, constZero);
+        Value constZero = mlir::smt::BVConstantOp::create(builder, loc, 0, 1);
+        Value constOne = mlir::smt::BVConstantOp::create(builder, loc, 1, 1);
+        return mlir::smt::IteOp::create(builder, loc, castOp.getInputs()[0],
+                                        constOne, constZero);
       });
 
   // Convert a 'smt.bv<1>'-typed value to a 'smt.bool'-typed value
@@ -305,8 +307,8 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         if (!bvType || bvType.getWidth() != 1)
           return Value();
 
-        Value constOne = builder.create<mlir::smt::BVConstantOp>(loc, 1, 1);
-        return builder.create<mlir::smt::EqOp>(loc, inputs[0], constOne);
+        Value constOne = mlir::smt::BVConstantOp::create(builder, loc, 1, 1);
+        return mlir::smt::EqOp::create(builder, loc, inputs[0], constOne);
       });
 
   // Default source materialization to convert from illegal types to legal
@@ -314,8 +316,8 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   converter.addSourceMaterialization([&](OpBuilder &builder, Type resultType,
                                          ValueRange inputs,
                                          Location loc) -> Value {
-    return builder
-        .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
+    return mlir::UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                    inputs)
         ->getResult(0);
   });
 }

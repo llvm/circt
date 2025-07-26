@@ -54,8 +54,8 @@ static void modifyGroupOperations(ComponentOp component) {
       // Replace `calyx.group_done %0, %1 ? : i1`
       //    with `calyx.assign %done, %0, %1 ? : i1`
       auto assignOp =
-          builder.create<AssignOp>(group->getLoc(), component.getDonePort(),
-                                   groupDone.getSrc(), groupDone.getGuard());
+          AssignOp::create(builder, group->getLoc(), component.getDonePort(),
+                           groupDone.getSrc(), groupDone.getGuard());
       groupDone->replaceAllUsesWith(assignOp);
     } else {
       // Replace calyx.group_go's uses with its guard, e.g.

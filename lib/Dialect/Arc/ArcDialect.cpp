@@ -66,7 +66,7 @@ Operation *ArcDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return builder.create<hw::ConstantOp>(loc, type, attrValue);
+      return hw::ConstantOp::create(builder, loc, type, attrValue);
 
   // Parameter expressions materialize into hw.param.value.
   auto *parentOp = builder.getBlock()->getParentOp();
@@ -74,7 +74,7 @@ Operation *ArcDialect::materializeConstant(OpBuilder &builder, Attribute value,
   if (!curModule)
     curModule = parentOp->getParentOfType<hw::HWModuleOp>();
   if (curModule && isValidParameterExpression(value, curModule))
-    return builder.create<hw::ParamValueOp>(loc, type, value);
+    return hw::ParamValueOp::create(builder, loc, type, value);
 
   return nullptr;
 }

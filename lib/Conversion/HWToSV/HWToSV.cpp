@@ -50,8 +50,8 @@ struct TriggeredOpConversionPattern : public OpConversionPattern<TriggeredOp> {
   LogicalResult
   matchAndRewrite(TriggeredOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto alwaysOp = rewriter.create<AlwaysOp>(
-        op.getLoc(),
+    auto alwaysOp = AlwaysOp::create(
+        rewriter, op.getLoc(),
         llvm::SmallVector<sv::EventControl>{hwToSvEventControl(op.getEvent())},
         llvm::SmallVector<Value>{op.getTrigger()});
     rewriter.mergeBlocks(op.getBodyBlock(), alwaysOp.getBodyBlock(),

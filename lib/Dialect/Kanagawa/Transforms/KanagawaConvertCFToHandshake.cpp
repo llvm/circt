@@ -52,8 +52,8 @@ LogicalResult ConvertCFToHandshakePass::convertMethod(MethodOp method) {
   newArgTypes.push_back(b.getNoneType());
   newResTypes.push_back(b.getNoneType());
   auto newFuncType = b.getFunctionType(newArgTypes, newResTypes);
-  auto dataflowMethodOp = b.create<DataflowMethodOp>(
-      method.getLoc(), method.getInnerSymAttr(), TypeAttr::get(newFuncType),
+  auto dataflowMethodOp = DataflowMethodOp::create(
+      b, method.getLoc(), method.getInnerSymAttr(), TypeAttr::get(newFuncType),
       method.getArgNamesAttr(), method.getArgAttrsAttr(),
       method.getResAttrsAttr());
   dataflowMethodOp.getFunctionBody().takeBody(method.getBody());

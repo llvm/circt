@@ -141,7 +141,7 @@ void ValidReady::buildInputSignals() {
     ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
-    auto wrap = b.create<WrapValidReadyOp>(data, valid);
+    auto wrap = WrapValidReadyOp::create(b, data, valid);
     ready = wrap.getReady();
     // Replace uses of the old ESI port argument with the new one from the
     // wrap.
@@ -159,9 +159,9 @@ void ValidReady::buildInputSignals() {
 void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                                  SmallVectorImpl<Value> &newOperands,
                                  ArrayRef<Backedge> newResults) {
-  auto unwrap = b.create<UnwrapValidReadyOp>(inst->getLoc(),
-                                             inst->getOperand(origPort.argNum),
-                                             newResults[readyPort.argNum]);
+  auto unwrap = UnwrapValidReadyOp::create(b, inst->getLoc(),
+                                           inst->getOperand(origPort.argNum),
+                                           newResults[readyPort.argNum]);
   newOperands[dataPort.argNum] = unwrap.getRawOutput();
   newOperands[validPort.argNum] = unwrap.getValid();
 }
@@ -181,8 +181,8 @@ void ValidReady::buildOutputSignals() {
     auto *terminator = body->getTerminator();
     ImplicitLocOpBuilder b(origPort.loc, terminator);
 
-    auto unwrap = b.create<UnwrapValidReadyOp>(
-        terminator->getOperand(origPort.argNum), ready);
+    auto unwrap = UnwrapValidReadyOp::create(
+        b, terminator->getOperand(origPort.argNum), ready);
     data = unwrap.getRawOutput();
     valid = unwrap.getValid();
   }
@@ -204,8 +204,8 @@ void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
                                   SmallVectorImpl<Value> &newOperands,
                                   ArrayRef<Backedge> newResults) {
   auto wrap =
-      b.create<WrapValidReadyOp>(inst->getLoc(), newResults[dataPort.argNum],
-                                 newResults[validPort.argNum]);
+      WrapValidReadyOp::create(b, inst->getLoc(), newResults[dataPort.argNum],
+                               newResults[validPort.argNum]);
   inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   newOperands[readyPort.argNum] = wrap.getReady();
 }
@@ -235,8 +235,8 @@ void FIFO::buildInputSignals() {
     ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
-    auto wrap = b.create<WrapFIFOOp>(ArrayRef<Type>({chanTy, b.getI1Type()}),
-                                     data, empty);
+    auto wrap = WrapFIFOOp::create(b, ArrayRef<Type>({chanTy, b.getI1Type()}),
+                                   data, empty);
     rden = wrap.getRden();
     // Replace uses of the old ESI port argument with the new one from the
     // wrap.
@@ -251,8 +251,8 @@ void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                            SmallVectorImpl<Value> &newOperands,
                            ArrayRef<Backedge> newResults) {
   auto unwrap =
-      b.create<UnwrapFIFOOp>(inst->getLoc(), inst->getOperand(origPort.argNum),
-                             newResults[rdenPort.argNum]);
+      UnwrapFIFOOp::create(b, inst->getLoc(), inst->getOperand(origPort.argNum),
+                           newResults[rdenPort.argNum]);
   newOperands[dataPort.argNum] = unwrap.getData();
   newOperands[emptyPort.argNum] = unwrap.getEmpty();
 }
@@ -276,7 +276,7 @@ void FIFO::buildOutputSignals() {
     ImplicitLocOpBuilder b(origPort.loc, terminator);
 
     auto unwrap =
-        b.create<UnwrapFIFOOp>(terminator->getOperand(origPort.argNum), rden);
+        UnwrapFIFOOp::create(b, terminator->getOperand(origPort.argNum), rden);
     data = unwrap.getData();
     empty = unwrap.getEmpty();
   }
@@ -292,8 +292,8 @@ void FIFO::buildOutputSignals() {
 void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
                             SmallVectorImpl<Value> &newOperands,
                             ArrayRef<Backedge> newResults) {
-  auto wrap = b.create<WrapFIFOOp>(
-      inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}),
+  auto wrap = WrapFIFOOp::create(
+      b, inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}),
       newResults[dataPort.argNum], newResults[emptyPort.argNum]);
   inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   newOperands[rdenPort.argNum] = wrap.getRden();
@@ -503,17 +503,17 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
     // Build a gasket by instantiating an interface, connecting one end to an
     // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst =
-        instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+        InterfaceInstanceOp::create(instBuilder, iface.getInterfaceType());
     nameStringBuffer.clear();
     ifaceInst->setAttr(
         "name",
         StringAttr::get(mod.getContext(),
                         constructInstanceName(op, iface, nameStringBuffer)));
     GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sinkStr);
-    instBuilder.create<UnwrapSVInterfaceOp>(op, sinkModport);
+        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sinkStr);
+    UnwrapSVInterfaceOp::create(instBuilder, op, sinkModport);
     GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sourceStr);
+        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sourceStr);
     // Finally, add the correct modport to the list of operands.
     newOperands.push_back(sourceModport);
   }
@@ -550,29 +550,29 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
     // `esi.wrap.iface` and the other end to the instance. Append it to the
     // operand list.
     auto ifaceInst =
-        instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+        InterfaceInstanceOp::create(instBuilder, iface.getInterfaceType());
     nameStringBuffer.clear();
     ifaceInst->setAttr(
         "name",
         StringAttr::get(mod.getContext(),
                         constructInstanceName(res, iface, nameStringBuffer)));
     GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sourceStr);
+        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sourceStr);
     auto newChannel =
-        instBuilder.create<WrapSVInterfaceOp>(res.getType(), sourceModport);
+        WrapSVInterfaceOp::create(instBuilder, res.getType(), sourceModport);
     // Connect all the old users of the output channel with the newly
     // wrapped replacement channel.
     res.replaceAllUsesWith(newChannel);
     GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sinkStr);
+        GetModportOp::create(instBuilder, ifaceInst, ESIHWBuilder::sinkStr);
     // And add the modport on the other side to the new operand list.
     newOperands.push_back(sinkModport);
   }
 
   // Create the new instance!
-  auto newInst = instBuilder.create<hw::InstanceOp>(
-      mod, inst.getInstanceNameAttr(), newOperands, inst.getParameters(),
-      inst.getInnerSymAttr());
+  auto newInst = hw::InstanceOp::create(
+      instBuilder, mod, inst.getInstanceNameAttr(), newOperands,
+      inst.getParameters(), inst.getInnerSymAttr());
 
   // Go through the old list of non-ESI result values, and replace them with
   // the new non-ESI results.

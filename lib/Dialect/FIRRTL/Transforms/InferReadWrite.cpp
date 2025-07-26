@@ -154,8 +154,8 @@ struct InferReadWritePass
       ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
       portAnnotations.push_back(builder.getArrayAttr(portAtts));
       // Create the new rw memory.
-      auto rwMem = builder.create<MemOp>(
-          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
+      auto rwMem = MemOp::create(
+          builder, resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
           memOp.getDepth(), RUWAttr::Undefined,
           builder.getArrayAttr(resultNames), memOp.getNameAttr(),
           memOp.getNameKind(), memOp.getAnnotations(),
@@ -166,36 +166,36 @@ struct InferReadWritePass
       // Create the subfield access to all fields of the port.
       // The addr should be connected to read/write address depending on the
       // read/write mode.
-      auto addr = builder.create<SubfieldOp>(rwPort, "addr");
+      auto addr = SubfieldOp::create(builder, rwPort, "addr");
       // Enable is high whenever the memory is written or read.
-      auto enb = builder.create<SubfieldOp>(rwPort, "en");
+      auto enb = SubfieldOp::create(builder, rwPort, "en");
       // Read/Write clock.
-      auto clk = builder.create<SubfieldOp>(rwPort, "clk");
-      auto readData = builder.create<SubfieldOp>(rwPort, "rdata");
+      auto clk = SubfieldOp::create(builder, rwPort, "clk");
+      auto readData = SubfieldOp::create(builder, rwPort, "rdata");
       // wmode is high when the port is in write mode. That is this can be
       // connected to the write enable.
-      auto wmode = builder.create<SubfieldOp>(rwPort, "wmode");
-      auto writeData = builder.create<SubfieldOp>(rwPort, "wdata");
-      auto mask = builder.create<SubfieldOp>(rwPort, "wmask");
+      auto wmode = SubfieldOp::create(builder, rwPort, "wmode");
+      auto writeData = SubfieldOp::create(builder, rwPort, "wdata");
+      auto mask = SubfieldOp::create(builder, rwPort, "wmask");
       // Temp wires to replace the original memory connects.
       auto rAddr =
-          builder.create<WireOp>(addr.getType(), "readAddr").getResult();
+          WireOp::create(builder, addr.getType(), "readAddr").getResult();
       auto wAddr =
-          builder.create<WireOp>(addr.getType(), "writeAddr").getResult();
+          WireOp::create(builder, addr.getType(), "writeAddr").getResult();
       auto wEnWire =
-          builder.create<WireOp>(enb.getType(), "writeEnable").getResult();
+          WireOp::create(builder, enb.getType(), "writeEnable").getResult();
       auto rEnWire =
-          builder.create<WireOp>(enb.getType(), "readEnable").getResult();
+          WireOp::create(builder, enb.getType(), "readEnable").getResult();
       auto writeClock =
-          builder.create<WireOp>(ClockType::get(enb.getContext())).getResult();
+          WireOp::create(builder, ClockType::get(enb.getContext())).getResult();
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
-      builder.create<MatchingConnectOp>(
-          addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
+      MatchingConnectOp::create(
+          builder, addr, MuxPrimOp::create(builder, wEnWire, wAddr, rAddr));
       // Enable = Or(WriteEnable, ReadEnable).
-      builder.create<MatchingConnectOp>(
-          enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
+      MatchingConnectOp::create(builder, enb,
+                                OrPrimOp::create(builder, rEnWire, wEnWire));
       builder.setInsertionPointToEnd(wmode->getBlock());
-      builder.create<MatchingConnectOp>(wmode, complementTerm);
+      MatchingConnectOp::create(builder, wmode, complementTerm);
       // Now iterate over the original memory read and write ports.
       size_t dbgsIndex = 0;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
@@ -470,8 +470,8 @@ private:
         ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
         builder.setInsertionPointToStart(
             memOp->getParentOfType<FModuleOp>().getBodyBlock());
-        auto constOne = builder.create<ConstantOp>(
-            UIntType::get(builder.getContext(), 1), APInt(1, 1));
+        auto constOne = ConstantOp::create(
+            builder, UIntType::get(builder.getContext(), 1), APInt(1, 1));
         setEnable(enableDriver, wmodeDriver, constOne);
       }
     }
@@ -553,12 +553,13 @@ private:
                                   memOp.getPortKind(i), /*maskBits=*/1));
 
       // Copy everything from old memory, except the result type.
-      auto newMem = builder.create<MemOp>(
-          resultTypes, memOp.getReadLatencyAttr(), memOp.getWriteLatencyAttr(),
-          memOp.getDepthAttr(), memOp.getRuwAttr(), memOp.getPortNamesAttr(),
-          memOp.getNameAttr(), memOp.getNameKindAttr(),
-          memOp.getAnnotationsAttr(), memOp.getPortAnnotationsAttr(),
-          memOp.getInnerSymAttr(), memOp.getInitAttr(), memOp.getPrefixAttr());
+      auto newMem = MemOp::create(
+          builder, resultTypes, memOp.getReadLatencyAttr(),
+          memOp.getWriteLatencyAttr(), memOp.getDepthAttr(), memOp.getRuwAttr(),
+          memOp.getPortNamesAttr(), memOp.getNameAttr(),
+          memOp.getNameKindAttr(), memOp.getAnnotationsAttr(),
+          memOp.getPortAnnotationsAttr(), memOp.getInnerSymAttr(),
+          memOp.getInitAttr(), memOp.getPrefixAttr());
       // Now replace the result of old memory with the new one.
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Old result.
@@ -575,17 +576,19 @@ private:
         for (Operation *u : oldPort.getUsers()) {
           auto oldRes = dyn_cast<SubfieldOp>(u);
           auto sf =
-              builder.create<SubfieldOp>(newPortVal, oldRes.getFieldIndex());
+              SubfieldOp::create(builder, newPortVal, oldRes.getFieldIndex());
           auto fName =
               sf.getInput().getType().base().getElementName(sf.getFieldIndex());
           // Replace all mask fields with a one bit constant 1.
           // Replace all other fields with the new port.
           if (fName.contains("mask")) {
-            WireOp dummy = builder.create<WireOp>(oldRes.getType());
+            WireOp dummy = WireOp::create(builder, oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
-            builder.create<MatchingConnectOp>(
-                sf, builder.create<ConstantOp>(
-                        UIntType::get(builder.getContext(), 1), APInt(1, 1)));
+            MatchingConnectOp::create(
+                builder, sf,
+                ConstantOp::create(builder,
+                                   UIntType::get(builder.getContext(), 1),
+                                   APInt(1, 1)));
           } else
             oldRes->replaceAllUsesWith(sf);
 

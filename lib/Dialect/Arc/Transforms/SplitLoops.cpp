@@ -161,7 +161,7 @@ void Splitter::run(Block &block, DenseMap<Operation *, APInt> &coloring) {
 
   // Create the final `arc.output` op for each of the splits.
   for (auto &split : splits)
-    split->builder.create<arc::OutputOp>(loc, split->exportedValues);
+    arc::OutputOp::create(split->builder, loc, split->exportedValues);
 }
 
 /// Get or create the split for a given operation color.
@@ -291,10 +291,11 @@ void SplitLoopsPass::splitArc(Namespace &arcNamespace, DefineOp defOp,
     if (splitter.splits.size() > 1)
       splitName = arcNamespace.newName(defOp.getSymName() + "_split_" +
                                        Twine(split->index));
-    auto splitArc = builder.create<DefineOp>(
-        splitName, builder.getFunctionType(
-                       split->block->getArgumentTypes(),
-                       split->block->getTerminator()->getOperandTypes()));
+    auto splitArc =
+        DefineOp::create(builder, splitName,
+                         builder.getFunctionType(
+                             split->block->getArgumentTypes(),
+                             split->block->getTerminator()->getOperandTypes()));
     splitArc.getBody().push_back(split->block.release());
     splitArcs.push_back(splitArc);
     ++numArcsCreated;
@@ -365,7 +366,7 @@ void SplitLoopsPass::replaceArcUse(CallOpInterface arcUse,
     if (!getMappedValuesOrSchedule(split->importedValues, operands))
       continue;
 
-    auto newUse = builder.create<CallOp>(splitDef, operands);
+    auto newUse = CallOp::create(builder, splitDef, operands);
     allArcUses.insert(newUse);
     newUses[split->index] = newUse;
 

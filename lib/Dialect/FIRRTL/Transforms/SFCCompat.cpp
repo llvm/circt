@@ -82,9 +82,9 @@ void SFCCompatPass::runOnOperation() {
                                           return src.isa<InvalidValueOp>();
                                         })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-      RegOp newReg = builder.create<RegOp>(
-          reg.getResult().getType(), reg.getClockVal(), reg.getNameAttr(),
-          reg.getNameKindAttr(), reg.getAnnotationsAttr(),
+      RegOp newReg = RegOp::create(
+          builder, reg.getResult().getType(), reg.getClockVal(),
+          reg.getNameAttr(), reg.getNameKindAttr(), reg.getAnnotationsAttr(),
           reg.getInnerSymAttr(), reg.getForceableAttr());
       reg.replaceAllUsesWith(newReg);
       reg.erase();
@@ -137,17 +137,17 @@ void SFCCompatPass::runOnOperation() {
         FIRRTLTypeSwitch<FIRRTLType, Value>(inv.getType())
             .Case<ClockType, AsyncResetType, ResetType>(
                 [&](auto type) -> Value {
-                  return builder.create<SpecialConstantOp>(
-                      type, builder.getBoolAttr(false));
+                  return SpecialConstantOp::create(builder, type,
+                                                   builder.getBoolAttr(false));
                 })
             .Case<IntType>([&](IntType type) -> Value {
-              return builder.create<ConstantOp>(type, getIntZerosAttr(type));
+              return ConstantOp::create(builder, type, getIntZerosAttr(type));
             })
             .Case<FEnumType, BundleType, FVectorType>([&](auto type) -> Value {
               auto width = circt::firrtl::getBitWidth(type);
               assert(width && "width must be inferred");
-              auto zero = builder.create<ConstantOp>(APSInt(*width));
-              return builder.create<BitCastOp>(type, zero);
+              auto zero = ConstantOp::create(builder, APSInt(*width));
+              return BitCastOp::create(builder, type, zero);
             })
             .Default([&](auto) {
               llvm_unreachable("all types are supported");

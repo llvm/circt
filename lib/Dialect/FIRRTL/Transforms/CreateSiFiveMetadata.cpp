@@ -73,7 +73,7 @@ struct ObjectModelIR {
     }
 
     // Create the path operation.
-    return builderOM.create<PathOp>(kind, id);
+    return PathOp::create(builderOM, kind, id);
   }
 
   void createMemorySchema() {
@@ -92,8 +92,8 @@ struct ObjectModelIR {
     };
     StringRef extraPortFields[3] = {"name", "direction", "width"};
 
-    extraPortsClass = builderOM.create<ClassOp>(
-        "ExtraPortsMemorySchema", extraPortFields, extraPortsType);
+    extraPortsClass = ClassOp::create(builderOM, "ExtraPortsMemorySchema",
+                                      extraPortFields, extraPortsType);
 
     mlir::Type classFieldTypes[13] = {
         StringType::get(context),
@@ -113,14 +113,14 @@ struct ObjectModelIR {
         ListType::get(context, cast<PropertyType>(StringType::get(context))),
     };
 
-    memorySchemaClass = builderOM.create<ClassOp>(
-        "MemorySchema", memoryParamNames, classFieldTypes);
+    memorySchemaClass = ClassOp::create(builderOM, "MemorySchema",
+                                        memoryParamNames, classFieldTypes);
 
     // Now create the class that will instantiate metadata class with all the
     // memories of the circt.
     SmallVector<PortInfo> mports;
-    memoryMetadataClass = builderOM.create<ClassOp>(
-        builderOM.getStringAttr("MemoryMetadata"), mports);
+    memoryMetadataClass = ClassOp::create(
+        builderOM, builderOM.getStringAttr("MemoryMetadata"), mports);
   }
 
   void createRetimeModulesSchema() {
@@ -128,12 +128,13 @@ struct ObjectModelIR {
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
     Type classFieldTypes[] = {StringType::get(context)};
-    retimeModulesSchemaClass = builderOM.create<ClassOp>(
-        "RetimeModulesSchema", retimeModulesParamNames, classFieldTypes);
+    retimeModulesSchemaClass =
+        ClassOp::create(builderOM, "RetimeModulesSchema",
+                        retimeModulesParamNames, classFieldTypes);
 
     SmallVector<PortInfo> mports;
-    retimeModulesMetadataClass = builderOM.create<ClassOp>(
-        builderOM.getStringAttr("RetimeModulesMetadata"), mports);
+    retimeModulesMetadataClass = ClassOp::create(
+        builderOM, builderOM.getStringAttr("RetimeModulesMetadata"), mports);
   }
 
   void addRetimeModule(FModuleLike module) {
@@ -144,12 +145,12 @@ struct ObjectModelIR {
 
     // Create the path operation.
     auto modEntry =
-        builderOM.create<StringConstantOp>(module.getModuleNameAttr());
-    auto object = builderOM.create<ObjectOp>(retimeModulesSchemaClass,
-                                             module.getModuleNameAttr());
+        StringConstantOp::create(builderOM, module.getModuleNameAttr());
+    auto object = ObjectOp::create(builderOM, retimeModulesSchemaClass,
+                                   module.getModuleNameAttr());
 
-    auto inPort = builderOM.create<ObjectSubfieldOp>(object, 0);
-    builderOM.create<PropAssignOp>(inPort, modEntry);
+    auto inPort = ObjectSubfieldOp::create(builderOM, object, 0);
+    PropAssignOp::create(builderOM, inPort, modEntry);
     auto portIndex = retimeModulesMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
@@ -158,7 +159,7 @@ struct ObjectModelIR {
     retimeModulesMetadataClass.insertPorts(newPorts);
     auto blockarg = retimeModulesMetadataClass.getBodyBlock()->addArgument(
         object.getType(), module->getLoc());
-    builderOM.create<PropAssignOp>(blockarg, object);
+    PropAssignOp::create(builderOM, blockarg, object);
   }
 
   void addBlackBoxModulesSchema() {
@@ -169,11 +170,11 @@ struct ObjectModelIR {
         StringType::get(context), BoolType::get(context),
         ListType::get(context, cast<PropertyType>(StringType::get(context)))};
     blackBoxModulesSchemaClass =
-        builderOM.create<ClassOp>("SitestBlackBoxModulesSchema",
-                                  blackBoxModulesParamNames, classFieldTypes);
+        ClassOp::create(builderOM, "SitestBlackBoxModulesSchema",
+                        blackBoxModulesParamNames, classFieldTypes);
     SmallVector<PortInfo> mports;
-    blackBoxMetadataClass = builderOM.create<ClassOp>(
-        builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);
+    blackBoxMetadataClass = ClassOp::create(
+        builderOM, builderOM.getStringAttr("SitestBlackBoxMetadata"), mports);
   }
 
   void addBlackBoxModule(FExtModuleOp module, bool inDut,
@@ -185,8 +186,9 @@ struct ObjectModelIR {
       return;
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         module.getLoc(), blackBoxMetadataClass.getBodyBlock());
-    auto modEntry = builderOM.create<StringConstantOp>(module.getDefnameAttr());
-    auto inDutAttr = builderOM.create<BoolConstantOp>(inDut);
+    auto modEntry =
+        StringConstantOp::create(builderOM, module.getDefnameAttr());
+    auto inDutAttr = BoolConstantOp::create(builderOM, inDut);
 
     SmallVector<Value> libValues;
     for (StringRef libName : libraries) {
@@ -194,28 +196,29 @@ struct ObjectModelIR {
       if (libName == defName) {
         libNameAttr = modEntry;
       } else {
-        libNameAttr = builderOM.create<StringConstantOp>(
-            builderOM.getStringAttr(libName));
+        libNameAttr = StringConstantOp::create(
+            builderOM, builderOM.getStringAttr(libName));
       }
       libValues.push_back(libNameAttr);
     }
-    auto blackBoxResourcesList = builderOM.create<ListCreateOp>(
+    auto blackBoxResourcesList = ListCreateOp::create(
+        builderOM,
         ListType::get(
             builderOM.getContext(),
             cast<PropertyType>(StringType::get(builderOM.getContext()))),
         libValues);
 
-    auto object = builderOM.create<ObjectOp>(blackBoxModulesSchemaClass,
-                                             module.getModuleNameAttr());
+    auto object = ObjectOp::create(builderOM, blackBoxModulesSchemaClass,
+                                   module.getModuleNameAttr());
 
-    auto inPortModuleName = builderOM.create<ObjectSubfieldOp>(object, 0);
-    builderOM.create<PropAssignOp>(inPortModuleName, modEntry);
-    auto inPortInDut = builderOM.create<ObjectSubfieldOp>(object, 2);
-    builderOM.create<PropAssignOp>(inPortInDut, inDutAttr);
+    auto inPortModuleName = ObjectSubfieldOp::create(builderOM, object, 0);
+    PropAssignOp::create(builderOM, inPortModuleName, modEntry);
+    auto inPortInDut = ObjectSubfieldOp::create(builderOM, object, 2);
+    PropAssignOp::create(builderOM, inPortInDut, inDutAttr);
     auto inPortBlackBoxResources =
-        builderOM.create<ObjectSubfieldOp>(object, 4);
-    builderOM.create<PropAssignOp>(inPortBlackBoxResources,
-                                   blackBoxResourcesList);
+        ObjectSubfieldOp::create(builderOM, object, 4);
+    PropAssignOp::create(builderOM, inPortBlackBoxResources,
+                         blackBoxResourcesList);
     auto portIndex = blackBoxMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
         {portIndex,
@@ -224,7 +227,7 @@ struct ObjectModelIR {
     blackBoxMetadataClass.insertPorts(newPorts);
     auto blockarg = blackBoxMetadataClass.getBodyBlock()->addArgument(
         object.getType(), module->getLoc());
-    builderOM.create<PropAssignOp>(blockarg, object);
+    PropAssignOp::create(builderOM, blockarg, object);
   }
 
   void addMemory(FMemModuleOp mem) {
@@ -234,11 +237,11 @@ struct ObjectModelIR {
         mem.getLoc(), memoryMetadataClass.getBodyBlock());
     auto createConstField = [&](Attribute constVal) -> Value {
       if (auto boolConstant = dyn_cast_or_null<mlir::BoolAttr>(constVal))
-        return builderOM.create<BoolConstantOp>(boolConstant);
+        return BoolConstantOp::create(builderOM, boolConstant);
       if (auto intConstant = dyn_cast_or_null<mlir::IntegerAttr>(constVal))
-        return builderOM.create<FIntegerConstantOp>(intConstant);
+        return FIntegerConstantOp::create(builderOM, intConstant);
       if (auto strConstant = dyn_cast_or_null<mlir::StringAttr>(constVal))
-        return builderOM.create<StringConstantOp>(strConstant);
+        return StringConstantOp::create(builderOM, strConstant);
       return {};
     };
     auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
@@ -261,8 +264,8 @@ struct ObjectModelIR {
       for (auto memPath : memPaths) {
         {
           igraph::InstanceOpInterface finalInst = memPath.leaf();
-          finalInstanceNames.emplace_back(builderOM.create<StringConstantOp>(
-              finalInst.getInstanceNameAttr()));
+          finalInstanceNames.emplace_back(StringConstantOp::create(
+              builderOM, finalInst.getInstanceNameAttr()));
         }
         SmallVector<Attribute> namepath;
         bool foundDut = false;
@@ -293,8 +296,8 @@ struct ObjectModelIR {
         PathOp pathRef;
         if (!namepath.empty()) {
           // This is a path that is in the design.
-          auto nla = nlaBuilder.create<hw::HierPathOp>(
-              mem->getLoc(),
+          auto nla = hw::HierPathOp::create(
+              nlaBuilder, mem->getLoc(),
               nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
               nlaBuilder.getArrayAttr(namepath));
           nla.setVisibility(SymbolTable::Visibility::Private);
@@ -310,15 +313,17 @@ struct ObjectModelIR {
         memoryHierPaths.push_back(pathRef);
       }
     }
-    auto finalInstNamesList = builderOM.create<ListCreateOp>(
+    auto finalInstNamesList = ListCreateOp::create(
+        builderOM,
         ListType::get(context, cast<PropertyType>(StringType::get(context))),
         finalInstanceNames);
-    auto hierpaths = builderOM.create<ListCreateOp>(
+    auto hierpaths = ListCreateOp::create(
+        builderOM,
         ListType::get(context, cast<PropertyType>(PathType::get(context))),
         memoryHierPaths);
     SmallVector<Value> memFields;
 
-    auto object = builderOM.create<ObjectOp>(memorySchemaClass, mem.getName());
+    auto object = ObjectOp::create(builderOM, memorySchemaClass, mem.getName());
     SmallVector<Value> extraPortsList;
     ClassType extraPortsType;
     for (auto attr : mem.getExtraPortsAttr()) {
@@ -328,18 +333,18 @@ struct ObjectModelIR {
       auto direction = createConstField(port.getAs<StringAttr>("direction"));
       auto width = createConstField(port.getAs<IntegerAttr>("width"));
       auto extraPortsObj =
-          builderOM.create<ObjectOp>(extraPortsClass, "extraPorts");
+          ObjectOp::create(builderOM, extraPortsClass, "extraPorts");
       extraPortsType = extraPortsObj.getType();
-      auto inPort = builderOM.create<ObjectSubfieldOp>(extraPortsObj, 0);
-      builderOM.create<PropAssignOp>(inPort, portName);
-      inPort = builderOM.create<ObjectSubfieldOp>(extraPortsObj, 2);
-      builderOM.create<PropAssignOp>(inPort, direction);
-      inPort = builderOM.create<ObjectSubfieldOp>(extraPortsObj, 4);
-      builderOM.create<PropAssignOp>(inPort, width);
+      auto inPort = ObjectSubfieldOp::create(builderOM, extraPortsObj, 0);
+      PropAssignOp::create(builderOM, inPort, portName);
+      inPort = ObjectSubfieldOp::create(builderOM, extraPortsObj, 2);
+      PropAssignOp::create(builderOM, inPort, direction);
+      inPort = ObjectSubfieldOp::create(builderOM, extraPortsObj, 4);
+      PropAssignOp::create(builderOM, inPort, width);
       extraPortsList.push_back(extraPortsObj);
     }
-    auto extraPorts = builderOM.create<ListCreateOp>(
-        memorySchemaClass.getPortType(22), extraPortsList);
+    auto extraPorts = ListCreateOp::create(
+        builderOM, memorySchemaClass.getPortType(22), extraPortsList);
     for (auto field : llvm::enumerate(memoryParamNames)) {
       auto propVal = createConstField(
           llvm::StringSwitch<TypedAttr>(field.value())
@@ -371,8 +376,8 @@ struct ObjectModelIR {
       // The following `2*index` translates the index to the memory schema input
       // port number.
       auto inPort =
-          builderOM.create<ObjectSubfieldOp>(object, 2 * field.index());
-      builderOM.create<PropAssignOp>(inPort, propVal);
+          ObjectSubfieldOp::create(builderOM, object, 2 * field.index());
+      PropAssignOp::create(builderOM, inPort, propVal);
     }
     auto portIndex = memoryMetadataClass.getNumPorts();
     SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
@@ -381,7 +386,7 @@ struct ObjectModelIR {
     memoryMetadataClass.insertPorts(newPorts);
     auto blockarg = memoryMetadataClass.getBodyBlock()->addArgument(
         object.getType(), mem->getLoc());
-    builderOM.create<PropAssignOp>(blockarg, object);
+    PropAssignOp::create(builderOM, blockarg, object);
   }
 
   ObjectOp instantiateSifiveMetadata(FModuleOp topMod) {
@@ -391,8 +396,8 @@ struct ObjectModelIR {
     auto builder = mlir::ImplicitLocOpBuilder::atBlockEnd(
         mlir::UnknownLoc::get(circtOp->getContext()), circtOp.getBodyBlock());
     SmallVector<PortInfo> mports;
-    auto sifiveMetadataClass = builder.create<ClassOp>(
-        builder.getStringAttr("SiFive_Metadata"), mports);
+    auto sifiveMetadataClass = ClassOp::create(
+        builder, builder.getStringAttr("SiFive_Metadata"), mports);
     builder.setInsertionPointToStart(sifiveMetadataClass.getBodyBlock());
 
     auto addPort = [&](Value obj, StringRef fieldName) {
@@ -404,25 +409,23 @@ struct ObjectModelIR {
       sifiveMetadataClass.insertPorts(newPorts);
       auto blockarg = sifiveMetadataClass.getBodyBlock()->addArgument(
           obj.getType(), topMod->getLoc());
-      builder.create<PropAssignOp>(blockarg, obj);
+      PropAssignOp::create(builder, blockarg, obj);
     };
     if (blackBoxMetadataClass)
-      addPort(
-          builder.create<ObjectOp>(blackBoxMetadataClass,
-                                   builder.getStringAttr("blackbox_metadata")),
-          "blackbox");
+      addPort(ObjectOp::create(builder, blackBoxMetadataClass,
+                               builder.getStringAttr("blackbox_metadata")),
+              "blackbox");
 
     if (memoryMetadataClass)
-      addPort(
-          builder.create<ObjectOp>(memoryMetadataClass,
-                                   builder.getStringAttr("memory_metadata")),
-          "memory");
+      addPort(ObjectOp::create(builder, memoryMetadataClass,
+                               builder.getStringAttr("memory_metadata")),
+              "memory");
 
     if (retimeModulesMetadataClass)
-      addPort(builder.create<ObjectOp>(
-                  retimeModulesMetadataClass,
-                  builder.getStringAttr("retime_modules_metadata")),
-              "retime");
+      addPort(
+          ObjectOp::create(builder, retimeModulesMetadataClass,
+                           builder.getStringAttr("retime_modules_metadata")),
+          "retime");
 
     if (instanceInfo.hasDut()) {
       auto dutMod = instanceInfo.getDut();
@@ -447,8 +450,8 @@ struct ObjectModelIR {
         // actual DUT module!!).
         auto leafInst = dutPath.leaf();
         auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
-        auto nla = nlaBuilder.create<hw::HierPathOp>(
-            dutMod->getLoc(),
+        auto nla = hw::HierPathOp::create(
+            nlaBuilder, dutMod->getLoc(),
             nlaBuilder.getStringAttr(circtNamespace.newName("dutNLA")),
             nlaBuilder.getArrayAttr(namepath));
         nla.setVisibility(SymbolTable::Visibility::Private);
@@ -456,15 +459,16 @@ struct ObjectModelIR {
         pathOpsToDut.emplace_back(createPathRef(leafInst, nla, builder));
       }
       // Create the list of paths op and add it as a field of the class.
-      auto pathList = builder.create<ListCreateOp>(
+      auto pathList = ListCreateOp::create(
+          builder,
           ListType::get(context, cast<PropertyType>(PathType::get(context))),
           pathOpsToDut);
       addPort(pathList, "dutModulePath");
     }
 
     builder.setInsertionPointToEnd(topMod.getBodyBlock());
-    return builder.create<ObjectOp>(sifiveMetadataClass,
-                                    builder.getStringAttr("sifive_metadata"));
+    return ObjectOp::create(builder, sifiveMetadataClass,
+                            builder.getStringAttr("sifive_metadata"));
   }
 
   /// Get the cached namespace for a module.
@@ -699,9 +703,9 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   {
     SmallString<128> seqMemsJsonPath(metadataDir);
     llvm::sys::path::append(seqMemsJsonPath, "seq_mems.json");
-    builder.create<emit::FileOp>(seqMemsJsonPath, [&] {
-      builder.create<sv::VerbatimOp>(dutJsonBuffer, ValueRange{},
-                                     builder.getArrayAttr(jsonSymbols));
+    emit::FileOp::create(builder, seqMemsJsonPath, [&] {
+      sv::VerbatimOp::create(builder, dutJsonBuffer, ValueRange{},
+                             builder.getArrayAttr(jsonSymbols));
     });
   }
 
@@ -714,9 +718,9 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       return failure();
     }
 
-    builder.create<emit::FileOp>(replSeqMemFile, [&] {
-      builder.create<sv::VerbatimOp>(seqMemConfStr, ValueRange{},
-                                     builder.getArrayAttr(seqMemSymbols));
+    emit::FileOp::create(builder, replSeqMemFile, [&] {
+      sv::VerbatimOp::create(builder, seqMemConfStr, ValueRange{},
+                             builder.getArrayAttr(seqMemSymbols));
     });
   }
 
@@ -811,9 +815,9 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
   // Put the retime information in a verbatim operation.
   auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                   circuitOp.getBodyBlock());
-  builder.create<emit::FileOp>(filename, [&] {
-    builder.create<sv::VerbatimOp>(builder.getStringAttr(buffer), ValueRange{},
-                                   builder.getArrayAttr(symbols));
+  emit::FileOp::create(builder, filename, [&] {
+    sv::VerbatimOp::create(builder, builder.getStringAttr(buffer), ValueRange{},
+                           builder.getArrayAttr(symbols));
   });
   return success();
 }
@@ -916,8 +920,8 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
     auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                     circuitOp.getBodyBlock());
 
-    builder.create<emit::FileOp>(filename, [&] {
-      builder.create<emit::VerbatimOp>(StringAttr::get(context, buffer));
+    emit::FileOp::create(builder, filename, [&] {
+      emit::VerbatimOp::create(builder, StringAttr::get(context, buffer));
     });
   };
 
@@ -961,8 +965,9 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       topMod.insertPorts(ports);
       auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
           topMod->getLoc(), topMod.getBodyBlock());
-      auto objectCast = builderOM.create<ObjectAnyRefCastOp>(objectOp);
-      builderOM.create<PropAssignOp>(topMod.getArgument(portIndex), objectCast);
+      auto objectCast = ObjectAnyRefCastOp::create(builderOM, objectOp);
+      PropAssignOp::create(builderOM, topMod.getArgument(portIndex),
+                           objectCast);
     }
 
   // This pass modifies the hierarchy, InstanceGraph is not preserved.

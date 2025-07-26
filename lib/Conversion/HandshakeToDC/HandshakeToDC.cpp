@@ -54,7 +54,7 @@ struct DCTuple {
 // Unpack a !dc.value<...> into a DCTuple.
 static DCTuple unpack(OpBuilder &b, Value v) {
   if (isa<dc::ValueType>(v.getType()))
-    return DCTuple(b.create<dc::UnpackOp>(v.getLoc(), v));
+    return DCTuple(dc::UnpackOp::create(b, v.getLoc(), v));
   assert(isa<dc::TokenType>(v.getType()) && "Expected a dc::TokenType");
   return DCTuple(v, {});
 }
@@ -62,7 +62,7 @@ static DCTuple unpack(OpBuilder &b, Value v) {
 static Value pack(OpBuilder &b, Value token, Value data = {}) {
   if (!data)
     return token;
-  return b.create<dc::PackOp>(token.getLoc(), token, data);
+  return dc::PackOp::create(b, token.getLoc(), token, data);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -113,8 +113,8 @@ public:
       if (vt && !vt.getInnerType())
         return pack(builder, inputs.front());
 
-      return builder
-          .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                inputs[0])
           ->getResult(0);
     });
 
@@ -134,8 +134,8 @@ public:
       if (vt && !vt.getInnerType())
         return pack(builder, inputs.front());
 
-      return builder
-          .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                inputs[0])
           ->getResult(0);
     });
   }
@@ -168,14 +168,14 @@ public:
     auto data = unpack(rewriter, adaptor.getDataOperand());
 
     // Join the token of the condition and the input.
-    auto join = rewriter.create<dc::JoinOp>(
-        op.getLoc(), ValueRange{condition.token, data.token});
+    auto join = dc::JoinOp::create(rewriter, op.getLoc(),
+                                   ValueRange{condition.token, data.token});
 
     // Pack that together with the condition data.
     auto packedCondition = pack(rewriter, join, condition.data);
 
     // Branch on the input data and the joined control input.
-    auto branch = rewriter.create<dc::BranchOp>(op.getLoc(), packedCondition);
+    auto branch = dc::BranchOp::create(rewriter, op.getLoc(), packedCondition);
 
     // Pack the branch output tokens with the input data, and replace the uses.
     llvm::SmallVector<Value, 4> packed;
@@ -197,8 +197,8 @@ public:
   matchAndRewrite(handshake::ForkOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto input = unpack(rewriter, adaptor.getOperand());
-    auto forkOut = rewriter.create<dc::ForkOp>(op.getLoc(), input.token,
-                                               op.getNumResults());
+    auto forkOut = dc::ForkOp::create(rewriter, op.getLoc(), input.token,
+                                      op.getNumResults());
 
     // Pack the fork result tokens with the input data, and replace the uses.
     llvm::SmallVector<Value, 4> packed;
@@ -248,14 +248,14 @@ public:
     }
 
     // Control side
-    Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
+    Value selectedIndex = dc::MergeOp::create(rewriter, op.getLoc(), tokens);
     auto selectedIndexUnpacked = unpack(rewriter, selectedIndex);
     Value mergeOutput;
 
     if (!data.empty()) {
       // Data-merge; mux the selected input.
-      auto dataMux = rewriter.create<arith::SelectOp>(
-          op.getLoc(), selectedIndexUnpacked.data, data[0], data[1]);
+      auto dataMux = arith::SelectOp::create(
+          rewriter, op.getLoc(), selectedIndexUnpacked.data, data[0], data[1]);
       convertedOps->insert(dataMux);
 
       // Pack the data mux with the control token.
@@ -290,11 +290,11 @@ public:
         inputData.push_back(dct.data);
     }
 
-    auto join = rewriter.create<dc::JoinOp>(op.getLoc(), inputTokens);
+    auto join = dc::JoinOp::create(rewriter, op.getLoc(), inputTokens);
     StructType structType =
         tupleToStruct(cast<TupleType>(op.getResult().getType()));
-    auto packedData =
-        rewriter.create<hw::StructCreateOp>(op.getLoc(), structType, inputData);
+    auto packedData = hw::StructCreateOp::create(rewriter, op.getLoc(),
+                                                 structType, inputData);
     convertedOps->insert(packedData);
     rewriter.replaceOp(op, pack(rewriter, join, packedData));
     return success();
@@ -313,7 +313,7 @@ public:
     // values.
     DCTuple unpackedInput = unpack(rewriter, adaptor.getInput());
     auto unpackedData =
-        rewriter.create<hw::StructExplodeOp>(op.getLoc(), unpackedInput.data);
+        hw::StructExplodeOp::create(rewriter, op.getLoc(), unpackedInput.data);
     convertedOps->insert(unpackedData);
     // Re-pack each of the tuple elements with the token.
     llvm::SmallVector<Value, 4> repackedInputs;
@@ -349,15 +349,15 @@ public:
     bool isIndexType = isa<IndexType>(op.getIndex().getType());
 
     // control-side
-    Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
+    Value selectedIndex = dc::MergeOp::create(rewriter, op.getLoc(), tokens);
     auto mergeOpUnpacked = unpack(rewriter, selectedIndex);
     auto selValue = mergeOpUnpacked.data;
 
     Value dataSide = selectedIndex;
     if (!data.empty()) {
       // Data side mux using the selected input.
-      auto dataMux = rewriter.create<arith::SelectOp>(op.getLoc(), selValue,
-                                                      data[0], data[1]);
+      auto dataMux = arith::SelectOp::create(rewriter, op.getLoc(), selValue,
+                                             data[0], data[1]);
       convertedOps->insert(dataMux);
       // Pack the data mux with the control token.
       auto packed = pack(rewriter, mergeOpUnpacked.token, dataMux);
@@ -368,15 +368,15 @@ public:
     // if the original op used `index` as the select operand type, we need to
     // index-cast the unpacked select operand
     if (isIndexType) {
-      selValue = rewriter.create<arith::IndexCastOp>(
-          op.getLoc(), rewriter.getIndexType(), selValue);
+      selValue = arith::IndexCastOp::create(rewriter, op.getLoc(),
+                                            rewriter.getIndexType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
       selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
     } else {
       // The cmerge had a specific type defined for the index type. dc.merge
       // provides an i1 operand for the selected index, so we need to cast it.
-      selValue = rewriter.create<arith::ExtUIOp>(
-          op.getLoc(), op.getIndex().getType(), selValue);
+      selValue = arith::ExtUIOp::create(rewriter, op.getLoc(),
+                                        op.getIndex().getType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
       selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
     }
@@ -402,7 +402,7 @@ public:
       inputData.push_back(unpacked.data);
     }
 
-    auto syncToken = rewriter.create<dc::JoinOp>(op.getLoc(), inputTokens);
+    auto syncToken = dc::JoinOp::create(rewriter, op.getLoc(), inputTokens);
 
     // Wrap all outputs with the synchronization token
     llvm::SmallVector<Value, 4> wrappedInputs;
@@ -425,9 +425,9 @@ public:
   matchAndRewrite(handshake::ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Wrap the constant with a token.
-    auto token = rewriter.create<dc::SourceOp>(op.getLoc());
+    auto token = dc::SourceOp::create(rewriter, op.getLoc());
     auto cst =
-        rewriter.create<arith::ConstantOp>(op.getLoc(), adaptor.getValue());
+        arith::ConstantOp::create(rewriter, op.getLoc(), adaptor.getValue());
     convertedOps->insert(cst);
     rewriter.replaceOp(op, pack(rewriter, token, cst));
     return success();
@@ -458,7 +458,7 @@ public:
 
       // Constant-like operation; assume the token can be represented as a
       // constant `dc.source`.
-      outToken = rewriter.create<dc::SourceOp>(op->getLoc());
+      outToken = dc::SourceOp::create(rewriter, op->getLoc());
     } else {
       llvm::SmallVector<Value> inputTokens;
       for (auto input : operands) {
@@ -468,7 +468,7 @@ public:
       }
       // Join the tokens of the inputs.
       assert(!inputTokens.empty() && "Expected at least one input token");
-      outToken = rewriter.create<dc::JoinOp>(op->getLoc(), inputTokens);
+      outToken = dc::JoinOp::create(rewriter, op->getLoc(), inputTokens);
     }
 
     // Patchwork to fix bad IR design in Handshake.
@@ -600,15 +600,17 @@ public:
       Value inputData = input.data;
       Value inputControl = input.token;
       if (isIndexType) {
-        cmpIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), i);
+        cmpIndex = arith::ConstantIndexOp::create(rewriter, op.getLoc(), i);
       } else {
         size_t width = cast<IntegerType>(selectData.getType()).getWidth();
-        cmpIndex = rewriter.create<arith::ConstantIntOp>(op.getLoc(), i, width);
+        cmpIndex =
+            arith::ConstantIntOp::create(rewriter, op.getLoc(), i, width);
       }
-      auto inputSelected = rewriter.create<arith::CmpIOp>(
-          op.getLoc(), arith::CmpIPredicate::eq, selectData, cmpIndex);
-      dataMux = rewriter.create<arith::SelectOp>(op.getLoc(), inputSelected,
-                                                 inputData, dataMux);
+      auto inputSelected =
+          arith::CmpIOp::create(rewriter, op.getLoc(), arith::CmpIPredicate::eq,
+                                selectData, cmpIndex);
+      dataMux = arith::SelectOp::create(rewriter, op.getLoc(), inputSelected,
+                                        inputData, dataMux);
 
       // Legalize the newly created operations.
       convertedOps->insert(cmpIndex.getDefiningOp());
@@ -619,8 +621,9 @@ public:
       // select value that has it's control from the original select token +
       // the inputSelected value.
       auto inputSelectedControl = pack(rewriter, selectToken, inputSelected);
-      controlMux = rewriter.create<dc::SelectOp>(
-          op.getLoc(), inputSelectedControl, inputControl, controlMux);
+      controlMux =
+          dc::SelectOp::create(rewriter, op.getLoc(), inputSelectedControl,
+                               inputControl, controlMux);
       convertedOps->insert(controlMux.getDefiningOp());
     }
 
@@ -671,12 +674,12 @@ public:
     ModulePortInfo ports = getModulePortInfoHS(*getTypeConverter(), op);
 
     if (op.isExternal()) {
-      auto mod = rewriter.create<hw::HWModuleExternOp>(
-          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+      auto mod = hw::HWModuleExternOp::create(
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
       convertedOps->insert(mod);
     } else {
-      auto hwModule = rewriter.create<hw::HWModuleOp>(
-          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+      auto hwModule = hw::HWModuleOp::create(
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
 
       auto &region = op->getRegions().front();
 
@@ -712,18 +715,18 @@ public:
     for (size_t i = ESIInstanceOp::NumFixedOperands, e = op.getNumOperands();
          i < e; ++i)
       operands.push_back(
-          rewriter.create<dc::FromESIOp>(loc, adaptor.getOperands()[i]));
+          dc::FromESIOp::create(rewriter, loc, adaptor.getOperands()[i]));
     operands.push_back(adaptor.getClk());
     operands.push_back(adaptor.getRst());
     // Locate the lowered module so the instance builder can get all the
     // metadata.
     Operation *targetModule = symCache.getDefinition(op.getModuleAttr());
     // And replace the op with an instance of the target module.
-    auto inst = rewriter.create<hw::InstanceOp>(loc, targetModule,
-                                                op.getInstNameAttr(), operands);
+    auto inst = hw::InstanceOp::create(rewriter, loc, targetModule,
+                                       op.getInstNameAttr(), operands);
     SmallVector<Value> esiResults(
         llvm::map_range(inst.getResults(), [&](Value v) {
-          return rewriter.create<dc::ToESIOp>(loc, v);
+          return dc::ToESIOp::create(rewriter, loc, v);
         }));
     rewriter.replaceOp(op, esiResults);
     return success();

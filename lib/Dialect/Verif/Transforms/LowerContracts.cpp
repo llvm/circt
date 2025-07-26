@@ -49,10 +49,10 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
 
   if ((isa<EnsureOp>(op) && !assumeContract) ||
       (isa<RequireOp>(op) && assumeContract))
-    return builder.create<AssertOp>(loc, property, enableValue, labelAttr);
+    return AssertOp::create(builder, loc, property, enableValue, labelAttr);
   if ((isa<EnsureOp>(op) && assumeContract) ||
       (isa<RequireOp>(op) && !assumeContract))
-    return builder.create<AssumeOp>(loc, property, enableValue, labelAttr);
+    return AssumeOp::create(builder, loc, property, enableValue, labelAttr);
   return nullptr;
 }
 
@@ -85,7 +85,7 @@ void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
   // contract ops with the assume variant
   for (auto result : contract.getResults()) {
     auto sym =
-        builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
+        SymbolicValueOp::create(builder, result.getLoc(), result.getType());
     mapping.map(result, sym);
   }
   auto &contractOps = contract.getBody().front().getOperations();
@@ -107,8 +107,8 @@ void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
       workList.push(definingOp);
     } else {
       // Create symbolic values for arguments
-      auto sym = builder.create<verif::SymbolicValueOp>(operand.getLoc(),
-                                                        operand.getType());
+      auto sym = verif::SymbolicValueOp::create(builder, operand.getLoc(),
+                                                operand.getType());
       mapping.map(operand, sym);
     }
   }
@@ -174,7 +174,7 @@ LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
     // Create symbolic values for results
     for (auto result : contract.getResults()) {
       auto sym =
-          builder.create<SymbolicValueOp>(result.getLoc(), result.getType());
+          SymbolicValueOp::create(builder, result.getLoc(), result.getType());
       mapping.map(result, sym);
     }
   } else {
@@ -214,8 +214,9 @@ LogicalResult runOnHWModule(HWModuleOp hwModule, ModuleOp mlirModule) {
     // Create verif.formal op
     auto name = mlirModuleBuilder.getStringAttr(
         hwModule.getNameAttr().getValue() + "_CheckContract_" + Twine(i));
-    auto formalOp = mlirModuleBuilder.create<verif::FormalOp>(
-        contract.getLoc(), name, mlirModuleBuilder.getDictionaryAttr({}));
+    auto formalOp =
+        verif::FormalOp::create(mlirModuleBuilder, contract.getLoc(), name,
+                                mlirModuleBuilder.getDictionaryAttr({}));
 
     // Fill in verif.formal body
     OpBuilder formalBuilder(formalOp);

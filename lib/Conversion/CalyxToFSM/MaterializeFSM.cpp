@@ -87,7 +87,7 @@ struct MaterializeCalyxToFSMPass
         guardConjunction = guards.front();
       else
         guardConjunction =
-            b.create<comb::AndOp>(transition.getLoc(), guards, false);
+            comb::AndOp::create(b, transition.getLoc(), guards, false);
       guardOp.setOperand(guardConjunction);
     }
   }
@@ -99,7 +99,7 @@ struct MaterializeCalyxToFSMPass
 
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(&machineOp.getBody().front());
-    auto constantOp = b.create<hw::ConstantOp>(machineOp.getLoc(), value);
+    auto constantOp = hw::ConstantOp::create(b, machineOp.getLoc(), value);
     constants[value] = constantOp;
     return constantOp;
   }

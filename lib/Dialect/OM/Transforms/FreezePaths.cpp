@@ -213,9 +213,9 @@ LogicalResult PathVisitor::process(PathCreateOp path) {
 
   // Replace the old path operation.
   OpBuilder builder(path);
-  auto frozenPath = builder.create<FrozenPathCreateOp>(
-      path.getLoc(), path.getTargetKindAttr(), path->getOperand(0), targetPath,
-      bottomModule, ref, field);
+  auto frozenPath = FrozenPathCreateOp::create(
+      builder, path.getLoc(), path.getTargetKindAttr(), path->getOperand(0),
+      targetPath, bottomModule, ref, field);
   path.replaceAllUsesWith(frozenPath.getResult());
   path->erase();
 
@@ -240,8 +240,8 @@ LogicalResult PathVisitor::process(BasePathCreateOp path) {
 
   // Replace the old path operation.
   OpBuilder builder(path);
-  auto frozenPath = builder.create<FrozenBasePathCreateOp>(
-      path.getLoc(), path->getOperand(0), targetPath);
+  auto frozenPath = FrozenBasePathCreateOp::create(
+      builder, path.getLoc(), path->getOperand(0), targetPath);
   path.replaceAllUsesWith(frozenPath.getResult());
   path->erase();
 
@@ -250,7 +250,7 @@ LogicalResult PathVisitor::process(BasePathCreateOp path) {
 
 LogicalResult PathVisitor::process(EmptyPathOp path) {
   OpBuilder builder(path);
-  auto frozenPath = builder.create<FrozenEmptyPathOp>(path.getLoc());
+  auto frozenPath = FrozenEmptyPathOp::create(builder, path.getLoc());
   path.replaceAllUsesWith(frozenPath.getResult());
   path->erase();
   return success();
@@ -290,8 +290,8 @@ LogicalResult PathVisitor::process(ObjectFieldOp objectFieldOp) {
 
   // Create a new op with the result type updated to replace path types.
   OpBuilder builder(objectFieldOp);
-  auto newObjectFieldOp = builder.create<ObjectFieldOp>(
-      objectFieldOp.getLoc(), newResultType, objectFieldOp.getObject(),
+  auto newObjectFieldOp = ObjectFieldOp::create(
+      builder, objectFieldOp.getLoc(), newResultType, objectFieldOp.getObject(),
       objectFieldOp.getFieldPath());
   objectFieldOp.replaceAllUsesWith(newObjectFieldOp.getResult());
   objectFieldOp->erase();

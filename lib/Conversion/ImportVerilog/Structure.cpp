@@ -108,8 +108,8 @@ struct BaseVisitor {
     guessNamespacePrefix(param.getParentScope()->asSymbol(), paramName);
     paramName += param.name;
 
-    builder.create<debug::VariableOp>(loc, builder.getStringAttr(paramName),
-                                      value, Value{});
+    debug::VariableOp::create(builder, loc, builder.getStringAttr(paramName),
+                              value, Value{});
   }
 };
 } // namespace
@@ -296,18 +296,19 @@ struct ModuleVisitor : public BaseVisitor {
 
           if (const auto *net =
                   port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
-            auto netOp = builder.create<moore::NetOp>(
-                loc, refType, StringAttr::get(builder.getContext(), net->name),
+            auto netOp = moore::NetOp::create(
+                builder, loc, refType,
+                StringAttr::get(builder.getContext(), net->name),
                 convertNetKind(net->netType.netKind), nullptr);
-            auto readOp = builder.create<moore::ReadOp>(loc, netOp);
+            auto readOp = moore::ReadOp::create(builder, loc, netOp);
             portValues.insert({port, readOp});
           } else if (const auto *var =
                          port->internalSymbol
                              ->as_if<slang::ast::VariableSymbol>()) {
-            auto varOp = builder.create<moore::VariableOp>(
-                loc, refType, StringAttr::get(builder.getContext(), var->name),
-                nullptr);
-            auto readOp = builder.create<moore::ReadOp>(loc, varOp);
+            auto varOp = moore::VariableOp::create(
+                builder, loc, refType,
+                StringAttr::get(builder.getContext(), var->name), nullptr);
+            auto readOp = moore::ReadOp::create(builder, loc, varOp);
             portValues.insert({port, readOp});
           } else {
             return mlir::emitError(loc)
@@ -369,12 +370,13 @@ struct ModuleVisitor : public BaseVisitor {
           auto sliceType = context.convertType(port->getType());
           if (!sliceType)
             return failure();
-          Value slice = builder.create<moore::ExtractRefOp>(
-              loc, moore::RefType::get(cast<moore::UnpackedType>(sliceType)),
-              value, offset);
+          Value slice = moore::ExtractRefOp::create(
+              builder, loc,
+              moore::RefType::get(cast<moore::UnpackedType>(sliceType)), value,
+              offset);
           // Create the "ReadOp" for input ports.
           if (port->direction == ArgumentDirection::In)
-            slice = builder.create<moore::ReadOp>(loc, slice);
+            slice = moore::ReadOp::create(builder, loc, slice);
           portValues.insert({port, slice});
           offset += width;
         }
@@ -406,7 +408,7 @@ struct ModuleVisitor : public BaseVisitor {
          llvm::zip(inputValues, moduleType.getInputTypes()))
       if (value.getType() != type)
         value =
-            builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+            moore::ConversionOp::create(builder, value.getLoc(), type, value);
 
     // Here we use the hierarchical value recorded in `Context::valueSymbols`.
     // Then we pass it as the input port with the ref<T> type of the instance.
@@ -418,8 +420,8 @@ struct ModuleVisitor : public BaseVisitor {
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
     auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
-    auto inst = builder.create<moore::InstanceOp>(
-        loc, moduleType.getOutputTypes(),
+    auto inst = moore::InstanceOp::create(
+        builder, loc, moduleType.getOutputTypes(),
         builder.getStringAttr(Twine(blockNamePrefix) + instNode.name),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
@@ -437,8 +439,8 @@ struct ModuleVisitor : public BaseVisitor {
       Value rvalue = output;
       auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
       if (dstType != rvalue.getType())
-        rvalue = builder.create<moore::ConversionOp>(loc, dstType, rvalue);
-      builder.create<moore::ContinuousAssignOp>(loc, lvalue, rvalue);
+        rvalue = moore::ConversionOp::create(builder, loc, dstType, rvalue);
+      moore::ContinuousAssignOp::create(builder, loc, lvalue, rvalue);
     }
 
     return success();
@@ -457,8 +459,9 @@ struct ModuleVisitor : public BaseVisitor {
         return failure();
     }
 
-    auto varOp = builder.create<moore::VariableOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+    auto varOp = moore::VariableOp::create(
+        builder, loc,
+        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
         builder.getStringAttr(Twine(blockNamePrefix) + varNode.name), initial);
     context.valueSymbols.insert(&varNode, varOp);
     return success();
@@ -484,8 +487,9 @@ struct ModuleVisitor : public BaseVisitor {
       return mlir::emitError(loc, "unsupported net kind `")
              << netNode.netType.name << "`";
 
-    auto netOp = builder.create<moore::NetOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+    auto netOp = moore::NetOp::create(
+        builder, loc,
+        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
         builder.getStringAttr(Twine(blockNamePrefix) + netNode.name), netkind,
         assignment);
     context.valueSymbols.insert(&netNode, netOp);
@@ -511,21 +515,21 @@ struct ModuleVisitor : public BaseVisitor {
     if (!rhs)
       return failure();
 
-    builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
+    moore::ContinuousAssignOp::create(builder, loc, lhs, rhs);
     return success();
   }
 
   // Handle procedures.
   LogicalResult convertProcedure(moore::ProcedureKind kind,
                                  const slang::ast::Statement &body) {
-    auto procOp = builder.create<moore::ProcedureOp>(loc, kind);
+    auto procOp = moore::ProcedureOp::create(builder, loc, kind);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
     Context::ValueSymbolScope scope(context.valueSymbols);
     if (failed(context.convertStatement(body)))
       return failure();
     if (builder.getBlock())
-      builder.create<moore::ReturnOp>(loc);
+      moore::ReturnOp::create(builder, loc);
     return success();
   }
 
@@ -835,7 +839,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
   // Create an empty module that corresponds to this module.
   auto moduleOp =
-      builder.create<moore::SVModuleOp>(loc, module->name, moduleType);
+      moore::SVModuleOp::create(builder, loc, module->name, moduleType);
   orderedRootOps.insert(it, {module->location, moduleOp});
   moduleOp.getBodyRegion().push_back(block.release());
   lowering.op = moduleOp;
@@ -900,7 +904,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     // Collect output port values to be returned in the terminator.
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
       if (isa<moore::RefType>(value.getType()))
-        value = builder.create<moore::ReadOp>(value.getLoc(), value);
+        value = moore::ReadOp::create(builder, value.getLoc(), value);
       outputs.push_back(value);
       continue;
     }
@@ -909,8 +913,8 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     // of that port.
     Value portArg = port.arg;
     if (port.ast.direction != slang::ast::ArgumentDirection::In)
-      portArg = builder.create<moore::ReadOp>(port.loc, port.arg);
-    builder.create<moore::ContinuousAssignOp>(port.loc, value, portArg);
+      portArg = moore::ReadOp::create(builder, port.loc, port.arg);
+    moore::ContinuousAssignOp::create(builder, port.loc, value, portArg);
   }
 
   // Ensure the number of operands of this module's terminator and the number of
@@ -920,7 +924,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
       if (hierPath.direction == slang::ast::ArgumentDirection::Out)
         outputs.push_back(hierValue);
 
-  builder.create<moore::OutputOp>(lowering.op.getLoc(), outputs);
+  moore::OutputOp::create(builder, lowering.op.getLoc(), outputs);
   return success();
 }
 
@@ -1000,7 +1004,7 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   funcName += subroutine.name;
 
   // Create a function declaration.
-  auto funcOp = builder.create<mlir::func::FuncOp>(loc, funcName, funcType);
+  auto funcOp = mlir::func::FuncOp::create(builder, loc, funcName, funcType);
   SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
   orderedRootOps.insert(it, {subroutine.location, funcOp});
   lowering->op = funcOp;
@@ -1037,8 +1041,8 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
       OpBuilder::InsertionGuard g(builder);
       builder.setInsertionPointToEnd(&block);
 
-      auto shadowArg = builder.create<moore::VariableOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+      auto shadowArg = moore::VariableOp::create(
+          builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
           StringAttr{}, blockArg);
       valueSymbols.insert(astArg, shadowArg);
       argVariables.push_back(shadowArg);
@@ -1054,8 +1058,8 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     auto type = convertType(*subroutine.returnValVar->getDeclaredType());
     if (!type)
       return failure();
-    returnVar = builder.create<moore::VariableOp>(
-        lowering->op.getLoc(),
+    returnVar = moore::VariableOp::create(
+        builder, lowering->op.getLoc(),
         moore::RefType::get(cast<moore::UnpackedType>(type)), StringAttr{},
         Value{});
     valueSymbols.insert(subroutine.returnValVar, returnVar);
@@ -1068,10 +1072,12 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // default one.
   if (builder.getBlock()) {
     if (returnVar && !subroutine.getReturnType().isVoid()) {
-      Value read = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
-      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), read);
+      Value read =
+          moore::ReadOp::create(builder, returnVar.getLoc(), returnVar);
+      mlir::func::ReturnOp::create(builder, lowering->op.getLoc(), read);
     } else {
-      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), ValueRange{});
+      mlir::func::ReturnOp::create(builder, lowering->op.getLoc(),
+                                   ValueRange{});
     }
   }
   if (returnVar && returnVar.use_empty())

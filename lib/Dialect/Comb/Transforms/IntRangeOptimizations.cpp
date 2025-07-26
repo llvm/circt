@@ -89,16 +89,16 @@ struct CombOpNarrow : public OpRewritePattern<CombOpTy> {
 
     // Extract the lsbs from each operand
     auto extractLhsOp =
-        rewriter.create<comb::ExtractOp>(loc, replaceType, lhs, 0);
+        comb::ExtractOp::create(rewriter, loc, replaceType, lhs, 0);
     auto extractRhsOp =
-        rewriter.create<comb::ExtractOp>(loc, replaceType, rhs, 0);
-    auto narrowOp = rewriter.create<CombOpTy>(loc, extractLhsOp, extractRhsOp);
+        comb::ExtractOp::create(rewriter, loc, replaceType, rhs, 0);
+    auto narrowOp = CombOpTy::create(rewriter, loc, extractLhsOp, extractRhsOp);
 
     // Concatenate zeros to match the original operator width
     auto zero =
-        rewriter.create<hw::ConstantOp>(loc, APInt::getZero(removeWidth));
-    auto replaceOp = rewriter.create<comb::ConcatOp>(
-        loc, op.getType(), ValueRange{zero, narrowOp});
+        hw::ConstantOp::create(rewriter, loc, APInt::getZero(removeWidth));
+    auto replaceOp = comb::ConcatOp::create(rewriter, loc, op.getType(),
+                                            ValueRange{zero, narrowOp});
 
     rewriter.replaceOp(op, replaceOp);
     return success();

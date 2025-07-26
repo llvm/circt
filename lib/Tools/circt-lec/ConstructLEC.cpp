@@ -46,15 +46,15 @@ static Value lookupOrCreateStringGlobal(OpBuilder &builder, ModuleOp moduleOp,
   if (!global) {
     OpBuilder b = OpBuilder::atBlockEnd(moduleOp.getBody());
     auto arrayTy = LLVM::LLVMArrayType::get(b.getI8Type(), str.size() + 1);
-    global = b.create<LLVM::GlobalOp>(
-        loc, arrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private, str,
-        StringAttr::get(b.getContext(), Twine(str).concat(Twine('\00'))));
+    global = LLVM::GlobalOp::create(
+        b, loc, arrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private,
+        str, StringAttr::get(b.getContext(), Twine(str).concat(Twine('\00'))));
   }
 
   // FIXME: sanity check the fetched global: do all the attributes match what
   // we expect?
 
-  return builder.create<LLVM::AddressOfOp>(loc, global);
+  return LLVM::AddressOfOp::create(builder, loc, global);
 }
 
 hw::HWModuleOp ConstructLECPass::lookupModule(StringRef name) {
@@ -74,7 +74,7 @@ Value ConstructLECPass::constructMiter(OpBuilder builder, Location loc,
 
   // Create the miter circuit that return equivalence result.
   auto lecOp =
-      builder.create<verif::LogicEquivalenceCheckingOp>(loc, withResult);
+      verif::LogicEquivalenceCheckingOp::create(builder, loc, withResult);
 
   builder.cloneRegionBefore(moduleA.getBody(), lecOp.getFirstCircuit(),
                             lecOp.getFirstCircuit().end());
@@ -89,11 +89,11 @@ Value ConstructLECPass::constructMiter(OpBuilder builder, Location loc,
     auto *term = lecOp.getFirstCircuit().front().getTerminator();
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPoint(term);
-    builder.create<verif::YieldOp>(loc, term->getOperands());
+    verif::YieldOp::create(builder, loc, term->getOperands());
     term->erase();
     term = lecOp.getSecondCircuit().front().getTerminator();
     builder.setInsertionPoint(term);
-    builder.create<verif::YieldOp>(loc, term->getOperands());
+    verif::YieldOp::create(builder, loc, term->getOperands());
     term->erase();
   }
 
@@ -143,18 +143,18 @@ void ConstructLECPass::runOnOperation() {
   // have to do any uniquing and the LEC driver also already knows this name.
   FunctionType functionType = FunctionType::get(&getContext(), {}, {});
   func::FuncOp entryFunc =
-      builder.create<func::FuncOp>(loc, firstModule, functionType);
+      func::FuncOp::create(builder, loc, firstModule, functionType);
 
   if (insertMode == lec::InsertAdditionalModeEnum::Main) {
     OpBuilder::InsertionGuard guard(builder);
     auto i32Ty = builder.getI32Type();
-    auto mainFunc = builder.create<func::FuncOp>(
-        loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
+    auto mainFunc = func::FuncOp::create(
+        builder, loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
     builder.createBlock(&mainFunc.getBody(), {}, {i32Ty, ptrTy}, {loc, loc});
-    builder.create<func::CallOp>(loc, entryFunc, ValueRange{});
+    func::CallOp::create(builder, loc, entryFunc, ValueRange{});
     // TODO: don't use LLVM here
-    Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
-    builder.create<func::ReturnOp>(loc, constZero);
+    Value constZero = LLVM::ConstantOp::create(builder, loc, i32Ty, 0);
+    func::ReturnOp::create(builder, loc, constZero);
   }
 
   builder.createBlock(&entryFunc.getBody());
@@ -170,10 +170,10 @@ void ConstructLECPass::runOnOperation() {
       lookupOrCreateStringGlobal(builder, getOperation(), "c1 == c2\n");
   Value neqFormatString =
       lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
-  Value formatString = builder.create<LLVM::SelectOp>(
-      loc, areEquivalent, eqFormatString, neqFormatString);
-  builder.create<LLVM::CallOp>(loc, printfFunc.value(),
-                               ValueRange{formatString});
+  Value formatString = LLVM::SelectOp::create(builder, loc, areEquivalent,
+                                              eqFormatString, neqFormatString);
+  LLVM::CallOp::create(builder, loc, printfFunc.value(),
+                       ValueRange{formatString});
 
-  builder.create<func::ReturnOp>(loc, ValueRange{});
+  func::ReturnOp::create(builder, loc, ValueRange{});
 }
