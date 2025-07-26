@@ -114,6 +114,7 @@ public:
   bool shouldEtcDisableModuleInlining() const {
     return etcDisableModuleInlining;
   }
+  bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
   bool shouldStripDebugInfo() const { return stripDebugInfo; }
   bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
   bool shouldExportModuleHierarchy() const { return exportModuleHierarchy; }
@@ -314,6 +315,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setInlineInputOnlyModules(bool value) {
+    inlineInputOnlyModules = value;
+    return *this;
+  }
+
   FirtoolOptions &
   setAddVivadoRAMAddressConflictSynthesisBugWorkaround(bool value) {
     addVivadoRAMAddressConflictSynthesisBugWorkaround = value;
@@ -437,6 +443,7 @@ private:
   bool etcDisableInstanceExtraction;
   bool etcDisableRegisterExtraction;
   bool etcDisableModuleInlining;
+  bool inlineInputOnlyModules;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
   std::string ckgModuleName;
   std::string ckgInputName;
