@@ -136,6 +136,39 @@ struct StructExtractOpConversion
 } // namespace
 
 namespace {
+/// Convert an ArrayInjectOp to the LLVM dialect.
+/// Pattern: array_inject(input, element, index) =>
+///   store(gep(store(input, alloca), zext(index)), element)
+///   load(alloca)
+struct ArrayInjectOpConversion
+    : public ConvertOpToLLVMPattern<hw::ArrayInjectOp> {
+  using ConvertOpToLLVMPattern<hw::ArrayInjectOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::ArrayInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto oneC = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
+    auto arrPtr = rewriter.create<LLVM::AllocaOp>(
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+        adaptor.getInput().getType(), oneC,
+        /*alignment=*/4);
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
+
+    auto arrTy = typeConverter->convertType(op.getInput().getType());
+    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
+    auto gep = rewriter.create<LLVM::GEPOp>(
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), arrTy,
+        arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
+
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getElement(), gep);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, arrTy, arrPtr);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 /// Convert an ArrayGetOp to the LLVM dialect.
 /// Pattern: array_get(input, index) =>
 ///   load(gep(store(input, alloca), zext(index)))
@@ -660,9 +693,10 @@ void circt::populateHWToLLVMConversionPatterns(
   patterns.add<BitcastOpConversion>(converter);
 
   // Extraction operation conversion patterns.
-  patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, StructExplodeOpConversion,
-               StructExtractOpConversion, StructInjectOpConversion>(converter);
+  patterns.add<ArrayInjectOpConversion, ArrayGetOpConversion,
+               ArraySliceOpConversion, ArrayConcatOpConversion,
+               StructExplodeOpConversion, StructExtractOpConversion,
+               StructInjectOpConversion>(converter);
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
