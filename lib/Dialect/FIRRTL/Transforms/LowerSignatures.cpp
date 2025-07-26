@@ -278,10 +278,9 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
       if (p.fieldID != 0) {
         auto &wire = bounceWires[p.portID];
         if (!wire)
-          wire = theBuilder
-                     .create<WireOp>(module.getPortType(p.portID),
-                                     module.getPortNameAttr(p.portID),
-                                     NameKindEnum::InterestingName)
+          wire = WireOp::create(theBuilder, module.getPortType(p.portID),
+                                module.getPortNameAttr(p.portID),
+                                NameKindEnum::InterestingName)
                      .getResult();
       } else {
         bounceWires[p.portID] = newArg;
@@ -291,9 +290,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // zero-length vectors.
     for (auto idx = 0U; idx < oldNumArgs; ++idx) {
       if (!bounceWires[idx]) {
-        bounceWires[idx] = theBuilder
-                               .create<WireOp>(module.getPortType(idx),
-                                               module.getPortNameAttr(idx))
+        bounceWires[idx] = WireOp::create(theBuilder, module.getPortType(idx),
+                                          module.getPortNameAttr(idx))
                                .getResult();
       }
       body->getArgument(idx).replaceAllUsesWith(bounceWires[idx]);
@@ -400,10 +398,10 @@ static void lowerModuleBody(FModuleOp mod,
       instPorts.push_back(p);
     }
     auto annos = inst.getAnnotations();
-    auto newOp = theBuilder.create<InstanceOp>(
-        instPorts, inst.getModuleName(), inst.getName(), inst.getNameKind(),
-        annos.getValue(), inst.getLayers(), inst.getLowerToBind(),
-        inst.getDoNotPrint(), inst.getInnerSymAttr());
+    auto newOp = InstanceOp::create(
+        theBuilder, instPorts, inst.getModuleName(), inst.getName(),
+        inst.getNameKind(), annos.getValue(), inst.getLayers(),
+        inst.getLowerToBind(), inst.getDoNotPrint(), inst.getInnerSymAttr());
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
@@ -423,8 +421,8 @@ static void lowerModuleBody(FModuleOp mod,
         continue;
       }
       if (!bounce[p.portID]) {
-        bounce[p.portID] = theBuilder.create<WireOp>(
-            inst.getResult(p.portID).getType(),
+        bounce[p.portID] = WireOp::create(
+            theBuilder, inst.getResult(p.portID).getType(),
             theBuilder.getStringAttr(
                 inst.getName() + "." +
                 cast<StringAttr>(oldNames[p.portID]).getValue()));

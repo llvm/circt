@@ -256,9 +256,9 @@ void circt::handshake::insertFork(Value result, bool isLazy,
   auto forkSize = opsToProcess.size();
   Operation *newOp;
   if (isLazy)
-    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result, forkSize);
+    newOp = LazyForkOp::create(rewriter, result.getLoc(), result, forkSize);
   else
-    newOp = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
+    newOp = ForkOp::create(rewriter, result.getLoc(), result, forkSize);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand

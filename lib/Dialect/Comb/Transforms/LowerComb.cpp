@@ -42,7 +42,7 @@ private:
         getMux(loc, b, t, f, table.drop_front(half), inputs.drop_front());
     Value if0 =
         getMux(loc, b, t, f, table.drop_back(half), inputs.drop_front());
-    return b.create<MuxOp>(loc, inputs.front(), if1, if0, false);
+    return MuxOp::create(b, loc, inputs.front(), if1, if0, false);
   }
 
 public:
@@ -52,8 +52,10 @@ public:
     SmallVector<bool> table(
         llvm::map_range(op.getLookupTableAttr().getAsValueRange<IntegerAttr>(),
                         [](const APInt &a) { return !a.isZero(); }));
-    Value t = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 1));
-    Value f = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 0));
+    Value t =
+        hw::ConstantOp::create(b, loc, b.getIntegerAttr(b.getI1Type(), 1));
+    Value f =
+        hw::ConstantOp::create(b, loc, b.getIntegerAttr(b.getI1Type(), 0));
 
     Value tree = getMux(loc, b, t, f, table, op.getInputs());
     b.modifyOpInPlace(tree.getDefiningOp(), [&]() {

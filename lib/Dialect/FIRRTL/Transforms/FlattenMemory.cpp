@@ -121,8 +121,8 @@ struct FlattenMemoryPass
       }
 
       // Create the new flattened memory.
-      auto flatMem = builder.create<MemOp>(
-          ports, memOp.getReadLatency(), memOp.getWriteLatency(),
+      auto flatMem = MemOp::create(
+          builder, ports, memOp.getReadLatency(), memOp.getWriteLatency(),
           memOp.getDepth(), memOp.getRuw(), builder.getArrayAttr(portNames),
           memOp.getNameAttr(), memOp.getNameKind(), memOp.getAnnotations(),
           memOp.getPortAnnotations(), memOp.getInnerSymAttr(),
@@ -136,11 +136,10 @@ struct FlattenMemoryPass
         // memory with the wire.  We will be reconstructing the original type
         // in the wire from the bitvector of the flattened memory.
         auto result = memOp.getResult(index);
-        auto wire = builder
-                        .create<WireOp>(result.getType(),
-                                        (memOp.getName() + "_" +
-                                         memOp.getPortName(index).getValue())
-                                            .str())
+        auto wire = WireOp::create(builder, result.getType(),
+                                   (memOp.getName() + "_" +
+                                    memOp.getPortName(index).getValue())
+                                       .str())
                         .getResult();
         result.replaceAllUsesWith(wire);
         result = wire;
@@ -149,9 +148,9 @@ struct FlattenMemoryPass
         for (size_t fieldIndex = 0, fend = rType.getNumElements();
              fieldIndex != fend; ++fieldIndex) {
           auto name = rType.getElement(fieldIndex).name;
-          auto oldField = builder.create<SubfieldOp>(result, fieldIndex);
+          auto oldField = SubfieldOp::create(builder, result, fieldIndex);
           FIRRTLBaseValue newField =
-              builder.create<SubfieldOp>(newResult, fieldIndex);
+              SubfieldOp::create(builder, newResult, fieldIndex);
           // data and mask depend on the memory type which was split.  They can
           // also go both directions, depending on the port direction.
           if (!(name == "data" || name == "mask" || name == "wdata" ||
@@ -174,7 +173,7 @@ struct FlattenMemoryPass
             // newFieldType is of smaller bits than old.
             if (getBitWidth(newFieldType) != *oldFieldBitWidth)
               newFieldType = UIntType::get(context, *oldFieldBitWidth);
-            realOldField = builder.create<BitCastOp>(newFieldType, oldField);
+            realOldField = BitCastOp::create(builder, newFieldType, oldField);
             // Mask bits require special handling, since some of the mask bits
             // need to be repeated, direct bitcasting wouldn't work. Depending
             // on the mask granularity, some mask bits will be repeated.

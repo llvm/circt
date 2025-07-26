@@ -165,8 +165,9 @@ void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
   PhysLocationAttr loc = PhysLocationAttr::get(
       ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num);
   StringAttr entity = StringAttr::get(ctxt, entityName);
-  OpBuilder(op).create<PDPhysLocationOp>(op->getLoc(), loc, entity,
-                                         FlatSymbolRefAttr::get(op));
+  auto builder = OpBuilder(op);
+  PDPhysLocationOp::create(builder, op->getLoc(), loc, entity,
+                           FlatSymbolRefAttr::get(op));
   op->setAttr(entity, loc);
 }
 

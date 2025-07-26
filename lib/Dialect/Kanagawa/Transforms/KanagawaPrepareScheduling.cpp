@@ -55,7 +55,7 @@ PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
   Location loc = sblock.getLoc();
   Block *bodyBlock = sblock.getBodyBlock();
   auto b = OpBuilder::atBlockBegin(bodyBlock);
-  auto ph = b.create<kanagawa::PipelineHeaderOp>(loc);
+  auto ph = kanagawa::PipelineHeaderOp::create(b, loc);
 
   // Create a pipeline.unscheduled operation which returns the same types
   // as that returned by the sblock.
@@ -69,8 +69,8 @@ PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
   for (size_t i = 0, e = retTypes.size(); i < e; ++i)
     outNames.push_back(b.getStringAttr("out" + std::to_string(i)));
 
-  auto pipeline = b.create<pipeline::UnscheduledPipelineOp>(
-      loc, retTypes, bodyBlock->getArguments(), b.getArrayAttr(inNames),
+  auto pipeline = pipeline::UnscheduledPipelineOp::create(
+      b, loc, retTypes, bodyBlock->getArguments(), b.getArrayAttr(inNames),
       b.getArrayAttr(outNames), ph.getClock(), ph.getGo(), ph.getReset(),
       ph.getStall());
   b.setInsertionPointToEnd(pipeline.getEntryStage());
@@ -81,7 +81,8 @@ PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
   // sblock is still being passed through the pipeline. While doing so, we
   // sneakily also set the pipeline return values so that it will reflect the
   // later value replacements.
-  auto pipelineRet = b.create<pipeline::ReturnOp>(loc, sblockRet.getOperands());
+  auto pipelineRet =
+      pipeline::ReturnOp::create(b, loc, sblockRet.getOperands());
   for (size_t i = 0, e = retTypes.size(); i < e; ++i)
     sblockRet.setOperand(i, pipeline.getResult(i));
 

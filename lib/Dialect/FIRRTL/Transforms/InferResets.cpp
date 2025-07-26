@@ -132,14 +132,14 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
   auto value =
       FIRRTLTypeSwitch<FIRRTLBaseType, Value>(type)
           .Case<ClockType>([&](auto type) {
-            return builder.create<AsClockPrimOp>(nullBit());
+            return AsClockPrimOp::create(builder, nullBit());
           })
           .Case<AsyncResetType>([&](auto type) {
-            return builder.create<AsAsyncResetPrimOp>(nullBit());
+            return AsAsyncResetPrimOp::create(builder, nullBit());
           })
           .Case<SIntType, UIntType>([&](auto type) {
-            return builder.create<ConstantOp>(
-                type, APInt::getZero(type.getWidth().value_or(1)));
+            return ConstantOp::create(
+                builder, type, APInt::getZero(type.getWidth().value_or(1)));
           })
           .Case<FEnumType>([&](auto type) -> Value {
             // There might not be a variant that corresponds to 0, in which case
@@ -148,38 +148,39 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
                 type.getElement(0).value.getValue().isZero()) {
               const auto &element = type.getElement(0);
               auto value = createZeroValue(builder, element.type, cache);
-              return builder.create<FEnumCreateOp>(type, element.name, value);
+              return FEnumCreateOp::create(builder, type, element.name, value);
             }
-            auto value = builder.create<ConstantOp>(
-                UIntType::get(builder.getContext(), type.getBitWidth(),
-                              /*isConst=*/true),
-                APInt::getZero(type.getBitWidth()));
-            return builder.create<BitCastOp>(type, value);
+            auto value = ConstantOp::create(builder,
+                                            UIntType::get(builder.getContext(),
+                                                          type.getBitWidth(),
+                                                          /*isConst=*/true),
+                                            APInt::getZero(type.getBitWidth()));
+            return BitCastOp::create(builder, type, value);
           })
           .Case<BundleType>([&](auto type) {
-            auto wireOp = builder.create<WireOp>(type);
+            auto wireOp = WireOp::create(builder, type);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
               auto fieldType = type.getElementTypePreservingConst(i);
               auto zero = createZeroValue(builder, fieldType, cache);
               auto acc =
-                  builder.create<SubfieldOp>(fieldType, wireOp.getResult(), i);
+                  SubfieldOp::create(builder, fieldType, wireOp.getResult(), i);
               emitConnect(builder, acc, zero);
             }
             return wireOp.getResult();
           })
           .Case<FVectorType>([&](auto type) {
-            auto wireOp = builder.create<WireOp>(type);
+            auto wireOp = WireOp::create(builder, type);
             auto zero = createZeroValue(
                 builder, type.getElementTypePreservingConst(), cache);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
-              auto acc = builder.create<SubindexOp>(zero.getType(),
-                                                    wireOp.getResult(), i);
+              auto acc = SubindexOp::create(builder, zero.getType(),
+                                            wireOp.getResult(), i);
               emitConnect(builder, acc, zero);
             }
             return wireOp.getResult();
           })
           .Case<ResetType, AnalogType>(
-              [&](auto type) { return builder.create<InvalidValueOp>(type); })
+              [&](auto type) { return InvalidValueOp::create(builder, type); })
           .Default([](auto) {
             llvm_unreachable("switch handles all types");
             return Value{};
@@ -218,14 +219,14 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
             return;
           LLVM_DEBUG(llvm::dbgs() << "  - Insert mux into " << op << "\n");
           auto muxOp =
-              builder.create<MuxPrimOp>(reset, resetValue, op.getSrc());
+              MuxPrimOp::create(builder, reset, resetValue, op.getSrc());
           op.getSrcMutable().assign(muxOp);
           resetValueUsed = true;
         })
         // Look through subfields.
         .Case<SubfieldOp>([&](auto op) {
           auto resetSubValue =
-              builder.create<SubfieldOp>(resetValue, op.getFieldIndexAttr());
+              SubfieldOp::create(builder, resetValue, op.getFieldIndexAttr());
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
@@ -234,7 +235,7 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
         // Look through subindices.
         .Case<SubindexOp>([&](auto op) {
           auto resetSubValue =
-              builder.create<SubindexOp>(resetValue, op.getIndexAttr());
+              SubindexOp::create(builder, resetValue, op.getIndexAttr());
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
@@ -245,7 +246,7 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
           if (op.getInput() != target)
             return;
           auto resetSubValue =
-              builder.create<SubaccessOp>(resetValue, op.getIndex());
+              SubaccessOp::create(builder, resetValue, op.getIndex());
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
@@ -851,7 +852,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
               //   `use.set(...)`.
               // - `drop_begin` such that the first use can keep the
               // original op.
-              auto newOp = builder.create<InvalidValueOp>(type);
+              auto newOp = InvalidValueOp::create(builder, type);
               use.set(newOp);
             }
           })
@@ -1768,8 +1769,8 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
         auto builder = ImplicitLocOpBuilder::atBlockBegin(nodeOp.getLoc(),
                                                           nodeOp->getBlock());
-        auto wireOp = builder.create<WireOp>(
-            nodeOp.getResult().getType(), nodeOp.getNameAttr(),
+        auto wireOp = WireOp::create(
+            builder, nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
             nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
         // Don't delete the node, since it might be in use in worklists.
@@ -1890,10 +1891,11 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
   if (auto regOp = dyn_cast<RegOp>(op)) {
     LLVM_DEBUG(llvm::dbgs() << "- Adding full reset to " << regOp << "\n");
     auto zero = createZeroValue(builder, regOp.getResult().getType());
-    auto newRegOp = builder.create<RegResetOp>(
-        regOp.getResult().getType(), regOp.getClockVal(), actualReset, zero,
-        regOp.getNameAttr(), regOp.getNameKindAttr(), regOp.getAnnotations(),
-        regOp.getInnerSymAttr(), regOp.getForceableAttr());
+    auto newRegOp = RegResetOp::create(
+        builder, regOp.getResult().getType(), regOp.getClockVal(), actualReset,
+        zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
+        regOp.getAnnotations(), regOp.getInnerSymAttr(),
+        regOp.getForceableAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
     if (regOp.getForceable())
       regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
@@ -1924,7 +1926,7 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     // into a mux in front of the register.
     insertResetMux(builder, regOp.getResult(), reset, value);
     builder.setInsertionPointAfterValue(regOp.getResult());
-    auto mux = builder.create<MuxPrimOp>(reset, value, regOp.getResult());
+    auto mux = MuxPrimOp::create(builder, reset, value, regOp.getResult());
     emitConnect(builder, regOp.getResult(), mux);
 
     // Replace the existing reset with the async reset.

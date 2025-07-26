@@ -34,11 +34,11 @@ void WrapProceduralOpsPass::runOnOperation() {
     if (!isa<scf::SCFDialect>(op.getDialect()) && !isa<func::CallOp>(op))
       continue;
     auto builder = OpBuilder(&op);
-    auto wrapperOp =
-        builder.create<llhd::CombinationalOp>(op.getLoc(), op.getResultTypes());
+    auto wrapperOp = llhd::CombinationalOp::create(builder, op.getLoc(),
+                                                   op.getResultTypes());
     op.replaceAllUsesWith(wrapperOp);
     builder.createBlock(&wrapperOp.getBody());
-    auto yieldOp = builder.create<llhd::YieldOp>(op.getLoc(), op.getResults());
+    auto yieldOp = llhd::YieldOp::create(builder, op.getLoc(), op.getResults());
     op.moveBefore(yieldOp);
     ++numOpsWrapped;
   }

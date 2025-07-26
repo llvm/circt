@@ -32,8 +32,8 @@ Value comb::createZExt(OpBuilder &builder, Location loc, Value value,
     return value;
 
   // Create a zero constant for the upper bits.
-  auto zeros = builder.create<hw::ConstantOp>(
-      loc, builder.getIntegerType(targetWidth - inputWidth), 0);
+  auto zeros = hw::ConstantOp::create(
+      builder, loc, builder.getIntegerType(targetWidth - inputWidth), 0);
   return builder.createOrFold<ConcatOp>(loc, zeros, value);
 }
 
@@ -64,7 +64,7 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
 
 Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder,
                             bool twoState) {
-  auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
+  auto allOnes = hw::ConstantOp::create(builder, loc, value.getType(), -1);
   return builder.createOrFold<XorOp>(loc, value, allOnes, twoState);
 }
 
@@ -170,8 +170,8 @@ Value comb::createDynamicInject(OpBuilder &builder, Location loc, Value value,
 
   // Zero-extend the offset and clear the value bits we are replacing.
   offset = createZExt(builder, loc, offset, largeWidth);
-  Value mask = builder.create<hw::ConstantOp>(
-      loc, APInt::getLowBitsSet(largeWidth, smallWidth));
+  Value mask = hw::ConstantOp::create(
+      builder, loc, APInt::getLowBitsSet(largeWidth, smallWidth));
   mask = builder.createOrFold<comb::ShlOp>(loc, mask, offset);
   mask = createOrFoldNot(loc, mask, builder, true);
   value = builder.createOrFold<comb::AndOp>(loc, value, mask, twoState);
@@ -205,14 +205,15 @@ Value comb::createInject(OpBuilder &builder, Location loc, Value value,
   auto end = offset + smallWidth;
   if (end < largeWidth)
     fragments.push_back(
-        builder.create<comb::ExtractOp>(loc, value, end, largeWidth - end));
+        comb::ExtractOp::create(builder, loc, value, end, largeWidth - end));
   if (end <= largeWidth)
     fragments.push_back(replacement);
   else
-    fragments.push_back(builder.create<comb::ExtractOp>(loc, replacement, 0,
-                                                        largeWidth - offset));
+    fragments.push_back(comb::ExtractOp::create(builder, loc, replacement, 0,
+                                                largeWidth - offset));
   if (offset > 0)
-    fragments.push_back(builder.create<comb::ExtractOp>(loc, value, 0, offset));
+    fragments.push_back(
+        comb::ExtractOp::create(builder, loc, value, 0, offset));
   return builder.createOrFold<comb::ConcatOp>(loc, fragments);
 }
 
@@ -237,7 +238,7 @@ SmallVector<Value>
 comb::wallaceReduction(OpBuilder &builder, Location loc, size_t width,
                        size_t targetAddends,
                        SmallVector<SmallVector<Value>> &addends) {
-  auto falseValue = builder.create<hw::ConstantOp>(loc, APInt(1, 0));
+  auto falseValue = hw::ConstantOp::create(builder, loc, APInt(1, 0));
   SmallVector<SmallVector<Value>> newAddends;
   newAddends.reserve(addends.size());
   // Continue reduction until we have only two rows. The length of
@@ -285,11 +286,11 @@ comb::wallaceReduction(OpBuilder &builder, Location loc, size_t width,
   for (auto &addend : addends) {
     // Reverse the order of the bits
     std::reverse(addend.begin(), addend.end());
-    carrySave.push_back(builder.create<comb::ConcatOp>(loc, addend));
+    carrySave.push_back(comb::ConcatOp::create(builder, loc, addend));
   }
 
   // Pad with zeros
-  auto zero = builder.create<hw::ConstantOp>(loc, APInt(width, 0));
+  auto zero = hw::ConstantOp::create(builder, loc, APInt(width, 0));
   while (carrySave.size() < targetAddends)
     carrySave.push_back(zero);
 

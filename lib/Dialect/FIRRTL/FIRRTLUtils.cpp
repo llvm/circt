@@ -42,29 +42,29 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // References use ref.define.  Add cast if types don't match.
     if (type_isa<RefType>(dstFType)) {
       if (dstFType != srcFType)
-        src = builder.create<RefCastOp>(dstFType, src);
-      builder.create<RefDefineOp>(dst, src);
+        src = RefCastOp::create(builder, dstFType, src);
+      RefDefineOp::create(builder, dst, src);
     } else if (type_isa<PropertyType>(dstFType) &&
                type_isa<PropertyType>(srcFType)) {
       // Properties use propassign.
-      builder.create<PropAssignOp>(dst, src);
+      PropAssignOp::create(builder, dst, src);
     } else {
       // Other types, give up and leave a connect
-      builder.create<ConnectOp>(dst, src);
+      ConnectOp::create(builder, dst, src);
     }
     return;
   }
 
   // More special connects
   if (isa<AnalogType>(dstType)) {
-    builder.create<AttachOp>(ArrayRef{dst, src});
+    AttachOp::create(builder, ArrayRef{dst, src});
     return;
   }
 
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<MatchingConnectOp>(dst, src);
+    MatchingConnectOp::create(builder, dst, src);
     return;
   }
 
@@ -75,12 +75,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcBundle = type_dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      ConnectOp::create(builder, dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
-      auto dstField = builder.create<SubfieldOp>(dst, i);
-      auto srcField = builder.create<SubfieldOp>(src, i);
+      auto dstField = SubfieldOp::create(builder, dst, i);
+      auto srcField = SubfieldOp::create(builder, src, i);
       if (dstBundle.getElement(i).isFlip)
         std::swap(dstField, srcField);
       emitConnect(builder, dstField, srcField);
@@ -95,12 +95,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcVector = type_dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      ConnectOp::create(builder, dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
-      auto dstField = builder.create<SubindexOp>(dst, i);
-      auto srcField = builder.create<SubindexOp>(src, i);
+      auto dstField = SubindexOp::create(builder, dst, i);
+      auto srcField = SubindexOp::create(builder, src, i);
       emitConnect(builder, dstField, srcField);
     }
     return;
@@ -109,7 +109,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
       dstType != srcType) {
     srcType = dstType.getConstType(srcType.isConst());
-    src = builder.create<UninferredResetCastOp>(srcType, src);
+    src = UninferredResetCastOp::create(builder, srcType, src);
   }
 
   // Handle passive types with possibly uninferred widths.
@@ -124,10 +124,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     //  can be const-cast'd, do so)
     if (dstType != srcType && dstType.getWidthlessType() != srcType &&
         areTypesConstCastable(dstType.getWidthlessType(), srcType)) {
-      src = builder.create<ConstCastOp>(dstType.getWidthlessType(), src);
+      src = ConstCastOp::create(builder, dstType.getWidthlessType(), src);
     }
 
-    builder.create<ConnectOp>(dst, src);
+    ConnectOp::create(builder, dst, src);
     return;
   }
 
@@ -140,29 +140,29 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     if (isSignedDest)
       tmpType =
           UIntType::get(dstType.getContext(), dstWidth, srcType.isConst());
-    src = builder.create<TailPrimOp>(tmpType, src, srcWidth - dstWidth);
+    src = TailPrimOp::create(builder, tmpType, src, srcWidth - dstWidth);
     // Insert the cast back to signed if needed.
     if (isSignedDest)
-      src = builder.create<AsSIntPrimOp>(
-          dstType.getConstType(tmpType.isConst()), src);
+      src = AsSIntPrimOp::create(builder,
+                                 dstType.getConstType(tmpType.isConst()), src);
   } else if (srcWidth < dstWidth) {
     // Need to extend arg.
-    src = builder.create<PadPrimOp>(src, dstWidth);
+    src = PadPrimOp::create(builder, src, dstWidth);
   }
 
   if (auto srcType = type_cast<FIRRTLBaseType>(src.getType());
       srcType && dstType != srcType &&
       areTypesConstCastable(dstType, srcType)) {
-    src = builder.create<ConstCastOp>(dstType, src);
+    src = ConstCastOp::create(builder, dstType, src);
   }
 
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<MatchingConnectOp>(dst, src);
+    MatchingConnectOp::create(builder, dst, src);
   } else
-    builder.create<ConnectOp>(dst, src);
+    ConnectOp::create(builder, dst, src);
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
@@ -678,19 +678,19 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
     FIRRTLTypeSwitch<Type, void>(value.getType())
         .Case<BundleType, OpenBundleType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
-          value = builder.create<SubfieldOp>(value, index);
+          value = SubfieldOp::create(builder, value, index);
           fieldID -= bundle.getFieldID(index);
         })
         .Case<FVectorType, OpenVectorType>([&](auto vector) {
           auto index = vector.getIndexForFieldID(fieldID);
-          value = builder.create<SubindexOp>(value, index);
+          value = SubindexOp::create(builder, value, index);
           fieldID -= vector.getFieldID(index);
         })
         .Case<RefType>([&](auto reftype) {
           FIRRTLTypeSwitch<FIRRTLBaseType, void>(reftype.getType())
               .template Case<BundleType, FVectorType>([&](auto type) {
                 auto index = type.getIndexForFieldID(fieldID);
-                value = builder.create<RefSubOp>(value, index);
+                value = RefSubOp::create(builder, value, index);
                 fieldID -= type.getFieldID(index);
               })
               .Default([&](auto _) {
@@ -1087,5 +1087,5 @@ PathOp circt::firrtl::createPathRef(Operation *op, hw::HierPathOp nla,
   }
 
   // Create the path operation.
-  return builderOM.create<PathOp>(kind, id);
+  return PathOp::create(builderOM, kind, id);
 }

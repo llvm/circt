@@ -79,8 +79,8 @@ public:
     SmallVector<scf::IndexSwitchOp> simplifiableIndexSwitchOps =
         collectSimplifiableIndexSwitchOps(affineParallelOp, factor);
 
-    auto outerLoop = rewriter.create<affine::AffineForOp>(
-        loc, lowerBound, rewriter.getDimIdentityMap(), upperBound,
+    auto outerLoop = affine::AffineForOp::create(
+        rewriter, loc, lowerBound, rewriter.getDimIdentityMap(), upperBound,
         rewriter.getDimIdentityMap(), step * factor);
 
     rewriter.setInsertionPointToStart(outerLoop.getBody());
@@ -89,8 +89,8 @@ public:
         /*results=*/rewriter.getAffineConstantExpr(0), rewriter.getContext());
     AffineMap ubMap = AffineMap::get(
         0, 0, rewriter.getAffineConstantExpr(factor), rewriter.getContext());
-    auto innerParallel = rewriter.create<affine::AffineParallelOp>(
-        loc, /*resultTypes=*/TypeRange(),
+    auto innerParallel = affine::AffineParallelOp::create(
+        rewriter, loc, /*resultTypes=*/TypeRange(),
         /*reductions=*/SmallVector<arith::AtomicRMWKind>(),
         /*lowerBoundsMap=*/lbMap, /*lowerBoundsOperands=*/SmallVector<Value>(),
         /*upperBoundsMap=*/ubMap, /*upperBoundsOperands=*/SmallVector<Value>(),
@@ -109,8 +109,8 @@ public:
         2, 0, rewriter.getAffineDimExpr(0) + rewriter.getAffineDimExpr(1),
         rewriter.getContext());
 
-    auto newIndex = rewriter.create<affine::AffineApplyOp>(
-        loc, addMap,
+    auto newIndex = affine::AffineApplyOp::create(
+        rewriter, loc, addMap,
         ValueRange{outerLoop.getInductionVar(), innerParallel.getIVs()[0]});
 
     Block *srcBlock = affineParallelOp.getBody();
@@ -133,7 +133,7 @@ public:
     });
 
     rewriter.setInsertionPointToEnd(destBlock);
-    rewriter.create<affine::AffineYieldOp>(loc);
+    affine::AffineYieldOp::create(rewriter, loc);
 
     for (auto indexSwitchOp : simplifiableIndexSwitchOps) {
       indexSwitchOp.setOperand(innerParallel.getIVs().front());

@@ -233,7 +233,7 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
       newPortTypes.push_back(TypeAttr::get(newType));
       if (block) {
         auto builder = OpBuilder::atBlockBegin(block);
-        wires.emplace_back(idx, builder.create<WireOp>(loc, newType));
+        wires.emplace_back(idx, WireOp::create(builder, loc, newType));
         probeToHWMap[block->getArgument(idx)] = wires.back().second.getData();
       }
     } else
@@ -351,21 +351,21 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
   builder.setInsertionPointToEnd(mem->getBlock());
   Type uintType = builder.getType<UIntType>();
   for (uint64_t i = 0, e = mem.getType().getNumElements(); i != e; ++i) {
-    auto port = builder.create<chirrtl::MemoryPortOp>(
-        mem.getType().getElementType(),
+    auto port = chirrtl::MemoryPortOp::create(
+        builder, mem.getType().getElementType(),
         chirrtl::CMemoryPortType::get(builder.getContext()), mem.getResult(),
         MemDirAttr::Read, builder.getStringAttr("memTap_" + Twine(i)),
         builder.getArrayAttr({}));
-    builder.create<chirrtl::MemoryPortAccessOp>(
-        port.getPort(),
-        builder.create<ConstantOp>(uintType, APSInt::getUnsigned(i)), clock);
+    chirrtl::MemoryPortAccessOp::create(
+        builder, port.getPort(),
+        ConstantOp::create(builder, uintType, APSInt::getUnsigned(i)), clock);
     data.push_back(port.getData());
   }
 
   // Package up all the reads into a vector.
   assert(vectype == FVectorType::get(mem.getType().getElementType(),
                                      mem.getType().getNumElements()));
-  auto vecData = builder.create<VectorCreateOp>(vectype, data);
+  auto vecData = VectorCreateOp::create(builder, vectype, data);
 
   // While the new ports are added as late as possible, the debug port
   // operation we're replacing likely has users and those are before
@@ -373,7 +373,7 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
   // and the new port access operations added above.  This will be used for
   // the existing users of the debug port.
   builder.setInsertionPoint(mem);
-  auto wire = builder.create<WireOp>(vectype);
+  auto wire = WireOp::create(builder, vectype);
   builder.setInsertionPointToEnd(mem->getBlock());
   emitConnect(builder, wire.getData(), vecData);
   probeToHWMap[op.getResult()] = wire.getData();
@@ -431,7 +431,7 @@ LogicalResult ProbeVisitor::visitActiveForceableDecl(Forceable fop) {
   if (newType != data.getType()) {
     ImplicitLocOpBuilder builder(fop.getLoc(), fop);
     builder.setInsertionPointAfterValue(data);
-    auto wire = builder.create<WireOp>(newType);
+    auto wire = WireOp::create(builder, newType);
     emitConnect(builder, wire.getData(), data);
     data = wire.getData();
   }
@@ -517,7 +517,7 @@ LogicalResult ProbeVisitor::visitExpr(RWProbeOp op) {
   assert(cast<FIRRTLBaseType>(data.getType()).getPassiveType() ==
          op.getType().getType());
   if (newType != data.getType()) {
-    auto wire = builder.create<WireOp>(newType);
+    auto wire = WireOp::create(builder, newType);
     emitConnect(builder, wire.getData(), data);
     data = wire.getData();
   }
@@ -541,7 +541,7 @@ LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   builder.setInsertionPointAfterValue(input);
-  auto wire = builder.create<WireOp>(newType);
+  auto wire = WireOp::create(builder, newType);
   emitConnect(builder, wire.getData(), input);
   probeToHWMap[op.getResult()] = wire.getData();
   toDelete.push_back(op);
@@ -566,7 +566,7 @@ LogicalResult ProbeVisitor::visitExpr(RefSendOp op) {
   assert(newType == op.getBase().getType().getPassiveType());
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   builder.setInsertionPointAfterValue(op.getBase());
-  auto wire = builder.create<WireOp>(newType);
+  auto wire = WireOp::create(builder, newType);
   emitConnect(builder, wire.getData(), op.getBase());
   probeToHWMap[op.getResult()] = wire.getData();
   return success();

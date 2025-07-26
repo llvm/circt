@@ -70,13 +70,11 @@ static FailureOr<Value> narrowValueToArrayWidth(OpBuilder &builder, Value array,
   unsigned hiBit = llvm::Log2_64_Ceil(arrayType.getNumElements());
 
   return hiBit == 0
-             ? builder
-                   .create<hw::ConstantOp>(value.getLoc(),
-                                           APInt(arrayType.getNumElements(), 0))
+             ? hw::ConstantOp::create(builder, value.getLoc(),
+                                      APInt(arrayType.getNumElements(), 0))
                    .getResult()
-             : builder
-                   .create<comb::ExtractOp>(value.getLoc(), value,
-                                            /*lowBit=*/0, hiBit)
+             : comb::ExtractOp::create(builder, value.getLoc(), value,
+                                       /*lowBit=*/0, hiBit)
                    .getResult();
 }
 
@@ -299,8 +297,8 @@ static LogicalResult specializeModule(
   }
 
   // Create the specialized module using the evaluated port info.
-  target = builder.create<HWModuleOp>(
-      source.getLoc(),
+  target = HWModuleOp::create(
+      builder, source.getLoc(),
       StringAttr::get(ctx, generateModuleName(ns, source, parameters)), ports);
 
   // Erase the default created hw.output op - we'll copy the correct operation

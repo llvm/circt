@@ -140,8 +140,8 @@ MergeCallArgs::matchAndRewrite(CallOp call, OpAdaptor adaptor,
   auto [argStruct, argLoc] = argStructEntry->second;
 
   // Pack all of the operands into it.
-  auto newArg = rewriter.create<hw::StructCreateOp>(loc, argStruct,
-                                                    adaptor.getOperands());
+  auto newArg = hw::StructCreateOp::create(rewriter, loc, argStruct,
+                                           adaptor.getOperands());
   newArg->setAttr("sv.namehint",
                   rewriter.getStringAttr(call.getCallee().getName().getValue() +
                                          "_args_called_from_" +
@@ -190,8 +190,8 @@ MergeMethodArgs::matchAndRewrite(MethodOp func, OpAdaptor adaptor,
       FunctionType::get(ctxt, {argStruct}, funcType.getResults());
   auto newArgNames = ArrayAttr::get(ctxt, {StringAttr::get(ctxt, "arg")});
   auto newMethod =
-      rewriter.create<MethodOp>(loc, func.getInnerSym(), newFuncType,
-                                newArgNames, ArrayAttr(), ArrayAttr());
+      MethodOp::create(rewriter, loc, func.getInnerSym(), newFuncType,
+                       newArgNames, ArrayAttr(), ArrayAttr());
 
   if (func->getNumRegions() > 0) {
     // Create a body block with a struct explode to the arg struct into the
@@ -200,7 +200,7 @@ MergeMethodArgs::matchAndRewrite(MethodOp func, OpAdaptor adaptor,
         rewriter.createBlock(&newMethod.getRegion(), {}, {argStruct}, {argLoc});
     rewriter.setInsertionPointToStart(b);
     auto replacementArgs =
-        rewriter.create<hw::StructExplodeOp>(loc, b->getArgument(0));
+        hw::StructExplodeOp::create(rewriter, loc, b->getArgument(0));
 
     // Merge the original method body, rewiring the args.
     Block *funcBody = &func.getBody().front();

@@ -45,8 +45,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     // Reduce to two values (carry,save)
-    auto results =
-        rewriter.create<datapath::CompressOp>(op.getLoc(), op.getOperands(), 2);
+    auto results = datapath::CompressOp::create(rewriter, op.getLoc(),
+                                                op.getOperands(), 2);
     // carry+saved
     rewriter.replaceOpWithNewOp<AddOp>(op, results.getResults(), true);
     return success();
@@ -66,8 +66,8 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
 
     auto width = op.getType().getIntOrFloatBitWidth();
     // Create partial product rows - number of rows == width
-    auto pp = rewriter.create<datapath::PartialProductOp>(
-        op.getLoc(), op.getInputs(), width);
+    auto pp = datapath::PartialProductOp::create(rewriter, op.getLoc(),
+                                                 op.getInputs(), width);
     // Sum partial products
     rewriter.replaceOpWithNewOp<AddOp>(op, pp.getResults(), true);
     return success();

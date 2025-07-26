@@ -299,8 +299,8 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
     OpBuilder &odsBuilder, Location loc, Twine name,
     ArrayRef<StringRef> formalParamNames, ArrayRef<StringRef> fieldNames,
     ArrayRef<Type> fieldTypes) {
-  circt::om::ClassOp classOp = odsBuilder.create<circt::om::ClassOp>(
-      loc, odsBuilder.getStringAttr(name),
+  circt::om::ClassOp classOp = circt::om::ClassOp::create(
+      odsBuilder, loc, odsBuilder.getStringAttr(name),
       odsBuilder.getStrArrayAttr(formalParamNames),
       odsBuilder.getStrArrayAttr(fieldNames),
       odsBuilder.getDictionaryAttr(llvm::map_to_vector(
@@ -314,12 +314,13 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
 
   mlir::SmallVector<Attribute> locAttrs(fieldNames.size(), LocationAttr(loc));
 
-  odsBuilder.create<ClassFieldsOp>(
-      loc,
-      llvm::map_to_vector(
-          fieldTypes,
-          [&](Type type) -> Value { return body->addArgument(type, loc); }),
-      odsBuilder.getArrayAttr(locAttrs));
+  ClassFieldsOp::create(odsBuilder, loc,
+                        llvm::map_to_vector(fieldTypes,
+                                            [&](Type type) -> Value {
+                                              return body->addArgument(type,
+                                                                       loc);
+                                            }),
+                        odsBuilder.getArrayAttr(locAttrs));
 
   odsBuilder.restoreInsertionPoint(prevLoc);
 
@@ -442,8 +443,8 @@ void circt::om::ClassOp::addNewFieldsOp(mlir::OpBuilder &builder,
   }
   // Also store the locations incase there's some other analysis that might
   // be able to use the default FusedLoc representation.
-  builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), values,
-                                builder.getArrayAttr(locAttrs));
+  ClassFieldsOp::create(builder, builder.getFusedLoc(locs), values,
+                        builder.getArrayAttr(locAttrs));
 }
 
 mlir::Location circt::om::ClassOp::getFieldLocByIndex(size_t i) {

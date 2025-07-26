@@ -83,20 +83,20 @@ LogicalResult ExportVerilog::lowerHWInstanceChoices(mlir::ModuleOp module) {
     auto symName = ns.newName(name);
     auto symNameAttr = declBuilder.getStringAttr(symName);
     auto symRef = FlatSymbolRefAttr::get(symNameAttr);
-    declBuilder.create<MacroDeclOp>(inst.getLoc(), symNameAttr,
-                                    /*args=*/ArrayAttr{},
-                                    /*verilogName=*/StringAttr{});
+    MacroDeclOp::create(declBuilder, inst.getLoc(), symNameAttr,
+                        /*args=*/ArrayAttr{},
+                        /*verilogName=*/StringAttr{});
 
     // This pass now generates the macros and attaches them to the instance
     // choice as an attribute. As a better solution, this pass should be moved
     // out of the umbrella of ExportVerilog and it should lower the `hw`
     // instance choices to a better SV-level representation of the operation.
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    builder.create<sv::IfDefOp>(
-        symName, [&] {},
+    sv::IfDefOp::create(
+        builder, symName, [&] {},
         [&] {
-          builder.create<sv::MacroDefOp>(
-              symRef, builder.getStringAttr("{{0}}"),
+          sv::MacroDefOp::create(
+              builder, symRef, builder.getStringAttr("{{0}}"),
               builder.getArrayAttr(
                   {FlatSymbolRefAttr::get(defaultModuleOp.getNameAttr())}));
         });

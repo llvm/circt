@@ -225,16 +225,16 @@ handleGetGlobalOp(memref::GetGlobalOp getGlobalOp, uint64_t bankingFactor,
     auto newInitValue = DenseElementsAttr::get(tensorType, subBlocks[bankCnt]);
 
     builder.restoreInsertionPoint(globalOpsInsertPt);
-    auto newGlobalOp = builder.create<memref::GlobalOp>(
-        globalOp.getLoc(), builder.getStringAttr(newName),
+    auto newGlobalOp = memref::GlobalOp::create(
+        builder, globalOp.getLoc(), builder.getStringAttr(newName),
         globalOp.getSymVisibilityAttr(), newTypeAttr, newInitValue,
         globalOp.getConstantAttr(), globalOp.getAlignmentAttr());
     builder.setInsertionPointAfter(newGlobalOp);
     globalOpsInsertPt = builder.saveInsertionPoint();
 
     builder.restoreInsertionPoint(getGlobalOpsInsertPt);
-    auto newGetGlobalOp = builder.create<memref::GetGlobalOp>(
-        getGlobalOp.getLoc(), newMemRefTy, newGlobalOp.getName());
+    auto newGetGlobalOp = memref::GetGlobalOp::create(
+        builder, getGlobalOp.getLoc(), newMemRefTy, newGlobalOp.getName());
     newGetGlobalOp->setAttrs(remainingAttrs);
     builder.setInsertionPointAfter(newGetGlobalOp);
     getGlobalOpsInsertPt = builder.saveInsertionPoint();
@@ -437,7 +437,7 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
         .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
           for (uint64_t bankCnt = 0; bankCnt < currFactor; ++bankCnt) {
             auto bankAllocOp =
-                builder.create<memref::AllocOp>(loc, newMemRefType);
+                memref::AllocOp::create(builder, loc, newMemRefType);
             bankAllocOp->setAttrs(remainingAttrs);
             banks.push_back(bankAllocOp);
           }
@@ -445,7 +445,7 @@ SmallVector<Value, 4> MemoryBankingPass::createBanks(OpBuilder &builder,
         .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
           for (uint64_t bankCnt = 0; bankCnt < currFactor; ++bankCnt) {
             auto bankAllocaOp =
-                builder.create<memref::AllocaOp>(loc, newMemRefType);
+                memref::AllocaOp::create(builder, loc, newMemRefType);
             bankAllocaOp->setAttrs(remainingAttrs);
             banks.push_back(bankAllocaOp);
           }
@@ -504,9 +504,9 @@ struct BankAffineLoadPattern
         {rewriter.getAffineDimExpr(currDimension).floorDiv(currFactor)});
 
     Value bankIndex =
-        rewriter.create<affine::AffineApplyOp>(loc, modMap, loadIndices);
+        affine::AffineApplyOp::create(rewriter, loc, modMap, loadIndices);
     Value offset =
-        rewriter.create<affine::AffineApplyOp>(loc, divMap, loadIndices);
+        affine::AffineApplyOp::create(rewriter, loc, divMap, loadIndices);
     SmallVector<Value, 4> newIndices(loadIndices.begin(), loadIndices.end());
     newIndices[currDimension] = offset;
 
@@ -517,16 +517,16 @@ struct BankAffineLoadPattern
       caseValues.push_back(i);
 
     rewriter.setInsertionPoint(loadOp);
-    scf::IndexSwitchOp switchOp = rewriter.create<scf::IndexSwitchOp>(
-        loc, resultTypes, bankIndex, caseValues,
+    scf::IndexSwitchOp switchOp = scf::IndexSwitchOp::create(
+        rewriter, loc, resultTypes, bankIndex, caseValues,
         /*numRegions=*/currFactor);
 
     for (unsigned i = 0; i < currFactor; ++i) {
       Region &caseRegion = switchOp.getCaseRegions()[i];
       rewriter.setInsertionPointToStart(&caseRegion.emplaceBlock());
-      Value bankedLoad = rewriter.create<mlir::affine::AffineLoadOp>(
-          loc, banks[i], newIndices);
-      rewriter.create<scf::YieldOp>(loc, bankedLoad);
+      Value bankedLoad = mlir::affine::AffineLoadOp::create(
+          rewriter, loc, banks[i], newIndices);
+      scf::YieldOp::create(rewriter, loc, bankedLoad);
     }
 
     Region &defaultRegion = switchOp.getDefaultRegion();
@@ -535,8 +535,8 @@ struct BankAffineLoadPattern
 
     TypedAttr zeroAttr =
         cast<TypedAttr>(rewriter.getZeroAttr(loadOp.getType()));
-    auto defaultValue = rewriter.create<arith::ConstantOp>(loc, zeroAttr);
-    rewriter.create<scf::YieldOp>(loc, defaultValue.getResult());
+    auto defaultValue = arith::ConstantOp::create(rewriter, loc, zeroAttr);
+    scf::YieldOp::create(rewriter, loc, defaultValue.getResult());
 
     // We track Load's memory reference only if it is a block argument - this is
     // the only case where the reference isn't replaced.
@@ -600,9 +600,9 @@ struct BankAffineStorePattern
         {rewriter.getAffineDimExpr(currDimension).floorDiv(currFactor)});
 
     Value bankIndex =
-        rewriter.create<affine::AffineApplyOp>(loc, modMap, storeIndices);
+        affine::AffineApplyOp::create(rewriter, loc, modMap, storeIndices);
     Value offset =
-        rewriter.create<affine::AffineApplyOp>(loc, divMap, storeIndices);
+        affine::AffineApplyOp::create(rewriter, loc, divMap, storeIndices);
     SmallVector<Value, 4> newIndices(storeIndices.begin(), storeIndices.end());
     newIndices[currDimension] = offset;
 
@@ -613,23 +613,23 @@ struct BankAffineStorePattern
       caseValues.push_back(i);
 
     rewriter.setInsertionPoint(storeOp);
-    scf::IndexSwitchOp switchOp = rewriter.create<scf::IndexSwitchOp>(
-        loc, resultTypes, bankIndex, caseValues,
+    scf::IndexSwitchOp switchOp = scf::IndexSwitchOp::create(
+        rewriter, loc, resultTypes, bankIndex, caseValues,
         /*numRegions=*/currFactor);
 
     for (unsigned i = 0; i < currFactor; ++i) {
       Region &caseRegion = switchOp.getCaseRegions()[i];
       rewriter.setInsertionPointToStart(&caseRegion.emplaceBlock());
-      rewriter.create<mlir::affine::AffineStoreOp>(
-          loc, storeOp.getValueToStore(), banks[i], newIndices);
-      rewriter.create<scf::YieldOp>(loc);
+      mlir::affine::AffineStoreOp::create(
+          rewriter, loc, storeOp.getValueToStore(), banks[i], newIndices);
+      scf::YieldOp::create(rewriter, loc);
     }
 
     Region &defaultRegion = switchOp.getDefaultRegion();
     assert(defaultRegion.empty() && "Default region should be empty");
     rewriter.setInsertionPointToStart(&defaultRegion.emplaceBlock());
 
-    rewriter.create<scf::YieldOp>(loc);
+    scf::YieldOp::create(rewriter, loc);
 
     processedOps.insert(storeOp);
     opsToErase.insert(storeOp);
@@ -671,7 +671,7 @@ struct BankReturnPattern : public OpRewritePattern<func::ReturnOp> {
     func::FuncOp funcOp = returnOp.getParentOp();
     rewriter.setInsertionPointToEnd(&funcOp.getBlocks().front());
     auto newReturnOp =
-        rewriter.create<func::ReturnOp>(loc, ValueRange(newReturnOperands));
+        func::ReturnOp::create(rewriter, loc, ValueRange(newReturnOperands));
     TypeRange newReturnType = TypeRange(newReturnOperands);
     FunctionType newFuncType =
         FunctionType::get(funcOp.getContext(),

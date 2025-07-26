@@ -88,8 +88,8 @@ static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
   // Add bounds checking
   auto inBound = rewriter.createOrFold<comb::ICmpOp>(
       loc, ICmpPredicate::ult, shiftAmount,
-      rewriter.create<hw::ConstantOp>(loc, shiftAmount.getType(),
-                                      maxShiftAmount));
+      hw::ConstantOp::create(rewriter, loc, shiftAmount.getType(),
+                             maxShiftAmount));
 
   return rewriter.createOrFold<comb::MuxOp>(loc, inBound, result,
                                             outOfBoundsValue);
@@ -196,7 +196,7 @@ static LogicalResult emulateBinaryOpForUnknownBits(
     auto it = constantPool.find(attr);
     if (it != constantPool.end())
       return it->second;
-    auto constant = rewriter.create<hw::ConstantOp>(loc, value);
+    auto constant = hw::ConstantOp::create(rewriter, loc, value);
     constantPool[attr] = constant;
     return constant;
   };
@@ -261,8 +261,8 @@ struct CombOrOpConversion : OpConversionPattern<OrOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Implement Or using And and invert flags: a | b = ~(~a & ~b)
     SmallVector<bool> allInverts(adaptor.getInputs().size(), true);
-    auto andOp = rewriter.create<aig::AndInverterOp>(
-        op.getLoc(), adaptor.getInputs(), allInverts);
+    auto andOp = aig::AndInverterOp::create(rewriter, op.getLoc(),
+                                            adaptor.getInputs(), allInverts);
     replaceOpWithNewOpAndCopyNamehint<aig::AndInverterOp>(rewriter, op, andOp,
                                                           /*invert=*/true);
     return success();
@@ -287,9 +287,9 @@ struct CombXorOpConversion : OpConversionPattern<XorOp> {
     SmallVector<bool> allNotInverts(inputs.size(), false);
 
     auto notAAndNotB =
-        rewriter.create<aig::AndInverterOp>(op.getLoc(), inputs, allInverts);
-    auto aAndB =
-        rewriter.create<aig::AndInverterOp>(op.getLoc(), inputs, allNotInverts);
+        aig::AndInverterOp::create(rewriter, op.getLoc(), inputs, allInverts);
+    auto aAndB = aig::AndInverterOp::create(rewriter, op.getLoc(), inputs,
+                                            allNotInverts);
 
     replaceOpWithNewOpAndCopyNamehint<aig::AndInverterOp>(rewriter, op,
                                                           notAAndNotB, aAndB,
@@ -323,14 +323,14 @@ struct CombLowerVariadicOp : OpConversionPattern<OpTy> {
     case 2:
       lhs = operands[0];
       rhs = operands[1];
-      return rewriter.create<OpTy>(op.getLoc(), ValueRange{lhs, rhs}, true);
+      return OpTy::create(rewriter, op.getLoc(), ValueRange{lhs, rhs}, true);
     default:
       auto firstHalf = operands.size() / 2;
       lhs =
           lowerFullyAssociativeOp(op, operands.take_front(firstHalf), rewriter);
       rhs =
           lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), rewriter);
-      return rewriter.create<OpTy>(op.getLoc(), ValueRange{lhs, rhs}, true);
+      return OpTy::create(rewriter, op.getLoc(), ValueRange{lhs, rhs}, true);
     }
   }
 };
@@ -352,26 +352,26 @@ struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
       // If the type of the mux is not integer, bitcast the operands first.
       auto widthType = rewriter.getIntegerType(hw::getBitWidth(op.getType()));
       trueVal =
-          rewriter.create<hw::BitcastOp>(op->getLoc(), widthType, trueVal);
+          hw::BitcastOp::create(rewriter, op->getLoc(), widthType, trueVal);
       falseVal =
-          rewriter.create<hw::BitcastOp>(op->getLoc(), widthType, falseVal);
+          hw::BitcastOp::create(rewriter, op->getLoc(), widthType, falseVal);
     }
 
     // Replicate condition if needed
     if (!trueVal.getType().isInteger(1))
-      cond = rewriter.create<comb::ReplicateOp>(op.getLoc(), trueVal.getType(),
-                                                cond);
+      cond = comb::ReplicateOp::create(rewriter, op.getLoc(), trueVal.getType(),
+                                       cond);
 
     // c ? a : b => (replicate(c) & a) | (~replicate(c) & b)
-    auto lhs = rewriter.create<aig::AndInverterOp>(op.getLoc(), cond, trueVal);
-    auto rhs = rewriter.create<aig::AndInverterOp>(op.getLoc(), cond, falseVal,
-                                                   true, false);
+    auto lhs = aig::AndInverterOp::create(rewriter, op.getLoc(), cond, trueVal);
+    auto rhs = aig::AndInverterOp::create(rewriter, op.getLoc(), cond, falseVal,
+                                          true, false);
 
-    Value result = rewriter.create<comb::OrOp>(op.getLoc(), lhs, rhs);
+    Value result = comb::OrOp::create(rewriter, op.getLoc(), lhs, rhs);
     // Insert the bitcast if the type of the mux is not integer.
     if (result.getType() != op.getType())
       result =
-          rewriter.create<hw::BitcastOp>(op.getLoc(), op.getType(), result);
+          hw::BitcastOp::create(rewriter, op.getLoc(), op.getType(), result);
     replaceOpAndCopyNamehint(rewriter, op, result);
     return success();
   }
@@ -423,27 +423,27 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       // sum[i] = xor(carry[i-1], a[i], b[i])
       // NOTE: The result is stored in reverse order.
       results[width - i - 1] =
-          rewriter.create<comb::XorOp>(op.getLoc(), xorOperands, true);
+          comb::XorOp::create(rewriter, op.getLoc(), xorOperands, true);
 
       // If this is the last bit, we are done.
       if (i == width - 1)
         break;
 
       // carry[i] = (carry[i-1] & (a[i] ^ b[i])) | (a[i] & b[i])
-      Value nextCarry = rewriter.create<comb::AndOp>(
-          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
+      Value nextCarry = comb::AndOp::create(
+          rewriter, op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
       if (!carry) {
         // This is the first bit, so the carry is the next carry.
         carry = nextCarry;
         continue;
       }
 
-      auto aXnorB = rewriter.create<comb::XorOp>(
-          op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
-      auto andOp = rewriter.create<comb::AndOp>(
-          op.getLoc(), ValueRange{carry, aXnorB}, true);
-      carry = rewriter.create<comb::OrOp>(op.getLoc(),
-                                          ValueRange{andOp, nextCarry}, true);
+      auto aXnorB = comb::XorOp::create(rewriter, op.getLoc(),
+                                        ValueRange{aBits[i], bBits[i]}, true);
+      auto andOp = comb::AndOp::create(rewriter, op.getLoc(),
+                                       ValueRange{carry, aXnorB}, true);
+      carry = comb::OrOp::create(rewriter, op.getLoc(),
+                                 ValueRange{andOp, nextCarry}, true);
     }
     LLVM_DEBUG(llvm::dbgs() << "Lower comb.add to Ripple-Carry Adder of width "
                             << width << "\n");
@@ -467,9 +467,9 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
     for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
       // p_i = a_i XOR b_i
-      p.push_back(rewriter.create<comb::XorOp>(op.getLoc(), aBit, bBit));
+      p.push_back(comb::XorOp::create(rewriter, op.getLoc(), aBit, bBit));
       // g_i = a_i AND b_i
-      g.push_back(rewriter.create<comb::AndOp>(op.getLoc(), aBit, bBit));
+      g.push_back(comb::AndOp::create(rewriter, op.getLoc(), aBit, bBit));
     }
 
     LLVM_DEBUG({
@@ -503,7 +503,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     // The carry into position i is the group generate from position i-1
     for (int64_t i = 1; i < width; ++i)
       results[width - 1 - i] =
-          rewriter.create<comb::XorOp>(op.getLoc(), p[i], gPrefix[i - 1]);
+          comb::XorOp::create(rewriter, op.getLoc(), p[i], gPrefix[i - 1]);
 
     replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(rewriter, op, results);
 
@@ -530,13 +530,13 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
         int64_t j = i - stride;
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], gPrefix[j]);
+            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
         gPrefix[i] =
-            rewriter.create<comb::OrOp>(op.getLoc(), gPrefix[i], andPG);
+            comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
         pPrefix[i] =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
+            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
       }
     }
     LLVM_DEBUG({
@@ -579,13 +579,13 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], gPrefix[j]);
+            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
         gPrefix[i] =
-            rewriter.create<comb::OrOp>(op.getLoc(), gPrefix[i], andPG);
+            comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
         pPrefix[i] =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
+            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
       }
     }
 
@@ -596,12 +596,12 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefix[i] = rewriter.create<OrOp>(op.getLoc(), gPrefix[i], andPG);
+            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
+        gPrefix[i] = OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
         pPrefix[i] =
-            rewriter.create<comb::AndOp>(op.getLoc(), pPrefix[i], pPrefix[j]);
+            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
       }
     }
 
@@ -659,9 +659,9 @@ struct CombSubOpConversion : OpConversionPattern<SubOp> {
     // Since `-rhs = ~rhs + 1` holds, rewrite `sub(lhs, rhs)` to:
     // sub(lhs, rhs) => add(lhs, -rhs) => add(lhs, add(~rhs, 1))
     // => add(lhs, ~rhs, 1)
-    auto notRhs = rewriter.create<aig::AndInverterOp>(op.getLoc(), rhs,
-                                                      /*invert=*/true);
-    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(), 1);
+    auto notRhs = aig::AndInverterOp::create(rewriter, op.getLoc(), rhs,
+                                             /*invert=*/true);
+    auto one = hw::ConstantOp::create(rewriter, op.getLoc(), op.getType(), 1);
     replaceOpWithNewOpAndCopyNamehint<comb::AddOp>(
         rewriter, op, ValueRange{lhs, notRhs, one}, true);
     return success();
@@ -692,7 +692,7 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     SmallVector<Value> aBits = extractBits(rewriter, a);
     SmallVector<Value> bBits = extractBits(rewriter, b);
 
-    auto falseValue = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
+    auto falseValue = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
 
     // Generate partial products
     SmallVector<SmallVector<Value>> partialProducts;
@@ -718,7 +718,7 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     auto addends =
         comb::wallaceReduction(rewriter, loc, width, 2, partialProducts);
     // Sum the two addends using a carry-propagate adder
-    auto newAdd = rewriter.create<comb::AddOp>(loc, addends, true);
+    auto newAdd = comb::AddOp::create(rewriter, loc, addends, true);
     replaceOpAndCopyNamehint(rewriter, op, newAdd);
     return success();
   }
@@ -749,8 +749,8 @@ struct CombDivUOpConversion : DivModOpConversionBase<DivUOp> {
         Value upperBits = rewriter.createOrFold<comb::ExtractOp>(
             op.getLoc(), adaptor.getLhs(), extractAmount,
             width - extractAmount);
-        Value constZero = rewriter.create<hw::ConstantOp>(
-            op.getLoc(), APInt::getZero(extractAmount));
+        Value constZero = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                                 APInt::getZero(extractAmount));
         replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(
             rewriter, op, op.getType(), ArrayRef<Value>{constZero, upperBits});
         return success();
@@ -782,8 +782,8 @@ struct CombModUOpConversion : DivModOpConversionBase<ModUOp> {
         size_t width = op.getType().getIntOrFloatBitWidth();
         Value lowerBits = rewriter.createOrFold<comb::ExtractOp>(
             op.getLoc(), adaptor.getLhs(), 0, extractAmount);
-        Value constZero = rewriter.create<hw::ConstantOp>(
-            op.getLoc(), APInt::getZero(width - extractAmount));
+        Value constZero = hw::ConstantOp::create(
+            rewriter, op.getLoc(), APInt::getZero(width - extractAmount));
         replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(
             rewriter, op, op.getType(), ArrayRef<Value>{constZero, lowerBits});
         return success();
@@ -851,7 +851,7 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
     // a >= b  ==> ( a[n] & ~b[n]) | (a[n] == b[n] & a[n-1:0] >= b[n-1:0])
     // a >  b  ==> ( a[n] & ~b[n]) | (a[n] == b[n] & a[n-1:0] > b[n-1:0])
     Value acc =
-        rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(), includeEq);
+        hw::ConstantOp::create(rewriter, op.getLoc(), op.getType(), includeEq);
 
     for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
       auto aBitXorBBit =
@@ -941,7 +941,7 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
 
       // XOR of signs: true if signs are different
       auto signsDiffer =
-          rewriter.create<comb::XorOp>(op.getLoc(), signA, signB);
+          comb::XorOp::create(rewriter, op.getLoc(), signA, signB);
 
       // Result when signs are different
       Value diffSignResult = isLess ? signA : signB;

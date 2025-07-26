@@ -49,9 +49,9 @@ struct DatapathCompressOpAddConversion : OpConversionPattern<CompressOp> {
     auto inputs = op.getOperands();
     unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
     // Sum all the inputs - set that to result value 0
-    auto addOp = rewriter.create<comb::AddOp>(loc, inputs, true);
+    auto addOp = comb::AddOp::create(rewriter, loc, inputs, true);
     // Replace remaining results with zeros
-    auto zeroOp = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+    auto zeroOp = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
     SmallVector<Value> results(op.getNumResults() - 1, zeroOp);
     results.push_back(addOp);
     rewriter.replaceOp(op, results);
@@ -134,10 +134,10 @@ private:
            "Cannot return more results than the operator width");
 
     for (unsigned i = 0; i < op.getNumResults(); ++i) {
-      auto repl = rewriter.create<comb::ReplicateOp>(loc, bBits[i], width);
-      auto ppRow = rewriter.create<comb::AndOp>(loc, repl, a);
-      auto shiftBy = rewriter.create<hw::ConstantOp>(loc, APInt(width, i));
-      auto ppAlign = rewriter.create<comb::ShlOp>(loc, ppRow, shiftBy);
+      auto repl = comb::ReplicateOp::create(rewriter, loc, bBits[i], width);
+      auto ppRow = comb::AndOp::create(rewriter, loc, repl, a);
+      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(width, i));
+      auto ppAlign = comb::ShlOp::create(rewriter, loc, ppRow, shiftBy);
       partialProducts.push_back(ppAlign);
     }
 
@@ -149,10 +149,10 @@ private:
                                        Value a, Value b, PartialProductOp op,
                                        unsigned width) {
     Location loc = op.getLoc();
-    auto zeroFalse = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
-    auto zeroWidth = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
-    auto oneWidth = rewriter.create<hw::ConstantOp>(loc, APInt(width, 1));
-    Value twoA = rewriter.create<comb::ShlOp>(loc, a, oneWidth);
+    auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+    auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+    auto oneWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 1));
+    Value twoA = comb::ShlOp::create(rewriter, loc, a, oneWidth);
 
     SmallVector<Value> bBits = extractBits(rewriter, b);
 
@@ -176,30 +176,33 @@ private:
       // Is the encoding zero or negative (an approximation)
       Value encNeg = bip1;
       // Is the encoding one = b[i] xor b[i-1]
-      Value encOne = rewriter.create<comb::XorOp>(loc, bi, bim1, true);
+      Value encOne = comb::XorOp::create(rewriter, loc, bi, bim1, true);
       // Is the encoding two = (bip1 & ~bi & ~bim1) | (~bip1 & bi & bim1)
-      Value constOne = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
-      Value biInv = rewriter.create<comb::XorOp>(loc, bi, constOne, true);
-      Value bip1Inv = rewriter.create<comb::XorOp>(loc, bip1, constOne, true);
-      Value bim1Inv = rewriter.create<comb::XorOp>(loc, bim1, constOne, true);
+      Value constOne = hw::ConstantOp::create(rewriter, loc, APInt(1, 1));
+      Value biInv = comb::XorOp::create(rewriter, loc, bi, constOne, true);
+      Value bip1Inv = comb::XorOp::create(rewriter, loc, bip1, constOne, true);
+      Value bim1Inv = comb::XorOp::create(rewriter, loc, bim1, constOne, true);
 
-      Value andLeft = rewriter.create<comb::AndOp>(
-          loc, ValueRange{bip1Inv, bi, bim1}, true);
-      Value andRight = rewriter.create<comb::AndOp>(
-          loc, ValueRange{bip1, biInv, bim1Inv}, true);
-      Value encTwo = rewriter.create<comb::OrOp>(loc, andLeft, andRight, true);
+      Value andLeft = comb::AndOp::create(rewriter, loc,
+                                          ValueRange{bip1Inv, bi, bim1}, true);
+      Value andRight = comb::AndOp::create(
+          rewriter, loc, ValueRange{bip1, biInv, bim1Inv}, true);
+      Value encTwo = comb::OrOp::create(rewriter, loc, andLeft, andRight, true);
 
-      Value encNegRepl = rewriter.create<comb::ReplicateOp>(loc, encNeg, width);
-      Value encOneRepl = rewriter.create<comb::ReplicateOp>(loc, encOne, width);
-      Value encTwoRepl = rewriter.create<comb::ReplicateOp>(loc, encTwo, width);
+      Value encNegRepl =
+          comb::ReplicateOp::create(rewriter, loc, encNeg, width);
+      Value encOneRepl =
+          comb::ReplicateOp::create(rewriter, loc, encOne, width);
+      Value encTwoRepl =
+          comb::ReplicateOp::create(rewriter, loc, encTwo, width);
 
       // Select between 2*a or 1*a or 0*a
-      Value selTwoA = rewriter.create<comb::AndOp>(loc, encTwoRepl, twoA);
-      Value selOneA = rewriter.create<comb::AndOp>(loc, encOneRepl, a);
-      Value magA = rewriter.create<comb::OrOp>(loc, selTwoA, selOneA, true);
+      Value selTwoA = comb::AndOp::create(rewriter, loc, encTwoRepl, twoA);
+      Value selOneA = comb::AndOp::create(rewriter, loc, encOneRepl, a);
+      Value magA = comb::OrOp::create(rewriter, loc, selTwoA, selOneA, true);
 
       // Conditionally invert the row
-      Value ppRow = rewriter.create<comb::XorOp>(loc, magA, encNegRepl, true);
+      Value ppRow = comb::XorOp::create(rewriter, loc, magA, encNegRepl, true);
 
       // No sign-correction in the first row
       if (i == 0) {
@@ -211,12 +214,13 @@ private:
       // Insert a sign-correction from the previous row
       assert(i >= 2 && "Expected i to be at least 2 for sign correction");
       // {ppRow, 0, encNegPrev} << 2*(i-1)
-      Value withSignCorrection = rewriter.create<comb::ConcatOp>(
-          loc, ValueRange{ppRow, zeroFalse, encNegPrev});
+      Value withSignCorrection = comb::ConcatOp::create(
+          rewriter, loc, ValueRange{ppRow, zeroFalse, encNegPrev});
       Value ppAlignPre =
-          rewriter.create<comb::ExtractOp>(loc, withSignCorrection, 0, width);
-      Value shiftBy = rewriter.create<hw::ConstantOp>(loc, APInt(width, i - 2));
-      Value ppAlign = rewriter.create<comb::ShlOp>(loc, ppAlignPre, shiftBy);
+          comb::ExtractOp::create(rewriter, loc, withSignCorrection, 0, width);
+      Value shiftBy =
+          hw::ConstantOp::create(rewriter, loc, APInt(width, i - 2));
+      Value ppAlign = comb::ShlOp::create(rewriter, loc, ppAlignPre, shiftBy);
       partialProducts.push_back(ppAlign);
       encNegPrev = encNeg;
 

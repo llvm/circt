@@ -43,7 +43,7 @@ using BlockValues = DenseMap<Block *, std::vector<Value>>;
 
 static void insertSink(Value val, OpBuilder &rewriter) {
   rewriter.setInsertionPointAfterValue(val);
-  rewriter.create<SinkOp>(val.getLoc(), val);
+  SinkOp::create(rewriter, val.getLoc(), val);
 }
 
 /// Insert Fork Operation for every operation and function argument with more

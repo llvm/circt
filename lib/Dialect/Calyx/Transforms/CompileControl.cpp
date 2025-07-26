@@ -94,7 +94,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   // Create the new compilation group to replace this SeqOp.
   builder.setInsertionPointToEnd(wiresBody);
   auto seqGroup =
-      builder.create<GroupOp>(wires->getLoc(), builder.getStringAttr("seq"));
+      GroupOp::create(builder, wires->getLoc(), builder.getStringAttr("seq"));
 
   // Guarantees a unique SymbolName for the group.
   auto &symTable = am.getChildAnalysis<SymbolTable>(wires);
@@ -118,25 +118,25 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     auto guard = groupOp.getDoneOp().getGuard();
     Value source = groupOp.getDoneOp().getSrc();
     auto doneOpValue = !guard ? source
-                              : builder.create<comb::AndOp>(
-                                    wires->getLoc(), guard, source, false);
+                              : comb::AndOp::create(builder, wires->getLoc(),
+                                                    guard, source, false);
 
     // Build the Guard for the `go` signal of the current group being walked.
     // The group should begin when:
     // (1) the current step in the fsm is reached, and
     // (2) the done signal of this group is not high.
     auto eqCmp =
-        builder.create<comb::ICmpOp>(wires->getLoc(), comb::ICmpPredicate::eq,
-                                     fsmOut, fsmCurrentState, false);
+        comb::ICmpOp::create(builder, wires->getLoc(), comb::ICmpPredicate::eq,
+                             fsmOut, fsmCurrentState, false);
     auto notDone = comb::createOrFoldNot(wires->getLoc(), doneOpValue, builder);
     auto groupGoGuard =
-        builder.create<comb::AndOp>(wires->getLoc(), eqCmp, notDone, false);
+        comb::AndOp::create(builder, wires->getLoc(), eqCmp, notDone, false);
 
     // Guard for the `in` and `write_en` signal of the fsm register. These are
     // driven when the group has completed.
     builder.setInsertionPoint(seqGroup);
-    auto groupDoneGuard =
-        builder.create<comb::AndOp>(wires->getLoc(), eqCmp, doneOpValue, false);
+    auto groupDoneGuard = comb::AndOp::create(builder, wires->getLoc(), eqCmp,
+                                              doneOpValue, false);
 
     // Directly update the GroupGoOp of the current group being walked.
     auto goOp = groupOp.getGoOp();
@@ -147,10 +147,10 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     fsmNextState = createConstant(wires->getLoc(), builder, component,
                                   fsmBitWidth, fsmIndex + 1);
     builder.setInsertionPointToEnd(seqGroup.getBodyBlock());
-    builder.create<AssignOp>(wires->getLoc(), fsmIn, fsmNextState,
-                             groupDoneGuard);
-    builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
-                             groupDoneGuard);
+    AssignOp::create(builder, wires->getLoc(), fsmIn, fsmNextState,
+                     groupDoneGuard);
+    AssignOp::create(builder, wires->getLoc(), fsmWriteEn, oneConstant,
+                     groupDoneGuard);
     // Increment the fsm index for the next group.
     ++fsmIndex;
   });
@@ -158,27 +158,27 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   // Build the final guard for the new Seq group's GroupDoneOp. This is
   // defined by the fsm's final state.
   builder.setInsertionPoint(seqGroup);
-  auto isFinalState = builder.create<comb::ICmpOp>(
-      wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmNextState, false);
+  auto isFinalState =
+      comb::ICmpOp::create(builder, wires->getLoc(), comb::ICmpPredicate::eq,
+                           fsmOut, fsmNextState, false);
 
   // Insert the respective GroupDoneOp.
   builder.setInsertionPointToEnd(seqGroup.getBodyBlock());
-  builder.create<GroupDoneOp>(seqGroup->getLoc(), oneConstant, isFinalState);
+  GroupDoneOp::create(builder, seqGroup->getLoc(), oneConstant, isFinalState);
 
   // Add continuous wires to reset the `in` and `write_en` ports of the fsm
   // when the SeqGroup is finished executing.
   builder.setInsertionPointToEnd(wiresBody);
   auto zeroConstant =
       createConstant(wires->getLoc(), builder, component, fsmBitWidth, 0);
-  builder.create<AssignOp>(wires->getLoc(), fsmIn, zeroConstant, isFinalState);
-  builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
-                           isFinalState);
+  AssignOp::create(builder, wires->getLoc(), fsmIn, zeroConstant, isFinalState);
+  AssignOp::create(builder, wires->getLoc(), fsmWriteEn, oneConstant,
+                   isFinalState);
 
   // Replace the SeqOp with an EnableOp.
   builder.setInsertionPoint(seq);
-  builder.create<EnableOp>(
-      seq->getLoc(), seqGroup.getSymName(),
-      ArrayAttr::get(builder.getContext(), compiledGroups));
+  EnableOp::create(builder, seq->getLoc(), seqGroup.getSymName(),
+                   ArrayAttr::get(builder.getContext(), compiledGroups));
 
   seq->erase();
 }

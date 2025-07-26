@@ -68,8 +68,8 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     // Flatten the operands.
     for (auto operand : adaptor.getOperands()) {
       if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            op.getLoc(), getInnerTypes(structType), operand);
+        auto explodedStruct = hw::StructExplodeOp::create(
+            rewriter, op.getLoc(), getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
       } else {
@@ -91,8 +91,8 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     // Flatten the operands.
     for (auto operand : flattenValues(adaptor.getOperands())) {
       if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            op.getLoc(), getInnerTypes(structType), operand);
+        auto explodedStruct = hw::StructExplodeOp::create(
+            rewriter, op.getLoc(), getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
       } else {
@@ -129,8 +129,8 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     llvm::SmallVector<Value> convOperands;
     for (auto operand : flattenValues(adaptor.getOperands())) {
       if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            loc, getInnerTypes(structType), operand);
+        auto explodedStruct = hw::StructExplodeOp::create(
+            rewriter, loc, getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
       } else {
@@ -150,8 +150,8 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
 
     // Create the new instance with the flattened module, attributes will be
     // adjusted later.
-    auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, newResultTypes, op.getInstanceNameAttr(),
+    auto newInstance = hw::InstanceOp::create(
+        rewriter, loc, newResultTypes, op.getInstanceNameAttr(),
         FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
         op.getInnerSymAttr(), op.getDoNotPrintAttr());
@@ -164,8 +164,8 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
       Type oldResultType = op.getResultTypes()[oldResultCntr];
       if (auto structType = getStructType(oldResultType)) {
         size_t nElements = structType.getElements().size();
-        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-            loc, structType,
+        auto implodedStruct = hw::StructCreateOp::create(
+            rewriter, loc, structType,
             newInstance.getResults().slice(resIndex, nElements));
         convResults.push_back(implodedStruct.getResult());
         resIndex += nElements - 1;
@@ -214,18 +214,18 @@ public:
       if (inputs.size() != 1 && !isStructType(inputs[0].getType()))
         return ValueRange();
 
-      auto explodeOp = builder.create<hw::StructExplodeOp>(loc, inputs[0]);
+      auto explodeOp = hw::StructExplodeOp::create(builder, loc, inputs[0]);
       return ValueRange(explodeOp.getResults());
     });
     addTargetMaterialization([](OpBuilder &builder, hw::StructType type,
                                 ValueRange inputs, Location loc) {
-      auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
+      auto result = hw::StructCreateOp::create(builder, loc, type, inputs);
       return result.getResult();
     });
 
     addTargetMaterialization([](OpBuilder &builder, hw::TypeAliasType type,
                                 ValueRange inputs, Location loc) {
-      auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
+      auto result = hw::StructCreateOp::create(builder, loc, type, inputs);
       return result.getResult();
     });
 
@@ -237,7 +237,7 @@ public:
     // which persist beyond the conversion.
     addSourceMaterialization([](OpBuilder &builder, hw::StructType type,
                                 ValueRange inputs, Location loc) {
-      auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
+      auto result = hw::StructCreateOp::create(builder, loc, type, inputs);
       return result.getResult();
     });
   }

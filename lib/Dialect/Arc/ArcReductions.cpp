@@ -29,9 +29,9 @@ struct StateElimination : public OpReduction<StateOp> {
   LogicalResult rewrite(StateOp stateOp) override {
     OpBuilder builder(stateOp);
     ValueRange results =
-        builder
-            .create<arc::CallOp>(stateOp.getLoc(), stateOp->getResultTypes(),
-                                 stateOp.getArcAttr(), stateOp.getInputs())
+        arc::CallOp::create(builder, stateOp.getLoc(),
+                            stateOp->getResultTypes(), stateOp.getArcAttr(),
+                            stateOp.getInputs())
             ->getResults();
     stateOp.replaceAllUsesWith(results);
     stateOp.erase();

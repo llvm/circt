@@ -85,7 +85,7 @@ FSMStateNode *FSMGraph::createState(OpBuilder &builder, Location loc,
                                     StringRef name) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(&getMachine().getBody().front());
-  auto stateOp = builder.create<StateOp>(loc, name);
+  auto stateOp = StateOp::create(builder, loc, name);
   return getOrAddState(stateOp);
 }
 
@@ -96,7 +96,7 @@ FSMTransitionEdge *FSMGraph::createTransition(OpBuilder &builder, Location loc,
   OpBuilder::InsertionGuard g(builder);
   // Set the insertion point to the end of the transitions.
   builder.setInsertionPointToEnd(&from.getTransitions().getBlocks().front());
-  auto transition = builder.create<TransitionOp>(loc, to);
+  auto transition = TransitionOp::create(builder, loc, to);
   return currentStateNode->addTransitionEdge(nextStateNode, transition);
 }
 

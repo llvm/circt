@@ -131,8 +131,8 @@ FlatSymbolRefAttr FirMemLowering::getOrCreateSchema() {
           "readUnderWrite", "writeUnderWrite",
           "writeClockIDs",  "initFilename",
           "initIsBinary",   "initIsInline"};
-      schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
-          circuit.getLoc(), "FIRRTLMem", "FIRRTL_Memory",
+      schemaOp = hw::HWGeneratorSchemaOp::create(
+          builder, circuit.getLoc(), "FIRRTLMem", "FIRRTL_Memory",
           builder.getStrArrayAttr(schemaFields));
     }
   }
@@ -292,8 +292,9 @@ FirMemLowering::createMemoryModule(FirMemConfig &mem,
   }
 
   // Create the module.
-  auto genOp = builder.create<hw::HWModuleGeneratedOp>(
-      loc, schemaSymRef, name, ports, StringRef{}, ArrayAttr{}, genAttrs);
+  auto genOp =
+      hw::HWModuleGeneratedOp::create(builder, loc, schemaSymRef, name, ports,
+                                      StringRef{}, ArrayAttr{}, genAttrs);
   if (mem.outputFile)
     genOp->setAttr("output_file", mem.outputFile);
 
@@ -313,8 +314,8 @@ void FirMemLowering::lowerMemoriesInModule(
     auto it = constOneOps.try_emplace(width, Value{});
     if (it.second) {
       auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
-      it.first->second = builder.create<hw::ConstantOp>(
-          module.getLoc(), builder.getIntegerType(width), 1);
+      it.first->second = hw::ConstantOp::create(
+          builder, module.getLoc(), builder.getIntegerType(width), 1);
     }
     return it.first->second;
   };
@@ -374,9 +375,9 @@ void FirMemLowering::lowerMemoriesInModule(
     if (auto name = memOp.getName(); name && !name->empty())
       memName = *name;
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
-    auto instOp = builder.create<hw::InstanceOp>(
-        genOp, builder.getStringAttr(memName + "_ext"), inputs, ArrayAttr{},
-        memOp.getInnerSymAttr());
+    auto instOp = hw::InstanceOp::create(
+        builder, genOp, builder.getStringAttr(memName + "_ext"), inputs,
+        ArrayAttr{}, memOp.getInnerSymAttr());
     for (auto [oldOutput, newOutput] : llvm::zip(outputs, instOp.getResults()))
       oldOutput.replaceAllUsesWith(newOutput);
 

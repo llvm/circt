@@ -61,9 +61,9 @@ struct Condition {
   /// condition is a constant.
   Value materialize(OpBuilder &builder, Location loc) const {
     if (isTrue())
-      return builder.create<hw::ConstantOp>(loc, APInt(1, 1));
+      return hw::ConstantOp::create(builder, loc, APInt(1, 1));
     if (isFalse())
-      return builder.create<hw::ConstantOp>(loc, APInt(1, 0));
+      return hw::ConstantOp::create(builder, loc, APInt(1, 0));
     return pair.getPointer();
   }
 
@@ -223,11 +223,11 @@ void CFRemover::run() {
                                            yieldOps[0].getOperandTypes(), locs);
     sortedBlocks.push_back(yieldBlock);
     yieldOp =
-        builder.create<YieldOp>(region.getLoc(), yieldBlock->getArguments());
+        YieldOp::create(builder, region.getLoc(), yieldBlock->getArguments());
     for (auto yieldOp : yieldOps) {
       builder.setInsertionPoint(yieldOp);
-      builder.create<cf::BranchOp>(yieldOp.getLoc(), yieldBlock,
-                                   yieldOp.getOperands());
+      cf::BranchOp::create(builder, yieldOp.getLoc(), yieldBlock,
+                           yieldOp.getOperands());
       yieldOp.erase();
     }
   }

@@ -365,7 +365,7 @@ private:
 
   void materializeTriggerEnables(OpBuilder &builder, Location loc) {
     Value trueVal =
-        builder.create<hw::ConstantOp>(loc, builder.getBoolAttr(true));
+        hw::ConstantOp::create(builder, loc, builder.getBoolAttr(true));
     for (uint64_t i = 0, e = 1ULL << primitives.size(); i < e; ++i) {
       if (!result[i])
         continue;
@@ -391,7 +391,7 @@ private:
             continue;
           }
           conjuncts.push_back(
-              builder.create<comb::XorOp>(loc, primitives[k], trueVal));
+              comb::XorOp::create(builder, loc, primitives[k], trueVal));
         }
         if (!conjuncts.empty())
           enableMap[key] =
@@ -477,7 +477,7 @@ private:
       for (auto *iter2 = iter1 + 1; iter2 != triggers.end(); ++iter2) {
         if (iter1->clocks == iter2->clocks && iter1->kinds == iter2->kinds) {
           iter1->enable =
-              builder.create<comb::OrOp>(loc, iter1->enable, iter2->enable);
+              comb::OrOp::create(builder, loc, iter1->enable, iter2->enable);
           triggers.erase(iter2--);
         }
       }
@@ -669,14 +669,14 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
         }))
       return WalkResult::interrupt();
 
-    Value clock = builder.create<seq::ToClockOp>(loc, triggers[0].clocks[0]);
+    Value clock = seq::ToClockOp::create(builder, loc, triggers[0].clocks[0]);
     Value reset, resetValue;
 
     if (triggers[0].kinds[0] == Trigger::Kind::NegEdge)
-      clock = builder.create<seq::ClockInverterOp>(loc, clock);
+      clock = seq::ClockInverterOp::create(builder, loc, clock);
 
     if (triggers[0].enable)
-      clock = builder.create<seq::ClockGateOp>(loc, clock, triggers[0].enable);
+      clock = seq::ClockGateOp::create(builder, loc, clock, triggers[0].enable);
 
     if (triggers.size() == 2) {
       // TODO: add support
@@ -702,20 +702,20 @@ void DesequentializationPass::runOnProcess(llhd::ProcessOp procOp) const {
 
       if (triggers[1].kinds[0] == Trigger::Kind::NegEdge) {
         Value trueVal =
-            builder.create<hw::ConstantOp>(loc, builder.getBoolAttr(true));
-        reset = builder.create<comb::XorOp>(loc, reset, trueVal);
+            hw::ConstantOp::create(builder, loc, builder.getBoolAttr(true));
+        reset = comb::XorOp::create(builder, loc, reset, trueVal);
       }
     }
 
     // FIXME: this adds async resets as sync resets and might also add the reset
     // as clock and clock as reset.
-    Value regOut = builder.create<seq::CompRegOp>(loc, op.getValue(), clock,
-                                                  reset, resetValue);
+    Value regOut = seq::CompRegOp::create(builder, loc, op.getValue(), clock,
+                                          reset, resetValue);
 
     op.getEnableMutable().clear();
     op.getValueMutable().assign(regOut);
     Value epsilonTime =
-        builder.create<llhd::ConstantTimeOp>(loc, 0, "ns", 0, 1);
+        llhd::ConstantTimeOp::create(builder, loc, 0, "ns", 0, 1);
     op.getTimeMutable().assign(epsilonTime);
 
     LLVM_DEBUG(

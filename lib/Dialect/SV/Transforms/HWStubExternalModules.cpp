@@ -45,15 +45,15 @@ void HWStubExternalModulesPass::runOnOperation() {
     if (auto module = dyn_cast<hw::HWModuleExternOp>(op)) {
       hw::ModulePortInfo ports(module.getPortList());
       auto nameAttr = module.getNameAttr();
-      auto newModule = builder.create<hw::HWModuleOp>(
-          module.getLoc(), nameAttr, ports, module.getParameters());
+      auto newModule = hw::HWModuleOp::create(
+          builder, module.getLoc(), nameAttr, ports, module.getParameters());
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
       // All output ports need values, use x
       for (auto &p : ports.getOutputs()) {
         outputs.push_back(
-            innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
+            sv::ConstantXOp::create(innerBuilder, outputOp->getLoc(), p.type));
       }
       outputOp->setOperands(outputs);
 

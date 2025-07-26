@@ -626,8 +626,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
           op, seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
     } else {
-      auto constant = rewriter.create<hw::ConstantOp>(
-          op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+      auto constant = hw::ConstantOp::create(
+          rewriter, op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
       rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
     }
     return success();
@@ -704,8 +704,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
                 matchPattern(arrayGet.getIndex(),
                              m_ConstantInt(&elementIndex)) &&
                 elementIndex == index) {
-              nextOperands.push_back(rewriter.create<hw::ConstantOp>(
-                  op.getLoc(),
+              nextOperands.push_back(hw::ConstantOp::create(
+                  rewriter, op.getLoc(),
                   APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
               changed = true;
               continue;
@@ -714,8 +714,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
         }
         // If one of the operands is self loop, update the next value.
         if (changed) {
-          auto newNextVal = rewriter.create<hw::ArrayCreateOp>(
-              arrayCreate.getLoc(), nextOperands);
+          auto newNextVal = hw::ArrayCreateOp::create(
+              rewriter, arrayCreate.getLoc(), nextOperands);
           if (arrayCreate->hasOneUse())
             // If the original next value has a single use, we can replace the
             // value directly.
@@ -889,11 +889,12 @@ LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
     // Replace all read ports with a constant 0.
     for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
       auto readOp = cast<FirMemReadOp>(user);
-      Value zero = rewriter.create<hw::ConstantOp>(
-          readOp.getLoc(), APInt::getZero(hw::getBitWidth(readOp.getType())));
+      Value zero = hw::ConstantOp::create(
+          rewriter, readOp.getLoc(),
+          APInt::getZero(hw::getBitWidth(readOp.getType())));
       if (readOp.getType() != zero.getType())
-        zero = rewriter.create<hw::BitcastOp>(readOp.getLoc(), readOp.getType(),
-                                              zero);
+        zero = hw::BitcastOp::create(rewriter, readOp.getLoc(),
+                                     readOp.getType(), zero);
       rewriter.replaceOp(readOp, zero);
     }
     rewriter.eraseOp(op);
@@ -1157,9 +1158,9 @@ void InitialOp::build(OpBuilder &builder, OperationState &result,
 TypedValue<seq::ImmutableType>
 circt::seq::createConstantInitialValue(OpBuilder builder, Location loc,
                                        mlir::IntegerAttr attr) {
-  auto initial = builder.create<seq::InitialOp>(loc, attr.getType(), [&]() {
-    auto constant = builder.create<hw::ConstantOp>(loc, attr);
-    builder.create<seq::YieldOp>(loc, ArrayRef<Value>{constant});
+  auto initial = seq::InitialOp::create(builder, loc, attr.getType(), [&]() {
+    auto constant = hw::ConstantOp::create(builder, loc, attr);
+    seq::YieldOp::create(builder, loc, ArrayRef<Value>{constant});
   });
   return cast<TypedValue<seq::ImmutableType>>(initial->getResult(0));
 }
@@ -1168,10 +1169,10 @@ mlir::TypedValue<seq::ImmutableType>
 circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
   assert(op->getNumResults() == 1 &&
          op->hasTrait<mlir::OpTrait::ConstantLike>());
-  auto initial =
-      builder.create<seq::InitialOp>(op->getLoc(), op->getResultTypes(), [&]() {
+  auto initial = seq::InitialOp::create(
+      builder, op->getLoc(), op->getResultTypes(), [&]() {
         auto clonedOp = builder.clone(*op);
-        builder.create<seq::YieldOp>(op->getLoc(), clonedOp->getResults());
+        seq::YieldOp::create(builder, op->getLoc(), clonedOp->getResults());
       });
   return cast<mlir::TypedValue<seq::ImmutableType>>(initial.getResult(0));
 }
@@ -1254,7 +1255,7 @@ FailureOr<seq::InitialOp> circt::seq::mergeInitialOps(Block *block) {
 
   // Create a new initial op which accumulates the results of the merged initial
   // ops.
-  auto newInitial = builder.create<seq::InitialOp>(initialOp.getLoc(), types);
+  auto newInitial = seq::InitialOp::create(builder, initialOp.getLoc(), types);
   newInitial.getInputsMutable().append(initialOp.getInputs());
 
   for (auto [resultAndOperand, newResult] :

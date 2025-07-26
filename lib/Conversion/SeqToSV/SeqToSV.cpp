@@ -102,7 +102,7 @@ LogicalResult
 ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
   OpBuilder builder = OpBuilder::atBlockBegin(module.getBodyBlock());
   if (!svInitialOp)
-    svInitialOp = builder.create<sv::InitialOp>(initialOp->getLoc());
+    svInitialOp = sv::InitialOp::create(builder, initialOp->getLoc());
   // Initial ops are merged to single one and must not have operands.
   assert(initialOp.getNumOperands() == 0 &&
          "initial op should have no operands");
@@ -115,9 +115,8 @@ ModuleLoweringState::ImmutableValueLowering::lower(seq::InitialOp initialOp) {
   for (auto [result, operand] :
        llvm::zip(initialOp.getResults(), yieldOp->getOperands())) {
     auto placeholder =
-        builder
-            .create<mlir::UnrealizedConversionCastOp>(
-                loc, ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
+        mlir::UnrealizedConversionCastOp::create(
+            builder, loc, ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
             ->getResult(0);
     result.replaceAllUsesWith(placeholder);
     mapping.insert(
@@ -154,20 +153,20 @@ public:
 
     auto regTy =
         ConversionPattern::getTypeConverter()->convertType(reg.getType());
-    auto svReg = rewriter.create<sv::RegOp>(loc, regTy, reg.getNameAttr(),
-                                            reg.getInnerSymAttr());
+    auto svReg = sv::RegOp::create(rewriter, loc, regTy, reg.getNameAttr(),
+                                   reg.getInnerSymAttr());
 
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 
-    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
+    auto regVal = sv::ReadInOutOp::create(rewriter, loc, svReg);
 
     auto assignValue = [&] {
       createAssign(rewriter, reg.getLoc(), svReg, reg);
     };
     auto assignReset = [&] {
-      rewriter.create<sv::PAssignOp>(loc, svReg, adaptor.getResetValue());
+      sv::PAssignOp::create(rewriter, loc, svReg, adaptor.getResetValue());
     };
 
     // Registers written in an `always_ff` process may not have any assignments
@@ -177,24 +176,24 @@ public:
 
     if (adaptor.getReset() && adaptor.getResetValue()) {
       if (mayLowerToAlwaysFF) {
-        rewriter.create<sv::AlwaysFFOp>(
-            loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
-            sv::ResetType::SyncReset, sv::EventControl::AtPosEdge,
-            adaptor.getReset(), assignValue, assignReset);
+        sv::AlwaysFFOp::create(rewriter, loc, sv::EventControl::AtPosEdge,
+                               adaptor.getClk(), sv::ResetType::SyncReset,
+                               sv::EventControl::AtPosEdge, adaptor.getReset(),
+                               assignValue, assignReset);
       } else {
-        rewriter.create<sv::AlwaysOp>(
-            loc, sv::EventControl::AtPosEdge, adaptor.getClk(), [&] {
-              rewriter.create<sv::IfOp>(loc, adaptor.getReset(), assignReset,
-                                        assignValue);
+        sv::AlwaysOp::create(
+            rewriter, loc, sv::EventControl::AtPosEdge, adaptor.getClk(), [&] {
+              sv::IfOp::create(rewriter, loc, adaptor.getReset(), assignReset,
+                               assignValue);
             });
       }
     } else {
       if (mayLowerToAlwaysFF) {
-        rewriter.create<sv::AlwaysFFOp>(loc, sv::EventControl::AtPosEdge,
-                                        adaptor.getClk(), assignValue);
+        sv::AlwaysFFOp::create(rewriter, loc, sv::EventControl::AtPosEdge,
+                               adaptor.getClk(), assignValue);
       } else {
-        rewriter.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge,
-                                      adaptor.getClk(), assignValue);
+        sv::AlwaysOp::create(rewriter, loc, sv::EventControl::AtPosEdge,
+                             adaptor.getClk(), assignValue);
       }
     }
 
@@ -216,7 +215,7 @@ public:
         OpBuilder::InsertionGuard guard(rewriter);
         auto in = initial.getSVInitial();
         rewriter.setInsertionPointToEnd(in.getBodyBlock());
-        rewriter.create<sv::BPAssignOp>(reg->getLoc(), svReg, initialValue);
+        sv::BPAssignOp::create(rewriter, reg->getLoc(), svReg, initialValue);
       }
     }
 
@@ -238,15 +237,15 @@ template <>
 void CompRegLower<CompRegOp>::createAssign(ConversionPatternRewriter &rewriter,
                                            Location loc, sv::RegOp svReg,
                                            OpAdaptor reg) const {
-  rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
+  sv::PAssignOp::create(rewriter, loc, svReg, reg.getInput());
 }
 /// Create the assign inside of an if block.
 template <>
 void CompRegLower<CompRegClockEnabledOp>::createAssign(
     ConversionPatternRewriter &rewriter, Location loc, sv::RegOp svReg,
     OpAdaptor reg) const {
-  rewriter.create<sv::IfOp>(loc, reg.getClockEnable(), [&]() {
-    rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
+  sv::IfOp::create(rewriter, loc, reg.getClockEnable(), [&]() {
+    sv::PAssignOp::create(rewriter, loc, svReg, reg.getInput());
   });
 }
 
@@ -268,9 +267,9 @@ public:
 
     auto regTy = ConversionPattern::getTypeConverter()->convertType(
         fromImmutableOp.getType());
-    auto svReg = rewriter.create<sv::RegOp>(loc, regTy);
+    auto svReg = sv::RegOp::create(rewriter, loc, regTy);
 
-    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
+    auto regVal = sv::ReadInOutOp::create(rewriter, loc, svReg);
 
     // Lower initial values.
     auto module = fromImmutableOp->template getParentOfType<hw::HWModuleOp>();
@@ -283,8 +282,8 @@ public:
     OpBuilder::InsertionGuard guard(rewriter);
     auto in = initial.getSVInitial();
     rewriter.setInsertionPointToEnd(in.getBodyBlock());
-    rewriter.create<sv::BPAssignOp>(fromImmutableOp->getLoc(), svReg,
-                                    initialValue);
+    sv::BPAssignOp::create(rewriter, fromImmutableOp->getLoc(), svReg,
+                           initialValue);
 
     rewriter.replaceOp(fromImmutableOp, regVal);
     return success();
@@ -308,25 +307,26 @@ public:
     // enable in
     Value enable = adaptor.getEnable();
     if (auto te = adaptor.getTestEnable())
-      enable = rewriter.create<comb::OrOp>(loc, enable, te);
+      enable = comb::OrOp::create(rewriter, loc, enable, te);
 
     // Enable latch.
-    Value enableLatch = rewriter.create<sv::RegOp>(
-        loc, rewriter.getI1Type(), rewriter.getStringAttr("cg_en_latch"));
+    Value enableLatch =
+        sv::RegOp::create(rewriter, loc, rewriter.getI1Type(),
+                          rewriter.getStringAttr("cg_en_latch"));
 
     // Latch the enable signal using an always @* block.
-    rewriter.create<sv::AlwaysOp>(
-        loc, llvm::SmallVector<sv::EventControl>{}, llvm::SmallVector<Value>{},
-        [&]() {
-          rewriter.create<sv::IfOp>(
-              loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
-                rewriter.create<sv::PAssignOp>(loc, enableLatch, enable);
+    sv::AlwaysOp::create(
+        rewriter, loc, llvm::SmallVector<sv::EventControl>{},
+        llvm::SmallVector<Value>{}, [&]() {
+          sv::IfOp::create(
+              rewriter, loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
+                sv::PAssignOp::create(rewriter, loc, enableLatch, enable);
               });
         });
 
     // Create the gated clock signal.
     rewriter.replaceOpWithNewOp<comb::AndOp>(
-        clockGate, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
+        clockGate, clk, sv::ReadInOutOp::create(rewriter, loc, enableLatch));
     return success();
   }
 };
@@ -344,7 +344,7 @@ public:
     Value clk = adaptor.getInput();
 
     StringAttr name = op->getAttrOfType<StringAttr>("sv.namehint");
-    Value one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+    Value one = hw::ConstantOp::create(rewriter, loc, APInt(1, 1));
     auto newOp = rewriter.replaceOpWithNewOp<comb::XorOp>(op, clk, one);
     if (name)
       rewriter.modifyOpInPlace(newOp,
@@ -408,8 +408,8 @@ struct SeqToSVTypeConverter : public TypeConverter {
                                  mlir::Location loc) -> mlir::Value {
       if (inputs.size() != 1)
         return Value();
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+      return mlir::UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                      inputs[0])
           ->getResult(0);
     });
 
@@ -418,8 +418,8 @@ struct SeqToSVTypeConverter : public TypeConverter {
                                  mlir::Location loc) -> mlir::Value {
       if (inputs.size() != 1)
         return Value();
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+      return mlir::UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                      inputs[0])
           ->getResult(0);
     });
   }
@@ -498,33 +498,33 @@ public:
 
     Value one;
     if (clockDiv.getPow2()) {
-      one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+      one = hw::ConstantOp::create(rewriter, loc, APInt(1, 1));
     }
 
     Value output = clockDiv.getInput();
 
     SmallVector<Value> regs;
     for (unsigned i = 0; i < clockDiv.getPow2(); ++i) {
-      Value reg = rewriter.create<sv::RegOp>(
-          loc, rewriter.getI1Type(),
+      Value reg = sv::RegOp::create(
+          rewriter, loc, rewriter.getI1Type(),
           rewriter.getStringAttr("clock_out_" + std::to_string(i)));
       regs.push_back(reg);
 
-      rewriter.create<sv::AlwaysOp>(
-          loc, sv::EventControl::AtPosEdge, output, [&] {
-            Value outputVal = rewriter.create<sv::ReadInOutOp>(loc, reg);
-            Value inverted = rewriter.create<comb::XorOp>(loc, outputVal, one);
-            rewriter.create<sv::BPAssignOp>(loc, reg, inverted);
+      sv::AlwaysOp::create(
+          rewriter, loc, sv::EventControl::AtPosEdge, output, [&] {
+            Value outputVal = sv::ReadInOutOp::create(rewriter, loc, reg);
+            Value inverted = comb::XorOp::create(rewriter, loc, outputVal, one);
+            sv::BPAssignOp::create(rewriter, loc, reg, inverted);
           });
 
-      output = rewriter.create<sv::ReadInOutOp>(loc, reg);
+      output = sv::ReadInOutOp::create(rewriter, loc, reg);
     }
 
     if (!regs.empty()) {
-      Value zero = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
-      rewriter.create<sv::InitialOp>(loc, [&] {
+      Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+      sv::InitialOp::create(rewriter, loc, [&] {
         for (Value reg : regs) {
-          rewriter.create<sv::BPAssignOp>(loc, reg, zero);
+          sv::BPAssignOp::create(rewriter, loc, reg, zero);
         }
       });
     }
@@ -719,20 +719,20 @@ void SeqToSVPass::runOnOperation() {
   auto loc = UnknownLoc::get(context);
   auto b = ImplicitLocOpBuilder::atBlockBegin(loc, circuit.getBody());
   if (needsRegRandomization || needsMemRandomization) {
-    b.create<sv::MacroDeclOp>("ENABLE_INITIAL_REG_");
-    b.create<sv::MacroDeclOp>("ENABLE_INITIAL_MEM_");
+    sv::MacroDeclOp::create(b, "ENABLE_INITIAL_REG_");
+    sv::MacroDeclOp::create(b, "ENABLE_INITIAL_MEM_");
     if (needsRegRandomization) {
-      b.create<sv::MacroDeclOp>("FIRRTL_BEFORE_INITIAL");
-      b.create<sv::MacroDeclOp>("FIRRTL_AFTER_INITIAL");
+      sv::MacroDeclOp::create(b, "FIRRTL_BEFORE_INITIAL");
+      sv::MacroDeclOp::create(b, "FIRRTL_AFTER_INITIAL");
     }
     if (needsMemRandomization)
-      b.create<sv::MacroDeclOp>("RANDOMIZE_MEM_INIT");
-    b.create<sv::MacroDeclOp>("RANDOMIZE_REG_INIT");
-    b.create<sv::MacroDeclOp>("RANDOMIZE");
-    b.create<sv::MacroDeclOp>("RANDOMIZE_DELAY");
-    b.create<sv::MacroDeclOp>("RANDOM");
-    b.create<sv::MacroDeclOp>("INIT_RANDOM");
-    b.create<sv::MacroDeclOp>("INIT_RANDOM_PROLOG_");
+      sv::MacroDeclOp::create(b, "RANDOMIZE_MEM_INIT");
+    sv::MacroDeclOp::create(b, "RANDOMIZE_REG_INIT");
+    sv::MacroDeclOp::create(b, "RANDOMIZE");
+    sv::MacroDeclOp::create(b, "RANDOMIZE_DELAY");
+    sv::MacroDeclOp::create(b, "RANDOM");
+    sv::MacroDeclOp::create(b, "INIT_RANDOM");
+    sv::MacroDeclOp::create(b, "INIT_RANDOM_PROLOG_");
   }
 
   bool hasRegRandomization = needsRegRandomization && !disableRegRandomization;
@@ -755,9 +755,9 @@ void SeqToSVPass::runOnOperation() {
     for (auto sym : circuit.getOps<sv::MacroDeclOp>())
       symbols.insert(sym.getName());
     if (!symbols.count("SYNTHESIS"))
-      b.create<sv::MacroDeclOp>("SYNTHESIS");
+      sv::MacroDeclOp::create(b, "SYNTHESIS");
     if (!symbols.count("VERILATOR"))
-      b.create<sv::MacroDeclOp>("VERILATOR");
+      sv::MacroDeclOp::create(b, "VERILATOR");
   }
 
   // TODO: We could have an operation for macros and uses of them, and
@@ -767,66 +767,65 @@ void SeqToSVPass::runOnOperation() {
                                StringRef defineFalse = StringRef()) {
     if (!defineFalse.data()) {
       assert(defineTrue.data() && "didn't define anything");
-      b.create<sv::IfDefOp>(
-          guard, [&]() { b.create<sv::MacroDefOp>(defName, defineTrue); });
+      sv::IfDefOp::create(
+          b, guard, [&]() { sv::MacroDefOp::create(b, defName, defineTrue); });
     } else {
-      b.create<sv::IfDefOp>(
-          guard,
+      sv::IfDefOp::create(
+          b, guard,
           [&]() {
             if (defineTrue.data())
-              b.create<sv::MacroDefOp>(defName, defineTrue);
+              sv::MacroDefOp::create(b, defName, defineTrue);
           },
-          [&]() { b.create<sv::MacroDefOp>(defName, defineFalse); });
+          [&]() { sv::MacroDefOp::create(b, defName, defineFalse); });
     }
   };
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    b.create<sv::IfDefOp>(
-        guard, []() {}, body);
+    sv::IfDefOp::create(b, guard, []() {}, body);
   };
 
-  b.create<emit::FragmentOp>(randomInitFragmentName.getAttr(), [&] {
-    b.create<sv::VerbatimOp>(
-        "// Standard header to adapt well known macros for "
-        "register randomization.");
+  emit::FragmentOp::create(b, randomInitFragmentName.getAttr(), [&] {
+    sv::VerbatimOp::create(b,
+                           "// Standard header to adapt well known macros for "
+                           "register randomization.");
 
-    b.create<sv::VerbatimOp>(
-        "\n// RANDOM may be set to an expression that produces a 32-bit "
-        "random unsigned value.");
+    sv::VerbatimOp::create(
+        b, "\n// RANDOM may be set to an expression that produces a 32-bit "
+           "random unsigned value.");
     emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
 
-    b.create<sv::VerbatimOp>(
-        "\n// Users can define INIT_RANDOM as general code that gets "
-        "injected "
-        "into the\n// initializer block for modules with registers.");
+    sv::VerbatimOp::create(
+        b, "\n// Users can define INIT_RANDOM as general code that gets "
+           "injected "
+           "into the\n// initializer block for modules with registers.");
     emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
 
-    b.create<sv::VerbatimOp>(
-        "\n// If using random initialization, you can also define "
-        "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
-        "is used.");
+    sv::VerbatimOp::create(
+        b, "\n// If using random initialization, you can also define "
+           "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
+           "is used.");
     emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(),
                       "0.002");
 
-    b.create<sv::VerbatimOp>(
-        "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+    sv::VerbatimOp::create(
+        b, "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
     emitGuard("INIT_RANDOM_PROLOG_", [&]() {
-      b.create<sv::IfDefOp>(
-          "RANDOMIZE",
+      sv::IfDefOp::create(
+          b, "RANDOMIZE",
           [&]() {
             emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_",
                               "`INIT_RANDOM",
                               "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
           },
-          [&]() { b.create<sv::MacroDefOp>("INIT_RANDOM_PROLOG_", ""); });
+          [&]() { sv::MacroDefOp::create(b, "INIT_RANDOM_PROLOG_", ""); });
     });
   });
 
   if (hasMemRandomization) {
-    b.create<emit::FragmentOp>(randomInitMemFragmentName.getAttr(), [&] {
-      b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
-                               "blocks unless synthesis is set");
+    emit::FragmentOp::create(b, randomInitMemFragmentName.getAttr(), [&] {
+      sv::VerbatimOp::create(b, "\n// Include rmemory initializers in init "
+                                "blocks unless synthesis is set");
       emitGuard("RANDOMIZE", [&]() {
         emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
       });
@@ -834,14 +833,14 @@ void SeqToSVPass::runOnOperation() {
         emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_",
                           StringRef(), "");
       });
-      b.create<sv::VerbatimOp>("");
+      sv::VerbatimOp::create(b, "");
     });
   }
 
   if (hasRegRandomization) {
-    b.create<emit::FragmentOp>(randomInitRegFragmentName.getAttr(), [&] {
-      b.create<sv::VerbatimOp>("\n// Include register initializers in init "
-                               "blocks unless synthesis is set");
+    emit::FragmentOp::create(b, randomInitRegFragmentName.getAttr(), [&] {
+      sv::VerbatimOp::create(b, "\n// Include register initializers in init "
+                                "blocks unless synthesis is set");
       emitGuard("RANDOMIZE", [&]() {
         emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
       });
@@ -849,7 +848,7 @@ void SeqToSVPass::runOnOperation() {
         emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_",
                           StringRef(), "");
       });
-      b.create<sv::VerbatimOp>("");
+      sv::VerbatimOp::create(b, "");
     });
   }
 }

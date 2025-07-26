@@ -47,8 +47,8 @@ struct AddOperatorLibraryPass
 // avoid passing the builder around.
 template <typename TOp>
 void addOperator(ImplicitLocOpBuilder &b, int latency) {
-  b.create<ssp::OperatorTypeOp>(
-      b.getStringAttr(TOp::getOperationName()),
+  ssp::OperatorTypeOp::create(
+      b, b.getStringAttr(TOp::getOperationName()),
       b.getArrayAttr({b.getAttr<ssp::LatencyAttr>(latency)}));
 }
 
@@ -57,7 +57,7 @@ void addOperator(ImplicitLocOpBuilder &b, int latency) {
 void AddOperatorLibraryPass::runOnOperation() {
   auto b = ImplicitLocOpBuilder::atBlockBegin(getOperation().getLoc(),
                                               getOperation().getBody());
-  auto opLib = b.create<ssp::OperatorLibraryOp>();
+  auto opLib = ssp::OperatorLibraryOp::create(b);
   opLib.setSymNameAttr(b.getStringAttr(kKanagawaOperatorLibName));
   b.setInsertionPointToStart(opLib.getBodyBlock());
 

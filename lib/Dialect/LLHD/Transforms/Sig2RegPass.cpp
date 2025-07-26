@@ -230,12 +230,12 @@ public:
     // Handle the writes by starting with the signal init value and injecting
     // the written values at the right offsets.
     for (auto interval : intervals) {
-      Value invMask = builder.create<hw::ConstantOp>(
-          loc, APInt::getAllOnes(interval.bitwidth));
+      Value invMask = hw::ConstantOp::create(
+          builder, loc, APInt::getAllOnes(interval.bitwidth));
 
       if (uint64_t(bw) > interval.bitwidth) {
-        Value pad = builder.create<hw::ConstantOp>(
-            loc, APInt::getZero(bw - interval.bitwidth));
+        Value pad = hw::ConstantOp::create(
+            builder, loc, APInt::getZero(bw - interval.bitwidth));
         invMask = builder.createOrFold<comb::ConcatOp>(loc, pad, invMask);
       }
 
@@ -243,7 +243,7 @@ public:
                                     interval.low.dynamic, bw);
       invMask = builder.createOrFold<comb::ShlOp>(loc, invMask, amt);
       Value allOnes =
-          builder.create<hw::ConstantOp>(loc, APInt::getAllOnes(bw));
+          hw::ConstantOp::create(builder, loc, APInt::getAllOnes(bw));
       Value mask = builder.createOrFold<comb::XorOp>(loc, invMask, allOnes);
       val = builder.createOrFold<comb::AndOp>(loc, val, mask);
 
@@ -251,8 +251,8 @@ public:
           loc, builder.getIntegerType(interval.bitwidth), interval.value);
 
       if (uint64_t(bw) > interval.bitwidth) {
-        Value pad = builder.create<hw::ConstantOp>(
-            loc, APInt::getZero(bw - interval.bitwidth));
+        Value pad = hw::ConstantOp::create(
+            builder, loc, APInt::getZero(bw - interval.bitwidth));
         assignVal = builder.createOrFold<comb::ConcatOp>(loc, pad, assignVal);
       }
 
@@ -299,13 +299,13 @@ private:
   Value buildDynamicIndex(OpBuilder &builder, Location loc,
                           uint64_t constOffset, ArrayRef<Value> indices,
                           uint64_t width) {
-    Value index = builder.create<hw::ConstantOp>(
-        loc, builder.getIntegerType(width), constOffset);
+    Value index = hw::ConstantOp::create(
+        builder, loc, builder.getIntegerType(width), constOffset);
 
     for (auto idx : indices) {
       auto bw = hw::getBitWidth(idx.getType());
       Value pad =
-          builder.create<hw::ConstantOp>(loc, APInt::getZero(width - bw));
+          hw::ConstantOp::create(builder, loc, APInt::getZero(width - bw));
       idx = builder.createOrFold<comb::ConcatOp>(loc, pad, idx);
       index = builder.createOrFold<comb::AddOp>(loc, index, idx);
     }

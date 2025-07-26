@@ -60,7 +60,7 @@ public:
     if (hasAttributes) {
       // Start the inline block...
       auto inlineStart =
-          rewriter.create<kanagawa::InlineStaticBlockBeginOp>(loc);
+          kanagawa::InlineStaticBlockBeginOp::create(rewriter, loc);
       inlineStart->setAttrs(op->getAttrs());
     }
 
@@ -77,7 +77,7 @@ public:
     if (hasAttributes) {
       // Close the inline block
       rewriter.setInsertionPoint(ret);
-      rewriter.create<kanagawa::InlineStaticBlockEndOp>(loc);
+      kanagawa::InlineStaticBlockEndOp::create(rewriter, loc);
     }
 
     rewriter.eraseOp(ret);

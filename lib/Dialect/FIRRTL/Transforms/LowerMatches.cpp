@@ -46,8 +46,8 @@ static void lowerMatch(MatchOp match) {
   auto input = match.getInput();
   for (size_t i = 0; i < numCases - 1; ++i) {
     // Create a WhenOp which tests the enum's tag.
-    auto condition = b.create<IsTagOp>(input, match.getFieldIndexAttr(i));
-    auto when = b.create<WhenOp>(condition, /*withElse=*/true);
+    auto condition = IsTagOp::create(b, input, match.getFieldIndexAttr(i));
+    auto when = WhenOp::create(b, condition, /*withElse=*/true);
 
     // Move the case block to the WhenOp.
     auto *thenBlock = &when.getThenBlock();
@@ -57,7 +57,7 @@ static void lowerMatch(MatchOp match) {
 
     // Replace the block argument with a subtag op.
     b.setInsertionPointToStart(caseBlock);
-    auto data = b.create<SubtagOp>(input, match.getFieldIndexAttr(i));
+    auto data = SubtagOp::create(b, input, match.getFieldIndexAttr(i));
     caseBlock->getArgument(0).replaceAllUsesWith(data);
     caseBlock->eraseArgument(0);
 
@@ -69,7 +69,7 @@ static void lowerMatch(MatchOp match) {
   // if there was only 1 variant, right before the match operation.
 
   // Replace the block argument with a subtag op.
-  auto data = b.create<SubtagOp>(input, match.getFieldIndexAttr(numCases - 1));
+  auto data = SubtagOp::create(b, input, match.getFieldIndexAttr(numCases - 1));
 
   // Get the final block from the match statement, and splice it into the
   // current insertion point.

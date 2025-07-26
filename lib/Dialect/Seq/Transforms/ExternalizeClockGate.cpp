@@ -64,9 +64,9 @@ void ExternalizeClockGatePass::runOnOperation() {
     modulePorts.push_back({{builder.getStringAttr(testEnableName), i1Type,
                             ModulePort::Direction::Input}});
 
-  auto externModuleOp = builder.create<HWModuleExternOp>(
-      getOperation().getLoc(), builder.getStringAttr(moduleName), modulePorts,
-      moduleName);
+  auto externModuleOp = HWModuleExternOp::create(
+      builder, getOperation().getLoc(), builder.getStringAttr(moduleName),
+      modulePorts, moduleName);
   symtbl.insert(externModuleOp);
 
   // Replace all clock gates with an instance of the external module.
@@ -84,7 +84,7 @@ void ExternalizeClockGatePass::runOnOperation() {
       // constant 0 input.
       if (hasTestEnable && !testEnable) {
         if (!cstFalse) {
-          cstFalse = builder.create<ConstantOp>(i1Type, 0);
+          cstFalse = ConstantOp::create(builder, i1Type, 0);
         }
         testEnable = cstFalse;
       }
@@ -102,7 +102,7 @@ void ExternalizeClockGatePass::runOnOperation() {
         if (it.second) {
           ImplicitLocOpBuilder builder(input.getLoc(), &getContext());
           builder.setInsertionPointAfterValue(input);
-          it.first->second = builder.create<seq::FromClockOp>(input);
+          it.first->second = seq::FromClockOp::create(builder, input);
         }
         instPorts.push_back(it.first->second);
       } else {
@@ -112,13 +112,13 @@ void ExternalizeClockGatePass::runOnOperation() {
       if (testEnable)
         instPorts.push_back(testEnable);
 
-      auto instOp = builder.create<InstanceOp>(
-          externModuleOp, builder.getStringAttr(instName), instPorts,
+      auto instOp = InstanceOp::create(
+          builder, externModuleOp, builder.getStringAttr(instName), instPorts,
           builder.getArrayAttr({}), ckgOp.getInnerSymAttr());
 
       Value output = instOp.getResult(0);
       if (hw::type_isa<seq::ClockType>(input.getType()))
-        output = builder.create<seq::ToClockOp>(output);
+        output = seq::ToClockOp::create(builder, output);
       ckgOp.replaceAllUsesWith(output);
       ckgOp.erase();
 

@@ -45,8 +45,8 @@ static LogicalResult lockRegion(Region &r, OpBuilder &rewriter) {
   BackedgeBuilder bebuilder(rewriter, loc);
   auto backEdge = bebuilder.get(rewriter.getNoneType());
 
-  auto buff = rewriter.create<handshake::BufferOp>(loc, backEdge, 1,
-                                                   BufferTypeEnum::seq);
+  auto buff = handshake::BufferOp::create(rewriter, loc, backEdge, 1,
+                                          BufferTypeEnum::seq);
 
   // Dummy value that causes a buffer initialization, but itself does not have a
   // semantic meaning.
@@ -55,7 +55,7 @@ static LogicalResult lockRegion(Region &r, OpBuilder &rewriter) {
   SmallVector<Value> inSyncOperands =
       llvm::to_vector_of<Value>(entry->getArguments());
   inSyncOperands.push_back(buff);
-  auto sync = rewriter.create<SyncOp>(loc, inSyncOperands);
+  auto sync = SyncOp::create(rewriter, loc, inSyncOperands);
 
   // replace all func arg usages with the synced ones
   // TODO is this UB?
@@ -67,7 +67,7 @@ static LogicalResult lockRegion(Region &r, OpBuilder &rewriter) {
   SmallVector<Value> endJoinOperands = llvm::to_vector(ret->getOperands());
   // Add the axilirary control signal output to the end-join
   endJoinOperands.push_back(sync.getResults().back());
-  auto endJoin = rewriter.create<JoinOp>(loc, endJoinOperands);
+  auto endJoin = JoinOp::create(rewriter, loc, endJoinOperands);
 
   backEdge.setValue(endJoin);
   return success();

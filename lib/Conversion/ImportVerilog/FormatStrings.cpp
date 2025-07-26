@@ -65,7 +65,7 @@ struct FormatStringParser {
       return Value{};
     if (fragments.size() == 1)
       return fragments[0];
-    return builder.create<moore::FormatConcatOp>(loc, fragments).getResult();
+    return moore::FormatConcatOp::create(builder, loc, fragments).getResult();
   }
 
   /// Parse a format string literal and consume and format the arguments
@@ -93,7 +93,7 @@ struct FormatStringParser {
 
   /// Emit a string literal that requires no additional formatting.
   void emitLiteral(StringRef literal) {
-    fragments.push_back(builder.create<moore::FormatLiteralOp>(loc, literal));
+    fragments.push_back(moore::FormatLiteralOp::create(builder, loc, literal));
   }
 
   /// Consume the next argument from the list and emit it according to the given
@@ -177,8 +177,8 @@ struct FormatStringParser {
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
 
-    fragments.push_back(builder.create<moore::FormatIntOp>(
-        loc, value, format, width, alignment, padding));
+    fragments.push_back(moore::FormatIntOp::create(builder, loc, value, format,
+                                                   width, alignment, padding));
     return success();
   }
 

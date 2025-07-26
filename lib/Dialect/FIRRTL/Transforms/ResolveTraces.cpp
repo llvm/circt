@@ -417,9 +417,9 @@ void ResolveTracesPass::runOnOperation() {
   else
     fileAttr = builder.getStringAttr(outputAnnotationFilename);
 
-  builder.create<emit::FileOp>(fileAttr, [&] {
-    builder.create<sv::VerbatimOp>(jsonBuffer, ValueRange{},
-                                   builder.getArrayAttr(symbols));
+  emit::FileOp::create(builder, fileAttr, [&] {
+    sv::VerbatimOp::create(builder, jsonBuffer, ValueRange{},
+                           builder.getArrayAttr(symbols));
   });
 
   return markAllAnalysesPreserved();

@@ -1123,7 +1123,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     auto sinkType = source->getType();
     if (auto baseSinkType = type_dyn_cast<FIRRTLBaseType>(sinkType))
       sinkType = baseSinkType.getPassiveType();
-    auto sink = builder.create<WireOp>(sinkType, name);
+    auto sink = WireOp::create(builder, sinkType, name);
     state.targetCaches.insertOp(sink);
     AnnotationSet annotations(context);
     annotations.addAnnotations(
@@ -2111,7 +2111,7 @@ void GrandCentralPass::runOnOperation() {
                   for (auto port : instance->getResults()) {
                     builder.setInsertionPointAfterValue(port);
                     auto wire =
-                        builder.create<WireOp>(port.getLoc(), port.getType());
+                        WireOp::create(builder, port.getLoc(), port.getType());
                     port.replaceAllUsesWith(wire.getResult());
                   }
                   i->erase();
@@ -2391,8 +2391,8 @@ void GrandCentralPass::runOnOperation() {
     // Generate gathered XMR's.
     for (auto xmrElem : xmrElems) {
       auto uloc = companionBuilder.getUnknownLoc();
-      companionBuilder.create<sv::VerbatimOp>(uloc, xmrElem.str, xmrElem.val,
-                                              xmrElem.syms);
+      sv::VerbatimOp::create(companionBuilder, uloc, xmrElem.str, xmrElem.val,
+                             xmrElem.syms);
     }
     numXMRs += xmrElems.size();
 
@@ -2401,7 +2401,7 @@ void GrandCentralPass::runOnOperation() {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
       auto loc = getOperation().getLoc();
       sv::InterfaceOp iface =
-          builder.create<sv::InterfaceOp>(loc, ifaceBuilder.iFaceName);
+          sv::InterfaceOp::create(builder, loc, ifaceBuilder.iFaceName);
       if (!topIface)
         topIface = iface;
       ++numInterfaces;
@@ -2429,8 +2429,9 @@ void GrandCentralPass::runOnOperation() {
         auto description = elem.description;
 
         if (description) {
-          auto descriptionOp = builder.create<sv::VerbatimOp>(
-              uloc, ("// " + cleanupDescription(description.getValue())));
+          auto descriptionOp = sv::VerbatimOp::create(
+              builder, uloc,
+              ("// " + cleanupDescription(description.getValue())));
 
           // If we need to generate a YAML representation of this interface,
           // then add an attribute indicating that this `sv::VerbatimOp` is
@@ -2440,8 +2441,8 @@ void GrandCentralPass::runOnOperation() {
                                    builder.getStringAttr("description"));
         }
         if (auto *str = std::get_if<VerbatimType>(&elem.elemType)) {
-          auto instanceOp = builder.create<sv::VerbatimOp>(
-              uloc, str->toStr(elem.elemName.getValue()));
+          auto instanceOp = sv::VerbatimOp::create(
+              builder, uloc, str->toStr(elem.elemName.getValue()));
 
           // If we need to generate a YAML representation of the interface, then
           // add attributes that describe what this `sv::VerbatimOp` is.
@@ -2463,8 +2464,8 @@ void GrandCentralPass::runOnOperation() {
         }
 
         auto tpe = std::get<Type>(elem.elemType);
-        builder.create<sv::InterfaceSignalOp>(uloc, elem.elemName.getValue(),
-                                              tpe);
+        sv::InterfaceSignalOp::create(builder, uloc, elem.elemName.getValue(),
+                                      tpe);
       }
     }
 
@@ -2475,8 +2476,8 @@ void GrandCentralPass::runOnOperation() {
 
     // Instantiate the interface inside the companion.
     builder.setInsertionPointToStart(companionModule.getBodyBlock());
-    builder.create<sv::InterfaceInstanceOp>(
-        getOperation().getLoc(), topIface.getInterfaceType(),
+    sv::InterfaceInstanceOp::create(
+        builder, getOperation().getLoc(), topIface.getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
         hw::InnerSymAttr::get(builder.getStringAttr(symbolName)));
 
@@ -2550,8 +2551,8 @@ void GrandCentralPass::runOnOperation() {
 
     // Generate gathered XMR's.
     for (auto xmrElem : xmrElems)
-      viewBuilder.create<sv::VerbatimOp>(xmrElem.str, xmrElem.val,
-                                         xmrElem.syms);
+      sv::VerbatimOp::create(viewBuilder, xmrElem.str, xmrElem.val,
+                             xmrElem.syms);
     numXMRs += xmrElems.size();
 
     sv::InterfaceOp topIface;
@@ -2562,7 +2563,7 @@ void GrandCentralPass::runOnOperation() {
       auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
       auto loc = getOperation().getLoc();
       sv::InterfaceOp iface =
-          builder.create<sv::InterfaceOp>(loc, ifaceBuilder.iFaceName);
+          sv::InterfaceOp::create(builder, loc, ifaceBuilder.iFaceName);
       if (!topIface)
         topIface = iface;
       ++numInterfaces;
@@ -2584,8 +2585,9 @@ void GrandCentralPass::runOnOperation() {
         auto description = elem.description;
 
         if (description) {
-          auto descriptionOp = builder.create<sv::VerbatimOp>(
-              uloc, ("// " + cleanupDescription(description.getValue())));
+          auto descriptionOp = sv::VerbatimOp::create(
+              builder, uloc,
+              ("// " + cleanupDescription(description.getValue())));
 
           // If we need to generate a YAML representation of this interface,
           // then add an attribute indicating that this `sv::VerbatimOp` is
@@ -2595,8 +2597,8 @@ void GrandCentralPass::runOnOperation() {
                                    builder.getStringAttr("description"));
         }
         if (auto *str = std::get_if<VerbatimType>(&elem.elemType)) {
-          auto instanceOp = builder.create<sv::VerbatimOp>(
-              uloc, str->toStr(elem.elemName.getValue()));
+          auto instanceOp = sv::VerbatimOp::create(
+              builder, uloc, str->toStr(elem.elemName.getValue()));
 
           // If we need to generate a YAML representation of the interface, then
           // add attributes that describe what this `sv::VerbatimOp` is.
@@ -2618,8 +2620,8 @@ void GrandCentralPass::runOnOperation() {
         }
 
         auto tpe = std::get<Type>(elem.elemType);
-        builder.create<sv::InterfaceSignalOp>(uloc, elem.elemName.getValue(),
-                                              tpe);
+        sv::InterfaceSignalOp::create(builder, uloc, elem.elemName.getValue(),
+                                      tpe);
       }
     }
 
@@ -2631,8 +2633,8 @@ void GrandCentralPass::runOnOperation() {
     // Instantiate the interface before the view and the XMR's we inserted
     // above.
     viewBuilder.setInsertionPoint(view);
-    viewBuilder.create<sv::InterfaceInstanceOp>(
-        topIface.getInterfaceType(), view.getName(),
+    sv::InterfaceInstanceOp::create(
+        viewBuilder, topIface.getInterfaceType(), view.getName(),
         hw::InnerSymAttr::get(builder.getStringAttr(symbolName)));
 
     view.erase();
@@ -2659,7 +2661,7 @@ void GrandCentralPass::emitHierarchyYamlFile(
   yamlize(yout, intfs, true, yamlContext);
 
   auto builder = OpBuilder::atBlockBegin(circuitOp.getBodyBlock());
-  builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+  sv::VerbatimOp::create(builder, builder.getUnknownLoc(), yamlString)
       ->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
                                    &getContext(), yamlPath,
                                    /*excludeFromFileList=*/true));

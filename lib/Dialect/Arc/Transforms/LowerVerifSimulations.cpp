@@ -59,8 +59,9 @@ void LowerVerifSimulationsPass::runOnOperation() {
       return signalPassFailure();
     }
   } else {
-    auto func = builder.create<func::FuncOp>(
-        getOperation().getLoc(), builder.getStringAttr("exit"), exitFuncType);
+    auto func =
+        func::FuncOp::create(builder, getOperation().getLoc(),
+                             builder.getStringAttr("exit"), exitFuncType);
     SymbolTable::setSymbolVisibility(func, SymbolTable::Visibility::Private);
   }
 
@@ -108,7 +109,7 @@ void LowerVerifSimulationsPass::lowerSimulation(verif::SimulationOp op,
 
   // Replace the `verif.yield` operation with an `hw.output`.
   OpBuilder builder(yieldOp);
-  builder.create<hw::OutputOp>(yieldOp->getLoc(), yieldOp->getOperands());
+  hw::OutputOp::create(builder, yieldOp->getLoc(), yieldOp->getOperands());
   yieldOp->erase();
 
   // Move the body of the simulation into a separate HW module.
@@ -116,25 +117,25 @@ void LowerVerifSimulationsPass::lowerSimulation(verif::SimulationOp op,
   auto implName = StringAttr::get(context, Twine("verif.simulation.impl.") +
                                                op.getSymName());
   auto loc = op.getLoc();
-  auto implOp = builder.create<hw::HWModuleOp>(loc, implName, implPorts);
+  auto implOp = hw::HWModuleOp::create(builder, loc, implName, implPorts);
   symbolTable.insert(implOp);
   implOp.getBody().takeBody(op.getBodyRegion());
 
   // Create a new function for the verification op.
   auto funcType = builder.getFunctionType({}, {});
   auto funcOp =
-      builder.create<func::FuncOp>(loc, op.getSymNameAttr(), funcType);
+      func::FuncOp::create(builder, loc, op.getSymNameAttr(), funcType);
   auto *funcBody = builder.createBlock(&funcOp.getBody());
 
-  auto falseOp = builder.create<hw::ConstantOp>(loc, i1Type, 0);
-  auto trueOp = builder.create<hw::ConstantOp>(loc, i1Type, 1);
-  auto lowOp = builder.create<seq::ToClockOp>(loc, falseOp);
-  auto highOp = builder.create<seq::ToClockOp>(loc, trueOp);
+  auto falseOp = hw::ConstantOp::create(builder, loc, i1Type, 0);
+  auto trueOp = hw::ConstantOp::create(builder, loc, i1Type, 1);
+  auto lowOp = seq::ToClockOp::create(builder, loc, falseOp);
+  auto highOp = seq::ToClockOp::create(builder, loc, trueOp);
 
   // Instantiate the implementation module.
   auto instType = SimModelInstanceType::get(
       context, FlatSymbolRefAttr::get(implOp.getSymNameAttr()));
-  auto instOp = builder.create<SimInstantiateOp>(loc);
+  auto instOp = SimInstantiateOp::create(builder, loc);
   auto *instBody =
       builder.createBlock(&instOp.getBody(), {}, {instType}, {loc});
   auto instArg = instBody->getArgument(0);
@@ -142,57 +143,57 @@ void LowerVerifSimulationsPass::lowerSimulation(verif::SimulationOp op,
   // Create an `scf.execute_region` op inside such that we can use simple
   // control flow in the `arc.sim.instantiate` op body. This is simpler than
   // setting up an `scf.while` op.
-  auto execOp = builder.create<scf::ExecuteRegionOp>(loc, TypeRange{});
+  auto execOp = scf::ExecuteRegionOp::create(builder, loc, TypeRange{});
   builder.setInsertionPointToEnd(&execOp.getRegion().emplaceBlock());
 
   // Apply the initial clock tick to the design.
-  builder.create<SimSetInputOp>(loc, instArg, clockName, lowOp);
-  builder.create<SimSetInputOp>(loc, instArg, initName, trueOp);
-  builder.create<SimStepOp>(loc, instArg);
-  builder.create<SimSetInputOp>(loc, instArg, clockName, highOp);
-  builder.create<SimStepOp>(loc, instArg);
-  builder.create<SimSetInputOp>(loc, instArg, clockName, lowOp);
-  builder.create<SimSetInputOp>(loc, instArg, initName, falseOp);
-  builder.create<SimStepOp>(loc, instArg);
+  SimSetInputOp::create(builder, loc, instArg, clockName, lowOp);
+  SimSetInputOp::create(builder, loc, instArg, initName, trueOp);
+  SimStepOp::create(builder, loc, instArg);
+  SimSetInputOp::create(builder, loc, instArg, clockName, highOp);
+  SimStepOp::create(builder, loc, instArg);
+  SimSetInputOp::create(builder, loc, instArg, clockName, lowOp);
+  SimSetInputOp::create(builder, loc, instArg, initName, falseOp);
+  SimStepOp::create(builder, loc, instArg);
 
   // Create the block that will perform a single clock tick.
   auto &loopBlock = execOp.getRegion().emplaceBlock();
-  builder.create<cf::BranchOp>(loc, &loopBlock);
+  cf::BranchOp::create(builder, loc, &loopBlock);
   builder.setInsertionPointToEnd(&loopBlock);
 
   // Sample the done and success signals.
   auto doneSample =
-      builder.create<SimGetPortOp>(loc, i1Type, instArg, doneName);
+      SimGetPortOp::create(builder, loc, i1Type, instArg, doneName);
   auto successSample =
-      builder.create<SimGetPortOp>(loc, i1Type, instArg, successName);
+      SimGetPortOp::create(builder, loc, i1Type, instArg, successName);
 
   // Apply a full clock cycle to the design.
-  builder.create<SimSetInputOp>(loc, instArg, clockName, highOp);
-  builder.create<SimStepOp>(loc, instArg);
-  builder.create<SimSetInputOp>(loc, instArg, clockName, lowOp);
-  builder.create<SimStepOp>(loc, instArg);
+  SimSetInputOp::create(builder, loc, instArg, clockName, highOp);
+  SimStepOp::create(builder, loc, instArg);
+  SimSetInputOp::create(builder, loc, instArg, clockName, lowOp);
+  SimStepOp::create(builder, loc, instArg);
 
   // If done, exit the loop.
   auto &exitBlock = execOp.getRegion().emplaceBlock();
-  builder.create<cf::CondBranchOp>(loc, doneSample, &exitBlock, &loopBlock);
+  cf::CondBranchOp::create(builder, loc, doneSample, &exitBlock, &loopBlock);
   builder.setInsertionPointToEnd(&exitBlock);
 
   // Convert the i1 success signal into an i32 failure signal that can be used
   // as an exit code.
   auto i32Type = builder.getI32Type();
-  auto failureI32 = builder.create<arith::ExtUIOp>(
-      loc, i32Type,
-      builder.create<arith::XOrIOp>(
-          loc, successSample, builder.create<hw::ConstantOp>(loc, i1Type, 1)));
+  auto failureI32 = arith::ExtUIOp::create(
+      builder, loc, i32Type,
+      arith::XOrIOp::create(builder, loc, successSample,
+                            hw::ConstantOp::create(builder, loc, i1Type, 1)));
 
   // Call exit with the computed exit code.
-  builder.create<func::CallOp>(loc, TypeRange{}, builder.getStringAttr("exit"),
-                               ValueRange{failureI32});
-  builder.create<scf::YieldOp>(loc);
+  func::CallOp::create(builder, loc, TypeRange{}, builder.getStringAttr("exit"),
+                       ValueRange{failureI32});
+  scf::YieldOp::create(builder, loc);
 
   // Create the final function return.
   builder.setInsertionPointToEnd(funcBody);
-  builder.create<func::ReturnOp>(loc);
+  func::ReturnOp::create(builder, loc);
 
   // Get rid of the original simulation op.
   op.erase();

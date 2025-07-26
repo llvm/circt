@@ -64,14 +64,14 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // small or vice versa. Like "logic [7:0] or [0:7]".
 
       // Only able to correctly handle the situation like "[7:0]" now.
-      auto extract = rewriter.create<ExtractOp>(op.getLoc(), type, op.getSrc(),
-                                                srcWidth - width);
+      auto extract = ExtractOp::create(rewriter, op.getLoc(), type, op.getSrc(),
+                                       srcWidth - width);
 
       // Update the real bit width of RHS of assignment. Like "c" the above
       // description mentioned.
       srcWidth = srcWidth - width;
 
-      rewriter.create<OpTy>(op.getLoc(), operand, extract);
+      OpTy::create(rewriter, op.getLoc(), operand, extract);
     }
     rewriter.eraseOp(op);
     return success();

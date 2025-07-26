@@ -121,7 +121,7 @@ LogicalResult ReblockPass::reblock(ArrayRef<Operation *> ops,
 
   auto b = OpBuilder(beginOp);
   auto kanagawaBlock =
-      b.create<StaticBlockOp>(beginOp->getLoc(), blockRetTypes, ValueRange{});
+      StaticBlockOp::create(b, beginOp->getLoc(), blockRetTypes, ValueRange{});
 
   // The new `kanagawa.sblock` should inherit the attributes of the block begin
   // op, if provided.

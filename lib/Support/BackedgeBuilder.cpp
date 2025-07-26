@@ -40,7 +40,7 @@ LogicalResult BackedgeBuilder::clearOrEmitError() {
     if (!op->use_empty()) {
       auto diag = op->emitError("backedge of type ")
                   << op->getResult(0).getType() << " still in use";
-      for (auto user : op->getUsers())
+      for (auto *user : op->getUsers())
         diag.attachNote(user->getLoc()) << "used by " << *user;
       ++numInUse;
       continue;
@@ -65,8 +65,8 @@ BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
 Backedge BackedgeBuilder::get(Type t, mlir::LocationAttr optionalLoc) {
   if (!optionalLoc)
     optionalLoc = loc;
-  Operation *op = builder.create<mlir::UnrealizedConversionCastOp>(
-      optionalLoc, t, ValueRange{});
+  Operation *op = mlir::UnrealizedConversionCastOp::create(builder, optionalLoc,
+                                                           t, ValueRange{});
   edges.push_back(op);
   return Backedge(op);
 }

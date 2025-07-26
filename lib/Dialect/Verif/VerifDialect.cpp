@@ -27,7 +27,7 @@ Operation *VerifDialect::materializeConstant(OpBuilder &builder,
                                              Location loc) {
   if (auto intType = dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return builder.create<hw::ConstantOp>(loc, type, attrValue);
+      return hw::ConstantOp::create(builder, loc, type, attrValue);
   return nullptr;
 }
 

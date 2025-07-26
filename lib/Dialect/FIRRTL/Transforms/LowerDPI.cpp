@@ -116,15 +116,16 @@ static Value convertToUnpackedArray(ImplicitLocOpBuilder &builder,
 
   // Create an unpacked array from a packed array.
   for (int i = length - 1; i >= 0; --i) {
-    auto index = builder.create<hw::ConstantOp>(APInt(width, i));
+    auto index = hw::ConstantOp::create(builder, APInt(width, i));
     auto elem = convertToUnpackedArray(
-        builder, builder.create<hw::ArrayGetOp>(loweredValue, index));
+        builder, hw::ArrayGetOp::create(builder, loweredValue, index));
     if (!elem)
       return {};
     values.push_back(elem);
   }
 
-  return builder.create<sv::UnpackedArrayCreateOp>(
+  return sv::UnpackedArrayCreateOp::create(
+      builder,
       hw::UnpackedArrayType::get(lowerType(array.getElementType()), length),
       values);
 }
@@ -135,7 +136,7 @@ static Value getLowered(ImplicitLocOpBuilder &builder, Value value) {
     return value;
 
   auto type = lowerType(value.getType());
-  Value result = builder.create<mlir::UnrealizedConversionCastOp>(type, value)
+  Value result = mlir::UnrealizedConversionCastOp::create(builder, type, value)
                      ->getResult(0);
 
   // We may need to cast the lowered value to a DPI specific type (e.g. open
@@ -152,7 +153,7 @@ static Value getLowered(ImplicitLocOpBuilder &builder, Value value) {
     return {};
   }
 
-  return builder.create<sv::UnpackedOpenArrayCastOp>(dpiType, result);
+  return sv::UnpackedOpenArrayCastOp::create(builder, dpiType, result);
 }
 
 LogicalResult LowerDPI::lower() {
@@ -183,14 +184,15 @@ LogicalResult LowerDPI::lower() {
         outputTypes.push_back(
             lowerDPIArgumentType(dpiOp.getResult().getType()));
 
-      auto call = builder.create<sim::DPICallOp>(
-          outputTypes, firstDPIDecl.getSymNameAttr(), clock, enable, inputs);
+      auto call = sim::DPICallOp::create(builder, outputTypes,
+                                         firstDPIDecl.getSymNameAttr(), clock,
+                                         enable, inputs);
       if (!call.getResults().empty()) {
         // Insert unrealized conversion cast HW type to FIRRTL type.
-        auto result = builder
-                          .create<mlir::UnrealizedConversionCastOp>(
-                              dpiOp.getResult().getType(), call.getResult(0))
-                          ->getResult(0);
+        auto result =
+            mlir::UnrealizedConversionCastOp::create(
+                builder, dpiOp.getResult().getType(), call.getResult(0))
+                ->getResult(0);
         dpiOp.getResult().replaceAllUsesWith(result);
       }
       return success();
@@ -269,8 +271,9 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
     return it->second;
 
   auto funcSymbol = nameSpace.newName(op.getFunctionNameAttr().getValue());
-  auto funcOp = builder.create<sim::DPIFuncOp>(
-      funcSymbol, modType, ArrayAttr(), ArrayAttr(), op.getFunctionNameAttr());
+  auto funcOp =
+      sim::DPIFuncOp::create(builder, funcSymbol, modType, ArrayAttr(),
+                             ArrayAttr(), op.getFunctionNameAttr());
   // External function must have a private linkage.
   funcOp.setPrivate();
   functionSignatureToDPIFuncOp[{op.getFunctionNameAttr(), modType}] = funcOp;

@@ -202,14 +202,15 @@ void LoopSchedulePipelineOp::build(OpBuilder &builder, OperationState &state,
     argLocs.push_back(arg.getLoc());
   condBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&condBlock);
-  builder.create<LoopScheduleRegisterOp>(builder.getUnknownLoc(), ValueRange());
+  LoopScheduleRegisterOp::create(builder, builder.getUnknownLoc(),
+                                 ValueRange());
 
   Region *stagesRegion = state.addRegion();
   Block &stagesBlock = stagesRegion->emplaceBlock();
   stagesBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&stagesBlock);
-  builder.create<LoopScheduleTerminatorOp>(builder.getUnknownLoc(),
-                                           ValueRange(), ValueRange());
+  LoopScheduleTerminatorOp::create(builder, builder.getUnknownLoc(),
+                                   ValueRange(), ValueRange());
 }
 
 //===----------------------------------------------------------------------===//
@@ -235,7 +236,8 @@ void LoopSchedulePipelineStageOp::build(OpBuilder &builder,
   Region *region = state.addRegion();
   Block &block = region->emplaceBlock();
   builder.setInsertionPointToEnd(&block);
-  builder.create<LoopScheduleRegisterOp>(builder.getUnknownLoc(), ValueRange());
+  LoopScheduleRegisterOp::create(builder, builder.getUnknownLoc(),
+                                 ValueRange());
 }
 
 unsigned LoopSchedulePipelineStageOp::getStageNumber() {

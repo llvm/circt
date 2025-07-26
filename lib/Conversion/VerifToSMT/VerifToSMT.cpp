@@ -47,7 +47,7 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
     Value cond = typeConverter->materializeTargetConversion(
         rewriter, op.getLoc(), smt::BoolType::get(getContext()),
         adaptor.getProperty());
-    Value notCond = rewriter.create<smt::NotOp>(op.getLoc(), cond);
+    Value notCond = smt::NotOp::create(rewriter, op.getLoc(), cond);
     rewriter.replaceOpWithNewOp<smt::AssertOp>(op, notCond);
     return success();
   }
@@ -89,7 +89,7 @@ protected:
       Value o2 = typeConverter->materializeTargetConversion(
           rewriter, loc, typeConverter->convertType(out1.getType()), out2);
       outputsDifferent.emplace_back(
-          rewriter.create<smt::DistinctOp>(loc, o1, o2));
+          smt::DistinctOp::create(rewriter, loc, o1, o2));
     }
   }
 
@@ -101,32 +101,32 @@ protected:
     // the result type of the operation and yield the result of the check
     // operation.
     if (op.getNumResults() == 0) {
-      auto checkOp = rewriter.create<smt::CheckOp>(loc, TypeRange{});
+      auto checkOp = smt::CheckOp::create(rewriter, loc, TypeRange{});
       rewriter.createBlock(&checkOp.getSatRegion());
-      rewriter.create<smt::YieldOp>(loc);
+      smt::YieldOp::create(rewriter, loc);
       rewriter.createBlock(&checkOp.getUnknownRegion());
-      rewriter.create<smt::YieldOp>(loc);
+      smt::YieldOp::create(rewriter, loc);
       rewriter.createBlock(&checkOp.getUnsatRegion());
-      rewriter.create<smt::YieldOp>(loc);
+      smt::YieldOp::create(rewriter, loc);
       rewriter.setInsertionPointAfter(checkOp);
-      rewriter.create<smt::YieldOp>(loc);
+      smt::YieldOp::create(rewriter, loc);
 
       // Erase as operation is replaced by an operator without a return value.
       rewriter.eraseOp(op);
     } else {
       Value falseVal =
-          rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(false));
+          arith::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(false));
       Value trueVal =
-          rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
-      auto checkOp = rewriter.create<smt::CheckOp>(loc, rewriter.getI1Type());
+          arith::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(true));
+      auto checkOp = smt::CheckOp::create(rewriter, loc, rewriter.getI1Type());
       rewriter.createBlock(&checkOp.getSatRegion());
-      rewriter.create<smt::YieldOp>(loc, falseVal);
+      smt::YieldOp::create(rewriter, loc, falseVal);
       rewriter.createBlock(&checkOp.getUnknownRegion());
-      rewriter.create<smt::YieldOp>(loc, falseVal);
+      smt::YieldOp::create(rewriter, loc, falseVal);
       rewriter.createBlock(&checkOp.getUnsatRegion());
-      rewriter.create<smt::YieldOp>(loc, trueVal);
+      smt::YieldOp::create(rewriter, loc, trueVal);
       rewriter.setInsertionPointAfter(checkOp);
-      rewriter.create<smt::YieldOp>(loc, checkOp->getResults());
+      smt::YieldOp::create(rewriter, loc, checkOp->getResults());
 
       rewriter.replaceOp(op, solver->getResults());
     }
@@ -157,8 +157,8 @@ struct LogicEquivalenceCheckingOpConversion
       if (hasNoResult) {
         rewriter.eraseOp(op);
       } else {
-        Value trueVal =
-            rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        Value trueVal = arith::ConstantOp::create(rewriter, loc,
+                                                  rewriter.getBoolAttr(true));
         rewriter.replaceOp(op, trueVal);
       }
       return success();
@@ -168,10 +168,10 @@ struct LogicEquivalenceCheckingOpConversion
     // value.
     smt::SolverOp solver;
     if (hasNoResult)
-      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
+      solver = smt::SolverOp::create(rewriter, loc, TypeRange{}, ValueRange{});
     else
-      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
-                                              ValueRange{});
+      solver = smt::SolverOp::create(rewriter, loc, rewriter.getI1Type(),
+                                     ValueRange{});
     rewriter.createBlock(&solver.getBodyRegion());
 
     // First, convert the block arguments of the miter bodies.
@@ -185,7 +185,7 @@ struct LogicEquivalenceCheckingOpConversion
     // Second, create the symbolic values we replace the block arguments with
     SmallVector<Value> inputs;
     for (auto arg : adaptor.getFirstCircuit().getArguments())
-      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
+      inputs.push_back(smt::DeclareFunOp::create(rewriter, loc, arg.getType()));
 
     // Third, inline the blocks
     // Note: the argument value replacement does not happen immediately, but
@@ -212,9 +212,9 @@ struct LogicEquivalenceCheckingOpConversion
     if (outputsDifferent.size() == 1)
       toAssert = outputsDifferent[0];
     else
-      toAssert = rewriter.create<smt::OrOp>(loc, outputsDifferent);
+      toAssert = smt::OrOp::create(rewriter, loc, outputsDifferent);
 
-    rewriter.create<smt::AssertOp>(loc, toAssert);
+    smt::AssertOp::create(rewriter, loc, toAssert);
 
     // Fifth, check for satisfiablility and report the result back.
     replaceOpWithSatCheck(op, loc, rewriter, solver);
@@ -251,8 +251,8 @@ struct RefinementCheckingOpConversion
       // If there is no non-determinism in the source circuit, the
       // refinement check becomes an equivalence check, which does not
       // need quantified expressions.
-      auto eqOp = rewriter.create<verif::LogicEquivalenceCheckingOp>(
-          op.getLoc(), op.getNumResults() != 0);
+      auto eqOp = verif::LogicEquivalenceCheckingOp::create(
+          rewriter, op.getLoc(), op.getNumResults() != 0);
       rewriter.moveBlockBefore(&op.getFirstCircuit().front(),
                                &eqOp.getFirstCircuit(),
                                eqOp.getFirstCircuit().end());
@@ -274,8 +274,8 @@ struct RefinementCheckingOpConversion
       if (hasNoResult) {
         rewriter.eraseOp(op);
       } else {
-        Value trueVal =
-            rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        Value trueVal = arith::ConstantOp::create(rewriter, loc,
+                                                  rewriter.getBoolAttr(true));
         rewriter.replaceOp(op, trueVal);
       }
       return success();
@@ -285,10 +285,10 @@ struct RefinementCheckingOpConversion
     // value.
     smt::SolverOp solver;
     if (hasNoResult)
-      solver = rewriter.create<smt::SolverOp>(loc, TypeRange{}, ValueRange{});
+      solver = smt::SolverOp::create(rewriter, loc, TypeRange{}, ValueRange{});
     else
-      solver = rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(),
-                                              ValueRange{});
+      solver = smt::SolverOp::create(rewriter, loc, rewriter.getI1Type(),
+                                     ValueRange{});
     rewriter.createBlock(&solver.getBodyRegion());
 
     // Convert the block arguments of the miter bodies.
@@ -302,7 +302,7 @@ struct RefinementCheckingOpConversion
     // Create the symbolic values we replace the block arguments with
     SmallVector<Value> inputs;
     for (auto arg : adaptor.getFirstCircuit().getArguments())
-      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
+      inputs.push_back(smt::DeclareFunOp::create(rewriter, loc, arg.getType()));
 
     // Inline the target circuit. Free variables remain free variables.
     rewriter.mergeBlocks(&adaptor.getSecondCircuit().front(), solver.getBody(),
@@ -311,8 +311,8 @@ struct RefinementCheckingOpConversion
 
     // Create the universally quantified expression containing the source
     // circuit. Free variables in the circuit's body become bound variables.
-    auto forallOp = rewriter.create<smt::ForallOp>(
-        op.getLoc(), TypeRange(srcNonDetValues),
+    auto forallOp = smt::ForallOp::create(
+        rewriter, op.getLoc(), TypeRange(srcNonDetValues),
         [&](OpBuilder &builder, auto, ValueRange args) -> Value {
           // Inline the source circuit
           Block *body = builder.getBlock();
@@ -340,7 +340,7 @@ struct RefinementCheckingOpConversion
 
     // Assert the quantified expression
     rewriter.setInsertionPointAfter(forallOp);
-    rewriter.create<smt::AssertOp>(op.getLoc(), forallOp.getResult());
+    smt::AssertOp::create(rewriter, op.getLoc(), forallOp.getResult());
 
     // Check for satisfiability and report the result back.
     replaceOpWithSatCheck(op, loc, rewriter, solver);
@@ -403,16 +403,16 @@ struct VerifBoundedModelCheckingOpConversion
       OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToEnd(
           op->getParentOfType<ModuleOp>().getBody());
-      initFuncOp = rewriter.create<func::FuncOp>(loc, names.newName("bmc_init"),
-                                                 initFuncTy);
+      initFuncOp = func::FuncOp::create(rewriter, loc,
+                                        names.newName("bmc_init"), initFuncTy);
       rewriter.inlineRegionBefore(op.getInit(), initFuncOp.getFunctionBody(),
                                   initFuncOp.end());
-      loopFuncOp = rewriter.create<func::FuncOp>(loc, names.newName("bmc_loop"),
-                                                 loopFuncTy);
+      loopFuncOp = func::FuncOp::create(rewriter, loc,
+                                        names.newName("bmc_loop"), loopFuncTy);
       rewriter.inlineRegionBefore(op.getLoop(), loopFuncOp.getFunctionBody(),
                                   loopFuncOp.end());
-      circuitFuncOp = rewriter.create<func::FuncOp>(
-          loc, names.newName("bmc_circuit"), circuitFuncTy);
+      circuitFuncOp = func::FuncOp::create(
+          rewriter, loc, names.newName("bmc_circuit"), circuitFuncTy);
       rewriter.inlineRegionBefore(op.getCircuit(),
                                   circuitFuncOp.getFunctionBody(),
                                   circuitFuncOp.end());
@@ -427,20 +427,20 @@ struct VerifBoundedModelCheckingOpConversion
         for (unsigned i = 0; i < outputTy.size(); ++i)
           toReturn.push_back(typeConverter->materializeTargetConversion(
               rewriter, loc, outputTy[i], operands[i]));
-        rewriter.create<func::ReturnOp>(loc, toReturn);
+        func::ReturnOp::create(rewriter, loc, toReturn);
       }
     }
 
-    auto solver =
-        rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(), ValueRange{});
+    auto solver = smt::SolverOp::create(rewriter, loc, rewriter.getI1Type(),
+                                        ValueRange{});
     rewriter.createBlock(&solver.getBodyRegion());
 
     // Call init func to get initial clock values
     ValueRange initVals =
-        rewriter.create<func::CallOp>(loc, initFuncOp)->getResults();
+        func::CallOp::create(rewriter, loc, initFuncOp)->getResults();
 
     // Initial push
-    rewriter.create<smt::PushOp>(loc, 1);
+    smt::PushOp::create(rewriter, loc, 1);
 
     // InputDecls order should be <circuit arguments> <state arguments>
     // <wasViolated>
@@ -463,11 +463,12 @@ struct VerifBoundedModelCheckingOpConversion
           assert(cstInt.getBitWidth() ==
                      cast<smt::BitVectorType>(newTy).getWidth() &&
                  "Width mismatch between initial value and target type");
-          inputDecls.push_back(rewriter.create<smt::BVConstantOp>(loc, cstInt));
+          inputDecls.push_back(
+              smt::BVConstantOp::create(rewriter, loc, cstInt));
           continue;
         }
       }
-      inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
+      inputDecls.push_back(smt::DeclareFunOp::create(rewriter, loc, newTy));
     }
 
     auto numStateArgs = initVals.size() - initIndex;
@@ -476,33 +477,32 @@ struct VerifBoundedModelCheckingOpConversion
       inputDecls.push_back(initVals[initIndex]);
 
     Value lowerBound =
-        rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(0));
+        arith::ConstantOp::create(rewriter, loc, rewriter.getI32IntegerAttr(0));
     Value step =
-        rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(1));
+        arith::ConstantOp::create(rewriter, loc, rewriter.getI32IntegerAttr(1));
     Value upperBound =
-        rewriter.create<arith::ConstantOp>(loc, adaptor.getBoundAttr());
+        arith::ConstantOp::create(rewriter, loc, adaptor.getBoundAttr());
     Value constFalse =
-        rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(false));
+        arith::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(false));
     Value constTrue =
-        rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+        arith::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(true));
     inputDecls.push_back(constFalse); // wasViolated?
 
     // TODO: swapping to a whileOp here would allow early exit once the property
     // is violated
     // Perform model check up to the provided bound
-    auto forOp = rewriter.create<scf::ForOp>(
-        loc, lowerBound, upperBound, step, inputDecls,
+    auto forOp = scf::ForOp::create(
+        rewriter, loc, lowerBound, upperBound, step, inputDecls,
         [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
           // Drop existing assertions
-          builder.create<smt::PopOp>(loc, 1);
-          builder.create<smt::PushOp>(loc, 1);
+          smt::PopOp::create(builder, loc, 1);
+          smt::PushOp::create(builder, loc, 1);
 
           // Execute the circuit
           ValueRange circuitCallOuts =
-              builder
-                  .create<func::CallOp>(
-                      loc, circuitFuncOp,
-                      iterArgs.take_front(circuitFuncOp.getNumArguments()))
+              func::CallOp::create(
+                  builder, loc, circuitFuncOp,
+                  iterArgs.take_front(circuitFuncOp.getNumArguments()))
                   ->getResults();
 
           // If we have a cycle up to which we ignore assertions, we need an
@@ -516,41 +516,43 @@ struct VerifBoundedModelCheckingOpConversion
           auto ignoreAssertionsUntil =
               op->getAttrOfType<IntegerAttr>("ignore_asserts_until");
           if (ignoreAssertionsUntil) {
-            auto ignoreUntilConstant = builder.create<arith::ConstantOp>(
-                loc, rewriter.getI32IntegerAttr(
-                         ignoreAssertionsUntil.getValue().getZExtValue()));
-            auto shouldIgnore = builder.create<arith::CmpIOp>(
-                loc, arith::CmpIPredicate::ult, i, ignoreUntilConstant);
-            auto ifShouldIgnore = builder.create<scf::IfOp>(
-                loc, builder.getI1Type(), shouldIgnore, true);
+            auto ignoreUntilConstant = arith::ConstantOp::create(
+                builder, loc,
+                rewriter.getI32IntegerAttr(
+                    ignoreAssertionsUntil.getValue().getZExtValue()));
+            auto shouldIgnore =
+                arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                      i, ignoreUntilConstant);
+            auto ifShouldIgnore = scf::IfOp::create(
+                builder, loc, builder.getI1Type(), shouldIgnore, true);
             // If we should ignore, yield the existing value
             builder.setInsertionPointToEnd(
                 &ifShouldIgnore.getThenRegion().front());
-            builder.create<scf::YieldOp>(loc, ValueRange(iterArgs.back()));
+            scf::YieldOp::create(builder, loc, ValueRange(iterArgs.back()));
             builder.setInsertionPointToEnd(
                 &ifShouldIgnore.getElseRegion().front());
             yieldedValue = ifShouldIgnore.getResult(0);
           }
 
           auto checkOp =
-              rewriter.create<smt::CheckOp>(loc, builder.getI1Type());
+              smt::CheckOp::create(rewriter, loc, builder.getI1Type());
           {
             OpBuilder::InsertionGuard guard(builder);
             builder.createBlock(&checkOp.getSatRegion());
-            builder.create<smt::YieldOp>(loc, constTrue);
+            smt::YieldOp::create(builder, loc, constTrue);
             builder.createBlock(&checkOp.getUnknownRegion());
-            builder.create<smt::YieldOp>(loc, constTrue);
+            smt::YieldOp::create(builder, loc, constTrue);
             builder.createBlock(&checkOp.getUnsatRegion());
-            builder.create<smt::YieldOp>(loc, constFalse);
+            smt::YieldOp::create(builder, loc, constFalse);
           }
 
-          Value violated = builder.create<arith::OrIOp>(
-              loc, checkOp.getResult(0), iterArgs.back());
+          Value violated = arith::OrIOp::create(
+              builder, loc, checkOp.getResult(0), iterArgs.back());
 
           // If we've packaged everything in an IfOp, we need to yield the
           // new violated value
           if (ignoreAssertionsUntil) {
-            builder.create<scf::YieldOp>(loc, violated);
+            scf::YieldOp::create(builder, loc, violated);
             // Replace the variable with the yielded value
             violated = yieldedValue;
           }
@@ -567,7 +569,7 @@ struct VerifBoundedModelCheckingOpConversion
           for (auto stateArg : iterArgs.drop_back().take_back(numStateArgs))
             loopCallInputs.push_back(stateArg);
           ValueRange loopVals =
-              builder.create<func::CallOp>(loc, loopFuncOp, loopCallInputs)
+              func::CallOp::create(builder, loc, loopFuncOp, loopCallInputs)
                   ->getResults();
 
           size_t loopIndex = 0;
@@ -579,7 +581,8 @@ struct VerifBoundedModelCheckingOpConversion
             if (isa<seq::ClockType>(oldTy))
               newDecls.push_back(loopVals[loopIndex++]);
             else
-              newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
+              newDecls.push_back(
+                  smt::DeclareFunOp::create(builder, loc, newTy));
           }
 
           // Only update the registers on a clock posedge unless in rising
@@ -598,13 +601,13 @@ struct VerifBoundedModelCheckingOpConversion
               // The clock is necessarily the first value returned by the loop
               // region
               auto newClock = loopVals[0];
-              auto oldClockLow = builder.create<smt::BVNotOp>(loc, oldClock);
+              auto oldClockLow = smt::BVNotOp::create(builder, loc, oldClock);
               auto isPosedgeBV =
-                  builder.create<smt::BVAndOp>(loc, oldClockLow, newClock);
+                  smt::BVAndOp::create(builder, loc, oldClockLow, newClock);
               // Convert posedge bv<1> to bool
-              auto trueBV = builder.create<smt::BVConstantOp>(loc, 1, 1);
+              auto trueBV = smt::BVConstantOp::create(builder, loc, 1, 1);
               auto isPosedge =
-                  builder.create<smt::EqOp>(loc, isPosedgeBV, trueBV);
+                  smt::EqOp::create(builder, loc, isPosedgeBV, trueBV);
               auto regStates =
                   iterArgs.take_front(circuitFuncOp.getNumArguments())
                       .take_back(numRegs);
@@ -614,8 +617,8 @@ struct VerifBoundedModelCheckingOpConversion
                 // Create an ITE to calculate the next reg state
                 // TODO: we create a lot of ITEs here that will slow things down
                 // - these could be avoided by making init/loop regions concrete
-                nextRegStates.push_back(builder.create<smt::IteOp>(
-                    loc, isPosedge, regInput, regState));
+                nextRegStates.push_back(smt::IteOp::create(
+                    builder, loc, isPosedge, regInput, regState));
               }
               newDecls.append(nextRegStates);
             }
@@ -627,12 +630,12 @@ struct VerifBoundedModelCheckingOpConversion
 
           newDecls.push_back(violated);
 
-          builder.create<scf::YieldOp>(loc, newDecls);
+          scf::YieldOp::create(builder, loc, newDecls);
         });
 
-    Value res = rewriter.create<arith::XOrIOp>(loc, forOp->getResults().back(),
-                                               constTrue);
-    rewriter.create<smt::YieldOp>(loc, res);
+    Value res = arith::XOrIOp::create(rewriter, loc, forOp->getResults().back(),
+                                      constTrue);
+    smt::YieldOp::create(rewriter, loc, res);
     rewriter.replaceOp(op, solver.getResults());
     return success();
   }

@@ -108,8 +108,8 @@ static bool valueDefinedBeforeOp(Value value, Operation *op) {
 // annotations.
 static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
                            bool addMuxPragmas) {
-  auto slot =
-      b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(memory, addr));
+  auto slot = sv::ReadInOutOp::create(
+      b, sv::ArrayIndexInOutOp::create(b, memory, addr));
   // If we don't want to add mux pragmas, just return the read value.
   if (!addMuxPragmas ||
       cast<hw::UnpackedArrayType>(
@@ -119,14 +119,14 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
   circt::sv::setSVAttributes(
       slot, sv::SVAttributeAttr::get(b.getContext(), "cadence map_to_mux",
                                      /*emitAsComment=*/true));
-  auto valWire = b.create<sv::WireOp>(slot.getType());
-  auto assignOp = b.create<sv::AssignOp>(valWire, slot);
+  auto valWire = sv::WireOp::create(b, slot.getType());
+  auto assignOp = sv::AssignOp::create(b, valWire, slot);
   sv::setSVAttributes(assignOp,
                       sv::SVAttributeAttr::get(b.getContext(),
                                                "synopsys infer_mux_override",
                                                /*emitAsComment=*/true));
 
-  return b.create<sv::ReadInOutOp>(valWire);
+  return sv::ReadInOutOp::create(b, valWire);
 }
 
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
@@ -146,7 +146,7 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
       alwaysOp = {};
   }
   if (!alwaysOp)
-    alwaysOp = b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock);
+    alwaysOp = sv::AlwaysOp::create(b, sv::EventControl::AtPosEdge, clock);
 
   // Add the necessary registers.
   auto savedIP = b.saveInsertionPoint();
@@ -155,8 +155,8 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   for (unsigned i = 0; i < stages; ++i) {
     auto regName =
         b.getStringAttr(moduleNamespace.newName("_" + name + "_d" + Twine(i)));
-    auto reg = b.create<sv::RegOp>(data.getType(), regName,
-                                   hw::InnerSymAttr::get(regName));
+    auto reg = sv::RegOp::create(b, data.getType(), regName,
+                                 hw::InnerSymAttr::get(regName));
     regs.push_back(reg);
     registers.push_back(reg);
   }
@@ -165,17 +165,17 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   b.setInsertionPointToEnd(alwaysOp.getBodyBlock());
   for (unsigned i = 0; i < stages; ++i) {
     if (i > 0)
-      data = b.create<sv::ReadInOutOp>(data);
-    auto emitAssign = [&] { b.create<sv::PAssignOp>(regs[i], data); };
+      data = sv::ReadInOutOp::create(b, data);
+    auto emitAssign = [&] { sv::PAssignOp::create(b, regs[i], data); };
     if (gate)
-      b.create<sv::IfOp>(gate, [&]() { emitAssign(); });
+      sv::IfOp::create(b, gate, [&]() { emitAssign(); });
     else
       emitAssign();
     data = regs[i];
     gate = {};
   }
   b.restoreInsertionPoint(savedIP);
-  data = b.create<sv::ReadInOutOp>(data);
+  data = sv::ReadInOutOp::create(b, data);
 
   lastPipelineAlwaysOp = alwaysOp;
   return data;
@@ -199,8 +199,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       mem.numReadPorts + mem.numWritePorts + mem.numReadWritePorts;
 
   // Create registers for the memory.
-  sv::RegOp reg = b.create<sv::RegOp>(
-      UnpackedArrayType::get(dataType, mem.depth), b.getStringAttr("Memory"));
+  sv::RegOp reg =
+      sv::RegOp::create(b, UnpackedArrayType::get(dataType, mem.depth),
+                        b.getStringAttr("Memory"));
 
   if (addVivadoRAMAddressConflictSynthesisBugWorkaround) {
     if (mem.readLatency == 0) {
@@ -252,13 +253,13 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     Value rdata = getMemoryRead(b, reg, addr, addMuxPragmas);
     switch (readEnableMode) {
     case ReadEnableMode::Undefined: {
-      Value x = b.create<sv::ConstantXOp>(rdata.getType());
-      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      Value x = sv::ConstantXOp::create(b, rdata.getType());
+      rdata = comb::MuxOp::create(b, en, rdata, x, false);
       break;
     }
     case ReadEnableMode::Zero: {
-      Value x = b.create<hw::ConstantOp>(rdata.getType(), 0);
-      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      Value x = hw::ConstantOp::create(b, rdata.getType(), 0);
+      rdata = comb::MuxOp::create(b, en, rdata, x, false);
       break;
     }
     case ReadEnableMode::Ignore:
@@ -282,7 +283,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     if (isMasked)
       wmaskBits = op.getBody().getArgument(inArg++);
     else
-      wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
+      wmaskBits = ConstantOp::create(b, b.getIntegerAttr(en.getType(), 1));
 
     // Add common pipeline stages.
     addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr,
@@ -344,8 +345,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     }
 
     // wire to store read result
-    auto rWire = b.create<sv::WireOp>(wdataIn.getType());
-    Value rdata = b.create<sv::ReadInOutOp>(rWire);
+    auto rWire = sv::WireOp::create(b, wdataIn.getType());
+    Value rdata = sv::ReadInOutOp::create(b, rWire);
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
@@ -359,30 +360,31 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     switch (readEnableMode) {
     case ReadEnableMode::Undefined: {
-      Value x = b.create<sv::ConstantXOp>(val.getType());
-      val = b.create<comb::MuxOp>(rcond, val, x, false);
+      Value x = sv::ConstantXOp::create(b, val.getType());
+      val = comb::MuxOp::create(b, rcond, val, x, false);
       break;
     }
     case ReadEnableMode::Zero: {
-      Value x = b.create<hw::ConstantOp>(val.getType(), 0);
-      val = b.create<comb::MuxOp>(rcond, val, x, false);
+      Value x = hw::ConstantOp::create(b, val.getType(), 0);
+      val = comb::MuxOp::create(b, rcond, val, x, false);
       break;
     }
     case ReadEnableMode::Ignore:
       break;
     }
-    b.create<sv::AssignOp>(rWire, val);
+    sv::AssignOp::create(b, rWire, val);
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
-      b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
+      sv::AlwaysOp::create(b, sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
             writeEn,
             b.createOrFold<comb::AndOp>(wmask.value(), writeWMode, false),
             false);
-        b.create<sv::IfOp>(wcond, [&]() {
-          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, writeAddr);
-          b.create<sv::PAssignOp>(
+        sv::IfOp::create(b, wcond, [&]() {
+          Value slotReg = sv::ArrayIndexInOutOp::create(b, reg, writeAddr);
+          sv::PAssignOp::create(
+              b,
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
                   b.createOrFold<ConstantOp>(b.getIntegerType(32),
@@ -408,7 +410,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     if (isMasked)
       wmaskBits = op.getBody().getArgument(inArg++);
     else
-      wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
+      wmaskBits = ConstantOp::create(b, b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
     addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr,
                              "W" + Twine(i) + "addr");
@@ -437,9 +439,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       for (auto wmask : llvm::enumerate(maskValues)) {
         // Guard by corresponding mask bit.
         auto wcond = b.createOrFold<comb::AndOp>(en, wmask.value(), false);
-        b.create<sv::IfOp>(wcond, [&]() {
-          auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
-          b.create<sv::PAssignOp>(
+        sv::IfOp::create(b, wcond, [&]() {
+          auto slot = sv::ArrayIndexInOutOp::create(b, reg, addr);
+          sv::PAssignOp::create(
+              b,
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slot,
                   b.createOrFold<ConstantOp>(b.getIntegerType(32),
@@ -452,8 +455,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Build a new always block with write port logic.
     auto alwaysBlock = [&] {
-      return b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock,
-                                    [&]() { writeLogic(); });
+      return sv::AlwaysOp::create(b, sv::EventControl::AtPosEdge, clock,
+                                  [&]() { writeLogic(); });
     };
 
     switch (mem.writeUnderWrite) {
@@ -489,12 +492,11 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.getStringAttr(moduleNamespace.newName(reg.getName()))));
 
     if (mem.initIsInline) {
-      b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
-        b.create<sv::InitialOp>([&]() {
-          b.create<sv::ReadMemOp>(reg, mem.initFilename,
-                                  mem.initIsBinary
-                                      ? MemBaseTypeAttr::MemBaseBin
-                                      : MemBaseTypeAttr::MemBaseHex);
+      sv::IfDefOp::create(b, "ENABLE_INITIAL_MEM_", [&]() {
+        sv::InitialOp::create(b, [&]() {
+          sv::ReadMemOp::create(b, reg, mem.initFilename,
+                                mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
+                                                 : MemBaseTypeAttr::MemBaseHex);
         });
       });
     } else {
@@ -522,26 +524,27 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // Create a new module with the readmem op.
       b.setInsertionPointAfter(op);
       auto boundModule =
-          b.create<HWModuleOp>(boundModuleName, ArrayRef<PortInfo>());
+          HWModuleOp::create(b, boundModuleName, ArrayRef<PortInfo>());
 
       // Build the hierpathop
-      auto path = b.create<hw::HierPathOp>(
-          mlirModuleNamespace.newName(op.getName() + "_path"),
+      auto path = hw::HierPathOp::create(
+          b, mlirModuleNamespace.newName(op.getName() + "_path"),
           b.getArrayAttr(
               ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
 
       b.setInsertionPointToStart(boundModule.getBodyBlock());
-      b.create<sv::InitialOp>([&]() {
-        auto xmr = b.create<sv::XMRRefOp>(reg.getType(), path.getSymNameAttr());
-        b.create<sv::ReadMemOp>(xmr, mem.initFilename,
-                                mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
-                                                 : MemBaseTypeAttr::MemBaseHex);
+      sv::InitialOp::create(b, [&]() {
+        auto xmr =
+            sv::XMRRefOp::create(b, reg.getType(), path.getSymNameAttr());
+        sv::ReadMemOp::create(b, xmr, mem.initFilename,
+                              mem.initIsBinary ? MemBaseTypeAttr::MemBaseBin
+                                               : MemBaseTypeAttr::MemBaseHex);
       });
 
       // Instantiate this new module inside the memory module.
       b.setInsertionPointAfter(reg);
-      auto boundInstance = b.create<hw::InstanceOp>(
-          boundModule, boundModule.getName(), ArrayRef<Value>());
+      auto boundInstance = hw::InstanceOp::create(
+          b, boundModule, boundModule.getName(), ArrayRef<Value>());
       boundInstance->setAttr(
           "inner_sym",
           hw::InnerSymAttr::get(b.getStringAttr(
@@ -550,10 +553,12 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
       // Build the file container and reference the module from it.
       b.setInsertionPointAfter(op);
-      b.create<emit::FileOp>(filename, [&] {
-        b.create<emit::RefOp>(FlatSymbolRefAttr::get(boundModuleName));
-        b.create<sv::BindOp>(hw::InnerRefAttr::get(
-            op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
+      emit::FileOp::create(b, filename, [&] {
+        emit::RefOp::create(b, FlatSymbolRefAttr::get(boundModuleName));
+        sv::BindOp::create(b,
+                           hw::InnerRefAttr::get(
+                               op.getNameAttr(),
+                               boundInstance.getInnerSymAttr().getSymName()));
       });
     }
   }
@@ -564,33 +569,34 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     return;
 
   constexpr unsigned randomWidth = 32;
-  b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
+  sv::IfDefOp::create(b, "ENABLE_INITIAL_MEM_", [&]() {
     sv::RegOp randReg;
     SmallVector<sv::RegOp> randRegs;
     if (!disableRegRandomization) {
-      b.create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+      sv::IfDefOp::create(b, "RANDOMIZE_REG_INIT", [&]() {
         signed totalWidth = 0;
         for (sv::RegOp &reg : registers)
           totalWidth += reg.getElementType().getIntOrFloatBitWidth();
         while (totalWidth > 0) {
           auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
           auto innerSym = hw::InnerSymAttr::get(name);
-          randRegs.push_back(b.create<sv::RegOp>(b.getIntegerType(randomWidth),
-                                                 name, innerSym));
+          randRegs.push_back(sv::RegOp::create(b, b.getIntegerType(randomWidth),
+                                               name, innerSym));
           totalWidth -= randomWidth;
         }
       });
     }
-    auto randomMemReg = b.create<sv::RegOp>(
+    auto randomMemReg = sv::RegOp::create(
+        b,
         b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
                          randomWidth),
         b.getStringAttr("_RANDOM_MEM"));
-    b.create<sv::InitialOp>([&]() {
-      b.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+    sv::InitialOp::create(b, [&]() {
+      sv::VerbatimOp::create(b, "`INIT_RANDOM_PROLOG_");
 
       // Memory randomization logic.  The entire memory is randomized.
       if (!disableMemRandomization) {
-        b.create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
+        sv::IfDefProceduralOp::create(b, "RANDOMIZE_MEM_INIT", [&]() {
           auto outerLoopIndVarType =
               b.getIntegerType(llvm::Log2_64_Ceil(mem.depth + 1));
           auto innerUpperBoundWidth =
@@ -605,24 +611,25 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           //       randomMem[j[mem.width-1: +: 32] = `RANDOM
           //     Memory[i] = randomMem[mem.dataWidth - 1: 0];
           // ```
-          b.create<sv::ForOp>(
-              0, mem.depth, 1, outerLoopIndVarType, "i",
+          sv::ForOp::create(
+              b, 0, mem.depth, 1, outerLoopIndVarType, "i",
               [&](BlockArgument outerIndVar) {
-                b.create<sv::ForOp>(
-                    0, innerUpperBoundWidth, randomWidth, innerLoopIndVarType,
-                    "j", [&](BlockArgument innerIndVar) {
-                      auto rhs = b.create<sv::MacroRefExprSEOp>(
-                          b.getIntegerType(randomWidth), "RANDOM");
+                sv::ForOp::create(
+                    b, 0, innerUpperBoundWidth, randomWidth,
+                    innerLoopIndVarType, "j", [&](BlockArgument innerIndVar) {
+                      auto rhs = sv::MacroRefExprSEOp::create(
+                          b, b.getIntegerType(randomWidth), "RANDOM");
                       Value truncInnerIndVar;
                       if (mem.dataWidth <= 1)
                         truncInnerIndVar =
-                            b.create<hw::ConstantOp>(b.getI1Type(), 0);
+                            hw::ConstantOp::create(b, b.getI1Type(), 0);
                       else
                         truncInnerIndVar = b.createOrFold<comb::ExtractOp>(
                             innerIndVar, 0, llvm::Log2_64_Ceil(mem.dataWidth));
-                      auto lhs = b.create<sv::IndexedPartSelectInOutOp>(
-                          randomMemReg, truncInnerIndVar, randomWidth, false);
-                      b.create<sv::BPAssignOp>(lhs, rhs);
+                      auto lhs = sv::IndexedPartSelectInOutOp::create(
+                          b, randomMemReg, truncInnerIndVar, randomWidth,
+                          false);
+                      sv::BPAssignOp::create(b, lhs, rhs);
                     });
 
                 Value iterValue = outerIndVar;
@@ -631,10 +638,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                         llvm::Log2_64_Ceil(mem.depth)))
                   iterValue = b.createOrFold<comb::ExtractOp>(
                       iterValue, 0, llvm::Log2_64_Ceil(mem.depth));
-                auto lhs = b.create<sv::ArrayIndexInOutOp>(reg, iterValue);
+                auto lhs = sv::ArrayIndexInOutOp::create(b, reg, iterValue);
                 auto rhs = b.createOrFold<comb::ExtractOp>(
-                    b.create<sv::ReadInOutOp>(randomMemReg), 0, mem.dataWidth);
-                b.create<sv::BPAssignOp>(lhs, rhs);
+                    sv::ReadInOutOp::create(b, randomMemReg), 0, mem.dataWidth);
+                sv::BPAssignOp::create(b, lhs, rhs);
               });
         });
       }
@@ -645,11 +652,11 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // TODO: This shares a lot of common logic with LowerToHW.  Combine
       // these two in a common randomization utility.
       if (!disableRegRandomization) {
-        b.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
+        sv::IfDefProceduralOp::create(b, "RANDOMIZE_REG_INIT", [&]() {
           unsigned bits = randomWidth;
           for (sv::RegOp &reg : randRegs)
-            b.create<sv::VerbatimOp>(
-                b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
+            sv::VerbatimOp::create(
+                b, b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
                 b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
                                                      reg.getInnerNameAttr())));
           auto randRegIdx = 0;
@@ -703,8 +710,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             if (values.size() > 1)
               rhs.append("}");
             rhs.append(";");
-            b.create<sv::VerbatimOp>(rhs, ValueRange{},
-                                     b.getArrayAttr(symbols));
+            sv::VerbatimOp::create(b, rhs, ValueRange{},
+                                   b.getArrayAttr(symbols));
           }
         });
       }
@@ -744,11 +751,11 @@ void HWMemSimImplPass::runOnOperation() {
       // 2. undefined read-under-write behavior.
       if (replSeqMem && ((mem.readLatency == 1 && mem.writeLatency == 1) &&
                          mem.dataWidth > 0)) {
-        builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                         oldModule.getPortList());
+        HWModuleExternOp::create(builder, oldModule.getLoc(), nameAttr,
+                                 oldModule.getPortList());
       } else {
-        auto newModule = builder.create<HWModuleOp>(
-            oldModule.getLoc(), nameAttr, oldModule.getPortList());
+        auto newModule = HWModuleOp::create(builder, oldModule.getLoc(),
+                                            nameAttr, oldModule.getPortList());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(

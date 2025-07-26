@@ -170,7 +170,7 @@ void LutCalculator::getTableEntriesAsConstValues(
   DenseMap<IntegerAttr, Value> map;
   for (auto entry : table) {
     if (!map.count(entry))
-      map[entry] = builder.create<hw::ConstantOp>(lut.getLoc(), entry);
+      map[entry] = hw::ConstantOp::create(builder, lut.getLoc(), entry);
 
     tableEntries.push_back(map[entry]);
   }
@@ -225,26 +225,27 @@ struct LutToInteger : OpConversionPattern<LutOp> {
       result.insertBits(chunk, nextInsertion);
     }
 
-    Value table = rewriter.create<hw::ConstantOp>(lut.getLoc(), result);
+    Value table = hw::ConstantOp::create(rewriter, lut.getLoc(), result);
 
     // Zero-extend the lookup/index value to the same bit-width as the table,
     // because the shift operation requires both operands to have the same
     // bit-width.
-    Value zextValue = rewriter.create<hw::ConstantOp>(
-        lut->getLoc(), rewriter.getIntegerType(tableSize - inputBw), 0);
-    Value entryOffset = rewriter.create<comb::ConcatOp>(lut.getLoc(), zextValue,
-                                                        lut.getInputs());
-    Value resultBitWidth = rewriter.create<hw::ConstantOp>(
-        lut.getLoc(), entryOffset.getType(),
+    Value zextValue =
+        hw::ConstantOp::create(rewriter, lut->getLoc(),
+                               rewriter.getIntegerType(tableSize - inputBw), 0);
+    Value entryOffset = comb::ConcatOp::create(rewriter, lut.getLoc(),
+                                               zextValue, lut.getInputs());
+    Value resultBitWidth = hw::ConstantOp::create(
+        rewriter, lut.getLoc(), entryOffset.getType(),
         lut.getResult().getType().getIntOrFloatBitWidth());
-    Value lookupValue =
-        rewriter.create<comb::MulOp>(lut.getLoc(), entryOffset, resultBitWidth);
+    Value lookupValue = comb::MulOp::create(rewriter, lut.getLoc(), entryOffset,
+                                            resultBitWidth);
 
     // Shift the table and truncate to the bitwidth of the output value.
     Value shiftedTable =
-        rewriter.create<comb::ShrUOp>(lut->getLoc(), table, lookupValue);
-    const Value extracted = rewriter.create<comb::ExtractOp>(
-        lut.getLoc(), shiftedTable, 0,
+        comb::ShrUOp::create(rewriter, lut->getLoc(), table, lookupValue);
+    const Value extracted = comb::ExtractOp::create(
+        rewriter, lut.getLoc(), shiftedTable, 0,
         lut.getOutput().getType().getIntOrFloatBitWidth());
 
     rewriter.replaceOp(lut, extracted);
@@ -275,13 +276,15 @@ struct LutToArray : OpConversionPattern<LutOp> {
     if (tableSize <= 256)
       return failure();
 
-    Value table = rewriter.create<hw::AggregateConstantOp>(
-        lut.getLoc(), hw::ArrayType::get(lut.getType(), constantAttrs.size()),
+    Value table = hw::AggregateConstantOp::create(
+        rewriter, lut.getLoc(),
+        hw::ArrayType::get(lut.getType(), constantAttrs.size()),
         rewriter.getArrayAttr(constantAttrs));
-    Value lookupValue = rewriter.create<comb::ConcatOp>(
-        lut.getLoc(), rewriter.getIntegerType(inputBw), lut.getInputs());
+    Value lookupValue = comb::ConcatOp::create(rewriter, lut.getLoc(),
+                                               rewriter.getIntegerType(inputBw),
+                                               lut.getInputs());
     const Value extracted =
-        rewriter.create<hw::ArrayGetOp>(lut.getLoc(), table, lookupValue);
+        hw::ArrayGetOp::create(rewriter, lut.getLoc(), table, lookupValue);
 
     rewriter.replaceOp(lut, extracted);
     return success();

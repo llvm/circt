@@ -877,9 +877,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     // Create RefSend/RefResolve if necessary.
     if (type_isa<RefType>(dest.getType()) != type_isa<RefType>(src.getType())) {
       if (type_isa<RefType>(dest.getType()))
-        src = builder.create<RefSendOp>(src);
+        src = RefSendOp::create(builder, src);
       else
-        src = builder.create<RefResolveOp>(src);
+        src = RefResolveOp::create(builder, src);
     }
 
     // If the sink is a wire with no users, then convert this to a node.
@@ -892,7 +892,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
           baseType && baseType.isPassive()) {
         // Note that the wire is replaced with the source type
         // regardless, continue this behavior.
-        builder.create<NodeOp>(src, destOp.getName())
+        NodeOp::create(builder, src, destOp.getName())
             .setAnnotationsAttr(destOp.getAnnotations());
         opsToErase.push_back(destOp);
         return success();

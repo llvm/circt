@@ -79,8 +79,8 @@ struct SpecializeOptionPass
               target = inst.getTargetOrDefaultAttr(it->second);
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-            auto newInst = builder.create<InstanceOp>(
-                inst->getResultTypes(), target, inst.getNameAttr(),
+            auto newInst = InstanceOp::create(
+                builder, inst->getResultTypes(), target, inst.getNameAttr(),
                 inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
                 inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
                 inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),

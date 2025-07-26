@@ -358,13 +358,13 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
           &newDefOp.getBody(), newDefOp.getBody().end(),
           newDefOp.getArgumentTypes(),
           SmallVector<Location>(newDefOp.getNumArguments(), defOp.getLoc()));
-      auto callOp = rewriter.create<CallOp>(newDefOp.getLoc(), newResultTypes,
-                                            newName, block->getArguments());
+      auto callOp = CallOp::create(rewriter, newDefOp.getLoc(), newResultTypes,
+                                   newName, block->getArguments());
       SmallVector<Value> results(callOp->getResults());
-      Value constTrue = rewriter.create<hw::ConstantOp>(
-          newDefOp.getLoc(), rewriter.getI1Type(), 1);
+      Value constTrue = hw::ConstantOp::create(rewriter, newDefOp.getLoc(),
+                                               rewriter.getI1Type(), 1);
       results.insert(results.begin() + op.getEnableIdx(), constTrue);
-      rewriter.create<OutputOp>(newDefOp.getLoc(), results);
+      OutputOp::create(rewriter, newDefOp.getLoc(), results);
 
       // Remove the enable output from the current arc
       auto *terminator = defOp.getBodyBlock().getTerminator();
@@ -416,7 +416,7 @@ LogicalResult
 ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
                                    PatternRewriter &rewriter) const {
   auto getConstant = [&](const APInt &constant) -> Value {
-    return rewriter.create<hw::ConstantOp>(op.getLoc(), constant);
+    return hw::ConstantOp::create(rewriter, op.getLoc(), constant);
   };
   auto sameWidthIntegers = [](TypeRange types) -> std::optional<unsigned> {
     if (llvm::all_equal(types) && !types.empty())
@@ -425,9 +425,9 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
     return std::nullopt;
   };
   auto negate = [&](Value input) -> Value {
-    auto constTrue = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-    return rewriter.create<comb::XorOp>(op.getLoc(), input, constTrue,
-                                        op.getTwoState());
+    auto constTrue = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 1));
+    return comb::XorOp::create(rewriter, op.getLoc(), input, constTrue,
+                               op.getTwoState());
   };
 
   APInt rhs;
@@ -438,8 +438,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
         if ((op.getPredicate() == comb::ICmpPredicate::eq ||
              op.getPredicate() == comb::ICmpPredicate::ne) &&
             rhs.isAllOnes()) {
-          Value andOp = rewriter.create<comb::AndOp>(
-              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+          Value andOp = comb::AndOp::create(
+              rewriter, op.getLoc(), concatOp.getInputs(), op.getTwoState());
           if (*optionalWidth == 1) {
             if (op.getPredicate() == comb::ICmpPredicate::ne)
               andOp = negate(andOp);
@@ -457,8 +457,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
         if ((op.getPredicate() == comb::ICmpPredicate::ne ||
              op.getPredicate() == comb::ICmpPredicate::eq) &&
             rhs.isZero()) {
-          Value orOp = rewriter.create<comb::OrOp>(
-              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+          Value orOp = comb::OrOp::create(
+              rewriter, op.getLoc(), concatOp.getInputs(), op.getTwoState());
           if (*optionalWidth == 1) {
             if (op.getPredicate() == comb::ICmpPredicate::eq)
               orOp = negate(orOp);
@@ -595,8 +595,8 @@ CompRegCanonicalizer::matchAndRewrite(seq::CompRegOp op,
     if (constant.isZero())
       return failure();
 
-  Value newInput = rewriter.create<comb::MuxOp>(
-      op->getLoc(), op.getReset(), op.getResetValue(), op.getInput());
+  Value newInput = comb::MuxOp::create(rewriter, op->getLoc(), op.getReset(),
+                                       op.getResetValue(), op.getInput());
   rewriter.modifyOpInPlace(op, [&]() {
     op.getInputMutable().set(newInput);
     op.getResetMutable().clear();

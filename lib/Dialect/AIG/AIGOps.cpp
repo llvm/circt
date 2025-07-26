@@ -87,7 +87,7 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
     return failure();
 
   if (!constValue.isAllOnes()) {
-    auto constOp = rewriter.create<hw::ConstantOp>(op.getLoc(), constValue);
+    auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), constValue);
     uniqueInverts.push_back(false);
     uniqueValues.push_back(constOp);
   }

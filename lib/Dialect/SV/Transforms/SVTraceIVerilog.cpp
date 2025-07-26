@@ -74,7 +74,7 @@ void SVTraceIVerilogPass::runOnOperation() {
     ss << "initial begin\n  $dumpfile (\"" << directoryName.getValue()
        << modName << ".vcd\");\n  $dumpvars (0, " << modName
        << ");\n  #1;\nend\n";
-    builder.create<sv::VerbatimOp>(hwmod.getLoc(), ss.str());
+    sv::VerbatimOp::create(builder, hwmod.getLoc(), ss.str());
   }
 }
 

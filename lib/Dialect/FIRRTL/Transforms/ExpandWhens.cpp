@@ -288,7 +288,7 @@ public:
       newValue = b.createOrFold<MuxPrimOp>(fusedLoc, cond, whenTrue, whenFalse);
     else if (trueIsInvalid)
       newValue = whenFalse;
-    return b.create<ConnectOp>(loc, dest, newValue);
+    return ConnectOp::create(b, loc, dest, newValue);
   }
 
   void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Duplex); }
@@ -301,14 +301,14 @@ public:
         .template Case<BundleType>([&](BundleType bundle) {
           for (auto i : llvm::seq(0u, (unsigned)bundle.getNumElements())) {
             auto subfield =
-                builder.create<SubfieldOp>(value.getLoc(), value, i);
+                SubfieldOp::create(builder, value.getLoc(), value, i);
             foreachSubelement(builder, subfield, fn);
           }
         })
         .template Case<FVectorType>([&](FVectorType vector) {
           for (auto i : llvm::seq((size_t)0, vector.getNumElements())) {
             auto subindex =
-                builder.create<SubindexOp>(value.getLoc(), value, i);
+                SubindexOp::create(builder, value.getLoc(), value, i);
             foreachSubelement(builder, subindex, fn);
           }
         })
@@ -320,7 +320,7 @@ public:
     // aggergate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
-      auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      auto connect = ConnectOp::create(builder, value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
     foreachSubelement(builder, op.getResult(), fn);
@@ -331,7 +331,7 @@ public:
     // aggergate type, connect each ground type element.
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
-      auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      auto connect = ConnectOp::create(builder, value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
     foreachSubelement(builder, op.getResult(), fn);

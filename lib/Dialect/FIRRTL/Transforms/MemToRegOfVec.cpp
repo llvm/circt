@@ -86,13 +86,12 @@ struct MemToRegOfVecPass
       return pipeInput;
 
     while (stages--) {
-      auto reg = b.create<RegOp>(pipeInput.getType(), clock, name).getResult();
+      auto reg = RegOp::create(b, pipeInput.getType(), clock, name).getResult();
       if (gate) {
-        b.create<WhenOp>(gate, /*withElseRegion*/ false, [&]() {
-          b.create<MatchingConnectOp>(reg, pipeInput);
-        });
+        WhenOp::create(b, gate, /*withElseRegion*/ false,
+                       [&]() { MatchingConnectOp::create(b, reg, pipeInput); });
       } else
-        b.create<MatchingConnectOp>(reg, pipeInput);
+        MatchingConnectOp::create(b, reg, pipeInput);
 
       pipeInput = reg;
     }
@@ -101,36 +100,36 @@ struct MemToRegOfVecPass
   }
 
   Value getClock(ImplicitLocOpBuilder &builder, Value bundle) {
-    return builder.create<SubfieldOp>(bundle, "clk");
+    return SubfieldOp::create(builder, bundle, "clk");
   }
 
   Value getAddr(ImplicitLocOpBuilder &builder, Value bundle) {
-    return builder.create<SubfieldOp>(bundle, "addr");
+    return SubfieldOp::create(builder, bundle, "addr");
   }
 
   Value getWmode(ImplicitLocOpBuilder &builder, Value bundle) {
-    return builder.create<SubfieldOp>(bundle, "wmode");
+    return SubfieldOp::create(builder, bundle, "wmode");
   }
 
   Value getEnable(ImplicitLocOpBuilder &builder, Value bundle) {
-    return builder.create<SubfieldOp>(bundle, "en");
+    return SubfieldOp::create(builder, bundle, "en");
   }
 
   Value getMask(ImplicitLocOpBuilder &builder, Value bundle) {
     auto bType = type_cast<BundleType>(bundle.getType());
     if (bType.getElement("mask"))
-      return builder.create<SubfieldOp>(bundle, "mask");
-    return builder.create<SubfieldOp>(bundle, "wmask");
+      return SubfieldOp::create(builder, bundle, "mask");
+    return SubfieldOp::create(builder, bundle, "wmask");
   }
 
   Value getData(ImplicitLocOpBuilder &builder, Value bundle,
                 bool getWdata = false) {
     auto bType = type_cast<BundleType>(bundle.getType());
     if (bType.getElement("data"))
-      return builder.create<SubfieldOp>(bundle, "data");
+      return SubfieldOp::create(builder, bundle, "data");
     if (bType.getElement("rdata") && !getWdata)
-      return builder.create<SubfieldOp>(bundle, "rdata");
-    return builder.create<SubfieldOp>(bundle, "wdata");
+      return SubfieldOp::create(builder, bundle, "rdata");
+    return SubfieldOp::create(builder, bundle, "wdata");
   }
 
   void generateRead(const FirMemory &firMem, Value clock, Value addr,
@@ -155,18 +154,18 @@ struct MemToRegOfVecPass
     }
 
     // Read the register[address] into a temporary.
-    Value rdata = builder.create<SubaccessOp>(regOfVec, addr);
+    Value rdata = SubaccessOp::create(builder, regOfVec, addr);
     if (!ignoreReadEnable) {
       // Initialize read data out with invalid.
-      builder.create<MatchingConnectOp>(
-          data, builder.create<InvalidValueOp>(data.getType()));
+      MatchingConnectOp::create(
+          builder, data, InvalidValueOp::create(builder, data.getType()));
       // If enable is true, then connect the data read from memory register.
-      builder.create<WhenOp>(enable, /*withElseRegion*/ false, [&]() {
-        builder.create<MatchingConnectOp>(data, rdata);
+      WhenOp::create(builder, enable, /*withElseRegion*/ false, [&]() {
+        MatchingConnectOp::create(builder, data, rdata);
       });
     } else {
       // Ignore read enable signal.
-      builder.create<MatchingConnectOp>(data, rdata);
+      MatchingConnectOp::create(builder, data, rdata);
     }
   }
 
@@ -182,7 +181,7 @@ struct MemToRegOfVecPass
     wdataIn = addPipelineStages(builder, numStages, clock, wdataIn, "wdata");
     maskBits = addPipelineStages(builder, numStages, clock, maskBits, "wmask");
     // Create the register access.
-    FIRRTLBaseValue rdata = builder.create<SubaccessOp>(regOfVec, addr);
+    FIRRTLBaseValue rdata = SubaccessOp::create(builder, regOfVec, addr);
 
     // The tuple for the access to individual fields of an aggregate data type.
     // Tuple::<register, data, mask>
@@ -211,15 +210,15 @@ struct MemToRegOfVecPass
       return;
     }
     // If enable:
-    builder.create<WhenOp>(enable, /*withElseRegion*/ false, [&]() {
+    WhenOp::create(builder, enable, /*withElseRegion*/ false, [&]() {
       // For each data field. Only one field if not aggregate.
       for (auto regDataMask : loweredRegDataMaskFields) {
         auto regField = std::get<0>(regDataMask);
         auto dataField = std::get<1>(regDataMask);
         auto maskField = std::get<2>(regDataMask);
         // If mask, then update the register field.
-        builder.create<WhenOp>(maskField, /*withElseRegion*/ false, [&]() {
-          builder.create<MatchingConnectOp>(regField, dataField);
+        WhenOp::create(builder, maskField, /*withElseRegion*/ false, [&]() {
+          MatchingConnectOp::create(builder, regField, dataField);
         });
       }
     });
@@ -239,7 +238,7 @@ struct MemToRegOfVecPass
     maskBits = addPipelineStages(builder, numStages, clock, maskBits, "wmask");
 
     // Read the register[address] into a temporary.
-    Value rdata = builder.create<SubaccessOp>(regOfVec, addr);
+    Value rdata = SubaccessOp::create(builder, regOfVec, addr);
 
     SmallVector<std::tuple<Value, Value, Value>, 8> loweredRegDataMaskFields;
     if (!getFields(rdata, wdataIn, maskBits, loweredRegDataMaskFields,
@@ -249,13 +248,13 @@ struct MemToRegOfVecPass
       return;
     }
     // Initialize read data out with invalid.
-    builder.create<MatchingConnectOp>(
-        rdataOut, builder.create<InvalidValueOp>(rdataOut.getType()));
+    MatchingConnectOp::create(
+        builder, rdataOut, InvalidValueOp::create(builder, rdataOut.getType()));
     // If enable:
-    builder.create<WhenOp>(enable, /*withElseRegion*/ false, [&]() {
+    WhenOp::create(builder, enable, /*withElseRegion*/ false, [&]() {
       // If write mode:
-      builder.create<WhenOp>(
-          wmode, true,
+      WhenOp::create(
+          builder, wmode, true,
           // Write block:
           [&]() {
             // For each data field. Only one field if not aggregate.
@@ -264,14 +263,14 @@ struct MemToRegOfVecPass
               auto dataField = std::get<1>(regDataMask);
               auto maskField = std::get<2>(regDataMask);
               // If mask true, then set the field.
-              builder.create<WhenOp>(
-                  maskField, /*withElseRegion*/ false, [&]() {
-                    builder.create<MatchingConnectOp>(regField, dataField);
+              WhenOp::create(
+                  builder, maskField, /*withElseRegion*/ false, [&]() {
+                    MatchingConnectOp::create(builder, regField, dataField);
                   });
             }
           },
           // Read block:
-          [&]() { builder.create<MatchingConnectOp>(rdataOut, rdata); });
+          [&]() { MatchingConnectOp::create(builder, rdataOut, rdata); });
     });
   }
 
@@ -309,9 +308,9 @@ struct MemToRegOfVecPass
       return FIRRTLTypeSwitch<FIRRTLType, bool>(inType)
           .Case<BundleType>([&](BundleType bundle) {
             for (size_t i = 0, e = bundle.getNumElements(); i != e; ++i) {
-              auto regField = builder.create<SubfieldOp>(reg, i);
-              auto inputField = builder.create<SubfieldOp>(input, i);
-              auto maskField = builder.create<SubfieldOp>(mask, i);
+              auto regField = SubfieldOp::create(builder, reg, i);
+              auto inputField = SubfieldOp::create(builder, input, i);
+              auto maskField = SubfieldOp::create(builder, mask, i);
               if (!flatAccess(regField, inputField, maskField))
                 return false;
             }
@@ -319,9 +318,9 @@ struct MemToRegOfVecPass
           })
           .Case<FVectorType>([&](auto vector) {
             for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
-              auto regField = builder.create<SubindexOp>(reg, i);
-              auto inputField = builder.create<SubindexOp>(input, i);
-              auto maskField = builder.create<SubindexOp>(mask, i);
+              auto regField = SubindexOp::create(builder, reg, i);
+              auto inputField = SubindexOp::create(builder, input, i);
+              auto maskField = SubindexOp::create(builder, mask, i);
               if (!flatAccess(regField, inputField, maskField))
                 return false;
             }
@@ -385,8 +384,8 @@ struct MemToRegOfVecPass
       }
       // Create a temporary wire to replace the memory port. This makes it
       // simpler to delete the memOp.
-      auto wire = builder.create<WireOp>(
-          result.getType(),
+      auto wire = WireOp::create(
+          builder, result.getType(),
           (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
@@ -399,8 +398,9 @@ struct MemToRegOfVecPass
       // IF the register is not yet created.
       if (!regOfVec) {
         // Create the register corresponding to the memory.
-        regOfVec = builder.create<RegOp>(
-            FVectorType::get(dataType, firMem.depth), clk, memOp.getNameAttr());
+        regOfVec =
+            RegOp::create(builder, FVectorType::get(dataType, firMem.depth),
+                          clk, memOp.getNameAttr());
 
         // Copy all the memory annotations.
         if (!memOp.getAnnotationsAttr().empty())
@@ -428,7 +428,7 @@ struct MemToRegOfVecPass
     // RefSend on the register.
     if (regOfVec)
       for (auto r : debugPorts)
-        r.replaceAllUsesWith(builder.create<RefSendOp>(regOfVec.getResult()));
+        r.replaceAllUsesWith(RefSendOp::create(builder, regOfVec.getResult()));
   }
 };
 } // end anonymous namespace
