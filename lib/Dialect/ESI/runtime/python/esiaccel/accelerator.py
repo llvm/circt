@@ -41,6 +41,13 @@ class AcceleratorConnection:
   def get_service_hostmem(self) -> cpp.HostMem:
     return self.cpp_accel.get_service_hostmem()
 
+  def get_accelerator(self) -> "Accelerator":
+    """
+    Return an accelerator that may be owned by this accelerator connection.
+    If no accelerator is owned, will throw.
+    """
+    return Accelerator(self.cpp_accel.get_accelerator())
+
 
 from .esiCppAccel import HostMemOptions
 

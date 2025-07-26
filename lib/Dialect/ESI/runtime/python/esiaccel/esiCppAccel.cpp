@@ -402,7 +402,9 @@ PYBIND11_MODULE(esiCppAccel, m) {
           [](AcceleratorConnection &acc) {
             return acc.getService<services::HostMem>({});
           },
-          py::return_value_policy::reference);
+          py::return_value_policy::reference)
+      .def("get_accelerator", &AcceleratorConnection::getAccelerator,
+           py::return_value_policy::reference);
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())
