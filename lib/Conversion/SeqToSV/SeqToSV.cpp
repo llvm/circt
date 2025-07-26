@@ -782,7 +782,8 @@ void SeqToSVPass::runOnOperation() {
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(b, guard, []() {}, body);
+    sv::IfDefOp::create(
+        b, guard, []() {}, body);
   };
 
   emit::FragmentOp::create(b, randomInitFragmentName.getAttr(), [&] {
