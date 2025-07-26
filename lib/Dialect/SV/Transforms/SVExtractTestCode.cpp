@@ -631,6 +631,11 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
   if (isa<TimeOp, sv::FuncCallProceduralOp>(op))
     return false;
 
+  if (auto system = dyn_cast<SystemFunctionOp>(op);
+      system &&
+      (system.getFnName() == "signed" || system.getFnName() == "unsigned"))
+    return false;
+
   // Otherwise, operations with memory effects as a part design.
   return !mlir::isMemoryEffectFree(op);
 }
