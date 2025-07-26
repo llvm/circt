@@ -172,7 +172,7 @@ struct Context {
   /// failure if an error occurs. Returns a null value if the formatted string
   /// is trivially empty. Otherwise returns the formatted string.
   FailureOr<Value> convertFormatString(
-      slang::span<const slang::ast::Expression *const> arguments, Location loc,
+      std::span<const slang::ast::Expression *const> arguments, Location loc,
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
