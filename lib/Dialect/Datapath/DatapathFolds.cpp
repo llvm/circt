@@ -158,8 +158,8 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
       return failure();
 
     // Create a new CompressOp with all collected operands
-    auto newCompressOp = rewriter.create<datapath::CompressOp>(
-        addOp.getLoc(), newCompressOperands, 2);
+    auto newCompressOp = datapath::CompressOp::create(rewriter, addOp.getLoc(),
+                                                      newCompressOperands, 2);
 
     // Replace the original AddOp with a new add(compress(inputs))
     rewriter.replaceOpWithNewOp<comb::AddOp>(addOp, newCompressOp.getResults(),
@@ -235,11 +235,11 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
       maxNonZeroBits = std::max(maxNonZeroBits, nonZeroBits);
     }
 
-    auto newPP = rewriter.create<datapath::PartialProductOp>(
-        op.getLoc(), op.getOperands(), maxNonZeroBits);
+    auto newPP = datapath::PartialProductOp::create(
+        rewriter, op.getLoc(), op.getOperands(), maxNonZeroBits);
 
-    auto zero = rewriter.create<hw::ConstantOp>(op.getLoc(),
-                                                APInt::getZero(inputWidth));
+    auto zero = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       APInt::getZero(inputWidth));
 
     // Collect newPP results and pad with zeros if needed
     SmallVector<Value> newResults(newPP.getResults().begin(),

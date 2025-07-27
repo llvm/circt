@@ -723,15 +723,15 @@ Value AIGERParser::getLiteralValue(unsigned literal,
   // Handle constants
   if (literal == 0) {
     // FALSE constant
-    return builder.create<hw::ConstantOp>(
-        loc, builder.getI1Type(),
+    return hw::ConstantOp::create(
+        builder, loc, builder.getI1Type(),
         builder.getIntegerAttr(builder.getI1Type(), 0));
   }
 
   if (literal == 1) {
     // TRUE constant
-    return builder.create<hw::ConstantOp>(
-        loc, builder.getI1Type(),
+    return hw::ConstantOp::create(
+        builder, loc, builder.getI1Type(),
         builder.getIntegerAttr(builder.getI1Type(), 1));
   }
 
@@ -770,8 +770,8 @@ Value AIGERParser::getLiteralValue(unsigned literal,
   if (inverted) {
     // Create an inverter using aig.and_inv with single input
     SmallVector<bool> inverts = {true};
-    return builder.create<aig::AndInverterOp>(loc, builder.getI1Type(),
-                                              ValueRange{baseValue}, inverts);
+    return aig::AndInverterOp::create(builder, loc, builder.getI1Type(),
+                                      ValueRange{baseValue}, inverts);
   }
 
   return baseValue;
@@ -825,8 +825,9 @@ ParseResult AIGERParser::createModule() {
   }
 
   // Create the HW module
-  auto hwModule = builder.create<hw::HWModuleOp>(
-      builder.getUnknownLoc(), builder.getStringAttr(moduleName), ports);
+  auto hwModule =
+      hw::HWModuleOp::create(builder, builder.getUnknownLoc(),
+                             builder.getStringAttr(moduleName), ports);
 
   // Set insertion point inside the module
   builder.setInsertionPointToStart(hwModule.getBodyBlock());
@@ -865,8 +866,8 @@ ParseResult AIGERParser::createModule() {
     auto nextBackedge = bb.get(builder.getI1Type());
 
     // Create the register with the backedge as input
-    auto regValue = builder.create<seq::CompRegOp>(
-        lexer.translateLocation(loc), (Value)nextBackedge, clockValue);
+    auto regValue = seq::CompRegOp::create(
+        builder, lexer.translateLocation(loc), (Value)nextBackedge, clockValue);
     if (auto name = symbolTable.lookup({SymbolKind::Latch, i}))
       regValue.setNameAttr(name);
 
@@ -889,9 +890,9 @@ ParseResult AIGERParser::createModule() {
                                  static_cast<bool>(rhs1 % 2)};
 
     // Create AND gate with potential inversions
-    auto andResult = builder.create<aig::AndInverterOp>(
-        location, builder.getI1Type(), ValueRange{rhs0Value, rhs1Value},
-        inverts);
+    auto andResult =
+        aig::AndInverterOp::create(builder, location, builder.getI1Type(),
+                                   ValueRange{rhs0Value, rhs1Value}, inverts);
 
     // Set the backedge for this AND gate's result
     backedges[lhs].setValue(andResult);

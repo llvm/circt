@@ -379,8 +379,8 @@ static void createRtlPorts(const RtlPortsInfo &rtlPortToCreate,
     FlatSymbolRefAttr portPathRef =
         hierPathCache.getRefFor(ArrayAttr::get(ctx, {portSym}));
 
-    auto portPath = builder.create<om::PathCreateOp>(
-        loc, om::PathType::get(ctx),
+    auto portPath = om::PathCreateOp::create(
+        builder, loc, om::PathType::get(ctx),
         om::TargetKindAttr::get(ctx, om::TargetKind::DontTouch), basePath,
         portPathRef);
 
@@ -389,22 +389,22 @@ static void createRtlPorts(const RtlPortsInfo &rtlPortToCreate,
     StringRef portDirectionName =
         mod.getPortDirection(i) == Direction::Out ? "Output" : "Input";
 
-    auto portDirection = builder.create<om::ConstantOp>(
-        loc, om::StringType::get(ctx),
+    auto portDirection = om::ConstantOp::create(
+        builder, loc, om::StringType::get(ctx),
         StringAttr::get(portDirectionName, om::StringType::get(ctx)));
 
     // Get a width attribute.
 
-    auto portWidth = builder.create<om::ConstantOp>(
-        loc, om::OMIntegerType::get(ctx),
+    auto portWidth = om::ConstantOp::create(
+        builder, loc, om::OMIntegerType::get(ctx),
         om::IntegerAttr::get(
             ctx, mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 64),
                                         portType.getBitWidthOrSentinel())));
 
     // Create an RtlPort object for this port, and add it to the list.
 
-    auto portObj = builder.create<om::ObjectOp>(
-        loc, portClassType, portClassName,
+    auto portObj = om::ObjectOp::create(
+        builder, loc, portClassType, portClassName,
         ArrayRef<Value>{portPath, portDirection, portWidth});
 
     ports.push_back(portObj);
@@ -412,9 +412,9 @@ static void createRtlPorts(const RtlPortsInfo &rtlPortToCreate,
 
   // Create a list of RtlPort objects to be included with the containingModule.
 
-  auto portsList = builder.create<om::ListCreateOp>(
-      UnknownLoc::get(builder.getContext()),
-      getRtlPortsType(builder.getContext()), ports);
+  auto portsList =
+      om::ListCreateOp::create(builder, UnknownLoc::get(builder.getContext()),
+                               getRtlPortsType(builder.getContext()), ports);
 
   object.getActualParamsMutable().append({portsList});
 }
@@ -997,8 +997,8 @@ static om::ClassLike convertExtClass(FModuleLike moduleLike, OpBuilder builder,
   }
   checkAddContainingModulePorts(hasContainingModule, builder, fieldNames,
                                 fieldTypes);
-  return builder.create<om::ClassExternOp>(
-      moduleLike.getLoc(), name, formalParamNames, fieldNames, fieldTypes);
+  return om::ClassExternOp::create(builder, moduleLike.getLoc(), name,
+                                   formalParamNames, fieldNames, fieldTypes);
 }
 
 static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
@@ -1023,8 +1023,8 @@ static om::ClassLike convertClass(FModuleLike moduleLike, OpBuilder builder,
 
   checkAddContainingModulePorts(hasContainingModule, builder, fieldNames,
                                 fieldTypes);
-  return builder.create<om::ClassOp>(moduleLike.getLoc(), name,
-                                     formalParamNames, fieldNames, fieldTypes);
+  return om::ClassOp::create(builder, moduleLike.getLoc(), name,
+                             formalParamNames, fieldNames, fieldTypes);
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
@@ -1332,8 +1332,8 @@ static LogicalResult updateObjectInClass(
   // Create the new Object op.
   OpBuilder builder(firrtlObject);
 
-  auto object = builder.create<om::ObjectOp>(
-      firrtlObject.getLoc(), classType, firrtlObject.getClassNameAttr(), args);
+  auto object = om::ObjectOp::create(builder, firrtlObject.getLoc(), classType,
+                                     firrtlObject.getClassNameAttr(), args);
 
   // If there is a 'containingModule', track that we need to add 'ports'.
   if (containingModuleRef) {
@@ -1369,8 +1369,8 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
   // The 0'th argument is the base path.
   auto basePath = firrtlInstance->getBlock()->getArgument(0);
   auto symRef = FlatSymbolRefAttr::get(hierPath.getSymNameAttr());
-  auto rebasedPath = builder.create<om::BasePathCreateOp>(
-      firrtlInstance->getLoc(), basePath, symRef);
+  auto rebasedPath = om::BasePathCreateOp::create(
+      builder, firrtlInstance->getLoc(), basePath, symRef);
 
   actualParameters.push_back(rebasedPath);
 
@@ -1419,8 +1419,8 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
 
   // Create the new Object op.
   auto object =
-      builder.create<om::ObjectOp>(firrtlInstance.getLoc(), classType,
-                                   className.getAttr(), actualParameters);
+      om::ObjectOp::create(builder, firrtlInstance.getLoc(), classType,
+                           className.getAttr(), actualParameters);
 
   // Replace uses of the FIRRTL instance outputs with field access into
   // the OM Object. The later dialect conversion will take care of
@@ -1440,8 +1440,8 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
         firrtlInstance.getPortName(result.getResultNumber()))});
 
     // Create the field access.
-    auto objectField = builder.create<ObjectFieldOp>(
-        object.getLoc(), result.getType(), object, objectFieldPath);
+    auto objectField = ObjectFieldOp::create(
+        builder, object.getLoc(), result.getType(), object, objectFieldPath);
 
     result.replaceAllUsesWith(objectField);
   }
@@ -2116,7 +2116,7 @@ static void populateTypeConverter(TypeConverter &converter) {
   converter.addTargetMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
-        return builder.create<UnrealizedConversionCastOp>(loc, type, values[0])
+        return UnrealizedConversionCastOp::create(builder, loc, type, values[0])
             ->getResult(0);
       });
 
@@ -2125,7 +2125,7 @@ static void populateTypeConverter(TypeConverter &converter) {
   converter.addSourceMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
-        return builder.create<UnrealizedConversionCastOp>(loc, type, values[0])
+        return UnrealizedConversionCastOp::create(builder, loc, type, values[0])
             ->getResult(0);
       });
 }

@@ -32,8 +32,8 @@ Value comb::createZExt(OpBuilder &builder, Location loc, Value value,
     return value;
 
   // Create a zero constant for the upper bits.
-  auto zeros = builder.create<hw::ConstantOp>(
-      loc, builder.getIntegerType(targetWidth - inputWidth), 0);
+  auto zeros = hw::ConstantOp::create(
+      builder, loc, builder.getIntegerType(targetWidth - inputWidth), 0);
   return builder.createOrFold<ConcatOp>(loc, zeros, value);
 }
 
@@ -64,7 +64,7 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
 
 Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder,
                             bool twoState) {
-  auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
+  auto allOnes = hw::ConstantOp::create(builder, loc, value.getType(), -1);
   return builder.createOrFold<XorOp>(loc, value, allOnes, twoState);
 }
 
@@ -170,8 +170,8 @@ Value comb::createDynamicInject(OpBuilder &builder, Location loc, Value value,
 
   // Zero-extend the offset and clear the value bits we are replacing.
   offset = createZExt(builder, loc, offset, largeWidth);
-  Value mask = builder.create<hw::ConstantOp>(
-      loc, APInt::getLowBitsSet(largeWidth, smallWidth));
+  Value mask = hw::ConstantOp::create(
+      builder, loc, APInt::getLowBitsSet(largeWidth, smallWidth));
   mask = builder.createOrFold<comb::ShlOp>(loc, mask, offset);
   mask = createOrFoldNot(loc, mask, builder, true);
   value = builder.createOrFold<comb::AndOp>(loc, value, mask, twoState);
@@ -205,15 +205,96 @@ Value comb::createInject(OpBuilder &builder, Location loc, Value value,
   auto end = offset + smallWidth;
   if (end < largeWidth)
     fragments.push_back(
-        builder.create<comb::ExtractOp>(loc, value, end, largeWidth - end));
+        comb::ExtractOp::create(builder, loc, value, end, largeWidth - end));
   if (end <= largeWidth)
     fragments.push_back(replacement);
   else
-    fragments.push_back(builder.create<comb::ExtractOp>(loc, replacement, 0,
-                                                        largeWidth - offset));
+    fragments.push_back(comb::ExtractOp::create(builder, loc, replacement, 0,
+                                                largeWidth - offset));
   if (offset > 0)
-    fragments.push_back(builder.create<comb::ExtractOp>(loc, value, 0, offset));
+    fragments.push_back(
+        comb::ExtractOp::create(builder, loc, value, 0, offset));
   return builder.createOrFold<comb::ConcatOp>(loc, fragments);
+}
+
+// Construct a full adder for three 1-bit inputs.
+std::pair<Value, Value> comb::fullAdder(OpBuilder &builder, Location loc,
+                                        Value a, Value b, Value c) {
+  auto aXorB = builder.createOrFold<comb::XorOp>(loc, a, b, true);
+  Value sum = builder.createOrFold<comb::XorOp>(loc, aXorB, c, true);
+
+  auto carry = builder.createOrFold<comb::OrOp>(
+      loc,
+      ArrayRef<Value>{builder.createOrFold<comb::AndOp>(loc, a, b, true),
+                      builder.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
+      true);
+
+  return {sum, carry};
+}
+
+// Perform Wallace tree reduction on partial products.
+// See https://en.wikipedia.org/wiki/Wallace_tree
+SmallVector<Value>
+comb::wallaceReduction(OpBuilder &builder, Location loc, size_t width,
+                       size_t targetAddends,
+                       SmallVector<SmallVector<Value>> &addends) {
+  auto falseValue = hw::ConstantOp::create(builder, loc, APInt(1, 0));
+  SmallVector<SmallVector<Value>> newAddends;
+  newAddends.reserve(addends.size());
+  // Continue reduction until we have only two rows. The length of
+  // `addends` is reduced by 1/3 in each iteration.
+  while (addends.size() > targetAddends) {
+    newAddends.clear();
+    // Take three rows at a time and reduce to two rows(sum and carry).
+    for (unsigned i = 0; i < addends.size(); i += 3) {
+      if (i + 2 < addends.size()) {
+        // We have three rows to reduce
+        auto &row1 = addends[i];
+        auto &row2 = addends[i + 1];
+        auto &row3 = addends[i + 2];
+
+        assert(row1.size() == width && row2.size() == width &&
+               row3.size() == width);
+
+        SmallVector<Value> sumRow, carryRow;
+        sumRow.reserve(width);
+        carryRow.reserve(width);
+        carryRow.push_back(falseValue);
+
+        // Process each bit position
+        for (unsigned j = 0; j < width; ++j) {
+          // Full adder logic
+          auto [sum, carry] =
+              comb::fullAdder(builder, loc, row1[j], row2[j], row3[j]);
+          sumRow.push_back(sum);
+          if (j + 1 < width)
+            carryRow.push_back(carry);
+        }
+
+        newAddends.push_back(std::move(sumRow));
+        newAddends.push_back(std::move(carryRow));
+      } else {
+        // Add remaining rows as is
+        newAddends.append(addends.begin() + i, addends.end());
+      }
+    }
+    std::swap(newAddends, addends);
+  }
+
+  assert(addends.size() <= targetAddends);
+  SmallVector<Value> carrySave;
+  for (auto &addend : addends) {
+    // Reverse the order of the bits
+    std::reverse(addend.begin(), addend.end());
+    carrySave.push_back(comb::ConcatOp::create(builder, loc, addend));
+  }
+
+  // Pad with zeros
+  auto zero = hw::ConstantOp::create(builder, loc, APInt(width, 0));
+  while (carrySave.size() < targetAddends)
+    carrySave.push_back(zero);
+
+  return carrySave;
 }
 
 //===----------------------------------------------------------------------===//

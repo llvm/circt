@@ -112,7 +112,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
         outValues.push_back(el);
     });
     opBuilder.setInsertionPointToEnd(currentBlock);
-    opBuilder.create<ReturnOp>(funcOp->getLoc(), outValues);
+    ReturnOp::create(opBuilder, funcOp->getLoc(), outValues);
   }
   // Create and populate new FuncOps
   for (long unsigned i = 0; i < blocks.size() - 1; ++i) {
@@ -132,8 +132,8 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     funcName.append("_split_func");
     funcName.append(std::to_string(i));
     auto newFunc =
-        opBuilder.create<FuncOp>(funcOp->getLoc(), funcName,
-                                 opBuilder.getFunctionType(argTypes, outTypes));
+        FuncOp::create(opBuilder, funcOp->getLoc(), funcName,
+                       opBuilder.getFunctionType(argTypes, outTypes));
     ++numFuncsCreated;
     symbolTable->insert(newFunc);
     auto *funcBlock = newFunc.addEntryBlock();
@@ -150,8 +150,8 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     for (auto pair : argMap)
       replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getRegion());
     opBuilder.setInsertionPointToStart(blocks[i + 1]);
-    Operation *callOp = opBuilder.create<func::CallOp>(
-        funcOp->getLoc(), outTypes, funcName, args);
+    Operation *callOp = func::CallOp::create(opBuilder, funcOp->getLoc(),
+                                             outTypes, funcName, args);
     auto callResults = callOp->getResults();
     argMap.clear();
     for (unsigned long k = 0; k < outValues.size(); ++k)

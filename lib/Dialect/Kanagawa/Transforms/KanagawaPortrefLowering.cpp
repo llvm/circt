@@ -76,8 +76,8 @@ public:
     rewriter.setInsertionPoint(op);
     if (d == Direction::Input) {
       // references to inputs becomes outputs (write from this container)
-      auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
+      auto rawOutput = OutputPortOp::create(
+          rewriter, op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
 
       // Replace writes to the unwrapped port with writes to the new port.
       for (auto *unwrappedPortUser :
@@ -92,8 +92,8 @@ public:
       }
     } else {
       // References to outputs becomes inputs (read from this container)
-      auto rawInput = rewriter.create<InputPortOp>(
-          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
+      auto rawInput = InputPortOp::create(
+          rewriter, op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
       // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
       // DialectConversion. Using it may lead to assertions about mutating
       // replaced/erased ops. For now, do this RAUW directly, until
@@ -157,19 +157,18 @@ public:
       // Outputs of inputs are inputs (external driver into this container).
       // Create the raw input port and write the input port reference with a
       // read of the raw input port.
-      auto rawInput = rewriter.create<InputPortOp>(
-          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
-      rewriter.create<PortWriteOp>(
-          op.getLoc(), portWrapper.getValue(),
-          rewriter.create<PortReadOp>(op.getLoc(), rawInput));
+      auto rawInput = InputPortOp::create(
+          rewriter, op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
+      PortWriteOp::create(rewriter, op.getLoc(), portWrapper.getValue(),
+                          PortReadOp::create(rewriter, op.getLoc(), rawInput));
     } else {
       // Outputs of outputs are outputs (external driver out of this container).
       // Create the raw output port and do a read of the input port reference.
-      auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
-      rewriter.create<PortWriteOp>(
-          op.getLoc(), rawOutput,
-          rewriter.create<PortReadOp>(op.getLoc(), portWrapper.getValue()));
+      auto rawOutput = OutputPortOp::create(
+          rewriter, op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
+      PortWriteOp::create(
+          rewriter, op.getLoc(), rawOutput,
+          PortReadOp::create(rewriter, op.getLoc(), portWrapper.getValue()));
     }
 
     // Finally, remove the port wrapper and the original output port.
@@ -221,20 +220,20 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
       if (innerDirection == Direction::Input) {
         // The portref<in portref<in T>> is now an output port.
         auto newGetPort =
-            rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
-                                       innerType, Direction::Output);
+            GetPortOp::create(rewriter, op.getLoc(), op.getInstance(), portName,
+                              innerType, Direction::Output);
         auto newGetPortVal =
-            rewriter.create<PortReadOp>(op.getLoc(), newGetPort);
-        rewriter.create<PortWriteOp>(op.getLoc(), getPortWrapper.getValue(),
-                                     newGetPortVal);
+            PortReadOp::create(rewriter, op.getLoc(), newGetPort);
+        PortWriteOp::create(rewriter, op.getLoc(), getPortWrapper.getValue(),
+                            newGetPortVal);
       } else {
         // The portref<in portref<out T>> is now an input port.
         auto newGetPort =
-            rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
-                                       innerType, Direction::Input);
-        auto writeValue =
-            rewriter.create<PortReadOp>(op.getLoc(), getPortWrapper.getValue());
-        rewriter.create<PortWriteOp>(op.getLoc(), newGetPort, writeValue);
+            GetPortOp::create(rewriter, op.getLoc(), op.getInstance(), portName,
+                              innerType, Direction::Input);
+        auto writeValue = PortReadOp::create(rewriter, op.getLoc(),
+                                             getPortWrapper.getValue());
+        PortWriteOp::create(rewriter, op.getLoc(), newGetPort, writeValue);
       }
     } else {
       PortReadOp getPortUnwrapper;
@@ -313,9 +312,9 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
           // forwarding is resolved through reading/writing the intermediate
           // inputs.
           auto fwPortName = rewriter.getStringAttr(portName.strref() + "_fw");
-          auto forwardedInputPort = rewriter.create<InputPortOp>(
-              op.getLoc(), hw::InnerSymAttr::get(fwPortName), innerType,
-              fwPortName);
+          auto forwardedInputPort = InputPortOp::create(
+              rewriter, op.getLoc(), hw::InnerSymAttr::get(fwPortName),
+              innerType, fwPortName);
 
           // TODO: RewriterBase::replaceAllUsesWith is not currently supported
           // by DialectConversion. Using it may lead to assertions about
@@ -323,8 +322,8 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
           // ConversionPatternRewriter properly supports RAUW.
           // See https://github.com/llvm/circt/issues/6795.
           getPortUnwrapper.getResult().replaceAllUsesWith(forwardedInputPort);
-          portDriverValue = rewriter.create<PortReadOp>(
-              op.getLoc(), forwardedInputPort.getPort());
+          portDriverValue = PortReadOp::create(rewriter, op.getLoc(),
+                                               forwardedInputPort.getPort());
         } else {
           // Direct assignmenet - the driver value will be the value of
           // the driver.
@@ -335,9 +334,9 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         // Perform assignment to the input port of the target instance using
         // the driver value.
         auto rawPort =
-            rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
-                                       innerType, Direction::Input);
-        rewriter.create<PortWriteOp>(op.getLoc(), rawPort, portDriverValue);
+            GetPortOp::create(rewriter, op.getLoc(), op.getInstance(), portName,
+                              innerType, Direction::Input);
+        PortWriteOp::create(rewriter, op.getLoc(), rawPort, portDriverValue);
       } else {
         // In this situation, we're retrieving an output port that is sent as an
         // output of the container: %rr = kanagawa.get_port %c %c_in :
@@ -354,8 +353,8 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         // We then replace the read op with the actual output port of the
         // container.
         auto rawPort =
-            rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
-                                       innerType, Direction::Output);
+            GetPortOp::create(rewriter, op.getLoc(), op.getInstance(), portName,
+                              innerType, Direction::Output);
 
         // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
         // DialectConversion. Using it may lead to assertions about mutating

@@ -21,7 +21,7 @@ LogicalResult WrapValidReadyOp::fold(FoldAdaptor,
     return failure();
   OpBuilder builder(getContext());
   results.push_back(
-      builder.create<NullSourceOp>(getLoc(), getChanOutput().getType())
+      NullSourceOp::create(builder, getLoc(), getChanOutput().getType())
           .getOut());
   results.push_back(IntegerAttr::get(IntegerType::get(getContext(), 1), 1));
   return success();
@@ -51,7 +51,7 @@ LogicalResult WrapFIFOOp::fold(FoldAdaptor,
 
   OpBuilder builder(getContext());
   results.push_back(
-      builder.create<NullSourceOp>(getLoc(), getChanOutput().getType())
+      NullSourceOp::create(builder, getLoc(), getChanOutput().getType())
           .getOut());
   results.push_back(IntegerAttr::get(
       IntegerType::get(getContext(), 1, IntegerType::Signless), 0));

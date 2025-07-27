@@ -271,9 +271,9 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
     StageOp terminator = cast<StageOp>(predecessorStage->getTerminator());
     b.setInsertionPoint(terminator);
     llvm::SmallVector<llvm::SmallVector<Value>> clockGates;
-    b.create<StageOp>(terminator.getLoc(), terminator.getNextStage(), regIns,
-                      passIns, clockGates, b.getArrayAttr(regNames),
-                      b.getArrayAttr(passNames));
+    StageOp::create(b, terminator.getLoc(), terminator.getNextStage(), regIns,
+                    passIns, clockGates, b.getArrayAttr(regNames),
+                    b.getArrayAttr(passNames));
     terminator.erase();
 
     // ... and add arguments to the next stage. Registers first, then

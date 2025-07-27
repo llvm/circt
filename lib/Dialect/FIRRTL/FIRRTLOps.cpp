@@ -2051,7 +2051,7 @@ void ClassOp::build(::mlir::OpBuilder &odsBuilder,
   auto args = body.getArguments();
   auto loc = odsState.location;
   for (unsigned i = 0, e = ports.size(); i != e; i += 2)
-    odsBuilder.create<PropAssignOp>(loc, args[i + 1], args[i]);
+    PropAssignOp::create(odsBuilder, loc, args[i + 1], args[i]);
 
   odsBuilder.restoreInsertionPoint(prevLoc);
 }
@@ -2413,11 +2413,11 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
   SmallVector<Attribute> newPortAnnotations =
       removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
 
-  auto newOp = builder.create<InstanceOp>(
-      getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
-      newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLayers(), getLowerToBind(), getDoNotPrint(),
-      getInnerSymAttr());
+  auto newOp = InstanceOp::create(
+      builder, getLoc(), newResultTypes, getModuleName(), getName(),
+      getNameKind(), newPortDirections, newPortNames,
+      getAnnotations().getValue(), newPortAnnotations, getLayers(),
+      getLowerToBind(), getDoNotPrint(), getInnerSymAttr());
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
@@ -2487,11 +2487,12 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   }
 
   // Create a new instance op with the reset inserted.
-  return OpBuilder(*this).create<InstanceOp>(
-      getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
-      newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLayers(), getLowerToBind(), getDoNotPrint(),
-      getInnerSymAttr());
+  OpBuilder builder(*this);
+  return InstanceOp::create(builder, getLoc(), newPortTypes, getModuleName(),
+                            getName(), getNameKind(), newPortDirections,
+                            newPortNames, getAnnotations().getValue(),
+                            newPortAnnos, getLayers(), getLowerToBind(),
+                            getDoNotPrint(), getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -2910,9 +2911,10 @@ InstanceChoiceOp::erasePorts(OpBuilder &builder,
   SmallVector<Attribute> newPortAnnotations =
       removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
 
-  auto newOp = builder.create<InstanceChoiceOp>(
-      getLoc(), newResultTypes, getModuleNames(), getCaseNames(), getName(),
-      getNameKind(), direction::packAttribute(getContext(), newPortDirections),
+  auto newOp = InstanceChoiceOp::create(
+      builder, getLoc(), newResultTypes, getModuleNames(), getCaseNames(),
+      getName(), getNameKind(),
+      direction::packAttribute(getContext(), newPortDirections),
       ArrayAttr::get(getContext(), newPortNames), getAnnotationsAttr(),
       ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
       getInnerSymAttr());

@@ -124,8 +124,8 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
   SmallVector<Value> argVec = arguments.takeVector();
 
   auto clockConv = builder.createOrFold<seq::FromClockOp>(fusedLoc, clock);
-  auto trigOp = builder.create<hw::TriggeredOp>(
-      fusedLoc,
+  auto trigOp = hw::TriggeredOp::create(
+      builder, fusedLoc,
       hw::EventControlAttr::get(builder.getContext(),
                                 hw::EventControl::AtPosEdge),
       clockConv, argVec);
@@ -189,10 +189,10 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // If not, create a new scf::IfOp for the condition.
     if (!condBlock) {
       builder.setInsertionPointToEnd(trigOp.getBodyBlock());
-      auto ifOp = builder.create<mlir::scf::IfOp>(printOp.getLoc(), TypeRange{},
-                                                  condArg, true, false);
+      auto ifOp = mlir::scf::IfOp::create(builder, printOp.getLoc(),
+                                          TypeRange{}, condArg, true, false);
       builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
-      builder.create<mlir::scf::YieldOp>(printOp.getLoc());
+      mlir::scf::YieldOp::create(builder, printOp.getLoc());
       condBlock = builder.getBlock();
       prevConditionValue = condArg;
       prevConditionBlock = condBlock;
@@ -201,7 +201,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // Create the procedural print operation and prune the operations outside of
     // the TriggeredOp.
     builder.setInsertionPoint(condBlock->getTerminator());
-    builder.create<PrintFormattedProcOp>(printOp.getLoc(), procPrintInput);
+    PrintFormattedProcOp::create(builder, printOp.getLoc(), procPrintInput);
     cleanupList.push_back(printOp.getInput().getDefiningOp());
     printOp.erase();
   }

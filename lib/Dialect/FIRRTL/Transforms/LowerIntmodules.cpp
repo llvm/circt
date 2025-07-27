@@ -90,7 +90,7 @@ void LowerIntmodulesPass::runOnOperation() {
       for (auto [idx, result] : llvm::enumerate(inst.getResults())) {
         // Replace inputs with wires that will be used as operands.
         if (inst.getPortDirection(idx) != Direction::Out) {
-          auto w = builder.create<WireOp>(result.getLoc(), result.getType())
+          auto w = WireOp::create(builder, result.getLoc(), result.getType())
                        .getResult();
           result.replaceAllUsesWith(w);
           inputs.push_back(w);
@@ -115,26 +115,28 @@ void LowerIntmodulesPass::runOnOperation() {
       // Create the replacement operation.
       if (outputs.empty()) {
         // If no outputs, just create the operation.
-        builder.create<GenericIntrinsicOp>(/*result=*/Type(),
-                                           op.getIntrinsicAttr(), inputs,
-                                           op.getParameters());
+        GenericIntrinsicOp::create(builder, /*result=*/Type(),
+                                   op.getIntrinsicAttr(), inputs,
+                                   op.getParameters());
 
       } else if (outputs.size() == 1) {
         // For single output, the result is the output.
         auto resultType = outputs.front().element.type;
-        auto intop = builder.create<GenericIntrinsicOp>(
-            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
+        auto intop = GenericIntrinsicOp::create(builder, resultType,
+                                                op.getIntrinsicAttr(), inputs,
+                                                op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
       } else {
         // For multiple outputs, create a bundle with fields for each output
         // and replace users with subfields.
         auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
             outputs, [](const auto &info) { return info.element; }));
-        auto intop = builder.create<GenericIntrinsicOp>(
-            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
+        auto intop = GenericIntrinsicOp::create(builder, resultType,
+                                                op.getIntrinsicAttr(), inputs,
+                                                op.getParameters());
         for (auto &output : outputs)
-          output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
-              intop.getResult(), output.element.name));
+          output.result.replaceAllUsesWith(SubfieldOp::create(
+              builder, intop.getResult(), output.element.name));
       }
       // Remove instance from IR and instance graph.
       use->erase();
@@ -178,7 +180,7 @@ void LowerIntmodulesPass::runOnOperation() {
         ImplicitLocOpBuilder builder(op.getLoc(), inst);
         auto replaceResults = [](OpBuilder &b, auto &&range) {
           return llvm::map_to_vector(range, [&b](auto v) {
-            auto w = b.create<WireOp>(v.getLoc(), v.getType()).getResult();
+            auto w = WireOp::create(b, v.getLoc(), v.getType()).getResult();
             v.replaceAllUsesWith(w);
             return w;
           });
@@ -199,8 +201,8 @@ void LowerIntmodulesPass::runOnOperation() {
           } else
             std::swap(inputs[1], inputs[2]);
         }
-        auto intop = builder.create<GenericIntrinsicOp>(
-            builder.getType<ClockType>(), "circt_clock_gate", inputs,
+        auto intop = GenericIntrinsicOp::create(
+            builder, builder.getType<ClockType>(), "circt_clock_gate", inputs,
             op.getParameters());
         inst.getResults().back().replaceAllUsesWith(intop.getResult());
 

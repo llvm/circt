@@ -206,8 +206,8 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     // Create a new fork op, dropping the unused results.
     rewriter.setInsertionPoint(op);
     auto operand = op.getOperand();
-    auto newFork = rewriter.create<ForkOp>(
-        op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
+    auto newFork = ForkOp::create(rewriter, op.getLoc(), operand,
+                                  op.getNumResults() - unusedIndexes.size());
     unsigned i = 0;
     for (auto oldRes : llvm::enumerate(op.getResults()))
       if (unusedIndexes.count(oldRes.index()) == 0)
@@ -233,8 +233,9 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     unsigned totalNumOuts = op.getSize() + parentForkOp.getSize();
     /// Create a new parent fork op which produces all of the fork outputs and
     /// replace all of the uses of the old results.
-    auto newParentForkOp = rewriter.create<ForkOp>(
-        parentForkOp.getLoc(), parentForkOp.getOperand(), totalNumOuts);
+    auto newParentForkOp =
+        ForkOp::create(rewriter, parentForkOp.getLoc(),
+                       parentForkOp.getOperand(), totalNumOuts);
 
     for (auto it :
          llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
@@ -730,7 +731,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
       return failure();
   }
 
-  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
+  auto merge = MergeOp::create(rewriter, op.getLoc(), op.getDataOperands());
 
   for (auto &use : llvm::make_early_inc_range(dataResult.getUses())) {
     auto *user = use.getOwner();

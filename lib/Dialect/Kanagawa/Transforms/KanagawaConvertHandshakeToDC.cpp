@@ -65,8 +65,8 @@ struct StaticBlockOpConversion
     if (failed(
             getTypeConverter()->convertTypes(op.getResultTypes(), resultTypes)))
       return failure();
-    auto dcBlock = rewriter.create<DCBlockOp>(op.getLoc(), resultTypes,
-                                              adaptor.getOperands());
+    auto dcBlock = DCBlockOp::create(rewriter, op.getLoc(), resultTypes,
+                                     adaptor.getOperands());
     rewriter.eraseOp(dcBlock.getBodyBlock()->getTerminator());
     rewriter.mergeBlocks(op.getBodyBlock(), dcBlock.getBodyBlock(),
                          dcBlock.getBodyBlock()->getArguments());

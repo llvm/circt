@@ -59,11 +59,11 @@ struct IcmpOpConversion : OpConversionPattern<ICmpOp> {
 
     Value result;
     if (adaptor.getPredicate() == ICmpPredicate::eq) {
-      result = rewriter.create<smt::EqOp>(op.getLoc(), adaptor.getLhs(),
-                                          adaptor.getRhs());
+      result = smt::EqOp::create(rewriter, op.getLoc(), adaptor.getLhs(),
+                                 adaptor.getRhs());
     } else if (adaptor.getPredicate() == ICmpPredicate::ne) {
-      result = rewriter.create<smt::DistinctOp>(op.getLoc(), adaptor.getLhs(),
-                                                adaptor.getRhs());
+      result = smt::DistinctOp::create(rewriter, op.getLoc(), adaptor.getLhs(),
+                                       adaptor.getRhs());
     } else {
       smt::BVCmpPredicate pred;
       switch (adaptor.getPredicate()) {
@@ -95,8 +95,8 @@ struct IcmpOpConversion : OpConversionPattern<ICmpOp> {
         llvm_unreachable("all cases handled above");
       }
 
-      result = rewriter.create<smt::BVCmpOp>(
-          op.getLoc(), pred, adaptor.getLhs(), adaptor.getRhs());
+      result = smt::BVCmpOp::create(rewriter, op.getLoc(), pred,
+                                    adaptor.getLhs(), adaptor.getRhs());
     }
 
     Value convVal = typeConverter->materializeTargetConversion(
@@ -148,7 +148,8 @@ struct SubOpConversion : OpConversionPattern<SubOp> {
   LogicalResult
   matchAndRewrite(SubOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value negRhs = rewriter.create<smt::BVNegOp>(op.getLoc(), adaptor.getRhs());
+    Value negRhs =
+        smt::BVNegOp::create(rewriter, op.getLoc(), adaptor.getRhs());
     rewriter.replaceOpWithNewOp<smt::BVAddOp>(op, adaptor.getLhs(), negRhs);
     return success();
   }
@@ -169,11 +170,11 @@ struct ParityOpConversion : OpConversionPattern<ParityOp> {
     // the type conversion should already fail.
     Type oneBitTy = smt::BitVectorType::get(getContext(), 1);
     Value runner =
-        rewriter.create<smt::ExtractOp>(loc, oneBitTy, 0, adaptor.getInput());
+        smt::ExtractOp::create(rewriter, loc, oneBitTy, 0, adaptor.getInput());
     for (unsigned i = 1; i < bitwidth; ++i) {
-      Value ext =
-          rewriter.create<smt::ExtractOp>(loc, oneBitTy, i, adaptor.getInput());
-      runner = rewriter.create<smt::BVXOrOp>(loc, runner, ext);
+      Value ext = smt::ExtractOp::create(rewriter, loc, oneBitTy, i,
+                                         adaptor.getInput());
+      runner = smt::BVXOrOp::create(rewriter, loc, runner, ext);
     }
 
     rewriter.replaceOp(op, runner);
@@ -218,11 +219,11 @@ struct DivisionOpConversion : OpConversionPattern<SourceOp> {
     auto resultType = OpConversionPattern<SourceOp>::typeConverter->convertType(
         op.getResult().getType());
     Value zero =
-        rewriter.create<smt::BVConstantOp>(loc, APInt(type.getWidth(), 0));
-    Value isZero = rewriter.create<smt::EqOp>(loc, adaptor.getRhs(), zero);
-    Value symbolicVal = rewriter.create<smt::DeclareFunOp>(loc, resultType);
+        smt::BVConstantOp::create(rewriter, loc, APInt(type.getWidth(), 0));
+    Value isZero = smt::EqOp::create(rewriter, loc, adaptor.getRhs(), zero);
+    Value symbolicVal = smt::DeclareFunOp::create(rewriter, loc, resultType);
     Value division =
-        rewriter.create<TargetOp>(loc, resultType, adaptor.getOperands());
+        TargetOp::create(rewriter, loc, resultType, adaptor.getOperands());
     rewriter.replaceOpWithNewOp<smt::IteOp>(op, isZero, symbolicVal, division);
     return success();
   }
@@ -245,7 +246,7 @@ struct VariadicToBinaryOpConversion : OpConversionPattern<SourceOp> {
 
     Value runner = operands[0];
     for (Value operand : operands.drop_front())
-      runner = rewriter.create<TargetOp>(op.getLoc(), runner, operand);
+      runner = TargetOp::create(rewriter, op.getLoc(), runner, operand);
 
     rewriter.replaceOp(op, runner);
     return success();

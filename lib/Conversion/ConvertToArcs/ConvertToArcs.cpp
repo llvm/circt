@@ -39,8 +39,8 @@ static LogicalResult convertInitialValue(seq::CompRegOp reg,
   // Use from_immutable cast to convert the seq.immutable type to the reg's
   // type.
   OpBuilder builder(reg);
-  auto init = builder.create<seq::FromImmutableOp>(reg.getLoc(), reg.getType(),
-                                                   reg.getInitialValue());
+  auto init = seq::FromImmutableOp::create(builder, reg.getLoc(), reg.getType(),
+                                           reg.getInitialValue());
 
   values.push_back(init);
   return success();
@@ -255,21 +255,21 @@ void Converter::extractArcs(HWModuleOp module) {
       }
     }
     assert(lastOp);
-    builder.create<arc::OutputOp>(lastOp->getLoc(), outputs);
+    arc::OutputOp::create(builder, lastOp->getLoc(), outputs);
 
     // Create the arc definition.
     builder.setInsertionPoint(module);
-    auto defOp = builder.create<DefineOp>(
-        lastOp->getLoc(),
-        builder.getStringAttr(
-            globalNamespace.newName(module.getModuleName() + "_arc")),
-        builder.getFunctionType(inputTypes, outputTypes));
+    auto defOp =
+        DefineOp::create(builder, lastOp->getLoc(),
+                         builder.getStringAttr(globalNamespace.newName(
+                             module.getModuleName() + "_arc")),
+                         builder.getFunctionType(inputTypes, outputTypes));
     defOp.getBody().push_back(block.release());
 
     // Create the call to the arc definition to replace the operations that
     // we have just extracted.
     builder.setInsertionPoint(module.getBodyBlock()->getTerminator());
-    auto arcOp = builder.create<CallOp>(lastOp->getLoc(), defOp, inputs);
+    auto arcOp = CallOp::create(builder, lastOp->getLoc(), defOp, inputs);
     arcUses.push_back(arcOp);
     for (auto [use, resultIdx] : externalUses)
       use->set(arcOp.getResult(resultIdx));
@@ -448,14 +448,13 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     }
 
     auto loc = regOps.back().getLoc();
-    builder.create<arc::OutputOp>(loc, outputs);
+    arc::OutputOp::create(builder, loc, outputs);
 
     builder.setInsertionPoint(module);
-    auto defOp =
-        builder.create<DefineOp>(loc,
-                                 builder.getStringAttr(globalNamespace.newName(
-                                     module.getModuleName() + "_arc")),
-                                 builder.getFunctionType(types, types));
+    auto defOp = DefineOp::create(builder, loc,
+                                  builder.getStringAttr(globalNamespace.newName(
+                                      module.getModuleName() + "_arc")),
+                                  builder.getFunctionType(types, types));
     defOp.getBody().push_back(block.release());
 
     builder.setInsertionPoint(module.getBodyBlock()->getTerminator());
@@ -473,8 +472,8 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
       }
 
     auto arcOp =
-        builder.create<StateOp>(loc, defOp, std::get<0>(clockAndResetAndOp),
-                                /*enable=*/Value{}, 1, inputs, initialValues);
+        StateOp::create(builder, loc, defOp, std::get<0>(clockAndResetAndOp),
+                        /*enable=*/Value{}, 1, inputs, initialValues);
     auto reset = std::get<1>(clockAndResetAndOp);
     if (reset)
       arcOp.getResetMutable().assign(reset);

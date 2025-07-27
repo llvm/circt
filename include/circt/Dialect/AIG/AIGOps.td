@@ -85,49 +85,4 @@ def AndInverterOp : AIGOp<"and_inv", [SameOperandsAndResultType, Pure]> {
   let hasCanonicalizeMethod = 1;
 }
 
-def CutOp : AIGOp<"cut", [IsolatedFromAbove, SingleBlock]> {
-  let summary = "AIG dialect Cut operation";
-  let description = [{
-    The `aig.cut` operation represents a cut in the And-Inverter-Graph.
-    This operation is variadic and can take multiple inputs and outputs,
-    which corresponds to the input and output edges in AIG conceptually.
-
-    ```mlir
-    %0, %1 = aig.cut %a, %b, %c, %d : (i1, i1, i1, i1) -> (i1, i1) {
-    ^bb0(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1):
-      %0 = aig.and_inv not %arg0, %arg1 : i1
-      %1 = aig.and_inv %arg1, %arg3 : i1
-      aig.output %0, %1 : i1 }
-    ```
-
-    This operation is designed to be particularly useful for progressive LUT
-    mapping. For instance, a k-input cut can be readily mapped to a k-input LUT.
-    Consequently, the subsequent stages of the pipeline can concentrate on
-    replacing combinational logic with k-input Cut operations, simplifying the
-    overall process.
-  }];
-
-  // TODO: Restrict to HWIntegerType.
-  let arguments = (ins Variadic<AnyType>:$inputs);
-  let results = (outs Variadic<AnyType>:$results);
-  let regions = (region SizedRegion<1>:$bodyRegion);
-  let assemblyFormat = [{
-    $inputs attr-dict `:` functional-type($inputs, $results) $bodyRegion
-  }];
-
-  let hasVerifier = 1;
-}
-
-def OutputOp : AIGOp<"output", [Terminator,
-                                ReturnLike, ParentOneOf<["CutOp"]>]> {
-  let summary = "AIG dialect Output operation";
-  let description = [{
-    The `aig.output` operation represents out edges of a cut.
-  }];
-  let arguments = (ins Variadic<AnyType>:$outputs);
-  let assemblyFormat = [{
-    attr-dict ($outputs^ `:` qualified(type($outputs)))?
-  }];
-}
-
 #endif // CIRCT_DIALECT_AIG_OPS_TD

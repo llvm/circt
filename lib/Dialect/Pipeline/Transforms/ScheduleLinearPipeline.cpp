@@ -148,8 +148,8 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 
   // Create the scheduled pipeline.
   b.setInsertionPoint(pipeline);
-  auto schedPipeline = b.template create<pipeline::ScheduledPipelineOp>(
-      pipeline.getLoc(), pipeline.getDataOutputs().getTypes(),
+  auto schedPipeline = pipeline::ScheduledPipelineOp::create(
+      b, pipeline.getLoc(), pipeline.getDataOutputs().getTypes(),
       pipeline.getInputs(), pipeline.getInputNames(), pipeline.getOutputNames(),
       pipeline.getClock(), pipeline.getGo(), pipeline.getReset(),
       pipeline.getStall(), pipeline.getNameAttr());
@@ -180,8 +180,8 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
       // Create a StageOp in the new stage, and branch it to the newly created
       // stage.
       b.setInsertionPointToEnd(currentStage);
-      b.create<pipeline::StageOp>(pipeline.getLoc(), newStage, ValueRange{},
-                                  ValueRange{});
+      pipeline::StageOp::create(b, pipeline.getLoc(), newStage, ValueRange{},
+                                ValueRange{});
       currentStage = newStage;
     }
   }
@@ -207,7 +207,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
       if (it == sourceOps.end()) {
         b.setInsertionPoint(opOperand.getOwner());
         it = sourceOps
-                 .try_emplace(v, b.create<SourceOp>(v.getLoc(), v).getResult())
+                 .try_emplace(v, SourceOp::create(b, v.getLoc(), v).getResult())
                  .first;
       }
       return it->second;

@@ -245,10 +245,10 @@ void BlackBoxReaderPass::runOnOperation() {
 
     auto fileName = ns.newName("blackbox_" + verilogName.getValue());
 
-    auto fileOp = builder.create<emit::FileOp>(
-        loc, annotationInfo.outputFileAttr.getFilename(), fileName,
+    auto fileOp = emit::FileOp::create(
+        builder, loc, annotationInfo.outputFileAttr.getFilename(), fileName,
         [&, text = annotationInfo.inlineText] {
-          builder.create<emit::VerbatimOp>(loc, text);
+          emit::VerbatimOp::create(builder, loc, text);
         });
 
     if (!annotationInfo.outputFileAttr.getExcludeFromFilelist().getValue())

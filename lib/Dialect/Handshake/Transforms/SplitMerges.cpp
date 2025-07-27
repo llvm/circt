@@ -46,8 +46,9 @@ struct DeconstructMergePattern : public OpRewritePattern<handshake::MergeOp> {
     while (mergeInputs.size() > 1) {
       llvm::SmallVector<Value> newMergeInputs;
       for (unsigned i = 0, e = mergeInputs.size(); i < ((e / 2) * 2); i += 2) {
-        auto cm2 = rewriter.create<handshake::MergeOp>(
-            mergeOp.getLoc(), ValueRange{mergeInputs[i], mergeInputs[i + 1]});
+        auto cm2 = handshake::MergeOp::create(
+            rewriter, mergeOp.getLoc(),
+            ValueRange{mergeInputs[i], mergeInputs[i + 1]});
         newMergeInputs.push_back(cm2.getResult());
       }
       if (mergeInputs.size() % 2 != 0)
@@ -79,20 +80,21 @@ struct DeconstructCMergePattern
     // tuple<index, data> from two operands and an index offset.
     auto mergeTwoOperands = [&](Value op0, Value op1,
                                 unsigned idxOffset) -> Value {
-      auto cm2 = rewriter.create<handshake::ControlMergeOp>(
-          loc, ValueRange{op0, op1}, cmergeIndexType);
+      auto cm2 = handshake::ControlMergeOp::create(
+          rewriter, loc, ValueRange{op0, op1}, cmergeIndexType);
       Value idxOperand = cm2.getIndex();
       if (idxOffset != 0) {
         // Non-zero index offset; add it to the index operand.
-        idxOperand = rewriter.create<arith::AddIOp>(
-            loc, idxOperand,
-            rewriter.create<arith::ConstantOp>(
-                loc, rewriter.getIntegerAttr(cmergeIndexType, idxOffset)));
+        idxOperand = arith::AddIOp::create(
+            rewriter, loc, idxOperand,
+            arith::ConstantOp::create(
+                rewriter, loc,
+                rewriter.getIntegerAttr(cmergeIndexType, idxOffset)));
       }
 
       // Pack index and data into a tuple s.t. they share control.
-      return rewriter.create<handshake::PackOp>(
-          loc, ValueRange{cm2.getResult(), idxOperand});
+      return handshake::PackOp::create(rewriter, loc,
+                                       ValueRange{cm2.getResult(), idxOperand});
     };
 
     llvm::SmallVector<Value> packedTuples;
@@ -106,16 +108,17 @@ struct DeconstructCMergePattern
       // If there is an odd number of operands, the last operand becomes a tuple
       // of itself with an index of the number of operands - 1.
       unsigned lastIdx = cmergeOp.getNumOperands() - 1;
-      packedTuples.push_back(rewriter.create<handshake::PackOp>(
-          loc, ValueRange{cmergeOp.getOperand(lastIdx),
-                          rewriter.create<arith::ConstantOp>(
-                              loc, rewriter.getIntegerAttr(cmergeIndexType,
-                                                           lastIdx))}));
+      packedTuples.push_back(handshake::PackOp::create(
+          rewriter, loc,
+          ValueRange{cmergeOp.getOperand(lastIdx),
+                     arith::ConstantOp::create(
+                         rewriter, loc,
+                         rewriter.getIntegerAttr(cmergeIndexType, lastIdx))}));
     }
 
     // Non-deterministically merge the tuples and unpack the result.
     auto mergedTuple =
-        rewriter.create<handshake::MergeOp>(loc, ValueRange(packedTuples));
+        handshake::MergeOp::create(rewriter, loc, ValueRange(packedTuples));
 
     // And finally, replace the original cmerge with the unpacked result.
     rewriter.replaceOpWithNewOp<handshake::UnpackOp>(cmergeOp,

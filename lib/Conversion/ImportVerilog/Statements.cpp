@@ -56,30 +56,30 @@ struct StmtVisitor {
     if (!type)
       return failure();
 
-    Value initial = builder.create<moore::ConstantOp>(
-        loc, cast<moore::IntType>(type), loopDim.range->lower());
+    Value initial = moore::ConstantOp::create(
+        builder, loc, cast<moore::IntType>(type), loopDim.range->lower());
 
     // Create loop varirable in this dimension
-    Value varOp = builder.create<moore::VariableOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+    Value varOp = moore::VariableOp::create(
+        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
         builder.getStringAttr(iter->name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          iter, varOp);
 
-    builder.create<cf::BranchOp>(loc, &checkBlock);
+    cf::BranchOp::create(builder, loc, &checkBlock);
     builder.setInsertionPointToEnd(&checkBlock);
 
     // When the loop variable is greater than the upper bound, goto exit
-    auto upperBound = builder.create<moore::ConstantOp>(
-        loc, cast<moore::IntType>(type), loopDim.range->upper());
+    auto upperBound = moore::ConstantOp::create(
+        builder, loc, cast<moore::IntType>(type), loopDim.range->upper());
 
-    auto var = builder.create<moore::ReadOp>(loc, varOp);
-    Value cond = builder.create<moore::SleOp>(loc, var, upperBound);
+    auto var = moore::ReadOp::create(builder, loc, varOp);
+    Value cond = moore::SleOp::create(builder, loc, var, upperBound);
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<cf::CondBranchOp>(loc, cond, &bodyBlock, &exitBlock);
+    cond = moore::ConversionOp::create(builder, loc, builder.getI1Type(), cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     builder.setInsertionPointToEnd(&bodyBlock);
 
@@ -101,17 +101,17 @@ struct StmtVisitor {
         return failure();
     }
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &stepBlock);
+      cf::BranchOp::create(builder, loc, &stepBlock);
 
     builder.setInsertionPointToEnd(&stepBlock);
 
     // add one to loop variable
-    var = builder.create<moore::ReadOp>(loc, varOp);
+    var = moore::ReadOp::create(builder, loc, varOp);
     auto one =
-        builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type), 1);
-    auto postValue = builder.create<moore::AddOp>(loc, var, one).getResult();
-    builder.create<moore::BlockingAssignOp>(loc, varOp, postValue);
-    builder.create<cf::BranchOp>(loc, &checkBlock);
+        moore::ConstantOp::create(builder, loc, cast<moore::IntType>(type), 1);
+    auto postValue = moore::AddOp::create(builder, loc, var, one).getResult();
+    moore::BlockingAssignOp::create(builder, loc, varOp, postValue);
+    cf::BranchOp::create(builder, loc, &checkBlock);
 
     if (exitBlock.hasNoPredecessors()) {
       exitBlock.erase();
@@ -193,8 +193,8 @@ struct StmtVisitor {
     }
 
     // Collect local temporary variables.
-    auto varOp = builder.create<moore::VariableOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+    auto varOp = moore::VariableOp::create(
+        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
         builder.getStringAttr(var.name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          &var, varOp);
@@ -215,27 +215,27 @@ struct StmtVisitor {
         return failure();
       cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
       if (allConds)
-        allConds = builder.create<moore::AndOp>(loc, allConds, cond);
+        allConds = moore::AndOp::create(builder, loc, allConds, cond);
       else
         allConds = cond;
     }
     assert(allConds && "slang guarantees at least one condition");
-    allConds =
-        builder.create<moore::ConversionOp>(loc, builder.getI1Type(), allConds);
+    allConds = moore::ConversionOp::create(builder, loc, builder.getI1Type(),
+                                           allConds);
 
     // Create the blocks for the true and false branches, and the exit block.
     Block &exitBlock = createBlock();
     Block *falseBlock = stmt.ifFalse ? &createBlock() : nullptr;
     Block &trueBlock = createBlock();
-    builder.create<cf::CondBranchOp>(loc, allConds, &trueBlock,
-                                     falseBlock ? falseBlock : &exitBlock);
+    cf::CondBranchOp::create(builder, loc, allConds, &trueBlock,
+                             falseBlock ? falseBlock : &exitBlock);
 
     // Generate the true branch.
     builder.setInsertionPointToEnd(&trueBlock);
     if (failed(context.convertStatement(stmt.ifTrue)))
       return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &exitBlock);
+      cf::BranchOp::create(builder, loc, &exitBlock);
 
     // Generate the false branch if present.
     if (stmt.ifFalse) {
@@ -243,7 +243,7 @@ struct StmtVisitor {
       if (failed(context.convertStatement(*stmt.ifFalse)))
         return failure();
       if (!isTerminated())
-        builder.create<cf::BranchOp>(loc, &exitBlock);
+        cf::BranchOp::create(builder, loc, &exitBlock);
     }
 
     // If control never reaches the exit block, remove it and mark control flow
@@ -298,26 +298,26 @@ struct StmtVisitor {
         Value cond;
         switch (caseStmt.condition) {
         case CaseStatementCondition::Normal:
-          cond = builder.create<moore::CaseEqOp>(itemLoc, caseExpr, value);
+          cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
           break;
         case CaseStatementCondition::WildcardXOrZ:
-          cond = builder.create<moore::CaseXZEqOp>(itemLoc, caseExpr, value);
+          cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
           break;
         case CaseStatementCondition::WildcardJustZ:
-          cond = builder.create<moore::CaseZEqOp>(itemLoc, caseExpr, value);
+          cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
           break;
         case CaseStatementCondition::Inside:
           mlir::emitError(loc, "unsupported set membership case statement");
           return failure();
         }
-        cond = builder.create<moore::ConversionOp>(itemLoc, builder.getI1Type(),
-                                                   cond);
+        cond = moore::ConversionOp::create(builder, itemLoc,
+                                           builder.getI1Type(), cond);
 
         // If the condition matches, branch to the match block. Otherwise
         // continue checking the next expression in a new block.
         auto &nextBlock = createBlock();
-        builder.create<mlir::cf::CondBranchOp>(itemLoc, cond, &matchBlock,
-                                               &nextBlock);
+        mlir::cf::CondBranchOp::create(builder, itemLoc, cond, &matchBlock,
+                                       &nextBlock);
         builder.setInsertionPointToEnd(&nextBlock);
       }
 
@@ -333,7 +333,7 @@ struct StmtVisitor {
         return failure();
       if (!isTerminated()) {
         auto loc = context.convertLocation(item.stmt->sourceRange);
-        builder.create<mlir::cf::BranchOp>(loc, &exitBlock);
+        mlir::cf::BranchOp::create(builder, loc, &exitBlock);
       }
     }
 
@@ -385,14 +385,14 @@ struct StmtVisitor {
     if ((twoStateExhaustive || (hasFullCaseAttr && !caseStmt.defaultCase)) &&
         lastMatchBlock &&
         caseStmt.condition == CaseStatementCondition::Normal) {
-      builder.create<mlir::cf::BranchOp>(loc, lastMatchBlock);
+      mlir::cf::BranchOp::create(builder, loc, lastMatchBlock);
     } else {
       // Generate the default case if present.
       if (caseStmt.defaultCase)
         if (failed(context.convertStatement(*caseStmt.defaultCase)))
           return failure();
       if (!isTerminated())
-        builder.create<mlir::cf::BranchOp>(loc, &exitBlock);
+        mlir::cf::BranchOp::create(builder, loc, &exitBlock);
     }
 
     // If control never reaches the exit block, remove it and mark control flow
@@ -418,7 +418,7 @@ struct StmtVisitor {
     auto &stepBlock = createBlock();
     auto &bodyBlock = createBlock();
     auto &checkBlock = createBlock();
-    builder.create<cf::BranchOp>(loc, &checkBlock);
+    cf::BranchOp::create(builder, loc, &checkBlock);
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
@@ -430,15 +430,15 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<cf::CondBranchOp>(loc, cond, &bodyBlock, &exitBlock);
+    cond = moore::ConversionOp::create(builder, loc, builder.getI1Type(), cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);
     if (failed(context.convertStatement(stmt.body)))
       return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &stepBlock);
+      cf::BranchOp::create(builder, loc, &stepBlock);
 
     // Generate the step expressions.
     builder.setInsertionPointToEnd(&stepBlock);
@@ -446,7 +446,7 @@ struct StmtVisitor {
       if (!context.convertRvalueExpression(*stepExpr))
         return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &checkBlock);
+      cf::BranchOp::create(builder, loc, &checkBlock);
 
     // If control never reaches the exit block, remove it and mark control flow
     // as terminated. Otherwise we continue inserting ops in the exit block.
@@ -479,7 +479,7 @@ struct StmtVisitor {
     auto &bodyBlock = createBlock();
     auto &checkBlock = createBlock();
     auto currentCount = checkBlock.addArgument(count.getType(), count.getLoc());
-    builder.create<cf::BranchOp>(loc, &checkBlock, count);
+    cf::BranchOp::create(builder, loc, &checkBlock, count);
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
@@ -488,23 +488,23 @@ struct StmtVisitor {
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
     auto cond = builder.createOrFold<moore::BoolCastOp>(loc, currentCount);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<cf::CondBranchOp>(loc, cond, &bodyBlock, &exitBlock);
+    cond = moore::ConversionOp::create(builder, loc, builder.getI1Type(), cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);
     if (failed(context.convertStatement(stmt.body)))
       return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &stepBlock);
+      cf::BranchOp::create(builder, loc, &stepBlock);
 
     // Decrement the current count and branch back to the check block.
     builder.setInsertionPointToEnd(&stepBlock);
-    auto one = builder.create<moore::ConstantOp>(
-        count.getLoc(), cast<moore::IntType>(count.getType()), 1);
+    auto one = moore::ConstantOp::create(
+        builder, count.getLoc(), cast<moore::IntType>(count.getType()), 1);
     Value nextCount =
-        builder.create<moore::SubOp>(count.getLoc(), currentCount, one);
-    builder.create<cf::BranchOp>(loc, &checkBlock, nextCount);
+        moore::SubOp::create(builder, count.getLoc(), currentCount, one);
+    cf::BranchOp::create(builder, loc, &checkBlock, nextCount);
 
     // If control never reaches the exit block, remove it and mark control flow
     // as terminated. Otherwise we continue inserting ops in the exit block.
@@ -525,7 +525,7 @@ struct StmtVisitor {
     auto &exitBlock = createBlock();
     auto &bodyBlock = createBlock();
     auto &checkBlock = createBlock();
-    builder.create<cf::BranchOp>(loc, atLeastOnce ? &bodyBlock : &checkBlock);
+    cf::BranchOp::create(builder, loc, atLeastOnce ? &bodyBlock : &checkBlock);
     if (atLeastOnce)
       bodyBlock.moveBefore(&checkBlock);
 
@@ -539,15 +539,15 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<cf::CondBranchOp>(loc, cond, &bodyBlock, &exitBlock);
+    cond = moore::ConversionOp::create(builder, loc, builder.getI1Type(), cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);
     if (failed(context.convertStatement(bodyStmt)))
       return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &checkBlock);
+      cf::BranchOp::create(builder, loc, &checkBlock);
 
     // If control never reaches the exit block, remove it and mark control flow
     // as terminated. Otherwise we continue inserting ops in the exit block.
@@ -573,7 +573,7 @@ struct StmtVisitor {
     // Create the blocks for the loop body and exit.
     auto &exitBlock = createBlock();
     auto &bodyBlock = createBlock();
-    builder.create<cf::BranchOp>(loc, &bodyBlock);
+    cf::BranchOp::create(builder, loc, &bodyBlock);
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&bodyBlock, &exitBlock});
@@ -584,7 +584,7 @@ struct StmtVisitor {
     if (failed(context.convertStatement(stmt.body)))
       return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &bodyBlock);
+      cf::BranchOp::create(builder, loc, &bodyBlock);
 
     // If control never reaches the exit block, remove it and mark control flow
     // as terminated. Otherwise we continue inserting ops in the exit block.
@@ -608,9 +608,9 @@ struct StmtVisitor {
       auto expr = context.convertRvalueExpression(*stmt.expr);
       if (!expr)
         return failure();
-      builder.create<mlir::func::ReturnOp>(loc, expr);
+      mlir::func::ReturnOp::create(builder, loc, expr);
     } else {
-      builder.create<mlir::func::ReturnOp>(loc);
+      mlir::func::ReturnOp::create(builder, loc);
     }
     setTerminated();
     return success();
@@ -621,7 +621,7 @@ struct StmtVisitor {
     if (context.loopStack.empty())
       return mlir::emitError(loc,
                              "cannot `continue` without a surrounding loop");
-    builder.create<cf::BranchOp>(loc, context.loopStack.back().continueBlock);
+    cf::BranchOp::create(builder, loc, context.loopStack.back().continueBlock);
     setTerminated();
     return success();
   }
@@ -630,7 +630,7 @@ struct StmtVisitor {
   LogicalResult visit(const slang::ast::BreakStatement &stmt) {
     if (context.loopStack.empty())
       return mlir::emitError(loc, "cannot `break` without a surrounding loop");
-    builder.create<cf::BranchOp>(loc, context.loopStack.back().breakBlock);
+    cf::BranchOp::create(builder, loc, context.loopStack.back().breakBlock);
     setTerminated();
     return success();
   }
@@ -652,13 +652,13 @@ struct StmtVisitor {
 
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
-        builder.create<moore::AssertOp>(loc, defer, cond, StringAttr{});
+        moore::AssertOp::create(builder, loc, defer, cond, StringAttr{});
         return success();
       case slang::ast::AssertionKind::Assume:
-        builder.create<moore::AssumeOp>(loc, defer, cond, StringAttr{});
+        moore::AssumeOp::create(builder, loc, defer, cond, StringAttr{});
         return success();
       case slang::ast::AssertionKind::CoverProperty:
-        builder.create<moore::CoverOp>(loc, defer, cond, StringAttr{});
+        moore::CoverOp::create(builder, loc, defer, cond, StringAttr{});
         return success();
       default:
         break;
@@ -669,21 +669,21 @@ struct StmtVisitor {
     }
 
     // Regard assertion statements with an action block as the "if-else".
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+    cond = moore::ConversionOp::create(builder, loc, builder.getI1Type(), cond);
 
     // Create the blocks for the true and false branches, and the exit block.
     Block &exitBlock = createBlock();
     Block *falseBlock = stmt.ifFalse ? &createBlock() : nullptr;
     Block &trueBlock = createBlock();
-    builder.create<cf::CondBranchOp>(loc, cond, &trueBlock,
-                                     falseBlock ? falseBlock : &exitBlock);
+    cf::CondBranchOp::create(builder, loc, cond, &trueBlock,
+                             falseBlock ? falseBlock : &exitBlock);
 
     // Generate the true branch.
     builder.setInsertionPointToEnd(&trueBlock);
     if (stmt.ifTrue && failed(context.convertStatement(*stmt.ifTrue)))
       return failure();
     if (!isTerminated())
-      builder.create<cf::BranchOp>(loc, &exitBlock);
+      cf::BranchOp::create(builder, loc, &exitBlock);
 
     if (stmt.ifFalse) {
       // Generate the false branch if present.
@@ -691,7 +691,7 @@ struct StmtVisitor {
       if (failed(context.convertStatement(*stmt.ifFalse)))
         return failure();
       if (!isTerminated())
-        builder.create<cf::BranchOp>(loc, &exitBlock);
+        cf::BranchOp::create(builder, loc, &exitBlock);
     }
 
     // If control never reaches the exit block, remove it and mark control flow
@@ -716,10 +716,10 @@ struct StmtVisitor {
     if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
-        builder.create<verif::AssertOp>(loc, property, Value(), StringAttr{});
+        verif::AssertOp::create(builder, loc, property, Value(), StringAttr{});
         return success();
       case slang::ast::AssertionKind::Assume:
-        builder.create<verif::AssumeOp>(loc, property, Value(), StringAttr{});
+        verif::AssumeOp::create(builder, loc, property, Value(), StringAttr{});
         return success();
       default:
         break;
@@ -749,14 +749,14 @@ struct StmtVisitor {
 
     if (subroutine.name == "$stop") {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
-      builder.create<moore::StopBIOp>(loc);
+      moore::StopBIOp::create(builder, loc);
       return true;
     }
 
     if (subroutine.name == "$finish") {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
-      builder.create<moore::FinishBIOp>(loc, 0);
-      builder.create<moore::UnreachableOp>(loc);
+      moore::FinishBIOp::create(builder, loc, 0);
+      moore::UnreachableOp::create(builder, loc);
       setTerminated();
       return true;
     }
@@ -802,7 +802,7 @@ struct StmtVisitor {
         return failure();
       if (*message == Value{})
         return true;
-      builder.create<moore::DisplayBIOp>(loc, *message);
+      moore::DisplayBIOp::create(builder, loc, *message);
       return true;
     }
 
@@ -831,15 +831,15 @@ struct StmtVisitor {
       if (failed(message))
         return failure();
       if (*message == Value{})
-        *message = builder.create<moore::FormatLiteralOp>(loc, "");
+        *message = moore::FormatLiteralOp::create(builder, loc, "");
 
-      builder.create<moore::SeverityBIOp>(loc, *severity, *message);
+      moore::SeverityBIOp::create(builder, loc, *severity, *message);
 
       // Handle the `$fatal` case which behaves like a `$finish`.
       if (severity == Severity::Fatal) {
         createFinishMessage(verbosityExpr);
-        builder.create<moore::FinishBIOp>(loc, 1);
-        builder.create<moore::UnreachableOp>(loc);
+        moore::FinishBIOp::create(builder, loc, 1);
+        moore::UnreachableOp::create(builder, loc);
         setTerminated();
       }
       return true;
@@ -861,7 +861,7 @@ struct StmtVisitor {
     }
     if (verbosity == 0)
       return;
-    builder.create<moore::FinishMessageBIOp>(loc, verbosity > 1);
+    moore::FinishMessageBIOp::create(builder, loc, verbosity > 1);
   }
 
   /// Emit an error for all other statements.

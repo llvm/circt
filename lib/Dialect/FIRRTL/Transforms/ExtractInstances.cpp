@@ -113,7 +113,7 @@ struct ExtractInstancesPass
     if (inserted) {
       auto builder = ImplicitLocOpBuilder::atBlockEnd(
           UnknownLoc::get(&getContext()), getOperation().getBodyBlock());
-      it->second = builder.create<emit::FileOp>(fileName);
+      it->second = emit::FileOp::create(builder, fileName);
     }
     return it->second;
   }
@@ -658,7 +658,7 @@ void ExtractInstancesPass::extractInstances() {
         auto src = newParentInst.getResult(numParentPorts + portIdx);
         if (newPorts[portIdx].second.direction == Direction::In)
           std::swap(src, dst);
-        builder.create<MatchingConnectOp>(dst, src);
+        MatchingConnectOp::create(builder, dst, src);
       }
 
       // Move the wiring prefix from the old to the new instance. We just look
@@ -980,8 +980,8 @@ void ExtractInstancesPass::groupInstances() {
     }
 
     // Create the wrapper module.
-    auto wrapper = builder.create<FModuleOp>(
-        builder.getUnknownLoc(), wrapperModuleName,
+    auto wrapper = FModuleOp::create(
+        builder, builder.getUnknownLoc(), wrapperModuleName,
         ConventionAttr::get(builder.getContext(), Convention::Internal), ports);
     SymbolTable::setSymbolVisibility(wrapper, SymbolTable::Visibility::Private);
 
@@ -989,9 +989,9 @@ void ExtractInstancesPass::groupInstances() {
     // extracted instances' ports with the corresponding wrapper module ports.
     // This will essentially disconnect the extracted instances.
     builder.setInsertionPointToStart(parent.getBodyBlock());
-    auto wrapperInst = builder.create<InstanceOp>(
-        wrapper.getLoc(), wrapper, wrapperName, NameKindEnum::DroppableName,
-        ArrayRef<Attribute>{},
+    auto wrapperInst = InstanceOp::create(
+        builder, wrapper.getLoc(), wrapper, wrapperName,
+        NameKindEnum::DroppableName, ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         /*doNotPrint=*/false, hw::InnerSymAttr::get(wrapperInstName));
     unsigned portIdx = 0;
@@ -1011,7 +1011,7 @@ void ExtractInstancesPass::groupInstances() {
         Value src = wrapper.getArgument(portIdx);
         if (ports[portIdx].direction == Direction::Out)
           std::swap(dst, src);
-        builder.create<MatchingConnectOp>(result.getLoc(), dst, src);
+        MatchingConnectOp::create(builder, result.getLoc(), dst, src);
         ++portIdx;
       }
     }
@@ -1051,7 +1051,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
                    obj.getType(), Direction::Out));
       auto blockarg =
           classOp.getBodyBlock()->addArgument(obj.getType(), obj.getLoc());
-      builderOM.create<PropAssignOp>(blockarg, obj);
+      PropAssignOp::create(builderOM, blockarg, obj);
     }
     classOp.insertPorts(newPorts);
   };
@@ -1102,11 +1102,11 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
         // Create the entry for this extracted instance in the metadata class.
         auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
             inst.getLoc(), extractMetadataClass.getBodyBlock());
-        auto prefixName = builderOM.create<StringConstantOp>(prefix);
-        auto object = builderOM.create<ObjectOp>(schemaClass, prefix);
+        auto prefixName = StringConstantOp::create(builderOM, prefix);
+        auto object = ObjectOp::create(builderOM, schemaClass, prefix);
         auto fPrefix =
-            builderOM.create<ObjectSubfieldOp>(object, prefixNameFieldId);
-        builderOM.create<PropAssignOp>(fPrefix, prefixName);
+            ObjectSubfieldOp::create(builderOM, object, prefixNameFieldId);
+        PropAssignOp::create(builderOM, fPrefix, prefixName);
 
         auto targetInstance = innerRefToInstances[path.front()];
         SmallVector<Attribute> pathOpAttr(llvm::reverse(path));
@@ -1114,18 +1114,18 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
             ArrayAttr::get(circuitOp->getContext(), pathOpAttr));
 
         auto pathOp = createPathRef(targetInstance, nla, builderOM);
-        auto fPath = builderOM.create<ObjectSubfieldOp>(object, pathFieldId);
-        builderOM.create<PropAssignOp>(fPath, pathOp);
+        auto fPath = ObjectSubfieldOp::create(builderOM, object, pathFieldId);
+        PropAssignOp::create(builderOM, fPath, pathOp);
         auto fFile =
-            builderOM.create<ObjectSubfieldOp>(object, fileNameFieldId);
-        auto fileNameOp =
-            builderOM.create<StringConstantOp>(builder.getStringAttr(fileName));
-        builderOM.create<PropAssignOp>(fFile, fileNameOp);
+            ObjectSubfieldOp::create(builderOM, object, fileNameFieldId);
+        auto fileNameOp = StringConstantOp::create(
+            builderOM, builder.getStringAttr(fileName));
+        PropAssignOp::create(builderOM, fFile, fileNameOp);
 
         auto finstName =
-            builderOM.create<ObjectSubfieldOp>(object, instNameFieldId);
-        auto instNameOp = builderOM.create<StringConstantOp>(origInstName);
-        builderOM.create<PropAssignOp>(finstName, instNameOp);
+            ObjectSubfieldOp::create(builderOM, object, instNameFieldId);
+        auto instNameOp = StringConstantOp::create(builderOM, origInstName);
+        PropAssignOp::create(builderOM, finstName, instNameOp);
 
         // Now add this to the output field of the class.
         classFields.emplace_back(object, prefix + "_field");
@@ -1158,8 +1158,8 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     }
 
     // Put the information in a verbatim operation.
-    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), buffer,
-                                   ValueRange{}, builder.getArrayAttr(symbols));
+    sv::VerbatimOp::create(builder, builder.getUnknownLoc(), buffer,
+                           ValueRange{}, builder.getArrayAttr(symbols));
   }
   if (!classFields.empty()) {
     addPortsToClass(classFields, extractMetadataClass);
@@ -1169,8 +1169,8 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         sifiveMetadataClass->getLoc(), sifiveMetadataClass.getBodyBlock());
     SmallVector<std::pair<Value, Twine>> classFields = {
-        {builderOM.create<ObjectOp>(
-             extractMetadataClass,
+        {ObjectOp::create(
+             builderOM, extractMetadataClass,
              builderOM.getStringAttr("extract_instances_metadata")),
          "extractedInstances_field"}};
 
@@ -1182,7 +1182,7 @@ void ExtractInstancesPass::createTraceFiles(ClassOp &sifiveMetadataClass) {
            "expected the class to be instantiated by an object op");
     builderOM.setInsertionPoint(metadataObj);
     auto newObj =
-        builderOM.create<ObjectOp>(sifiveMetadataClass, metadataObj.getName());
+        ObjectOp::create(builderOM, sifiveMetadataClass, metadataObj.getName());
     metadataObj->replaceAllUsesWith(newObj);
     metadataObj->remove();
   }
@@ -1202,11 +1202,11 @@ void ExtractInstancesPass::createSchema() {
   };
   StringRef portFields[] = {"name", "path", "filename", "inst_name"};
 
-  schemaClass = builderOM.create<ClassOp>("ExtractInstancesSchema", portFields,
-                                          portsType);
+  schemaClass = ClassOp::create(builderOM, "ExtractInstancesSchema", portFields,
+                                portsType);
 
   // Now create the class that will instantiate the schema objects.
   SmallVector<PortInfo> mports;
-  extractMetadataClass = builderOM.create<ClassOp>(
-      builderOM.getStringAttr("ExtractInstancesMetadata"), mports);
+  extractMetadataClass = ClassOp::create(
+      builderOM, builderOM.getStringAttr("ExtractInstancesMetadata"), mports);
 }

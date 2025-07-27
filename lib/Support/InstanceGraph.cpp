@@ -183,7 +183,7 @@ InstanceGraph::getInferredTopLevelNodes() {
               return true;
             }
             marked.insert(node);
-            for (auto use : *node) {
+            for (auto *use : *node) {
               InstanceGraphNode *targetModule = use->getTarget();
               candidateTopLevels.remove(targetModule);
               if (cycleUtil(targetModule, trace))
@@ -195,7 +195,7 @@ InstanceGraph::getInferredTopLevelNodes() {
           };
 
   bool cyclic = false;
-  for (auto moduleIt : *this) {
+  for (auto *moduleIt : *this) {
     if (visited.contains(moduleIt))
       continue;
 

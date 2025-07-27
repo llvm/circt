@@ -74,7 +74,7 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
 
   if (indices.empty()) {
     // Singleton memref (e.g. memref<i32>) - return 0.
-    return rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(0))
+    return arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(0))
         .getResult();
   }
 
@@ -92,24 +92,22 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
 
     // Multiply product by the current index operand.
     if (llvm::isPowerOf2_64(indexMulFactor)) {
-      auto constant =
-          rewriter
-              .create<arith::ConstantOp>(
-                  loc, rewriter.getIndexAttr(llvm::Log2_64(indexMulFactor)))
-              .getResult();
-      finalIdx =
-          rewriter.create<arith::ShLIOp>(loc, finalIdx, constant).getResult();
-    } else {
-      auto constant = rewriter
-                          .create<arith::ConstantOp>(
-                              loc, rewriter.getIndexAttr(indexMulFactor))
+      auto constant = arith::ConstantOp::create(
+                          rewriter, loc,
+                          rewriter.getIndexAttr(llvm::Log2_64(indexMulFactor)))
                           .getResult();
       finalIdx =
-          rewriter.create<arith::MulIOp>(loc, finalIdx, constant).getResult();
+          arith::ShLIOp::create(rewriter, loc, finalIdx, constant).getResult();
+    } else {
+      auto constant = arith::ConstantOp::create(
+                          rewriter, loc, rewriter.getIndexAttr(indexMulFactor))
+                          .getResult();
+      finalIdx =
+          arith::MulIOp::create(rewriter, loc, finalIdx, constant).getResult();
     }
 
     // Sum up with the prior lower dimension accessors.
-    auto sumOp = rewriter.create<arith::AddIOp>(loc, finalIdx, partialIdx);
+    auto sumOp = arith::AddIOp::create(rewriter, loc, finalIdx, partialIdx);
     finalIdx = sumOp.getResult();
   }
   return finalIdx;
@@ -324,8 +322,9 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
     llvm::SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
-    auto newCallOp = rewriter.create<func::CallOp>(
-        op.getLoc(), adaptor.getCallee(), convResTypes, adaptor.getOperands());
+    auto newCallOp =
+        func::CallOp::create(rewriter, op.getLoc(), adaptor.getCallee(),
+                             convResTypes, adaptor.getOperands());
 
     if (!rewriteFunctions) {
       rewriter.replaceOp(op, newCallOp);
@@ -345,7 +344,7 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
           calledFunction, op.getCallee(), funcType);
     else
       newFuncOp =
-          rewriter.create<func::FuncOp>(op.getLoc(), op.getCallee(), funcType);
+          func::FuncOp::create(rewriter, op.getLoc(), op.getCallee(), funcType);
     newFuncOp.setVisibility(SymbolTable::Visibility::Private);
     rewriter.replaceOp(op, newCallOp);
 
@@ -417,8 +416,8 @@ static Value materializeCollapseShapeFlattening(OpBuilder &builder,
   assert(indices.has_value() && "expected a valid collapse");
 
   // Generate the appropriate return type:
-  return builder.create<memref::CollapseShapeOp>(loc, inputs[0],
-                                                 indices.value());
+  return memref::CollapseShapeOp::create(builder, loc, inputs[0],
+                                         indices.value());
 }
 
 static void populateTypeConversionPatterns(TypeConverter &typeConverter) {

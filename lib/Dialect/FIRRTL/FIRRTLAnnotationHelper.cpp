@@ -405,8 +405,8 @@ HierPathCache::HierPathCache(Operation *op, SymbolTable &symbolTable)
 hw::HierPathOp HierPathCache::getOpFor(ArrayAttr attr) {
   auto &op = cache[attr];
   if (!op) {
-    op = builder.create<hw::HierPathOp>(UnknownLoc::get(builder.getContext()),
-                                        "nla", attr);
+    op = hw::HierPathOp::create(builder, UnknownLoc::get(builder.getContext()),
+                                "nla", attr);
     symbolTable.insert(op);
     op.setVisibility(SymbolTable::Visibility::Private);
   }
@@ -475,10 +475,9 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // RefSendOp.  Store into an op to ensure we have stable reference,
   // so future tapping won't invalidate this Value.
   sendVal = modInstance.getResults().back();
-  sendVal =
-      builder
-          .create<mlir::UnrealizedConversionCastOp>(sendVal.getType(), sendVal)
-          ->getResult(0);
+  sendVal = mlir::UnrealizedConversionCastOp::create(builder, sendVal.getType(),
+                                                     sendVal)
+                ->getResult(0);
 
   // Now set the instance as the source for the final datatap xmr.
   srcTarget = AnnoPathValue(modInstance);
@@ -495,9 +494,10 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
     auto builder = ImplicitLocOpBuilder::atBlockEnd(
         intMod.getLoc(), &intMod.getBody().getBlocks().back());
-    auto pathStr = builder.create<VerbatimExprOp>(
-        portRefType.getType(), internalPathAttr.getValue(), ValueRange{});
-    auto sendPath = builder.create<RefSendOp>(pathStr);
+    auto pathStr =
+        VerbatimExprOp::create(builder, portRefType.getType(),
+                               internalPathAttr.getValue(), ValueRange{});
+    auto sendPath = RefSendOp::create(builder, pathStr);
     emitConnect(builder, intMod.getArguments().back(), sendPath.getResult());
   }
 
@@ -647,7 +647,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
                                                       lastInst->getBlock());
       builder.setInsertionPointAfter(lastInst);
       // Instance port cannot be used as an annotation target, so use a NodeOp.
-      auto node = builder.create<NodeOp>(lastInst.getResult(portNo));
+      auto node = NodeOp::create(builder, lastInst.getResult(portNo));
       AnnotationSet::addDontTouch(node);
       srcTarget->ref = AnnoTarget(circt::firrtl::detail::AnnoTargetImpl(node));
     }
@@ -692,17 +692,17 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
         valType.getWidthlessType() != wireType.getWidthlessType()) {
       // Helper: create a wire, cast it with callback, connect cast to sink.
       auto addWireWithCast = [&](auto createCast) {
-        auto wire =
-            sinkBuilder.create<WireOp>(valType, tapName.getValue()).getResult();
+        auto wire = WireOp::create(sinkBuilder, valType, tapName.getValue())
+                        .getResult();
         emitConnect(sinkBuilder, sink, createCast(wire));
         sink = wire;
       };
       if (isa<IntType>(wireType))
         addWireWithCast(
-            [&](auto v) { return sinkBuilder.create<AsUIntPrimOp>(v); });
+            [&](auto v) { return AsUIntPrimOp::create(sinkBuilder, v); });
       else if (isa<AsyncResetType>(wireType))
         addWireWithCast(
-            [&](auto v) { return sinkBuilder.create<AsAsyncResetPrimOp>(v); });
+            [&](auto v) { return AsAsyncResetPrimOp::create(sinkBuilder, v); });
     }
 
     state.wiringProblems.push_back(
@@ -814,19 +814,20 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
     SmallVector<Value> data;
     Type uintType = builder.getType<UIntType>();
     for (uint64_t i = 0, e = combMem.getType().getNumElements(); i != e; ++i) {
-      auto port = builder.create<chirrtl::MemoryPortOp>(
-          combMem.getType().getElementType(),
+      auto port = chirrtl::MemoryPortOp::create(
+          builder, combMem.getType().getElementType(),
           CMemoryPortType::get(builder.getContext()), combMem.getResult(),
           MemDirAttr::Read, builder.getStringAttr("memTap_" + Twine(i)),
           builder.getArrayAttr({}));
-      builder.create<chirrtl::MemoryPortAccessOp>(
-          port.getPort(),
-          builder.create<ConstantOp>(uintType, APSInt::getUnsigned(i)), clock);
+      chirrtl::MemoryPortAccessOp::create(
+          builder, port.getPort(),
+          ConstantOp::create(builder, uintType, APSInt::getUnsigned(i)), clock);
       data.push_back(port.getData());
     }
 
     // Package up all the reads into a vector.
-    auto sendVal = builder.create<VectorCreateOp>(
+    auto sendVal = VectorCreateOp::create(
+        builder,
         FVectorType::get(combMem.getType().getElementType(),
                          combMem.getType().getNumElements()),
         data);
@@ -844,10 +845,9 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   auto debugType = RefType::get(FVectorType::get(
       combMem.getType().getElementType(), combMem.getType().getNumElements()));
   Value memDbgPort =
-      builder
-          .create<chirrtl::MemoryDebugPortOp>(
-              debugType, combMem,
-              state.getNamespace(srcTarget->ref.getModule()).newName("memTap"))
+      chirrtl::MemoryDebugPortOp::create(
+          builder, debugType, combMem,
+          state.getNamespace(srcTarget->ref.getModule()).newName("memTap"))
           .getResult();
 
   auto sendVal = memDbgPort;

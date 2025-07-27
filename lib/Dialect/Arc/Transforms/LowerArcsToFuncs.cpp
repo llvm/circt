@@ -42,8 +42,8 @@ struct DefineOpLowering : public OpConversionPattern<arc::DefineOp> {
   LogicalResult
   matchAndRewrite(arc::DefineOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto func = rewriter.create<mlir::func::FuncOp>(op.getLoc(), op.getName(),
-                                                    op.getFunctionType());
+    auto func = mlir::func::FuncOp::create(rewriter, op.getLoc(), op.getName(),
+                                           op.getFunctionType());
     func->setAttr(
         "llvm.linkage",
         LLVM::LinkageAttr::get(getContext(), LLVM::linkage::Linkage::Internal));

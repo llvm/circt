@@ -73,7 +73,7 @@ static void insertBuffer(Location loc, Value operand, OpBuilder &builder,
   auto ip = builder.saveInsertionPoint();
   builder.setInsertionPointAfterValue(operand);
   auto bufferOp =
-      builder.create<handshake::BufferOp>(loc, operand, numSlots, bufferType);
+      handshake::BufferOp::create(builder, loc, operand, numSlots, bufferType);
   operand.replaceUsesWithIf(
       bufferOp, function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
         return !isa<handshake::BufferOp>(operand.getOwner());

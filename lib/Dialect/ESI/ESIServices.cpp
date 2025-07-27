@@ -107,15 +107,15 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
           fromHostType = b.getType<ChannelType>(fromHostType.getInner(),
                                                 ChannelSignaling::ValidReady,
                                                 fromHostType.getDataDelay());
-        auto cosim = b.create<CosimFromHostEndpointOp>(
-            loc, fromHostType, clk, rst,
+        auto cosim = CosimFromHostEndpointOp::create(
+            b, loc, fromHostType, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         mlir::TypedValue<ChannelType> fromHost = cosim.getFromHost();
         if (fromHostType.getSignaling() == ChannelSignaling::FIFO)
-          fromHost = b.create<ChannelBufferOp>(
-                          loc, ch.type, clk, rst, fromHost,
-                          /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
-                          /*name=*/StringAttr())
+          fromHost = ChannelBufferOp::create(
+                         b, loc, ch.type, clk, rst, fromHost,
+                         /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
+                         /*name=*/StringAttr())
                          .getOutput();
         toServerValues.push_back(fromHost);
         channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
@@ -123,7 +123,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     }
 
     auto pack =
-        b.create<PackBundleOp>(implReq.getLoc(), bundleType, toServerValues);
+        PackBundleOp::create(b, implReq.getLoc(), bundleType, toServerValues);
     implReq.getResult(toClientResultNum[req])
         .replaceAllUsesWith(pack.getBundle());
 
@@ -136,23 +136,23 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
           auto cosimType = b.getType<ChannelType>(chType.getInner(),
                                                   ChannelSignaling::ValidReady,
                                                   chType.getDataDelay());
-          fromChannel = b.create<ChannelBufferOp>(
-                             loc, cosimType, clk, rst, fromChannel,
-                             /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
-                             /*name=*/StringAttr())
+          fromChannel = ChannelBufferOp::create(
+                            b, loc, cosimType, clk, rst, fromChannel,
+                            /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
+                            /*name=*/StringAttr())
                             .getOutput();
         }
-        auto cosim = b.create<CosimToHostEndpointOp>(
-            loc, clk, rst, fromChannel,
+        auto cosim = CosimToHostEndpointOp::create(
+            b, loc, clk, rst, fromChannel,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
       }
     }
 
-    implRecords.create<ServiceImplClientRecordOp>(
-        req.getLoc(), req.getRelativeAppIDPathAttr(), req.getServicePortAttr(),
-        TypeAttr::get(bundleType), b.getDictionaryAttr(channelAssignments),
-        DictionaryAttr());
+    ServiceImplClientRecordOp::create(
+        implRecords, req.getLoc(), req.getRelativeAppIDPathAttr(),
+        req.getServicePortAttr(), TypeAttr::get(bundleType),
+        b.getDictionaryAttr(channelAssignments), DictionaryAttr());
   }
 
   // Erase the generation request.
@@ -186,10 +186,10 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   auto rst = implReq.getOperand(1);
   auto write = b.getStringAttr("write");
   auto read = b.getStringAttr("read");
-  auto none = b.create<hw::ConstantOp>(
-      APInt(/*numBits*/ 0, /*val*/ 0, /*isSigned*/ false));
+  auto none = hw::ConstantOp::create(
+      b, APInt(/*numBits*/ 0, /*val*/ 0, /*isSigned*/ false));
   auto i1 = b.getI1Type();
-  auto c0 = b.create<hw::ConstantOp>(i1, 0);
+  auto c0 = hw::ConstantOp::create(b, i1, 0);
 
   // List of reqs which have a result.
   SmallVector<ServiceImplementConnReqOp, 8> toClientReqs(
@@ -211,7 +211,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   hw::UnpackedArrayType memType =
       hw::UnpackedArrayType::get(ramDecl.getInnerType(), ramDecl.getDepth());
   auto mem =
-      b.create<sv::RegOp>(memType, implReq.getServiceSymbolAttr().getAttr())
+      sv::RegOp::create(b, memType, implReq.getServiceSymbolAttr().getAttr())
           .getResult();
 
   // Do everything which doesn't actually write to the memory, store the signals
@@ -226,30 +226,30 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
 
       // Construct the response channel.
       auto doneValid = bb.get(i1);
-      auto ackChannel = b.create<WrapValidReadyOp>(none, doneValid);
+      auto ackChannel = WrapValidReadyOp::create(b, none, doneValid);
 
       auto pack =
-          b.create<PackBundleOp>(implReq.getLoc(), req.getToClient().getType(),
-                                 ackChannel.getChanOutput());
+          PackBundleOp::create(b, implReq.getLoc(), req.getToClient().getType(),
+                               ackChannel.getChanOutput());
       Value toServer =
           pack.getFromChannels()[RandomAccessMemoryDeclOp::ReqDirChannelIdx];
       toClientResp = pack.getBundle();
 
       // Unwrap the write request and 'explode' the struct.
       auto unwrap =
-          b.create<UnwrapValidReadyOp>(toServer, ackChannel.getReady());
+          UnwrapValidReadyOp::create(b, toServer, ackChannel.getReady());
 
-      Value address = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
-                                                    b.getStringAttr("address"));
-      Value data = b.create<hw::StructExtractOp>(unwrap.getRawOutput(),
-                                                 b.getStringAttr("data"));
+      Value address = hw::StructExtractOp::create(b, unwrap.getRawOutput(),
+                                                  b.getStringAttr("address"));
+      Value data = hw::StructExtractOp::create(b, unwrap.getRawOutput(),
+                                               b.getStringAttr("data"));
 
       // Determine if the write should occur this cycle.
-      auto go = b.create<comb::AndOp>(unwrap.getValid(), unwrap.getReady());
+      auto go = comb::AndOp::create(b, unwrap.getValid(), unwrap.getReady());
       go->setAttr("sv.namehint", b.getStringAttr("write_go"));
       // Register the 'go' signal and use it as the done message.
       doneValid.setValue(
-          b.create<seq::CompRegOp>(go, clk, rst, c0, "write_done"));
+          seq::CompRegOp::create(b, go, clk, rst, c0, "write_done"));
       // Store the necessary data for the 'always' memory writing block.
       writeGoAddressData.push_back(std::make_tuple(go, address, data));
 
@@ -259,24 +259,24 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       // Construct the response channel.
       auto dataValid = bb.get(i1);
       auto data = bb.get(ramDecl.getInnerType());
-      auto dataChannel = b.create<WrapValidReadyOp>(data, dataValid);
+      auto dataChannel = WrapValidReadyOp::create(b, data, dataValid);
 
       auto pack =
-          b.create<PackBundleOp>(implReq.getLoc(), req.getToClient().getType(),
-                                 dataChannel.getChanOutput());
+          PackBundleOp::create(b, implReq.getLoc(), req.getToClient().getType(),
+                               dataChannel.getChanOutput());
       Value toServer =
           pack.getFromChannels()[RandomAccessMemoryDeclOp::RespDirChannelIdx];
       toClientResp = pack.getBundle();
 
       // Unwrap the requested address and read from that memory location.
       auto addressUnwrap =
-          b.create<UnwrapValidReadyOp>(toServer, dataChannel.getReady());
+          UnwrapValidReadyOp::create(b, toServer, dataChannel.getReady());
       Value unsignedAddress = addressUnwrap.getRawOutput();
-      Value signlessAddress = b.create<hw::BitcastOp>(
-          b.getIntegerType(llvm::Log2_64_Ceil(ramDecl.getDepth())),
+      Value signlessAddress = hw::BitcastOp::create(
+          b, b.getIntegerType(llvm::Log2_64_Ceil(ramDecl.getDepth())),
           unsignedAddress);
-      Value memLoc = b.create<sv::ArrayIndexInOutOp>(mem, signlessAddress);
-      auto readData = b.create<sv::ReadInOutOp>(memLoc);
+      Value memLoc = sv::ArrayIndexInOutOp::create(b, mem, signlessAddress);
+      auto readData = sv::ReadInOutOp::create(b, memLoc);
 
       // Set the data on the response.
       data.setValue(readData);
@@ -289,19 +289,19 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   }
 
   // Now construct the memory writes.
-  auto hwClk = b.create<seq::FromClockOp>(clk);
-  b.create<sv::AlwaysFFOp>(
-      sv::EventControl::AtPosEdge, hwClk, sv::ResetType::SyncReset,
+  auto hwClk = seq::FromClockOp::create(b, clk);
+  sv::AlwaysFFOp::create(
+      b, sv::EventControl::AtPosEdge, hwClk, sv::ResetType::SyncReset,
       sv::EventControl::AtPosEdge, rst, [&] {
         for (auto [go, address, data] : writeGoAddressData) {
           Value a = address, d = data; // So the lambda can capture.
           // If we're told to go, do the write.
-          b.create<sv::IfOp>(go, [&] {
-            Value signlessAddress = b.create<hw::BitcastOp>(
-                b.getIntegerType(llvm::Log2_64_Ceil(ramDecl.getDepth())), a);
+          sv::IfOp::create(b, go, [&] {
+            Value signlessAddress = hw::BitcastOp::create(
+                b, b.getIntegerType(llvm::Log2_64_Ceil(ramDecl.getDepth())), a);
             Value memLoc =
-                b.create<sv::ArrayIndexInOutOp>(mem, signlessAddress);
-            b.create<sv::PAssignOp>(memLoc, d);
+                sv::ArrayIndexInOutOp::create(b, mem, signlessAddress);
+            sv::PAssignOp::create(b, memLoc, d);
           });
         }
       });
@@ -330,8 +330,8 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
   // Since we always need a record of generation, create it here then pass it to
   // the generator for possible modification.
   OpBuilder b(req);
-  auto implRecord = b.create<ServiceImplRecordOp>(
-      req.getLoc(), req.getAppID(), /*isEngine=*/false,
+  auto implRecord = ServiceImplRecordOp::create(
+      b, req.getLoc(), req.getAppID(), /*isEngine=*/false,
       req.getServiceSymbolAttr(), req.getStdServiceAttr(),
       req.getImplTypeAttr(), b.getDictionaryAttr({}));
   implRecord.getReqDetails().emplaceBlock();
@@ -491,15 +491,15 @@ StringAttr ESIConnectServicesPass::getStdService(FlatSymbolRefAttr svcSym) {
 
 void ESIConnectServicesPass::convertReq(RequestConnectionOp req) {
   OpBuilder b(req);
-  auto newReq = b.create<ServiceImplementConnReqOp>(
-      req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
+  auto newReq = ServiceImplementConnReqOp::create(
+      b, req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
       ArrayAttr::get(&getContext(), {req.getAppIDAttr()}));
   newReq->setDialectAttrs(req->getDialectAttrs());
   req.getToClient().replaceAllUsesWith(newReq.getToClient());
 
   // Emit a record of the original request.
-  b.create<ServiceRequestRecordOp>(
-      req.getLoc(), req.getAppID(), req.getServicePortAttr(),
+  ServiceRequestRecordOp::create(
+      b, req.getLoc(), req.getAppID(), req.getServicePortAttr(),
       getStdService(req.getServicePortAttr().getModuleRef()),
       req.getToClient().getType());
   req.erase();
@@ -523,7 +523,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
   // location of the values), get the pointer to the default service instance,
   // if any.
   llvm::SetVector<ServiceImplementConnReqOp> *anyServiceInst = nullptr;
-  if (auto defaultService = localImplReqs.find(SymbolRefAttr());
+  if (auto *defaultService = localImplReqs.find(SymbolRefAttr());
       defaultService != localImplReqs.end())
     anyServiceInst = &defaultService->second;
 
@@ -532,7 +532,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     for (auto req : llvm::make_early_inc_range(
              mod.getBodyBlock()->getOps<ServiceImplementConnReqOp>())) {
       auto service = req.getServicePort().getModuleRef();
-      auto reqListIter = localImplReqs.find(service);
+      auto *reqListIter = localImplReqs.find(service);
       if (reqListIter != localImplReqs.end())
         reqListIter->second.insert(req);
       else if (anyServiceInst)
@@ -590,8 +590,8 @@ LogicalResult ESIConnectServicesPass::replaceInst(
 
   // Create the generation request op.
   OpBuilder b(instOp);
-  auto implOp = b.create<ServiceImplementReqOp>(
-      instOp.getLoc(), resultTypes, instOp.getAppIDAttr(),
+  auto implOp = ServiceImplementReqOp::create(
+      b, instOp.getLoc(), resultTypes, instOp.getAppIDAttr(),
       instOp.getServiceSymbolAttr(), instOp.getImplTypeAttr(),
       getStdService(declSym), instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
@@ -691,9 +691,9 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
         appIDPath = prependNamePart(appIDPath, instAppID);
 
       // Clone the request.
-      auto clone = b.create<ServiceImplementConnReqOp>(
-          req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
-          appIDPath);
+      auto clone = ServiceImplementConnReqOp::create(
+          b, req.getLoc(), req.getToClient().getType(),
+          req.getServicePortAttr(), appIDPath);
       clone->setDialectAttrs(req->getDialectAttrs());
       newOperands.push_back(clone.getToClient());
     }

@@ -305,8 +305,8 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
     if (it != invalids.end())
       return it->getSecond();
     return invalids
-        .insert({type,
-                 builder.create<InvalidValueOp>(builder.getUnknownLoc(), type)})
+        .insert({type, InvalidValueOp::create(builder, builder.getUnknownLoc(),
+                                              type)})
         .first->getSecond();
   };
 
@@ -325,15 +325,15 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
     auto connectOp =
-        builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
+        MatchingConnectOp::create(builder, port.loc, modulePort, instPort);
     instToInsertionPoint[instOp] = builder.saveInsertionPoint();
     // If the connect was created inside a WhenOp, then the port needs to be
     // invalidated to make a legal circuit.
     if (port.direction == Direction::Out &&
         connectOp->getParentOfType<WhenOp>()) {
       builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-      builder.create<MatchingConnectOp>(port.loc, modulePort,
-                                        getOrCreateInvalid(port.type));
+      MatchingConnectOp::create(builder, port.loc, modulePort,
+                                getOrCreateInvalid(port.type));
     }
   }
   return success();
@@ -379,7 +379,7 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface moduleOp) {
 
   auto loc = builder.getUnknownLoc();
   // Put the information in a verbatim operation.
-  builder.create<emit::FileOp>(loc, outputFile, [&] {
+  emit::FileOp::create(builder, loc, outputFile, [&] {
     for (auto instancePath : instancePaths) {
       // Note: Reverse instancepath to construct the NLA.
       SmallVector<Attribute> path(llvm::reverse(instancePath));
@@ -405,8 +405,8 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface moduleOp) {
 
       os << "\n";
     }
-    builder.create<sv::VerbatimOp>(loc, buffer, ValueRange{},
-                                   builder.getArrayAttr(params));
+    sv::VerbatimOp::create(builder, loc, buffer, ValueRange{},
+                           builder.getArrayAttr(params));
   });
   anythingChanged = true;
 }
@@ -508,8 +508,8 @@ void AddSeqMemPortsPass::runOnOperation() {
           auto value = inst.getResult(firstResult + i);
           auto type = value.getType();
           auto attr = getIntZerosAttr(type);
-          auto zero = builder.create<ConstantOp>(portInfo.loc, type, attr);
-          builder.create<MatchingConnectOp>(portInfo.loc, value, zero);
+          auto zero = ConstantOp::create(builder, portInfo.loc, type, attr);
+          MatchingConnectOp::create(builder, portInfo.loc, value, zero);
         }
       }
     }

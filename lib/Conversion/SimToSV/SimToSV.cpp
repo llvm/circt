@@ -65,13 +65,13 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     auto loc = op.getLoc();
     auto resultType = rewriter.getIntegerType(1);
-    auto str = rewriter.create<sv::ConstantStrOp>(loc, op.getFormatString());
-    auto reg = rewriter.create<sv::RegOp>(loc, resultType,
-                                          rewriter.getStringAttr("_pargs"));
-    rewriter.create<sv::InitialOp>(loc, [&] {
-      auto call = rewriter.create<sv::SystemFunctionOp>(
-          loc, resultType, "test$plusargs", ArrayRef<Value>{str});
-      rewriter.create<sv::BPAssignOp>(loc, reg, call);
+    auto str = sv::ConstantStrOp::create(rewriter, loc, op.getFormatString());
+    auto reg = sv::RegOp::create(rewriter, loc, resultType,
+                                 rewriter.getStringAttr("_pargs"));
+    sv::InitialOp::create(rewriter, loc, [&] {
+      auto call = sv::SystemFunctionOp::create(
+          rewriter, loc, resultType, "test$plusargs", ArrayRef<Value>{str});
+      sv::BPAssignOp::create(rewriter, loc, reg, call);
     });
 
     rewriter.replaceOpWithNewOp<sv::ReadInOutOp>(op, reg);
@@ -93,18 +93,18 @@ public:
     auto i1ty = rewriter.getIntegerType(1);
     auto type = op.getResult().getType();
 
-    auto wirev = rewriter.create<sv::WireOp>(
-        loc, type, rewriter.getStringAttr("_pargs_v"));
-    auto wiref = rewriter.create<sv::WireOp>(
-        loc, i1ty, rewriter.getStringAttr("_pargs_f"));
+    auto wirev = sv::WireOp::create(rewriter, loc, type,
+                                    rewriter.getStringAttr("_pargs_v"));
+    auto wiref = sv::WireOp::create(rewriter, loc, i1ty,
+                                    rewriter.getStringAttr("_pargs_f"));
 
     state.usedSynthesisMacro = true;
-    rewriter.create<sv::IfDefOp>(
-        loc, "SYNTHESIS",
+    sv::IfDefOp::create(
+        rewriter, loc, "SYNTHESIS",
         [&]() {
-          auto cstFalse = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
-          auto cstZ = rewriter.create<sv::ConstantZOp>(loc, type);
-          auto assignZ = rewriter.create<sv::AssignOp>(loc, wirev, cstZ);
+          auto cstFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+          auto cstZ = sv::ConstantZOp::create(rewriter, loc, type);
+          auto assignZ = sv::AssignOp::create(rewriter, loc, wirev, cstZ);
           circt::sv::setSVAttributes(
               assignZ,
               sv::SVAttributeAttr::get(
@@ -112,33 +112,34 @@ public:
                   "This dummy assignment exists to avoid undriven lint "
                   "warnings (e.g., Verilator UNDRIVEN).",
                   /*emitAsComment=*/true));
-          rewriter.create<sv::AssignOp>(loc, wiref, cstFalse);
+          sv::AssignOp::create(rewriter, loc, wiref, cstFalse);
         },
         [&]() {
           auto i32ty = rewriter.getIntegerType(32);
-          auto regf = rewriter.create<sv::RegOp>(
-              loc, i32ty, rewriter.getStringAttr("_found"));
-          auto regv = rewriter.create<sv::RegOp>(
-              loc, type, rewriter.getStringAttr("_value"));
-          rewriter.create<sv::InitialOp>(loc, [&] {
+          auto regf = sv::RegOp::create(rewriter, loc, i32ty,
+                                        rewriter.getStringAttr("_found"));
+          auto regv = sv::RegOp::create(rewriter, loc, type,
+                                        rewriter.getStringAttr("_value"));
+          sv::InitialOp::create(rewriter, loc, [&] {
             auto str =
-                rewriter.create<sv::ConstantStrOp>(loc, op.getFormatString());
-            auto call = rewriter.create<sv::SystemFunctionOp>(
-                loc, i32ty, "value$plusargs", ArrayRef<Value>{str, regv});
-            rewriter.create<sv::BPAssignOp>(loc, regf, call);
+                sv::ConstantStrOp::create(rewriter, loc, op.getFormatString());
+            auto call = sv::SystemFunctionOp::create(
+                rewriter, loc, i32ty, "value$plusargs",
+                ArrayRef<Value>{str, regv});
+            sv::BPAssignOp::create(rewriter, loc, regf, call);
           });
-          Value readRegF = rewriter.create<sv::ReadInOutOp>(loc, regf);
-          Value readRegV = rewriter.create<sv::ReadInOutOp>(loc, regv);
-          auto cstTrue = rewriter.create<hw::ConstantOp>(loc, i32ty, 1);
+          Value readRegF = sv::ReadInOutOp::create(rewriter, loc, regf);
+          Value readRegV = sv::ReadInOutOp::create(rewriter, loc, regv);
+          auto cstTrue = hw::ConstantOp::create(rewriter, loc, i32ty, 1);
           // Squash any X coming from the regf to 0.
-          auto cmp = rewriter.create<comb::ICmpOp>(
-              loc, comb::ICmpPredicate::ceq, readRegF, cstTrue);
-          rewriter.create<sv::AssignOp>(loc, wiref, cmp);
-          rewriter.create<sv::AssignOp>(loc, wirev, readRegV);
+          auto cmp = comb::ICmpOp::create(
+              rewriter, loc, comb::ICmpPredicate::ceq, readRegF, cstTrue);
+          sv::AssignOp::create(rewriter, loc, wiref, cmp);
+          sv::AssignOp::create(rewriter, loc, wirev, readRegV);
         });
 
-    Value readf = rewriter.create<sv::ReadInOutOp>(loc, wiref);
-    Value readv = rewriter.create<sv::ReadInOutOp>(loc, wirev);
+    Value readf = sv::ReadInOutOp::create(rewriter, loc, wiref);
+    Value readv = sv::ReadInOutOp::create(rewriter, loc, wirev);
 
     rewriter.replaceOp(op, {readf, readv});
     return success();
@@ -155,16 +156,16 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     auto loc = op.getLoc();
 
-    Value clockCast = rewriter.create<seq::FromClockOp>(loc, adaptor.getClk());
+    Value clockCast = seq::FromClockOp::create(rewriter, loc, adaptor.getClk());
 
     this->state.usedSynthesisMacro = true;
-    rewriter.create<sv::IfDefOp>(
-        loc, "SYNTHESIS", [&] {},
+    sv::IfDefOp::create(
+        rewriter, loc, "SYNTHESIS", [&] {},
         [&] {
-          rewriter.create<sv::AlwaysOp>(
-              loc, sv::EventControl::AtPosEdge, clockCast, [&] {
-                rewriter.create<sv::IfOp>(loc, adaptor.getCond(),
-                                          [&] { rewriter.create<ToOp>(loc); });
+          sv::AlwaysOp::create(
+              rewriter, loc, sv::EventControl::AtPosEdge, clockCast, [&] {
+                sv::IfOp::create(rewriter, loc, adaptor.getCond(),
+                                 [&] { ToOp::create(rewriter, loc); });
               });
         });
 
@@ -192,49 +193,50 @@ public:
     SmallVector<Value> reads;
     for (auto [type, result] :
          llvm::zip(op.getResultTypes(), op.getResults())) {
-      temporaries.push_back(rewriter.create<sv::RegOp>(op.getLoc(), type));
+      temporaries.push_back(sv::RegOp::create(rewriter, op.getLoc(), type));
       reads.push_back(
-          rewriter.create<sv::ReadInOutOp>(op.getLoc(), temporaries.back()));
+          sv::ReadInOutOp::create(rewriter, op.getLoc(), temporaries.back()));
     }
 
     auto emitCall = [&]() {
-      auto call = rewriter.create<sv::FuncCallProceduralOp>(
-          op.getLoc(), op.getResultTypes(), op.getCalleeAttr(),
+      auto call = sv::FuncCallProceduralOp::create(
+          rewriter, op.getLoc(), op.getResultTypes(), op.getCalleeAttr(),
           adaptor.getInputs());
       for (auto [lhs, rhs] : llvm::zip(temporaries, call.getResults())) {
         if (isClockedCall)
-          rewriter.create<sv::PAssignOp>(op.getLoc(), lhs, rhs);
+          sv::PAssignOp::create(rewriter, op.getLoc(), lhs, rhs);
         else
-          rewriter.create<sv::BPAssignOp>(op.getLoc(), lhs, rhs);
+          sv::BPAssignOp::create(rewriter, op.getLoc(), lhs, rhs);
       }
     };
     if (isClockedCall) {
       Value clockCast =
-          rewriter.create<seq::FromClockOp>(loc, adaptor.getClock());
-      rewriter.create<sv::AlwaysOp>(
-          loc, ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
+          seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
+      sv::AlwaysOp::create(
+          rewriter, loc,
+          ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
           ArrayRef<Value>{clockCast}, [&]() {
             if (!hasEnable)
               return emitCall();
-            rewriter.create<sv::IfOp>(op.getLoc(), adaptor.getEnable(),
-                                      emitCall);
+            sv::IfOp::create(rewriter, op.getLoc(), adaptor.getEnable(),
+                             emitCall);
           });
     } else {
       // Unclocked call is lowered into always_comb.
       // TODO: If there is a return value and no output argument, use an
       // unclocked call op.
-      rewriter.create<sv::AlwaysCombOp>(loc, [&]() {
+      sv::AlwaysCombOp::create(rewriter, loc, [&]() {
         if (!hasEnable)
           return emitCall();
         auto assignXToResults = [&] {
           for (auto lhs : temporaries) {
-            auto xValue = rewriter.create<sv::ConstantXOp>(
-                op.getLoc(), lhs.getType().getElementType());
-            rewriter.create<sv::BPAssignOp>(op.getLoc(), lhs, xValue);
+            auto xValue = sv::ConstantXOp::create(
+                rewriter, op.getLoc(), lhs.getType().getElementType());
+            sv::BPAssignOp::create(rewriter, op.getLoc(), lhs, xValue);
           }
         };
-        rewriter.create<sv::IfOp>(op.getLoc(), adaptor.getEnable(), emitCall,
-                                  assignXToResults);
+        sv::IfOp::create(rewriter, op.getLoc(), adaptor.getEnable(), emitCall,
+                         assignXToResults);
       });
     }
 
@@ -269,24 +271,25 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   }
 
   auto svFuncDecl =
-      builder.create<sv::FuncOp>(func.getSymNameAttr(), func.getModuleType(),
-                                 func.getPerArgumentAttrsAttr(), inputLocsAttr,
-                                 outputLocsAttr, func.getVerilogNameAttr());
+      sv::FuncOp::create(builder, func.getSymNameAttr(), func.getModuleType(),
+                         func.getPerArgumentAttrsAttr(), inputLocsAttr,
+                         outputLocsAttr, func.getVerilogNameAttr());
   // DPI function is a declaration so it must be a private function.
   svFuncDecl.setPrivate();
   auto name = builder.getStringAttr(nameSpace.newName(
       func.getSymNameAttr().getValue(), "dpi_import_fragument"));
 
   // Add include guards to avoid duplicate declarations. See Issue 7458.
-  auto macroDecl = builder.create<sv::MacroDeclOp>(nameSpace.newName(
-      "__CIRCT_DPI_IMPORT", func.getSymNameAttr().getValue().upper()));
-  builder.create<emit::FragmentOp>(name, [&]() {
-    builder.create<sv::IfDefOp>(
-        macroDecl.getSymNameAttr(), []() {},
+  auto macroDecl = sv::MacroDeclOp::create(
+      builder, nameSpace.newName("__CIRCT_DPI_IMPORT",
+                                 func.getSymNameAttr().getValue().upper()));
+  emit::FragmentOp::create(builder, name, [&]() {
+    sv::IfDefOp::create(
+        builder, macroDecl.getSymNameAttr(), []() {},
         [&]() {
-          builder.create<sv::FuncDPIImportOp>(func.getSymNameAttr(),
-                                              StringAttr());
-          builder.create<sv::MacroDefOp>(macroDecl.getSymNameAttr(), "");
+          sv::FuncDPIImportOp::create(builder, func.getSymNameAttr(),
+                                      StringAttr());
+          sv::MacroDefOp::create(builder, macroDecl.getSymNameAttr(), "");
         });
   });
 
@@ -369,7 +372,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       } else {
         auto builder = ImplicitLocOpBuilder::atBlockBegin(
             UnknownLoc::get(context), circuit.getBody());
-        builder.create<sv::MacroDeclOp>("SYNTHESIS");
+        sv::MacroDeclOp::create(builder, "SYNTHESIS");
       }
     }
   }

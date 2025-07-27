@@ -55,8 +55,8 @@ void Lowering::lower() {
 
   // Replace the process.
   OpBuilder builder(processOp);
-  auto executeOp = builder.create<CombinationalOp>(processOp.getLoc(),
-                                                   processOp.getResultTypes());
+  auto executeOp = CombinationalOp::create(builder, processOp.getLoc(),
+                                           processOp.getResultTypes());
   executeOp.getRegion().takeBody(processOp.getBody());
   processOp.replaceAllUsesWith(executeOp);
   processOp.erase();
@@ -64,7 +64,7 @@ void Lowering::lower() {
 
   // Replace the `llhd.wait` with an `llhd.yield`.
   builder.setInsertionPoint(waitOp);
-  builder.create<YieldOp>(waitOp.getLoc(), waitOp.getYieldOperands());
+  YieldOp::create(builder, waitOp.getLoc(), waitOp.getYieldOperands());
   waitOp.erase();
 
   // Simplify the execute op body region since disconnecting the control flow

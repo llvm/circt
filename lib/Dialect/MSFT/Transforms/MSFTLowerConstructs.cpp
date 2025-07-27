@@ -87,9 +87,9 @@ public:
     for (size_t rowNum = 0, numRows = rowInputs.getNumElements();
          rowNum < numRows; ++rowNum) {
       Value rowNumVal =
-          rewriter.create<hw::ConstantOp>(loc, rowIdxType, rowNum);
-      auto rowValue =
-          rewriter.create<hw::ArrayGetOp>(loc, array.getRowInputs(), rowNumVal);
+          hw::ConstantOp::create(rewriter, loc, rowIdxType, rowNum);
+      auto rowValue = hw::ArrayGetOp::create(rewriter, loc,
+                                             array.getRowInputs(), rowNumVal);
       rowValue->setAttr("sv.namehint",
                         StringAttr::get(ctxt, "row_" + Twine(rowNum)));
       rowValues.push_back(rowValue);
@@ -105,9 +105,9 @@ public:
     for (size_t colNum = 0, numCols = colInputs.getNumElements();
          colNum < numCols; ++colNum) {
       Value colNumVal =
-          rewriter.create<hw::ConstantOp>(loc, colIdxType, colNum);
-      auto colValue =
-          rewriter.create<hw::ArrayGetOp>(loc, array.getColInputs(), colNumVal);
+          hw::ConstantOp::create(rewriter, loc, colIdxType, colNum);
+      auto colValue = hw::ArrayGetOp::create(rewriter, loc,
+                                             array.getColInputs(), colNumVal);
       colValue->setAttr("sv.namehint",
                         StringAttr::get(ctxt, "col_" + Twine(colNum)));
       colValues.push_back(colValue);
@@ -154,12 +154,12 @@ public:
       // vectors.
       std::reverse(colPEOutputs.begin(), colPEOutputs.end());
       peOutputs.push_back(
-          rewriter.create<hw::ArrayCreateOp>(loc, colPEOutputs));
+          hw::ArrayCreateOp::create(rewriter, loc, colPEOutputs));
     }
 
     std::reverse(peOutputs.begin(), peOutputs.end());
     rewriter.replaceOp(array,
-                       rewriter.create<hw::ArrayCreateOp>(loc, peOutputs));
+                       hw::ArrayCreateOp::create(rewriter, loc, peOutputs));
     return success();
   }
 };

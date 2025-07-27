@@ -62,8 +62,8 @@ LogicalResult LowerSymbolicValuesPass::lowerToExtModule() {
     auto flatType = builder.getIntegerType(numBits);
     auto &extmoduleOp = extmoduleOps[flatType];
     if (!extmoduleOp) {
-      extmoduleOp = builder.create<HWModuleExternOp>(
-          op.getLoc(),
+      extmoduleOp = HWModuleExternOp::create(
+          builder, op.getLoc(),
           builder.getStringAttr(Twine("circt.symbolic_value.") +
                                 Twine(numBits)),
           PortInfo{{builder.getStringAttr("z"), flatType, ModulePort::Output}},
@@ -77,9 +77,9 @@ LogicalResult LowerSymbolicValuesPass::lowerToExtModule() {
     // Instantiate the extmodule as a means of generating a symbolic value with
     // the correct number of bits.
     builder.setInsertionPoint(op);
-    auto instOp = builder.create<InstanceOp>(
-        op.getLoc(), extmoduleOp, builder.getStringAttr("symbolic_value"),
-        ArrayRef<Value>{},
+    auto instOp = InstanceOp::create(
+        builder, op.getLoc(), extmoduleOp,
+        builder.getStringAttr("symbolic_value"), ArrayRef<Value>{},
         builder.getArrayAttr(ParamDeclAttr::get(
             builder.getContext(), builder.getStringAttr("WIDTH"),
             builder.getI32Type(), builder.getI32IntegerAttr(numBits))));
@@ -87,7 +87,7 @@ LogicalResult LowerSymbolicValuesPass::lowerToExtModule() {
 
     // Insert a bit cast if needed to obtain the original symbolic value's type.
     if (op.getType() != value.getType())
-      value = builder.create<BitcastOp>(op.getLoc(), op.getType(), value);
+      value = BitcastOp::create(builder, op.getLoc(), op.getType(), value);
 
     // Replace the `verif.symbolic_value` op.
     op.replaceAllUsesWith(value);
@@ -103,12 +103,12 @@ void LowerSymbolicValuesPass::lowerToAnySeqWire() {
     // Create a replacement wire declaration with a `(* anyseq *)` Verilog
     // attribute.
     OpBuilder builder(op);
-    auto wireOp = builder.create<sv::WireOp>(op.getLoc(), op.getType());
+    auto wireOp = sv::WireOp::create(builder, op.getLoc(), op.getType());
     sv::addSVAttributes(wireOp,
                         sv::SVAttributeAttr::get(&getContext(), "anyseq"));
 
     // Create a read from the wire and replace the `verif.symbolic_value` op.
-    Value value = builder.create<sv::ReadInOutOp>(op.getLoc(), wireOp);
+    Value value = sv::ReadInOutOp::create(builder, op.getLoc(), wireOp);
     op.replaceAllUsesWith(value);
     op.erase();
   });

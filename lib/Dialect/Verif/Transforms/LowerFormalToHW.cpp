@@ -44,7 +44,7 @@ static LogicalResult lowerFormalToHW(FormalOp op) {
   }
 
   auto moduleOp =
-      rewriter.create<hw::HWModuleOp>(op.getLoc(), op.getNameAttr(), ports);
+      hw::HWModuleOp::create(rewriter, op.getLoc(), op.getNameAttr(), ports);
 
   rewriter.inlineBlockBefore(&op.getBody().front(),
                              &moduleOp.getBodyBlock()->front(),

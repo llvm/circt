@@ -134,9 +134,9 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 
       auto builder = ImplicitLocOpBuilder::atBlockEnd(
           UnknownLoc::get(mlirModule.getContext()), mlirModule.getBody());
-      builder.create<emit::FileOp>(file.getFilename(), [&] {
-        builder.create<sv::VerbatimOp>(jsonBuffer, ValueRange{},
-                                       builder.getArrayAttr(symbols));
+      emit::FileOp::create(builder, file.getFilename(), [&] {
+        sv::VerbatimOp::create(builder, jsonBuffer, ValueRange{},
+                               builder.getArrayAttr(symbols));
       });
     }
   }

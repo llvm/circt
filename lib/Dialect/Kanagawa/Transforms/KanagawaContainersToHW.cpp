@@ -137,7 +137,7 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
 
     const ContainerPortInfo &cpi = portOrder.at(op.getInnerRef());
     auto hwMod =
-        rewriter.create<hw::HWModuleOp>(op.getLoc(), hwmodName, *cpi.hwPorts);
+        hw::HWModuleOp::create(rewriter, op.getLoc(), hwmodName, *cpi.hwPorts);
     modSymMap[op.getInnerRef()] = hwMod.getSymNameAttr();
 
     hw::OutputOp outputOp =
@@ -183,7 +183,7 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
     // Rewrite the hw.output op.
     rewriter.eraseOp(outputOp);
     rewriter.setInsertionPointToEnd(hwMod.getBodyBlock());
-    outputOp = rewriter.create<hw::OutputOp>(op.getLoc(), outputValues);
+    outputOp = hw::OutputOp::create(rewriter, op.getLoc(), outputValues);
     rewriter.eraseOp(op);
     return success();
   }
@@ -299,9 +299,9 @@ struct ContainerInstanceOpConversionPattern
 
     // Create the hw.instance op.
     StringRef moduleName = modSymMap[op.getTargetNameAttr()];
-    auto hwInst = rewriter.create<hw::InstanceOp>(
-        op.getLoc(), retTypes, op.getInnerSym().getSymName(), moduleName,
-        operands, rewriter.getArrayAttr(argNames),
+    auto hwInst = hw::InstanceOp::create(
+        rewriter, op.getLoc(), retTypes, op.getInnerSym().getSymName(),
+        moduleName, operands, rewriter.getArrayAttr(argNames),
         rewriter.getArrayAttr(resNames),
         /*parameters*/ rewriter.getArrayAttr({}), /*innerSym*/ nullptr);
 

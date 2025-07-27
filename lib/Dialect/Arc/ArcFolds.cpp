@@ -158,8 +158,8 @@ static bool removeUnusedClockDomainOutputs(ClockDomainOp op,
 
   rewriter.setInsertionPoint(op);
 
-  auto newDomain = rewriter.create<ClockDomainOp>(
-      op.getLoc(), resultTypes, op.getInputs(), op.getClock());
+  auto newDomain = ClockDomainOp::create(rewriter, op.getLoc(), resultTypes,
+                                         op.getInputs(), op.getClock());
   rewriter.inlineRegionBefore(op.getBody(), newDomain.getBody(),
                               newDomain->getRegion(0).begin());
 

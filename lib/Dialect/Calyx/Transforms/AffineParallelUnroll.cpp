@@ -260,8 +260,8 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
                                      rewriter.getContext());
     AffineMap ubMap = AffineMap::get(0, 0, rewriter.getAffineConstantExpr(1),
                                      rewriter.getContext());
-    auto newParallelOp = rewriter.create<AffineParallelOp>(
-        loc, /*resultTypes=*/TypeRange(),
+    auto newParallelOp = AffineParallelOp::create(
+        rewriter, loc, /*resultTypes=*/TypeRange(),
         /*reductions=*/SmallVector<arith::AtomicRMWKind>(),
         /*lowerBoundsMap=*/lbMap, /*lowerBoundsOperands=*/SmallVector<Value>(),
         /*upperBoundsMap=*/ubMap, /*upperBoundsOperands=*/SmallVector<Value>(),
@@ -294,7 +294,7 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
       // Create an `scf.execute_region` to wrap each unrolled block since
       // `affine.parallel` requires only one block in the body region.
       auto executeRegionOp =
-          insideBuilder.create<scf::ExecuteRegionOp>(loc, TypeRange{});
+          scf::ExecuteRegionOp::create(insideBuilder, loc, TypeRange{});
       Region &executeRegionRegion = executeRegionOp.getRegion();
       Block *executeRegionBlock = &executeRegionRegion.emplaceBlock();
 
@@ -307,7 +307,7 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
       // Map induction variables to constant indices
       for (unsigned i = 0; i < indices.size(); ++i) {
         Value ivConstant =
-            regionBuilder.create<arith::ConstantIndexOp>(loc, indices[i]);
+            arith::ConstantIndexOp::create(regionBuilder, loc, indices[i]);
         operandMap.map(pLoopIVs[i], ivConstant);
       }
 
@@ -316,7 +316,7 @@ struct AffineParallelUnroll : public OpRewritePattern<AffineParallelOp> {
         regionBuilder.clone(*it, operandMap);
 
       // A terminator should always be inserted in `scf.execute_region`'s block.
-      regionBuilder.create<scf::YieldOp>(loc);
+      scf::YieldOp::create(regionBuilder, loc);
 
       // Increment indices using `step`.
       bool done = false;

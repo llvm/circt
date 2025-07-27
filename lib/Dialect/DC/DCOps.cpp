@@ -83,7 +83,7 @@ struct JoinOnBranchPattern : public OpRewritePattern<JoinOp> {
 
       // Unpack the !dc.value<i1> input to the branch op
       auto unpacked =
-          rewriter.create<UnpackOp>(op.getLoc(), branch.getCondition());
+          UnpackOp::create(rewriter, op.getLoc(), branch.getCondition());
       rewriter.modifyOpInPlace(op, [&]() {
         op->eraseOperands(operandInfo.indices);
         op.getTokensMutable().append({unpacked.getToken()});
@@ -219,8 +219,8 @@ public:
         // adding more outputs to the current fork.
         size_t totalForks = fork.getNumResults() + userFork.getNumResults();
 
-        auto newFork = rewriter.create<dc::ForkOp>(fork.getLoc(),
-                                                   fork.getToken(), totalForks);
+        auto newFork = dc::ForkOp::create(rewriter, fork.getLoc(),
+                                          fork.getToken(), totalForks);
         rewriter.replaceOp(
             fork, newFork.getResults().take_front(fork.getNumResults()));
         rewriter.replaceOp(
@@ -252,7 +252,7 @@ public:
     // each output.
     llvm::SmallVector<Value> sources;
     for (size_t i = 0; i < fork.getNumResults(); ++i)
-      sources.push_back(rewriter.create<dc::SourceOp>(fork.getLoc()));
+      sources.push_back(dc::SourceOp::create(rewriter, fork.getLoc()));
 
     rewriter.replaceOp(fork, sources);
     return success();
@@ -276,8 +276,8 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     // Create a new fork op, dropping the unused results.
     rewriter.setInsertionPoint(op);
     auto operand = op.getOperand();
-    auto newFork = rewriter.create<ForkOp>(
-        op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
+    auto newFork = ForkOp::create(rewriter, op.getLoc(), operand,
+                                  op.getNumResults() - unusedIndexes.size());
     unsigned i = 0;
     for (auto oldRes : llvm::enumerate(op.getResults()))
       if (unusedIndexes.count(oldRes.index()) == 0)
@@ -414,11 +414,10 @@ public:
     rewriter.replaceOpWithNewOp<JoinOp>(
         select,
         llvm::SmallVector<Value>{
-            rewriter.create<UnpackOp>(select.getLoc(), select.getCondition())
+            UnpackOp::create(rewriter, select.getLoc(), select.getCondition())
                 .getToken(),
-            rewriter
-                .create<UnpackOp>(branchInput.getLoc(),
-                                  branchInput.getCondition())
+            UnpackOp::create(rewriter, branchInput.getLoc(),
+                             branchInput.getCondition())
                 .getToken()});
 
     return success();

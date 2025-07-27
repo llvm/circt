@@ -80,7 +80,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   circt::BackedgeBuilder back(rewriter, loc);
   circt::Backedge wrapReady = back.get(rewriter.getI1Type());
   auto unwrap =
-      rewriter.create<UnwrapValidReadyOp>(loc, stage.getInput(), wrapReady);
+      UnwrapValidReadyOp::create(rewriter, loc, stage.getInput(), wrapReady);
 
   StringRef pipeStageName = "pipelineStage";
   if (auto name = stage->getAttrOfType<StringAttr>("name"))
@@ -92,8 +92,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   operands.push_back(unwrap.getRawOutput());
   operands.push_back(unwrap.getValid());
   operands.push_back(stageReady);
-  auto stageInst = rewriter.create<hw::InstanceOp>(
-      loc, stageModule, pipeStageName, operands, stageParams);
+  auto stageInst = hw::InstanceOp::create(rewriter, loc, stageModule,
+                                          pipeStageName, operands, stageParams);
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from
@@ -104,8 +104,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   xValid = stageInstResults[2];
 
   // Wrap up the output of the HW stage module.
-  auto wrap = rewriter.create<WrapValidReadyOp>(
-      loc, chPort, rewriter.getI1Type(), x, xValid);
+  auto wrap = WrapValidReadyOp::create(rewriter, loc, chPort,
+                                       rewriter.getI1Type(), x, xValid);
   // Set the stages x_ready backedge correctly.
   stageReady.setValue(wrap.getReady());
 
@@ -134,12 +134,12 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
   if (width == -1)
     return rewriter.notifyMatchFailure(
         nullop, "NullOp lowering only supports hw types");
-  auto valid =
-      rewriter.create<hw::ConstantOp>(nullop.getLoc(), rewriter.getI1Type(), 0);
+  auto valid = hw::ConstantOp::create(rewriter, nullop.getLoc(),
+                                      rewriter.getI1Type(), 0);
   auto zero =
-      rewriter.create<hw::ConstantOp>(loc, rewriter.getIntegerType(width), 0);
-  auto typedZero = rewriter.create<hw::BitcastOp>(loc, innerType, zero);
-  auto wrap = rewriter.create<WrapValidReadyOp>(loc, typedZero, valid);
+      hw::ConstantOp::create(rewriter, loc, rewriter.getIntegerType(width), 0);
+  auto typedZero = hw::BitcastOp::create(rewriter, loc, innerType, zero);
+  auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid);
   wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
   rewriter.replaceOp(nullop, {wrap.getChanOutput()});
   return success();
@@ -160,8 +160,8 @@ public:
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
     if (wrap) {
       if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
-        auto c1 = rewriter.create<hw::ConstantOp>(wrap.getLoc(),
-                                                  rewriter.getI1Type(), 1);
+        auto c1 = hw::ConstantOp::create(rewriter, wrap.getLoc(),
+                                         rewriter.getI1Type(), 1);
         rewriter.replaceOp(wrap, {nullptr, c1});
         return success();
       }
@@ -276,8 +276,8 @@ public:
                    "Could not find 'unwrap'.");
 
       // Create transaction signal as valid AND ready
-      auto validAndReady = rewriter.create<comb::AndOp>(
-          op.getLoc(), wrapVR.getValid(), unwrapVR.getReady());
+      auto validAndReady = comb::AndOp::create(
+          rewriter, op.getLoc(), wrapVR.getValid(), unwrapVR.getReady());
 
       rewriter.replaceOp(op, {validAndReady, wrapVR.getRawInput()});
       return success();
@@ -298,12 +298,12 @@ public:
                    "Could not find 'unwrap'.");
 
       // Create transaction signal as !empty AND rden
-      auto notEmpty = rewriter.create<comb::XorOp>(
-          op.getLoc(), wrapFIFO.getEmpty(),
-          rewriter.create<hw::ConstantOp>(op.getLoc(),
-                                          rewriter.getBoolAttr(true)));
-      auto transaction = rewriter.create<comb::AndOp>(op.getLoc(), notEmpty,
-                                                      unwrapFIFO.getRden());
+      auto notEmpty = comb::XorOp::create(
+          rewriter, op.getLoc(), wrapFIFO.getEmpty(),
+          hw::ConstantOp::create(rewriter, op.getLoc(),
+                                 rewriter.getBoolAttr(true)));
+      auto transaction = comb::AndOp::create(rewriter, op.getLoc(), notEmpty,
+                                             unwrapFIFO.getRden());
 
       rewriter.replaceOp(op, {transaction, wrapFIFO.getData()});
       return success();
@@ -370,14 +370,15 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterfaceOp wrap, OpAdaptor adaptor,
     return failure();
 
   auto loc = wrap.getLoc();
-  auto validSignal = rewriter.create<ReadInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::validStr);
+  auto validSignal = ReadInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
+                                                   ESIHWBuilder::validStr);
   Value dataSignal;
-  dataSignal = rewriter.create<ReadInterfaceSignalOp>(loc, ifaceInstance,
-                                                      ESIHWBuilder::dataStr);
-  auto wrapVR = rewriter.create<WrapValidReadyOp>(loc, dataSignal, validSignal);
-  rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::readyStr, wrapVR.getReady());
+  dataSignal = ReadInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
+                                             ESIHWBuilder::dataStr);
+  auto wrapVR =
+      WrapValidReadyOp::create(rewriter, loc, dataSignal, validSignal);
+  AssignInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
+                                  ESIHWBuilder::readyStr, wrapVR.getReady());
   rewriter.replaceOp(wrap, {wrapVR.getChanOutput()});
   return success();
 }
@@ -415,15 +416,16 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
     return failure();
 
   auto loc = unwrap.getLoc();
-  auto readySignal = rewriter.create<ReadInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::readyStr);
+  auto readySignal = ReadInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
+                                                   ESIHWBuilder::readyStr);
   auto unwrapVR =
-      rewriter.create<UnwrapValidReadyOp>(loc, operands[0], readySignal);
-  rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::validStr, unwrapVR.getValid());
+      UnwrapValidReadyOp::create(rewriter, loc, operands[0], readySignal);
+  AssignInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
+                                  ESIHWBuilder::validStr, unwrapVR.getValid());
 
-  rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.getRawOutput());
+  AssignInterfaceSignalOp::create(rewriter, loc, ifaceInstance,
+                                  ESIHWBuilder::dataStr,
+                                  unwrapVR.getRawOutput());
   rewriter.eraseOp(unwrap);
   return success();
 }
@@ -468,14 +470,15 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
   // Set up the egest route to drive the EP's toHost ports.
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
-      rewriter.create<UnwrapValidReadyOp>(loc, toHost, sendReady);
+      UnwrapValidReadyOp::create(rewriter, loc, toHost, sendReady);
   Value castedSendData;
   if (width > 0)
-    castedSendData = rewriter.create<hw::BitcastOp>(
-        loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
+    castedSendData =
+        hw::BitcastOp::create(rewriter, loc, rewriter.getIntegerType(width),
+                              unwrapSend.getRawOutput());
   else
-    castedSendData = rewriter.create<hw::ConstantOp>(
-        loc, rewriter.getIntegerType(1), rewriter.getBoolAttr(false));
+    castedSendData = hw::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerType(1), rewriter.getBoolAttr(false));
 
   // Build or get the cached Cosim Endpoint module parameterization.
   Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
@@ -489,8 +492,9 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
       unwrapSend.getValid(),
       castedSendData,
   };
-  auto cosimEpModule = rewriter.create<hw::InstanceOp>(
-      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
+  auto cosimEpModule =
+      hw::InstanceOp::create(rewriter, loc, endpoint, ep.getIdAttr(), operands,
+                             ArrayAttr::get(ctxt, params));
   sendReady.setValue(cosimEpModule.getResult(0));
 
   // Replace the CosimEndpointOp op.
@@ -547,22 +551,23 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
 
   // Create replacement Cosim_Endpoint instance.
   Value operands[] = {adaptor.getClk(), adaptor.getRst(), recvReady};
-  auto cosimEpModule = rewriter.create<hw::InstanceOp>(
-      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
+  auto cosimEpModule =
+      hw::InstanceOp::create(rewriter, loc, endpoint, ep.getIdAttr(), operands,
+                             ArrayAttr::get(ctxt, params));
 
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
   Value castedRecvData;
   if (width > 0)
-    castedRecvData =
-        rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
+    castedRecvData = hw::BitcastOp::create(rewriter, loc, type.getInner(),
+                                           recvDataFromCosim);
   else
-    castedRecvData = rewriter.create<hw::ConstantOp>(
-        loc, rewriter.getIntegerType(0),
+    castedRecvData = hw::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerType(0),
         rewriter.getIntegerAttr(rewriter.getIntegerType(0), 0));
-  WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
-      loc, castedRecvData, recvValidFromCosim);
+  WrapValidReadyOp wrapRecv = WrapValidReadyOp::create(
+      rewriter, loc, castedRecvData, recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
@@ -615,8 +620,8 @@ LogicalResult ManifestRomLowering::createRomModule(
       {{rewriter.getStringAttr("data"), rewriter.getI64Type(),
         ModulePort::Direction::Output}},
   };
-  auto rom = rewriter.create<HWModuleOp>(
-      loc, rewriter.getStringAttr(manifestRomName), ports);
+  auto rom = HWModuleOp::create(rewriter, loc,
+                                rewriter.getStringAttr(manifestRomName), ports);
   Block *romBody = rom.getBodyBlock();
   rewriter.setInsertionPointToStart(romBody);
   Value clk = romBody->getArgument(0);
@@ -647,25 +652,26 @@ LogicalResult ManifestRomLowering::createRomModule(
   SmallVector<Attribute> wordAttrs;
   for (uint64_t word : words)
     wordAttrs.push_back(rewriter.getI64IntegerAttr(word));
-  auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-      loc, hw::UnpackedArrayType::get(rewriter.getI64Type(), words.size()),
+  auto manifestConstant = hw::AggregateConstantOp::create(
+      rewriter, loc,
+      hw::UnpackedArrayType::get(rewriter.getI64Type(), words.size()),
       rewriter.getArrayAttr(wordAttrs));
   auto manifestReg =
-      rewriter.create<sv::RegOp>(loc, manifestConstant.getType());
-  rewriter.create<sv::AssignOp>(loc, manifestReg, manifestConstant);
+      sv::RegOp::create(rewriter, loc, manifestConstant.getType());
+  sv::AssignOp::create(rewriter, loc, manifestReg, manifestConstant);
 
   // Slim down the address, register it, do the lookup, and register the output.
   size_t addrBits = llvm::Log2_64_Ceil(words.size());
   auto slimmedIdx =
-      rewriter.create<comb::ExtractOp>(loc, inputAddress, 0, addrBits);
-  Value inputAddresReg = rewriter.create<seq::CompRegOp>(loc, slimmedIdx, clk);
+      comb::ExtractOp::create(rewriter, loc, inputAddress, 0, addrBits);
+  Value inputAddresReg = seq::CompRegOp::create(rewriter, loc, slimmedIdx, clk);
   auto readIdx =
-      rewriter.create<sv::ArrayIndexInOutOp>(loc, manifestReg, inputAddresReg);
-  auto readData = rewriter.create<sv::ReadInOutOp>(loc, readIdx);
-  Value readDataReg = rewriter.create<seq::CompRegOp>(loc, readData, clk);
+      sv::ArrayIndexInOutOp::create(rewriter, loc, manifestReg, inputAddresReg);
+  auto readData = sv::ReadInOutOp::create(rewriter, loc, readIdx);
+  Value readDataReg = seq::CompRegOp::create(rewriter, loc, readData, clk);
   if (auto *term = romBody->getTerminator())
     rewriter.eraseOp(term);
-  rewriter.create<hw::OutputOp>(loc, ValueRange{readDataReg});
+  hw::OutputOp::create(rewriter, loc, ValueRange{readDataReg});
   return success();
 }
 
@@ -717,38 +723,38 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   };
   rewriter.setInsertionPointToEnd(
       op->getParentOfType<mlir::ModuleOp>().getBody());
-  auto cosimManifestExternModule = rewriter.create<HWModuleExternOp>(
-      loc, rewriter.getStringAttr("Cosim_Manifest"), ports, "Cosim_Manifest",
-      ArrayAttr::get(ctxt, params));
+  auto cosimManifestExternModule = HWModuleExternOp::create(
+      rewriter, loc, rewriter.getStringAttr("Cosim_Manifest"), ports,
+      "Cosim_Manifest", ArrayAttr::get(ctxt, params));
 
   hw::ModulePortInfo portInfo({});
-  auto manifestMod = rewriter.create<hw::HWModuleOp>(
-      loc, rewriter.getStringAttr("__ESIManifest"), portInfo,
+  auto manifestMod = hw::HWModuleOp::create(
+      rewriter, loc, rewriter.getStringAttr("__ESIManifest"), portInfo,
       [&](OpBuilder &rewriter, const hw::HWModulePortAccessor &) {
         // Assemble the manifest data into a constant.
         SmallVector<Attribute> bytes;
         for (uint8_t b : op.getCompressedManifest().getData())
           bytes.push_back(rewriter.getI8IntegerAttr(b));
-        auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-            loc, hw::ArrayType::get(rewriter.getI8Type(), bytes.size()),
+        auto manifestConstant = hw::AggregateConstantOp::create(
+            rewriter, loc,
+            hw::ArrayType::get(rewriter.getI8Type(), bytes.size()),
             rewriter.getArrayAttr(bytes));
         auto manifestLogic =
-            rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
-        rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
-        auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
+            sv::LogicOp::create(rewriter, loc, manifestConstant.getType());
+        sv::AssignOp::create(rewriter, loc, manifestLogic, manifestConstant);
+        auto manifest = sv::ReadInOutOp::create(rewriter, loc, manifestLogic);
 
         // Then instantiate the external module.
-        rewriter.create<hw::InstanceOp>(
-            loc, cosimManifestExternModule, "__manifest",
-            ArrayRef<Value>({manifest}),
-            rewriter.getArrayAttr({ParamDeclAttr::get(
-                "COMPRESSED_MANIFEST_SIZE",
-                rewriter.getI32IntegerAttr(bytes.size()))}));
+        hw::InstanceOp::create(rewriter, loc, cosimManifestExternModule,
+                               "__manifest", ArrayRef<Value>({manifest}),
+                               rewriter.getArrayAttr({ParamDeclAttr::get(
+                                   "COMPRESSED_MANIFEST_SIZE",
+                                   rewriter.getI32IntegerAttr(bytes.size()))}));
       });
 
   rewriter.setInsertionPoint(op);
-  rewriter.create<hw::InstanceOp>(loc, manifestMod, "__manifest",
-                                  ArrayRef<Value>({}));
+  hw::InstanceOp::create(rewriter, loc, manifestMod, "__manifest",
+                         ArrayRef<Value>({}));
 
   rewriter.eraseOp(op);
   return success();

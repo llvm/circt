@@ -125,7 +125,7 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
 
   // Add a return op to the end of the body.
   auto builder = OpBuilder::atBlockEnd(&clockRegion.front());
-  builder.create<func::ReturnOp>(clockOp->getLoc());
+  func::ReturnOp::create(builder, clockOp->getLoc());
 
   // Pick a name for the clock function.
   SmallString<32> funcName;
@@ -137,8 +137,8 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
   else if (isa<FinalOp>(clockOp))
     funcName.append("_final");
 
-  auto funcOp = funcBuilder.create<func::FuncOp>(
-      clockOp->getLoc(), funcName,
+  auto funcOp = func::FuncOp::create(
+      funcBuilder, clockOp->getLoc(), funcName,
       builder.getFunctionType({modelStorageArg.getType()}, {}));
   symbolTable->insert(funcOp); // uniquifies the name
   LLVM_DEBUG(llvm::dbgs() << "  - Created function `" << funcOp.getSymName()

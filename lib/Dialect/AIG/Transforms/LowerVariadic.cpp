@@ -42,12 +42,12 @@ static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
     break;
   case 1:
     if (inverts[0])
-      return rewriter.create<AndInverterOp>(op.getLoc(), operands[0], true);
+      return AndInverterOp::create(rewriter, op.getLoc(), operands[0], true);
     else
       return operands[0];
   case 2:
-    return rewriter.create<AndInverterOp>(op.getLoc(), operands[0], operands[1],
-                                          inverts[0], inverts[1]);
+    return AndInverterOp::create(rewriter, op.getLoc(), operands[0],
+                                 operands[1], inverts[0], inverts[1]);
   default:
     auto firstHalf = operands.size() / 2;
     auto lhs =
@@ -56,7 +56,7 @@ static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
     auto rhs =
         lowerVariadicAndInverterOp(op, operands.drop_front(firstHalf),
                                    inverts.drop_front(firstHalf), rewriter);
-    return rewriter.create<AndInverterOp>(op.getLoc(), lhs, rhs);
+    return AndInverterOp::create(rewriter, op.getLoc(), lhs, rhs);
   }
 
   return Value();

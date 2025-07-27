@@ -51,8 +51,8 @@ public:
       StringAttr name;
       if (baseName.has_value())
         name = rewriter.getStringAttr(baseName.value() + "_sh" + Twine(i + 1));
-      in = rewriter.create<seq::CompRegClockEnabledOp>(
-          op.getLoc(), in, adaptor.getClk(), adaptor.getClockEnable(),
+      in = seq::CompRegClockEnabledOp::create(
+          rewriter, op.getLoc(), in, adaptor.getClk(), adaptor.getClockEnable(),
           adaptor.getReset(), adaptor.getResetValue(), name, init);
     }
 

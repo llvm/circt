@@ -417,7 +417,7 @@ LogicalResult AIGERRunner::importFromAIGER(Converter &converter,
   mlir::OpBuilder builder(originalModule->getContext());
   builder.setInsertionPointToStart(&temporaryBlock);
   auto temporaryModule =
-      builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
+      mlir::ModuleOp::create(builder, builder.getUnknownLoc());
 
   // Import the AIGER file into the temporary module
   if (failed(circt::aiger::importAIGER(sourceMgr, originalModule->getContext(),

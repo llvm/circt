@@ -65,14 +65,14 @@ struct AssertionExprVisitor {
 
     switch (repetition.kind) {
     case SequenceRepetition::Consecutive:
-      return builder.create<ltl::RepeatOp>(loc, inputSequence, minRepetitions,
-                                           repetitionRange);
+      return ltl::RepeatOp::create(builder, loc, inputSequence, minRepetitions,
+                                   repetitionRange);
     case SequenceRepetition::Nonconsecutive:
-      return builder.create<ltl::NonConsecutiveRepeatOp>(
-          loc, inputSequence, minRepetitions, repetitionRange);
+      return ltl::NonConsecutiveRepeatOp::create(
+          builder, loc, inputSequence, minRepetitions, repetitionRange);
     case SequenceRepetition::GoTo:
-      return builder.create<ltl::GoToRepeatOp>(loc, inputSequence,
-                                               minRepetitions, repetitionRange);
+      return ltl::GoToRepeatOp::create(builder, loc, inputSequence,
+                                       minRepetitions, repetitionRange);
     }
     llvm_unreachable("All enum values handled in switch");
   }
@@ -120,8 +120,8 @@ struct AssertionExprVisitor {
 
       auto [delayMin, delayRange] =
           convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
-      auto delayedSequence = builder.create<ltl::DelayOp>(loc, sequenceValue,
-                                                          delayMin, delayRange);
+      auto delayedSequence = ltl::DelayOp::create(builder, loc, sequenceValue,
+                                                  delayMin, delayRange);
       sequenceElements.push_back(delayedSequence);
     }
 
@@ -135,13 +135,13 @@ struct AssertionExprVisitor {
     using slang::ast::UnaryAssertionOperator;
     switch (expr.op) {
     case UnaryAssertionOperator::Not:
-      return builder.create<ltl::NotOp>(loc, value);
+      return ltl::NotOp::create(builder, loc, value);
     case UnaryAssertionOperator::SEventually:
       if (expr.range.has_value()) {
         mlir::emitError(loc, "Strong eventually with range not supported");
         return {};
       } else {
-        return builder.create<ltl::EventuallyOp>(loc, value);
+        return ltl::EventuallyOp::create(builder, loc, value);
       }
     case UnaryAssertionOperator::Always: {
       std::pair<mlir::IntegerAttr, mlir::IntegerAttr> attr = {
@@ -150,15 +150,16 @@ struct AssertionExprVisitor {
         attr =
             convertRangeToAttrs(expr.range.value().min, expr.range.value().max);
       }
-      return builder.create<ltl::RepeatOp>(loc, value, attr.first, attr.second);
+      return ltl::RepeatOp::create(builder, loc, value, attr.first,
+                                   attr.second);
     }
     case UnaryAssertionOperator::NextTime: {
       auto minRepetitions = builder.getI64IntegerAttr(1);
       if (expr.range.has_value()) {
         minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
       }
-      return builder.create<ltl::DelayOp>(loc, value, minRepetitions,
-                                          builder.getI64IntegerAttr(0));
+      return ltl::DelayOp::create(builder, loc, value, minRepetitions,
+                                  builder.getI64IntegerAttr(0));
     }
     case UnaryAssertionOperator::Eventually:
     case UnaryAssertionOperator::SNextTime:
@@ -179,81 +180,86 @@ struct AssertionExprVisitor {
     using slang::ast::BinaryAssertionOperator;
     switch (expr.op) {
     case BinaryAssertionOperator::And:
-      return builder.create<ltl::AndOp>(loc, operands);
+      return ltl::AndOp::create(builder, loc, operands);
     case BinaryAssertionOperator::Or:
-      return builder.create<ltl::OrOp>(loc, operands);
+      return ltl::OrOp::create(builder, loc, operands);
     case BinaryAssertionOperator::Intersect:
-      return builder.create<ltl::IntersectOp>(loc, operands);
+      return ltl::IntersectOp::create(builder, loc, operands);
     case BinaryAssertionOperator::Throughout: {
-      auto lhsRepeat = builder.create<ltl::RepeatOp>(
-          loc, lhs, builder.getI64IntegerAttr(0), mlir::IntegerAttr{});
-      return builder.create<ltl::IntersectOp>(
-          loc, SmallVector<Value, 2>{lhsRepeat, rhs});
+      auto lhsRepeat = ltl::RepeatOp::create(
+          builder, loc, lhs, builder.getI64IntegerAttr(0), mlir::IntegerAttr{});
+      return ltl::IntersectOp::create(builder, loc,
+                                      SmallVector<Value, 2>{lhsRepeat, rhs});
     }
     case BinaryAssertionOperator::Within: {
       auto constOne =
-          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
-      auto oneRepeat = builder.create<ltl::RepeatOp>(
-          loc, constOne, builder.getI64IntegerAttr(0), mlir::IntegerAttr{});
-      auto repeatDelay = builder.create<ltl::DelayOp>(
-          loc, oneRepeat, builder.getI64IntegerAttr(1),
-          builder.getI64IntegerAttr(0));
-      auto lhsDelay = builder.create<ltl::DelayOp>(
-          loc, lhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
-      auto combined = builder.create<ltl::ConcatOp>(
-          loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
-      return builder.create<ltl::IntersectOp>(
-          loc, SmallVector<Value, 2>{combined, rhs});
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+      auto oneRepeat = ltl::RepeatOp::create(builder, loc, constOne,
+                                             builder.getI64IntegerAttr(0),
+                                             mlir::IntegerAttr{});
+      auto repeatDelay = ltl::DelayOp::create(builder, loc, oneRepeat,
+                                              builder.getI64IntegerAttr(1),
+                                              builder.getI64IntegerAttr(0));
+      auto lhsDelay =
+          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
+                               builder.getI64IntegerAttr(0));
+      auto combined = ltl::ConcatOp::create(
+          builder, loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
+      return ltl::IntersectOp::create(builder, loc,
+                                      SmallVector<Value, 2>{combined, rhs});
     }
     case BinaryAssertionOperator::Iff: {
-      auto ored = builder.create<ltl::OrOp>(loc, operands);
-      auto notOred = builder.create<ltl::NotOp>(loc, ored);
-      auto anded = builder.create<ltl::AndOp>(loc, operands);
-      return builder.create<ltl::OrOp>(loc,
-                                       SmallVector<Value, 2>{notOred, anded});
+      auto ored = ltl::OrOp::create(builder, loc, operands);
+      auto notOred = ltl::NotOp::create(builder, loc, ored);
+      auto anded = ltl::AndOp::create(builder, loc, operands);
+      return ltl::OrOp::create(builder, loc,
+                               SmallVector<Value, 2>{notOred, anded});
     }
     case BinaryAssertionOperator::Until:
-      return builder.create<ltl::UntilOp>(loc, operands);
+      return ltl::UntilOp::create(builder, loc, operands);
     case BinaryAssertionOperator::UntilWith: {
-      auto untilOp = builder.create<ltl::UntilOp>(loc, operands);
-      auto andOp = builder.create<ltl::AndOp>(loc, operands);
-      auto notUntil = builder.create<ltl::NotOp>(loc, untilOp);
-      return builder.create<ltl::OrOp>(loc,
-                                       SmallVector<Value, 2>{notUntil, andOp});
+      auto untilOp = ltl::UntilOp::create(builder, loc, operands);
+      auto andOp = ltl::AndOp::create(builder, loc, operands);
+      auto notUntil = ltl::NotOp::create(builder, loc, untilOp);
+      return ltl::OrOp::create(builder, loc,
+                               SmallVector<Value, 2>{notUntil, andOp});
     }
     case BinaryAssertionOperator::Implies: {
-      auto notLhs = builder.create<ltl::NotOp>(loc, lhs);
-      return builder.create<ltl::OrOp>(loc, SmallVector<Value, 2>{notLhs, rhs});
+      auto notLhs = ltl::NotOp::create(builder, loc, lhs);
+      return ltl::OrOp::create(builder, loc,
+                               SmallVector<Value, 2>{notLhs, rhs});
     }
     case BinaryAssertionOperator::OverlappedImplication:
-      return builder.create<ltl::ImplicationOp>(loc, operands);
+      return ltl::ImplicationOp::create(builder, loc, operands);
     case BinaryAssertionOperator::NonOverlappedImplication: {
       auto constOne =
-          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
-      auto lhsDelay = builder.create<ltl::DelayOp>(
-          loc, lhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
-      auto antecedent = builder.create<ltl::ConcatOp>(
-          loc, SmallVector<Value, 2>{lhsDelay, constOne});
-      return builder.create<ltl::ImplicationOp>(
-          loc, SmallVector<Value, 2>{antecedent, rhs});
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+      auto lhsDelay =
+          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
+                               builder.getI64IntegerAttr(0));
+      auto antecedent = ltl::ConcatOp::create(
+          builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
+      return ltl::ImplicationOp::create(builder, loc,
+                                        SmallVector<Value, 2>{antecedent, rhs});
     }
     case BinaryAssertionOperator::OverlappedFollowedBy: {
-      auto notRhs = builder.create<ltl::NotOp>(loc, rhs);
-      auto implication = builder.create<ltl::ImplicationOp>(
-          loc, SmallVector<Value, 2>{lhs, notRhs});
-      return builder.create<ltl::NotOp>(loc, implication);
+      auto notRhs = ltl::NotOp::create(builder, loc, rhs);
+      auto implication = ltl::ImplicationOp::create(
+          builder, loc, SmallVector<Value, 2>{lhs, notRhs});
+      return ltl::NotOp::create(builder, loc, implication);
     }
     case BinaryAssertionOperator::NonOverlappedFollowedBy: {
       auto constOne =
-          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
-      auto notRhs = builder.create<ltl::NotOp>(loc, rhs);
-      auto lhsDelay = builder.create<ltl::DelayOp>(
-          loc, lhs, builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
-      auto antecedent = builder.create<ltl::ConcatOp>(
-          loc, SmallVector<Value, 2>{lhsDelay, constOne});
-      auto implication = builder.create<ltl::ImplicationOp>(
-          loc, SmallVector<Value, 2>{antecedent, notRhs});
-      return builder.create<ltl::NotOp>(loc, implication);
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+      auto notRhs = ltl::NotOp::create(builder, loc, rhs);
+      auto lhsDelay =
+          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
+                               builder.getI64IntegerAttr(0));
+      auto antecedent = ltl::ConcatOp::create(
+          builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
+      auto implication = ltl::ImplicationOp::create(
+          builder, loc, SmallVector<Value, 2>{antecedent, notRhs});
+      return ltl::NotOp::create(builder, loc, implication);
     }
     case BinaryAssertionOperator::SUntil:
     case BinaryAssertionOperator::SUntilWith:
@@ -303,6 +309,6 @@ Value Context::convertToI1(Value value) {
     return {};
   }
 
-  return builder.create<moore::ConversionOp>(value.getLoc(),
-                                             builder.getI1Type(), value);
+  return moore::ConversionOp::create(builder, value.getLoc(),
+                                     builder.getI1Type(), value);
 }

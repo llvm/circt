@@ -93,24 +93,24 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants can materialize into hw.constant
   if (auto intType = dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return builder.create<ConstantOp>(loc, type, attrValue);
+      return ConstantOp::create(builder, loc, type, attrValue);
 
   // Aggregate constants.
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
     if (type_isa<StructType, ArrayType, UnpackedArrayType>(type))
-      return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+      return AggregateConstantOp::create(builder, loc, type, arrayAttr);
   }
 
   // Parameter expressions materialize into hw.param.value.
   Block *block = builder.getBlock();
   if (!block)
     return nullptr;
-  auto parentOp = block->getParentOp();
+  auto *parentOp = block->getParentOp();
   auto curModule = dyn_cast<HWModuleOp>(parentOp);
   if (!curModule)
     curModule = parentOp->getParentOfType<HWModuleOp>();
   if (curModule && isValidParameterExpression(value, curModule))
-    return builder.create<ParamValueOp>(loc, type, value);
+    return ParamValueOp::create(builder, loc, type, value);
 
   return nullptr;
 }

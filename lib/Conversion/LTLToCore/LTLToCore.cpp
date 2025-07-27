@@ -57,7 +57,7 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
         rewriter, op->getLoc(), rewriter.getIntegerAttr(i1, 0));
 
     // Generate the constant used to negate the reset value
-    Value constOne = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 1);
+    Value constOne = hw::ConstantOp::create(rewriter, op.getLoc(), i1, 1);
 
     // Create a backedge for the register to be used in the OrOp
     circt::BackedgeBuilder bb(rewriter, op.getLoc());
@@ -66,15 +66,15 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     // Generate an or between the reset and the register's value to store
     // whether or not the reset has been active at least once
     Value orReset =
-        rewriter.create<comb::OrOp>(op.getLoc(), adaptor.getReset(), reg);
+        comb::OrOp::create(rewriter, op.getLoc(), adaptor.getReset(), reg);
 
     // This register should not be reset, so we give it dummy reset and resetval
     // operands to fit the build signature
     Value reset, resetval;
 
     // Finally generate the register to set the backedge
-    reg.setValue(rewriter.create<seq::CompRegOp>(
-        op.getLoc(), orReset,
+    reg.setValue(seq::CompRegOp::create(
+        rewriter, op.getLoc(), orReset,
         rewriter.createOrFold<seq::ToClockOp>(op.getLoc(), adaptor.getClock()),
         rewriter.getStringAttr("hbr"), reset, resetval, constZero,
         InnerSymAttr{} // inner_sym
@@ -83,8 +83,8 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     // We also need to consider the case where we are currently in a reset cycle
     // in which case our hbr register should be down-
     // Practically this means converting it to (and hbr (not reset))
-    Value notReset =
-        rewriter.create<comb::XorOp>(op.getLoc(), adaptor.getReset(), constOne);
+    Value notReset = comb::XorOp::create(rewriter, op.getLoc(),
+                                         adaptor.getReset(), constOne);
     rewriter.replaceOpWithNewOp<comb::AndOp>(op, reg, notReset);
 
     return success();
@@ -137,8 +137,8 @@ void LowerLTLToCorePass::runOnOperation() {
           mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1)
           return Value();
-        return builder
-            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+        return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                  inputs[0])
             ->getResult(0);
       });
 
@@ -147,8 +147,8 @@ void LowerLTLToCorePass::runOnOperation() {
           mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
         if (inputs.size() != 1)
           return Value();
-        return builder
-            .create<UnrealizedConversionCastOp>(loc, resultType, inputs[0])
+        return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                  inputs[0])
             ->getResult(0);
       });
 

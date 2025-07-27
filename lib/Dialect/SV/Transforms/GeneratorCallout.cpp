@@ -159,9 +159,10 @@ void HWGeneratorCalloutPass::processGenerator(
   // Only extract the first line from the output.
   auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
   OpBuilder builder(generatedModuleOp);
-  auto extMod = builder.create<hw::HWModuleExternOp>(
-      generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
-      generatedModuleOp.getPortList());
+  auto extMod =
+      hw::HWModuleExternOp::create(builder, generatedModuleOp.getLoc(),
+                                   generatedModuleOp.getVerilogModuleNameAttr(),
+                                   generatedModuleOp.getPortList());
   // Attach an attribute to which file the definition of the external
   // module exists in.
   extMod->setAttr("filenames", builder.getStringAttr(fileContent));

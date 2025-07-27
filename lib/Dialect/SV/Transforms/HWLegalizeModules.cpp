@@ -74,10 +74,11 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         for (auto field : llvm::reverse(constOp.getFields())) {
           if (auto intAttr = dyn_cast<IntegerAttr>(field))
             inputs.push_back(
-                builder.create<hw::ConstantOp>(constOp.getLoc(), intAttr));
+                hw::ConstantOp::create(builder, constOp.getLoc(), intAttr));
           else
-            inputs.push_back(builder.create<hw::AggregateConstantOp>(
-                constOp.getLoc(), constOp.getType(), cast<ArrayAttr>(field)));
+            inputs.push_back(hw::AggregateConstantOp::create(
+                builder, constOp.getLoc(), constOp.getType(),
+                cast<ArrayAttr>(field)));
         }
         if (!processUsers(op, constOp.getResult(), inputs))
           return false;
@@ -151,7 +152,7 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
           auto index = builder.createOrFold<hw::ConstantOp>(
               loc, APInt(llvm::Log2_64_Ceil(e), i));
           auto element =
-              builder.create<hw::ArrayGetOp>(loc, getOp.getInput(), index);
+              hw::ArrayGetOp::create(builder, loc, getOp.getInput(), index);
           caseValues.push_back(element);
         }
 
@@ -162,7 +163,7 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Emit the read from the wire, replace uses and clean up.
         builder.setInsertionPoint(getOp);
         auto readWire =
-            builder.create<sv::ReadInOutOp>(getOp.getLoc(), theWire);
+            sv::ReadInOutOp::create(builder, getOp.getLoc(), theWire);
         getOp.getResult().replaceAllUsesWith(readWire);
         return true;
       })
@@ -186,9 +187,9 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
           auto loc = op.getLoc();
           auto index = builder.createOrFold<hw::ConstantOp>(
               loc, APInt(llvm::Log2_64_Ceil(e), i));
-          auto element = builder.create<sv::ArrayIndexInOutOp>(
-              loc, indexOp.getInput(), index);
-          auto readElement = builder.create<sv::ReadInOutOp>(loc, element);
+          auto element = sv::ArrayIndexInOutOp::create(
+              builder, loc, indexOp.getInput(), index);
+          auto readElement = sv::ReadInOutOp::create(builder, loc, element);
           caseValues.push_back(readElement);
         }
 
@@ -213,11 +214,11 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
           auto loc = op.getLoc();
           auto index = builder.createOrFold<hw::ConstantOp>(
               loc, APInt(llvm::Log2_64_Ceil(e), i));
-          auto dstElement = builder.create<sv::ArrayIndexInOutOp>(
-              loc, assignOp.getDest(), index);
+          auto dstElement = sv::ArrayIndexInOutOp::create(
+              builder, loc, assignOp.getDest(), index);
           auto srcElement =
-              builder.create<hw::ArrayGetOp>(loc, assignOp.getSrc(), index);
-          builder.create<sv::PAssignOp>(loc, dstElement, srcElement);
+              hw::ArrayGetOp::create(builder, loc, assignOp.getSrc(), index);
+          sv::PAssignOp::create(builder, loc, dstElement, srcElement);
         }
 
         // Remove original assignment.
@@ -234,7 +235,7 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         SmallVector<Value> elements;
         for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
           auto loc = op.getLoc();
-          auto element = builder.create<sv::RegOp>(loc, ty.getElementType());
+          auto element = sv::RegOp::create(builder, loc, ty.getElementType());
           if (auto nameAttr = regOp->getAttrOfType<StringAttr>(name)) {
             element.setNameAttr(
                 StringAttr::get(regOp.getContext(), nameAttr.getValue()));
@@ -259,8 +260,8 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
   // Create the wire for the result of the casez in the
   // hw.module.
   OpBuilder builder(&op);
-  auto theWire = builder.create<sv::RegOp>(op.getLoc(), elementType,
-                                           builder.getStringAttr("casez_tmp"));
+  auto theWire = sv::RegOp::create(builder, op.getLoc(), elementType,
+                                   builder.getStringAttr("casez_tmp"));
   builder.setInsertionPoint(&op);
 
   auto loc = input.getLoc();
@@ -268,23 +269,23 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
   // non-procedural region we need to inject an always_comb
   // block.
   if (!op.getParentOp()->hasTrait<sv::ProceduralRegion>()) {
-    auto alwaysComb = builder.create<sv::AlwaysCombOp>(loc);
+    auto alwaysComb = sv::AlwaysCombOp::create(builder, loc);
     builder.setInsertionPointToEnd(alwaysComb.getBodyBlock());
   }
 
   // If we are missing elements in the array (it is non-power of
   // two), then add a default 'X' value.
   if (1ULL << index.getType().getIntOrFloatBitWidth() != caseValues.size()) {
-    caseValues.push_back(builder.create<sv::ConstantXOp>(
-        op.getLoc(), op.getResult(0).getType()));
+    caseValues.push_back(sv::ConstantXOp::create(builder, op.getLoc(),
+                                                 op.getResult(0).getType()));
   }
 
   APInt caseValue(index.getType().getIntOrFloatBitWidth(), 0);
   auto *context = builder.getContext();
 
   // Create the casez itself.
-  builder.create<sv::CaseOp>(
-      loc, CaseStmtType::CaseZStmt, index, caseValues.size(),
+  sv::CaseOp::create(
+      builder, loc, CaseStmtType::CaseZStmt, index, caseValues.size(),
       [&](size_t caseIdx) -> std::unique_ptr<sv::CasePattern> {
         // Use a default pattern for the last value, even if we
         // are complete. This avoids tools thinking they need to
@@ -299,7 +300,7 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
         else
           thePattern = std::make_unique<sv::CaseBitPattern>(caseValue, context);
         ++caseValue;
-        builder.create<sv::BPAssignOp>(loc, theWire, theValue);
+        sv::BPAssignOp::create(builder, loc, theWire, theValue);
         return thePattern;
       });
 

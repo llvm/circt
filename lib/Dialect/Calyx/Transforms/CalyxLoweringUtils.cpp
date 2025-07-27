@@ -174,10 +174,10 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
   mlir::IRRewriter::InsertionGuard guard(builder);
   auto loc = inputValue.getLoc();
   builder.setInsertionPointToEnd(groupOp.getBodyBlock());
-  builder.create<calyx::AssignOp>(loc, reg.getIn(), inputValue);
-  builder.create<calyx::AssignOp>(
-      loc, reg.getWriteEn(), createConstant(loc, builder, componentOp, 1, 1));
-  builder.create<calyx::GroupDoneOp>(loc, reg.getDone());
+  calyx::AssignOp::create(builder, loc, reg.getIn(), inputValue);
+  calyx::AssignOp::create(builder, loc, reg.getWriteEn(),
+                          createConstant(loc, builder, componentOp, 1, 1));
+  calyx::GroupDoneOp::create(builder, loc, reg.getDone());
 }
 
 //===----------------------------------------------------------------------===//
@@ -610,13 +610,13 @@ MultipleGroupDonePattern::matchAndRewrite(calyx::GroupOp groupOp,
   SmallVector<Value> doneOpSrcs;
   llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
                   [](calyx::GroupDoneOp op) { return op.getSrc(); });
-  Value allDone = rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(),
-                                               doneOpSrcs, false);
+  Value allDone = comb::AndOp::create(rewriter, groupDoneOps.front().getLoc(),
+                                      doneOpSrcs, false);
 
   /// Create a group done op with the complex expression as a guard.
-  rewriter.create<calyx::GroupDoneOp>(
-      groupOp.getLoc(),
-      rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)), allDone);
+  calyx::GroupDoneOp::create(
+      rewriter, groupOp.getLoc(),
+      hw::ConstantOp::create(rewriter, groupOp.getLoc(), APInt(1, 1)), allDone);
   for (auto groupDoneOp : groupDoneOps)
     rewriter.eraseOp(groupDoneOp);
 
@@ -775,8 +775,8 @@ RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
 
   rewriter.setInsertionPoint(assignOp->getBlock(),
                              assignOp->getBlock()->begin());
-  rewriter.create<calyx::AssignOp>(assignOp->getLoc(), newOp->getResult(0),
-                                   src);
+  calyx::AssignOp::create(rewriter, assignOp->getLoc(), newOp->getResult(0),
+                          src);
   assignOp.setOperand(1, newOp->getResult(1));
 
   return success();
@@ -828,8 +828,8 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
     rewriter.setInsertionPointToStart(
         getComponent().getWiresOp().getBodyBlock());
-    rewriter.create<calyx::AssignOp>(
-        funcOp->getLoc(),
+    calyx::AssignOp::create(
+        rewriter, funcOp->getLoc(),
         calyx::getComponentOutput(
             getComponent(), getState().getFuncOpResultMapping(argType.index())),
         reg.getOut());

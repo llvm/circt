@@ -45,8 +45,9 @@ static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
 
     Value newIndex =
         builder.createOrFold<moore::ConversionOp>(loc, intType, index);
-    Value offset = builder.create<moore::ConstantOp>(
-        loc, intType, range.lower(), /*isSigned = */ range.lower() < 0);
+    Value offset =
+        moore::ConstantOp::create(builder, loc, intType, range.lower(),
+                                  /*isSigned = */ range.lower() < 0);
     return builder.createOrFold<moore::SubOp>(loc, newIndex, offset);
   }
 
@@ -55,8 +56,8 @@ static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
 
   Value newIndex =
       builder.createOrFold<moore::ConversionOp>(loc, intType, index);
-  Value offset = builder.create<moore::ConstantOp>(
-      loc, intType, range.upper(), /* isSigned = */ range.upper() < 0);
+  Value offset = moore::ConstantOp::create(builder, loc, intType, range.upper(),
+                                           /* isSigned = */ range.upper() < 0);
   return builder.createOrFold<moore::SubOp>(loc, offset, newIndex);
 }
 
@@ -97,22 +98,22 @@ struct ExprVisitor {
 
       auto lowBit = constValue->integer().as<uint32_t>().value();
       if (isLvalue)
-        return builder.create<moore::ExtractRefOp>(
-            loc, resultType, value, range.translateIndex(lowBit));
+        return moore::ExtractRefOp::create(builder, loc, resultType, value,
+                                           range.translateIndex(lowBit));
       else
-        return builder.create<moore::ExtractOp>(loc, resultType, value,
-                                                range.translateIndex(lowBit));
+        return moore::ExtractOp::create(builder, loc, resultType, value,
+                                        range.translateIndex(lowBit));
     }
     auto lowBit = context.convertRvalueExpression(expr.selector());
     if (!lowBit)
       return {};
     lowBit = getSelectIndex(builder, loc, lowBit, range);
     if (isLvalue)
-      return builder.create<moore::DynExtractRefOp>(loc, resultType, value,
-                                                    lowBit);
+      return moore::DynExtractRefOp::create(builder, loc, resultType, value,
+                                            lowBit);
     else
-      return builder.create<moore::DynExtractOp>(loc, resultType, value,
-                                                 lowBit);
+      return moore::DynExtractOp::create(builder, loc, resultType, value,
+                                         lowBit);
   }
 
   /// Handle range bit selections.
@@ -200,10 +201,11 @@ struct ExprVisitor {
       // Adjust the offset such that it matches the right bound of the range.
       if (offsetAdd != 0) {
         if (offsetDyn)
-          offsetDyn = builder.create<moore::AddOp>(
-              loc, offsetDyn,
-              builder.create<moore::ConstantOp>(
-                  loc, cast<moore::IntType>(offsetDyn.getType()), offsetAdd,
+          offsetDyn = moore::AddOp::create(
+              builder, loc, offsetDyn,
+              moore::ConstantOp::create(
+                  builder, loc, cast<moore::IntType>(offsetDyn.getType()),
+                  offsetAdd,
                   /*isSigned=*/offsetAdd < 0));
         else
           offsetConst += offsetAdd;
@@ -222,20 +224,20 @@ struct ExprVisitor {
     if (offsetDyn) {
       offsetDyn = getSelectIndex(builder, loc, offsetDyn, range);
       if (isLvalue) {
-        return builder.create<moore::DynExtractRefOp>(loc, resultType, value,
-                                                      offsetDyn);
+        return moore::DynExtractRefOp::create(builder, loc, resultType, value,
+                                              offsetDyn);
       } else {
-        return builder.create<moore::DynExtractOp>(loc, resultType, value,
-                                                   offsetDyn);
+        return moore::DynExtractOp::create(builder, loc, resultType, value,
+                                           offsetDyn);
       }
     } else {
       offsetConst = range.translateIndex(offsetConst);
       if (isLvalue) {
-        return builder.create<moore::ExtractRefOp>(loc, resultType, value,
-                                                   offsetConst);
+        return moore::ExtractRefOp::create(builder, loc, resultType, value,
+                                           offsetConst);
       } else {
-        return builder.create<moore::ExtractOp>(loc, resultType, value,
-                                                offsetConst);
+        return moore::ExtractOp::create(builder, loc, resultType, value,
+                                        offsetConst);
       }
     }
   }
@@ -257,9 +259,9 @@ struct ExprVisitor {
       operands.push_back(value);
     }
     if (isLvalue)
-      return builder.create<moore::ConcatRefOp>(loc, operands);
+      return moore::ConcatRefOp::create(builder, loc, operands);
     else
-      return builder.create<moore::ConcatOp>(loc, operands);
+      return moore::ConcatOp::create(builder, loc, operands);
   }
 
   /// Handle member accesses.
@@ -277,21 +279,21 @@ struct ExprVisitor {
     // Handle structs.
     if (valueType->isStruct()) {
       if (isLvalue)
-        return builder.create<moore::StructExtractRefOp>(loc, resultType,
-                                                         memberName, value);
+        return moore::StructExtractRefOp::create(builder, loc, resultType,
+                                                 memberName, value);
       else
-        return builder.create<moore::StructExtractOp>(loc, resultType,
-                                                      memberName, value);
+        return moore::StructExtractOp::create(builder, loc, resultType,
+                                              memberName, value);
     }
 
     // Handle unions.
     if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
       if (isLvalue)
-        return builder.create<moore::UnionExtractRefOp>(loc, resultType,
-                                                        memberName, value);
+        return moore::UnionExtractRefOp::create(builder, loc, resultType,
+                                                memberName, value);
       else
-        return builder.create<moore::UnionExtractOp>(loc, type, memberName,
-                                                     value);
+        return moore::UnionExtractOp::create(builder, loc, type, memberName,
+                                             value);
     }
 
     mlir::emitError(loc, "expression of type ")
@@ -316,14 +318,14 @@ struct RvalueExprVisitor : public ExprVisitor {
   Value visit(const slang::ast::LValueReferenceExpression &expr) {
     assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
     auto lvalue = context.lvalueStack.back();
-    return builder.create<moore::ReadOp>(loc, lvalue);
+    return moore::ReadOp::create(builder, loc, lvalue);
   }
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
       if (isa<moore::RefType>(value.getType())) {
-        auto readOp = builder.create<moore::ReadOp>(loc, value);
+        auto readOp = moore::ReadOp::create(builder, loc, value);
         if (context.rvalueReadCallback)
           context.rvalueReadCallback(readOp);
         value = readOp.getResult();
@@ -349,7 +351,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto hierLoc = context.convertLocation(expr.symbol.location);
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
       if (isa<moore::RefType>(value.getType())) {
-        auto readOp = builder.create<moore::ReadOp>(hierLoc, value);
+        auto readOp = moore::ReadOp::create(builder, hierLoc, value);
         if (context.rvalueReadCallback)
           context.rvalueReadCallback(readOp);
         value = readOp.getResult();
@@ -394,9 +396,9 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     if (expr.isNonBlocking())
-      builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
+      moore::NonBlockingAssignOp::create(builder, loc, lhs, rhs);
     else
-      builder.create<moore::BlockingAssignOp>(loc, lhs, rhs);
+      moore::BlockingAssignOp::create(builder, loc, lhs, rhs);
     return rhs;
   }
 
@@ -407,21 +409,21 @@ struct RvalueExprVisitor : public ExprVisitor {
     arg = context.convertToSimpleBitVector(arg);
     if (!arg)
       return {};
-    Value result = builder.create<ConcreteOp>(loc, arg);
+    Value result = ConcreteOp::create(builder, loc, arg);
     if (invert)
-      result = builder.create<moore::NotOp>(loc, result);
+      result = moore::NotOp::create(builder, loc, result);
     return result;
   }
 
   // Helper function to create pre and post increments and decrements.
   Value createIncrement(Value arg, bool isInc, bool isPost) {
-    auto preValue = builder.create<moore::ReadOp>(loc, arg);
-    auto one = builder.create<moore::ConstantOp>(
-        loc, cast<moore::IntType>(preValue.getType()), 1);
+    auto preValue = moore::ReadOp::create(builder, loc, arg);
+    auto one = moore::ConstantOp::create(
+        builder, loc, cast<moore::IntType>(preValue.getType()), 1);
     auto postValue =
-        isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
-              : builder.create<moore::SubOp>(loc, preValue, one).getResult();
-    builder.create<moore::BlockingAssignOp>(loc, arg, postValue);
+        isInc ? moore::AddOp::create(builder, loc, preValue, one).getResult()
+              : moore::SubOp::create(builder, loc, preValue, one).getResult();
+    moore::BlockingAssignOp::create(builder, loc, arg, postValue);
     if (isPost)
       return preValue;
     return postValue;
@@ -451,13 +453,13 @@ struct RvalueExprVisitor : public ExprVisitor {
       arg = context.convertToSimpleBitVector(arg);
       if (!arg)
         return {};
-      return builder.create<moore::NegOp>(loc, arg);
+      return moore::NegOp::create(builder, loc, arg);
 
     case UnaryOperator::BitwiseNot:
       arg = context.convertToSimpleBitVector(arg);
       if (!arg)
         return {};
-      return builder.create<moore::NotOp>(loc, arg);
+      return moore::NotOp::create(builder, loc, arg);
 
     case UnaryOperator::BitwiseAnd:
       return createReduction<moore::ReduceAndOp>(arg, false);
@@ -476,7 +478,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       arg = context.convertToBool(arg);
       if (!arg)
         return {};
-      return builder.create<moore::NotOp>(loc, arg);
+      return moore::NotOp::create(builder, loc, arg);
 
     case UnaryOperator::Preincrement:
       return createIncrement(arg, true, false);
@@ -502,7 +504,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     rhs = context.convertToSimpleBitVector(rhs);
     if (!rhs)
       return {};
-    return builder.create<ConcreteOp>(loc, lhs, rhs);
+    return ConcreteOp::create(builder, loc, lhs, rhs);
   }
 
   // Handle binary operators.
@@ -544,7 +546,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       // maintain uniform types across operands and results, cast the RHS to
       // that four-valued type as well.
       auto rhsCast =
-          builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+          moore::ConversionOp::create(builder, loc, lhs.getType(), rhs);
       if (expr.type->isSigned())
         return createBinary<moore::PowSOp>(lhs, rhsCast);
       else
@@ -561,25 +563,25 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto result = createBinary<moore::XorOp>(lhs, rhs);
       if (!result)
         return {};
-      return builder.create<moore::NotOp>(loc, result);
+      return moore::NotOp::create(builder, loc, result);
     }
 
     case BinaryOperator::Equality:
       if (isa<moore::UnpackedArrayType>(lhs.getType()))
-        return builder.create<moore::UArrayCmpOp>(
-            loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
+        return moore::UArrayCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
-        return builder.create<moore::StringCmpOp>(
-            loc, moore::StringCmpPredicate::eq, lhs, rhs);
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::eq, lhs, rhs);
       else
         return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
       if (isa<moore::UnpackedArrayType>(lhs.getType()))
-        return builder.create<moore::UArrayCmpOp>(
-            loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
+        return moore::UArrayCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
-        return builder.create<moore::StringCmpOp>(
-            loc, moore::StringCmpPredicate::ne, lhs, rhs);
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::ne, lhs, rhs);
       else
         return createBinary<moore::NeOp>(lhs, rhs);
     case BinaryOperator::CaseEquality:
@@ -595,32 +597,32 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (expr.left().type->isSigned())
         return createBinary<moore::SgeOp>(lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
-        return builder.create<moore::StringCmpOp>(
-            loc, moore::StringCmpPredicate::ge, lhs, rhs);
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::ge, lhs, rhs);
       else
         return createBinary<moore::UgeOp>(lhs, rhs);
     case BinaryOperator::GreaterThan:
       if (expr.left().type->isSigned())
         return createBinary<moore::SgtOp>(lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
-        return builder.create<moore::StringCmpOp>(
-            loc, moore::StringCmpPredicate::gt, lhs, rhs);
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::gt, lhs, rhs);
       else
         return createBinary<moore::UgtOp>(lhs, rhs);
     case BinaryOperator::LessThanEqual:
       if (expr.left().type->isSigned())
         return createBinary<moore::SleOp>(lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
-        return builder.create<moore::StringCmpOp>(
-            loc, moore::StringCmpPredicate::le, lhs, rhs);
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::le, lhs, rhs);
       else
         return createBinary<moore::UleOp>(lhs, rhs);
     case BinaryOperator::LessThan:
       if (expr.left().type->isSigned())
         return createBinary<moore::SltOp>(lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
-        return builder.create<moore::StringCmpOp>(
-            loc, moore::StringCmpPredicate::lt, lhs, rhs);
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::lt, lhs, rhs);
       else
         return createBinary<moore::UltOp>(lhs, rhs);
 
@@ -634,7 +636,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
-      return builder.create<moore::AndOp>(loc, lhs, rhs);
+      return moore::AndOp::create(builder, loc, lhs, rhs);
     }
     case BinaryOperator::LogicalOr: {
       // TODO: This should short-circuit. Put the RHS code into a separate
@@ -645,7 +647,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
-      return builder.create<moore::OrOp>(loc, lhs, rhs);
+      return moore::OrOp::create(builder, loc, lhs, rhs);
     }
     case BinaryOperator::LogicalImplication: {
       // `(lhs -> rhs)` equivalent to `(!lhs || rhs)`.
@@ -655,8 +657,8 @@ struct RvalueExprVisitor : public ExprVisitor {
       rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
-      auto notLHS = builder.create<moore::NotOp>(loc, lhs);
-      return builder.create<moore::OrOp>(loc, notLHS, rhs);
+      auto notLHS = moore::NotOp::create(builder, loc, lhs);
+      return moore::OrOp::create(builder, loc, notLHS, rhs);
     }
     case BinaryOperator::LogicalEquivalence: {
       // `(lhs <-> rhs)` equivalent to `(lhs && rhs) || (!lhs && !rhs)`.
@@ -666,11 +668,11 @@ struct RvalueExprVisitor : public ExprVisitor {
       rhs = context.convertToBool(rhs, domain);
       if (!rhs)
         return {};
-      auto notLHS = builder.create<moore::NotOp>(loc, lhs);
-      auto notRHS = builder.create<moore::NotOp>(loc, rhs);
-      auto both = builder.create<moore::AndOp>(loc, lhs, rhs);
-      auto notBoth = builder.create<moore::AndOp>(loc, notLHS, notRHS);
-      return builder.create<moore::OrOp>(loc, both, notBoth);
+      auto notLHS = moore::NotOp::create(builder, loc, lhs);
+      auto notRHS = moore::NotOp::create(builder, loc, rhs);
+      auto both = moore::AndOp::create(builder, loc, lhs, rhs);
+      auto notBoth = moore::AndOp::create(builder, loc, notLHS, notRHS);
+      return moore::OrOp::create(builder, loc, both, notBoth);
     }
 
     case BinaryOperator::LogicalShiftLeft:
@@ -687,8 +689,8 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (!lhs || !rhs)
         return {};
       if (expr.type->isSigned())
-        return builder.create<moore::AShrOp>(loc, lhs, rhs);
-      return builder.create<moore::ShrOp>(loc, lhs, rhs);
+        return moore::AShrOp::create(builder, loc, lhs, rhs);
+      return moore::ShrOp::create(builder, loc, lhs, rhs);
     }
     }
 
@@ -712,7 +714,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto value = context.convertRvalueExpression(expr.concat());
     if (!value)
       return {};
-    return builder.create<moore::ReplicateOp>(loc, type, value);
+    return moore::ReplicateOp::create(builder, loc, type, value);
   }
 
   // Handle set membership operator.
@@ -743,17 +745,17 @@ struct RvalueExprVisitor : public ExprVisitor {
         // within the range.
         if (openRange->left().type->isSigned() ||
             expr.left().type->isSigned()) {
-          leftValue = builder.create<moore::SgeOp>(loc, lhs, lowBound);
+          leftValue = moore::SgeOp::create(builder, loc, lhs, lowBound);
         } else {
-          leftValue = builder.create<moore::UgeOp>(loc, lhs, lowBound);
+          leftValue = moore::UgeOp::create(builder, loc, lhs, lowBound);
         }
         if (openRange->right().type->isSigned() ||
             expr.left().type->isSigned()) {
-          rightValue = builder.create<moore::SleOp>(loc, lhs, highBound);
+          rightValue = moore::SleOp::create(builder, loc, lhs, highBound);
         } else {
-          rightValue = builder.create<moore::UleOp>(loc, lhs, highBound);
+          rightValue = moore::UleOp::create(builder, loc, lhs, highBound);
         }
-        cond = builder.create<moore::AndOp>(loc, leftValue, rightValue);
+        cond = moore::AndOp::create(builder, loc, leftValue, rightValue);
       } else {
         // Handle expressions.
         if (!listExpr->type->isIntegral()) {
@@ -771,7 +773,7 @@ struct RvalueExprVisitor : public ExprVisitor {
             context.convertRvalueExpression(*listExpr));
         if (!value)
           return {};
-        cond = builder.create<moore::WildcardEqOp>(loc, lhs, value);
+        cond = moore::WildcardEqOp::create(builder, loc, lhs, value);
       }
       conditions.push_back(cond);
     }
@@ -780,7 +782,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto result = conditions.back();
     conditions.pop_back();
     while (!conditions.empty()) {
-      result = builder.create<moore::OrOp>(loc, conditions.back(), result);
+      result = moore::OrOp::create(builder, loc, conditions.back(), result);
       conditions.pop_back();
     }
     return result;
@@ -805,7 +807,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         context.convertToBool(context.convertRvalueExpression(*cond.expr));
     if (!value)
       return {};
-    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, value);
+    auto conditionalOp =
+        moore::ConditionalOp::create(builder, loc, type, value);
 
     // Create blocks for true region and false region.
     auto &trueBlock = conditionalOp.getTrueRegion().emplaceBlock();
@@ -818,14 +821,14 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto trueValue = context.convertRvalueExpression(expr.left(), type);
     if (!trueValue)
       return {};
-    builder.create<moore::YieldOp>(loc, trueValue);
+    moore::YieldOp::create(builder, loc, trueValue);
 
     // Handle right expression.
     builder.setInsertionPointToStart(&falseBlock);
     auto falseValue = context.convertRvalueExpression(expr.right(), type);
     if (!falseValue)
       return {};
-    builder.create<moore::YieldOp>(loc, falseValue);
+    moore::YieldOp::create(builder, loc, falseValue);
 
     return conditionalOp.getResult();
   }
@@ -880,15 +883,15 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     // Create the call.
     auto callOp =
-        builder.create<mlir::func::CallOp>(loc, lowering->op, arguments);
+        mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
 
     // For calls to void functions we need to have a value to return from this
     // function. Create a dummy `unrealized_conversion_cast`, which will get
     // deleted again later on.
     if (callOp.getNumResults() == 0)
-      return builder
-          .create<mlir::UnrealizedConversionCastOp>(
-              loc, moore::VoidType::get(context.getContext()), ValueRange{})
+      return mlir::UnrealizedConversionCastOp::create(
+                 builder, loc, moore::VoidType::get(context.getContext()),
+                 ValueRange{})
           .getResult(0);
 
     return callOp.getResult(0);
@@ -919,13 +922,13 @@ struct RvalueExprVisitor : public ExprVisitor {
   /// Handle string literals.
   Value visit(const slang::ast::StringLiteral &expr) {
     auto type = context.convertType(*expr.type);
-    return builder.create<moore::StringConstantOp>(loc, type, expr.getValue());
+    return moore::StringConstantOp::create(builder, loc, type, expr.getValue());
   }
 
   /// Handle real literals.
   Value visit(const slang::ast::RealLiteral &expr) {
-    return builder.create<moore::RealLiteralOp>(
-        loc, builder.getF64FloatAttr(expr.getValue()));
+    return moore::RealLiteralOp::create(
+        builder, loc, builder.getF64FloatAttr(expr.getValue()));
   }
 
   /// Handle assignment patterns.
@@ -952,31 +955,31 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (auto intType = dyn_cast<moore::IntType>(type)) {
       assert(intType.getWidth() == elements.size());
       std::reverse(elements.begin(), elements.end());
-      return builder.create<moore::ConcatOp>(loc, intType, elements);
+      return moore::ConcatOp::create(builder, loc, intType, elements);
     }
 
     // Handle packed structs.
     if (auto structType = dyn_cast<moore::StructType>(type)) {
       assert(structType.getMembers().size() == elements.size());
-      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+      return moore::StructCreateOp::create(builder, loc, structType, elements);
     }
 
     // Handle unpacked structs.
     if (auto structType = dyn_cast<moore::UnpackedStructType>(type)) {
       assert(structType.getMembers().size() == elements.size());
-      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+      return moore::StructCreateOp::create(builder, loc, structType, elements);
     }
 
     // Handle packed arrays.
     if (auto arrayType = dyn_cast<moore::ArrayType>(type)) {
       assert(arrayType.getSize() == elements.size());
-      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, elements);
     }
 
     // Handle unpacked arrays.
     if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(type)) {
       assert(arrayType.getSize() == elements.size());
-      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, elements);
     }
 
     mlir::emitError(loc) << "unsupported assignment pattern with type " << type;
@@ -1032,7 +1035,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       // error.
       value = operands.front();
     } else {
-      value = builder.create<moore::ConcatOp>(loc, operands).getResult();
+      value = moore::ConcatOp::create(builder, loc, operands).getResult();
     }
 
     if (expr.sliceSize == 0) {
@@ -1048,8 +1051,8 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto extractResultType = moore::IntType::get(
           context.getContext(), expr.sliceSize, type.getDomain());
 
-      auto extracted = builder.create<moore::ExtractOp>(
-          loc, extractResultType, value, i * expr.sliceSize);
+      auto extracted = moore::ExtractOp::create(builder, loc, extractResultType,
+                                                value, i * expr.sliceSize);
       slicedOperands.push_back(extracted);
     }
     // Handle other wire
@@ -1057,12 +1060,12 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto extractResultType = moore::IntType::get(
           context.getContext(), remainSize, type.getDomain());
 
-      auto extracted = builder.create<moore::ExtractOp>(
-          loc, extractResultType, value, iterMax * expr.sliceSize);
+      auto extracted = moore::ExtractOp::create(
+          builder, loc, extractResultType, value, iterMax * expr.sliceSize);
       slicedOperands.push_back(extracted);
     }
 
-    return builder.create<moore::ConcatOp>(loc, slicedOperands);
+    return moore::ConcatOp::create(builder, loc, slicedOperands);
   }
 
   Value visit(const slang::ast::AssertionInstanceExpression &expr) {
@@ -1151,7 +1154,7 @@ struct LvalueExprVisitor : public ExprVisitor {
       // error.
       value = operands.front();
     } else {
-      value = builder.create<moore::ConcatRefOp>(loc, operands).getResult();
+      value = moore::ConcatRefOp::create(builder, loc, operands).getResult();
     }
 
     if (expr.sliceSize == 0) {
@@ -1170,8 +1173,8 @@ struct LvalueExprVisitor : public ExprVisitor {
       auto extractResultType = moore::RefType::get(
           moore::IntType::get(context.getContext(), expr.sliceSize, domain));
 
-      auto extracted = builder.create<moore::ExtractRefOp>(
-          loc, extractResultType, value, i * expr.sliceSize);
+      auto extracted = moore::ExtractRefOp::create(
+          builder, loc, extractResultType, value, i * expr.sliceSize);
       slicedOperands.push_back(extracted);
     }
     // Handle other wire
@@ -1179,12 +1182,12 @@ struct LvalueExprVisitor : public ExprVisitor {
       auto extractResultType = moore::RefType::get(
           moore::IntType::get(context.getContext(), remainSize, domain));
 
-      auto extracted = builder.create<moore::ExtractRefOp>(
-          loc, extractResultType, value, iterMax * expr.sliceSize);
+      auto extracted = moore::ExtractRefOp::create(
+          builder, loc, extractResultType, value, iterMax * expr.sliceSize);
       slicedOperands.push_back(extracted);
     }
 
-    return builder.create<moore::ConcatRefOp>(loc, slicedOperands);
+    return moore::ConcatRefOp::create(builder, loc, slicedOperands);
   }
 
   /// Emit an error for all other expressions.
@@ -1228,7 +1231,7 @@ Value Context::convertToBool(Value value) {
     if (type.getBitSize() == 1)
       return value;
   if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType()))
-    return builder.create<moore::BoolCastOp>(value.getLoc(), value);
+    return moore::BoolCastOp::create(builder, value.getLoc(), value);
   mlir::emitError(value.getLoc(), "expression of type ")
       << value.getType() << " cannot be cast to a boolean";
   return {};
@@ -1250,9 +1253,9 @@ Value Context::materializeSVInt(const slang::SVInt &svint,
                                      fvint.hasUnknown() || typeIsFourValued
                                          ? moore::Domain::FourValued
                                          : moore::Domain::TwoValued);
-  Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
+  Value result = moore::ConstantOp::create(builder, loc, intType, fvint);
   if (result.getType() != type)
-    result = builder.create<moore::ConversionOp>(loc, type, result);
+    result = moore::ConversionOp::create(builder, loc, type, result);
   return result;
 }
 
@@ -1280,7 +1283,7 @@ Value Context::convertToBool(Value value, Domain domain) {
   auto type = moore::IntType::get(getContext(), 1, domain);
   if (value.getType() == type)
     return value;
-  return builder.create<moore::ConversionOp>(value.getLoc(), type, value);
+  return moore::ConversionOp::create(builder, value.getLoc(), type, value);
 }
 
 Value Context::convertToSimpleBitVector(Value value) {
@@ -1297,8 +1300,8 @@ Value Context::convertToSimpleBitVector(Value value) {
     if (auto bits = packed.getBitSize()) {
       auto sbvType =
           moore::IntType::get(value.getContext(), *bits, packed.getDomain());
-      return builder.create<moore::ConversionOp>(value.getLoc(), sbvType,
-                                                 value);
+      return moore::ConversionOp::create(builder, value.getLoc(), sbvType,
+                                         value);
     }
   }
 
@@ -1325,25 +1328,25 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     auto srcWidthType = moore::IntType::get(value.getContext(), srcWidth,
                                             srcPacked.getDomain());
     if (value.getType() != srcWidthType)
-      value = builder.create<moore::ConversionOp>(value.getLoc(), srcWidthType,
-                                                  value);
+      value = moore::ConversionOp::create(builder, value.getLoc(), srcWidthType,
+                                          value);
 
     // Create truncation or sign/zero extension ops depending on the source and
     // destination width.
     auto dstWidthType = moore::IntType::get(value.getContext(), dstWidth,
                                             srcPacked.getDomain());
     if (dstWidth < srcWidth) {
-      value = builder.create<moore::TruncOp>(loc, dstWidthType, value);
+      value = moore::TruncOp::create(builder, loc, dstWidthType, value);
     } else if (dstWidth > srcWidth) {
       if (isSigned)
-        value = builder.create<moore::SExtOp>(loc, dstWidthType, value);
+        value = moore::SExtOp::create(builder, loc, dstWidthType, value);
       else
-        value = builder.create<moore::ZExtOp>(loc, dstWidthType, value);
+        value = moore::ZExtOp::create(builder, loc, dstWidthType, value);
     }
   }
 
   if (value.getType() != type)
-    value = builder.create<moore::ConversionOp>(loc, type, value);
+    value = moore::ConversionOp::create(builder, loc, type, value);
   return value;
 }
 
@@ -1362,79 +1365,79 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   value = convertToSimpleBitVector(value);
                   if (!value)
                     return failure();
-                  return (Value)builder.create<moore::Clog2BIOp>(loc, value);
+                  return (Value)moore::Clog2BIOp::create(builder, loc, value);
                 })
           .Case("$ln",
                 [&]() -> Value {
-                  return builder.create<moore::LnBIOp>(loc, value);
+                  return moore::LnBIOp::create(builder, loc, value);
                 })
           .Case("$log10",
                 [&]() -> Value {
-                  return builder.create<moore::Log10BIOp>(loc, value);
+                  return moore::Log10BIOp::create(builder, loc, value);
                 })
           .Case("$sin",
                 [&]() -> Value {
-                  return builder.create<moore::SinBIOp>(loc, value);
+                  return moore::SinBIOp::create(builder, loc, value);
                 })
           .Case("$cos",
                 [&]() -> Value {
-                  return builder.create<moore::CosBIOp>(loc, value);
+                  return moore::CosBIOp::create(builder, loc, value);
                 })
           .Case("$tan",
                 [&]() -> Value {
-                  return builder.create<moore::TanBIOp>(loc, value);
+                  return moore::TanBIOp::create(builder, loc, value);
                 })
           .Case("$exp",
                 [&]() -> Value {
-                  return builder.create<moore::ExpBIOp>(loc, value);
+                  return moore::ExpBIOp::create(builder, loc, value);
                 })
           .Case("$sqrt",
                 [&]() -> Value {
-                  return builder.create<moore::SqrtBIOp>(loc, value);
+                  return moore::SqrtBIOp::create(builder, loc, value);
                 })
           .Case("$floor",
                 [&]() -> Value {
-                  return builder.create<moore::FloorBIOp>(loc, value);
+                  return moore::FloorBIOp::create(builder, loc, value);
                 })
           .Case("$ceil",
                 [&]() -> Value {
-                  return builder.create<moore::CeilBIOp>(loc, value);
+                  return moore::CeilBIOp::create(builder, loc, value);
                 })
           .Case("$asin",
                 [&]() -> Value {
-                  return builder.create<moore::AsinBIOp>(loc, value);
+                  return moore::AsinBIOp::create(builder, loc, value);
                 })
           .Case("$acos",
                 [&]() -> Value {
-                  return builder.create<moore::AcosBIOp>(loc, value);
+                  return moore::AcosBIOp::create(builder, loc, value);
                 })
           .Case("$atan",
                 [&]() -> Value {
-                  return builder.create<moore::AtanBIOp>(loc, value);
+                  return moore::AtanBIOp::create(builder, loc, value);
                 })
           .Case("$sinh",
                 [&]() -> Value {
-                  return builder.create<moore::SinhBIOp>(loc, value);
+                  return moore::SinhBIOp::create(builder, loc, value);
                 })
           .Case("$cosh",
                 [&]() -> Value {
-                  return builder.create<moore::CoshBIOp>(loc, value);
+                  return moore::CoshBIOp::create(builder, loc, value);
                 })
           .Case("$tanh",
                 [&]() -> Value {
-                  return builder.create<moore::TanhBIOp>(loc, value);
+                  return moore::TanhBIOp::create(builder, loc, value);
                 })
           .Case("$asinh",
                 [&]() -> Value {
-                  return builder.create<moore::AsinhBIOp>(loc, value);
+                  return moore::AsinhBIOp::create(builder, loc, value);
                 })
           .Case("$acosh",
                 [&]() -> Value {
-                  return builder.create<moore::AcoshBIOp>(loc, value);
+                  return moore::AcoshBIOp::create(builder, loc, value);
                 })
           .Case("$atanh",
                 [&]() -> Value {
-                  return builder.create<moore::AtanhBIOp>(loc, value);
+                  return moore::AtanhBIOp::create(builder, loc, value);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

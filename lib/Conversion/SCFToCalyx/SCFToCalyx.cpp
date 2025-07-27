@@ -495,14 +495,14 @@ private:
              calyx::SgeLibOp, calyx::SgtLibOp>(calyxOp.getOperation())) &&
         "Must be a Calyx comparison library operation.");
     int64_t outputIndex = 2;
-    rewriter.create<calyx::AssignOp>(loc, condReg.getIn(),
-                                     calyxOp.getResult(outputIndex));
-    rewriter.create<calyx::AssignOp>(
-        loc, condReg.getWriteEn(),
+    calyx::AssignOp::create(rewriter, loc, condReg.getIn(),
+                            calyxOp.getResult(outputIndex));
+    calyx::AssignOp::create(
+        rewriter, loc, condReg.getWriteEn(),
         createConstant(loc, rewriter,
                        getState<ComponentLoweringState>().getComponentOp(), 1,
                        1));
-    rewriter.create<calyx::GroupDoneOp>(loc, condReg.getDone());
+    calyx::GroupDoneOp::create(rewriter, loc, condReg.getDone());
 
     getState<ComponentLoweringState>().addSeqGuardCmpLibOp(cmpIOp);
   }
@@ -565,7 +565,7 @@ private:
       auto srcOp = calyx::parentIsSeqCell(dstOp.value())
                        ? condReg.getOut()
                        : op->getOperand(dstOp.index());
-      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(), srcOp);
+      calyx::AssignOp::create(rewriter, op.getLoc(), dstOp.value(), srcOp);
     }
 
     /// Replace the result values of the source operator with the new operator.
@@ -620,24 +620,24 @@ private:
     if constexpr (std::is_same_v<TSrcOp, math::SqrtOp>)
       // According to the Hardfloat library: "If sqrtOp is 1, the operation is
       // the square root of a, and operand b is ignored."
-      rewriter.create<calyx::AssignOp>(loc, opPipe.getLeft(), op.getOperand());
+      calyx::AssignOp::create(rewriter, loc, opPipe.getLeft(), op.getOperand());
     else {
-      rewriter.create<calyx::AssignOp>(loc, opPipe.getLeft(), op.getLhs());
-      rewriter.create<calyx::AssignOp>(loc, opPipe.getRight(), op.getRhs());
+      calyx::AssignOp::create(rewriter, loc, opPipe.getLeft(), op.getLhs());
+      calyx::AssignOp::create(rewriter, loc, opPipe.getRight(), op.getRhs());
     }
     // Write the output to this register.
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), out);
+    calyx::AssignOp::create(rewriter, loc, reg.getIn(), out);
     // The write enable port is high when the pipeline is done.
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), opPipe.getDone());
+    calyx::AssignOp::create(rewriter, loc, reg.getWriteEn(), opPipe.getDone());
     // Set pipelineOp to high as long as its done signal is not high.
     // This prevents the pipelineOP from executing for the cycle that we write
     // to register. To get !(pipelineOp.done) we do 1 xor pipelineOp.done
     hw::ConstantOp c1 = createConstant(loc, rewriter, getComponent(), 1, 1);
-    rewriter.create<calyx::AssignOp>(
-        loc, opPipe.getGo(), c1,
+    calyx::AssignOp::create(
+        rewriter, loc, opPipe.getGo(), c1,
         comb::createOrFoldNot(group.getLoc(), opPipe.getDone(), builder));
     // The group is done when the register write is complete.
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+    calyx::GroupDoneOp::create(rewriter, loc, reg.getDone());
 
     // Pass the result from the source operation to register holding the resullt
     // from the Calyx primitive.
@@ -653,13 +653,13 @@ private:
         subOp = createConstant(loc, rewriter, getComponent(), /*width=*/1,
                                /*subtract=*/1);
       }
-      rewriter.create<calyx::AssignOp>(loc, opFOp.getSubOp(), subOp);
+      calyx::AssignOp::create(rewriter, loc, opFOp.getSubOp(), subOp);
     } else if (auto opFOp =
                    dyn_cast<calyx::DivSqrtOpIEEE754>(opPipe.getOperation())) {
       bool isSqrt = !isa<arith::DivFOp>(op);
       hw::ConstantOp sqrtOp =
           createConstant(loc, rewriter, getComponent(), /*width=*/1, isSqrt);
-      rewriter.create<calyx::AssignOp>(loc, opFOp.getSqrtOp(), sqrtOp);
+      calyx::AssignOp::create(rewriter, loc, opFOp.getSqrtOp(), sqrtOp);
     }
 
     // Register the values for the pipeline.
@@ -698,23 +698,25 @@ private:
                                                             group);
 
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loc, calyxOp.getIn(), op.getIn());
+    calyx::AssignOp::create(rewriter, loc, calyxOp.getIn(), op.getIn());
     if (isa<calyx::FpToIntOpIEEE754>(calyxOp)) {
-      rewriter.create<calyx::AssignOp>(
-          loc, cast<calyx::FpToIntOpIEEE754>(calyxOp).getSignedOut(), c1);
+      calyx::AssignOp::create(
+          rewriter, loc, cast<calyx::FpToIntOpIEEE754>(calyxOp).getSignedOut(),
+          c1);
     } else if (isa<calyx::IntToFpOpIEEE754>(calyxOp)) {
-      rewriter.create<calyx::AssignOp>(
-          loc, cast<calyx::IntToFpOpIEEE754>(calyxOp).getSignedIn(), c1);
+      calyx::AssignOp::create(
+          rewriter, loc, cast<calyx::IntToFpOpIEEE754>(calyxOp).getSignedIn(),
+          c1);
     }
     op.getResult().replaceAllUsesWith(reg.getOut());
 
-    rewriter.create<calyx::AssignOp>(loc, reg.getIn(), calyxOp.getOut());
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), c1);
+    calyx::AssignOp::create(rewriter, loc, reg.getIn(), calyxOp.getOut());
+    calyx::AssignOp::create(rewriter, loc, reg.getWriteEn(), c1);
 
-    rewriter.create<calyx::AssignOp>(
-        loc, calyxOp.getGo(), c1,
+    calyx::AssignOp::create(
+        rewriter, loc, calyxOp.getGo(), c1,
         comb::createOrFoldNot(loc, calyxOp.getDone(), builder));
-    rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+    calyx::GroupDoneOp::create(rewriter, loc, reg.getDone());
 
     return success();
   }
@@ -734,16 +736,16 @@ private:
           "We expected a 1 dimensional memory of size 1 because there were no "
           "address assignment values");
       // Assign to address 1'd0 in memory.
-      rewriter.create<calyx::AssignOp>(
-          loc, addrPorts[0],
+      calyx::AssignOp::create(
+          rewriter, loc, addrPorts[0],
           createConstant(loc, rewriter, getComponent(), 1, 0));
     } else {
       assert(addrPorts.size() == addressValues.size() &&
              "Mismatch between number of address ports of the provided memory "
              "and address assignment values");
       for (auto address : enumerate(addressValues))
-        rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
-                                         address.value());
+        calyx::AssignOp::create(rewriter, loc, addrPorts[address.index()],
+                                address.value());
     }
   }
 
@@ -759,18 +761,18 @@ private:
     auto reg = createRegister(
         loc, rewriter, component, 1,
         getState<ComponentLoweringState>().getUniqueName(nameSuffix));
-    rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(),
-                                     calyxCmpFOp.getDone());
+    calyx::AssignOp::create(rewriter, loc, reg.getWriteEn(),
+                            calyxCmpFOp.getDone());
     if (invert) {
       auto notLibOp = getState<ComponentLoweringState>()
                           .getNewLibraryOpInstance<calyx::NotLibOp>(
                               rewriter, loc, {one, one});
-      rewriter.create<calyx::AssignOp>(loc, notLibOp.getIn(), signal);
-      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), notLibOp.getOut());
+      calyx::AssignOp::create(rewriter, loc, notLibOp.getIn(), signal);
+      calyx::AssignOp::create(rewriter, loc, reg.getIn(), notLibOp.getOut());
       getState<ComponentLoweringState>().registerEvaluatingGroup(
           notLibOp.getOut(), group);
     } else
-      rewriter.create<calyx::AssignOp>(loc, reg.getIn(), signal);
+      calyx::AssignOp::create(rewriter, loc, reg.getIn(), signal);
     return reg;
   };
 };
@@ -793,8 +795,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   if (memoryInterface.readEnOpt().has_value()) {
     auto oneI1 =
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.readEn(),
-                                     oneI1);
+    calyx::AssignOp::create(rewriter, loadOp.getLoc(), memoryInterface.readEn(),
+                            oneI1);
     regWriteEn = memoryInterface.done();
     if (calyx::noStoresToMemory(memref) &&
         calyx::singleLoadFromMemory(memref)) {
@@ -802,8 +804,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       // register. The readData value will be held until readEn is asserted
       // again
       needReg = false;
-      rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
-                                          memoryInterface.done());
+      calyx::GroupDoneOp::create(rewriter, loadOp.getLoc(),
+                                 memoryInterface.done());
       // We refrain from replacing the loadOp result with
       // memoryInterface.readData, since multiple loadOp's need to be converted
       // to a single memory's ReadData. If this replacement is done now, we lose
@@ -820,10 +822,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
     auto zeroI1 =
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 0);
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(),
-                                     memoryInterface.contentEn(), oneI1);
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeEn(),
-                                     zeroI1);
+    calyx::AssignOp::create(rewriter, loadOp.getLoc(),
+                            memoryInterface.contentEn(), oneI1);
+    calyx::AssignOp::create(rewriter, loadOp.getLoc(),
+                            memoryInterface.writeEn(), zeroI1);
     regWriteEn = memoryInterface.done();
     if (calyx::noStoresToMemory(memref) &&
         calyx::singleLoadFromMemory(memref)) {
@@ -831,8 +833,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       // register. The readData value will be held until contentEn is asserted
       // again
       needReg = false;
-      rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
-                                          memoryInterface.done());
+      calyx::GroupDoneOp::create(rewriter, loadOp.getLoc(),
+                                 memoryInterface.done());
       // We refrain from replacing the loadOp result with
       // memoryInterface.readData, since multiple loadOp's need to be converted
       // to a single memory's ReadData. If this replacement is done now, we lose
@@ -859,11 +861,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         loadOp.getMemRefType().getElementTypeBitWidth(),
         getState<ComponentLoweringState>().getUniqueName("load"));
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getIn(),
-                                     memoryInterface.readData());
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getWriteEn(),
-                                     regWriteEn);
-    rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(), reg.getDone());
+    calyx::AssignOp::create(rewriter, loadOp.getLoc(), reg.getIn(),
+                            memoryInterface.readData());
+    calyx::AssignOp::create(rewriter, loadOp.getLoc(), reg.getWriteEn(),
+                            regWriteEn);
+    calyx::GroupDoneOp::create(rewriter, loadOp.getLoc(), reg.getDone());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
     res = reg.getOut();
   }
@@ -887,18 +889,20 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   assignAddressPorts(rewriter, storeOp.getLoc(), group, memoryInterface,
                      storeOp.getIndices());
   rewriter.setInsertionPointToEnd(group.getBodyBlock());
-  rewriter.create<calyx::AssignOp>(
-      storeOp.getLoc(), memoryInterface.writeData(), storeOp.getValueToStore());
-  rewriter.create<calyx::AssignOp>(
-      storeOp.getLoc(), memoryInterface.writeEn(),
+  calyx::AssignOp::create(rewriter, storeOp.getLoc(),
+                          memoryInterface.writeData(),
+                          storeOp.getValueToStore());
+  calyx::AssignOp::create(
+      rewriter, storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
   if (memoryInterface.contentEnOpt().has_value()) {
     // If memory has content enable, it must be asserted when writing
-    rewriter.create<calyx::AssignOp>(
-        storeOp.getLoc(), memoryInterface.contentEn(),
+    calyx::AssignOp::create(
+        rewriter, storeOp.getLoc(), memoryInterface.contentEn(),
         createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
   }
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
+  calyx::GroupDoneOp::create(rewriter, storeOp.getLoc(),
+                             memoryInterface.done());
 
   return success();
 }
@@ -1060,8 +1064,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                                           group);
 
   rewriter.setInsertionPointToEnd(group.getBodyBlock());
-  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
-  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getRight(), cmpf.getRhs());
+  calyx::AssignOp::create(rewriter, loc, calyxCmpFOp.getLeft(), cmpf.getLhs());
+  calyx::AssignOp::create(rewriter, loc, calyxCmpFOp.getRight(), cmpf.getRhs());
 
   bool signalingFlag = false;
   switch (cmpf.getPredicate()) {
@@ -1089,8 +1093,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
   // The IEEE Standard mandates that equality comparisons ordinarily are quiet,
   // while inequality comparisons ordinarily are signaling.
-  rewriter.create<calyx::AssignOp>(loc, calyxCmpFOp.getSignaling(),
-                                   signalingFlag ? c1 : c0);
+  calyx::AssignOp::create(rewriter, loc, calyxCmpFOp.getSignaling(),
+                          signalingFlag ? c1 : c0);
 
   // Prepare signals and create registers
   SmallVector<calyx::RegisterOp> inputRegs;
@@ -1136,10 +1140,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto outputLibOp = getState<ComponentLoweringState>()
                            .getNewLibraryOpInstance<calyx::AndLibOp>(
                                rewriter, loc, {one, one, one});
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     inputRegs[0].getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     inputRegs[1].getOut());
+    calyx::AssignOp::create(rewriter, loc, outputLibOp.getLeft(),
+                            inputRegs[0].getOut());
+    calyx::AssignOp::create(rewriter, loc, outputLibOp.getRight(),
+                            inputRegs[1].getOut());
 
     outputValue = outputLibOp.getOut();
     break;
@@ -1148,10 +1152,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto outputLibOp = getState<ComponentLoweringState>()
                            .getNewLibraryOpInstance<calyx::OrLibOp>(
                                rewriter, loc, {one, one, one});
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getLeft(),
-                                     inputRegs[0].getOut());
-    rewriter.create<calyx::AssignOp>(loc, outputLibOp.getRight(),
-                                     inputRegs[1].getOut());
+    calyx::AssignOp::create(rewriter, loc, outputLibOp.getLeft(),
+                            inputRegs[0].getOut());
+    calyx::AssignOp::create(rewriter, loc, outputLibOp.getRight(),
+                            inputRegs[1].getOut());
 
     outputValue = outputLibOp.getOut();
     break;
@@ -1162,22 +1166,22 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto doneLibOp = getState<ComponentLoweringState>()
                          .getNewLibraryOpInstance<calyx::AndLibOp>(
                              rewriter, loc, {one, one, one});
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getLeft(),
-                                     inputRegs[0].getDone());
-    rewriter.create<calyx::AssignOp>(loc, doneLibOp.getRight(),
-                                     inputRegs[1].getDone());
+    calyx::AssignOp::create(rewriter, loc, doneLibOp.getLeft(),
+                            inputRegs[0].getDone());
+    calyx::AssignOp::create(rewriter, loc, doneLibOp.getRight(),
+                            inputRegs[1].getDone());
     doneValue = doneLibOp.getOut();
   }
 
   // Write to the output register
-  rewriter.create<calyx::AssignOp>(loc, reg.getIn(), outputValue);
-  rewriter.create<calyx::AssignOp>(loc, reg.getWriteEn(), doneValue);
+  calyx::AssignOp::create(rewriter, loc, reg.getIn(), outputValue);
+  calyx::AssignOp::create(rewriter, loc, reg.getWriteEn(), doneValue);
 
   // Set the go and done signal
-  rewriter.create<calyx::AssignOp>(
-      loc, calyxCmpFOp.getGo(), c1,
+  calyx::AssignOp::create(
+      rewriter, loc, calyxCmpFOp.getGo(), c1,
       comb::createOrFoldNot(loc, calyxCmpFOp.getDone(), builder));
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.getDone());
+  calyx::GroupDoneOp::create(rewriter, loc, reg.getDone());
 
   cmpf.getResult().replaceAllUsesWith(reg.getOut());
 
@@ -1254,7 +1258,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   uint64_t signBit = 1ULL << (bitwidth - 1);
   uint64_t absMask = ~signBit & ((1ULL << bitwidth) - 1); // clear sign bit
 
-  Value maskOp = rewriter.create<arith::ConstantIntOp>(loc, intTy, absMask);
+  Value maskOp = arith::ConstantIntOp::create(rewriter, loc, intTy, absMask);
 
   auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, absFOp);
   rewriter.setInsertionPointToStart(combGroup.getBodyBlock());
@@ -1262,8 +1266,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto andLibOp = getState<ComponentLoweringState>()
                       .getNewLibraryOpInstance<calyx::AndLibOp>(
                           rewriter, loc, {intTy, intTy, intTy});
-  rewriter.create<calyx::AssignOp>(loc, andLibOp.getLeft(), maskOp);
-  rewriter.create<calyx::AssignOp>(loc, andLibOp.getRight(), input);
+  calyx::AssignOp::create(rewriter, loc, andLibOp.getLeft(), maskOp);
+  calyx::AssignOp::create(rewriter, loc, andLibOp.getRight(), input);
 
   getState<ComponentLoweringState>().registerEvaluatingGroup(andLibOp.getOut(),
                                                              combGroup);
@@ -1290,8 +1294,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     sizes.push_back(1);
     addrSizes.push_back(1);
   }
-  auto memoryOp = rewriter.create<calyx::SeqMemoryOp>(
-      allocOp.getLoc(), componentState.getUniqueName("mem"),
+  auto memoryOp = calyx::SeqMemoryOp::create(
+      rewriter, allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
 
   // Externalize memories conditionally (only in the top-level component because
@@ -1443,12 +1447,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
       // Assign inductionReg.out to the left port of the adder.
       Value leftOp = opInputPorts.front();
-      rewriter.create<calyx::AssignOp>(forOp.getLoc(), leftOp,
-                                       inductionReg.getOut());
+      calyx::AssignOp::create(rewriter, forOp.getLoc(), leftOp,
+                              inductionReg.getOut());
       // Assign forOp.getConstantStep to the right port of the adder.
       Value rightOp = opInputPorts.back();
-      rewriter.create<calyx::AssignOp>(
-          forOp.getLoc(), rightOp,
+      calyx::AssignOp::create(
+          rewriter, forOp.getLoc(), rightOp,
           createConstant(forOp->getLoc(), rewriter, componentOp,
                          regWidth.getIntOrFloatBitWidth(),
                          forOp.getConstantStep().value().getSExtValue()));
@@ -1602,8 +1606,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto floatAttr = cast<FloatAttr>(constOp.getValueAttr());
     auto intType =
         rewriter.getIntegerType(floatAttr.getType().getIntOrFloatBitWidth());
-    auto calyxConstOp = rewriter.create<calyx::ConstantOp>(
-        constOp.getLoc(), name, floatAttr, intType);
+    auto calyxConstOp = calyx::ConstantOp::create(rewriter, constOp.getLoc(),
+                                                  name, floatAttr, intType);
     calyxConstOp->moveAfter(getComponent().getBodyBlock(),
                             getComponent().getBodyBlock()->begin());
     rewriter.replaceAllUsesWith(constOp, calyxConstOp.getOut());
@@ -1942,8 +1946,9 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     calyx::addMandatoryComponentPorts(rewriter, ports);
 
     /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
-    auto compOp = rewriter.create<calyx::ComponentOp>(
-        funcOp.getLoc(), rewriter.getStringAttr(funcOp.getSymName()), ports);
+    auto compOp = calyx::ComponentOp::create(
+        rewriter, funcOp.getLoc(), rewriter.getStringAttr(funcOp.getSymName()),
+        ports);
 
     std::string funcName = "func_" + funcOp.getSymName().str();
     rewriter.modifyOpInPlace(funcOp, [&]() { funcOp.setSymName(funcName); });
@@ -1976,8 +1981,8 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
           sizes.push_back(1);
           addrSizes.push_back(1);
         }
-        auto memOp = rewriter.create<calyx::SeqMemoryOp>(
-            funcOp.getLoc(), memName,
+        auto memOp = calyx::SeqMemoryOp::create(
+            rewriter, funcOp.getLoc(), memName,
             memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
         // we don't set the memory to "external", which implies it's a reference
 
@@ -2210,7 +2215,7 @@ class BuildControl : public calyx::FuncOpPartialLoweringPattern {
     auto *entryBlock = &funcOp.getBlocks().front();
     rewriter.setInsertionPointToStart(
         getComponent().getControlOp().getBodyBlock());
-    auto topLevelSeqOp = rewriter.create<calyx::SeqOp>(funcOp.getLoc());
+    auto topLevelSeqOp = calyx::SeqOp::create(rewriter, funcOp.getLoc());
     DenseSet<Block *> path;
     return buildCFGControl(path, rewriter, topLevelSeqOp.getBodyBlock(),
                            nullptr, entryBlock);
@@ -2229,15 +2234,15 @@ private:
 
     if (compBlockScheduleables.size() > 1 &&
         !isa<scf::ParallelOp>(block->getParentOp())) {
-      auto seqOp = rewriter.create<calyx::SeqOp>(loc);
+      auto seqOp = calyx::SeqOp::create(rewriter, loc);
       parentCtrlBlock = seqOp.getBodyBlock();
     }
 
     for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
-        rewriter.create<calyx::EnableOp>(groupPtr->getLoc(),
-                                         groupPtr->getSymName());
+        calyx::EnableOp::create(rewriter, groupPtr->getLoc(),
+                                groupPtr->getSymName());
       } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
@@ -2248,7 +2253,7 @@ private:
             rewriter);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBodyBlock());
         auto whileBodyOp =
-            rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
+            calyx::SeqOp::create(rewriter, whileOp.getOperation()->getLoc());
         auto *whileBodyOpBlock = whileBodyOp.getBodyBlock();
 
         /// Only schedule the 'after' block. The 'before' block is
@@ -2263,16 +2268,16 @@ private:
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
         calyx::GroupOp whileLatchGroup =
             getState<ComponentLoweringState>().getWhileLoopLatchGroup(whileOp);
-        rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
-                                         whileLatchGroup.getName());
+        calyx::EnableOp::create(rewriter, whileLatchGroup.getLoc(),
+                                whileLatchGroup.getName());
       } else if (auto *parSchedPtr = std::get_if<ParScheduleable>(&group)) {
         auto parOp = parSchedPtr->parOp;
-        auto calyxParOp = rewriter.create<calyx::ParOp>(parOp.getLoc());
+        auto calyxParOp = calyx::ParOp::create(rewriter, parOp.getLoc());
 
         WalkResult walkResult =
             parOp.walk([&](scf::ExecuteRegionOp execRegion) {
               rewriter.setInsertionPointToEnd(calyxParOp.getBodyBlock());
-              auto seqOp = rewriter.create<calyx::SeqOp>(execRegion.getLoc());
+              auto seqOp = calyx::SeqOp::create(rewriter, execRegion.getLoc());
               rewriter.setInsertionPointToEnd(seqOp.getBodyBlock());
 
               for (auto &execBlock : execRegion.getRegion().getBlocks()) {
@@ -2297,7 +2302,7 @@ private:
             forSchedPtr->bound, rewriter);
         rewriter.setInsertionPointToEnd(forCtrlOp.getBodyBlock());
         auto forBodyOp =
-            rewriter.create<calyx::SeqOp>(forOp.getOperation()->getLoc());
+            calyx::SeqOp::create(rewriter, forOp.getOperation()->getLoc());
         auto *forBodyOpBlock = forBodyOp.getBodyBlock();
 
         // Schedule the body of the for loop.
@@ -2310,8 +2315,8 @@ private:
         rewriter.setInsertionPointToEnd(forBodyOpBlock);
         calyx::GroupOp forLatchGroup =
             getState<ComponentLoweringState>().getForLoopLatchGroup(forOp);
-        rewriter.create<calyx::EnableOp>(forLatchGroup.getLoc(),
-                                         forLatchGroup.getName());
+        calyx::EnableOp::create(rewriter, forLatchGroup.getLoc(),
+                                forLatchGroup.getName());
       } else if (auto *ifSchedPtr = std::get_if<IfScheduleable>(&group);
                  ifSchedPtr) {
         auto ifOp = ifSchedPtr->ifOp;
@@ -2331,13 +2336,13 @@ private:
         }
 
         bool initElse = !ifOp.getElseRegion().empty();
-        auto ifCtrlOp = rewriter.create<calyx::IfOp>(
-            loc, cond, symbolAttr, /*initializeElseBody=*/initElse);
+        auto ifCtrlOp = calyx::IfOp::create(rewriter, loc, cond, symbolAttr,
+                                            /*initializeElseBody=*/initElse);
 
         rewriter.setInsertionPointToEnd(ifCtrlOp.getBodyBlock());
 
         auto thenSeqOp =
-            rewriter.create<calyx::SeqOp>(ifOp.getThenRegion().getLoc());
+            calyx::SeqOp::create(rewriter, ifOp.getThenRegion().getLoc());
         auto *thenSeqOpBlock = thenSeqOp.getBodyBlock();
 
         auto *thenBlock = &ifOp.getThenRegion().front();
@@ -2352,15 +2357,15 @@ private:
           rewriter.setInsertionPointToEnd(thenSeqOpBlock);
           calyx::GroupOp thenGroup =
               getState<ComponentLoweringState>().getThenGroup(ifOp);
-          rewriter.create<calyx::EnableOp>(thenGroup.getLoc(),
-                                           thenGroup.getName());
+          calyx::EnableOp::create(rewriter, thenGroup.getLoc(),
+                                  thenGroup.getName());
         }
 
         if (!ifOp.getElseRegion().empty()) {
           rewriter.setInsertionPointToEnd(ifCtrlOp.getElseBody());
 
           auto elseSeqOp =
-              rewriter.create<calyx::SeqOp>(ifOp.getElseRegion().getLoc());
+              calyx::SeqOp::create(rewriter, ifOp.getElseRegion().getLoc());
           auto *elseSeqOpBlock = elseSeqOp.getBodyBlock();
 
           auto *elseBlock = &ifOp.getElseRegion().front();
@@ -2373,14 +2378,14 @@ private:
             rewriter.setInsertionPointToEnd(elseSeqOpBlock);
             calyx::GroupOp elseGroup =
                 getState<ComponentLoweringState>().getElseGroup(ifOp);
-            rewriter.create<calyx::EnableOp>(elseGroup.getLoc(),
-                                             elseGroup.getName());
+            calyx::EnableOp::create(rewriter, elseGroup.getLoc(),
+                                    elseGroup.getName());
           }
         }
       } else if (auto *callSchedPtr = std::get_if<CallScheduleable>(&group)) {
         auto instanceOp = callSchedPtr->instanceOp;
         OpBuilder::InsertionGuard g(rewriter);
-        auto callBody = rewriter.create<calyx::SeqOp>(instanceOp.getLoc());
+        auto callBody = calyx::SeqOp::create(rewriter, instanceOp.getLoc());
         rewriter.setInsertionPointToStart(callBody.getBodyBlock());
 
         auto callee = callSchedPtr->callOp.getCallee();
@@ -2428,10 +2433,11 @@ private:
         ArrayAttr refCellsAttr =
             ArrayAttr::get(rewriter.getContext(), refCells);
 
-        rewriter.create<calyx::InvokeOp>(
-            instanceOp.getLoc(), instanceOp.getSymName(), instancePorts,
-            inputPorts, refCellsAttr, ArrayAttr::get(rewriter.getContext(), {}),
-            ArrayAttr::get(rewriter.getContext(), {}));
+        calyx::InvokeOp::create(rewriter, instanceOp.getLoc(),
+                                instanceOp.getSymName(), instancePorts,
+                                inputPorts, refCellsAttr,
+                                ArrayAttr::get(rewriter.getContext(), {}),
+                                ArrayAttr::get(rewriter.getContext(), {}));
       } else
         llvm_unreachable("Unknown scheduleable");
     }
@@ -2450,11 +2456,11 @@ private:
     /// Schedule any registered block arguments to be executed before the body
     /// of the branch.
     rewriter.setInsertionPointToEnd(parentCtrlBlock);
-    auto preSeqOp = rewriter.create<calyx::SeqOp>(loc);
+    auto preSeqOp = calyx::SeqOp::create(rewriter, loc);
     rewriter.setInsertionPointToEnd(preSeqOp.getBodyBlock());
     for (auto barg :
          getState<ComponentLoweringState>().getBlockArgGroups(from, to))
-      rewriter.create<calyx::EnableOp>(barg.getLoc(), barg.getSymName());
+      calyx::EnableOp::create(rewriter, barg.getLoc(), barg.getSymName());
 
     return buildCFGControl(path, rewriter, parentCtrlBlock, from, to);
   }
@@ -2494,12 +2500,13 @@ private:
         auto symbolAttr = FlatSymbolRefAttr::get(
             StringAttr::get(getContext(), condGroup.getSymName()));
 
-        auto ifOp = rewriter.create<calyx::IfOp>(
-            brOp->getLoc(), cond, symbolAttr, /*initializeElseBody=*/true);
+        auto ifOp =
+            calyx::IfOp::create(rewriter, brOp->getLoc(), cond, symbolAttr,
+                                /*initializeElseBody=*/true);
         rewriter.setInsertionPointToStart(ifOp.getThenBody());
-        auto thenSeqOp = rewriter.create<calyx::SeqOp>(brOp.getLoc());
+        auto thenSeqOp = calyx::SeqOp::create(rewriter, brOp.getLoc());
         rewriter.setInsertionPointToStart(ifOp.getElseBody());
-        auto elseSeqOp = rewriter.create<calyx::SeqOp>(brOp.getLoc());
+        auto elseSeqOp = calyx::SeqOp::create(rewriter, brOp.getLoc());
 
         bool trueBrSchedSuccess =
             schedulePath(rewriter, path, brOp.getLoc(), block, successors[0],
@@ -2529,10 +2536,10 @@ private:
   insertParInitGroups(PatternRewriter &rewriter, Location loc,
                       const SmallVector<calyx::GroupOp> &initGroups) const {
     PatternRewriter::InsertionGuard g(rewriter);
-    auto parOp = rewriter.create<calyx::ParOp>(loc);
+    auto parOp = calyx::ParOp::create(rewriter, loc);
     rewriter.setInsertionPointToStart(parOp.getBodyBlock());
     for (calyx::GroupOp group : initGroups)
-      rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
+      calyx::EnableOp::create(rewriter, group.getLoc(), group.getName());
   }
 
   calyx::WhileOp buildWhileCtrlOp(ScfWhileOp whileOp,
@@ -2549,7 +2556,7 @@ private:
                          .getEvaluatingGroup<calyx::CombGroupOp>(cond);
     auto symbolAttr = FlatSymbolRefAttr::get(
         StringAttr::get(getContext(), condGroup.getSymName()));
-    return rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
+    return calyx::WhileOp::create(rewriter, loc, cond, symbolAttr);
   }
 
   calyx::RepeatOp buildForCtrlOp(ScfForOp forOp,
@@ -2562,7 +2569,7 @@ private:
     insertParInitGroups(rewriter, loc, initGroups);
 
     // Insert the repeatOp that corresponds to the For loop.
-    return rewriter.create<calyx::RepeatOp>(loc, bound);
+    return calyx::RepeatOp::create(rewriter, loc, bound);
   }
 };
 
@@ -2792,7 +2799,7 @@ private:
     FunctionType funcType = builder.getFunctionType({}, {});
 
     if (auto newFunc =
-            builder.create<FuncOp>(moduleOp.getLoc(), newName, funcType))
+            FuncOp::create(builder, moduleOp.getLoc(), newName, funcType))
       return newFunc;
 
     return nullptr;
@@ -2852,16 +2859,17 @@ private:
       Value newOpRes;
       TypeSwitch<Operation *>(op)
           .Case<memref::AllocaOp>([&](memref::AllocaOp allocaOp) {
-            newOpRes = builder.create<memref::AllocaOp>(callee.getLoc(),
-                                                        allocaOp.getType());
+            newOpRes = memref::AllocaOp::create(builder, callee.getLoc(),
+                                                allocaOp.getType());
           })
           .Case<memref::AllocOp>([&](memref::AllocOp allocOp) {
-            newOpRes = builder.create<memref::AllocOp>(callee.getLoc(),
-                                                       allocOp.getType());
+            newOpRes = memref::AllocOp::create(builder, callee.getLoc(),
+                                               allocOp.getType());
           })
           .Case<memref::GetGlobalOp>([&](memref::GetGlobalOp getGlobalOp) {
-            newOpRes = builder.create<memref::GetGlobalOp>(
-                caller.getLoc(), getGlobalOp.getType(), getGlobalOp.getName());
+            newOpRes = memref::GetGlobalOp::create(builder, caller.getLoc(),
+                                                   getGlobalOp.getType(),
+                                                   getGlobalOp.getName());
           })
           .Default([&](Operation *defaultOp) {
             llvm::report_fatal_error("Unsupported operation in TypeSwitch");
@@ -2890,7 +2898,7 @@ private:
       if (isa<MemRefType>(arg.getType())) {
         auto memrefType = cast<MemRefType>(arg.getType());
         auto allocOp =
-            builder.create<memref::AllocOp>(callee.getLoc(), memrefType);
+            memref::AllocOp::create(builder, callee.getLoc(), memrefType);
         calleeArgFnOperands.push_back(allocOp);
       } else {
         auto callerArg = callerEntryBlock->getArgument(otherArgsCount++);
@@ -2906,9 +2914,9 @@ private:
     auto resultTypes = callee.getResultTypes();
 
     builder.setInsertionPointToEnd(callerEntryBlock);
-    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
-                           fnOperands);
-    builder.create<ReturnOp>(caller.getLoc());
+    CallOp::create(builder, caller.getLoc(), calleeName, resultTypes,
+                   fnOperands);
+    ReturnOp::create(builder, caller.getLoc());
   }
 
   /// Conditionally creates an optional new top-level function; and inserts a

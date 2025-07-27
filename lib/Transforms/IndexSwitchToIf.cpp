@@ -49,12 +49,13 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
         rewriter.setInsertionPointToStart(&prevIfOp.getElseRegion().front());
 
       Value caseValue =
-          rewriter.create<arith::ConstantIndexOp>(loc, caseValueInt);
-      Value cond = rewriter.create<arith::CmpIOp>(
-          loc, arith::CmpIPredicate::eq, switchOp.getOperand(), caseValue);
+          arith::ConstantIndexOp::create(rewriter, loc, caseValueInt);
+      Value cond =
+          arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::eq,
+                                switchOp.getOperand(), caseValue);
 
-      auto ifOp = rewriter.create<scf::IfOp>(loc, switchOp.getResultTypes(),
-                                             cond, /*hasElseRegion=*/true);
+      auto ifOp = scf::IfOp::create(rewriter, loc, switchOp.getResultTypes(),
+                                    cond, /*hasElseRegion=*/true);
 
       Region &caseRegion = switchOp.getCaseRegions()[i];
       rewriter.eraseBlock(&ifOp.getThenRegion().front());
@@ -69,7 +70,7 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
 
       if (prevIfOp && hasResults) {
         rewriter.setInsertionPointToEnd(&prevIfOp.getElseRegion().front());
-        rewriter.create<scf::YieldOp>(loc, ifOp.getResult(0));
+        scf::YieldOp::create(rewriter, loc, ifOp.getResult(0));
       }
 
       if (i == 0 && hasResults)

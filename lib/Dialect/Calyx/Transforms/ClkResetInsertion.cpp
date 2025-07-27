@@ -45,7 +45,7 @@ static void doPortPassthrough(ComponentOp comp, Value fromPort,
     for (auto port : cell.getInputPorts()) {
       if (!cell.portInfo(port).hasAttribute(portID))
         continue;
-      builder.create<AssignOp>(cell.getLoc(), port, fromPort);
+      AssignOp::create(builder, cell.getLoc(), port, fromPort);
     }
   }
 }

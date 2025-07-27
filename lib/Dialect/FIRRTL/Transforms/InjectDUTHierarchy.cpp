@@ -215,8 +215,8 @@ void InjectDUTHierarchy::runOnOperation() {
   // just created becomes the "DUT".
   auto oldDutNameAttr = dut.getNameAttr();
   wrapper = dut;
-  dut = b.create<FModuleOp>(dut.getLoc(), oldDutNameAttr,
-                            dut.getConventionAttr(), dut.getPorts());
+  dut = FModuleOp::create(b, dut.getLoc(), oldDutNameAttr,
+                          dut.getConventionAttr(), dut.getPorts());
 
   // Finish setting up the DUT and the Wrapper.  This depends on if we are in
   // `moveDut` mode or not.  If `moveDut=false` (the normal, legacy behavior),
@@ -275,11 +275,11 @@ void InjectDUTHierarchy::runOnOperation() {
   b.setInsertionPointToStart(dut.getBodyBlock());
   hw::InnerSymbolNamespace dutNS(dut);
   auto wrapperInst =
-      b.create<InstanceOp>(b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
-                           NameKindEnum::DroppableName, ArrayRef<Attribute>{},
-                           ArrayRef<Attribute>{}, false, false,
-                           hw::InnerSymAttr::get(b.getStringAttr(
-                               dutNS.newName(wrapper.getModuleName()))));
+      InstanceOp::create(b, b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
+                         NameKindEnum::DroppableName, ArrayRef<Attribute>{},
+                         ArrayRef<Attribute>{}, false, false,
+                         hw::InnerSymAttr::get(b.getStringAttr(
+                             dutNS.newName(wrapper.getModuleName()))));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();

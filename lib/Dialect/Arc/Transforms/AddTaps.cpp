@@ -66,7 +66,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
 
     OpBuilder builder(wireOp);
     if (!readOp)
-      readOp = builder.create<sv::ReadInOutOp>(wireOp.getLoc(), wireOp);
+      readOp = sv::ReadInOutOp::create(builder, wireOp.getLoc(), wireOp);
     buildTap(builder, readOp.getLoc(), readOp, wireOp.getName());
   }
 
@@ -95,7 +95,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
       return;
     if (isa<seq::ClockType>(value.getType()))
       value = builder.createOrFold<seq::FromClockOp>(loc, value);
-    builder.create<arc::TapOp>(loc, value, name);
+    arc::TapOp::create(builder, loc, value, name);
   }
 };
 } // namespace

@@ -70,8 +70,8 @@ static FailureOr<Block *> buildMergeBlock(Block *b1, Block *b2, Block *oldSucc,
   SmallVector<Location> argLocs(blockArgTypes.size(), rewriter.getUnknownLoc());
 
   Block *res = rewriter.createBlock(oldSucc, blockArgTypes, argLocs);
-  rewriter.create<cf::BranchOp>(rewriter.getUnknownLoc(), oldSucc,
-                                res->getArguments());
+  cf::BranchOp::create(rewriter, rewriter.getUnknownLoc(), oldSucc,
+                       res->getArguments());
 
   if (failed(changeBranchTarget(b1, oldSucc, res, rewriter)))
     return failure();

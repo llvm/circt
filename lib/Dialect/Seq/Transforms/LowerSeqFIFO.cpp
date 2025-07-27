@@ -48,104 +48,107 @@ public:
     Backedge nextCount = bb.get(countType);
 
     // ====== Some constants ======
-    Value countTcFull = rewriter.create<hw::ConstantOp>(loc, countType, depth);
-    Value countTc1 = rewriter.create<hw::ConstantOp>(loc, countType, 1);
-    Value countTc0 = rewriter.create<hw::ConstantOp>(loc, countType, 0);
-    Value ptrTc0 = rewriter.create<hw::ConstantOp>(loc, ptrType, 0);
-    Value ptrTc1 = rewriter.create<hw::ConstantOp>(loc, ptrType, 1);
-    Value ptrTcFull = rewriter.create<hw::ConstantOp>(loc, ptrType, depth);
+    Value countTcFull = hw::ConstantOp::create(rewriter, loc, countType, depth);
+    Value countTc1 = hw::ConstantOp::create(rewriter, loc, countType, 1);
+    Value countTc0 = hw::ConstantOp::create(rewriter, loc, countType, 0);
+    Value ptrTc0 = hw::ConstantOp::create(rewriter, loc, ptrType, 0);
+    Value ptrTc1 = hw::ConstantOp::create(rewriter, loc, ptrType, 1);
+    Value ptrTcFull = hw::ConstantOp::create(rewriter, loc, ptrType, depth);
 
     // ====== Hardware units ======
-    Value count = rewriter.create<seq::CompRegOp>(
-        loc, nextCount, clk, rst,
-        rewriter.create<hw::ConstantOp>(loc, countType, 0), "fifo_count");
-    seq::HLMemOp hlmem = rewriter.create<seq::HLMemOp>(
-        loc, clk, rst, "fifo_mem",
+    Value count = seq::CompRegOp::create(
+        rewriter, loc, nextCount, clk, rst,
+        hw::ConstantOp::create(rewriter, loc, countType, 0), "fifo_count");
+    seq::HLMemOp hlmem = seq::HLMemOp::create(
+        rewriter, loc, clk, rst, "fifo_mem",
         llvm::SmallVector<int64_t>{static_cast<int64_t>(depth)}, eltType);
-    Value rdAddr = rewriter.create<seq::CompRegOp>(
-        loc, rdAddrNext, clk, rst,
-        rewriter.create<hw::ConstantOp>(loc, ptrType, 0), "fifo_rd_addr");
-    Value wrAddr = rewriter.create<seq::CompRegOp>(
-        loc, wrAddrNext, clk, rst,
-        rewriter.create<hw::ConstantOp>(loc, ptrType, 0), "fifo_wr_addr");
+    Value rdAddr = seq::CompRegOp::create(
+        rewriter, loc, rdAddrNext, clk, rst,
+        hw::ConstantOp::create(rewriter, loc, ptrType, 0), "fifo_rd_addr");
+    Value wrAddr = seq::CompRegOp::create(
+        rewriter, loc, wrAddrNext, clk, rst,
+        hw::ConstantOp::create(rewriter, loc, ptrType, 0), "fifo_wr_addr");
 
-    Value readData = rewriter.create<seq::ReadPortOp>(
-        loc, hlmem, llvm::SmallVector<Value>{rdAddr}, adaptor.getRdEn(),
-        mem.getRdLatency());
-    rewriter.create<seq::WritePortOp>(loc, hlmem,
-                                      llvm::SmallVector<Value>{wrAddr},
-                                      adaptor.getInput(), adaptor.getWrEn(),
-                                      /*latency*/ 1);
+    Value readData = seq::ReadPortOp::create(
+        rewriter, loc, hlmem, llvm::SmallVector<Value>{rdAddr},
+        adaptor.getRdEn(), mem.getRdLatency());
+    seq::WritePortOp::create(rewriter, loc, hlmem,
+                             llvm::SmallVector<Value>{wrAddr},
+                             adaptor.getInput(), adaptor.getWrEn(),
+                             /*latency*/ 1);
 
     // ====== some more constants =====
-    comb::ICmpOp fifoFull = rewriter.create<comb::ICmpOp>(
-        loc, comb::ICmpPredicate::eq, count, countTcFull);
+    comb::ICmpOp fifoFull = comb::ICmpOp::create(
+        rewriter, loc, comb::ICmpPredicate::eq, count, countTcFull);
     fifoFull->setAttr("sv.namehint", rewriter.getStringAttr("fifo_full"));
-    comb::ICmpOp fifoEmpty = rewriter.create<comb::ICmpOp>(
-        loc, comb::ICmpPredicate::eq, count, countTc0);
+    comb::ICmpOp fifoEmpty = comb::ICmpOp::create(
+        rewriter, loc, comb::ICmpPredicate::eq, count, countTc0);
     fifoEmpty->setAttr("sv.namehint", rewriter.getStringAttr("fifo_empty"));
 
     // ====== Next-state count ======
     auto notRdEn = comb::createOrFoldNot(loc, adaptor.getRdEn(), rewriter);
     auto notWrEn = comb::createOrFoldNot(loc, adaptor.getWrEn(), rewriter);
-    Value rdEnNandWrEn = rewriter.create<comb::AndOp>(loc, notRdEn, notWrEn);
+    Value rdEnNandWrEn = comb::AndOp::create(rewriter, loc, notRdEn, notWrEn);
     Value rdEnAndNotWrEn =
-        rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), notWrEn);
+        comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), notWrEn);
     Value wrEnAndNotRdEn =
-        rewriter.create<comb::AndOp>(loc, adaptor.getWrEn(), notRdEn);
+        comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), notRdEn);
 
-    auto countEqTcFull = rewriter.create<comb::ICmpOp>(
-        loc, comb::ICmpPredicate::eq, count, countTcFull);
-    auto addCountTc1 = rewriter.create<comb::AddOp>(loc, count, countTc1);
-    Value wrEnNext = rewriter.create<comb::MuxOp>(loc, countEqTcFull,
-                                                  // keep value
-                                                  count,
-                                                  // increment
-                                                  addCountTc1);
-    auto countEqTc0 = rewriter.create<comb::ICmpOp>(
-        loc, comb::ICmpPredicate::eq, count, countTc0);
-    auto subCountTc1 = rewriter.create<comb::SubOp>(loc, count, countTc1);
+    auto countEqTcFull = comb::ICmpOp::create(
+        rewriter, loc, comb::ICmpPredicate::eq, count, countTcFull);
+    auto addCountTc1 = comb::AddOp::create(rewriter, loc, count, countTc1);
+    Value wrEnNext = comb::MuxOp::create(rewriter, loc, countEqTcFull,
+                                         // keep value
+                                         count,
+                                         // increment
+                                         addCountTc1);
+    auto countEqTc0 = comb::ICmpOp::create(
+        rewriter, loc, comb::ICmpPredicate::eq, count, countTc0);
+    auto subCountTc1 = comb::SubOp::create(rewriter, loc, count, countTc1);
 
-    Value rdEnNext = rewriter.create<comb::MuxOp>(loc, countEqTc0,
-                                                  // keep value
-                                                  count,
-                                                  // decrement
-                                                  subCountTc1);
+    Value rdEnNext = comb::MuxOp::create(rewriter, loc, countEqTc0,
+                                         // keep value
+                                         count,
+                                         // decrement
+                                         subCountTc1);
 
     auto nextInnerMux =
-        rewriter.create<comb::MuxOp>(loc, rdEnAndNotWrEn, rdEnNext, count);
-    auto nextMux = rewriter.create<comb::MuxOp>(loc, wrEnAndNotRdEn, wrEnNext,
-                                                nextInnerMux);
-    nextCount.setValue(rewriter.create<comb::MuxOp>(
-        loc, rdEnNandWrEn, /*keep value*/ count, nextMux));
+        comb::MuxOp::create(rewriter, loc, rdEnAndNotWrEn, rdEnNext, count);
+    auto nextMux = comb::MuxOp::create(rewriter, loc, wrEnAndNotRdEn, wrEnNext,
+                                       nextInnerMux);
+    nextCount.setValue(comb::MuxOp::create(rewriter, loc, rdEnNandWrEn,
+                                           /*keep value*/ count, nextMux));
     static_cast<Value>(nextCount).getDefiningOp()->setAttr(
         "sv.namehint", rewriter.getStringAttr("fifo_count_next"));
 
     // ====== Read/write pointers ======
-    Value wrAndNotFull = rewriter.create<comb::AndOp>(
-        loc, adaptor.getWrEn(), comb::createOrFoldNot(loc, fifoFull, rewriter));
-    auto addWrAddrPtrTc1 = rewriter.create<comb::AddOp>(loc, wrAddr, ptrTc1);
+    Value wrAndNotFull =
+        comb::AndOp::create(rewriter, loc, adaptor.getWrEn(),
+                            comb::createOrFoldNot(loc, fifoFull, rewriter));
+    auto addWrAddrPtrTc1 = comb::AddOp::create(rewriter, loc, wrAddr, ptrTc1);
 
-    auto wrAddrNextNoRollover = rewriter.create<comb::MuxOp>(
-        loc, wrAndNotFull, addWrAddrPtrTc1, wrAddr);
-    auto isMaxAddrWr = rewriter.create<comb::ICmpOp>(
-        loc, comb::ICmpPredicate::eq, wrAddrNextNoRollover, ptrTcFull);
-    wrAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, isMaxAddrWr, ptrTc0,
-                                                     wrAddrNextNoRollover));
+    auto wrAddrNextNoRollover = comb::MuxOp::create(rewriter, loc, wrAndNotFull,
+                                                    addWrAddrPtrTc1, wrAddr);
+    auto isMaxAddrWr =
+        comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                             wrAddrNextNoRollover, ptrTcFull);
+    wrAddrNext.setValue(comb::MuxOp::create(rewriter, loc, isMaxAddrWr, ptrTc0,
+                                            wrAddrNextNoRollover));
     static_cast<Value>(wrAddrNext)
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_wr_addr_next"));
 
     auto notFifoEmpty = comb::createOrFoldNot(loc, fifoEmpty, rewriter);
     Value rdAndNotEmpty =
-        rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), notFifoEmpty);
-    auto addRdAddrPtrTc1 = rewriter.create<comb::AddOp>(loc, rdAddr, ptrTc1);
-    auto rdAddrNextNoRollover = rewriter.create<comb::MuxOp>(
-        loc, rdAndNotEmpty, addRdAddrPtrTc1, rdAddr);
-    auto isMaxAddrRd = rewriter.create<comb::ICmpOp>(
-        loc, comb::ICmpPredicate::eq, rdAddrNextNoRollover, ptrTcFull);
-    rdAddrNext.setValue(rewriter.create<comb::MuxOp>(loc, isMaxAddrRd, ptrTc0,
-                                                     rdAddrNextNoRollover));
+        comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), notFifoEmpty);
+    auto addRdAddrPtrTc1 = comb::AddOp::create(rewriter, loc, rdAddr, ptrTc1);
+    auto rdAddrNextNoRollover = comb::MuxOp::create(
+        rewriter, loc, rdAndNotEmpty, addRdAddrPtrTc1, rdAddr);
+    auto isMaxAddrRd =
+        comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                             rdAddrNextNoRollover, ptrTcFull);
+    rdAddrNext.setValue(comb::MuxOp::create(rewriter, loc, isMaxAddrRd, ptrTc0,
+                                            rdAddrNextNoRollover));
     static_cast<Value>(rdAddrNext)
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_rd_addr_next"));
@@ -161,37 +164,39 @@ public:
     results.push_back(fifoEmpty);
 
     if (auto almostFull = mem.getAlmostFullThreshold()) {
-      results.push_back(rewriter.create<comb::ICmpOp>(
-          loc, comb::ICmpPredicate::uge, count,
-          rewriter.create<hw::ConstantOp>(loc, countType, almostFull.value())));
+      results.push_back(
+          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::uge, count,
+                               hw::ConstantOp::create(rewriter, loc, countType,
+                                                      almostFull.value())));
       static_cast<Value>(results.back())
           .getDefiningOp()
           ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_almost_full"));
     }
 
     if (auto almostEmpty = mem.getAlmostEmptyThreshold()) {
-      results.push_back(rewriter.create<comb::ICmpOp>(
-          loc, comb::ICmpPredicate::ule, count,
-          rewriter.create<hw::ConstantOp>(loc, countType,
-                                          almostEmpty.value())));
+      results.push_back(
+          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::ule, count,
+                               hw::ConstantOp::create(rewriter, loc, countType,
+                                                      almostEmpty.value())));
       static_cast<Value>(results.back())
           .getDefiningOp()
           ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_almost_empty"));
     }
 
     // ====== Protocol checks =====
-    Value clkI1 = rewriter.create<seq::FromClockOp>(loc, clk);
+    Value clkI1 = seq::FromClockOp::create(rewriter, loc, clk);
     Value notEmptyAndRden = comb::createOrFoldNot(
-        loc, rewriter.create<comb::AndOp>(loc, adaptor.getRdEn(), fifoEmpty),
+        loc, comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), fifoEmpty),
         rewriter);
-    rewriter.create<verif::ClockedAssertOp>(
-        loc, notEmptyAndRden, verif::ClockEdge::Pos, clkI1, /*enable=*/Value(),
+    verif::ClockedAssertOp::create(
+        rewriter, loc, notEmptyAndRden, verif::ClockEdge::Pos, clkI1,
+        /*enable=*/Value(),
         rewriter.getStringAttr("FIFO empty when read enabled"));
     Value notFullAndWren = comb::createOrFoldNot(
-        loc, rewriter.create<comb::AndOp>(loc, adaptor.getWrEn(), fifoFull),
+        loc, comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), fifoFull),
         rewriter);
-    rewriter.create<verif::ClockedAssertOp>(
-        loc, notFullAndWren, verif::ClockEdge::Pos, clkI1,
+    verif::ClockedAssertOp::create(
+        rewriter, loc, notFullAndWren, verif::ClockEdge::Pos, clkI1,
         /*enable=*/Value(),
         rewriter.getStringAttr("FIFO full when write enabled"));
 

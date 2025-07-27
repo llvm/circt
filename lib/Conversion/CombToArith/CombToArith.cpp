@@ -123,11 +123,11 @@ struct ExtractOpConversion : OpConversionPattern<ExtractOp> {
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    Value lowBit = rewriter.create<arith::ConstantOp>(
-        op.getLoc(),
+    Value lowBit = arith::ConstantOp::create(
+        rewriter, op.getLoc(),
         IntegerAttr::get(adaptor.getInput().getType(), adaptor.getLowBit()));
     Value shifted =
-        rewriter.create<ShRUIOp>(op.getLoc(), adaptor.getInput(), lowBit);
+        ShRUIOp::create(rewriter, op.getLoc(), adaptor.getInput(), lowBit);
     rewriter.replaceOpWithNewOp<TruncIOp>(op, op.getResult().getType(),
                                           shifted);
     return success();
@@ -162,8 +162,8 @@ struct ConcatOpConversion : OpConversionPattern<ConcatOp> {
     unsigned offset = type.getIntOrFloatBitWidth();
     for (auto operand : adaptor.getOperands().drop_back()) {
       offset -= operand.getType().getIntOrFloatBitWidth();
-      auto offsetConst = rewriter.create<arith::ConstantOp>(
-          loc, IntegerAttr::get(type, offset));
+      auto offsetConst = arith::ConstantOp::create(
+          rewriter, loc, IntegerAttr::get(type, offset));
       auto extended = rewriter.createOrFold<ExtUIOp>(loc, type, operand);
       auto shifted = rewriter.createOrFold<ShLIOp>(loc, extended, offsetConst);
       aggregate = rewriter.createOrFold<OrIOp>(loc, aggregate, shifted);
@@ -201,14 +201,14 @@ struct DivOpConversion : OpConversionPattern<SourceOp> {
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
-    Value zero = rewriter.create<arith::ConstantOp>(
-        loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 0));
-    Value one = rewriter.create<arith::ConstantOp>(
-        loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 1));
-    Value isZero = rewriter.create<arith::CmpIOp>(loc, CmpIPredicate::eq,
-                                                  adaptor.getRhs(), zero);
+    Value zero = arith::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 0));
+    Value one = arith::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 1));
+    Value isZero = arith::CmpIOp::create(rewriter, loc, CmpIPredicate::eq,
+                                         adaptor.getRhs(), zero);
     Value divisor =
-        rewriter.create<arith::SelectOp>(loc, isZero, one, adaptor.getRhs());
+        arith::SelectOp::create(rewriter, loc, isZero, one, adaptor.getRhs());
     rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(), divisor);
     return success();
   }
@@ -229,7 +229,7 @@ struct VariadicOpConversion : OpConversionPattern<SourceOp> {
     Value runner = operands[0];
     for (Value operand :
          llvm::make_range(operands.begin() + 1, operands.end())) {
-      runner = rewriter.create<TargetOp>(op.getLoc(), runner, operand);
+      runner = TargetOp::create(rewriter, op.getLoc(), runner, operand);
     }
     rewriter.replaceOp(op, runner);
     return success();
@@ -254,10 +254,10 @@ struct LogicalShiftConversion : OpConversionPattern<SourceOp> {
     unsigned shifteeWidth =
         hw::type_cast<IntegerType>(adaptor.getLhs().getType())
             .getIntOrFloatBitWidth();
-    auto zeroConstOp = rewriter.create<arith::ConstantOp>(
-        op.getLoc(), IntegerAttr::get(adaptor.getLhs().getType(), 0));
-    auto maxShamtConstOp = rewriter.create<arith::ConstantOp>(
-        op.getLoc(),
+    auto zeroConstOp = arith::ConstantOp::create(
+        rewriter, op.getLoc(), IntegerAttr::get(adaptor.getLhs().getType(), 0));
+    auto maxShamtConstOp = arith::ConstantOp::create(
+        rewriter, op.getLoc(),
         IntegerAttr::get(adaptor.getLhs().getType(), shifteeWidth));
     auto shiftOp = rewriter.createOrFold<TargetOp>(
         op.getLoc(), adaptor.getLhs(), adaptor.getRhs());
@@ -281,8 +281,8 @@ struct ShrSOpConversion : OpConversionPattern<ShrSOp> {
         hw::type_cast<IntegerType>(adaptor.getLhs().getType())
             .getIntOrFloatBitWidth();
     // Clamp the shift amount to shifteeWidth - 1
-    auto maxShamtMinusOneConstOp = rewriter.create<arith::ConstantOp>(
-        op.getLoc(),
+    auto maxShamtMinusOneConstOp = arith::ConstantOp::create(
+        rewriter, op.getLoc(),
         IntegerAttr::get(adaptor.getLhs().getType(), shifteeWidth - 1));
     auto shamtOp = rewriter.createOrFold<MinUIOp>(op.getLoc(), adaptor.getRhs(),
                                                   maxShamtMinusOneConstOp);

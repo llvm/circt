@@ -601,9 +601,9 @@ static void buildComponentLike(OpBuilder &builder, OperationState &result,
   // Insert the WiresOp and ControlOp.
   IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(body);
-  builder.create<WiresOp>(result.location);
+  WiresOp::create(builder, result.location);
   if (!combinational)
-    builder.create<ControlOp>(result.location);
+    ControlOp::create(builder, result.location);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2437,12 +2437,12 @@ static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
   // this IfOp is nested in a ParOp. This avoids unintentionally
   // parallelizing the pulled out EnableOps.
   rewriter.setInsertionPointAfter(ifOp);
-  SeqOpTy seqOp = rewriter.create<SeqOpTy>(ifOp.getLoc());
+  SeqOpTy seqOp = SeqOpTy::create(rewriter, ifOp.getLoc());
   Block *body = seqOp.getBodyBlock();
   ifOp->remove();
   body->push_back(ifOp);
   rewriter.setInsertionPointToEnd(body);
-  rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->getGroupName());
+  EnableOp::create(rewriter, seqOp.getLoc(), lastThenEnableOp->getGroupName());
 
   // Erase the common EnableOp from the Then and Else regions.
   rewriter.eraseOp(*lastThenEnableOp);
@@ -2496,7 +2496,7 @@ static LogicalResult commonTailPatternWithPar(OpTy controlOp,
   // the pulled out EnableOps.
   rewriter.setInsertionPointAfter(controlOp);
 
-  ParOpTy parOp = rewriter.create<ParOpTy>(controlOp.getLoc());
+  ParOpTy parOp = ParOpTy::create(rewriter, controlOp.getLoc());
   Block *body = parOp.getBodyBlock();
   controlOp->remove();
   body->push_back(controlOp);
@@ -2504,7 +2504,7 @@ static LogicalResult commonTailPatternWithPar(OpTy controlOp,
   // counterparts in the Then and Else regions.
   rewriter.setInsertionPointToEnd(body);
   for (StringRef groupName : groupNames)
-    rewriter.create<EnableOp>(parOp.getLoc(), groupName);
+    EnableOp::create(rewriter, parOp.getLoc(), groupName);
 
   return success();
 }

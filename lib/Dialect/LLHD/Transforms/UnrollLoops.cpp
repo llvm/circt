@@ -268,7 +268,7 @@ void Loop::unroll(CFGLoopInfo &cfgLoopInfo) {
     pruner.eraseLaterIfUnused(iterIndVar);
     builder.setInsertionPointAfterValue(iterIndVar);
     iterIndVar.replaceAllUsesWith(
-        builder.create<hw::ConstantOp>(iterIndVar.getLoc(), indValue));
+        hw::ConstantOp::create(builder, iterIndVar.getLoc(), indValue));
 
     // Update all edges to the original loop header to point to the cloned loop
     // header. Leave the original back-edge untouched.
@@ -293,8 +293,8 @@ void Loop::unroll(CFGLoopInfo &cfgLoopInfo) {
       continueDestOperands = exitBranchOp.getFalseDestOperands();
     }
     builder.setInsertionPoint(exitBranchOp);
-    builder.create<cf::BranchOp>(exitBranchOp.getLoc(), continueDest,
-                                 continueDestOperands);
+    cf::BranchOp::create(builder, exitBranchOp.getLoc(), continueDest,
+                         continueDestOperands);
     pruner.eraseLaterIfUnused(exitBranchOp.getOperands());
     exitBranchOp.erase();
 
@@ -314,7 +314,7 @@ void Loop::unroll(CFGLoopInfo &cfgLoopInfo) {
   pruner.eraseLaterIfUnused(indVar);
   builder.setInsertionPointAfterValue(indVar);
   indVar.replaceAllUsesWith(
-      builder.create<hw::ConstantOp>(indVar.getLoc(), indValue));
+      hw::ConstantOp::create(builder, indVar.getLoc(), indValue));
   indVar = {};
 
   // Remove the continue edge of the exit branch in the loop body, since we
@@ -327,8 +327,8 @@ void Loop::unroll(CFGLoopInfo &cfgLoopInfo) {
     exitDestOperands = exitBranchOp.getFalseDestOperands();
   }
   builder.setInsertionPoint(exitBranchOp);
-  builder.create<cf::BranchOp>(exitBranchOp.getLoc(), exitDest,
-                               exitDestOperands);
+  cf::BranchOp::create(builder, exitBranchOp.getLoc(), exitDest,
+                       exitDestOperands);
   pruner.eraseLaterIfUnused(exitBranchOp.getOperands());
   exitBranchOp.erase();
   exitEdge = nullptr;

@@ -219,7 +219,7 @@ Vectorizer::vectorize(FindInitialVectorsPass::StatisticVars &stat) {
     // Now construct the `VectorizeOp`
     ImplicitLocOpBuilder builder(ops[0]->getLoc(), ops[0]);
     auto vectorizeOp =
-        builder.create<VectorizeOp>(resultTypes, operandValueRanges);
+        VectorizeOp::create(builder, resultTypes, operandValueRanges);
 
     // Now we have the operands, results and attributes, now we need to get
     // the blocks.
@@ -245,7 +245,7 @@ Vectorizer::vectorize(FindInitialVectorsPass::StatisticVars &stat) {
 
     auto *clonedOp = builder.clone(*ops[0], argMapping);
     // `VectorizeReturnOp`
-    builder.create<VectorizeReturnOp>(clonedOp->getResult(0));
+    VectorizeReturnOp::create(builder, clonedOp->getResult(0));
 
     // Now replace the original ops with the vectorized ops
     for (auto [op, result] : llvm::zip(ops, vectorizeOp->getResults())) {

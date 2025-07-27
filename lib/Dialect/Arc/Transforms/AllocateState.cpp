@@ -135,7 +135,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       if (!getter || !result.getDefiningOp<AllocStorageOp>()) {
         ImplicitLocOpBuilder builder(result.getLoc(), user);
         getter =
-            builder.create<StorageGetOp>(result.getType(), storage, offset);
+            StorageGetOp::create(builder, result.getType(), storage, offset);
         getters.push_back(getter);
         opOrder[getter] = userOrder;
       } else if (userOrder < opOrder.lookup(getter)) {
@@ -152,8 +152,8 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     storageOwner = cast<BlockArgument>(storage).getOwner()->getParentOp();
 
   if (storageOwner->isProperAncestor(block->getParentOp())) {
-    auto substorage = builder.create<AllocStorageOp>(
-        block->getParentOp()->getLoc(),
+    auto substorage = AllocStorageOp::create(
+        builder, block->getParentOp()->getLoc(),
         StorageType::get(&getContext(), currentByte), storage);
     for (auto *op : ops)
       op->replaceUsesOfWith(storage, substorage);

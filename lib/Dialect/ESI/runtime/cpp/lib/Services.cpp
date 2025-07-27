@@ -200,16 +200,21 @@ FuncService::Function *FuncService::Function::get(AppID id, BundleType *type,
 }
 
 void FuncService::Function::connect() {
+  if (connected)
+    throw std::runtime_error("Function is already connected");
   if (channels.size() != 2)
     throw std::runtime_error("FuncService must have exactly two channels");
   arg = &getRawWrite("arg");
   arg->connect();
   result = &getRawRead("result");
   result->connect();
+  connected = true;
 }
 
 std::future<MessageData>
 FuncService::Function::call(const MessageData &argData) {
+  if (!connected)
+    throw std::runtime_error("Function must be 'connect'ed before calling");
   std::scoped_lock<std::mutex> lock(callMutex);
   arg->write(argData);
   return result->readAsync();
@@ -235,7 +240,8 @@ CallService::Callback::Callback(AcceleratorConnection &acc, AppID id,
     : ServicePort(id, type, channels), acc(acc) {}
 
 CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
-                                                  AppID id, BundleType *type,
+                                                  AppID id,
+                                                  const BundleType *type,
                                                   WriteChannelPort &result,
                                                   ReadChannelPort &arg) {
   return new Callback(acc, id, type, {{"arg", arg}, {"result", result}});

@@ -148,10 +148,10 @@ static void setResetOperandOfStateOp(arc::StateOp stateOp,
   ImplicitLocOpBuilder builder(stateOp.getLoc(), stateOp);
 
   if (stateOp.getEnable())
-    resetCond = builder.create<comb::AndOp>(stateOp.getEnable(), resetCond);
+    resetCond = comb::AndOp::create(builder, stateOp.getEnable(), resetCond);
 
   if (stateOp.getReset())
-    resetCond = builder.create<comb::OrOp>(stateOp.getReset(), resetCond);
+    resetCond = comb::OrOp::create(builder, stateOp.getReset(), resetCond);
 
   stateOp.getResetMutable().assign(resetCond);
 }
@@ -192,25 +192,24 @@ applyEnableTransformation(arc::DefineOp arcOp, arc::StateOp stateOp,
 
   Value enableCond =
       stateOp.getInputs()[enableInfos[0].condition.getArgNumber()];
-  Value one = builder.create<hw::ConstantOp>(builder.getI1Type(), -1);
+  Value one = hw::ConstantOp::create(builder, builder.getI1Type(), -1);
   if (enableInfos[0].isDisable) {
     inputs[enableInfos[0].condition.getArgNumber()] =
-        builder.create<hw::ConstantOp>(builder.getI1Type(), 0);
-    enableCond = builder.create<comb::XorOp>(enableCond, one);
+        hw::ConstantOp::create(builder, builder.getI1Type(), 0);
+    enableCond = comb::XorOp::create(builder, enableCond, one);
   } else {
     inputs[enableInfos[0].condition.getArgNumber()] = one;
   }
 
   if (stateOp.getEnable())
-    enableCond = builder.create<comb::AndOp>(stateOp.getEnable(), enableCond);
+    enableCond = comb::AndOp::create(builder, stateOp.getEnable(), enableCond);
 
   stateOp.getEnableMutable().assign(enableCond);
 
   for (size_t i = 0, e = outputOp.getOutputs().size(); i < e; ++i) {
     if (enableInfos[i].selfArg.hasOneUse())
-      inputs[enableInfos[i].selfArg.getArgNumber()] =
-          builder.create<hw::ConstantOp>(stateOp.getLoc(),
-                                         enableInfos[i].selfArg.getType(), 0);
+      inputs[enableInfos[i].selfArg.getArgNumber()] = hw::ConstantOp::create(
+          builder, stateOp.getLoc(), enableInfos[i].selfArg.getType(), 0);
   }
 
   stateOp.getInputsMutable().assign(inputs);

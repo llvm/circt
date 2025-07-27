@@ -46,14 +46,14 @@ struct CompressOpConversion : OpConversionPattern<CompressOp> {
     Value operandRunner = operands[0];
     for (Value operand : operands.drop_front())
       operandRunner =
-          rewriter.create<smt::BVAddOp>(op.getLoc(), operandRunner, operand);
+          smt::BVAddOp::create(rewriter, op.getLoc(), operandRunner, operand);
 
     // Create free variables
     SmallVector<Value, 2> newResults;
     newResults.reserve(results.size());
     for (Value result : results) {
-      auto declareFunOp = rewriter.create<smt::DeclareFunOp>(
-          op.getLoc(), typeConverter->convertType(result.getType()));
+      auto declareFunOp = smt::DeclareFunOp::create(
+          rewriter, op.getLoc(), typeConverter->convertType(result.getType()));
       newResults.push_back(declareFunOp.getResult());
     }
 
@@ -61,13 +61,13 @@ struct CompressOpConversion : OpConversionPattern<CompressOp> {
     Value resultRunner = newResults.front();
     for (auto freeVar : llvm::drop_begin(newResults, 1))
       resultRunner =
-          rewriter.create<smt::BVAddOp>(op.getLoc(), resultRunner, freeVar);
+          smt::BVAddOp::create(rewriter, op.getLoc(), resultRunner, freeVar);
 
     // Assert sum operands == sum results (free variables)
     auto premise =
-        rewriter.create<smt::EqOp>(op.getLoc(), operandRunner, resultRunner);
+        smt::EqOp::create(rewriter, op.getLoc(), operandRunner, resultRunner);
     // Encode via an assertion (could be relaxed to an assumption).
-    rewriter.create<smt::AssertOp>(op.getLoc(), premise);
+    smt::AssertOp::create(rewriter, op.getLoc(), premise);
 
     if (newResults.size() != results.size())
       return rewriter.notifyMatchFailure(op, "expected same number of results");
@@ -93,14 +93,14 @@ struct PartialProductOpConversion : OpConversionPattern<PartialProductOp> {
 
     // Multiply the operands
     auto mulResult =
-        rewriter.create<smt::BVMulOp>(op.getLoc(), operands[0], operands[1]);
+        smt::BVMulOp::create(rewriter, op.getLoc(), operands[0], operands[1]);
 
     // Create free variables
     SmallVector<Value, 2> newResults;
     newResults.reserve(results.size());
     for (Value result : results) {
-      auto declareFunOp = rewriter.create<smt::DeclareFunOp>(
-          op.getLoc(), typeConverter->convertType(result.getType()));
+      auto declareFunOp = smt::DeclareFunOp::create(
+          rewriter, op.getLoc(), typeConverter->convertType(result.getType()));
       newResults.push_back(declareFunOp.getResult());
     }
 
@@ -108,13 +108,13 @@ struct PartialProductOpConversion : OpConversionPattern<PartialProductOp> {
     Value resultRunner = newResults.front();
     for (auto freeVar : llvm::drop_begin(newResults, 1))
       resultRunner =
-          rewriter.create<smt::BVAddOp>(op.getLoc(), resultRunner, freeVar);
+          smt::BVAddOp::create(rewriter, op.getLoc(), resultRunner, freeVar);
 
     // Assert product of operands == sum results (free variables)
     auto premise =
-        rewriter.create<smt::EqOp>(op.getLoc(), mulResult, resultRunner);
+        smt::EqOp::create(rewriter, op.getLoc(), mulResult, resultRunner);
     // Encode via an assertion (could be relaxed to an assumption).
-    rewriter.create<smt::AssertOp>(op.getLoc(), premise);
+    smt::AssertOp::create(rewriter, op.getLoc(), premise);
 
     if (newResults.size() != results.size())
       return rewriter.notifyMatchFailure(op, "expected same number of results");

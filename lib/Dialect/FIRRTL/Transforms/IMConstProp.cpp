@@ -976,7 +976,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
   // Separate the constants we insert from the instructions we are folding and
   // processing. Leave these as-is until we're done.
-  auto cursor = builder.create<firrtl::ConstantOp>(module.getLoc(), APSInt(1));
+  auto cursor = firrtl::ConstantOp::create(builder, module.getLoc(), APSInt(1));
   builder.setInsertionPoint(cursor);
 
   // Unique constants per <Const,Type> pair, inserted at entry
@@ -1002,7 +1002,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
              "Attempting to materialize rwprobe of constant, shouldn't happen");
       auto inner = getConst(constantValue, refType.getType(), loc);
       assert(inner);
-      cst = builder.create<RefSendOp>(loc, inner);
+      cst = RefSendOp::create(builder, loc, inner);
     } else
       cst = module->getDialect()->materializeConstant(builder, constantValue,
                                                       type, loc);
