@@ -241,4 +241,9 @@ void InlineSequencesPass::runOnOperation() {
 
   numSequencesInlined = inliner.numSequencesInlined;
   numSequencesInterleaved = inliner.numSequencesInterleaved;
+
+  if (removeSequenceDecls) {
+    for (auto op : llvm::make_early_inc_range(moduleOp.getOps<SequenceOp>()))
+      op.erase();
+  }
 }

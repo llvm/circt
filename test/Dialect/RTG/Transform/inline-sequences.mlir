@@ -1,10 +1,15 @@
-// RUN: circt-opt --rtg-inline-sequences --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --rtg-inline-sequences=remove-sequence-decls=false --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --rtg-inline-sequences=remove-sequence-decls=true --split-input-file --verify-diagnostics %s | FileCheck %s --check-prefix=CHECK-REMOVED
 
+// CHECK-LABEL: rtg.sequence @seq0
+// CHECK-REMOVED-NOT: rtg.sequence @seq0
 rtg.sequence @seq0() {
   rtgtest.rv32i.ebreak
   rtgtest.rv32i.ebreak
 }
 
+// CHECK-LABEL: rtg.sequence @seq1
+// CHECK-REMOVED-NOT: rtg.sequence @seq1
 rtg.sequence @seq1() {
   rtgtest.rv32i.ecall
   rtgtest.rv32i.ecall
@@ -58,6 +63,8 @@ rtg.test @interleaveSequences() {
   // CHECK-NEXT: }
 }
 
+// CHECK-LABEL: rtg.sequence @nested0
+// CHECK-REMOVED-NOT: rtg.sequence @nested0
 rtg.sequence @nested0() {
   %ra = rtg.fixed_reg #rtgtest.ra
   %sp = rtg.fixed_reg #rtgtest.s0
@@ -65,6 +72,8 @@ rtg.sequence @nested0() {
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
 
+// CHECK-LABEL: rtg.sequence @nested1
+// CHECK-REMOVED-NOT: rtg.sequence @nested1
 rtg.sequence @nested1() {
   %0 = rtg.get_sequence @nested0 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
@@ -90,6 +99,8 @@ rtg.test @nestedSequences() {
   rtg.embed_sequence %1
 }
 
+// CHECK-LABEL: rtg.sequence @seqWithArgs
+// CHECK-REMOVED-NOT: rtg.sequence @seqWithArgs
 rtg.sequence @seqWithArgs(%imm: !rtg.isa.immediate<12>, %seq: !rtg.randomized_sequence) {
   %sp = rtg.fixed_reg #rtgtest.sp
   rtgtest.rv32i.jalr %sp, %sp, %imm

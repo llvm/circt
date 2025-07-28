@@ -75,6 +75,11 @@ def InlineSequencesPass : Pass<"rtg-inline-sequences", "mlir::ModuleOp"> {
     ('interleave_sequences' operation).
   }];
 
+  let options = [
+    Option<"removeSequenceDecls", "remove-sequence-decls", "bool", "true",
+           "Whether to remove sequence declarations after inlining.">,
+  ];
+
   let statistics = [
     Statistic<"numSequencesInlined", "num-sequences-inlined",
       "Number of sequences inlined into another sequence or test.">,
