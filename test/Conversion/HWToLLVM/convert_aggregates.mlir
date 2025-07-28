@@ -76,6 +76,58 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
   return
 }
 
+// CHECK-LABEL: @convertArrayInject
+func.func @convertArrayInject(
+  %arg0: !hw.array<0xi32>, %arg1: !hw.array<1xi32>, %arg2: !hw.array<2xi32>, %arg3: !hw.array<5xi32>,
+  %arg4: i32, %arg5: i64, %arg6: i1, %arg7: i3) {
+  // CHECK-DAG: %[[CAST0:.*]] = builtin.unrealized_conversion_cast %arg0 : !hw.array<0xi32> to !llvm.array<0 x i32>
+  // CHECK-DAG: %[[CAST1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<1xi32> to !llvm.array<1 x i32>
+  // CHECK-DAG: %[[CAST2:.*]] = builtin.unrealized_conversion_cast %arg2 : !hw.array<2xi32> to !llvm.array<2 x i32>
+  // CHECK-DAG: %[[CAST3:.*]] = builtin.unrealized_conversion_cast %arg3 : !hw.array<5xi32> to !llvm.array<5 x i32>
+
+  // CHECK-NEXT: %[[ONE0:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[ALLOCA0:.*]] = llvm.alloca %[[ONE0]] x !llvm.array<0 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA0]] : !llvm.array<0 x i32>, !llvm.ptr
+  // CHECK-NEXT: %[[ZEXT0:.*]] = llvm.zext %arg5 : i64 to i65
+  // CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[ALLOCA0]][0, %[[ZEXT0]]] : (!llvm.ptr, i65) -> !llvm.ptr, !llvm.array<0 x i32>
+  // CHECK-NEXT: llvm.store %arg4, %[[GEP0]] : i32, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[ALLOCA0]] : !llvm.ptr -> !llvm.array<0 x i32>
+  %0 = hw.array_inject %arg0[%arg5], %arg4 : !hw.array<0xi32>, i64
+
+  // CHECK-NEXT: %[[ONE1:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[ALLOCA1:.*]] = llvm.alloca %[[ONE1]] x !llvm.array<1 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[CAST1]], %[[ALLOCA1]] : !llvm.array<1 x i32>, !llvm.ptr
+  // CHECK-NEXT: %[[ZEXT1:.*]] = llvm.zext %arg6 : i1 to i2
+  // CHECK-NEXT: %[[MAX1:.*]] = llvm.mlir.constant(0 : i32) : i2
+  // CHECK-NEXT: %[[UMIN1:.*]] = llvm.intr.umin(%[[ZEXT1]], %[[MAX1]]) : (i2, i2) -> i2
+  // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ALLOCA1]][0, %[[UMIN1]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<1 x i32>
+  // CHECK-NEXT: llvm.store %arg4, %[[GEP1]] : i32, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[ALLOCA1]] : !llvm.ptr -> !llvm.array<1 x i32>
+  %1 = hw.array_inject %arg1[%arg6], %arg4 : !hw.array<1xi32>, i1
+
+  // CHECK-NEXT: %[[ONE2:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[ALLOCA2:.*]] = llvm.alloca %[[ONE2]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[CAST2]], %[[ALLOCA2]] : !llvm.array<2 x i32>, !llvm.ptr
+  // CHECK-NEXT: %[[ZEXT2:.*]] = llvm.zext %arg6 : i1 to i2
+  // CHECK-NEXT: %[[GEP2:.*]] = llvm.getelementptr %[[ALLOCA2]][0, %[[ZEXT2]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
+  // CHECK-NEXT: llvm.store %arg4, %[[GEP2]] : i32, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[ALLOCA2]] : !llvm.ptr -> !llvm.array<2 x i32>
+  %2 = hw.array_inject %arg2[%arg6], %arg4 : !hw.array<2xi32>, i1
+
+  // CHECK-NEXT: %[[ONE3:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[ALLOCA3:.*]] = llvm.alloca %[[ONE3]] x !llvm.array<5 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[CAST3]], %[[ALLOCA3]] : !llvm.array<5 x i32>, !llvm.ptr
+  // CHECK-NEXT: %[[ZEXT3:.*]] = llvm.zext %arg7 : i3 to i4
+  // CHECK-NEXT: %[[MAX3:.*]] = llvm.mlir.constant(4 : i32) : i4
+  // CHECK-NEXT: %[[UMIN3:.*]] = llvm.intr.umin(%[[ZEXT3]], %[[MAX3]]) : (i4, i4) -> i4
+  // CHECK-NEXT: %[[GEP3:.*]] = llvm.getelementptr %[[ALLOCA3]][0, %[[UMIN3]]] : (!llvm.ptr, i4) -> !llvm.ptr, !llvm.array<5 x i32>
+  // CHECK-NEXT: llvm.store %arg4, %[[GEP3]] : i32, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[ALLOCA3]] : !llvm.ptr -> !llvm.array<5 x i32>
+  %3 = hw.array_inject %arg3[%arg7], %arg4 : !hw.array<5xi32>, i3
+
+  return
+}
+
 // CHECK: llvm.mlir.global internal constant @[[GLOB1:.+]](dense<[1, 0]> : tensor<2xi32>) {addr_space = 0 : i32} : !llvm.array<2 x i32>
 
 // CHECK: llvm.mlir.global internal constant @[[GLOB2:.+]](dense<{{[[][[]}}3, 2], [1, 0{{[]][]]}}> : tensor<2x2xi32>) {addr_space = 0 : i32} : !llvm.array<2 x array<2 x i32>>

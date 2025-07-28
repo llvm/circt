@@ -157,6 +157,18 @@ struct ArrayInjectOpConversion
 
     auto arrTy = typeConverter->convertType(op.getInput().getType());
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
+    const size_t numElems =
+        cast<hw::ArrayType>(op.getInput().getType()).getNumElements();
+
+    if (numElems != 0 && (numElems == 1 || !llvm::isPowerOf2_64(numElems))) {
+      // Clamp index to prevent OOB access.
+      auto indexMax = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), zextIndex.getType(),
+          rewriter.getI32IntegerAttr(numElems - 1));
+      zextIndex =
+          rewriter.create<LLVM::UMinOp>(op->getLoc(), zextIndex, indexMax);
+    }
+
     auto gep = rewriter.create<LLVM::GEPOp>(
         op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), arrTy,
         arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
