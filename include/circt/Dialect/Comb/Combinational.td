@@ -331,3 +331,28 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
 
   let hasVerifier = 1;
 }
+
+def ReverseOp : CombOp<"reverse", [
+    SameOperandsAndResultType,
+    Pure
+]> {
+  let summary = "Reverses the bit order of an integer value";
+
+  let description = [{
+    Reverses the bit ordering of a value. The LSB becomes the MSB and vice versa.
+
+    Example:
+    ```mlir
+      %out = comb.reverse %in : i4
+    ```
+    If %in is 4'b1101, then %out is 4'b1011.
+  }];
+
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
