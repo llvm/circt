@@ -85,7 +85,8 @@ hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : i2, i4
 
-  // CHECK: wire [15:0] w2 = {6'h0, in4, clock, clock, in4};
+  // CHECK: wire [15:0] w2;
+  // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
   // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
   %tmp = comb.extract %in4 from 3 : (i4) -> i1
   %tmp2 = comb.replicate %tmp : (i1) -> i2
