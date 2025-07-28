@@ -108,6 +108,15 @@ void SequenceOp::print(OpAsmPrinter &p) {
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false);
 }
 
+mlir::SymbolTable::Visibility SequenceOp::getVisibility() {
+  return mlir::SymbolTable::Visibility::Private;
+}
+
+void SequenceOp::setVisibility(mlir::SymbolTable::Visibility visibility) {
+  // Do nothing, always private.
+  assert(false && "cannot change visibility of sequence");
+}
+
 //===----------------------------------------------------------------------===//
 // GetSequenceOp
 //===----------------------------------------------------------------------===//
