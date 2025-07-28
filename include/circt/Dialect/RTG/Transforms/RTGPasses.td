@@ -84,7 +84,7 @@ def InlineSequencesPass : Pass<"rtg-inline-sequences", "mlir::ModuleOp"> {
 }
 
 def LinearScanRegisterAllocationPass : Pass<
-    "rtg-linear-scan-register-allocation", "rtg::TestOp"> {
+    "rtg-linear-scan-register-allocation"> {
 
   let summary = "simple linear scan register allocation for RTG";
   let description = [{
@@ -100,7 +100,7 @@ def LinearScanRegisterAllocationPass : Pass<
   ];
 }
 
-def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels", "mlir::ModuleOp"> {
+def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels"> {
   let summary = "lower label_unique_decl to label_decl operations";
   let description = [{
     This pass lowers label_unique_decl operations to label_decl operations by
@@ -114,7 +114,7 @@ def LowerUniqueLabelsPass : Pass<"rtg-lower-unique-labels", "mlir::ModuleOp"> {
   ];
 }
 
-def UniqueValidateOpsPass : Pass<"rtg-unique-validate", "mlir::ModuleOp"> {
+def UniqueValidateOpsPass : Pass<"rtg-unique-validate"> {
   let summary = "compute unique IDs for validate operations";
   let description = [{
     This pass visits all 'rtg.validate' operations without an ID attribute and
