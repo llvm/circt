@@ -261,10 +261,22 @@ PYBIND11_MODULE(esiCppAccel, m) {
              // emits an error.
              return f.valid();
            })
-      .def("wait", &std::future<MessageData>::wait)
+      .def("wait",
+           [](std::future<MessageData> &f) {
+             // Yield the GIL while waiting for the future to complete, in case
+             // of python callbacks occuring from other threads while waiting.
+             py::gil_scoped_release release{};
+             f.wait();
+           })
       .def("get", [](std::future<MessageData> &f) {
-        MessageData data = f.get();
-        return py::bytearray((const char *)data.getBytes(), data.getSize());
+        std::optional<MessageData> data;
+        {
+          // Yield the GIL while waiting for the future to complete, in case of
+          // python callbacks occuring from other threads while waiting.
+          py::gil_scoped_release release{};
+          data.emplace(f.get());
+        }
+        return py::bytearray((const char *)data->getBytes(), data->getSize());
       });
 
   py::class_<ChannelPort>(m, "ChannelPort")
