@@ -169,6 +169,7 @@ struct ArrayInjectOpConversion : OpConversionPattern<ArrayInjectOp> {
     if (!arrType)
       return rewriter.notifyMatchFailure(op.getLoc(), "unsupported array type");
 
+    Value oobVal = mlir::smt::DeclareFunOp::create(rewriter, loc, arrType);
     // Check if the index is within bounds
     Value numElementsVal = mlir::smt::BVConstantOp::create(
         rewriter, loc, numElements - 1, llvm::Log2_64_Ceil(numElements));
@@ -181,10 +182,8 @@ struct ArrayInjectOpConversion : OpConversionPattern<ArrayInjectOp> {
         rewriter, loc, adaptor.getInput(), adaptor.getIndex(),
         adaptor.getElement());
 
-    // Return the original array if out of bounds, otherwise return the new
-    // array
-    rewriter.replaceOpWithNewOp<mlir::smt::IteOp>(op, inBounds, stored,
-                                                  adaptor.getInput());
+    // Return unbounded array if out of bounds
+    rewriter.replaceOpWithNewOp<mlir::smt::IteOp>(op, inBounds, stored, oobVal);
     return success();
   }
 };
