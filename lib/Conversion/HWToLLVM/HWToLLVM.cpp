@@ -148,7 +148,7 @@ struct ArrayInjectOpConversion
   matchAndRewrite(hw::ArrayInjectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto inputType = cast<hw::ArrayType>(op.getInput().getType());
-    auto oldArrTy = typeConverter->convertType(inputType);
+    auto oldArrTy = adaptor.getInput().getType();
     auto newArrTy = oldArrTy;
     const size_t arrElems = inputType.getNumElements();
 
