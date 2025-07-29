@@ -78,7 +78,7 @@ inline void registerAllPasses() {
   msft::registerPasses();
   om::registerPasses();
   pipeline::registerPasses();
-  rtg::registerPasses();
+  rtg::registerRTGPasses();
   seq::registerPasses();
   sim::registerPasses();
   ssp::registerPasses();
