@@ -21,6 +21,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -696,6 +697,7 @@ def TestOp : RTGOp<"test", [
   Symbol,
   SingleBlock,
   NoTerminator,
+  Emittable,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   HasParent<"mlir::ModuleOp">,

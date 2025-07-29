@@ -197,4 +197,39 @@ def PrintTestNamesPass : Pass<"rtg-print-test-names", "mlir::ModuleOp"> {
   ];
 }
 
+def InsertTestToFileMappingPass : Pass<"rtg-insert-test-to-file-mapping",
+                                       "mlir::ModuleOp"> {
+  let summary = "insert Emit dialect ops to prepare for emission";
+  let description = [{
+    This pass inserts emit dialect operations to group tests to output files.
+    All tests can be put in a single output file, each test in its own file, or
+    tests can be grouped according to some properties (e.g., machine mode vs.
+    user mode tests) (TODO).
+  }];
+
+  let options = [
+    Option<"splitOutput", "split-output", "bool", /*default=*/"false",
+      "If 'true' emits one file per 'rtg.test' in the IR. The name of the "
+      "file matches the test name and is placed in 'path'. Otherwise, path "
+      "is interpreted as the full file path including filename.">,
+    Option<"path", "path", "std::string", /*default=*/"",
+      "The directory or file path in which the output files should be "
+      "created. If empty is is emitted to stderr (not allowed if "
+      "'split-output' is set to 'true')">,
+  ];
+
+  let dependentDialects = ["emit::EmitDialect"];
+}
+
+def SimpleTestInlinerPass : Pass<"rtg-simple-test-inliner", "mlir::ModuleOp"> {
+  let summary = "inline test contents";
+  let description = [{
+    This is a simple pass to inline test contents into 'emit.file' operations
+    in which they are referenced. No "glue code" is inserted between tests
+    added to the same file. Thus this pass is not intended to be used in a
+    production pipeline but just to bring the IR into a structure understood by
+    the RTG ISA assembly emission pass to avoid making that pass more complex.
+  }];
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD
