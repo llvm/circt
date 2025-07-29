@@ -1831,7 +1831,9 @@ FIRRTL version 6.0.0
 circuit CatSign:
   public module CatExp:
     ; expected-error @below {{all operands must have same signedness}}
-    node n = cat(UInt<1>(0), SInt<1>(0))
+    node n = cat(UInt<1>(0),
+    ; expected-note @below {{operand with different signedness is here}}
+                 SInt<1>(0))
 
 // -----
 FIRRTL version 6.0.0
@@ -1839,4 +1841,6 @@ circuit CatSign:
   public module CatExp:
     input a: UInt<1>[1]
     ; expected-error @below {{all operands must be Int type}}
-    node n = cat(UInt<1>(0), a)
+    node n = cat(UInt<1>(0),
+    ; expected-note @below {{non-integer operand is here}}
+                 a)
