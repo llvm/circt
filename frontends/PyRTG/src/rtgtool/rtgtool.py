@@ -155,7 +155,11 @@ def compile(mlir_module: ir.Module, args: argparse.Namespace) -> None:
     if args.output_format == OutputFormat.ELABORATED:
       return pm
 
-    pm.add(f'rtg-emit-isa-assembly{{path={args.output_path}}}')
+    pm.add(
+        f'rtg-insert-test-to-file-mapping{{split-output=false path={args.output_path}}}'
+    )
+    pm.add('rtg-simple-test-inliner')
+    pm.add('emit.file(rtg-emit-isa-assembly)')
     return pm
 
   get_populated_pm().run(mlir_module.operation)

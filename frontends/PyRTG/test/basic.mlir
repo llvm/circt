@@ -17,9 +17,9 @@
 // ELABORATED-NEXT: rtg.label
 // ELABORATED-NEXT: }
 
-// ASM: Begin of test0
+// ASM: Begin of test 'test0_singleton'
 // ASM: label_string:
-// ASM: End of test0
+// ASM: End of test 'test0_singleton'
 rtg.sequence @seq0() {
   %0 = rtg.label_decl "label_string"
   rtg.label local %0

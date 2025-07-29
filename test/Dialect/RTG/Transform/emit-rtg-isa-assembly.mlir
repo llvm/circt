@@ -1,12 +1,12 @@
 // RUN: circt-opt --rtg-emit-isa-assembly %s 2>&1 >/dev/null | FileCheck %s --check-prefix=CHECK-ALLOWED --match-full-lines --strict-whitespace
 // RUN: circt-opt --rtg-emit-isa-assembly="unsupported-instructions=rtgtest.rv32i.ebreak,rtgtest.rv32i.ecall unsupported-instructions-file=%S/unsupported-instr.txt" %s 2>&1 >/dev/null | FileCheck %s --match-full-lines --strict-whitespace
 
-// CHECK:# Begin of test0
-// CHECK-EMPTY:
-// CHECK-ALLOWED:# Begin of test0
-// CHECK-ALLOWED-EMPTY:
+// CHECK:    # Begin of test0
+// CHECK-ALLOWED:    # Begin of test0
 
-rtg.test @test0() {
+emit.file "" {
+  rtg.comment "Begin of test0"
+
   %rd = rtg.fixed_reg #rtgtest.ra
   %rs = rtg.fixed_reg #rtgtest.s0
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
@@ -214,13 +214,9 @@ rtg.test @test0() {
   // CHECK-NEXT:    # srai ra, s0, 31
   // CHECK-NEXT:    .word 0x41F45093
   rtgtest.rv32i.srai %rd, %rs, %imm5
-
-  // CHECK-ALLOWED-NEXT:    # this is a comment
-  // CHECK-NEXT:    # this is a comment
-  rtg.comment "this is a comment"
+  
+  rtg.comment "End of test0"
 }
 
-// CHECK-EMPTY:
-// CHECK-NEXT:# End of test0
-// CHECK-ALLOWED-EMPTY:
-// CHECK-ALLOWED-NEXT:# End of test0
+// CHECK-NEXT:    # End of test0
+// CHECK-ALLOWED-NEXT:    # End of test0

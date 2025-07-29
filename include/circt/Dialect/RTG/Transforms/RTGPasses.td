@@ -35,28 +35,24 @@ def ElaborationPass : Pass<"rtg-elaborate", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::index::IndexDialect"];
 }
 
-def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "mlir::ModuleOp"> {
-  let summary = "Elaborate the contexts of RTG";
+def EmitRTGISAAssemblyPass : Pass<"rtg-emit-isa-assembly", "emit::FileOp"> {
+  let summary = "emits the instructions in a format understood by assemblers";
   let description = [{
-    Emits all 'rtg.test's in the IR in a format understood by assemblers.
+    This pass expects all instructions to be inside 'emit.file' operations with
+    an appropriate filename attribute. There are two special filenames:
+    - "-" means that the output should be emitted to stdout.
+    - "" means that the output should be emitted to stderr.
+
+    In order to operate on 'emit.file' operations in parallel, the pass
+    requires that all 'emit.file' operations have a unique filename (this is not
+    checked by the pass and violations will result in race conditions).
 
     There are two options to specify lists of instructions that are not
     supported by the assembler. For instructions in any of those lists, this
     pass will emit the equivalent binary representation.
-
-    This pass operates on the `InstructionOpInterface` and folds constant-like
-    operations to support downstream dialects.
   }];
 
   let options = [
-    Option<"splitOutput", "split-output", "bool", /*default=*/"false",
-      "If 'true' emits one file per 'rtg.test' in the IR. The name of the "
-      "file matches the test name and is placed in 'path'. Otherwise, path "
-      "is interpreted as the full file path including filename.">,
-    Option<"path", "path", "std::string", /*default=*/"",
-      "The directory or file path in which the output files should be "
-      "created. If empty is is emitted to stderr (not allowed if "
-      "'split-output' is set to 'true')">,
     Option<"unsupportedInstructionsFile", "unsupported-instructions-file",
       "std::string", /*default=*/"",
       "An absolute path to a file with a list of instruction names not "
