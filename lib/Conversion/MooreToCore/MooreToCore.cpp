@@ -1599,6 +1599,7 @@ static void populateLegality(ConversionTarget &target,
   target.addIllegalDialect<MooreDialect>();
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<hw::HWDialect>();
+  target.addLegalDialect<seq::SeqDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
   target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<mlir::BuiltinDialect>();
