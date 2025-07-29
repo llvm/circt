@@ -20,7 +20,7 @@ extern "C" {
 //===----------------------------------------------------------------------===//
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(RTG, rtg);
-MLIR_CAPI_EXPORTED void registerRTGPasses(void);
+MLIR_CAPI_EXPORTED void registerRTGPipelines(void);
 
 //===----------------------------------------------------------------------===//
 // Type API.
@@ -188,5 +188,7 @@ MLIR_CAPI_EXPORTED MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt,
 #ifdef __cplusplus
 }
 #endif
+
+#include "circt/Dialect/RTG/Transforms/RTGPasses.capi.h.inc"
 
 #endif // CIRCT_C_DIALECT_RTG_H

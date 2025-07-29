@@ -13,6 +13,7 @@
 #include "circt/Dialect/RTG/Transforms/RTGPassPipelines.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 
+#include "mlir/CAPI/Pass.h"
 #include "mlir/CAPI/Registration.h"
 
 using namespace circt;
@@ -24,10 +25,7 @@ using namespace circt::rtg;
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTG, rtg, RTGDialect)
 
-void registerRTGPasses() {
-  circt::rtg::registerPasses();
-  circt::rtg::registerPipelines();
-}
+void registerRTGPipelines() { circt::rtg::registerPipelines(); }
 
 //===----------------------------------------------------------------------===//
 // Type API.
@@ -283,3 +281,9 @@ bool rtgAttrIsAAnyContextAttr(MlirAttribute attr) {
 MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt, MlirType type) {
   return wrap(AnyContextAttr::get(unwrap(ctxt), unwrap(type)));
 }
+
+//===----------------------------------------------------------------------===//
+// Passes
+//===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/RTG/Transforms/RTGPasses.capi.cpp.inc"
