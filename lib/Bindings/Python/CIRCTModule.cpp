@@ -202,8 +202,6 @@ NB_MODULE(_circt, m) {
   circt::python::populateDialectOMSubmodule(om);
   nb::module_ rtg = m.def_submodule("_rtg", "RTG API");
   circt::python::populateDialectRTGSubmodule(rtg);
-  nb::module_ rtgtool = m.def_submodule("_rtgtool", "RTGTool API");
-  circt::python::populateDialectRTGToolSubmodule(rtgtool);
 #ifdef CIRCT_INCLUDE_TESTS
   nb::module_ rtgtest = m.def_submodule("_rtgtest", "RTGTest API");
   circt::python::populateDialectRTGTestSubmodule(rtgtest);

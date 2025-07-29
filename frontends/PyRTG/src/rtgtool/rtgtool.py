@@ -12,7 +12,7 @@ import os
 from types import ModuleType
 
 import pyrtg
-from pyrtg.circt import ir, passmanager, rtgtool_support, register_dialects
+from pyrtg.circt import ir, passmanager, register_dialects
 
 
 class InputFormat(Enum):
@@ -25,22 +25,15 @@ class InputFormat(Enum):
   PYTHON = 'py'
 
 
-def to_output_format(format: str) -> rtgtool_support.OutputFormat:
+class OutputFormat(Enum):
   """
-  Convert the CLI argument choice string of the output format to the enum
-  understood by the CIRCT python bindings and thus also the C++ backend.
+  The output formats accepted by this tool. The enum's values correspond to the
+  selectable CLI argument choice, but not necessarily the file extension.
   """
 
-  if format == "mlir":
-    return rtgtool_support.OutputFormat.MLIR
-
-  if format == "elaborated":
-    return rtgtool_support.OutputFormat.ELABORATED_MLIR
-
-  if format == "asm":
-    return rtgtool_support.OutputFormat.ASM
-
-  assert False, "all output format options must be handled above"
+  MLIR = 'mlir'
+  ELABORATED = 'elaborated'
+  ASM = 'asm'
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,18 +57,14 @@ def parse_args() -> argparse.Namespace:
                       type=bool,
                       default=True,
                       help="Run the verifier after each transformation pass")
-  parser.add_argument("--verbose-pass-executions",
-                      type=bool,
-                      default=False,
-                      help="Log executions of toplevel module passes")
   parser.add_argument("--input-format",
                       type=InputFormat,
                       choices=list(InputFormat),
                       help="Input Format")
   parser.add_argument("--output-format",
-                      type=str,
-                      choices=output_format_choices,
-                      default="asm",
+                      type=OutputFormat,
+                      choices=list(OutputFormat),
+                      default=OutputFormat.ASM,
                       help="Output Format")
   parser.add_argument(
       "-o",
@@ -88,6 +77,13 @@ def parse_args() -> argparse.Namespace:
                       type=bool,
                       default=True,
                       help="Lower memories as immediates")
+  parser.add_argument(
+      "--mlir-timing",
+      type=bool,
+      nargs='?',
+      default=False,
+      const=True,
+      help="Print pass timings of the MLIR compilation pipeline")
 
   args = parser.parse_args()
 
@@ -142,17 +138,27 @@ def compile(mlir_module: ir.Module, args: argparse.Namespace) -> None:
   Populate and run the MLIR compilation pipeline according to the CLI arguments.
   """
 
-  pm = passmanager.PassManager()
-  options = rtgtool_support.Options(
-      seed=args.seed,
-      verify_passes=args.verify_passes,
-      verbose_pass_execution=args.verbose_pass_executions,
-      output_format=to_output_format(args.output_format),
-      output_path=args.output_path,
-      split_output=False,
-      memories_as_immediates=args.memories_as_immediates)
-  rtgtool_support.populate_randomizer_pipeline(pm, options)
-  pm.run(mlir_module.operation)
+  def get_populated_pm():
+    pm = passmanager.PassManager()
+    pm.enable_verifier(args.verify_passes)
+    if args.mlir_timing:
+      pm.enable_timing()
+    pm.add('any(cse,canonicalize)')
+
+    if args.output_format == OutputFormat.MLIR:
+      return pm
+
+    pm.add(
+        f'rtg-randomization-pipeline{{seed={args.seed} memories-as-immediates={str(args.memories_as_immediates).lower()}}}'
+    )
+
+    if args.output_format == OutputFormat.ELABORATED:
+      return pm
+
+    pm.add(f'rtg-emit-isa-assembly{{path={args.output_path}}}')
+    return pm
+
+  get_populated_pm().run(mlir_module.operation)
 
 
 def print_output(mlir_module: ir.Module, args: argparse.Namespace) -> None:
@@ -161,7 +167,7 @@ def print_output(mlir_module: ir.Module, args: argparse.Namespace) -> None:
   """
 
   # The assembly emitter does print to the desired output itself, so we don't need to do anything here.
-  if to_output_format(args.output_format) == rtgtool_support.OutputFormat.ASM:
+  if args.output_format == OutputFormat.ASM:
     return
 
   if len(args.output_path) == 0:

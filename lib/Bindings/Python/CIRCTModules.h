@@ -24,7 +24,6 @@ void populateDialectHWSubmodule(nanobind::module_ &m);
 void populateDialectMSFTSubmodule(nanobind::module_ &m);
 void populateDialectOMSubmodule(nanobind::module_ &m);
 void populateDialectRTGSubmodule(nanobind::module_ &m);
-void populateDialectRTGToolSubmodule(nanobind::module_ &m);
 #ifdef CIRCT_INCLUDE_TESTS
 void populateDialectRTGTestSubmodule(nanobind::module_ &m);
 #endif

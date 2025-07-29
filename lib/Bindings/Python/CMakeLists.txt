@@ -21,7 +21,6 @@ set(PYTHON_BINDINGS_SOURCES
   MSFTModule.cpp
   OMModule.cpp
   RTGModule.cpp
-  RTGToolModule.cpp
   SeqModule.cpp
   SupportModule.cpp
   SVModule.cpp
@@ -50,7 +49,6 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIOM
   CIRCTCAPIPipeline
   CIRCTCAPIRTG
-  CIRCTCAPIRtgTool
   CIRCTCAPISeq
   CIRCTCAPISV
   CIRCTCAPISupport
@@ -103,7 +101,6 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources.Support
   ADD_TO_PARENT CIRCTBindingsPythonSources
   SOURCES
     support.py
-    rtgtool_support.py
 )
 
 ################################################################################
