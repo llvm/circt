@@ -9,12 +9,10 @@ class Target(Config):
   mem_blk = Param(loader=lambda: MemoryBlock.declare(0, 31, 32))
 
 
-# CHECK-LABEL: Begin of test0
-# CHECK-EMPTY:
+# CHECK-LABEL: Begin of test 'test0_Target'
 # CHECK-NEXT: la t0, 0
 # CHECK-NEXT: la t1, 8
-# CHECK-EMPTY:
-# CHECK-NEXT: End of test0
+# CHECK-NEXT: End of test 'test0_Target'
 
 
 @test(Target)

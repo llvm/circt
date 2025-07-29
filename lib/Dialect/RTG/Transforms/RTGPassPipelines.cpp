@@ -27,13 +27,15 @@ void circt::rtg::buildRandomizationPipeline(
     pm.addPass(rtg::createElaborationPass(passOptions));
   }
   pm.addPass(rtg::createInlineSequencesPass());
+  pm.addPass(createSymbolDCEPass());
   {
+    auto &testPm = pm.nest<rtg::TestOp>();
     MemoryAllocationPassOptions passOptions;
     passOptions.useImmediates = options.memoriesAsImmediates;
-    pm.addNestedPass<rtg::TestOp>(rtg::createMemoryAllocationPass());
+    testPm.addPass(rtg::createMemoryAllocationPass(passOptions));
+    testPm.addPass(rtg::createLowerUniqueLabelsPass());
+    testPm.addPass(rtg::createLinearScanRegisterAllocationPass());
   }
-  pm.addPass(rtg::createLowerUniqueLabelsPass());
-  pm.addNestedPass<rtg::TestOp>(rtg::createLinearScanRegisterAllocationPass());
   {
     auto &anyPm = pm.nestAny();
     anyPm.addPass(mlir::createCSEPass());

@@ -98,8 +98,8 @@ def seq2(set):
 # ELABORATED-LABEL: rtg.test @test0
 # ELABORATED-NEXT: }
 
-# ASM-LABEL: Begin of test0
-# ASM: End of test0
+# ASM-LABEL: Begin of test 'test0
+# ASM: End of test 'test0
 
 
 @test(Singleton)
@@ -119,11 +119,9 @@ def test0(config):
 # CHECK-NEXT: rtg.label local
 # CHECK-NEXT: }
 
-# ASM-LABEL: Begin of test1_args
-# ASM-EMPTY:
+# ASM-LABEL: Begin of test 'test1_args
 # ASM-NEXT: L_0:
-# ASM-EMPTY:
-# ASM: End of test1_args
+# ASM: End of test 'test1_args
 
 
 @test(Tgt0)
@@ -220,8 +218,7 @@ def test1_args(config):
 
 # ELABORATED-NEXT: }
 
-# ASM-LABEL: Begin of test2_labels
-# ASM-EMPTY:
+# ASM-LABEL: Begin of test 'test2_labels
 # ASM-NEXT: .global l0
 # ASM-NEXT: l0:
 # ASM-NEXT: .extern l1_0
@@ -244,8 +241,7 @@ def test1_args(config):
 
 # ASM-NEXT: # this is a comment
 
-# ASM-EMPTY:
-# ASM: End of test2_labels
+# ASM: End of test 'test2_labels
 
 
 @test(Singleton)

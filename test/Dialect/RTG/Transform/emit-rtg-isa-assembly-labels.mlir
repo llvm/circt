@@ -1,9 +1,8 @@
 // RUN: circt-opt --rtg-emit-isa-assembly %s 2>&1 >/dev/null | FileCheck %s --match-full-lines --strict-whitespace
 
-// CHECK:# Begin of test0
-// CHECK-EMPTY:
-
-rtg.test @test0() {
+emit.file "" {
+  // CHECK:    # Begin of test0
+  rtg.comment "Begin of test0"
   %rd = rtg.fixed_reg #rtgtest.ra
   %rs = rtg.fixed_reg #rtgtest.s0
   %label = rtg.label_decl "label_name"
@@ -36,6 +35,3 @@ rtg.test @test0() {
   // CHECK-NEXT:    jal ra, label_name
   rtgtest.rv32i.jal %rd, %label : !rtg.isa.label
 }
-
-// CHECK-EMPTY:
-// CHECK-NEXT:# End of test0
