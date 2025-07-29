@@ -59,9 +59,7 @@ func.func @simpleDiamond(%arg0: i1, %arg1: i64) {
 // CHECK:           %[[VAL_24:.*]] = arith.index_cast %[[VAL_9]] : i1 to index
 // CHECK:           %[[VAL_25:.*]] = br %[[VAL_23]] : none
 // CHECK:           %[[VAL_26:.*]] = mux %[[VAL_3]] {{\[}}%[[VAL_22]], %[[VAL_25]]] : i1, none
-// CHECK:           %[[VAL_27:.*]] = constant %[[VAL_26]] {value = true} : i1
-// CHECK:           %[[VAL_28:.*]] = arith.xori %[[VAL_3]], %[[VAL_27]] : i1
-// CHECK:           %[[VAL_29:.*]] = arith.index_cast %[[VAL_28]] : i1 to index
+// CHECK:           %[[VAL_29:.*]] = arith.index_cast %[[VAL_3]] : i1 to index
 // CHECK:           return %[[VAL_26]] : none
 // CHECK:         }
 func.func @nestedDiamond(%arg0: i1) {
@@ -329,9 +327,7 @@ func.func @simple_loop(%arg0: i64) {
 // CHECK:           %[[VAL_44:.*]] = arith.index_cast %[[VAL_9]] : i1 to index
 // CHECK:           %[[VAL_45:.*]] = br %[[VAL_43]] : none
 // CHECK:           %[[VAL_46:.*]] = mux %[[VAL_3]] {{\[}}%[[VAL_38]], %[[VAL_45]]] : i1, none
-// CHECK:           %[[VAL_47:.*]] = constant %[[VAL_46]] {value = true} : i1
-// CHECK:           %[[VAL_48:.*]] = arith.xori %[[VAL_3]], %[[VAL_47]] : i1
-// CHECK:           %[[VAL_49:.*]] = arith.index_cast %[[VAL_48]] : i1 to index
+// CHECK:           %[[VAL_49:.*]] = arith.index_cast %[[VAL_3]] : i1 to index
 // CHECK:           return %[[VAL_46]] : none
 // CHECK:         }
 func.func @blockWith3PredsAndLoop(%arg0: i1) {
@@ -394,9 +390,7 @@ func.func @blockWith3PredsAndLoop(%arg0: i1) {
 // CHECK:           %[[VAL_44:.*]] = arith.index_cast %[[VAL_9]] : i1 to index
 // CHECK:           %[[VAL_45:.*]] = br %[[VAL_43]] : none
 // CHECK:           %[[VAL_46:.*]] = mux %[[VAL_3]] {{\[}}%[[VAL_42]], %[[VAL_45]]] : i1, none
-// CHECK:           %[[VAL_47:.*]] = constant %[[VAL_46]] {value = true} : i1
-// CHECK:           %[[VAL_48:.*]] = arith.xori %[[VAL_3]], %[[VAL_47]] : i1
-// CHECK:           %[[VAL_49:.*]] = arith.index_cast %[[VAL_48]] : i1 to index
+// CHECK:           %[[VAL_49:.*]] = arith.index_cast %[[VAL_3]] : i1 to index
 // CHECK:           return %[[VAL_46]] : none
 // CHECK:         }
 func.func @otherBlockOrder(%arg0: i1) {
@@ -455,9 +449,7 @@ func.func @otherBlockOrder(%arg0: i1) {
 // CHECK:           %[[VAL_40:.*]] = arith.index_cast %[[VAL_15]] : i1 to index
 // CHECK:           %[[VAL_41:.*]] = br %[[VAL_39]] : none
 // CHECK:           %[[VAL_42:.*]] = mux %[[VAL_4]] {{\[}}%[[VAL_38]], %[[VAL_41]]] : i1, none
-// CHECK:           %[[VAL_43:.*]] = constant %[[VAL_42]] {value = true} : i1
-// CHECK:           %[[VAL_44:.*]] = arith.xori %[[VAL_4]], %[[VAL_43]] : i1
-// CHECK:           %[[VAL_45:.*]] = arith.index_cast %[[VAL_44]] : i1 to index
+// CHECK:           %[[VAL_45:.*]] = arith.index_cast %[[VAL_4]] : i1 to index
 // CHECK:           return %[[VAL_42]] : none
 // CHECK:         }
 func.func @multiple_block_args(%arg0: i1, %arg1: i64) {
