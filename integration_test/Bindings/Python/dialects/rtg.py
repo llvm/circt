@@ -6,7 +6,6 @@ import circt
 from circt.dialects import rtg, rtgtest
 from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr, IndexType
 from circt.passmanager import PassManager
-from circt import rtgtool_support as rtgtool
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -77,11 +76,7 @@ with Context() as ctx, Location.unknown():
   print(m)
 
   pm = PassManager()
-  options = rtgtool.Options(
-      seed=0,
-      output_format=rtgtool.OutputFormat.ELABORATED_MLIR,
-  )
-  rtgtool.populate_randomizer_pipeline(pm, options)
+  pm.add('rtg-randomization-pipeline{seed=0}')
   pm.run(m.operation)
 
   # CHECK: rtg.test @test_name_target() template "test_name" target @target {

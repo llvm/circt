@@ -70,20 +70,6 @@ target_link_libraries(circt-capi-arc-test
   CIRCTCAPIArc
 )
 
-add_llvm_executable(circt-capi-rtg-pipelines-test
-  PARTIAL_SOURCES_INTENDED
-  rtg-pipelines.c
-)
-llvm_update_compile_flags(circt-capi-rtg-pipelines-test)
-
-target_link_libraries(circt-capi-rtg-pipelines-test
-  PRIVATE
-
-  MLIRCAPIIR
-  CIRCTCAPIRTG
-  CIRCTCAPIRtgTool
-)
-
 add_llvm_executable(circt-capi-rtg-test
   PARTIAL_SOURCES_INTENDED
   rtg.c
