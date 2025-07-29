@@ -42,11 +42,10 @@ struct LowerUniqueLabelsPass
 } // namespace
 
 void LowerUniqueLabelsPass::runOnOperation() {
-  auto moduleOp = getOperation();
   Namespace labelNames;
 
   // Collect all the label names in a first iteration.
-  moduleOp.walk([&](Operation *op) {
+  getOperation()->walk([&](Operation *op) {
     if (auto labelDecl = dyn_cast<LabelDeclOp>(op))
       labelNames.add(labelDecl.getFormatString());
     else if (auto labelDecl = dyn_cast<LabelUniqueDeclOp>(op))
@@ -54,7 +53,7 @@ void LowerUniqueLabelsPass::runOnOperation() {
   });
 
   // Lower the unique labels in a second iteration.
-  moduleOp.walk([&](LabelUniqueDeclOp op) {
+  getOperation()->walk([&](LabelUniqueDeclOp op) {
     // Convert 'rtg.label_unique_decl' to 'rtg.label_decl' by choosing a unique
     // name based on the set of names we collected during elaboration.
     IRRewriter rewriter(op);

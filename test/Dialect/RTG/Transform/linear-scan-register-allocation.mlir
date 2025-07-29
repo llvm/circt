@@ -1,4 +1,4 @@
-// RUN: circt-opt --rtg-linear-scan-register-allocation --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline="builtin.module(rtg.test(rtg-linear-scan-register-allocation))" --split-input-file --verify-diagnostics %s | FileCheck %s
 
 // CHECK-LABEL: @test0
 rtg.test @test0() {

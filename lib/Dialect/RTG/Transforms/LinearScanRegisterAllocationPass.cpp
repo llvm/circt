@@ -62,14 +62,21 @@ static void expireOldInterval(SmallVector<RegisterLiveRange *> &active,
 }
 
 void LinearScanRegisterAllocationPass::runOnOperation() {
-  auto testOp = getOperation();
-
-  LLVM_DEBUG(llvm::dbgs() << "=== Processing test @" << testOp.getSymName()
+  LLVM_DEBUG(llvm::dbgs() << "=== Processing "
+                          << OpWithFlags(getOperation(),
+                                         OpPrintingFlags().skipRegions())
                           << "\n\n");
+
+  if (getOperation()->getNumRegions() != 1 ||
+      getOperation()->getRegion(0).getBlocks().size() != 1) {
+    getOperation()->emitError("expected a single region with a single block");
+    return signalPassFailure();
+  }
 
   DenseMap<Operation *, unsigned> opIndices;
   unsigned maxIdx;
-  for (auto [i, op] : llvm::enumerate(*testOp.getBody())) {
+  for (auto [i, op] :
+       llvm::enumerate(getOperation()->getRegion(0).getBlocks().front())) {
     // TODO: ideally check that the IR is already fully elaborated
     opIndices[&op] = i;
     maxIdx = i;
@@ -78,7 +85,7 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
   // Collect all the register intervals we have to consider.
   SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
   SmallVector<RegisterLiveRange *> active;
-  for (auto &op : *testOp.getBody()) {
+  for (auto &op : getOperation()->getRegion(0).getBlocks().front()) {
     if (!isa<rtg::FixedRegisterOp, rtg::VirtualRegisterOp>(&op))
       continue;
 

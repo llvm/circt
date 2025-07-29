@@ -35,12 +35,11 @@ struct UniqueValidateOpsPass
 } // namespace
 
 void UniqueValidateOpsPass::runOnOperation() {
-  auto moduleOp = getOperation();
   Namespace names;
   SmallVector<ValidateOp> validateOps;
 
   // Collect all the already fixed names in a first iteration.
-  moduleOp.walk([&](ValidateOp op) {
+  getOperation()->walk([&](ValidateOp op) {
     if (op.getId().has_value())
       names.add(op.getId().value());
     else
