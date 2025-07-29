@@ -147,34 +147,50 @@ struct ArrayInjectOpConversion
   LogicalResult
   matchAndRewrite(hw::ArrayInjectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto oneC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
-    auto arrPtr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
-        adaptor.getInput().getType(), oneC,
-        /*alignment=*/4);
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
+    auto inputType = cast<hw::ArrayType>(op.getInput().getType());
+    auto oldArrTy = typeConverter->convertType(inputType);
+    auto newArrTy = oldArrTy;
+    const size_t arrElems = inputType.getNumElements();
 
-    auto arrTy = typeConverter->convertType(op.getInput().getType());
-    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
-    const size_t numElems =
-        cast<hw::ArrayType>(op.getInput().getType()).getNumElements();
-
-    if (numElems != 0 && (numElems == 1 || !llvm::isPowerOf2_64(numElems))) {
-      // Clamp index to prevent OOB access.
-      auto indexMax = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), zextIndex.getType(),
-          rewriter.getI32IntegerAttr(numElems - 1));
-      zextIndex =
-          rewriter.create<LLVM::UMinOp>(op->getLoc(), zextIndex, indexMax);
+    if (arrElems == 0) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
     }
 
+    auto oneC = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
+    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
+
+    Value arrPtr;
+    if (arrElems == 1 || !llvm::isPowerOf2_64(arrElems)) {
+      // Clamp index to prevent OOB access. We add an extra element to the
+      // array so that OOB access modifies this element, leaving the original
+      // array intact.
+      auto maxIndex = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), zextIndex.getType(),
+          rewriter.getI32IntegerAttr(arrElems));
+      zextIndex =
+          rewriter.create<LLVM::UMinOp>(op->getLoc(), zextIndex, maxIndex);
+
+      newArrTy = typeConverter->convertType(
+          hw::ArrayType::get(inputType.getElementType(), arrElems + 1));
+      arrPtr = rewriter.create<LLVM::AllocaOp>(
+          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+          newArrTy, oneC, /*alignment=*/4);
+    } else {
+      arrPtr = rewriter.create<LLVM::AllocaOp>(
+          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+          newArrTy, oneC, /*alignment=*/4);
+    }
+
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
+
     auto gep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), arrTy,
-        arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+        newArrTy, arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
 
     rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getElement(), gep);
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, arrTy, arrPtr);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, oldArrTy, arrPtr);
     return success();
   }
 };
