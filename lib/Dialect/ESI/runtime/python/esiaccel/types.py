@@ -448,14 +448,27 @@ class FunctionPort(BundlePort):
     self.cpp_port.connect()
     self.connected = True
 
-  def call(self, **kwargs: Any) -> Future:
+  def call(self, *args: Any, **kwargs: Any) -> Future:
     """Call the function with the given argument and returns a future of the
     result."""
-    valid, reason = self.arg_type.is_valid(kwargs)
+
+    # Accept either positional or keyword arguments, but not both.
+    if len(args) > 0 and len(kwargs) > 0:
+      raise ValueError("cannot use both positional and keyword arguments")
+
+    # Handle arguments: for single positional arg, unwrap it from tuple
+    if len(args) == 1:
+      selected = args[0]
+    elif len(args) > 1:
+      selected = args
+    else:
+      selected = kwargs
+
+    valid, reason = self.arg_type.is_valid(selected)
     if not valid:
       raise ValueError(
-          f"'{kwargs}' cannot be converted to '{self.arg_type}': {reason}")
-    arg_bytes: bytearray = self.arg_type.serialize(kwargs)
+          f"'{selected}' cannot be converted to '{self.arg_type}': {reason}")
+    arg_bytes: bytearray = self.arg_type.serialize(selected)
     cpp_future = self.cpp_port.call(arg_bytes)
     return MessageFuture(self.result_type, cpp_future)
 
