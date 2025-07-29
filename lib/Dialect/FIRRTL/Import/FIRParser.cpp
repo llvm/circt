@@ -2691,11 +2691,27 @@ ParseResult FIRStmtParser::parseCatExp(Value &result) {
 
   auto loc = getToken().getLoc();
   SmallVector<Value, 3> operands;
+  std::optional<bool> isSigned;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         Value operand;
         locationProcessor.setLoc(loc);
+        auto operandLoc = getToken().getLoc();
         if (parseExp(operand, "expected expression in cat expression"))
           return failure();
+        if (!type_isa<IntType>(operand.getType())) {
+          auto diag = emitError(loc, "all operands must be Int type");
+          diag.attachNote(translateLocation(operandLoc))
+              << "non-integer operand is here";
+          return failure();
+        }
+        if (!isSigned)
+          isSigned = type_isa<SIntType>(operand.getType());
+        else if (type_isa<SIntType>(operand.getType()) != *isSigned) {
+          auto diag = emitError(loc, "all operands must have same signedness");
+          diag.attachNote(translateLocation(operandLoc))
+              << "operand with different signedness is here";
+          return failure();
+        }
 
         operands.push_back(operand);
         return success();
