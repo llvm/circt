@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_RTG_IR_RTGOPS_H
 #define CIRCT_DIALECT_RTG_IR_RTGOPS_H
 
+#include "circt/Dialect/Emit/EmitOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGAttrInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
