@@ -46,7 +46,7 @@ def ConstantOp : RTGOp<"constant", [
 
 def SequenceOp : RTGOp<"sequence", [
   IsolatedFromAbove,
-  Symbol,
+  DeclareOpInterfaceMethods<Symbol, ["getVisibility", "setVisibility"]>,
   SingleBlock,
   NoTerminator,
   HasParent<"mlir::ModuleOp">,
