@@ -560,16 +560,12 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return WalkResult::interrupt();
 
     // Strip layer requirements from any op that might represent a probe.
-    if (auto wire = dyn_cast<WireOp>(op)) {
-      removeLayersFromValue(wire.getResult());
-      return WalkResult::advance();
-    }
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
+    for (auto result : op->getResults())
+      removeLayersFromValue(result);
+
+    // If the op is an instance, clear the enablelayers attribute.
+    if (auto instance = dyn_cast<InstanceOp>(op))
       instance.setLayers({});
-      for (auto result : instance.getResults())
-        removeLayersFromValue(result);
-      return WalkResult::advance();
-    }
 
     auto layerBlock = dyn_cast<LayerBlockOp>(op);
     if (!layerBlock)
