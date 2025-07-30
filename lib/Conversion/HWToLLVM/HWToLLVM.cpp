@@ -136,6 +136,67 @@ struct StructExtractOpConversion
 } // namespace
 
 namespace {
+/// Convert an ArrayInjectOp to the LLVM dialect.
+/// Pattern: array_inject(input, element, index) =>
+///   store(gep(store(input, alloca), zext(index)), element)
+///   load(alloca)
+struct ArrayInjectOpConversion
+    : public ConvertOpToLLVMPattern<hw::ArrayInjectOp> {
+  using ConvertOpToLLVMPattern<hw::ArrayInjectOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::ArrayInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto inputType = cast<hw::ArrayType>(op.getInput().getType());
+    auto oldArrTy = adaptor.getInput().getType();
+    auto newArrTy = oldArrTy;
+    const size_t arrElems = inputType.getNumElements();
+
+    if (arrElems == 0) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
+    }
+
+    auto oneC = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
+    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
+
+    Value arrPtr;
+    if (arrElems == 1 || !llvm::isPowerOf2_64(arrElems)) {
+      // Clamp index to prevent OOB access. We add an extra element to the
+      // array so that OOB access modifies this element, leaving the original
+      // array intact.
+      auto maxIndex = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), zextIndex.getType(),
+          rewriter.getI32IntegerAttr(arrElems));
+      zextIndex =
+          rewriter.create<LLVM::UMinOp>(op->getLoc(), zextIndex, maxIndex);
+
+      newArrTy = typeConverter->convertType(
+          hw::ArrayType::get(inputType.getElementType(), arrElems + 1));
+      arrPtr = rewriter.create<LLVM::AllocaOp>(
+          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+          newArrTy, oneC, /*alignment=*/4);
+    } else {
+      arrPtr = rewriter.create<LLVM::AllocaOp>(
+          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+          newArrTy, oneC, /*alignment=*/4);
+    }
+
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
+
+    auto gep = rewriter.create<LLVM::GEPOp>(
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+        newArrTy, arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
+
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getElement(), gep);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, oldArrTy, arrPtr);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 /// Convert an ArrayGetOp to the LLVM dialect.
 /// Pattern: array_get(input, index) =>
 ///   load(gep(store(input, alloca), zext(index)))
@@ -660,9 +721,10 @@ void circt::populateHWToLLVMConversionPatterns(
   patterns.add<BitcastOpConversion>(converter);
 
   // Extraction operation conversion patterns.
-  patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
-               ArrayConcatOpConversion, StructExplodeOpConversion,
-               StructExtractOpConversion, StructInjectOpConversion>(converter);
+  patterns.add<ArrayInjectOpConversion, ArrayGetOpConversion,
+               ArraySliceOpConversion, ArrayConcatOpConversion,
+               StructExplodeOpConversion, StructExtractOpConversion,
+               StructInjectOpConversion>(converter);
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
