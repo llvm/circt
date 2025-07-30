@@ -6555,7 +6555,7 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// Format Sring operations
+// Format String operations
 //===----------------------------------------------------------------------===//
 
 void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
