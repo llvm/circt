@@ -194,7 +194,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
     // directory as the backend DLL to the DLL search path.)
     backendPath.clear();
 
-    // Attempt to load it.
+  // Attempt to load it.
 #ifdef __linux__
   void *handle = dlopen(backendPathStr.c_str(), RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
@@ -210,8 +210,9 @@ static void loadBackend(Context &ctxt, std::string backend) {
   if (backendPath != std::filesystem::path()) {
     std::filesystem::path backendPathParent = backendPath.parent_path();
     // If backendPath has no parent directory (e.g., it's a relative path or
-    // a filename without a directory), fallback to the current working directory.
-    // This ensures a valid directory is used for setting the DLL search path.
+    // a filename without a directory), fallback to the current working
+    // directory. This ensures a valid directory is used for setting the DLL
+    // search path.
     if (backendPathParent.empty())
       backendPathParent = std::filesystem::current_path();
     logger.debug("CONNECT", "setting DLL search directory to: " +
