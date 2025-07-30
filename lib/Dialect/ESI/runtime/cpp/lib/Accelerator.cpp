@@ -276,15 +276,15 @@ std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
     if (f == registry.end()) {
       esi::ServiceImplDetails details;
       details["backend"] = backend;
-      std::string loaded_backends;
+      std::ostringstream loaded_backends;
       bool first = true;
       for (const auto &b : registry) {
         if (!first)
-          loaded_backends += ", ";
-        loaded_backends += b.first;
+          loaded_backends << ", ";
+        loaded_backends << b.first;
         first = false;
       }
-      details["loaded_backends"] = loaded_backends;
+      details["loaded_backends"] = loaded_backends.str();
       ctxt.getLogger().error("CONNECT", "backend '" + backend + "' not found",
                              &details);
       throw std::runtime_error("Backend '" + backend + "' not found");
