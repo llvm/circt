@@ -311,7 +311,7 @@ firrtl.circuit "Test" {
   // XMR Ref ops used by force_initial are cloned.
   //
   // CHECK:      firrtl.module private @XmrRef_A()
-  // CHECK-NEXT:   %0 = firrtl.xmr.ref @XmrRef_path : !firrtl.rwprobe<uint<1>, @A>
+  // CHECK-NEXT:   %0 = firrtl.xmr.ref @XmrRef_path : !firrtl.rwprobe<uint<1>>
   // CHECK-NEXT:   %a = firrtl.wire
   // CHECK-NEXT:   %c1_ui1 = firrtl.constant 1
   // CHECK-NEXT:   firrtl.ref.force_initial %c1_ui1, %0, %c1_ui1

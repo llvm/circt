@@ -473,6 +473,18 @@ static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
   return missing.empty();
 }
 
+static LogicalResult checkLayerCompatibility(
+    Operation *op, const LayerSet &src, const LayerSet &dst,
+    const Twine &errorMsg,
+    const Twine &noteMsg = Twine("missing layer requirements")) {
+  SmallVector<SymbolRefAttr> missing;
+  if (isLayerSetCompatibleWith(src, dst, missing))
+    return success();
+  interleaveComma(missing, op->emitOpError(errorMsg).attachNote()
+                               << noteMsg << ": ");
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -1658,16 +1670,8 @@ LogicalResult FExtModuleOp::verify() {
         referenced.insert(layer);
   }
 
-  SmallVector<SymbolRefAttr> missing;
-  if (!isLayerSetCompatibleWith(referenced, known, missing)) {
-    auto diag = emitOpError("references unknown layers");
-    auto &note = diag.attachNote();
-    note << "unknown layers: ";
-    interleaveComma(missing, note);
-    return failure();
-  }
-
-  return success();
+  return checkLayerCompatibility(getOperation(), referenced, known,
+                                 "references unknown layers", "unknown layers");
 }
 
 LogicalResult FIntModuleOp::verify() {
@@ -3895,15 +3899,10 @@ LogicalResult RefDefineOp::verify() {
   auto ambientLayers = getAmbientLayersAt(getOperation());
   auto dstLayers = getLayersFor(getDest());
   SmallVector<SymbolRefAttr> missingLayers;
-  if (!isLayerSetCompatibleWith(ambientLayers, dstLayers, missingLayers)) {
-    auto diag = emitOpError("has more layer requirements than destination");
-    auto &note = diag.attachNote();
-    note << "additional layers required: ";
-    interleaveComma(missingLayers, note);
-    return failure();
-  }
 
-  return success();
+  return checkLayerCompatibility(getOperation(), ambientLayers, dstLayers,
+                                 "has more layer requirements than destination",
+                                 "additional layers required");
 }
 
 LogicalResult PropAssignOp::verify() {
@@ -6275,31 +6274,18 @@ FIRRTLType RefSubOp::inferReturnType(Type type, uint32_t fieldIndex,
 LogicalResult RefCastOp::verify() {
   auto srcLayers = getLayersFor(getInput());
   auto dstLayers = getLayersFor(getResult());
-  SmallVector<SymbolRefAttr> missingLayers;
-  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
-    auto diag =
-        emitOpError("cannot discard layer requirements of input reference");
-    auto &note = diag.attachNote();
-    note << "discarding layer requirements: ";
-    llvm::interleaveComma(missingLayers, note);
-    return failure();
-  }
-  return success();
+  return checkLayerCompatibility(
+      getOperation(), srcLayers, dstLayers,
+      "cannot discard layer requirements of input reference",
+      "discarding layer requirements");
 }
 
 LogicalResult RefResolveOp::verify() {
   auto srcLayers = getLayersFor(getRef());
   auto dstLayers = getAmbientLayersAt(getOperation());
-  SmallVector<SymbolRefAttr> missingLayers;
-  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
-    auto diag =
-        emitOpError("ambient layers are insufficient to resolve reference");
-    auto &note = diag.attachNote();
-    note << "missing layer requirements: ";
-    interleaveComma(missingLayers, note);
-    return failure();
-  }
-  return success();
+  return checkLayerCompatibility(
+      getOperation(), srcLayers, dstLayers,
+      "ambient layers are insufficient to resolve reference");
 }
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
@@ -6344,6 +6330,38 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
         .attachNote(symOp.getLoc())
         .append("target here");
   return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
+}
+
+LogicalResult RefForceOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to force its reference");
+}
+
+LogicalResult RefForceInitialOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to force its reference");
+}
+
+LogicalResult RefReleaseOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to release its reference");
+}
+
+LogicalResult RefReleaseInitialOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to release its reference");
 }
 
 LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -6494,7 +6512,7 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// Format Sring operations
+// Format String operations
 //===----------------------------------------------------------------------===//
 
 void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

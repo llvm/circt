@@ -169,3 +169,74 @@ firrtl.circuit "Top" {
     }
   }
 }
+
+// -----
+
+// Forcing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %c : !firrtl.clock, in %e : !firrtl.uint<1>, in %v : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{has insufficient ambient layers to force its reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.force %c, %e, %p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Releasing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %c : !firrtl.clock, in %e : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{has insufficient ambient layers to release its reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.release %c, %e, %p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>
+  }
+}
+// -----
+
+// Force-initial-ing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %e : !firrtl.uint<1>, in %v : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{has insufficient ambient layers to force its reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.force_initial %e, %p, %v : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Release-initial-ing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %e : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{has insufficient ambient layers to release its reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.release_initial %e, %p : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>
+  }
+}
