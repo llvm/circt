@@ -69,6 +69,12 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(ZLIB)
 set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
 set(ZLIB_LIBRARY zlibstatic)
+if(UNIX)
+  target_compile_options(zlibstatic
+    PRIVATE
+      -fPIC
+  )
+endif()
 
 # fmt is used for logging and formatting messages.
 if (NOT TARGET fmt::fmt-header-only)
@@ -178,15 +184,7 @@ if (DEFINED ZLIB_INCLUDE_DIR)
   target_include_directories(ESICppRuntime PRIVATE
     ${ZLIB_INCLUDE_DIR})
 endif()
-if(WIN32 AND TARGET zlib)
-  # On windows, DLLs must be in the same directory (or system directory) to be
-  # found. Windows doesn't have the equivalent of rpath.
-  add_custom_command(TARGET ESICppRuntime POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      $<TARGET_FILE:zlib>
-      ${CMAKE_CURRENT_BINARY_DIR}
-  )
-endif()
+
 target_link_libraries(ESICppRuntime PRIVATE
   ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
