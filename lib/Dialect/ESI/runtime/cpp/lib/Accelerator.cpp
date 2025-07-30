@@ -161,29 +161,27 @@ static void loadBackend(Context &ctxt, std::string backend) {
 #endif
 
   // Look for library using the C++ std API.
-  // TODO: once the runtime has a logging framework, log the paths we are
-  // trying.
 
   // First, try the current directory.
   std::filesystem::path backendPath = backendFileName;
   std::string backendPathStr;
   logger.debug("CONNECT",
-               "trying to load backend plugin: " + backendPath.string());
+               "trying to find backend plugin: " + backendPath.string());
   if (!std::filesystem::exists(backendPath)) {
     // Next, try the directory of the executable.
     backendPath = getExePath().parent_path().append(backendFileName);
     logger.debug("CONNECT",
-                 "trying to load backend plugin: " + backendPath.string());
+                 "trying to find backend plugin: " + backendPath.string());
     if (!std::filesystem::exists(backendPath)) {
       // Finally, try the directory of the library.
       backendPath = getLibPath().parent_path().append(backendFileName);
       logger.debug("CONNECT",
-                   "trying to load backend plugin: " + backendPath.string());
+                   "trying to find backend plugin: " + backendPath.string());
       if (!std::filesystem::exists(backendPath)) {
         // If all else fails, just try the name.
         backendPathStr = backendFileName;
         logger.debug("CONNECT",
-                     "trying to load backend plugin: " + backendPathStr);
+                     "trying to find backend plugin: " + backendPathStr);
       }
     }
   }
@@ -211,6 +209,10 @@ static void loadBackend(Context &ctxt, std::string backend) {
   // has transitive dependencies.
   if (backendPath != std::filesystem::path()) {
     std::filesystem::path backendPathParent = backendPath.parent_path();
+    if (backendPathParent.empty())
+      backendPathParent = std::filesystem::current_path();
+    logger.debug("CONNECT", "setting DLL search directory to: " +
+                                backendPathParent.string());
     if (SetDllDirectoryA(backendPathParent.string().c_str()) == 0)
       throw std::runtime_error("While setting DLL directory: " +
                                std::to_string(GetLastError()));
@@ -269,7 +271,19 @@ std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
     loadBackend(ctxt, backend);
     f = registry.find(backend);
     if (f == registry.end()) {
-      ctxt.getLogger().error("CONNECT", "backend '" + backend + "' not found");
+      esi::ServiceImplDetails details;
+      details["backend"] = backend;
+      std::string loaded_backends;
+      bool first = true;
+      for (const auto &b : registry) {
+        if (!first)
+          loaded_backends += ", ";
+        loaded_backends += b.first;
+        first = false;
+      }
+      details["loaded_backends"] = loaded_backends;
+      ctxt.getLogger().error("CONNECT", "backend '" + backend + "' not found",
+                             &details);
       throw std::runtime_error("Backend '" + backend + "' not found");
     }
   }
