@@ -55,30 +55,20 @@ if (NOT TARGET nlohmann_json)
   FetchContent_MakeAvailable(json)
 endif()
 
-if(ESI_STATIC_RUNTIME)
-  set(ZLIB_USE_STATIC_LIBS ON)
-endif()
-
-# We need zlib to uncompress the manifest.
-find_package(ZLIB)
-if(ZLIB_FOUND)
-  set(ZLIB_LIBRARY ZLIB::ZLIB)
-else()
-  message("-- zlib not found, pulling down zlib from git")
-  set(ZLIB_BUILD_EXAMPLES OFF)
-  FetchContent_Declare(
-    ZLIB
-    GIT_REPOSITORY https://github.com/madler/zlib.git
-    GIT_TAG        v1.3.1
-  )
-  FetchContent_MakeAvailable(ZLIB)
-  set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
-  if(ESI_STATIC_RUNTIME)
-    set(ZLIB_LIBRARY zlibstatic)
-  else()
-    set(ZLIB_LIBRARY zlib)
-  endif()
-endif()
+# We need zlib to uncompress the manifest. We build it statically to avoid
+# conflicts with local zlib versions, and since we don't export anything zlib
+# related in our public headers.
+message("-- pulling down zlib from git")
+set(ZLIB_USE_STATIC_LIBS ON)
+set(ZLIB_BUILD_EXAMPLES OFF)
+FetchContent_Declare(
+  ZLIB
+  GIT_REPOSITORY https://github.com/madler/zlib.git
+  GIT_TAG        v1.3.1
+)
+FetchContent_MakeAvailable(ZLIB)
+set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+set(ZLIB_LIBRARY zlibstatic)
 
 # fmt is used for logging and formatting messages.
 if (NOT TARGET fmt::fmt-header-only)
@@ -197,7 +187,7 @@ if(WIN32 AND TARGET zlib)
       ${CMAKE_CURRENT_BINARY_DIR}
   )
 endif()
-target_link_libraries(ESICppRuntime PUBLIC
+target_link_libraries(ESICppRuntime PRIVATE
   ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
 )
@@ -223,7 +213,6 @@ install(TARGETS ESICppRuntime
   DESTINATION ${ESIRT_INSTALL_LIBDIR}
   RUNTIME_DEPENDENCIES
     PRE_EXCLUDE_REGEXES .*
-    PRE_INCLUDE_REGEXES zlibd zlib libz
   COMPONENT ESIRuntime
 )
 
@@ -380,7 +369,6 @@ if(Python3_FOUND)
     install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
       PRE_EXCLUDE_REGEXES .*
-      PRE_INCLUDE_REGEXES zlibd zlib
       COMPONENT ESIRuntime
     )
 
