@@ -226,16 +226,28 @@ static void loadBackend(Context &ctxt, std::string backend) {
   HMODULE handle = LoadLibraryA(backendPathStr.c_str());
   if (!handle) {
     DWORD error = GetLastError();
-    if (error == ERROR_MOD_NOT_FOUND) {
-      logger.error("CONNECT", "while attempting to load backend plugin: " +
-                                  backendPathStr + " not found");
-      throw std::runtime_error("While attempting to load backend plugin: " +
-                               backendPathStr + " not found");
+    // Get the error message string
+    LPSTR messageBuffer = nullptr;
+    size_t size = FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPSTR)&messageBuffer, 0, nullptr);
+
+    std::string errorMessage;
+    if (size > 0 && messageBuffer != nullptr) {
+      errorMessage = std::string(messageBuffer, size);
+      LocalFree(messageBuffer);
+    } else {
+      errorMessage = "Unknown error";
     }
-    logger.error("CONNECT", "while attempting to load backend plugin: " +
-                                std::to_string(error));
-    throw std::runtime_error("While attempting to load backend plugin: " +
-                             std::to_string(error));
+
+    std::string fullError = "While attempting to load backend plugin '" +
+                            backendPathStr + "': " + errorMessage +
+                            " (error code: " + std::to_string(error) + ")";
+
+    logger.error("CONNECT", fullError);
+    throw std::runtime_error(fullError);
   }
 #else
 #eror "Unsupported platform"
