@@ -26,7 +26,7 @@ rtg.get_sequence @seq0 : !rtg.sequence
 rtg.sequence @seq0(%arg0: index) { }
 
 // expected-error @below {{referenced 'rtg.sequence' op's type does not match}}
-"rtg.get_sequence"() <{sequence="seq0"}> : () -> !rtg.sequence
+"rtg.get_sequence"() <{sequence=@seq0}> : () -> !rtg.sequence
 
 // -----
 

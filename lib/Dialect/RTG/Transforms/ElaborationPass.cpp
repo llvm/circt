@@ -1316,7 +1316,7 @@ public:
     SmallVector<ElaboratorValue> replacements;
     state[op.getResult()] =
         sharedState.internalizer.internalize<SequenceStorage>(
-            op.getSequenceAttr(), std::move(replacements));
+            op.getSequenceAttr().getAttr(), std::move(replacements));
     return DeletionKind::Delete;
   }
 

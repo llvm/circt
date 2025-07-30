@@ -81,7 +81,7 @@ struct SequenceInliner
   }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
-    auto seqOp = table.lookup<SequenceOp>(op.getSequenceAttr());
+    auto seqOp = table.lookup<SequenceOp>(op.getSequenceAttr().getAttr());
     if (!seqOp)
       return op->emitError() << "referenced sequence not found";
 

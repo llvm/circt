@@ -88,7 +88,7 @@ def GetSequenceOp : RTGOp<"get_sequence", [
     of the main ways to do randomization.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sequence);
+  let arguments = (ins FlatSymbolRefAttr:$sequence);
   let results = (outs SequenceType:$ref);
 
   let assemblyFormat = "$sequence `:` qualified(type($ref)) attr-dict";
