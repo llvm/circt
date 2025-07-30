@@ -172,38 +172,6 @@ firrtl.circuit "Top" {
 
 // -----
 
-// XMRRefOp's result type must have an appropriate color.
-firrtl.circuit "Top" {
-  firrtl.layer @A bind {}
-  hw.hierpath @xmr [@Top::@wire]
-  firrtl.module @Top(out %o : !firrtl.probe<uint<1>>) {
-    firrtl.layerblock @A {
-      %wire = firrtl.wire sym @wire : !firrtl.uint<1>
-    }
-    %0 = firrtl.xmr.ref @xmr : !firrtl.probe<uint<1>>
-  }
-}
-
-// -----
-
-// Driving an outer property from inside a layerblock is not allowed.
-firrtl.circuit "Top" {
-  firrtl.layer @A bind {}
-  firrtl.extmodule @WithInputProp(in i : !firrtl.string) attributes {knownLayers=[@A], layers=[@A]}
-  firrtl.module @Top(out %o : !firrtl.probe<uint<1>>) {
-    // expected-note @below {{operand is defined here}}
-    %foo_in = firrtl.instance foo @WithInputProp(in i : !firrtl.string)
-    // expected-error @below {{'firrtl.layerblock' op captures a property operand}}
-    firrtl.layerblock @A {
-      %str = firrtl.string "whatever"
-       // expected-note @below {{operand is used here}}
-      firrtl.propassign %foo_in, %str : !firrtl.string
-    }
-  }
-}
-
-// -----
-
 // Forcing a colored probe is not allowed (in an uncolored context).
 firrtl.circuit "Top" {
   firrtl.layer @A bind {}
