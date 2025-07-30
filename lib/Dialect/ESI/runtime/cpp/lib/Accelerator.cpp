@@ -209,6 +209,9 @@ static void loadBackend(Context &ctxt, std::string backend) {
   // has transitive dependencies.
   if (backendPath != std::filesystem::path()) {
     std::filesystem::path backendPathParent = backendPath.parent_path();
+    // If backendPath has no parent directory (e.g., it's a relative path or
+    // a filename without a directory), fallback to the current working directory.
+    // This ensures a valid directory is used for setting the DLL search path.
     if (backendPathParent.empty())
       backendPathParent = std::filesystem::current_path();
     logger.debug("CONNECT", "setting DLL search directory to: " +
