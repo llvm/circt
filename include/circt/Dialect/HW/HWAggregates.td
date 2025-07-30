@@ -193,6 +193,8 @@ def ArrayInjectOp : HWOp<"array_inject", [
     `element` value, and returns the updated array value as a result. The index
     must be exactly `ceil(log2(length(input)))` bits wide. The element type
     must match the input array's element type.
+
+    If the `index` is out of bounds, the result is undefined.
   }];
   let arguments = (ins
     ArrayType:$input,
