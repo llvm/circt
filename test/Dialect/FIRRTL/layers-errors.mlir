@@ -169,3 +169,106 @@ firrtl.circuit "Top" {
     }
   }
 }
+
+// -----
+
+// XMRRefOp's result type must have an appropriate color.
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  hw.hierpath @xmr [@Top::@wire]
+  firrtl.module @Top(out %o : !firrtl.probe<uint<1>>) {
+    firrtl.layerblock @A {
+      %wire = firrtl.wire sym @wire : !firrtl.uint<1>
+    }
+    %0 = firrtl.xmr.ref @xmr : !firrtl.probe<uint<1>>
+  }
+}
+
+// -----
+
+// Driving an outer property from inside a layerblock is not allowed.
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.extmodule @WithInputProp(in i : !firrtl.string) attributes {knownLayers=[@A], layers=[@A]}
+  firrtl.module @Top(out %o : !firrtl.probe<uint<1>>) {
+    // expected-note @below {{operand is defined here}}
+    %foo_in = firrtl.instance foo @WithInputProp(in i : !firrtl.string)
+    // expected-error @below {{'firrtl.layerblock' op captures a property operand}}
+    firrtl.layerblock @A {
+      %str = firrtl.string "whatever"
+       // expected-note @below {{operand is used here}}
+      firrtl.propassign %foo_in, %str : !firrtl.string
+    }
+  }
+}
+
+// -----
+
+// Forcing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %c : !firrtl.clock, in %e : !firrtl.uint<1>, in %v : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{op ambient layers are insufficient to force reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.force %c, %e, %p, %v : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Releasing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %c : !firrtl.clock, in %e : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{op ambient layers are insufficient to release reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.release %c, %e, %p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>
+  }
+}
+// -----
+
+// Force-initial-ing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %e : !firrtl.uint<1>, in %v : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{op ambient layers are insufficient to force reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.force_initial %e, %p, %v : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Release-initial-ing a colored probe is not allowed (in an uncolored context).
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Top(in %e : !firrtl.uint<1>) {
+    %p = firrtl.wire : !firrtl.rwprobe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %w, %wp = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+      %q = firrtl.ref.cast %wp : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint<1>, @A>
+      firrtl.ref.define %p, %q : !firrtl.rwprobe<uint<1>, @A>
+    }
+    // expected-error @below {{op ambient layers are insufficient to release reference}}
+    // expected-note @below {{missing layer requirements: @A}}
+    firrtl.ref.release_initial %e, %p : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>, @A>
+  }
+}

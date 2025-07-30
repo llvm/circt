@@ -6346,6 +6346,67 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
+LogicalResult RefForceOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(destLayers, ambientLayers, missingLayers)) {
+    auto diag =
+        emitOpError("ambient layers are insufficient to force reference");
+    auto &note = diag.attachNote();
+    note << "missing layer requirements: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
+}
+
+LogicalResult RefForceInitialOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  SmallVector<SymbolRefAttr> missingLayers;
+  // Every layer in the target must be present in the ambient layers.
+  if (!isLayerSetCompatibleWith(destLayers, ambientLayers, missingLayers)) {
+    auto diag =
+        emitOpError("ambient layers are insufficient to force reference");
+    auto &note = diag.attachNote();
+    note << "missing layer requirements: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
+}
+
+LogicalResult RefReleaseOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(destLayers, ambientLayers, missingLayers)) {
+    auto diag =
+        emitOpError("ambient layers are insufficient to release reference");
+    auto &note = diag.attachNote();
+    note << "missing layer requirements: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
+}
+
+LogicalResult RefReleaseInitialOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(destLayers, ambientLayers, missingLayers)) {
+    auto diag =
+        emitOpError("ambient layers are insufficient to release reference");
+    auto &note = diag.attachNote();
+    note << "missing layer requirements: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
+}
+
 LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *target = symbolTable.lookupNearestSymbolFrom(*this, getRefAttr());
   if (!target)
