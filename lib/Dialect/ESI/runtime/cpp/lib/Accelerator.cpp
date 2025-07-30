@@ -194,7 +194,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
     // directory as the backend DLL to the DLL search path.)
     backendPath.clear();
 
-  // Attempt to load it.
+    // Attempt to load it.
 #ifdef __linux__
   void *handle = dlopen(backendPathStr.c_str(), RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
