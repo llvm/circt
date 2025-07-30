@@ -335,7 +335,8 @@ static void populateLLHDLowering(PassManager &pm) {
   // Simplify processes, replace signals with process results, and detect
   // registers.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
-  modulePM.addPass(mlir::createSROA());
+  // See https://github.com/llvm/circt/issues/8804.
+  // modulePM.addPass(mlir::createSROA());
   modulePM.addPass(llhd::createMem2RegPass());
   modulePM.addPass(llhd::createHoistSignalsPass());
   modulePM.addPass(llhd::createDeseqPass());
