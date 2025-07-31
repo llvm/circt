@@ -172,6 +172,31 @@ MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
 
+//===----------------------------------------------------------------------===//
+// MacroErrorOp
+//===----------------------------------------------------------------------===//
+
+std::string MacroErrorOp::getMacroIdentifier() {
+  const auto *prefix = "_ERROR";
+  auto msg = getMessage();
+  if (!msg || msg->empty())
+    return prefix;
+
+  std::string id(prefix);
+  id.push_back('_');
+  for (auto c : *msg) {
+    if (llvm::isAlnum(c))
+      id.push_back(c);
+    else
+      id.push_back('_');
+  }
+  return id;
+}
+
+//===----------------------------------------------------------------------===//
+// MacroDeclOp
+//===----------------------------------------------------------------------===//
+
 MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }

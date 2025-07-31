@@ -41,7 +41,7 @@ public:
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
             FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp, MacroRefOp,
-            FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
+            FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp, MacroErrorOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
@@ -143,6 +143,7 @@ public:
   HANDLE(VerbatimOp, Unhandled);
   HANDLE(MacroRefOp, Unhandled);
   HANDLE(IncludeOp, Unhandled);
+  HANDLE(MacroErrorOp, Unhandled);
 
   // Type declarations.
   HANDLE(InterfaceOp, Unhandled);

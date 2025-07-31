@@ -854,6 +854,23 @@ def ForOp : SVOp<"for", [SingleBlock, NoTerminator, ProceduralOp,
 // Macros
 //===----------------------------------------------------------------------===//
 
+def MacroErrorOp : SVOp<"macro.error"> {
+  let summary = "Produce a compilation error using the preprocessor";
+  let description = [{
+    The `sv.macro.error` op represents a static error in System Verilog. Since
+    System Verilog lacks an error preprocessor directive, this is emitted as a
+    reference to an undefined macro definition.
+
+    We reserve the macro prefix _ERROR for emitting static assertions.
+  }];
+  let arguments = (ins OptionalAttr<StrAttr>:$message);
+  let assemblyFormat = "($message^)? attr-dict";
+  let extraClassDeclaration = [{
+    /// Build the bogus macro identifier for this error op. Do not define this
+    /// macro identifier. The identifier will be prefixed by `_ERROR`.
+    std::string getMacroIdentifier();
+  }];
+}
 
 def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
   let summary = "System verilog macro declaration";

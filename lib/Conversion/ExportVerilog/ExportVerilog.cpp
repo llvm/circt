@@ -4108,6 +4108,7 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
+  LogicalResult visitSV(MacroErrorOp op);
   LogicalResult visitSV(MacroDefOp op);
 
   void emitBlockAsStatement(Block *block,
@@ -5739,6 +5740,13 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(MacroErrorOp op) {
+  startStatement();
+  ps << "`" << op.getMacroIdentifier();
+  setPendingNewline();
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
   auto decl = op.getReferencedMacro(&state.symbolCache);
   // TODO: source info!
@@ -6864,6 +6872,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             separateFile(op);
           }
         })
+        .Case<MacroErrorOp>([&](auto op) { replicatedOps.push_back(op); })
         .Case<MacroDeclOp>([&](auto op) {
           symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
@@ -6965,7 +6974,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       })
       .Case<emit::FileOp, emit::FileListOp, emit::FragmentOp>(
           [&](auto op) { FileEmitter(state).emit(op); })
-      .Case<MacroDefOp, FuncDPIImportOp>(
+      .Case<MacroErrorOp, MacroDefOp, FuncDPIImportOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<FuncOp>([&](auto op) { ModuleEmitter(state).emitFunc(op); })
       .Case<IncludeOp>([&](auto op) { ModuleEmitter(state).emitStatement(op); })
