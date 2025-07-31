@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <ctype.h>
 #include <optional>
 
 using namespace circt;
@@ -171,6 +172,37 @@ MacroDeclOp
 MacroRefExprSEOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
+
+//===----------------------------------------------------------------------===//
+// MacroErrorOp
+//===----------------------------------------------------------------------===//
+
+SmallString<32> MacroErrorOp::getMacroIdentifier() {
+  SmallString<32> id;
+  id.append("_ERROR");
+
+  auto msg = getMessage();
+  if (!msg)
+    return id;
+
+  bool split = true;
+  for (auto c : *msg) {
+    if (isalnum(c)) {
+      if (split)
+        id.push_back('_');
+      id.push_back(c);
+      split = false;
+    } else {
+      split = true;
+    }
+  }
+
+  return id;
+}
+
+//===----------------------------------------------------------------------===//
+// MacroDeclOp
+//===----------------------------------------------------------------------===//
 
 MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());

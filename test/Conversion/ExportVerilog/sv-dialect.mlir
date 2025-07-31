@@ -1978,6 +1978,15 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 // CHECK-NEXT:    .out (wire_0)
 // CHECK-NEXT:  );
 
+sv.macro.error
+sv.macro.error "  my message ( ) xxx _  _yyy_ "
+// CHECK: `_ERROR
+// CHECK: `_ERROR_my_message_xxx_yyy
+
+//===----------------------------------------------------------------------===//
+// Below here, we are matching the final MLIR IR, not the output verilog.
+//===----------------------------------------------------------------------===//
+
 // CHECK-LABEL:  hw.module @issue595
 // CHECK:     sv.wire  {hw.verilogName = "_GEN"} : !hw.inout<i32>
 
