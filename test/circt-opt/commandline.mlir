@@ -35,4 +35,5 @@
 // DIALECT-SAME: smt
 // DIALECT-SAME: ssp
 // DIALECT-SAME: sv
+// DIALECT-SAME: synth
 // DIALECT-SAME: systemc
