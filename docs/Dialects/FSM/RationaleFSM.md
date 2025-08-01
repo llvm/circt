@@ -145,8 +145,9 @@ means the corresponding transition is always taken.
 
 To avoid *state explosion*, we introduce `fsm.variable` operation (similar to
 the [extended state](https://en.wikipedia.org/wiki/UML_state_machine) in UML
-state machine) to represent a variable associated with an FSM instance and can
-hold a value of any type, which can be updated through `fsm.update` operations.
+state machine) which represents a variable associated with an FSM instance and
+can hold a value of any type, which can be updated through `fsm.update`
+operations.
 
 `fsm.transition` has an optional `action` CFG region representing the actions
 associated with the current transition.  The action region can contain
