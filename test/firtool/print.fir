@@ -2,6 +2,7 @@
 ; RUN: firtool %s --extract-test-code | FileCheck --check-prefix=ETC %s
 
 FIRRTL version 5.1.0
+; CHECK: `ifndef SYNTHESIS
 ; CHECK: `ifndef __CIRCT_LIB_LOGGING
 ; CHECK-NEXT:   // CIRCT Logging Library
 ; CHECK-NEXT:   package __circt_lib_logging;
@@ -19,6 +20,7 @@ FIRRTL version 5.1.0
 ; CHECK-NEXT:   endpackage
 ; CHECK-NEXT:   `define __CIRCT_LIB_LOGGING
 ; CHECK-NEXT: `endif // not def __CIRCT_LIB_LOGGING
+; CHECK-NEXT: `endif // not def SYNTHESIS
 circuit PrintTest:
   ; CHECK-LABEL: module PrintTest
   ; ETC-LABEL: module PrintTest_assert

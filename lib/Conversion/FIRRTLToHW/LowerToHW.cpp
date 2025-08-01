@@ -901,8 +901,9 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     sv::MacroDeclOp::create(b, "__CIRCT_LIB_LOGGING");
     // Create the fragment containing the FileDescriptor class.
     emit::FragmentOp::create(b, "CIRCT_LIB_LOGGING_FRAGMENT", [&] {
-      emitGuard("__CIRCT_LIB_LOGGING", [&]() {
-        sv::VerbatimOp::create(b, R"(// CIRCT Logging Library
+      emitGuard("SYNTHESIS", [&]() {
+        emitGuard("__CIRCT_LIB_LOGGING", [&]() {
+          sv::VerbatimOp::create(b, R"(// CIRCT Logging Library
 package __circt_lib_logging;
   class FileDescriptor;
     static int global_id [string];
@@ -918,7 +919,8 @@ package __circt_lib_logging;
 endpackage
 )");
 
-        sv::MacroDefOp::create(b, "__CIRCT_LIB_LOGGING", "");
+          sv::MacroDefOp::create(b, "__CIRCT_LIB_LOGGING", "");
+        });
       });
     });
   }
