@@ -256,6 +256,8 @@ struct ExprVisitor {
         return {};
       if (!isLvalue)
         value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
       operands.push_back(value);
     }
     if (isLvalue)
