@@ -27,10 +27,10 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
-#include "circt/Synthesis/SynthesisPipeline.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Diagnostics.h"
@@ -52,7 +52,7 @@ namespace cl = llvm::cl;
 
 using namespace mlir;
 using namespace circt;
-using namespace synthesis;
+using namespace synth;
 
 //===----------------------------------------------------------------------===//
 // Command-line options declaration
@@ -185,17 +185,17 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
       /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
       /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
-    circt::synthesis::buildAIGLoweringPipeline(pm);
+    circt::synth::buildAIGLoweringPipeline(pm);
     if (untilReached(UntilAIGLowering))
       return;
 
-    circt::synthesis::AIGOptimizationPipelineOptions options;
+    circt::synth::AIGOptimizationPipelineOptions options;
     options.abcCommands = abcCommands;
     options.abcPath.setValue(abcPath);
     options.ignoreAbcFailures.setValue(ignoreAbcFailures);
     options.disableWordToBits.setValue(disableWordToBits);
 
-    circt::synthesis::buildAIGOptimizationPipeline(pm, options);
+    circt::synth::buildAIGOptimizationPipeline(pm, options);
   };
 
   nestOrAddToHierarchicalRunner(pm, pipeline, topName);

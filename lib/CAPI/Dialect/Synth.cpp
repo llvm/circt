@@ -6,10 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt-c/Synthesis.h"
+#include "circt-c/Dialect/Synth.h"
 
-#include "circt/Synthesis/SynthesisPipeline.h"
+#include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 
-void registerSynthesisPipeline() {
-  circt::synthesis::registerSynthesisPipeline();
-}
+void registerSynthesisPipeline() { circt::synth::registerSynthesisPipeline(); }

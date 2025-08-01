@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Synthesis/SynthesisPipeline.h"
+#include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -24,7 +24,7 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::synthesis;
+using namespace circt::synth;
 
 //===----------------------------------------------------------------------===//
 // Pipeline Implementation
@@ -36,7 +36,7 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
 
-void circt::synthesis::buildAIGLoweringPipeline(OpPassManager &pm) {
+void circt::synth::buildAIGLoweringPipeline(OpPassManager &pm) {
   {
     // Partially legalize Comb to AIG, run CSE and canonicalization.
     circt::ConvertCombToAIGOptions convOptions;
@@ -57,7 +57,7 @@ void circt::synthesis::buildAIGLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createCSEPass());
 }
 
-void circt::synthesis::buildAIGOptimizationPipeline(
+void circt::synth::buildAIGOptimizationPipeline(
     OpPassManager &pm, const AIGOptimizationPipelineOptions &options) {
 
   pm.addPass(aig::createLowerVariadic());
@@ -85,12 +85,12 @@ void circt::synthesis::buildAIGOptimizationPipeline(
 // Pipeline Registration
 //===----------------------------------------------------------------------===//
 
-void circt::synthesis::registerSynthesisPipeline() {
+void circt::synth::registerSynthesisPipeline() {
   PassPipelineRegistration<EmptyPipelineOptions>(
-      "synthesis-aig-lowering-pipeline",
+      "synth-aig-lowering-pipeline",
       "The default pipeline for until AIG lowering", buildAIGLoweringPipeline);
   PassPipelineRegistration<AIGOptimizationPipelineOptions>(
-      "synthesis-aig-optimization-pipeline",
+      "synth-aig-optimization-pipeline",
       "The default pipeline for AIG optimization pipeline",
       buildAIGOptimizationPipeline);
 }
