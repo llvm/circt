@@ -10,20 +10,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: attributes {verilogName = "__circt_lib_logging::FileDescriptor::get"}
   // CHECK-NEXT: sv.macro.decl @__CIRCT_LIB_LOGGING
   // CHECK-NEXT: emit.fragment @CIRCT_LIB_LOGGING_FRAGMENT {
-  // CHECK-NEXT:   sv.ifdef  @__CIRCT_LIB_LOGGING {
+  // CHECK-NEXT:   sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.verbatim "// CIRCT Logging Library
-  // CHECK-SAME:       package __circt_lib_logging;
-  // CHECK-SAME:         class FileDescriptor;
-  // CHECK-SAME:           static int global_id [string];
-  // CHECK-SAME:           static function int get(string name);
-  // CHECK-SAME:             if (global_id.exists(name) == 32'h0)
-  // CHECK-SAME:               global_id[name] = $fopen(name);
-  // CHECK-SAME:             return global_id[name];
-  // CHECK-SAME:           endfunction
-  // CHECK-SAME:         endclass
-  // CHECK-SAME:       endpackage
-  // CHECK-NEXT:     sv.macro.def @__CIRCT_LIB_LOGGING ""
+  // CHECK-NEXT:     sv.ifdef  @__CIRCT_LIB_LOGGING {
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.verbatim "// CIRCT Logging Library
+  // CHECK-SAME:         package __circt_lib_logging;
+  // CHECK-SAME:           class FileDescriptor;
+  // CHECK-SAME:             static int global_id [string];
+  // CHECK-SAME:             static function int get(string name);
+  // CHECK-SAME:               if (global_id.exists(name) == 32'h0)
+  // CHECK-SAME:                 global_id[name] = $fopen(name);
+  // CHECK-SAME:               return global_id[name];
+  // CHECK-SAME:             endfunction
+  // CHECK-SAME:           endclass
+  // CHECK-SAME:         endpackage
+  // CHECK-NEXT:       sv.macro.def @__CIRCT_LIB_LOGGING ""
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK:      emit.fragment @PRINTF_COND_FRAGMENT {
