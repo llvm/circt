@@ -14,7 +14,7 @@ set_target_properties(MtiPli PROPERTIES CXX_VISIBILITY_PRESET "default")
 # the simulator, but without it we get runtime link errors. TODO: figure out how
 # to do this properly such that we avoid packaging a dummy library.
 install(TARGETS MtiPli
-  DESTINATION lib
+  DESTINATION ${ESIRT_INSTALL_LIBDIR}
   COMPONENT ESIRuntime
 )
 
@@ -38,7 +38,7 @@ target_link_libraries(EsiCosimDpiServer
 
 add_dependencies(ESIRuntime EsiCosimDpiServer)
 install(TARGETS EsiCosimDpiServer
-  DESTINATION lib
+  DESTINATION ${ESIRT_INSTALL_LIBDIR}
   COMPONENT ESIRuntime
 )
 
@@ -73,7 +73,7 @@ endforeach()
 # ESI simple cosim runner.
 install(FILES
   esi-cosim.py
-  DESTINATION bin
+  DESTINATION ${ESIRT_INSTALL_BINDIR}
   PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
               GROUP_EXECUTE GROUP_READ
               WORLD_EXECUTE WORLD_READ

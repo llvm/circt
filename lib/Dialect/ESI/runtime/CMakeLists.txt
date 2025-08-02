@@ -104,12 +104,6 @@ if (WHEEL_BUILD)
   message(STATUS "Setting up for a Python wheel build.")
 endif()
 
-if(WIN32)
-  set(LIB_DIR "bin")
-else()
-  set(LIB_DIR "lib")
-endif()
-
 ##===----------------------------------------------------------------------===//
 ## Overall target to build everything.
 ##===----------------------------------------------------------------------===//
@@ -202,8 +196,10 @@ if(NOT MSVC)
 endif()
 add_dependencies(ESIRuntime ESICppRuntime)
 if (WIN32)
+  set(ESIRT_INSTALL_BINDIR ".")
   set(ESIRT_INSTALL_LIBDIR ".")
 else()
+  set(ESIRT_INSTALL_BINDIR "bin")
   set(ESIRT_INSTALL_LIBDIR "lib")
 endif()
 
@@ -251,7 +247,7 @@ target_link_libraries(esiquery PRIVATE
 )
 add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
-  DESTINATION bin
+  DESTINATION ${ESIRT_INSTALL_BINDIR}
   COMPONENT ESIRuntime
 )
 
