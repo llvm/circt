@@ -53,8 +53,10 @@ std::string SysInfo::getJsonManifest() const {
 // MMIO class implementations.
 //===----------------------------------------------------------------------===//
 
-MMIO::MMIO(AcceleratorConnection &conn, const HWClientDetails &clients)
+MMIO::MMIO(AcceleratorConnection &conn, const AppIDPath &idPath,
+           const HWClientDetails &clients)
     : Service(conn) {
+  AppIDPath idParent = idPath.parent();
   for (const HWClientDetail &client : clients) {
     auto offsetIter = client.implOptions.find("offset");
     if (offsetIter == client.implOptions.end())
@@ -71,8 +73,8 @@ MMIO::MMIO(AcceleratorConnection &conn, const HWClientDetails &clients)
     uint64_t sizeVal = std::any_cast<uint64_t>(size.value);
     if (sizeVal >= 1ull << 32)
       throw std::runtime_error("MMIO client size mustn't exceed 32 bits");
-    regions[client.relPath] =
-        RegionDescriptor{(uint32_t)offsetVal, (uint32_t)sizeVal};
+    AppIDPath absPath = idParent + client.relPath;
+    regions[absPath] = RegionDescriptor{(uint32_t)offsetVal, (uint32_t)sizeVal};
   }
 }
 
@@ -90,8 +92,9 @@ BundlePort *MMIO::getPort(AppIDPath id, const BundleType *type) const {
 namespace {
 class MMIOPassThrough : public MMIO {
 public:
-  MMIOPassThrough(const HWClientDetails &clients, MMIO *parent)
-      : MMIO(parent->getConnection(), clients), parent(parent) {}
+  MMIOPassThrough(const HWClientDetails &clients, const AppIDPath &idPath,
+                  MMIO *parent)
+      : MMIO(parent->getConnection(), idPath, clients), parent(parent) {}
   uint64_t read(uint32_t addr) const override { return parent->read(addr); }
   void write(uint32_t addr, uint64_t data) override {
     parent->write(addr, data);
@@ -107,7 +110,7 @@ Service *MMIO::getChildService(Service::Type service, AppIDPath id,
                                HWClientDetails clients) {
   if (service != typeid(MMIO))
     return Service::getChildService(service, id, implName, details, clients);
-  return new MMIOPassThrough(clients, this);
+  return new MMIOPassThrough(clients, id, this);
 }
 
 //===----------------------------------------------------------------------===//

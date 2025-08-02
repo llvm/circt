@@ -257,8 +257,9 @@ void TraceAccelerator::createEngine(const std::string &dmaEngineName,
 
 class TraceMMIO : public MMIO {
 public:
-  TraceMMIO(TraceAccelerator &conn, const HWClientDetails &clients)
-      : MMIO(conn, clients), impl(conn.getImpl()) {}
+  TraceMMIO(TraceAccelerator &conn, const AppIDPath &idPath,
+            const HWClientDetails &clients)
+      : MMIO(conn, idPath, clients), impl(conn.getImpl()) {}
 
   virtual uint64_t read(uint32_t addr) const override {
     uint64_t data = rand();
@@ -339,7 +340,7 @@ Service *TraceAccelerator::createService(Service::Type svcType,
   if (svcType == typeid(SysInfo))
     return new TraceSysInfo(*this, getImpl().manifestJson);
   if (svcType == typeid(MMIO))
-    return new TraceMMIO(*this, clients);
+    return new TraceMMIO(*this, idPath, clients);
   if (svcType == typeid(HostMem))
     return new TraceHostMem(*this);
   return nullptr;

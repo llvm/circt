@@ -724,9 +724,16 @@ std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
 }
 
 namespace esi {
-AppIDPath AppIDPath::operator+(const AppIDPath &b) {
+AppIDPath AppIDPath::operator+(const AppIDPath &b) const {
   AppIDPath ret = *this;
   ret.insert(ret.end(), b.begin(), b.end());
+  return ret;
+}
+
+AppIDPath AppIDPath::parent() const {
+  AppIDPath ret = *this;
+  if (!ret.empty())
+    ret.pop_back();
   return ret;
 }
 

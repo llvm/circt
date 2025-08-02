@@ -49,7 +49,8 @@ class AppIDPath : public std::vector<AppID> {
 public:
   using std::vector<AppID>::vector;
 
-  AppIDPath operator+(const AppIDPath &b);
+  AppIDPath operator+(const AppIDPath &b) const;
+  AppIDPath parent() const;
   std::string toStr() const;
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
