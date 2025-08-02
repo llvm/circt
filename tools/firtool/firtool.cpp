@@ -692,6 +692,14 @@ static LogicalResult processInputSplit(
     MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
     TimingScope &ts, std::unique_ptr<llvm::MemoryBuffer> buffer,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+  // In LLVM commit b6a98b9, we started creating splits that don't have null
+  // terminated buffers, which are assumed by our tool and the SourceMgr. Make
+  // a copy to ensure null-termination.
+  if (!buffer->getBuffer().ends_with('\0')) {
+    buffer = llvm::MemoryBuffer::getMemBufferCopy(
+        buffer->getBuffer(), buffer->getBufferIdentifier());
+  }
+
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   sourceMgr.setIncludeDirs(includeDirs);
