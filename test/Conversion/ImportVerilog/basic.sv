@@ -619,9 +619,13 @@ function void RepeatLoopStatements(int x, bit y);
 endfunction
 
 // CHECK-LABEL: moore.module @Statements
-module Statements;
+module Statements(
+  // CHECK-SAME: out out0 : !moore.l256
+  output reg [255:0] out0
+);
   bit x, y, z;
   int i;
+  logic [63:0] r;
   initial begin
     // CHECK: %a = moore.variable : <i32>
     automatic int a;
@@ -644,6 +648,22 @@ module Statements;
     // CHECK: [[TMP1:%.+]] = moore.read %y
     // CHECK: moore.nonblocking_assign %x, [[TMP1]] : i1
     x <= y;
+  end
+
+  initial begin
+    // CHECK: [[CONCAT1:%.+]] = moore.concat {{.*}} : (!moore.l64, !moore.l64, !moore.l64, !moore.l64) -> l256
+    // CHECK: [[CON1A:%.+]] = moore.conversion [[CONCAT1]] : !moore.l256 -> !moore.array<4 x l64>
+    // CHECK: [[PACK1:%.+]] = moore.variable [[CON1A]] : <array<4 x l64>>
+    // CHECK: [[TMP1:%.+]] = moore.read [[PACK1]] : <array<4 x l64>>
+    // CHECK: [[CON1B:%.+]] = moore.conversion [[TMP1]] : !moore.array<4 x l64> -> !moore.l256
+    // moore.blocking_assign %out0, [[CON1B]] : l256
+    automatic logic [3:0][63:0] pack = {
+        r,
+        {2{r[31:0]}},
+        {4{r[15:0]}},
+        {8{r[7:0]}}
+    };
+    out0 = pack;
   end
 endmodule
 
