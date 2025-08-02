@@ -384,10 +384,12 @@ LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
 
 void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
                                             LayerBlockOp layerBlock) {
-  OpBuilder builder(layerBlock);
-  auto macroName = macroNames[layer];
-  auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
-  ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+  if (!layerBlock.getBody()->empty()) {
+    OpBuilder builder(layerBlock);
+    auto macroName = macroNames[layer];
+    auto ifDef = builder.create<sv::IfDefOp>(layerBlock.getLoc(), macroName);
+    ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+  }
   layerBlock.erase();
 }
 
@@ -866,11 +868,22 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
       break;
     }
 
-    // If the parent layer is inline, we enable it by defining a macro.
-    // We will also have to manually enable any subsequent ancestors.
-    auto parentMacroSymbol = macroNames[parent];
-    sv::MacroDefOp::create(b, loc, parentMacroSymbol);
-    parent = layer->getParentOfType<LayerOp>();
+    // If the parent layer is inline, we can only assert that the parent is
+    // already enabled.
+    if (parent.getConvention() == LayerConvention::Inline) {
+      auto parentMacroSymbolRefAttr = macroNames[parent];
+      auto parentGuard = sv::IfDefOp::create(b, loc, parentMacroSymbolRefAttr);
+      OpBuilder::InsertionGuard guard(b);
+      b.createBlock(&parentGuard.getElseRegion());
+      auto message = StringAttr::get(&getContext(),
+                                     Twine(parent.getName()) + " not enabled");
+      sv::MacroErrorOp::create(b, loc, message);
+      parent = parent->getParentOfType<LayerOp>();
+      continue;
+    }
+
+    // Unknown Layer convention.
+    llvm_unreachable("unknown layer convention");
   }
 
   // Create IR to include bind files for child modules. If a module is
