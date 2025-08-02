@@ -124,7 +124,8 @@ public:
     uint32_t size;
   };
 
-  MMIO(AcceleratorConnection &, const HWClientDetails &clients);
+  MMIO(AcceleratorConnection &, const AppIDPath &idPath,
+       const HWClientDetails &clients);
   virtual ~MMIO() = default;
 
   /// Read a 64-bit value from the global MMIO space.

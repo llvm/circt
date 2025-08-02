@@ -351,9 +351,9 @@ bool StubContainer::getChannelDesc(const std::string &channelName,
 namespace {
 class CosimMMIO : public MMIO {
 public:
-  CosimMMIO(CosimAccelerator &conn, Context &ctxt, StubContainer *rpcClient,
-            const HWClientDetails &clients)
-      : MMIO(conn, clients) {
+  CosimMMIO(CosimAccelerator &conn, Context &ctxt, const AppIDPath &idPath,
+            StubContainer *rpcClient, const HWClientDetails &clients)
+      : MMIO(conn, idPath, clients) {
     // We have to locate the channels ourselves since this service might be used
     // to retrieve the manifest.
     ChannelDesc cmdArg, cmdResp;
@@ -720,7 +720,7 @@ Service *CosimAccelerator::createService(Service::Type svcType,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
   if (svcType == typeid(services::MMIO)) {
-    return new CosimMMIO(*this, getCtxt(), rpcClient, clients);
+    return new CosimMMIO(*this, getCtxt(), idPath, rpcClient, clients);
   } else if (svcType == typeid(services::HostMem)) {
     return new CosimHostMem(*this, getCtxt(), rpcClient);
   } else if (svcType == typeid(SysInfo)) {

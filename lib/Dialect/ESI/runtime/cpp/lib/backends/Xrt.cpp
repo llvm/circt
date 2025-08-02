@@ -107,8 +107,9 @@ class XrtMMIO : public MMIO {
   constexpr static uint32_t IndirectMMIOReg = 0x20;
 
 public:
-  XrtMMIO(XrtAccelerator &conn, ::xrt::ip &ip, const HWClientDetails &clients)
-      : MMIO(conn, clients), ip(ip) {}
+  XrtMMIO(XrtAccelerator &conn, ::xrt::ip &ip, const AppIDPath &idPath,
+          const HWClientDetails &clients)
+      : MMIO(conn, idPath, clients), ip(ip) {}
 
   uint64_t read(uint32_t addr) const override {
     std::lock_guard<std::mutex> lock(m);
@@ -207,7 +208,7 @@ Service *XrtAccelerator::createService(Service::Type svcType, AppIDPath id,
                                        const ServiceImplDetails &details,
                                        const HWClientDetails &clients) {
   if (svcType == typeid(MMIO))
-    return new XrtMMIO(*this, impl->ip, clients);
+    return new XrtMMIO(*this, impl->ip, id, clients);
   else if (svcType == typeid(HostMem))
     return new XrtHostMem(*this, impl->device, impl->memoryGroup);
   else if (svcType == typeid(SysInfo))
