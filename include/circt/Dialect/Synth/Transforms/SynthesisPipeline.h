@@ -10,10 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LIB_SYNTHESIS_SYNTHESISPIPELINE_H
-#define LIB_SYNTHESIS_SYNTHESISPIPELINE_H
+#ifndef CIRCT_DIALECT_SYNTH_TRANSFORMS_SYNTHESISPIPELINE_H
+#define CIRCT_DIALECT_SYNTH_TRANSFORMS_SYNTHESISPIPELINE_H
 
-#include "circt-c/Synthesis.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
 #include <string>
@@ -23,7 +22,7 @@
 // Pipeline Options
 //===----------------------------------------------------------------------===//
 namespace circt {
-namespace synthesis {
+namespace synth {
 
 /// Options for the aig optimization pipeline.
 struct AIGOptimizationPipelineOptions
@@ -56,7 +55,7 @@ void buildAIGOptimizationPipeline(
 /// Register the synthesis pipelines.
 void registerSynthesisPipeline();
 
-} // namespace synthesis
+} // namespace synth
 } // namespace circt
 
-#endif // LIB_SYNTHESIS_SYNTHESISPIPELINE_H
+#endif // CIRCT_DIALECT_SYNTH_TRANSFORMS_SYNTHESISPIPELINE_H
