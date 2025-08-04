@@ -186,13 +186,16 @@ static void loadBackend(Context &ctxt, std::string backend) {
     }
   }
   // If the path was found, convert it to a string.
-  if (backendPathStr.empty())
+  if (backendPathStr.empty()) {
+    backendPath = std::filesystem::absolute(backendPath);
+    logger.debug("CONNECT", "found backend plugin: " + backendPath.string());
     backendPathStr = backendPath.string();
-  else
+  } else {
     // Otherwise, signal that the path wasn't found by clearing the path and
     // just use the name. (This is only used on Windows to add the same
     // directory as the backend DLL to the DLL search path.)
     backendPath.clear();
+  }
 
     // Attempt to load it.
 #ifdef __linux__
