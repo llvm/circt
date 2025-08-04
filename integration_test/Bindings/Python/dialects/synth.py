@@ -27,8 +27,8 @@ with Context() as ctx, Location.unknown():
 
   # Check that the synthesis pipeline is registered.
   pm = PassManager.parse(
-      "builtin.module(hw.module(synthesis-aig-lowering-pipeline, "
-      "synthesis-aig-optimization-pipeline))")
+      "builtin.module(hw.module(synth-aig-lowering-pipeline, "
+      "synth-aig-optimization-pipeline))")
   pm.run(m.operation)
   # CHECK: hw.module @foo(
   # CHECK-NOT: comb.mul
