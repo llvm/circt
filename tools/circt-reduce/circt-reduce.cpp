@@ -440,7 +440,7 @@ int main(int argc, char **argv) {
   // Parse the command line options provided by the user.
   cl::ParseCommandLineOptions(argc, argv, "CIRCT test case reduction tool\n");
 
-  // Register all the dialects and create a context to work wtih.
+  // Register all the dialects.
   mlir::DialectRegistry registry;
   registerAllDialects(registry);
   registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
@@ -448,7 +448,10 @@ int main(int argc, char **argv) {
   arc::registerReducePatternDialectInterface(registry);
   firrtl::registerReducePatternDialectInterface(registry);
   hw::registerReducePatternDialectInterface(registry);
+
+  // Create a context.
   mlir::MLIRContext context(registry);
+  context.allowUnregisteredDialects(true); // allow reduction of unknown ops
 
   // Do the actual processing and use `exit` to avoid the slow teardown of the
   // context.
