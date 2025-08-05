@@ -596,4 +596,24 @@ def SimulationOp : FIRRTLOp<"simulation", [
   }];
 }
 
+def DomainOp : FIRRTLOp<"domain", [
+  DeclareOpInterfaceMethods<Symbol>,
+  HasParent<"firrtl::CircuitOp">,
+  NoTerminator,
+  SingleBlock
+]> {
+  let summary = "Define a domain type";
+  let description = [{
+    A `firrtl.domain` operation defines a type of domain that exists in this
+    circuit.  E.g., this can be used to declare a `ClockDomain` type when
+    modeling clocks in FIRRTL Dialect.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

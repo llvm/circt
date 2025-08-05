@@ -58,6 +58,7 @@ struct Emitter {
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
+  void emitDeclaration(DomainOp op);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
   void emitDeclaration(FormalOp op);
@@ -418,7 +419,7 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<LayerOp, OptionOp, FormalOp, SimulationOp>(
+          .Case<DomainOp, LayerOp, OptionOp, FormalOp, SimulationOp>(
               [&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
@@ -628,6 +629,12 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
     emitParamAssign(param, op, PPExtString("parameter"));
     setPendingNewline();
   }
+}
+
+void Emitter::emitDeclaration(DomainOp op) {
+  startStatement();
+  ps << "domain " << PPExtString(op.getSymName()) << " :";
+  emitLocationAndNewLine(op);
 }
 
 /// Emit a layer definition.

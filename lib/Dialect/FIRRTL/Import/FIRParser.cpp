@@ -5228,6 +5228,7 @@ private:
   ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
 
   ParseResult parseClass(CircuitOp circuit, unsigned indent);
+  ParseResult parseDomain(CircuitOp circuit, unsigned indent);
   ParseResult parseExtClass(CircuitOp circuit, unsigned indent);
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
@@ -5581,6 +5582,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
 
     // If we got to the next top-level declaration, then we're done.
     case FIRToken::kw_class:
+    case FIRToken::kw_domain:
     case FIRToken::kw_declgroup:
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
@@ -5664,6 +5666,25 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   // Stash the class name -> op in the constants, so we can resolve Inst types.
   getConstants().classMap[name.getValue()] = classOp;
   return skipToModuleEnd(indent);
+}
+
+/// domain ::= 'domain' id ':' info?
+ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
+  consumeToken(FIRToken::kw_domain);
+
+  StringAttr name;
+  LocWithInfo info(getToken().getLoc(), this);
+  if (parseId(name, "domain name") ||
+      parseToken(FIRToken::colon, "expected ':' after domain definition") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  auto builder = circuit.getBodyBuilder();
+  DomainOp::create(builder, info.getLoc(), name)
+      ->getRegion(0)
+      .push_back(new Block());
+
+  return success();
 }
 
 /// extclass ::= 'extclass' id ':' info? INDENT portlist DEDENT
@@ -5933,6 +5954,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
         removedFeature({3, 3, 0}, "optional groups"))
       return failure();
     return parseLayer(circuit);
+  case FIRToken::kw_domain:
+    if (requireFeature(missingSpecFIRVersion, "domains"))
+      return failure();
+    return parseDomain(circuit, indent);
   case FIRToken::kw_extclass:
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
@@ -6281,6 +6306,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
     case FIRToken::kw_class:
     case FIRToken::kw_declgroup:
+    case FIRToken::kw_domain:
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:

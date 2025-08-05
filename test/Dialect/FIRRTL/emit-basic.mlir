@@ -955,4 +955,6 @@ firrtl.circuit "Foo" {
     %cat_3_node = firrtl.node %cat_3_tmp : !firrtl.uint<3>
   }
 
+  // CHECK-LABEL: domain ClockDomain :
+  firrtl.domain @ClockDomain {}
 }

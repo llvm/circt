@@ -2191,3 +2191,11 @@ circuit NullaryCat:
     input a: UInt<1>
     ; CHECK: firrtl.cat : () -> !firrtl.uint<0>
     node b = cat()
+
+;// -----
+FIRRTL version 5.1.0
+circuit Domains:
+  ; CHECK-LABEL: firrtl.domain @ClockDomain
+  domain ClockDomain:
+
+  public module Domains:
