@@ -1015,9 +1015,16 @@ hw.module @RelocatedSignal() {
   %c0_i4 = hw.constant 0 : i4
   %3 = llhd.constant_time <0ns, 0d, 1e>
   %clock_0 = llhd.sig name "clock" %false : i1
+  // CHECK: [[CLOCK:%clock]] = llhd.sig %false : i1
+  // CHECK-NEXT: llhd.process
   llhd.process {
+    // CHECK-NEXT: [[CON:%.+]] = hw.constant 0 : i4
+    // CHECK-NEXT: [[READY:%ready_T]] = llhd.sig [[CON]] : i4
     cf.br ^bb1
   ^bb1:
+    // CHECK: [[TIME:%.+]] = llhd.constant_time
+    // CHECK-NEXT: llhd.drv [[READY]], {{%.+}} after [[TIME]]
+    // CHECK-NEXT: llhd.wait
     %5 = llhd.prb %clock_0 : !hw.inout<i1>
     llhd.wait (%5 : i1), ^bb2
   ^bb2:
