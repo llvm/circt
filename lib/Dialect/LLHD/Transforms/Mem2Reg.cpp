@@ -653,6 +653,8 @@ struct Promoter {
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
 
+  void relocateSlots();
+
   /// The region we are promoting in.
   Region &region;
 
@@ -729,6 +731,10 @@ LogicalResult Promoter::promote() {
 
   // Insert the necessary block arguments.
   insertBlockArgs();
+
+  // Slots might not dominate the inserted probes and drives. If that is the
+  // case, try relocating them to the entry block.
+  relocateSlots();
 
   // Erase operations that have become unused.
   pruner.eraseNow();
@@ -1694,6 +1700,33 @@ void Promoter::replaceValueWith(Value oldValue, Value newValue) {
     if (def->condition.isConditional() &&
         def->condition.getCondition() == oldValue)
       def->condition.setCondition(newValue);
+  }
+}
+
+void Promoter::relocateSlots() {
+  DominanceInfo dominance(region.getParentOp());
+  auto builder = OpBuilder::atBlockBegin(&region.getBlocks().front());
+  for (auto &slot : slots) {
+    if (llvm::all_of(slot.getUsers(), [&](auto *user) {
+          return dominance.dominates(slot, user);
+        }))
+      continue;
+
+    auto oldSlot = slot.getDefiningOp<llhd::SignalOp>();
+    auto *initSignal = oldSlot.getInit().getDefiningOp();
+    if (!llvm::isa<hw::ConstantOp>(initSignal))
+      continue;
+
+    LLVM_DEBUG(llvm::dbgs() << "- Relocating slot " << slot << "\n");
+
+    pruner.eraseLaterIfUnused(initSignal);
+    initSignal = builder.clone(*initSignal);
+
+    auto newSlot = llhd::SignalOp::create(
+        builder, oldSlot.getLoc(), oldSlot->getOperands(), oldSlot->getAttrs());
+    newSlot.setOperand(initSignal->getResult(0));
+    oldSlot.replaceAllUsesWith(newSlot.getResult());
+    pruner.eraseNow(oldSlot);
   }
 }
 

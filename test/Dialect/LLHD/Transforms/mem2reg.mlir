@@ -1005,3 +1005,38 @@ hw.module @ProbePostDef() {
   hw.output
 }
 
+// Regression test verifying that a signal with a constant operand is moved
+// to the entry block to dominate the inserted drive.
+// CHECK-LABEL: RelocatedSignal
+hw.module @RelocatedSignal() {
+  %true = hw.constant true
+  %false = hw.constant false
+  %c0_i2 = hw.constant 0 : i2
+  %c0_i4 = hw.constant 0 : i4
+  %3 = llhd.constant_time <0ns, 0d, 1e>
+  %clock_0 = llhd.sig name "clock" %false : i1
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    %5 = llhd.prb %clock_0 : !hw.inout<i1>
+    llhd.wait (%5 : i1), ^bb2
+  ^bb2:
+    %6 = llhd.prb %clock_0 : !hw.inout<i1>
+    %8 = comb.and bin %6, %true : i1
+    cf.cond_br %8, ^bb3, ^bb1
+  ^bb3:
+    %c2_i4 = hw.constant 0 : i4
+    %ready_T = llhd.sig %c2_i4 : i4
+    %c0_i3 = hw.constant 0 : i3
+    %157 = comb.concat %c0_i3, %6 : i3, i1
+    llhd.drv %ready_T, %157 after %3 : !hw.inout<i4>
+    %160 = llhd.prb %ready_T : !hw.inout<i4>
+    %29 = comb.icmp eq %160, %c0_i4 : i4
+    cf.cond_br %29, ^bb4, ^bb5
+  ^bb4:
+    cf.br ^bb1
+  ^bb5:
+    cf.br ^bb1
+  }
+  hw.output
+}
