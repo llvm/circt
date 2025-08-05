@@ -8,3 +8,5 @@
 
 add_circt_dialect(Synth synth)
 add_circt_dialect_doc(Synth synth)
+
+add_subdirectory(Transforms)
