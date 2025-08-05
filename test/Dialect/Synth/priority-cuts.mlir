@@ -15,6 +15,8 @@
 //   Example: @t8 = binary 1000 = 2-input AND function
 //           @t2 = binary 10 = identity function (1-input)
 //           @t128 = binary 10000000 = 3-input function
+//   Truth table indexing: For inputs [a0, a1], a0 is LSB, a1 is MSB.
+//   So for AND: f(0,0)=0, f(1,0)=0, f(0,1)=0, f(1,1)=1 → binary 1000 = 8
 //
 // - d<depth>: Logic depth from primary inputs to this cut's output
 //   Example: d0 = primary input (no logic), d1 = one logic level, etc.

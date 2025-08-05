@@ -40,7 +40,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/LogicalResult.h"
 #include <functional>
 #include <memory>
 #include <optional>
@@ -76,15 +75,15 @@ static void simulateLogicOp(Operation *op, DenseMap<Value, llvm::APInt> &eval) {
     return;
   }
 
-  assert(false &&
-         "Unsupported operation for simulation. isSupportedLogicOp should "
-         "be used to check if the operation can be simulated.");
+  llvm::report_fatal_error(
+      "Unsupported operation for simulation. isSupportedLogicOp should "
+      "be used to check if the operation can be simulated.");
 }
 
-//  Return true if the value is always a cut input.
+// Return true if the value is always a cut input.
 static bool isAlwaysCutInput(Value value) {
   auto *op = value.getDefiningOp();
-  // If the value has no defining operation, it is a primary input
+  // If the value has no defining operation, it is an input
   if (!op)
     return true;
 
@@ -100,29 +99,29 @@ LogicalResult
 circt::synth::topologicallySortLogicNetwork(mlir::Operation *topOp) {
 
   // Sort the operations topologically
-  if (topOp
-          ->walk([&](Region *region) {
-            auto regionKindOp =
-                dyn_cast<mlir::RegionKindInterface>(region->getParentOp());
-            if (!regionKindOp ||
-                regionKindOp.hasSSADominance(region->getRegionNumber()))
-              return WalkResult::advance();
+  auto walkResult = topOp->walk([&](Region *region) {
+    auto regionKindOp =
+        dyn_cast<mlir::RegionKindInterface>(region->getParentOp());
+    if (!regionKindOp ||
+        regionKindOp.hasSSADominance(region->getRegionNumber()))
+      return WalkResult::advance();
 
-            // Graph region.
-            for (auto &block : *region) {
-              if (!mlir::sortTopologically(
-                      &block, [&](Value value, Operation *op) -> bool {
-                        // Topologically sort simulatable ops and purely
-                        // dataflow ops. Other operations can be scheduled.
-                        return !(isSupportedLogicOp(op) ||
-                                 isa<comb::ExtractOp, comb::ReplicateOp,
-                                     comb::ConcatOp>(op));
-                      }))
-                return WalkResult::interrupt();
-            }
-            return WalkResult::advance();
-          })
-          .wasInterrupted())
+    auto isOperationReady = [&](Value value, Operation *op) -> bool {
+      // Topologically sort simulatable ops and purely
+      // dataflow ops. Other operations can be scheduled.
+      return !(isSupportedLogicOp(op) ||
+               isa<comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp>(op));
+    };
+
+    // Graph region.
+    for (auto &block : *region) {
+      if (!mlir::sortTopologically(&block, isOperationReady))
+        return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+
+  if (walkResult.wasInterrupted())
     return mlir::emitError(topOp->getLoc(),
                            "failed to sort operations topologically");
   return success();
@@ -133,9 +132,11 @@ circt::synth::topologicallySortLogicNetwork(mlir::Operation *topOp) {
 //===----------------------------------------------------------------------===//
 
 bool Cut::isTrivialCut() const {
-  // A cut is a primary input if it has no operations and only one input
+  // A cut is a trival cut if it has no operations and only one input
   return operations.empty() && inputs.size() == 1;
 }
+
+unsigned Cut::getDepth() const { return depth; }
 
 mlir::Operation *Cut::getRoot() const {
   return operations.empty()
@@ -158,15 +159,14 @@ const NPNClass &Cut::getNPNClass() const {
 }
 
 void Cut::getPermutatedInputs(const NPNClass &patternNPN,
-                              SmallVectorImpl<Value> &permuatedInputs) const {
+                              SmallVectorImpl<Value> &permutedInputs) const {
   auto npnClass = getNPNClass();
-  SmallVector<Value> permutedInputs;
   SmallVector<unsigned> idx;
   npnClass.getInputPermutation(patternNPN, idx);
-  permuatedInputs.reserve(idx.size());
+  permutedInputs.reserve(idx.size());
   for (auto inputIndex : idx) {
     assert(inputIndex < inputs.size() && "Input index out of bounds");
-    permuatedInputs.push_back(inputs[inputIndex]);
+    permutedInputs.push_back(inputs[inputIndex]);
   }
 }
 
@@ -217,13 +217,18 @@ const BinaryTruthTable &Cut::getTruthTable() const {
   uint32_t tableSize = 1 << numInputs;
   DenseMap<Value, APInt> eval;
   for (uint32_t i = 0; i < numInputs; ++i) {
-    APInt value(tableSize, 0);
-    for (uint32_t j = 0; j < tableSize; ++j) {
-      // Make sure the order of the bits is correct.
-      value.setBitVal(j, (j >> i) & 1);
-    }
-    // Set the input value for the truth table
-    eval[inputs[i]] = std::move(value);
+    // Create alternating bit pattern for input i
+    // For input i, bits alternate every 2^i positions
+    uint32_t blockSize = 1 << i;
+
+    // Create the repeating pattern: blockSize zeros followed by blockSize ones
+    uint32_t patternWidth = 2 * blockSize;
+    APInt pattern(patternWidth, 0);
+    assert(patternWidth <= tableSize);
+    // Set the upper half of the pattern to 1s
+    pattern = APInt::getHighBitsSet(patternWidth, blockSize);
+    // Use getSplat to repeat this pattern across the full table size
+    eval[inputs[i]] = APInt::getSplat(tableSize, pattern);
   }
 
   // Simulate the operations in the cut
@@ -249,7 +254,26 @@ static Cut getAsTrivialCut(mlir::Value value) {
   return cut;
 }
 
+[[maybe_unused]] static bool isCutDerivedFromOperand(const Cut &cut,
+                                                     Operation *op) {
+  if (auto *root = cut.getRoot())
+    return llvm::any_of(op->getOperands(),
+                        [&](Value v) { return v.getDefiningOp() == root; });
+
+  assert(cut.isTrivialCut());
+  // If the cut is trivial, it has no operations, so it must be a primary input.
+  // In this case, the only operation that can be derived from it is the
+  // primary input itself.
+  return cut.inputs.size() == 1 &&
+         llvm::any_of(op->getOperands(),
+                      [&](Value v) { return v == *cut.inputs.begin(); });
+}
+
 Cut Cut::mergeWith(const Cut &other, Operation *root) const {
+  assert(isCutDerivedFromOperand(*this, root) &&
+         isCutDerivedFromOperand(other, root) &&
+         "The operation must be a child of the current root operation");
+
   // Create a new cut that combines this cut and the other cut
   Cut newCut;
   // Topological sort the operations in the new cut.
@@ -279,16 +303,12 @@ Cut Cut::mergeWith(const Cut &other, Operation *root) const {
                       "arguments are treated as inputs");
 
       // Otherwise, check if the operation is in the other cut.
-
-      if (isInput) {
+      if (isInput)
         if (!other.operations.contains(defOp)) // op is in the other cut.
           continue;
-      }
-      if (isOtherInput) {
+      if (isOtherInput)
         if (!operations.contains(defOp)) // op is in this cut.
           continue;
-      }
-
       populateOperations(defOp);
     }
 
@@ -333,6 +353,8 @@ Cut Cut::mergeWith(const Cut &other, Operation *root) const {
 // This is used to create a new cut with the same inputs and operations, but a
 // different root operation.
 Cut Cut::reRoot(Operation *root) const {
+  assert(isCutDerivedFromOperand(*this, root) &&
+         "The operation must be a child of the current root operation");
   Cut newCut;
   newCut.inputs = inputs;
   newCut.operations = operations;
@@ -426,20 +448,8 @@ llvm::MapVector<Value, std::unique_ptr<CutSet>> CutEnumerator::takeVector() {
 void CutEnumerator::clear() { cutSets.clear(); }
 
 LogicalResult CutEnumerator::visit(Operation *op) {
-  if (isSupportedLogicOp(op)) {
-    // Support only binary operations with a single bit
-    // TODO: This can be extended to support variadic multiplication.
-    if (op->getNumOperands() > 2)
-      return op->emitError() << "Cut enumeration supports at most 2 operands, "
-                             << "found: " << op->getNumOperands();
-    if (!op->getResult(0).getType().isInteger(1))
-      return op->emitError()
-             << "Supported logic operations must have a single bit "
-                "result type but found: "
-             << op->getResult(0).getType();
-
+  if (isSupportedLogicOp(op))
     return visitLogicOp(op);
-  }
 
   // Skip other operations. If the operation is not a supported logic
   // operation, we create a trivial cut lazily.
@@ -460,7 +470,10 @@ LogicalResult CutEnumerator::visitLogicOp(Operation *logicOp) {
                               "found: ")
            << numOperands;
   if (!logicOp->getOpResult(0).getType().isInteger(1))
-    return logicOp->emitError("Result type must be a single bit integer");
+    return logicOp->emitError()
+           << "Supported logic operations must have a single bit "
+              "result type but found: "
+           << logicOp->getResult(0).getType();
 
   SmallVector<const CutSet *, 2> operandCutSets;
   operandCutSets.reserve(numOperands);
@@ -529,6 +542,9 @@ LogicalResult CutEnumerator::enumerateCuts(
     llvm::function_ref<std::optional<MatchedPattern>(Cut &)> matchCut) {
   LLVM_DEBUG(llvm::dbgs() << "Enumerating cuts for module: " << topOp->getName()
                           << "\n");
+  // Topologically sort the logic network
+  if (failed(topologicallySortLogicNetwork(topOp)))
+    return failure();
 
   // Store the pattern matching function for use during cut finalization
   this->matchCut = matchCut;

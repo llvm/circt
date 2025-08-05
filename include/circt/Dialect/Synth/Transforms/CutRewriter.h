@@ -30,10 +30,6 @@
 namespace circt {
 namespace synth {
 
-// Import NPN classes from the support library
-using circt::BinaryTruthTable;
-using circt::NPNClass;
-
 // This is a helper function to sort operations topologically in a logic
 // network. This is necessary for cut rewriting to ensure that operations are
 // processed in the correct order, respecting dependencies.
@@ -85,10 +81,7 @@ public:
   bool isTrivialCut() const;
 
   /// Get the root operation of this cut.
-  unsigned getDepth() const { return depth; }
-
-  /// Default constructor creates an empty cut.
-  Cut() = default;
+  unsigned getDepth() const;
 
   /// Get the root operation of this cut.
   /// The root operation produces the output of the cut.
@@ -120,7 +113,7 @@ public:
 
   /// Get the permutated inputs for this cut based on the given pattern NPN.
   void getPermutatedInputs(const NPNClass &patternNPN,
-                           SmallVectorImpl<Value> &permuatedInputs) const;
+                           SmallVectorImpl<Value> &permutedInputs) const;
 };
 
 /// Represents a cut that has been successfully matched to a rewriting pattern.
@@ -131,8 +124,6 @@ public:
 /// TODO: Currently only added as a placeholder.
 class MatchedPattern {
 public:
-  /// Default constructor creates an invalid matched pattern.
-  MatchedPattern() = default;
 };
 
 /// Manages a collection of cuts for a single logic node using priority cuts
@@ -231,7 +222,7 @@ public:
 
   /// Get the cut set for a specific value.
   /// If not found, it means no cuts have been generated for this value yet.
-  /// In that case returna a trivial cut set.
+  /// In that case return a trivial cut set.
   const CutSet *getCutSet(Value value);
 
   /// Move ownership of all cut sets to caller.
