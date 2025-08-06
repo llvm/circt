@@ -176,10 +176,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.shouldReplaceSequentialMemories())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemory());
 
-  if (opt.shouldAddCompanionAssume())
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        circt::firrtl::createCreateCompanionAssume());
-
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstProp());
 
@@ -754,11 +750,6 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Lower `EICG_wrapper` modules into clock gate intrinsics"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> addCompanionAssume{
-      "add-companion-assume",
-      llvm::cl::desc("Add companion assumes to assertions"),
-      llvm::cl::init(false)};
-
   llvm::cl::opt<bool> selectDefaultInstanceChoice{
       "select-default-for-unspecified-instance-choice",
       llvm::cl::desc(
@@ -823,7 +814,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
-      stripDebugInfo(false), fixupEICGWrapper(false), addCompanionAssume(false),
+      stripDebugInfo(false), fixupEICGWrapper(false),
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
@@ -875,7 +866,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripFirDebugInfo = clOptions->stripFirDebugInfo;
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
-  addCompanionAssume = clOptions->addCompanionAssume;
   selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
   symbolicValueLowering = clOptions->symbolicValueLowering;
   disableWireElimination = clOptions->disableWireElimination;
