@@ -36,10 +36,14 @@ struct TypeVisitor {
   }
 
   Type visit(const slang::ast::FloatingType &type) {
+    if (type.floatKind == slang::ast::FloatingType::Kind::RealTime)
+      return moore::TimeType::get(context.getContext());
     return moore::RealType::get(context.getContext());
   }
 
   Type visit(const slang::ast::PredefinedIntegerType &type) {
+    if (type.integerKind == slang::ast::PredefinedIntegerType::Kind::Time)
+      return moore::TimeType::get(context.getContext());
     return getSimpleBitVectorType(type);
   }
 

@@ -54,6 +54,32 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
 
 
 //===----------------------------------------------------------------------===//
+// TimeType
+//===----------------------------------------------------------------------===//
+
+def TimeType : MooreTypeDef<"Time", [], "moore::PackedType"> {
+  let mnemonic = "time";
+  let summary = "the SystemVerilog `time` and `realtime` type";
+  let description = [{
+    The `!moore.time` type represents a time value. Internally, the value is
+    represented as femtoseconds in `i64`.
+
+    Time values are a problematic part of the SystemVerilog language, since they
+    are multiplied by a scaling factor given by the current scope's `timeunit`
+    and then mapped to an 64 bit four-valued integer for `time`, or a real for
+    `realtime`. This means that a time value flowing from one module with one
+    timeunit to another module with a different timeunit will read as two
+    distinct delay values in the two modules.
+
+    To work around these issues, the Moore dialect maps all time values to
+    femtoseconds and represents them as an integer value. This allows us to have
+    time values exchanged between modules correctly, while locally casting from
+    and to `integer` and `real` with the correct local scaling factor.
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//
 
@@ -75,7 +101,7 @@ def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
     | `int`      | `!moore.i32`  |
     | `integer`  | `!moore.l32`  |
     | `longint`  | `!moore.i64`  |
-    | `time`     | `!moore.l64`  |
+    | `time`     | `!moore.time` |
   }];
   let parameters = (ins "unsigned":$width, "Domain":$domain);
 
@@ -112,7 +138,7 @@ def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
     |-------------|---------------|
     | `shortreal` | `!moore.real` |
     | `real`      | `!moore.real` |
-    | `realtime`  | `!moore.real` |
+    | `realtime`  | `!moore.time` |
   }];
 }
 

@@ -1181,3 +1181,12 @@ moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) 
       moore.return
   }
 }
+
+// CHECK-LABEL: @Time
+// CHECK-SAME: (%arg0: !llhd.time) -> (!llhd.time, !llhd.time)
+func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
+  // CHECK-NEXT: [[TMP:%.+]] = llhd.constant_time <1234000fs, 0d, 0e>
+  %0 = moore.constant_time 1234000 fs
+  // CHECK-NEXT: return %arg0, [[TMP]] : !llhd.time, !llhd.time
+  return %arg0, %0 : !moore.time, !moore.time
+}

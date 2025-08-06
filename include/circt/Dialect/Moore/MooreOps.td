@@ -492,6 +492,13 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   ];
 }
 
+def ConstantTimeOp : MooreOp<"constant_time", [Pure]> {
+  let summary = "A constant time value in femtoseconds";
+  let arguments = (ins UI64Attr:$value);
+  let results = (outs TimeType:$result);
+  let assemblyFormat = "$value `fs` attr-dict";
+}
+
 def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let summary = "Produce a constant string value";
   let description = [{

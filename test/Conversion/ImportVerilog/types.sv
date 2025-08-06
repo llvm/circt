@@ -27,7 +27,7 @@ module IntAtoms;
   // CHECK-NEXT: %d5 = moore.variable : <i64>
   // CHECK-NEXT: %d6 = moore.variable : <l32>
   // CHECK-NEXT: %d7 = moore.variable : <i8>
-  // CHECK-NEXT: %d8 = moore.variable : <l64>
+  // CHECK-NEXT: %d8 = moore.variable : <time>
   logic d0;
   bit d1;
   reg d2;
@@ -46,7 +46,7 @@ module IntAtoms;
   // CHECK-NEXT: %u5 = moore.variable : <i64>
   // CHECK-NEXT: %u6 = moore.variable : <l32>
   // CHECK-NEXT: %u7 = moore.variable : <i8>
-  // CHECK-NEXT: %u8 = moore.variable : <l64>
+  // CHECK-NEXT: %u8 = moore.variable : <time>
   logic unsigned u0;
   bit unsigned u1;
   reg unsigned u2;
@@ -65,7 +65,7 @@ module IntAtoms;
   // CHECK-NEXT: %s5 = moore.variable : <i64>
   // CHECK-NEXT: %s6 = moore.variable : <l32>
   // CHECK-NEXT: %s7 = moore.variable : <i8>
-  // CHECK-NEXT: %s8 = moore.variable : <l64>
+  // CHECK-NEXT: %s8 = moore.variable : <time>
   logic signed s0;
   bit signed s1;
   reg signed s2;
@@ -116,7 +116,7 @@ endmodule
 module RealType;
   // CHECK-NEXT: %d0 = moore.variable : <real>
   real d0;
-  // CHECK-NEXT: %d1 = moore.variable : <real>
+  // CHECK-NEXT: %d1 = moore.variable : <time>
   realtime d1;
   // CHECK-NEXT: %d2 = moore.variable : <real>
   shortreal d2;

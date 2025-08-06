@@ -147,3 +147,9 @@ function Foo;
   // expected-error @below {{string format specifier with width not supported}}
   $write("%42s", "foo");
 endfunction
+
+// -----
+function time Foo;
+  // expected-error @below {{time value is larger than 18446744073709549568 fs}}
+  return 100000s;
+endfunction
