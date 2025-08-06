@@ -813,8 +813,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
           portAnnotations.push_back(mem.getPortAnnotation(res.index()));
           oldResults.push_back(res.value());
         }
-        auto newMem = builder.create<MemOp>(
-            resultTypes, mem.getReadLatency(), mem.getWriteLatency(),
+        auto newMem = MemOp::create(
+            builder, resultTypes, mem.getReadLatency(), mem.getWriteLatency(),
             mem.getDepth(), RUWBehavior::Undefined,
             builder.getArrayAttr(resultNames), mem.getNameAttr(),
             mem.getNameKind(), mem.getAnnotations(),
