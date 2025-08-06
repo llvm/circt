@@ -929,7 +929,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     wire d : {|a : UInt<8>|}
     ; CHECK: !firrtl.enum<a = 1: uint<8>>
     wire e : {|a = 1 : UInt<8>|}
-  
+
   ; CHECK-LABEL: firrtl.module private @EnumValue
   module EnumValues:
     ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None>

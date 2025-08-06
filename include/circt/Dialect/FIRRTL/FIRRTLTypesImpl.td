@@ -344,10 +344,10 @@ def FEnumImpl : FIRRTLImplType<"FEnum"> {
 
     /// Return this type with any type alias types recursively removed from itself.
     FIRRTLBaseType getAnonymousType();
-    
+
     /// Get the width of this
     size_t getBitWidth();
-    
+
     /// Get the width of the data. Equal to the width of the largest element.
     size_t getDataWidth();
 
@@ -361,7 +361,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum"> {
     /// Look up an element's name by index. This asserts if index is invalid.
     StringAttr getElementNameAttr(size_t index);
     StringRef getElementName(size_t index);
-    
+
     // Look up an element's value by index. This asserts if index is invalid.
     IntegerAttr getElementValueAttr(size_t index);
     APInt getElementValue(size_t index);
