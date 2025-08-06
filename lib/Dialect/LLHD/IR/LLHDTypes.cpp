@@ -34,7 +34,7 @@ using namespace mlir;
 /// Syntax: timeattr ::= #llhd.time<[time][timeUnit], [delta]d, [epsilon]e>
 Attribute TimeAttr::parse(AsmParser &p, Type type) {
   llvm::StringRef timeUnit;
-  unsigned time = 0;
+  uint64_t time = 0;
   unsigned delta = 0;
   unsigned eps = 0;
 
@@ -63,7 +63,7 @@ void TimeAttr::print(AsmPrinter &p) const {
 }
 
 LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,
-                               TimeType type, unsigned time,
+                               TimeType type, uint64_t time,
                                llvm::StringRef timeUnit, unsigned delta,
                                unsigned epsilon) {
   // Check the time unit is a legal SI unit

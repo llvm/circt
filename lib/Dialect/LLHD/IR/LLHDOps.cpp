@@ -55,7 +55,7 @@ OpFoldResult llhd::ConstantTimeOp::fold(FoldAdaptor adaptor) {
 }
 
 void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
-                                 unsigned time, const StringRef &timeUnit,
+                                 uint64_t time, const StringRef &timeUnit,
                                  unsigned delta, unsigned epsilon) {
   auto *ctx = builder.getContext();
   auto attr = TimeAttr::get(ctx, time, timeUnit, delta, epsilon);
