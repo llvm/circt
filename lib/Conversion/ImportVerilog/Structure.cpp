@@ -711,7 +711,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   auto timeScaleGuard =
       llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
 
-  auto parameters = module->parameters;
+  auto parameters = module->getParameters();
   bool hasModuleSame = false;
   // If there is already exist a module that has the same name with this
   // module ,has the same parent scope and has the same parameters we can
@@ -719,7 +719,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   for (auto const &existingModule : modules) {
     if (module->getDeclaringDefinition() ==
         existingModule.getFirst()->getDeclaringDefinition()) {
-      auto moduleParameters = existingModule.getFirst()->parameters;
+      auto moduleParameters = existingModule.getFirst()->getParameters();
       hasModuleSame = true;
       for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
            it1 != parameters.end() && it2 != moduleParameters.end();

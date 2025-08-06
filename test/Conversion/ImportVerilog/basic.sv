@@ -2081,9 +2081,10 @@ endtask
 // CHECK-LABEL: func.func private @SignalEventControl(
 // CHECK-SAME: [[X:%[^:]+]]: !moore.ref<i32>
 // CHECK-SAME: [[Y:%[^:]+]]: !moore.ref<i32>
+// CHECK-SAME: [[T:%[^:]+]]: !moore.ref<i1>
 // CHECK-SAME: [[U:%[^:]+]]: !moore.ref<i1>
 // CHECK-SAME: [[V:%[^:]+]]: !moore.ref<l1>
-task automatic SignalEventControl(ref int x, ref int y, ref bit u, ref logic v);
+task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, ref logic v);
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP:%.+]] = moore.read [[X]]
   // CHECK:   moore.detect_event any [[TMP]]
@@ -2099,51 +2100,51 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit u, ref logic v);
   @(x) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP:%.+]] = moore.read [[T]]
   // CHECK:   moore.detect_event posedge [[TMP]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(posedge x) dummyA();
+  @(posedge t) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP:%.+]] = moore.read [[T]]
   // CHECK:   moore.detect_event negedge [[TMP]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(negedge x) dummyA();
+  @(negedge t) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP:%.+]] = moore.read [[T]]
   // CHECK:   moore.detect_event edge [[TMP]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(edge x) dummyA();
+  @(edge t) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP1:%.+]] = moore.read [[T]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[U]]
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP2]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(posedge x iff u) dummyA();
+  @(posedge t iff u) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP1:%.+]] = moore.read [[T]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[V]] : <l1>
   // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.l1 -> !moore.i1
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(posedge x iff v) dummyA();
+  @(posedge t iff v) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP1:%.+]] = moore.read [[T]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[Y]]
   // CHECK:   [[TMP3:%.+]] = moore.bool_cast [[TMP2]] : i32 -> i1
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(posedge x iff y) dummyA();
+  @(posedge t iff y) dummyA();
 
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP:%.+]] = moore.read [[X]]
@@ -2164,16 +2165,16 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit u, ref logic v);
   @(x, y) dummyA();
 
   // CHECK: moore.wait_event {
-  // CHECK:   [[TMP1:%.+]] = moore.read [[X]]
+  // CHECK:   [[TMP1:%.+]] = moore.read [[T]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[U]]
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP2]]
-  // CHECK:   [[TMP1:%.+]] = moore.read [[Y]]
+  // CHECK:   [[TMP1:%.+]] = moore.read [[U]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[V]]
   // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.l1 -> !moore.i1
   // CHECK:   moore.detect_event negedge [[TMP1]] if [[TMP3]]
   // CHECK: }
   // CHECK: call @dummyA()
-  @(posedge x iff u, negedge y iff v) dummyA();
+  @(posedge t iff u, negedge u iff v) dummyA();
 endtask
 
 // CHECK-LABEL: func.func private @ImplicitEventControlExamples(
@@ -2365,7 +2366,7 @@ module ConcurrentAssert(input clk);
     // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
     // CHECK: moore.return
   // CHECK: }
-  assert property (a [*]);
+  assert property (a [+]);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
@@ -3031,30 +3032,31 @@ endfunction
 
 // CHECK-LABEL: @TimeLiterals
 module TimeLiterals;
-  timeunit 1ns / 10ps; // round to 10ps
+  timeunit 1ns / 10ps; // constants should be independent of timeunit
+
   // CHECK: moore.constant_time 12000000 fs
   time a0 = 12ns;
-  // CHECK: moore.constant_time 2350000 fs
+  // CHECK: moore.constant_time 2345000 fs
   time a1 = 2.345ns;
-  // CHECK: moore.constant_time 350000 fs
+  // CHECK: moore.constant_time 345000 fs
   time a2 = 345ps;
   // CHECK: moore.constant_time 45000000 fs
   realtime b0 = 45ns;
-  // CHECK: moore.constant_time 5680000 fs
+  // CHECK: moore.constant_time 5678000 fs
   realtime b1 = 5.678ns;
-  // CHECK: moore.constant_time 680000 fs
+  // CHECK: moore.constant_time 678000 fs
   realtime b2 = 678ps;
 
   // CHECK-LABEL: moore.module private @InheritTimeunit
   module InheritTimeunit;
-    // CHECK: moore.constant_time 790000 fs
+    // CHECK: moore.constant_time 789000 fs
     time c0 = 789ps;
   endmodule
 
   // CHECK-LABEL: moore.module private @OverrideTimeunit
   module OverrideTimeunit;
-    timeunit 1ps / 10fs;
-    // CHECK: moore.constant_time 89120 fs
+    timeunit 1ps / 10fs; // constants should be independent of timeunit
+    // CHECK: moore.constant_time 89123 fs
     time d0 = 89.1234ps;
   endmodule
 endmodule
