@@ -390,6 +390,7 @@ void circt::registerFromVerilogTranslation() {
             ModuleOp::create(UnknownLoc::get(context)));
         ImportVerilogOptions options;
         options.debugInfo = true;
+        options.warningOptions.push_back("no-missing-top");
         if (failed(
                 importVerilog(sourceMgr, context, ts, module.get(), &options)))
           module = {};
