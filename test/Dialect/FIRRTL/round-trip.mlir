@@ -196,4 +196,15 @@ firrtl.module @Fprintf(
   firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.domain @ClockDomain {
+// CHECK-NEXT:  }
+firrtl.domain @ClockDomain {}
+
+// CHECK-LABEL: firrtl.module @Domains(
+// CHECK-SAME:    in %clock_domain: !firrtl.domain<@ClockDomain>
+firrtl.module @Domains(
+  in %clock_domain: !firrtl.domain<@ClockDomain>
+) {
+}
+
 }

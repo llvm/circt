@@ -253,4 +253,14 @@ def PrintfOperandType : FIRRTLDialectType<
     "a printf operand type (a FIRRTL base type or a format string type)",
     "::circt::firrtl::FIRRTLType">;
 
+//===----------------------------------------------------------------------===//
+// Domain Type
+//===----------------------------------------------------------------------===//
+
+def DomainType : FIRRTLDialectTypeHelper<
+  "DomainType",
+  "a domain type">,
+  BuildableType<"::circt::firrtl::DomainType::get($_builder.getContext())">;
+
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

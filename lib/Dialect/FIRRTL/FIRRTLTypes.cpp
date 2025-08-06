@@ -166,6 +166,9 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
       .Case<FStringType>([&](auto) { os << "fstring"; })
+      .Case<DomainType>([&](DomainType type) {
+        os << "domain<" << type.getImpl()->name << ">";
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -207,6 +210,7 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= vector '<' type ',' int '>'
 ///   ::= const '.' type
 ///   ::= 'property.' firrtl-phased-type
+///   ::= 'domain' '<' symbol '>'
 /// bundle-elt ::= identifier flip? ':' type
 /// enum-elt ::= identifier ':' type
 /// ```
@@ -538,6 +542,15 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   if (name == "fstring") {
     return result = FStringType::get(context), success();
   }
+  if (name == "domain") {
+    StringAttr name;
+    if (parser.parseLess() || parser.parseSymbolName(name) ||
+        parser.parseGreater())
+      return failure();
+    result = DomainType::get(
+        context, FlatSymbolRefAttr::get(name));
+    return success();
+  }
 
   return {};
 }
@@ -748,6 +761,10 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<LHSType>(
           [](auto type) { return type.getType().getRecursiveTypeProperties(); })
       .Case<FStringType>([](auto type) {
+        return RecursiveTypeProperties{true,  false, false, false,
+                                       false, false, false};
+      })
+      .Case<DomainType>([](auto type) {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
