@@ -1,4 +1,4 @@
-; RUN: firtool %s --add-companion-assume | FileCheck %s
+; RUN: firtool %s | FileCheck %s
 
 FIRRTL version 4.0.0
 
@@ -32,17 +32,6 @@ circuit ChiselVerif:
                                        label = "label for ifelsefatal assert",
                                        guards = "MACRO_GUARD;ASDF">,
               clock, cond, enable, enable)
-    ; CHECK: `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:  assume property (@(posedge clock) [[GEN]]);
-    ; CHECK-NEXT:  `ifdef MACRO_GUARD
-    ; CHECK-NEXT:    `ifdef ASDF
-    ; CHECK-NEXT:      assume__label_for_assert_with_format_string:
-    ; CHECK-NEXT:        assume property (@(posedge clock) [[GEN]]);
-    ; CHECK-NEXT:      assume__label_for_ifelsefatal_assert:
-    ; CHECK-SAME:        assume property (@(posedge clock) [[GEN]]);
-    ; CHECK-NEXT:    `endif
-    ; CHECK-NEXT:  `endif
-    ; CHECK-NEXT:`endif
 
     ; CHECK: label_for_assume
     ; CHECK: assume property

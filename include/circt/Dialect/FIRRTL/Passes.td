@@ -607,15 +607,6 @@ def RandomizeRegisterInit :
   }];
 }
 
-def CreateCompanionAssume : Pass<"firrtl-create-companion-assume", "firrtl::FModuleOp"> {
-  let summary = "Create companion assume statements for assertions";
-  let description = [{
-    This pass generates companion assume statements gated by macros to assertions.
-    If the assertion is UNR only one, a special form of assume (AssumeEdgedPredicateIntrinsicOp)
-    is used. Otherwise a concurrent assume is used
-  }];
-}
-
 def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   let summary = "Lower ref ports to XMR";
   let description = [{

@@ -131,7 +131,6 @@ public:
   }
   bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
-  bool shouldAddCompanionAssume() const { return addCompanionAssume; }
   bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
   bool shouldSelectDefaultInstanceChoice() const {
     return selectDefaultInstanceChoice;
@@ -365,11 +364,6 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setAddCompanionAssume(bool value) {
-    addCompanionAssume = value;
-    return *this;
-  }
-
   FirtoolOptions &setDisableCSEinClasses(bool value) {
     disableCSEinClasses = value;
     return *this;
@@ -448,7 +442,6 @@ private:
   bool stripFirDebugInfo;
   bool stripDebugInfo;
   bool fixupEICGWrapper;
-  bool addCompanionAssume;
   bool disableCSEinClasses;
   bool selectDefaultInstanceChoice;
   verif::SymbolicValueLowering symbolicValueLowering;
