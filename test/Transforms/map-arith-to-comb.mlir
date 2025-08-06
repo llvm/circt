@@ -49,6 +49,20 @@ hw.module @foo(in %arg0 : i32, in %arg1 : i32, in %arg2 : i1) {
     %c0_i32 = arith.constant 0 : i32
 }
 
+// CHECK-LABEL: func @allow_hw_arrays
+func.func @allow_hw_arrays(%arg0: !hw.array<9xi42>, %arg1: !hw.array<9xi42>, %arg2: i1) {
+  // CHECK: comb.mux %arg2, %arg0, %arg1 : !hw.array<9xi42>
+  %0 = arith.select %arg2, %arg0, %arg1 : !hw.array<9xi42>
+  return
+}
+
+// CHECK-LABEL: func @allow_hw_structs
+func.func @allow_hw_structs(%arg0: !hw.struct<a: i42, b: i1337>, %arg1: !hw.struct<a: i42, b: i1337>, %arg2: i1) {
+  // CHECK: comb.mux %arg2, %arg0, %arg1 : !hw.struct<a: i42, b: i1337>
+  %0 = arith.select %arg2, %arg0, %arg1 : !hw.struct<a: i42, b: i1337>
+  return
+}
+
 // -----
 
 hw.module @invalidVector(in %arg0 : vector<4xi32>) {

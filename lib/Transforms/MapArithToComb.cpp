@@ -34,7 +34,7 @@ class MapArithTypeConverter : public mlir::TypeConverter {
 public:
   MapArithTypeConverter() {
     addConversion([](Type type) {
-      if (isa<mlir::IntegerType>(type))
+      if (hw::isHWValueType(type))
         return type;
 
       return Type();
