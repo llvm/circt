@@ -343,3 +343,10 @@ hw.module @SkipLoopWithUnsupportedBounds() {
     llhd.yield
   }
 }
+
+// CHECK-LABEL: @DontCrashOnSingleBlocks
+hw.module @DontCrashOnSingleBlocks() {
+  llhd.combinational {
+    llhd.yield
+  }
+}

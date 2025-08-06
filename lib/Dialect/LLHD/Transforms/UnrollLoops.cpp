@@ -396,9 +396,13 @@ void UnrollLoopsPass::runOnOperation() {
 }
 
 void UnrollLoopsPass::runOnOperation(CombinationalOp op) {
-  LLVM_DEBUG(llvm::dbgs() << "Unrolling loops in " << op.getLoc() << "\n");
+  // There's nothing to do if we only have a single block. MLIR even refuses to
+  // compute a dominator tree in that case.
+  if (op.getBody().hasOneBlock())
+    return;
 
   // Find the loops.
+  LLVM_DEBUG(llvm::dbgs() << "Unrolling loops in " << op.getLoc() << "\n");
   DominanceInfo domInfo(op);
   CFGLoopInfo cfgLoopInfo(domInfo.getDomTree(&op.getBody()));
 
