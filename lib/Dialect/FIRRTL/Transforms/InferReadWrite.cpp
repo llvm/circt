@@ -154,9 +154,9 @@ struct InferReadWritePass
       ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
       portAnnotations.push_back(builder.getArrayAttr(portAtts));
       // Create the new rw memory.
-      auto rwMem = MemOp::create(
-          builder, resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
-          memOp.getDepth(), RUWAttr::Undefined,
+      auto rwMem = builder.create<MemOp>(
+          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
+          memOp.getDepth(), RUWBehavior::Undefined,
           builder.getArrayAttr(resultNames), memOp.getNameAttr(),
           memOp.getNameKind(), memOp.getAnnotations(),
           builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),

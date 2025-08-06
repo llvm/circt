@@ -95,7 +95,7 @@ struct ObjectModelIR {
     extraPortsClass = ClassOp::create(builderOM, "ExtraPortsMemorySchema",
                                       extraPortFields, extraPortsType);
 
-    mlir::Type classFieldTypes[13] = {
+    mlir::Type classFieldTypes[14] = {
         StringType::get(context),
         FIntegerType::get(context),
         FIntegerType::get(context),
@@ -105,6 +105,7 @@ struct ObjectModelIR {
         FIntegerType::get(context),
         FIntegerType::get(context),
         FIntegerType::get(context),
+        StringType::get(context),
         ListType::get(context, cast<PropertyType>(PathType::get(context))),
         BoolType::get(context),
         ListType::get(
@@ -344,7 +345,7 @@ struct ObjectModelIR {
       extraPortsList.push_back(extraPortsObj);
     }
     auto extraPorts = ListCreateOp::create(
-        builderOM, memorySchemaClass.getPortType(22), extraPortsList);
+        builderOM, memorySchemaClass.getPortType(24), extraPortsList);
     for (auto field : llvm::enumerate(memoryParamNames)) {
       auto propVal = createConstField(
           llvm::StringSwitch<TypedAttr>(field.value())
@@ -360,7 +361,9 @@ struct ObjectModelIR {
               .Case("hierarchy", {})
               .Case("inDut", BoolAttr::get(context, inDut))
               .Case("extraPorts", {})
-              .Case("preExtInstName", {}));
+              .Case("preExtInstName", {})
+              .Case("ruwBehavior", builderOM.getStringAttr(
+                                       stringifyRUWBehavior(mem.getRuw()))));
       if (!propVal) {
         if (field.value() == "hierarchy")
           propVal = hierpaths;
@@ -486,11 +489,11 @@ struct ObjectModelIR {
   ClassOp memoryMetadataClass;
   ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
   ClassOp blackBoxModulesSchemaClass, blackBoxMetadataClass;
-  StringRef memoryParamNames[13] = {
-      "name",          "depth",      "width",          "maskBits",
-      "readPorts",     "writePorts", "readwritePorts", "writeLatency",
-      "readLatency",   "hierarchy",  "inDut",          "extraPorts",
-      "preExtInstName"};
+  StringRef memoryParamNames[14] = {
+      "name",        "depth",         "width",          "maskBits",
+      "readPorts",   "writePorts",    "readwritePorts", "writeLatency",
+      "readLatency", "ruwBehavior",   "hierarchy",      "inDut",
+      "extraPorts",  "preExtInstName"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[3] = {"moduleName", "inDut", "libraries"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
@@ -564,9 +567,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     // Get the memory data width.
     auto width = mem.getDataWidth();
     // Metadata needs to be printed for memories which are candidates for
-    // macro replacement. The requirements for macro replacement::
-    // 1. read latency and write latency of one.
-    // 2. undefined read-under-write behavior.
+    // macro replacement.
     if (mem.getReadLatency() != 1 || mem.getWriteLatency() != 1 || width <= 0)
       return;
     auto memExtSym = FlatSymbolRefAttr::get(SymbolTable::getSymbolName(mem));
@@ -597,9 +598,14 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
 
     auto maskGranStr =
         !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
+
     seqMemConfStr = (StringRef(seqMemConfStr) + "name {{" + Twine(symId) +
                      "}} depth " + Twine(mem.getDepth()) + " width " +
-                     Twine(width) + " ports " + portStr + maskGranStr + "\n")
+                     Twine(width) + " ports " + portStr + maskGranStr +
+                     (mem.getRuw() == RUWBehavior::Undefined
+                          ? ""
+                          : " ruw " + stringifyRUWBehavior(mem.getRuw())) +
+                     "\n")
                         .str();
 
     // Do not emit any JSON for memories which are not in the DUT.
@@ -615,6 +621,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       jsonStream.attribute("read", mem.getNumReadPorts());
       jsonStream.attribute("write", mem.getNumWritePorts());
       jsonStream.attribute("readwrite", mem.getNumReadWritePorts());
+      jsonStream.attribute("ruw_behavior", stringifyRUWBehavior(mem.getRuw()));
       if (isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {

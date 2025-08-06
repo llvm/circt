@@ -285,7 +285,7 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLBaseType elementType, uint64_t numElements,
-                     RUWAttr ruw, StringRef name, NameKindEnum nameKind,
+                     RUWBehavior ruw, StringRef name, NameKindEnum nameKind,
                      ArrayAttr annotations, StringAttr innerSym,
                      MemoryInitAttr init) {
   build(builder, result,

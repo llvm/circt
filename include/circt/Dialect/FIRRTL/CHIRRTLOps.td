@@ -60,7 +60,9 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<
     Define a new behavioral sequential memory.  Sequential memories have a
     write latency and a read latency of 1.
   }];
-  let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
+  let arguments = (ins RUWBehaviorAttr:$ruw,
+                       StrAttr:$name,
+                       NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        OptionalAttr<MemoryInitAttr>:$init,
@@ -70,7 +72,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<
                          custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
-                   "firrtl::RUWAttr":$ruw, "mlir::StringRef":$name,
+                   "firrtl::RUWBehavior":$ruw, "mlir::StringRef":$name,
                    "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>

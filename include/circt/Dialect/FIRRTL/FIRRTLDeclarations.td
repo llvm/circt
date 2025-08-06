@@ -246,7 +246,7 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   let arguments =
     (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
          ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
-         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWBehaviorAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
