@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
+#include "llvm/ADT/ScopeExit.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -650,6 +651,13 @@ struct ModuleVisitor : public BaseVisitor {
 LogicalResult Context::convertCompilation() {
   const auto &root = compilation.getRoot();
 
+  // Keep track of the local time scale. `getTimeScale` automatically looks
+  // through parent scopes to find the time scale effective locally.
+  auto prevTimeScale = timeScale;
+  timeScale = root.getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
   // First only to visit the whole AST to collect the hierarchical names without
   // any operation creating.
   for (auto *inst : root.topInstances)
@@ -695,6 +703,13 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ParameterSymbol;
   using slang::ast::PortSymbol;
   using slang::ast::TypeParameterSymbol;
+
+  // Keep track of the local time scale. `getTimeScale` automatically looks
+  // through parent scopes to find the time scale effective locally.
+  auto prevTimeScale = timeScale;
+  timeScale = module->getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
 
   auto parameters = module->parameters;
   bool hasModuleSame = false;
@@ -868,6 +883,13 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
   ValueSymbolScope scope(valueSymbols);
 
+  // Keep track of the local time scale. `getTimeScale` automatically looks
+  // through parent scopes to find the time scale effective locally.
+  auto prevTimeScale = timeScale;
+  timeScale = module->getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
   // Collect downward hierarchical names. Such as,
   // module SubA; int x = Top.y; endmodule. The "Top" module is the parent of
   // the "SubA", so "Top.y" is the downward hierarchical name.
@@ -931,6 +953,13 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 /// Convert a package and its contents.
 LogicalResult
 Context::convertPackage(const slang::ast::PackageSymbol &package) {
+  // Keep track of the local time scale. `getTimeScale` automatically looks
+  // through parent scopes to find the time scale effective locally.
+  auto prevTimeScale = timeScale;
+  timeScale = package.getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(intoModuleOp.getBody());
   ValueSymbolScope scope(valueSymbols);
@@ -1019,6 +1048,13 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
 /// Convert a function.
 LogicalResult
 Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  // Keep track of the local time scale. `getTimeScale` automatically looks
+  // through parent scopes to find the time scale effective locally.
+  auto prevTimeScale = timeScale;
+  timeScale = subroutine.getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
   // First get or create the function declaration.
   auto *lowering = declareFunction(subroutine);
   if (!lowering)

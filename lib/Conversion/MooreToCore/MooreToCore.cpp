@@ -600,6 +600,19 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct ConstantTimeOpConv : public OpConversionPattern<ConstantTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConstantTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<llhd::ConstantTimeOp>(
+        op, llhd::TimeAttr::get(op->getContext(), op.getValue(),
+                                StringRef("fs"), 0, 0));
+    return success();
+  }
+};
+
 struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -1636,6 +1649,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return IntegerType::get(type.getContext(), type.getWidth());
   });
 
+  typeConverter.addConversion(
+      [&](TimeType type) { return llhd::TimeType::get(type.getContext()); });
+
   typeConverter.addConversion([&](FormatStringType type) {
     return sim::FormatStringType::get(type.getContext());
   });
@@ -1690,12 +1706,14 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
-      return hw::InOutType::get(innerType);
+      if (hw::isHWValueType(innerType))
+        return hw::InOutType::get(innerType);
     return {};
   });
 
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
+  typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
   typeConverter.addConversion([](debug::StructType type) { return type; });
@@ -1763,6 +1781,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
+    ConstantTimeOpConv,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
     ReadOpConversion,
     StructExtractOpConversion, StructExtractRefOpConversion,

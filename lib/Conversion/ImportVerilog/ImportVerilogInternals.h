@@ -248,6 +248,9 @@ struct Context {
   /// example to populate the list of observed signals in an implicit event
   /// control `@*`.
   std::function<void(moore::ReadOp)> rvalueReadCallback;
+
+  /// The time scale currently in effect.
+  slang::TimeScale timeScale;
 };
 
 } // namespace ImportVerilog

@@ -3028,3 +3028,33 @@ function void rangeSelectRValue(
   // CHECK: moore.dyn_extract %arg1 from [[TMP2]] : i8, i6 -> i5
   z = b[i-:5];  // b[i-5+1:i] = b[i-4:i] = bits[9-(i-4):9-i]; offset = 9-i
 endfunction
+
+// CHECK-LABEL: @TimeLiterals
+module TimeLiterals;
+  timeunit 1ns / 10ps; // round to 10ps
+  // CHECK: moore.constant_time 12000000 fs
+  time a0 = 12ns;
+  // CHECK: moore.constant_time 2350000 fs
+  time a1 = 2.345ns;
+  // CHECK: moore.constant_time 350000 fs
+  time a2 = 345ps;
+  // CHECK: moore.constant_time 45000000 fs
+  realtime b0 = 45ns;
+  // CHECK: moore.constant_time 5680000 fs
+  realtime b1 = 5.678ns;
+  // CHECK: moore.constant_time 680000 fs
+  realtime b2 = 678ps;
+
+  // CHECK-LABEL: moore.module private @InheritTimeunit
+  module InheritTimeunit;
+    // CHECK: moore.constant_time 790000 fs
+    time c0 = 789ps;
+  endmodule
+
+  // CHECK-LABEL: moore.module private @OverrideTimeunit
+  module OverrideTimeunit;
+    timeunit 1ps / 10fs;
+    // CHECK: moore.constant_time 89120 fs
+    time d0 = 89.1234ps;
+  endmodule
+endmodule

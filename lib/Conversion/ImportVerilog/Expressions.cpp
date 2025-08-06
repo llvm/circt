@@ -710,6 +710,42 @@ struct RvalueExprVisitor : public ExprVisitor {
     return context.materializeSVInt(expr.getValue(), *expr.type, loc);
   }
 
+  // Handle time literals.
+  Value visit(const slang::ast::TimeLiteral &expr) {
+    // The time literal is expressed in the current time scale. Determine the
+    // conversion factor to convert the literal from the current time scale into
+    // femtoseconds.
+    static_assert(int(slang::TimeUnit::Seconds) == 0);
+    static_assert(int(slang::TimeUnit::Femtoseconds) == 5);
+    static_assert(int(slang::TimeScaleMagnitude::One) == 1);
+    static_assert(int(slang::TimeScaleMagnitude::Ten) == 10);
+    static_assert(int(slang::TimeScaleMagnitude::Hundred) == 100);
+    static constexpr double units[] = {1e15, 1e12, 1e9, 1e6, 1e3, 1e0};
+    auto base = context.timeScale.base;
+    double scale = units[int(base.unit)] * int(base.magnitude);
+
+    // Convert and round the value to femtoseconds.
+    double value = std::round(expr.getValue() * scale);
+    assert(value >= 0.0);
+
+    // Check that the value does not exceed what we can represent in the IR.
+    // Casting the maximum uint64 value to double changes its value from
+    // 18446744073709551615 to 18446744073709551616, which makes the comparison
+    // overestimate the largest number we can represent. To avoid this, round
+    // the maximum value down to the closest number that only has the front 53
+    // bits set. This matches the mantissa of a double, plus the implicit
+    // leading 1, ensuring that we can accurately represent the limit.
+    static constexpr uint64_t limit =
+        (std::numeric_limits<uint64_t>::max() >> 11) << 11;
+    if (value > limit) {
+      mlir::emitError(loc) << "time value is larger than " << limit << " fs";
+      return {};
+    }
+
+    return moore::ConstantTimeOp::create(builder, loc,
+                                         static_cast<uint64_t>(value));
+  }
+
   // Handle replications.
   Value visit(const slang::ast::ReplicationExpression &expr) {
     auto type = context.convertType(*expr.type);

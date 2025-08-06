@@ -36,6 +36,7 @@ class QueueType;
 class RealType;
 class StringType;
 class StructType;
+class TimeType;
 class UnionType;
 class UnpackedType;
 class UnpackedArrayType;
@@ -134,7 +135,7 @@ class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
     return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType, StructType,
-                     UnionType>(type);
+                     UnionType, TimeType>(type);
   }
 
   /// Get the value domain of this type.
