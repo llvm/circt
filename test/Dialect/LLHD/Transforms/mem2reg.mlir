@@ -1018,13 +1018,8 @@ hw.module @RelocatedSignal() {
   // CHECK: [[CLOCK:%clock]] = llhd.sig %false : i1
   // CHECK-NEXT: llhd.process
   llhd.process {
-    // CHECK-NEXT: [[CON:%.+]] = hw.constant 0 : i4
-    // CHECK-NEXT: [[READY:%ready_T]] = llhd.sig [[CON]] : i4
     cf.br ^bb1
   ^bb1:
-    // CHECK: [[TIME:%.+]] = llhd.constant_time
-    // CHECK-NEXT: llhd.drv [[READY]], {{%.+}} after [[TIME]]
-    // CHECK-NEXT: llhd.wait
     %5 = llhd.prb %clock_0 : !hw.inout<i1>
     llhd.wait (%5 : i1), ^bb2
   ^bb2:
@@ -1044,6 +1039,45 @@ hw.module @RelocatedSignal() {
     cf.br ^bb1
   ^bb5:
     cf.br ^bb1
+  }
+  hw.output
+}
+
+// CHECK-LABEL: DominanceMini1
+hw.module @DominanceMini1() {
+  %true = hw.constant true
+  %false = hw.constant false
+  %3 = llhd.constant_time <0ns, 0d, 1e>
+  %clock_0 = llhd.sig name "clock" %false : i1
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    %5 = llhd.prb %clock_0 : !hw.inout<i1>
+    llhd.wait (%5 : i1), ^bb3
+  ^bb3:
+    %c2_i4 = hw.constant 0 : i4
+    %ready_T = llhd.sig %c2_i4 : i4
+    llhd.drv %ready_T, %c2_i4 after %3 : !hw.inout<i4>
+    %160 = llhd.prb %ready_T : !hw.inout<i4>
+    cf.br ^bb1
+  }
+  hw.output
+}
+
+// CHECK-LABEL: DominanceMini2
+hw.module @DominanceMini2() {
+  %false = hw.constant false
+  %b = llhd.sig %false : i1
+  llhd.combinational {
+    cf.br ^bb2
+  ^bb1:  // no predecessors
+    %0 = llhd.prb %b : !hw.inout<i1>
+    %1 = llhd.constant_time <0ns, 0d, 1e>
+    %g = llhd.sig %false : i1
+    llhd.drv %g, %0 after %1 : !hw.inout<i1>
+    cf.br ^bb2
+  ^bb2:  // 2 preds: ^bb0, ^bb1
+    llhd.yield
   }
   hw.output
 }
