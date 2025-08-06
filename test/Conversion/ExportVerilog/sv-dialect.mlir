@@ -1935,6 +1935,17 @@ hw.module @bindInMod() {
 // CHECK-NEXT:    ._k       (1'h1)
 // CHECK: endmodule
 
+sv.macro.error
+sv.macro.error "my message xxx yyy"
+// CHECK: `_ERROR
+// CHECK: `_ERROR_my_message_xxx_yyy
+
+hw.module @MacroExample() {
+  sv.macro.error "inside macro example"
+}
+// CHECK-LABEL: module MacroExample
+// CHECK: `_ERROR_inside_macro_example
+
 sv.bind <@wait_order::@baz>
 
 // CHECK-LABEL: bind wait_order_0 XMRRef_Baz baz (
