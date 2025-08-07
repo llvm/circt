@@ -13,8 +13,7 @@
 // CHECK-DAG: hw-operand1-forwarder
 // CHECK-DAG: canonicalize
 // CHECK-DAG: hw-operand2-forwarder
-// CHECK-DAG: hw-module-output-pruner-front
-// CHECK-DAG: hw-module-output-pruner-back
+// CHECK-DAG: hw-module-output-pruner
 // CHECK-DAG: hw-module-input-pruner
 // CHECK-DAG: operation-pruner
 hw.module @Foo(in %in : i1, out out : i1) {
