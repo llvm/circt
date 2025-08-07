@@ -215,5 +215,9 @@ firrtl.module @Domains(
   %oneDomain = firrtl.wire : !firrtl.uint<1, [@clockDomainSym]>
   // CHECK-NEXT: %twoDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @resetDomainSym]>
   %twoDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @resetDomainSym]>
+  // CHECK-NEXT: %sortedDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @resetDomainSym]>
+  %sortedDomains = firrtl.wire : !firrtl.uint<1, [@resetDomainSym, @clockDomainSym]>
+  // CHECK-NEXT: %uniqueDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym]>
+  %uniqueDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @clockDomainSym]>
 }
 }

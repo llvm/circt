@@ -1367,7 +1367,14 @@ int32_t IntType::getWidthOrSentinel() const {
 struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
   WidthTypeStorage(int32_t width, bool isConst,
                    ArrayRef<FlatSymbolRefAttr> domains)
-      : FIRRTLBaseTypeStorage(isConst), width(width), domains(domains) {}
+      : FIRRTLBaseTypeStorage(isConst), width(width), domains(domains) {
+    // Domains must be sorted and uniqued.  This provides a canonical
+    // representation of domains that allows for pointer comparison of types.
+    llvm::sort(this->domains, [](FlatSymbolRefAttr lhs, FlatSymbolRefAttr rhs) {
+      return lhs.getValue() < rhs.getValue();
+    });
+    this->domains.erase(llvm::unique(this->domains), this->domains.end());
+  }
   using KeyTy = std::tuple<int32_t, char, ArrayRef<FlatSymbolRefAttr>>;
 
   bool operator==(const KeyTy &key) const { return key == getAsKey(); }
