@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --lower-scf-to-calyx="write-json=%T/data" -canonicalize>/dev/null && FileCheck %s < %T/data.json
+// RUN: circt-opt %s --lower-scf-to-calyx="write-json=%t" -canonicalize>/dev/null && FileCheck %s < %t.json
 
 // CHECK-LABEL:   "mem_0": {
 // CHECK:           "data": [
