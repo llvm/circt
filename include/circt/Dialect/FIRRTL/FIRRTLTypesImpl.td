@@ -40,10 +40,18 @@ def SIntImpl : FIRRTLImplType<"SInt",
                               [WidthQualifiedTypeTrait],
                               "::circt::firrtl::IntType"> {
   let summary = "A signed integer type, whose width may not be known.";
-  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
+  let parameters = (
+    ins "int32_t":$widthOrSentinel,
+        "bool":$isConst,
+        "ArrayRef<FlatSymbolRefAttr>":$domains
+  );
   let storageClass = "WidthTypeStorage";
   let builders = [
-    TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
+    TypeBuilder<(
+      ins "std::optional<int32_t>":$width,
+          CArg<"bool", "false">:$isConst,
+          CArg<"ArrayRef<FlatSymbolRefAttr>", "{}">:$domains
+    )>,
     TypeBuilder<(ins)>,
   ];
   let genVerifyDecl = true;
@@ -53,6 +61,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
     SIntType getConstType(bool isConst) const;
+    ArrayRef<FlatSymbolRefAttr> getDomains() const;
   }];
 }
 
@@ -60,10 +69,18 @@ def UIntImpl : FIRRTLImplType<"UInt",
                               [WidthQualifiedTypeTrait],
                               "::circt::firrtl::IntType"> {
   let summary = "An unsigned integer type, whose width may not be known.";
-  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
+  let parameters = (
+    ins "int32_t":$widthOrSentinel,
+        "bool":$isConst,
+        "ArrayRef<FlatSymbolRefAttr>":$domains
+  );
   let storageClass = "WidthTypeStorage";
   let builders = [
-    TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
+    TypeBuilder<(
+      ins "std::optional<int32_t>":$width,
+          CArg<"bool", "false">:$isConst,
+          CArg<"ArrayRef<FlatSymbolRefAttr>", "{}">:$domains
+    )>,
     TypeBuilder<(ins)>,
   ];
   let genVerifyDecl = true;
@@ -73,6 +90,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
     UIntType getConstType(bool isConst) const;
+    ArrayRef<FlatSymbolRefAttr> getDomains() const;
   }];
 }
 
@@ -124,16 +142,25 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
   [WidthQualifiedTypeTrait]> {
   let summary = "Analog signal";
-  let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
+  let parameters = (
+    ins "int32_t":$widthOrSentinel,
+        "bool":$isConst,
+        "ArrayRef<FlatSymbolRefAttr>":$domains
+  );
   let storageClass = "WidthTypeStorage";
   let typeName = "firrtl.analog";
   let builders = [
-    TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
+    TypeBuilder<(
+      ins "std::optional<int32_t>":$width,
+          CArg<"bool", "false">:$isConst,
+          CArg<"ArrayRef<FlatSymbolRefAttr>", "{}">:$domains
+    )>,
     TypeBuilder<(ins)>,
   ];
   let extraClassDeclaration = [{
     int32_t getWidthOrSentinel() const;
     AnalogType getConstType(bool isConst) const;
+    ArrayRef<FlatSymbolRefAttr> getDomains() const;
   }];
   let genVerifyDecl = true;
 }
