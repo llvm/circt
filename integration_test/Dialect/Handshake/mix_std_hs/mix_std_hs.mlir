@@ -1,8 +1,9 @@
 // REQUIRES: iverilog,cocotb
 
-// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %T-cycles
-// RUN: hlstool %S/kernel.mlir --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %T-cycles
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=mix_std_hs --pythonFolder="%S,%S/.." %T-cycles/*.sv 2>&1 | FileCheck %s
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %t.dir
+// RUN: hlstool %S/kernel.mlir --dynamic-hw --buffering-strategy=cycles --split-verilog --lowering-options=disallowLocalVariables,disallowPackedStructAssignments -o %t.dir
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=mix_std_hs --pythonFolder="%S,%S/.." %t.dir/*.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0

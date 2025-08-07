@@ -1,17 +1,20 @@
 // REQUIRES: iverilog,cocotb
 
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: circt-opt %s --insert-merge-blocks | \
 // RUN: hlstool --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=nested_diamonds --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=nested_diamonds --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // @mortbopet: this is currently disabled due to deadlocking.
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: circt-opt %s --insert-merge-blocks | \
 // RUN: hlstool --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=nested_diamonds --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=nested_diamonds --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // Locking the circt should yield the same result
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=all --dynamic-parallelism=locking --verilog --lowering-options=disallowLocalVariables > %t.sv
-// DISABLED: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=nested_diamonds --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// DISABLED: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=nested_diamonds --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[NUM:.*]] PASS=[[NUM]] FAIL=0 SKIP=0

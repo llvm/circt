@@ -1,7 +1,8 @@
 // REQUIRES: iverilog,cocotb
 
 // RUN: circt-opt %s --lower-seq-fifo --lower-seq-hlmem --lower-seq-to-sv --lower-verif-to-sv --sv-trace-iverilog --export-verilog -o %t.mlir > %t.sv
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=fifo \
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=fifo \
 // RUN:     --pythonModule=fifo --pythonFolder="%S,%S/.." %t.sv 2>&1
 
 // CHECK: ** TEST
