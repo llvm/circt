@@ -655,8 +655,6 @@ struct Promoter {
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
 
-  void relocateSlots();
-
   /// The region we are promoting in.
   Region &region;
 
@@ -710,16 +708,13 @@ LogicalResult Promoter::promote() {
   LLVM_DEBUG({
     llvm::dbgs() << "After probe insertion:\n";
     lattice.dump();
-    llvm::dbgs() << *region.getParentOp() << "\n";
   });
 
   // Propagate the reaching definitions forward across the lattice.
-  DominanceInfo dominance(region.getParentOp());
   propagateForward();
   LLVM_DEBUG({
     llvm::dbgs() << "After forward propagation:\n";
     lattice.dump();
-    llvm::dbgs() << *region.getParentOp() << "\n";
   });
 
   // Resolve definitions.
@@ -731,15 +726,10 @@ LogicalResult Promoter::promote() {
   LLVM_DEBUG({
     llvm::dbgs() << "After def resolution and drive insertion:\n";
     lattice.dump();
-    llvm::dbgs() << *region.getParentOp() << "\n";
   });
 
   // Insert the necessary block arguments.
   insertBlockArgs();
-
-  // Slots might not dominate the inserted probes and drives. If that is the
-  // case, try relocating them to the entry block.
-  // relocateSlots();
 
   // Erase operations that have become unused.
   pruner.eraseNow();
@@ -1161,11 +1151,12 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
     for (auto *predecessor : entry->predecessors) {
       if (predecessor->suspends)
         continue;
-      // ...
+      // Propogate signal definitions only to blocks that are dominated by the
+      // signal itself.
       for (auto &defEntry : predecessor->valueBefore->reachingDefs) {
-        auto def = defEntry.getFirst().getPointer();
-        auto *defBlock = def.getDefiningOp()->getBlock();
-        if (!dominance.dominates(defBlock, entry->block))
+        auto slot = getSlot(defEntry.getFirst());
+        auto *slotBlock = slot.getDefiningOp()->getBlock();
+        if (!dominance.dominates(slotBlock, entry->block))
           continue;
         reachingDefs.insert(defEntry);
       }
@@ -1191,6 +1182,7 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
             return predecessor->suspends;
           }))
         continue;
+
       for (auto *predecessor : entry->predecessors) {
         auto otherDef = predecessor->valueBefore->reachingDefs.lookup(slot);
         if (!otherDef && optimisticMerges)
@@ -1722,33 +1714,6 @@ void Promoter::replaceValueWith(Value oldValue, Value newValue) {
     if (def->condition.isConditional() &&
         def->condition.getCondition() == oldValue)
       def->condition.setCondition(newValue);
-  }
-}
-
-void Promoter::relocateSlots() {
-  DominanceInfo dominance(region.getParentOp());
-  auto builder = OpBuilder::atBlockBegin(&region.getBlocks().front());
-  for (auto &slot : slots) {
-    if (llvm::all_of(slot.getUsers(), [&](auto *user) {
-          return dominance.dominates(slot, user);
-        }))
-      continue;
-
-    auto oldSlot = slot.getDefiningOp<llhd::SignalOp>();
-    auto *initSignal = oldSlot.getInit().getDefiningOp();
-    if (!llvm::isa<hw::ConstantOp>(initSignal))
-      continue;
-
-    LLVM_DEBUG(llvm::dbgs() << "- Relocating slot " << slot << "\n");
-
-    pruner.eraseLaterIfUnused(initSignal);
-    initSignal = builder.clone(*initSignal);
-
-    auto newSlot = llhd::SignalOp::create(
-        builder, oldSlot.getLoc(), oldSlot->getOperands(), oldSlot->getAttrs());
-    newSlot.setOperand(initSignal->getResult(0));
-    oldSlot.replaceAllUsesWith(newSlot.getResult());
-    pruner.eraseNow(oldSlot);
   }
 }
 

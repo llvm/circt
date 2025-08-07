@@ -1005,46 +1005,11 @@ hw.module @ProbePostDef() {
   hw.output
 }
 
-// Regression test verifying that a signal with a constant operand is moved
-// to the entry block to dominate the inserted drive.
-// CHECK-LABEL: RelocatedSignal
-hw.module @RelocatedSignal() {
-  %true = hw.constant true
-  %false = hw.constant false
-  %c0_i2 = hw.constant 0 : i2
-  %c0_i4 = hw.constant 0 : i4
-  %3 = llhd.constant_time <0ns, 0d, 1e>
-  %clock_0 = llhd.sig name "clock" %false : i1
-  // CHECK: [[CLOCK:%clock]] = llhd.sig %false : i1
-  // CHECK-NEXT: llhd.process
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    %5 = llhd.prb %clock_0 : !hw.inout<i1>
-    llhd.wait (%5 : i1), ^bb2
-  ^bb2:
-    %6 = llhd.prb %clock_0 : !hw.inout<i1>
-    %8 = comb.and bin %6, %true : i1
-    cf.cond_br %8, ^bb3, ^bb1
-  ^bb3:
-    %c2_i4 = hw.constant 0 : i4
-    %ready_T = llhd.sig %c2_i4 : i4
-    %c0_i3 = hw.constant 0 : i3
-    %157 = comb.concat %c0_i3, %6 : i3, i1
-    llhd.drv %ready_T, %157 after %3 : !hw.inout<i4>
-    %160 = llhd.prb %ready_T : !hw.inout<i4>
-    %29 = comb.icmp eq %160, %c0_i4 : i4
-    cf.cond_br %29, ^bb4, ^bb5
-  ^bb4:
-    cf.br ^bb1
-  ^bb5:
-    cf.br ^bb1
-  }
-  hw.output
-}
-
-// CHECK-LABEL: DominanceMini1
-hw.module @DominanceMini1() {
+// CHECK-LABEL: DominanceTest1
+// Regression test verifying that signal definitions do not propagate to blocks
+// that are not dominated by the signal. Otherwise, the inserted drive would not
+// dominate signal operand.
+hw.module @DominanceTest1() {
   %true = hw.constant true
   %false = hw.constant false
   %3 = llhd.constant_time <0ns, 0d, 1e>
@@ -1064,19 +1029,21 @@ hw.module @DominanceMini1() {
   hw.output
 }
 
-// CHECK-LABEL: DominanceMini2
-hw.module @DominanceMini2() {
+// CHECK-LABEL: DominanceTest2
+hw.module @DominanceTest2() {
   %false = hw.constant false
   %b = llhd.sig %false : i1
   llhd.combinational {
-    cf.br ^bb2
-  ^bb1:  // no predecessors
+    cf.br ^bb3
+  ^bb1:
     %0 = llhd.prb %b : !hw.inout<i1>
     %1 = llhd.constant_time <0ns, 0d, 1e>
     %g = llhd.sig %false : i1
     llhd.drv %g, %0 after %1 : !hw.inout<i1>
     cf.br ^bb2
-  ^bb2:  // 2 preds: ^bb0, ^bb1
+  ^bb2:
+    cf.br ^bb3
+  ^bb3:
     llhd.yield
   }
   hw.output
