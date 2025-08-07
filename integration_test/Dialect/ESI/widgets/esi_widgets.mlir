@@ -3,7 +3,8 @@
 // Test the original HandshakeToHW flow.
 
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --lower-seq-fifo --lower-seq-hlmem --lower-seq-to-sv --lower-verif-to-sv --canonicalize --prettify-verilog --export-verilog -o %t.hw.mlir > %t.sv
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=esi_widgets --pythonFolder="%S" %t.sv %esi_prims
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=esi_widgets --pythonFolder="%S" %t.sv %esi_prims
 
 module attributes {circt.loweringOptions = "disallowLocalVariables"} {
   hw.module @fifo1(

@@ -3,7 +3,8 @@
 // RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
 // RUN:     -o %t.mlir > %t.sv
 
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=nonstallable_test1 \
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=nonstallable_test1 \
 // RUN:     --pythonModule=nonstallable_test1 --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 

@@ -2,19 +2,23 @@
 
 // Test the original HandshakeToHW flow.
 
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // Test the DC lowering flow.
 // TODO: This test does not pass with DC as DC to HW does not support buffer initValues.
+// RUNx: rm -rf %t.dir && mkdir %t.dir
 // RUNx: hlstool %s --dynamic-hw --dc --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
+// RUNx: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
+// RUNx: rm -rf %t.dir && mkdir %t.dir
 // RUNx: hlstool %s --dynamic-hw --dc --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUNx: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
+// RUNx: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=buffer_initial_values --pythonFolder="%S,%S/.." %t.sv %esi_prims 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
