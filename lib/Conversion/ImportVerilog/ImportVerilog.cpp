@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Support/Timing.h"
@@ -23,7 +22,7 @@
 #include "slang/driver/Driver.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
-#include "slang/util/Version.h"
+#include "slang/util/VersionInfo.h"
 
 using namespace mlir;
 using namespace circt;
@@ -92,11 +91,10 @@ public:
       mlirDiag << " [-W" << optionName << "]";
 
     // Write out macro expansions, if we have any, in reverse order.
-    for (auto it = diag.expansionLocs.rbegin(); it != diag.expansionLocs.rend();
-         it++) {
+    for (auto loc : std::views::reverse(diag.expansionLocs)) {
       auto &note = mlirDiag.attachNote(
-          convertLocation(sourceManager->getFullyOriginalLoc(*it)));
-      auto macroName = sourceManager->getMacroName(*it);
+          convertLocation(sourceManager->getFullyOriginalLoc(loc)));
+      auto macroName = sourceManager->getMacroName(loc);
       if (macroName.empty())
         note << "expanded from here";
       else
@@ -202,15 +200,25 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
     const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(i + 1);
     auto slangBuffer = driver.sourceManager.assignText(
         mlirBuffer->getBufferIdentifier(), mlirBuffer->getBuffer());
-    driver.buffers.push_back(slangBuffer);
+    driver.sourceLoader.addBuffer(slangBuffer);
     bufferFilePaths.insert({slangBuffer.id, mlirBuffer->getBufferIdentifier()});
   }
 
+  for (const auto &libDir : options.libDirs)
+    driver.sourceLoader.addSearchDirectories(libDir);
+
+  for (const auto &libExt : options.libExts)
+    driver.sourceLoader.addSearchExtension(libExt);
+
+  for (const auto &includeDir : options.includeDirs)
+    if (driver.sourceManager.addUserDirectories(includeDir))
+      return failure();
+
+  for (const auto &includeSystemDir : options.includeSystemDirs)
+    if (driver.sourceManager.addSystemDirectories(includeSystemDir))
+      return failure();
+
   // Populate the driver options.
-  driver.options.includeDirs = options.includeDirs;
-  driver.options.includeSystemDirs = options.includeSystemDirs;
-  driver.options.libDirs = options.libDirs;
-  driver.options.libExts = options.libExts;
   driver.options.excludeExts.insert(options.excludeExts.begin(),
                                     options.excludeExts.end());
   driver.options.ignoreDirectives = options.ignoreDirectives;
@@ -221,22 +229,24 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.librariesInheritMacros = options.librariesInheritMacros;
 
   driver.options.timeScale = options.timeScale;
-  driver.options.allowUseBeforeDeclare = options.allowUseBeforeDeclare;
-  driver.options.ignoreUnknownModules = options.ignoreUnknownModules;
-  driver.options.onlyLint =
-      options.mode == ImportVerilogOptions::Mode::OnlyLint;
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::AllowUseBeforeDeclare,
+      options.allowUseBeforeDeclare);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::IgnoreUnknownModules,
+      options.ignoreUnknownModules);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::LintMode,
+      options.mode == ImportVerilogOptions::Mode::OnlyLint);
+  driver.options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::DisableInstanceCaching, false);
   driver.options.topModules = options.topModules;
   driver.options.paramOverrides = options.paramOverrides;
 
   driver.options.errorLimit = options.errorLimit;
   driver.options.warningOptions = options.warningOptions;
-  driver.options.suppressWarningsPaths = options.suppressWarningsPaths;
 
   driver.options.singleUnit = options.singleUnit;
-  driver.options.libraryFiles = options.libraryFiles;
-
-  for (auto &dir : sourceMgr.getIncludeDirs())
-    driver.options.includeDirs.push_back(dir);
 
   return success(driver.processOptions());
 }
@@ -319,12 +329,13 @@ LogicalResult ImportDriver::preprocessVerilog(llvm::raw_ostream &os) {
                                               diagnostics, optionBag);
     // Sources have to be pushed in reverse, as they form a stack in the
     // preprocessor. Last pushed source is processed first.
-    for (auto &buffer : slang::make_reverse_range(driver.buffers))
+    auto sources = driver.sourceLoader.loadSources();
+    for (auto &buffer : std::views::reverse(sources))
       preprocessor.pushSource(buffer);
     if (failed(preprocessAndPrint(preprocessor)))
       return failure();
   } else {
-    for (auto &buffer : driver.buffers) {
+    for (auto &buffer : driver.sourceLoader.loadSources()) {
       slang::BumpAllocator alloc;
       slang::Diagnostics diagnostics;
       slang::parsing::Preprocessor preprocessor(driver.sourceManager, alloc,
@@ -342,28 +353,15 @@ LogicalResult ImportDriver::preprocessVerilog(llvm::raw_ostream &os) {
 // Entry Points
 //===----------------------------------------------------------------------===//
 
-/// Execute a callback and report any thrown exceptions as "internal slang
-/// error" MLIR diagnostics.
-static LogicalResult
-catchExceptions(llvm::function_ref<LogicalResult()> callback) {
-  try {
-    return callback();
-  } catch (const std::exception &e) {
-    return emitError(UnknownLoc(), "internal slang error: ") << e.what();
-  }
-}
-
 /// Parse the specified Verilog inputs into the specified MLIR context.
 LogicalResult circt::importVerilog(SourceMgr &sourceMgr,
                                    MLIRContext *mlirContext, TimingScope &ts,
                                    ModuleOp module,
                                    const ImportVerilogOptions *options) {
-  return catchExceptions([&] {
-    ImportDriver importDriver(mlirContext, ts, options);
-    if (failed(importDriver.prepareDriver(sourceMgr)))
-      return failure();
-    return importDriver.importVerilog(module);
-  });
+  ImportDriver importDriver(mlirContext, ts, options);
+  if (failed(importDriver.prepareDriver(sourceMgr)))
+    return failure();
+  return importDriver.importVerilog(module);
 }
 
 /// Run the files in a source manager through Slang's Verilog preprocessor and
@@ -372,12 +370,10 @@ LogicalResult circt::preprocessVerilog(SourceMgr &sourceMgr,
                                        MLIRContext *mlirContext,
                                        TimingScope &ts, llvm::raw_ostream &os,
                                        const ImportVerilogOptions *options) {
-  return catchExceptions([&] {
-    ImportDriver importDriver(mlirContext, ts, options);
-    if (failed(importDriver.prepareDriver(sourceMgr)))
-      return failure();
-    return importDriver.preprocessVerilog(os);
-  });
+  ImportDriver importDriver(mlirContext, ts, options);
+  if (failed(importDriver.prepareDriver(sourceMgr)))
+    return failure();
+  return importDriver.preprocessVerilog(os);
 }
 
 /// Entry point as an MLIR translation.
