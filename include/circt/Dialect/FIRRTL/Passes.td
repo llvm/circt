@@ -909,4 +909,12 @@ def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
   }];
 }
 
+def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {
+  let summary = "lower domain information to properties";
+  let description = [{
+    Lower all domain information into FIRRTL properties.  This has the effect of
+    erasing all domain information.
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
