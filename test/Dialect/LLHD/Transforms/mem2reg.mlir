@@ -1005,3 +1005,65 @@ hw.module @ProbePostDef() {
   hw.output
 }
 
+// CHECK-LABEL: DominanceTest1
+// Regression test verifying that signal definitions do not propagate to blocks
+// that are not dominated by the signal. Otherwise, the inserted drive would not
+// dominate signal operand.
+hw.module @DominanceTest1() {
+  %true = hw.constant true
+  %false = hw.constant false
+  %3 = llhd.constant_time <0ns, 0d, 1e>
+  %clock_0 = llhd.sig name "clock" %false : i1
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: [[TMP0:%.+]] = llhd.prb %clock
+    // CHECK-NEXT: cf.br ^bb1([[TMP0]] : i1)
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NEXT: ^bb1([[BBARG0:%.+]]: i1)
+    // CHECK-NEXT: llhd.wait ([[BBARG0]] : i1), ^bb2
+    %5 = llhd.prb %clock_0 : !hw.inout<i1>
+    llhd.wait (%5 : i1), ^bb3
+  ^bb3:
+    // CHECK-NEXT: ^bb2:
+    // CHECK-NEXT: [[TMP1:%.+]] = llhd.prb %clock
+    // CHECK: %ready_T = llhd.sig
+    // CHECK: llhd.drv %ready_T
+    // CHECK: cf.br ^bb1([[TMP1]] : i1)
+    %c0_i4 = hw.constant 0 : i4
+    %ready_T = llhd.sig %c0_i4 : i4
+    llhd.drv %ready_T, %c0_i4 after %3 : !hw.inout<i4>
+    %6 = llhd.prb %ready_T : !hw.inout<i4>
+    cf.br ^bb1
+  }
+  hw.output
+}
+
+// CHECK-LABEL: DominanceTest2
+hw.module @DominanceTest2() {
+  %false = hw.constant false
+  %b = llhd.sig %false : i1
+  // CHECK: llhd.combinational
+  llhd.combinational {
+    cf.br ^bb3
+  // CHECK: ^bb1:
+  ^bb1:
+    // CHECK-NEXT: [[PRB1:%.+]] = llhd.prb %b
+    // CHECK-NEXT: [[SIG1:%.+]] = llhd.sig %false
+    // CHECK-NEXT: cf.br ^bb2
+    %0 = llhd.prb %b : !hw.inout<i1>
+    %1 = llhd.constant_time <0ns, 0d, 1e>
+    %g = llhd.sig %false : i1
+    llhd.drv %g, %0 after %1 : !hw.inout<i1>
+    cf.br ^bb2
+  ^bb2:
+    // CHECK-NEXT: ^bb2
+    // CHECK-NEXT: [[TIME1:%.+]] = llhd.constant_time
+    // CHECK-NEXT: llhd.drv [[SIG1]], [[PRB1]]
+    // CHECK-NEXT: cf.br ^bb3
+    cf.br ^bb3
+  ^bb3:
+    llhd.yield
+  }
+  hw.output
+}
