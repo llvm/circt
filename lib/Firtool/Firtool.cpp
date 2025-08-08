@@ -48,6 +48,9 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
+
   return success();
 }
 
@@ -771,6 +774,20 @@ struct FirtoolCmdOptions {
       "inline-input-only-modules", llvm::cl::desc("Inline input-only modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<firtool::FirtoolOptions::DomainMode> domainMode{
+      "domain-mode", llvm::cl::desc("Enable domain inference and checking"),
+      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Disable),
+      llvm::cl::values(
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Disable, "disable",
+                     "Disable domain checking"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Infer, "infer",
+                     "Check domains with inference for private modules"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Check, "check",
+                     "Check domains without inference"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::InferAll, "infer-all",
+                     "Check domains with inference for both public and private "
+                     "modules"))};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -823,7 +840,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
       lintXmrsInDesign(true), emitAllBindFiles(false),
-      inlineInputOnlyModules(false) {
+      inlineInputOnlyModules(false), domainMode(DomainMode::Disable) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -877,4 +894,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
   emitAllBindFiles = clOptions->emitAllBindFiles;
   inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
+  domainMode = clOptions->domainMode;
 }
