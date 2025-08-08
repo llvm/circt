@@ -48,6 +48,9 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
+  if (opt.shouldInferDomains())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains());
+
   return success();
 }
 
@@ -760,6 +763,11 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Emit bindfiles for private modules"),
       llvm::cl::init(false)};
 
+    llvm::cl::opt<bool> inferDomains{
+      "infer-domains",
+      llvm::cl::desc("Enable domain inference and checking"),
+      llvm::cl::init(false)};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -811,7 +819,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
-      lintXmrsInDesign(true), emitAllBindFiles(false) {
+      lintXmrsInDesign(true), emitAllBindFiles(false), inferDomains(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -864,4 +872,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   lintStaticAsserts = clOptions->lintStaticAsserts;
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
   emitAllBindFiles = clOptions->emitAllBindFiles;
+  inferDomains = clOptions->inferDomains;
 }
