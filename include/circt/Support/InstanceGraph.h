@@ -59,6 +59,11 @@ class InstanceGraphNode;
 class InstanceRecord
     : public llvm::ilist_node_with_parent<InstanceRecord, InstanceGraphNode> {
 public:
+  /// Get the op that this is tracking.
+  Operation *getOperation() {
+    return instance.getOperation();
+  }
+
   /// Get the instance-like op that this is tracking.
   template <typename TTarget = InstanceOpInterface>
   auto getInstance() {
@@ -112,6 +117,8 @@ class InstanceGraphNode : public llvm::ilist_node<InstanceGraphNode> {
 
 public:
   InstanceGraphNode() : module(nullptr) {}
+
+  Operation *getOperation() { return module.getOperation(); }
 
   /// Get the module that this node is tracking.
   template <typename TTarget = ModuleOpInterface>
