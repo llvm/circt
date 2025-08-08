@@ -668,7 +668,8 @@ LogicalResult Visitor::visitDecl(WireOp op) {
   if (mappings.hwType)
     hwOnlyAggMap[op.getResult()] =
         WireOp::create(builder, mappings.hwType, op.getName(), op.getNameKind(),
-                       op.getAnnotations(), mappings.newSym, op.getForceable())
+                       op.getAnnotations(), mappings.newSym, op.getForceable(),
+                       {})
             .getResult();
 
   // Create the non-HW wires.  Non-HW wire names are always droppable.
