@@ -253,4 +253,13 @@ firrtl.module @AnonymousDomains(
   %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @DomainDefine
+firrtl.module @DomainDefine(
+  in  %x : !firrtl.domain of @ClockDomain,
+  out %y : !firrtl.domain of @ClockDomain
+) {
+  // CHECK: firrtl.domain.define %y, %x
+  firrtl.domain.define %y, %x
+}
+
 }

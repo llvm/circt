@@ -968,14 +968,26 @@ firrtl.circuit "Foo" {
     #firrtl.domain.field<"alwaysOn", !firrtl.bool>
   ]
 
+  // CHECK-LABEL:  extmodule ExtModuleWithDomains :
+  // CHECK-NEXT:     input I : Domain of PowerDomain
+  // CHECK-NEXT:     output O : Domain of PowerDomain
+  firrtl.extmodule @ExtModuleWithDomains(
+    in  I: !firrtl.domain of @PowerDomain,
+    out O: !firrtl.domain of @PowerDomain
+  )
+
   // CHECK-LABEL: module Domains :
   firrtl.module @Domains(
     // CHECK-NEXT: input A : Domain of ClockDomain
     // CHECK-NEXT: input B : Domain of ClockDomain
+    // CHECK-NEXT: input I : Domain of PowerDomain
+    // CHECK-NEXT: output O : Domain of PowerDomain
     // CHECK-NEXT: input a : UInt<1> domains [A]
     // CHECK-NEXT: input ab : UInt<1> domains [A, B]
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
+    in %I: !firrtl.domain of @PowerDomain,
+    out %O: !firrtl.domain of @PowerDomain,
     in %a: !firrtl.uint<1> domains [%A],
     in %ab: !firrtl.uint<1> domains [%A, %B]
   ) {
@@ -988,6 +1000,13 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: node twoDomains = unsafe_domain_cast(a, A, B)
     %2 = firrtl.unsafe_domain_cast %a domains %A, %B : !firrtl.uint<1>
     %twoDomains = firrtl.node %2 : !firrtl.uint<1>
+
+    // CHECK-NEXT: inst ext of ExtModuleWithDomains
+    %ext_I, %ext_O = firrtl.instance ext @ExtModuleWithDomains(in I: !firrtl.domain of @PowerDomain, out O: !firrtl.domain of @PowerDomain)
+    // CHECK-NEXT: domain_define ext.I = I
+    firrtl.domain.define %ext_I, %I
+    // CHECK-NEXT: domain_define O = ext.O
+    firrtl.domain.define %O, %ext_O
   }
 
 }

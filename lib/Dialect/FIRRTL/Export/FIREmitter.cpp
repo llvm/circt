@@ -102,6 +102,7 @@ struct Emitter {
   void emitStatement(MemoryPortOp op);
   void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
+  void emitStatement(DomainDefineOp op);
   void emitStatement(RefDefineOp op);
   void emitStatement(RefForceOp op);
   void emitStatement(RefForceInitialOp op);
@@ -752,9 +753,9 @@ void Emitter::emitStatementsInBlock(Block &block) {
               ConnectOp, MatchingConnectOp, PropAssignOp, InstanceOp,
               InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
               CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
-              RefDefineOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
-              RefReleaseInitialOp, LayerBlockOp, GenericIntrinsicOp>(
-            [&](auto op) { emitStatement(op); })
+              DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
+              GenericIntrinsicOp>([&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -1280,6 +1281,14 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
   // Print the clock.
   emitExpression(op.getClock());
 
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(DomainDefineOp op) {
+  startStatement();
+  emitAssignLike([&]() { emitExpression(op.getDest()); },
+                 [&]() { emitExpression(op.getSrc()); }, PPExtString("="),
+                 PPExtString("domain_define"));
   emitLocationAndNewLine(op);
 }
 

@@ -4052,6 +4052,29 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   return success();
 }
 
+/// Returns success if the given connect is the sole driver of its dest operand.
+/// Returns failure if there are other connects driving the dest.
+static LogicalResult checkSingleConnect(FConnectLike connect) {
+  // For now, refs and domains can't be in bundles so this is sufficient. This
+  // is insufficient for properties, and insufficient before
+  // lower-open-aggregates has run. In the future, need to ensure no other
+  // define's to same "fieldSource". (When aggregates can have references, we
+  // can define a reference within, but this must be unique.  Checking this here
+  // may be expensive, consider adding something to FModuleLike's to check it
+  // there instead)
+  auto dest = connect.getDest();
+  for (auto *user : dest.getUsers()) {
+    if (auto c = dyn_cast<FConnectLike>(user);
+        c && c.getDest() == dest && c != connect) {
+      auto diag = connect.emitError("destination cannot be driven by multiple "
+                                    "operations");
+      diag.attachNote(c->getLoc()) << "other driver is here";
+      return failure();
+    }
+  }
+  return success();
+}
+
 LogicalResult ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
@@ -4113,23 +4136,12 @@ LogicalResult MatchingConnectOp::verify() {
 }
 
 LogicalResult RefDefineOp::verify() {
-  // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // For now, refs can't be in bundles so this is sufficient.
-  // In the future need to ensure no other define's to same "fieldSource".
-  // (When aggregates can have references, we can define a reference within,
-  // but this must be unique.  Checking this here may be expensive,
-  // consider adding something to FModuleLike's to check it there instead)
-  for (auto *user : getDest().getUsers()) {
-    if (auto conn = dyn_cast<FConnectLike>(user);
-        conn && conn.getDest() == getDest() && conn != *this)
-      return emitError("destination reference cannot be reused by multiple "
-                       "operations, it can only capture a unique dataflow");
-  }
+  if (failed(checkSingleConnect(*this)))
+    return failure();
 
-  // Check "static" source/dest
   if (auto *op = getDest().getDefiningOp()) {
     // TODO: Make ref.sub only source flow?
     if (isa<RefSubOp>(op))
@@ -4153,16 +4165,70 @@ LogicalResult RefDefineOp::verify() {
 }
 
 LogicalResult PropAssignOp::verify() {
-  // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Verify that there is a single value driving the destination.
-  for (auto *user : getDest().getUsers()) {
-    if (auto conn = dyn_cast<FConnectLike>(user);
-        conn && conn.getDest() == getDest() && conn != *this)
-      return emitError("destination property cannot be reused by multiple "
-                       "operations, it can only capture a unique dataflow");
+  if (failed(checkSingleConnect(*this)))
+    return failure();
+
+  return success();
+}
+
+static FlatSymbolRefAttr getDomainTypeName(Value value) {
+  if (!isa<DomainType>(value.getType()))
+    return {};
+
+  if (auto arg = dyn_cast<BlockArgument>(value)) {
+    auto *parent = arg.getOwner()->getParentOp();
+    if (auto module = dyn_cast<FModuleLike>(parent)) {
+      auto info = module.getDomainInfo();
+      if (info.empty())
+        return {};
+      auto attr = info[arg.getArgNumber()];
+      return dyn_cast<FlatSymbolRefAttr>(attr);
+    }
+
+    return {};
+  }
+
+  if (auto result = dyn_cast<OpResult>(value)) {
+    auto *op = result.getDefiningOp();
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      auto info = instance.getDomainInfo();
+      if (info.empty())
+        return {};
+      auto attr = info[result.getResultNumber()];
+      return dyn_cast<FlatSymbolRefAttr>(attr);
+    }
+    return {};
+  }
+
+  return {};
+}
+
+LogicalResult DomainDefineOp::verify() {
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  if (failed(checkSingleConnect(*this)))
+    return failure();
+
+  auto dst = getDest();
+  auto src = getSrc();
+
+  auto dstDomain = getDomainTypeName(dst);
+  if (!dstDomain)
+    return emitError("could not determine domain-type of destination");
+
+  auto srcDomain = getDomainTypeName(src);
+  if (!srcDomain)
+    return emitError("could not determine domain-type of source");
+
+  if (dstDomain != srcDomain) {
+    auto diag = emitError()
+                << "source domain type " << srcDomain
+                << " does not match destination domain type " << dstDomain;
+    return diag;
   }
 
   return success();

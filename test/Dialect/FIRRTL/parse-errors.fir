@@ -572,8 +572,8 @@ circuit DefineTwice:
   public module DefineTwice:
     input in: UInt<1>
     output out : Probe<UInt<1>>
-    define out = probe(in) ; expected-error {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    define out = probe(in)
+    define out = probe(in) ; expected-error {{destination cannot be driven by multiple operation}}
+    define out = probe(in) ; expected-note {{other driver is here}}
 
 ;// -----
 
@@ -1858,3 +1858,123 @@ circuit Domains:
   public module Domains:
     ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
     input a: UInt<1> domains [A]
+
+;// -----
+
+FIRRTL version 5.0.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    domain_define
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @+3 {{expected domain expression}}
+    domain_define
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    ; expected-error @below {{use of unknown declaration 'x'}}
+    domain_define x
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : UInt<1>
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    ; expected-error @+3 {{expected '='}}
+    domain_define x
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    ; expected-error @+3 {{expected domain expression}}
+    domain_define x =
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    ; expected-error @below {{use of unknown declaration 'y'}}
+    domain_define x = y
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    input  y : UInt<1>
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x = y
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    input  y : UInt<1>[3]
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x = y[1]
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    input  y : {a: UInt<1>}
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x = y.a
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : UInt<1>[3]
+    input  y : Domain of D
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x[1] = y
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : {a: UInt<1>}
+    input  y : Domain of D
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x.a = y
