@@ -19,7 +19,8 @@ hw.module @Bar(in %arg0: i32, in %arg1: i32, out out0: i32, out out1: i32) {
 
 // CHECK-LABEL: hw.module @FooFoo
 hw.module @FooFoo(in %arg0: i32, in %arg1: !hw.array<2xi32>, out out0: i32, out out1: !hw.array<2xi32>) {
-  // CHECK-NEXT: [[V0:%.+]], [[V1:%.+]] = hw.instance
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 0
+  // CHECK-NEXT: {{%.+}}, [[V1:%.+]] = hw.instance
   %inst.out0, %inst.out1 = hw.instance "inst" @FooBar (arg0: %arg0: i32, arg1: %arg1: !hw.array<2xi32>) -> (out0: i32, out1: !hw.array<2xi32>)
   // CHECK-NEXT: hw.output [[V0]], [[V1]]
   hw.output %inst.out0, %inst.out1 : i32, !hw.array<2xi32>
