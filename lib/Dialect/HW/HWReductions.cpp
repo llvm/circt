@@ -113,19 +113,20 @@ struct HWOperandForwarder : public Reduction {
 /// A sample reduction pattern that replaces integer operations with a constant
 /// zero of their type.
 struct HWConstantifier : public Reduction {
-  uint64_t match(Operation *op) override {
-    if (op->getNumResults() == 0 || op->getNumOperands() == 0)
-      return 0;
-    return llvm::all_of(op->getResults(), [](Value result) {
-      return isa<IntegerType>(result.getType());
-    });
+  void matches(Operation *op,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    for (auto result : op->getResults())
+      if (!result.use_empty())
+        if (isa<IntegerType>(result.getType()))
+          addMatch(1, result.getResultNumber());
   }
-  LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
+  LogicalResult rewriteMatches(Operation *op,
+                               ArrayRef<uint64_t> indices) override {
     OpBuilder builder(op);
-    for (auto result : op->getResults()) {
+    for (auto idx : indices) {
+      auto result = op->getResult(idx);
       auto type = cast<IntegerType>(result.getType());
-      auto newOp = hw::ConstantOp::create(builder, op->getLoc(), type, 0);
+      auto newOp = hw::ConstantOp::create(builder, result.getLoc(), type, 0);
       result.replaceAllUsesWith(newOp);
     }
     reduce::pruneUnusedOps(op, *this);
