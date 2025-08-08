@@ -108,6 +108,32 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   }];
 }
 
+def DomainDefineOp
+    : FIRRTLOp<"domain.define", [SameTypeOperands, FConnectLike]> {
+  let summary = "FIRRTL Define Domains.";
+  let description = [{
+    Define a target domain to the source domain:
+    ```
+      firrtl.domain.define %dest, %src
+    ```
+    Used to statically route domains from source to destination
+    through the design, one module at a time.
+
+    Similar to "connect" but cannot have multiple define's to same
+    destination, and the define is never conditional even if under
+    a "when".
+
+    Source and destination must resolve statically.
+  }];
+  let arguments = (ins DomainType:$dest, DomainType:$src);
+  let hasVerifier = 1;
+  let assemblyFormat = "$dest `,` $src  attr-dict";
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
+  }];
+}
 
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
