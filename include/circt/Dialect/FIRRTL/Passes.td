@@ -905,4 +905,17 @@ def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
   }];
 }
 
+def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
+  let summary = "Infer and type check all firrtl domains";
+  let description = [{
+    This pass does domain inference on a FIRRTL circuit.  The end result of this
+    is either a corrrctly domain-checked FIRRTL circuit or failure with verbose
+    error messages indicating why the FIRRTL circuit has illegal domain
+    constructs.
+
+    E.g., this pass can be used to check for illegal clock-domain-crossings if
+    clock domains are specified for signals in the design.
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
