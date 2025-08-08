@@ -38,12 +38,36 @@ struct Reduction {
   /// benefit measure where a higher number means that applying the pattern
   /// leads to a bigger reduction and zero means that the patten does not
   /// match and thus cannot be applied at all.
-  virtual uint64_t match(Operation *op) = 0;
+  virtual uint64_t match(Operation *op) { return 0; }
+
+  /// Collect all ways how this reduction can apply to a specific operation. If
+  /// a reduction can apply to an operation in different ways, for example
+  /// deleting different operands, it should call `addMatch` multiple times with
+  /// the expected benefit of the match, as well as an integer identifying one
+  /// of the different ways it can match.
+  ///
+  /// Calls `match(op)` by default.
+  virtual void matches(Operation *op,
+                       llvm::function_ref<void(uint64_t, uint64_t)> addMatch) {
+    addMatch(match(op), 0);
+  }
 
   /// Apply the reduction to a specific operation. If the returned result
   /// indicates that the application failed, the resulting module is treated the
   /// same as if the tester marked it as uninteresting.
-  virtual LogicalResult rewrite(Operation *op) = 0;
+  virtual LogicalResult rewrite(Operation *op) { return failure(); }
+
+  /// Apply a set of matches of this reduction to a specific operation. If the
+  /// reduction registered multiple matches for an operation, a subset of the
+  /// integer identifiers of those matches will be passed to this function
+  /// again. If the returned result indicates that the application failed, the
+  /// resulting module is treated the same as if the tester marked it as
+  /// uninteresting.
+  virtual LogicalResult rewriteMatches(Operation *op,
+                                       ArrayRef<uint64_t> matches) {
+    assert(matches.size() == 1 && matches[0] == 0);
+    return rewrite(op);
+  }
 
   /// Return a human-readable name for this reduction pattern.
   virtual std::string getName() const = 0;

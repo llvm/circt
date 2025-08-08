@@ -165,6 +165,12 @@ static LogicalResult writeOutput(ModuleOp module) {
   return success();
 }
 
+struct Match {
+  Operation *op;
+  uint64_t id;
+  uint64_t benefit;
+};
+
 /// Execute the main chunk of work of the tool. This function reads the input
 /// module and iteratively applies the reduction strategies until no options
 /// make it smaller.
@@ -262,31 +268,91 @@ static LogicalResult execute(MLIRContext &context) {
       size_t opIdx = 0;
       mlir::OwningOpRef<mlir::ModuleOp> newModule = module->clone();
       pattern.beforeReduction(*newModule);
-      SmallVector<std::pair<Operation *, uint64_t>, 16> opBenefits;
+      SmallVector<Match, 16> matches;
       SmallDenseSet<Operation *> opsTouched;
       pattern.notifyOpErasedCallback = [&](Operation *op) {
         opsTouched.insert(op);
       };
       newModule->walk([&](Operation *op) {
-        uint64_t benefit = pattern.match(op);
-        if (benefit > 0) {
-          opIdx++;
-          opBenefits.push_back(std::make_pair(op, benefit));
-        }
+        pattern.matches(op, [&](uint64_t benefit, uint64_t id) {
+          if (benefit > 0) {
+            opIdx++;
+            matches.push_back(Match{op, id, benefit});
+          }
+        });
       });
-      std::sort(opBenefits.begin(), opBenefits.end(),
-                [](auto a, auto b) { return a.second > b.second; });
-      for (size_t idx = rangeBase, num = 0;
-           num < rangeLength && idx < opBenefits.size(); ++idx) {
-        auto *op = opBenefits[idx].first;
-        if (opsTouched.contains(op))
-          continue;
-        if (pattern.match(op)) {
+
+      // Sort the matches by benefit. This will cause us to try the most
+      // beneficial matches first.
+      llvm::sort(matches, [](auto &a, auto &b) {
+        if (a.benefit > b.benefit)
+          return true;
+        if (a.benefit < b.benefit)
+          return false;
+        return a.id < b.id;
+      });
+
+      // Drop all matches before `rangeBase`.
+      if (rangeBase < matches.size())
+        matches.erase(matches.begin(), matches.begin() + rangeBase);
+      else
+        matches.clear();
+
+      // Pick the next `rangeLength` of matches and apply the pattern. This may
+      // not work for all matches, which is why we do this in a loop until we
+      // ahve actually applied `rangeLength` matches.
+      size_t remaining = rangeLength;
+      while (remaining > 0 && !matches.empty()) {
+        // Group the matches by op to make applying them in batch easier.
+        remaining = std::min(remaining, matches.size());
+        std::sort(matches.begin(), matches.begin() + remaining,
+                  [](auto &a, auto &b) { return a.op < b.op; });
+
+        // Apply the first `remaining` matches.
+        for (size_t idx = 0; idx < remaining;) {
+          // Pick the next op to apply the reduction to.
+          auto *op = matches[idx].op;
+          if (!opsTouched.insert(op).second) {
+            while (idx < remaining && matches[idx].op == op)
+              ++idx;
+            continue;
+          }
+
+          // Match the pattern against the op again. This will allow us to skip
+          // over matches in the list that no longer apply.
+          SmallDenseSet<uint64_t> possibleIds;
+          pattern.matches(op, [&](uint64_t benefit, uint64_t id) {
+            if (benefit > 0)
+              possibleIds.insert(id);
+          });
+
+          // Collect the matches for this op that are still possible.
+          SmallVector<uint64_t> ids;
+          while (idx < remaining && matches[idx].op == op) {
+            auto id = matches[idx].id;
+            if (possibleIds.contains(id))
+              ids.push_back(id);
+            ++idx;
+          }
+          if (ids.empty())
+            continue;
+
+          // Apply the pattern to these matches.
           op->walk([&](Operation *subop) { opsTouched.insert(subop); });
-          (void)pattern.rewrite(op);
-          ++num;
+          (void)pattern.rewriteMatches(op, ids);
+          assert(remaining >= ids.size());
+          remaining -= ids.size();
         }
+
+        // If we have not applied the number of matches we set out to, filter
+        // the list of remaining matches to contain only the ones we haven't
+        // tried yet.
+        if (remaining > 0)
+          llvm::erase_if(matches, [&](auto &match) {
+            return opsTouched.contains(match.op);
+          });
       }
+
       pattern.afterReduction(*newModule);
       pattern.notifyOpErasedCallback = nullptr;
       if (opIdx == 0) {
