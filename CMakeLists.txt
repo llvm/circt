@@ -564,7 +564,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v8.1
+      GIT_TAG v9.0
       GIT_SHALLOW ON)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
@@ -608,7 +608,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 8.1 REQUIRED)
+    find_package(slang 9.0 REQUIRED)
   endif()
 endif()
 
