@@ -244,10 +244,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, FPrintFOp, FFlushOp, SkipOp, StopOp,
-                       WhenOp, AssertOp, AssumeOp, CoverOp, PropAssignOp,
-                       RefForceOp, RefForceInitialOp, RefReleaseOp,
-                       RefReleaseInitialOp, FPGAProbeIntrinsicOp,
+                       DomainDefineOp, ForceOp, PrintFOp, FPrintFOp, FFlushOp,
+                       SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
+                       PropAssignOp, RefForceOp, RefForceInitialOp,
+                       RefReleaseOp, RefReleaseInitialOp, FPGAProbeIntrinsicOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
                        UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp,
                        VerifRequireIntrinsicOp, VerifEnsureIntrinsicOp,
@@ -281,6 +281,7 @@ public:
   HANDLE(ConnectOp);
   HANDLE(MatchingConnectOp);
   HANDLE(RefDefineOp);
+  HANDLE(DomainDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(FPrintFOp);

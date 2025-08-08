@@ -1207,8 +1207,9 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.probe<uint<1>>)
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %y : !firrtl.probe<uint<1>>
   }
 }
@@ -1221,9 +1222,10 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -1237,8 +1239,9 @@ firrtl.circuit "Bar" {
     %y = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %2 : !firrtl.probe<uint<1>>
   }
 }
@@ -1329,8 +1332,9 @@ firrtl.circuit "PropertyDriveSource" {
 firrtl.circuit "PropertyDoubleDrive" {
   firrtl.module @PropertyDriveSource(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{destination property cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.propassign %out, %0 : !firrtl.string
+    // expected-note @below {{other driver is here}}
     firrtl.propassign %out, %0 : !firrtl.string
   }
 }
@@ -3072,4 +3076,78 @@ firrtl.circuit "WrongNonDomainPortInfo" {
   firrtl.module @WrongNonDomainPortInfo(
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [["hello"]]} {}
+}
+
+// -----
+
+// Output domain ports on modules can only be driven once.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.module @Top(
+    in  %i: !firrtl.domain of @ClockDomain,
+    out %o: !firrtl.domain of @ClockDomain
+  ) {
+    // expected-error @below {{destination cannot be driven by multiple operations}}
+    firrtl.domain.define %o, %i
+    // expected-note @below {{other driver is here}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Input domain ports on instances can only be driven once.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Ext(in i: !firrtl.domain of @ClockDomain)
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
+    %ext_i = firrtl.instance ext @Ext(in  i: !firrtl.domain of @ClockDomain)
+    // expected-error @below {{destination cannot be driven by multiple operations}}
+    firrtl.domain.define %ext_i, %i
+    // expected-note @below {{other driver is here}}
+    firrtl.domain.define %ext_i, %i
+  }
+}
+
+// -----
+
+// No-crossing of domain types.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain, out %o : !firrtl.domain of @PowerDomain) {
+    // expected-error @below {{source domain type @ClockDomain does not match destination domain type @PowerDomain}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Unable to determine domain type of destination.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
+    %o = firrtl.wire : !firrtl.domain
+    // expected-error @below {{could not determine domain-type of destination}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Unable to determine domain type of source.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(out %o : !firrtl.domain of @PowerDomain) {
+    %i = firrtl.wire : !firrtl.domain
+    // expected-error @below {{could not determine domain-type of source}}
+    firrtl.domain.define %o, %i
+  }
 }
