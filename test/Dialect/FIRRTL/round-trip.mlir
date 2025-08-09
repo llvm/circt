@@ -196,4 +196,28 @@ firrtl.module @Fprintf(
   firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.domain @ClockDomain {
+// CHECK-NEXT:  }
+firrtl.domain @ClockDomain {}
+firrtl.domain @ResetDomain {}
+
+// CHECK-LABEL: firrtl.module @Domains(
+// CHECK-SAME:    in %clockDomain: !firrtl.domain<@ClockDomain> sym @clockDomainSym
+// CHECK-SAME:    in %resetDomain: !firrtl.domain<@ResetDomain> sym @resetDomainSym
+firrtl.module @Domains(
+  in %clockDomain: !firrtl.domain<@ClockDomain> sym @clockDomainSym,
+  in %resetDomain: !firrtl.domain<@ResetDomain> sym @resetDomainSym,
+  in %x : !firrtl.uint<1, [@clockDomainSym]>
+) {
+  // CHECK-NEXT: %noDomain = firrtl.wire : !firrtl.uint<1>
+  %noDomain = firrtl.wire : !firrtl.uint<1, []>
+  // CHECK-NEXT: %oneDomain = firrtl.wire : !firrtl.uint<1, [@clockDomainSym]>
+  %oneDomain = firrtl.wire : !firrtl.uint<1, [@clockDomainSym]>
+  // CHECK-NEXT: %twoDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @resetDomainSym]>
+  %twoDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @resetDomainSym]>
+  // CHECK-NEXT: %sortedDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @resetDomainSym]>
+  %sortedDomains = firrtl.wire : !firrtl.uint<1, [@resetDomainSym, @clockDomainSym]>
+  // CHECK-NEXT: %uniqueDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym]>
+  %uniqueDomains = firrtl.wire : !firrtl.uint<1, [@clockDomainSym, @clockDomainSym]>
+}
 }
