@@ -46,12 +46,11 @@ std::string circt::getSlangVersion() {
 //===----------------------------------------------------------------------===//
 
 /// Convert a slang `SourceLocation` to an MLIR `Location`.
-static Location
-convertLocation(MLIRContext *context, const slang::SourceManager &sourceManager,
-                SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths,
-                slang::SourceLocation loc) {
+static Location convertLocation(MLIRContext *context,
+                                const slang::SourceManager &sourceManager,
+                                slang::SourceLocation loc) {
   if (loc && loc.buffer() != slang::SourceLocation::NoLocation.buffer()) {
-    auto fileName = bufferFilePaths.lookup(loc.buffer());
+    auto fileName = sourceManager.getFileName(loc);
     auto line = sourceManager.getLineNumber(loc);
     auto column = sourceManager.getColumnNumber(loc);
     return FileLineColLoc::get(context, fileName, line, column);
@@ -60,7 +59,7 @@ convertLocation(MLIRContext *context, const slang::SourceManager &sourceManager,
 }
 
 Location Context::convertLocation(slang::SourceLocation loc) {
-  return ::convertLocation(getContext(), sourceManager, bufferFilePaths, loc);
+  return ::convertLocation(getContext(), sourceManager, loc);
 }
 
 Location Context::convertLocation(slang::SourceRange range) {
@@ -72,10 +71,7 @@ namespace {
 /// that will map slang diagnostics to their MLIR counterpart and emit them.
 class MlirDiagnosticClient : public slang::DiagnosticClient {
 public:
-  MlirDiagnosticClient(
-      MLIRContext *context,
-      SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths)
-      : context(context), bufferFilePaths(bufferFilePaths) {}
+  MlirDiagnosticClient(MLIRContext *context) : context(context) {}
 
   void report(const slang::ReportedDiagnostic &diag) override {
     // Generate the primary MLIR diagnostic.
@@ -100,11 +96,17 @@ public:
       else
         note << "expanded from macro '" << macroName << "'";
     }
+
+    // Write out the include stack.
+    slang::SmallVector<slang::SourceLocation> includeStack;
+    getIncludeStack(diag.location.buffer(), includeStack);
+    for (auto &loc : std::views::reverse(includeStack))
+      mlirDiag.attachNote(convertLocation(loc)) << "included from here";
   }
 
   /// Convert a slang `SourceLocation` to an MLIR `Location`.
   Location convertLocation(slang::SourceLocation loc) const {
-    return ::convertLocation(context, *sourceManager, bufferFilePaths, loc);
+    return ::convertLocation(context, *sourceManager, loc);
   }
 
   static DiagnosticSeverity getSeverity(slang::DiagnosticSeverity severity) {
@@ -124,7 +126,6 @@ public:
 
 private:
   MLIRContext *context;
-  SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;
 };
 } // namespace
 
@@ -168,16 +169,6 @@ struct ImportDriver {
   // Use slang's driver which conveniently packages a lot of the things we
   // need for compilation.
   slang::driver::Driver driver;
-
-  // A separate mapping from slang's buffers to the original MLIR file name
-  // since slang's `SourceLocation::getFileName` returns a modified version that
-  // is nice for human consumption (proximate paths, just file names, etc.), but
-  // breaks MLIR's assumption that the diagnostics report the exact file paths
-  // that appear in the `SourceMgr`. We use this separate map to lookup the
-  // exact paths and use those for reporting.
-  //
-  // See: https://github.com/MikePopoloski/slang/discussions/658
-  SmallDenseMap<slang::BufferID, StringRef> bufferFilePaths;
 };
 } // namespace
 
@@ -187,8 +178,7 @@ struct ImportDriver {
 LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   // Use slang's driver which conveniently packages a lot of the things we
   // need for compilation.
-  auto diagClient =
-      std::make_shared<MlirDiagnosticClient>(mlirContext, bufferFilePaths);
+  auto diagClient = std::make_shared<MlirDiagnosticClient>(mlirContext);
   driver.diagEngine.addClient(diagClient);
 
   // Populate the source manager with the source files.
@@ -201,7 +191,6 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
     auto slangBuffer = driver.sourceManager.assignText(
         mlirBuffer->getBufferIdentifier(), mlirBuffer->getBuffer());
     driver.sourceLoader.addBuffer(slangBuffer);
-    bufferFilePaths.insert({slangBuffer.id, mlirBuffer->getBufferIdentifier()});
   }
 
   for (const auto &libDir : options.libDirs)
@@ -279,8 +268,7 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
                     func::FuncDialect, verif::VerifDialect, ltl::LTLDialect,
                     debug::DebugDialect>();
   auto conversionTimer = ts.nest("Verilog to dialect mapping");
-  Context context(options, *compilation, module, driver.sourceManager,
-                  bufferFilePaths);
+  Context context(options, *compilation, module, driver.sourceManager);
   if (failed(context.convertCompilation()))
     return failure();
   conversionTimer.stop();
