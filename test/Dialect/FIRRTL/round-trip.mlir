@@ -211,6 +211,8 @@ firrtl.module @Domains(
   in %a: !firrtl.uint<1> domains [%A],
   out %b: !firrtl.uint<1> domains [%B]
 ) {
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
 }
 
 }

@@ -1960,6 +1960,7 @@ private:
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
+  ParseResult parseUnsafeDomainCast(Value &result);
 
   template <typename T, size_t M, size_t N, size_t... Ms, size_t... Ns>
   ParseResult parsePrim(std::index_sequence<Ms...>, std::index_sequence<Ns...>,
@@ -2334,6 +2335,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_cat:
     if (parseCatExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_unsafe_domain_cast:
+    if (requireFeature(nextFIRVersion, "unsafe_domain_cast") ||
+        parseUnsafeDomainCast(result))
       return failure();
     break;
 
@@ -2735,6 +2742,33 @@ ParseResult FIRStmtParser::parseCatExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = CatPrimOp::create(builder, operands);
+  return success();
+}
+
+ParseResult FIRStmtParser::parseUnsafeDomainCast(Value &result) {
+  consumeToken(FIRToken::lp_unsafe_domain_cast);
+
+  auto loc = getToken().getLoc();
+  Value input;
+  if (parseExp(input, "expected input"))
+    return failure();
+
+  SmallVector<Value> domains;
+  if (consumeIf(FIRToken::comma)) {
+    if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          Value domain;
+          if (parseExp(domain, "expected domain"))
+            return failure();
+          domains.push_back(domain);
+          return success();
+        }))
+      return failure();
+  } else if (parseToken(FIRToken::r_paren, "expected closing parenthesis")) {
+    return failure();
+  }
+
+  locationProcessor.setLoc(loc);
+  result = UnsafeDomainCastOp::create(builder, input, domains);
   return success();
 }
 

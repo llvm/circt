@@ -968,6 +968,16 @@ firrtl.circuit "Foo" {
     in %B: !firrtl.domain,
     in %a: !firrtl.uint<1> domains [%A],
     in %ab: !firrtl.uint<1> domains [%A, %B]
-  ) {}
+  ) {
+    // CHECK: node noDomains = unsafe_domain_cast(a)
+    %0 = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
+    %noDomains = firrtl.node %0 : !firrtl.uint<1>
+    // CHECK-NEXT: node oneDomain = unsafe_domain_cast(a, A)
+    %1 = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
+    %oneDomain = firrtl.node %1 : !firrtl.uint<1>
+    // CHECK-NEXT: node twoDomains = unsafe_domain_cast(a, A, B)
+    %2 = firrtl.unsafe_domain_cast %a domains %A, %B : !firrtl.uint<1>
+    %twoDomains = firrtl.node %2 : !firrtl.uint<1>
+  }
 
 }

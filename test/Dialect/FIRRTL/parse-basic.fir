@@ -2208,3 +2208,10 @@ circuit Domains:
     input B: Domain
     input a: UInt<1> domains [A]
     input ab: UInt<1> domains [A, B]
+
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
+    node noDomains = unsafe_domain_cast(a)
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
+    node oneDomain = unsafe_domain_cast(a, A)
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains %A, %B : !firrtl.uint<1>
+    node twoDomains = unsafe_domain_cast(a, A, B)

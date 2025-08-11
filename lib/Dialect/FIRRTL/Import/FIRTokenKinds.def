@@ -194,6 +194,7 @@ TOK_LPKEYWORD(rwprobe)
 
 TOK_LPKEYWORD(intrinsic)
 TOK_LPKEYWORD(cat)
+TOK_LPKEYWORD(unsafe_domain_cast)
 
 // These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddPrimOp, 2, 0, FIRVersion(0, 0, 0), "Base")
