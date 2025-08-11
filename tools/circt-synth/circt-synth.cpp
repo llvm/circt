@@ -148,6 +148,10 @@ static cl::opt<bool>
 static cl::opt<bool> disableWordToBits("disable-word-to-bits",
                                        cl::desc("Disable LowerWordToBits pass"),
                                        cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool>
+    disableDatapath("disable-datapath",
+                    cl::desc("Disable datapath optimization passes"),
+                    cl::init(false), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -185,17 +189,19 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
       /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
       /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
-    circt::synth::buildAIGLoweringPipeline(pm);
+    circt::synth::AIGLoweringPipelineOptions loweringOptions;
+    loweringOptions.disableDatapath = disableDatapath;
+    circt::synth::buildAIGLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilAIGLowering))
       return;
 
-    circt::synth::AIGOptimizationPipelineOptions options;
-    options.abcCommands = abcCommands;
-    options.abcPath.setValue(abcPath);
-    options.ignoreAbcFailures.setValue(ignoreAbcFailures);
-    options.disableWordToBits.setValue(disableWordToBits);
+    circt::synth::AIGOptimizationPipelineOptions optimizationOptions;
+    optimizationOptions.abcCommands = abcCommands;
+    optimizationOptions.abcPath.setValue(abcPath);
+    optimizationOptions.ignoreAbcFailures.setValue(ignoreAbcFailures);
+    optimizationOptions.disableWordToBits.setValue(disableWordToBits);
 
-    circt::synth::buildAIGOptimizationPipeline(pm, options);
+    circt::synth::buildAIGOptimizationPipeline(pm, optimizationOptions);
   };
 
   nestOrAddToHierarchicalRunner(pm, pipeline, topName);
