@@ -300,7 +300,7 @@ static LogicalResult execute(MLIRContext &context) {
 
       // Pick the next `rangeLength` of matches and apply the pattern. This may
       // not work for all matches, which is why we do this in a loop until we
-      // ahve actually applied `rangeLength` matches.
+      // have actually applied `rangeLength` matches.
       size_t remaining = rangeLength;
       while (remaining > 0 && !matches.empty()) {
         // Group the matches by op to make applying them in batch easier.
