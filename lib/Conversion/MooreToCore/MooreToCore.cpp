@@ -696,8 +696,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       // If the target result type is something else (e.g., an array), we must
       // bitcast the extracted integer slice to that type. This handles the
       // `logic [7:0] a = int_val;` case.
-      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, resultType,
-                                                 extractedInt);
+      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, resultType, extractedInt);
       return success();
     }
 
