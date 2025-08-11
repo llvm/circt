@@ -1751,4 +1751,30 @@ def HierarchicalModuleNameOp :
 
 }
 
+//===----------------------------------------------------------------------===//
+// Domain Operations
+//===----------------------------------------------------------------------===//
+
+def UnsafeDomainCastOp :
+  FIRRTLOp<"unsafe_domain_cast", [
+    AllTypesMatch<["input", "result"]>,
+    Pure
+  ]> {
+  let summary = "cast an operand from one domain to another";
+  let description = [{
+    This operation is used to _unsafely_ convert from the domain of an operand
+    to another domain.  This operation is inherently unsafe and unchecked.
+
+    This operation is necessary in order to describe certain constructs like
+    synchronizers which, from a domain type system perspective, violate normal
+    constraints.
+  }];
+  let arguments = (ins PassiveType:$input, Variadic<DomainType>:$domains);
+  let results = (outs PassiveType:$result);
+  let assemblyFormat = [{
+    $input (`domains` $domains^)? attr-dict-with-keyword `:` qualified(type($input))
+  }];
+  let hasFolder = 1;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
