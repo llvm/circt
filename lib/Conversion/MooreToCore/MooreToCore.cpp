@@ -670,17 +670,15 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
   LogicalResult
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // TODO: return X if the domain is four-valued for out-of-bounds accesses
+    // once we support four-valued lowering
     Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType = adaptor.getInput().getType();
     int32_t low = adaptor.getLowBit();
 
-    // The input is an integer type.
     if (isa<IntegerType>(inputType)) {
       int64_t resultWidth = hw::getBitWidth(resultType);
-      if (resultWidth < 0)
-        return rewriter.notifyMatchFailure(
-            op, "cannot determine bit width of result type");
 
       //  The slice will have an integer type.
       Value extractedInt = rewriter.create<comb::ExtractOp>(
@@ -699,7 +697,6 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       return success();
     }
 
-    // The input is an array type.
     if (auto arrTy = dyn_cast<hw::ArrayType>(inputType)) {
       int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
@@ -724,7 +721,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       // The result is the array's element type (Array Get).
       if (low < 0 || low >= inputWidth) {
         // TODO: Handle out-of-bounds access.
-        return rewriter.notifyMatchFailure(op, "out-of-bounds array access");
+        return failure();
       }
 
       Value idx = rewriter.create<hw::ConstantOp>(
@@ -733,7 +730,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       return success();
     }
 
-    return rewriter.notifyMatchFailure(op, "unhandled extract pattern");
+    return failure();
   }
 };
 

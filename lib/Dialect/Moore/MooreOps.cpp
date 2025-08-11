@@ -668,10 +668,6 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     PackedType packedType = dyn_cast<PackedType>(nestedType);
 
     if (!packedType) {
-      if (loc)
-        llvm::outs() << "operand of moore.concat_ref must be a reference to a "
-                        "packed type, but got "
-                     << nestedType;
       return failure();
     }
 
@@ -681,9 +677,6 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     // getBitSize() for PackedType returns an optional, so we must check it.
     std::optional<int> bitSize = packedType.getBitSize();
     if (!bitSize) {
-      if (loc)
-        llvm::outs() << "operand type " << packedType
-                     << " in moore.concat_ref has no known bit size";
       return failure();
     }
     width += *bitSize;
