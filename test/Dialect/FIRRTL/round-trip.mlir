@@ -205,6 +205,9 @@ firrtl.domain @ClockDomain {
 firrtl.module @Domains(
   in %clockDomain: !firrtl.domain
 ) {
+  %a = firrtl.wire : !firrtl.uint<1>
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %clockDomain : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %clockDomain : !firrtl.uint<1>
 }
 
 }
