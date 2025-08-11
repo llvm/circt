@@ -79,10 +79,9 @@ struct HierPathInfo {
 struct Context {
   Context(const ImportVerilogOptions &options,
           slang::ast::Compilation &compilation, mlir::ModuleOp intoModuleOp,
-          const slang::SourceManager &sourceManager,
-          SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths)
+          const slang::SourceManager &sourceManager)
       : options(options), compilation(compilation), intoModuleOp(intoModuleOp),
-        sourceManager(sourceManager), bufferFilePaths(bufferFilePaths),
+        sourceManager(sourceManager),
         builder(OpBuilder::atBlockEnd(intoModuleOp.getBody())),
         symbolTable(intoModuleOp) {}
   Context(const Context &) = delete;
@@ -188,7 +187,6 @@ struct Context {
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
-  SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;
 
   /// The builder used to create IR operations.
   OpBuilder builder;
