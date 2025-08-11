@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
@@ -672,27 +673,40 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: return X if the domain is four-valued for out-of-bounds accesses
     // once we support four-valued lowering
-    Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType = adaptor.getInput().getType();
     int32_t low = adaptor.getLowBit();
 
     if (isa<IntegerType>(inputType)) {
-      int64_t resultWidth = hw::getBitWidth(resultType);
+      int32_t inputWidth = inputType.getIntOrFloatBitWidth();
+      int32_t resultWidth = hw::getBitWidth(resultType);//resultType.getIntOrFloatBitWidth();
+      int32_t high = low + resultWidth;
 
-      Value extractedInt = rewriter.create<comb::ExtractOp>(
-          loc, adaptor.getInput(), low, resultWidth);
+      SmallVector<Value> toConcat;
+      if (low < 0)
+        toConcat.push_back(hw::ConstantOp::create(
+            rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
 
-      // If the target result type is already this integer type, done.
-      if (extractedInt.getType() == resultType) {
-        rewriter.replaceOp(op, extractedInt);
-        return success();
+      if (low < inputWidth && high > 0) {
+        int32_t lowIdx = std::max(low, 0);
+        Value middle = rewriter.createOrFold<comb::ExtractOp>(
+            op.getLoc(),
+            rewriter.getIntegerType(
+                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
+            adaptor.getInput(), lowIdx);
+        toConcat.push_back(middle);
       }
 
-      // If the target result type is something else (e.g., an array), we must
-      // bitcast the extracted integer slice to that type. This handles the
-      // `logic [7:0] a = int_val;` case.
-      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, resultType, extractedInt);
+      int32_t diff = high - inputWidth;
+      if (diff > 0) {
+        Value val =
+            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
+        toConcat.push_back(val);
+      }
+
+      Value concat =
+          rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
+      rewriter.replaceOp(op, concat);
       return success();
     }
 
@@ -700,31 +714,71 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      // The result is also an array (Array Slice).
       if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType)) {
-        int32_t resWidth = resArrTy.getNumElements();
-        Value lowIdxVal = rewriter.create<hw::ConstantOp>(
-            loc, rewriter.getIntegerType(width), low);
-        Value middle = rewriter.createOrFold<hw::ArraySliceOp>(
-            loc,
-            hw::ArrayType::get(arrTy.getElementType(),
-                               std::min(resWidth, inputWidth - low)),
-            adaptor.getInput(), lowIdxVal);
+        int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
+        if (elementWidth < 0)
+          return failure();
 
-        // TODO: Handle out-of-bounds access gracefully.
-        // For now, assume in-bounds.
-        rewriter.replaceOp(op, middle);
+        int32_t high = low + resArrTy.getNumElements();
+        int32_t resWidth = resArrTy.getNumElements();
+
+        SmallVector<Value> toConcat;
+        if (low < 0) {
+          Value val = hw::ConstantOp::create(
+              rewriter, op.getLoc(),
+              APInt(std::min((-low) * elementWidth, resWidth * elementWidth),
+                    0));
+          Value res = rewriter.createOrFold<hw::BitcastOp>(
+              op.getLoc(), hw::ArrayType::get(arrTy.getElementType(), -low),
+              val);
+          toConcat.push_back(res);
+        }
+
+        if (low < inputWidth && high > 0) {
+          int32_t lowIdx = std::max(0, low);
+          Value lowIdxVal = hw::ConstantOp::create(
+              rewriter, op.getLoc(), rewriter.getIntegerType(width), lowIdx);
+          Value middle = rewriter.createOrFold<hw::ArraySliceOp>(
+              op.getLoc(),
+              hw::ArrayType::get(
+                  arrTy.getElementType(),
+                  std::min(resWidth, std::min(inputWidth, high) - lowIdx)),
+              adaptor.getInput(), lowIdxVal);
+          toConcat.push_back(middle);
+        }
+
+        int32_t diff = high - inputWidth;
+        if (diff > 0) {
+          Value constZero = hw::ConstantOp::create(
+              rewriter, op.getLoc(), APInt(diff * elementWidth, 0));
+          Value val = hw::BitcastOp::create(
+              rewriter, op.getLoc(),
+              hw::ArrayType::get(arrTy.getElementType(), diff), constZero);
+          toConcat.push_back(val);
+        }
+
+        Value concat =
+            rewriter.createOrFold<hw::ArrayConcatOp>(op.getLoc(), toConcat);
+        rewriter.replaceOp(op, concat);
         return success();
       }
 
-      // The result is the array's element type (Array Get).
+      // Otherwise, it has to be the array's element type
       if (low < 0 || low >= inputWidth) {
-        // TODO: Handle out-of-bounds access.
-        return failure();
+        int32_t bw = hw::getBitWidth(resultType);
+        if (bw < 0)
+          return failure();
+
+        Value val = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(bw, 0));
+        Value bitcast =
+            rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType, val);
+        rewriter.replaceOp(op, bitcast);
+        return success();
       }
 
-      Value idx = rewriter.create<hw::ConstantOp>(
-          loc, rewriter.getIntegerType(width), adaptor.getLowBit());
+      Value idx = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                         rewriter.getIntegerType(width),
+                                         adaptor.getLowBit());
       rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
       return success();
     }
