@@ -680,7 +680,6 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     if (isa<IntegerType>(inputType)) {
       int64_t resultWidth = hw::getBitWidth(resultType);
 
-      //  The slice will have an integer type.
       Value extractedInt = rewriter.create<comb::ExtractOp>(
           loc, adaptor.getInput(), low, resultWidth);
 
