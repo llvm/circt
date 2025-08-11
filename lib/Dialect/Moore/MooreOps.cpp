@@ -663,12 +663,11 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
-  for (auto operand : operands) {
-    auto nestedType = cast<RefType>(operand.getType()).getNestedType();
-    auto packedType = dyn_cast<PackedType>(nestedType);
+  for (Value operand : operands) {
+    UnpackedType nestedType = cast<RefType>(operand.getType()).getNestedType();
+    PackedType packedType = dyn_cast<PackedType>(nestedType);
 
     if (!packedType) {
-      // It's good practice to emit an error if the type is not what we expect.
       if (loc)
         llvm::outs() << "operand of moore.concat_ref must be a reference to a "
                         "packed type, but got "
@@ -680,7 +679,7 @@ LogicalResult ConcatRefOp::inferReturnTypes(
       domain = Domain::FourValued;
 
     // getBitSize() for PackedType returns an optional, so we must check it.
-    auto bitSize = packedType.getBitSize();
+    std::optional<int> bitSize = packedType.getBitSize();
     if (!bitSize) {
       if (loc)
         llvm::outs() << "operand type " << packedType
@@ -692,6 +691,7 @@ LogicalResult ConcatRefOp::inferReturnTypes(
   results.push_back(RefType::get(IntType::get(context, width, domain)));
   return success();
 }
+
 //===----------------------------------------------------------------------===//
 // ArrayCreateOp
 //===----------------------------------------------------------------------===//

@@ -675,19 +675,18 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     Type inputType = adaptor.getInput().getType();
     int32_t low = adaptor.getLowBit();
 
-    // Case 1: The input is an integer type.
+    // The input is an integer type.
     if (isa<IntegerType>(inputType)) {
       int64_t resultWidth = hw::getBitWidth(resultType);
       if (resultWidth < 0)
         return rewriter.notifyMatchFailure(
             op, "cannot determine bit width of result type");
 
-      // We are extracting a slice of bits from an integer. This is a simple
-      // part-select. The slice will have an integer type.
+      //  The slice will have an integer type.
       Value extractedInt = rewriter.create<comb::ExtractOp>(
           loc, adaptor.getInput(), low, resultWidth);
 
-      // If the target result type is already this integer type, we are done.
+      // If the target result type is already this integer type, done.
       if (extractedInt.getType() == resultType) {
         rewriter.replaceOp(op, extractedInt);
         return success();
@@ -700,12 +699,12 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       return success();
     }
 
-    // Case 2: The input is an array type.
+    // The input is an array type.
     if (auto arrTy = dyn_cast<hw::ArrayType>(inputType)) {
       int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      // Subcase 2.1: The result is also an array (Array Slice).
+      // The result is also an array (Array Slice).
       if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType)) {
         int32_t resWidth = resArrTy.getNumElements();
         Value lowIdxVal = rewriter.create<hw::ConstantOp>(
@@ -717,12 +716,12 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
             adaptor.getInput(), lowIdxVal);
 
         // TODO: Handle out-of-bounds access gracefully.
-        // For now, we assume in-bounds.
+        // For now, assume in-bounds.
         rewriter.replaceOp(op, middle);
         return success();
       }
 
-      // Subcase 2.2: The result is the array's element type (Array Get).
+      // The result is the array's element type (Array Get).
       if (low < 0 || low >= inputWidth) {
         // TODO: Handle out-of-bounds access.
         return rewriter.notifyMatchFailure(op, "out-of-bounds array access");
