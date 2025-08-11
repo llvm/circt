@@ -93,7 +93,7 @@ struct ExprVisitor {
     auto resultType =
         isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
     auto range = expr.value().type->getFixedRange();
-    if (auto *constValue = expr.selector().constant) {
+    if (auto *constValue = expr.selector().getConstant()) {
       assert(!constValue->hasUnknown());
       assert(constValue->size() <= 32);
 
@@ -126,9 +126,9 @@ struct ExprVisitor {
 
     std::optional<int32_t> constLeft;
     std::optional<int32_t> constRight;
-    if (auto *constant = expr.left().constant)
+    if (auto *constant = expr.left().getConstant())
       constLeft = constant->integer().as<int32_t>();
-    if (auto *constant = expr.right().constant)
+    if (auto *constant = expr.right().getConstant())
       constRight = constant->integer().as<int32_t>();
 
     // We need to determine the right bound of the range. This is the address of

@@ -630,8 +630,10 @@ struct Promoter {
   void constructLattice();
   void propagateBackward();
   void propagateBackward(LatticeNode *node);
-  void propagateForward(bool optimisticMerges);
-  void propagateForward(LatticeNode *node, bool optimisticMerges);
+  void propagateForward();
+  void propagateForward(bool optimisticMerges, DominanceInfo &dominance);
+  void propagateForward(LatticeNode *node, bool optimisticMerges,
+                        DominanceInfo &dominance);
   void markDirty(LatticeNode *node);
 
   void insertProbeBlocks();
@@ -709,8 +711,7 @@ LogicalResult Promoter::promote() {
   });
 
   // Propagate the reaching definitions forward across the lattice.
-  propagateForward(true);
-  propagateForward(false);
+  propagateForward();
   LLVM_DEBUG({
     llvm::dbgs() << "After forward propagation:\n";
     lattice.dump();
@@ -1057,6 +1058,12 @@ void Promoter::propagateBackward(LatticeNode *node) {
   assert(false && "unhandled node in backward propagation");
 }
 
+void Promoter::propagateForward() {
+  DominanceInfo dominance(region.getParentOp());
+  propagateForward(true, dominance);
+  propagateForward(false, dominance);
+}
+
 /// Propagate the lattice values forwards along with control flow until a fixed
 /// point is reached. If `optimisticMerges` is true, block entry points
 /// propagate definitions from their predecessors into the block without
@@ -1065,18 +1072,20 @@ void Promoter::propagateBackward(LatticeNode *node) {
 /// propagate through loop structures. If `optimisticMerges` is false, block
 /// entry points create merge definitions for definitions that are not available
 /// in all predecessors.
-void Promoter::propagateForward(bool optimisticMerges) {
+void Promoter::propagateForward(bool optimisticMerges,
+                                DominanceInfo &dominance) {
   for (auto *node : lattice.nodes)
-    propagateForward(node, optimisticMerges);
+    propagateForward(node, optimisticMerges, dominance);
   while (!dirtyNodes.empty()) {
     auto *node = *dirtyNodes.begin();
     dirtyNodes.erase(node);
-    propagateForward(node, optimisticMerges);
+    propagateForward(node, optimisticMerges, dominance);
   }
 }
 
 /// Propagate the lattice value before a node forward to the value after a node.
-void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges) {
+void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
+                                DominanceInfo &dominance) {
   auto update = [&](LatticeValue *value, auto &reachingDefs) {
     if (value->reachingDefs != reachingDefs) {
       value->reachingDefs = reachingDefs;
@@ -1139,10 +1148,19 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges) {
     // Propagate reaching definitions from predecessors, creating new
     // definitions in case of a merge.
     SmallDenseMap<DefSlot, Def *, 1> reachingDefs;
-    for (auto *predecessor : entry->predecessors)
-      if (!predecessor->suspends)
-        reachingDefs.insert(predecessor->valueBefore->reachingDefs.begin(),
-                            predecessor->valueBefore->reachingDefs.end());
+    for (auto *predecessor : entry->predecessors) {
+      if (predecessor->suspends)
+        continue;
+      // Propogate signal definitions only to blocks that are dominated by the
+      // signal itself.
+      for (auto &defEntry : predecessor->valueBefore->reachingDefs) {
+        auto slot = getSlot(defEntry.getFirst());
+        auto *slotBlock = slot.getDefiningOp()->getBlock();
+        if (!dominance.dominates(slotBlock, entry->block))
+          continue;
+        reachingDefs.insert(defEntry);
+      }
+    }
 
     for (auto pair : reachingDefs) {
       DefSlot slot = pair.first;
@@ -1164,6 +1182,7 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges) {
             return predecessor->suspends;
           }))
         continue;
+
       for (auto *predecessor : entry->predecessors) {
         auto otherDef = predecessor->valueBefore->reachingDefs.lookup(slot);
         if (!otherDef && optimisticMerges)
@@ -1461,7 +1480,8 @@ void Promoter::resolveDefinitions(ProbeNode *node) {
   value = unpackProjections(builder, value, projections);
 
   // Replace the probe result with the projected value.
-  LLVM_DEBUG(llvm::dbgs() << "- Replacing " << *node->op << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "- Replacing " << *node->op << " with " << value
+                          << "\n");
   replaceValueWith(node->op->getResult(0), value);
   pruner.eraseNow(node->op);
   node->op = nullptr;

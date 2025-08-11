@@ -8,7 +8,7 @@
   "uri":"test:///diagnostic.sv",
   "languageId":"verilog",
   "version":1,
-  "text":"module foo()\n wire bar;\nendmodule"
+  "text":"function foo()\n int bar = 0;\nendfunction"
 }}}
 // CHECK:      "method": "textDocument/publishDiagnostics",
 // CHECK-NEXT:   "params": {
@@ -17,11 +17,11 @@
 // CHECK-NEXT:         "message": "expected ';'",
 // CHECK-NEXT:         "range": {
 // CHECK-NEXT:           "end": {
-// CHECK-NEXT:             "character": 12,
+// CHECK-NEXT:             "character": 14,
 // CHECK-NEXT:             "line": 0
 // CHECK-NEXT:           },
 // CHECK-NEXT:           "start": {
-// CHECK-NEXT:             "character": 12,
+// CHECK-NEXT:             "character": 14,
 // CHECK-NEXT:             "line": 0
 // CHECK-NEXT:           }
 // CHECK-NEXT:         },
@@ -29,14 +29,14 @@
 // CHECK-NEXT:         "source": "slang"
 // CHECK-NEXT:       },
 // CHECK-NEXT:       {
-// CHECK-NEXT:         "message": "unused net 'bar'",
+// CHECK-NEXT:         "message": "initializing a static variable in a procedural context requires an explicit 'static' keyword",
 // CHECK-NEXT:         "range": {
 // CHECK-NEXT:           "end": {
-// CHECK-NEXT:             "character": 6,
+// CHECK-NEXT:             "character": 5,
 // CHECK-NEXT:             "line": 1
 // CHECK-NEXT:           },
 // CHECK-NEXT:           "start": {
-// CHECK-NEXT:             "character": 6,
+// CHECK-NEXT:             "character": 5,
 // CHECK-NEXT:             "line": 1
 // CHECK-NEXT:           }
 // CHECK-NEXT:         },

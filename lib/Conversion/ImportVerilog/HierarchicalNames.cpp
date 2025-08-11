@@ -178,7 +178,7 @@ struct InstBodyVisitor {
     return success();
   }
 };
-}; // namespace
+} // namespace
 
 LogicalResult Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
   if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
