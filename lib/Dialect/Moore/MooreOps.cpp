@@ -657,6 +657,9 @@ LogicalResult ConcatOp::inferReturnTypes(
 // ConcatRefOp
 //===----------------------------------------------------------------------===//
 
+
+
+
 LogicalResult ConcatRefOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
@@ -664,15 +667,31 @@ LogicalResult ConcatRefOp::inferReturnTypes(
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
   for (auto operand : operands) {
-    auto type = cast<IntType>(cast<RefType>(operand.getType()).getNestedType());
-    if (type.getDomain() == Domain::FourValued)
+    auto nestedType = cast<RefType>(operand.getType()).getNestedType();
+    auto packedType = dyn_cast<PackedType>(nestedType);
+
+    if (!packedType) {
+      // It's good practice to emit an error if the type is not what we expect.
+      if (loc)
+        llvm::outs() << "operand of moore.concat_ref must be a reference to a packed type, but got " << nestedType;
+      return failure();
+    }
+    
+    if (packedType.getDomain() == Domain::FourValued)
       domain = Domain::FourValued;
-    width += type.getWidth();
+    
+    // getBitSize() for PackedType returns an optional, so we must check it.
+    auto bitSize = packedType.getBitSize();
+    if (!bitSize) {
+      if (loc)
+        llvm::outs() << "operand type " << packedType << " in moore.concat_ref has no known bit size";
+      return failure();
+    }
+    width += *bitSize;
   }
   results.push_back(RefType::get(IntType::get(context, width, domain)));
   return success();
 }
-
 //===----------------------------------------------------------------------===//
 // ArrayCreateOp
 //===----------------------------------------------------------------------===//
