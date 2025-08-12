@@ -3103,3 +3103,9 @@ module PackedLvalue4(input logic [1023:0] x);
   // CHECK: moore.concat_ref [[A]], [[X:%.*]] : (!moore.ref<l512>, !moore.ref<l512>) -> <l1024>
   always_comb {a, {b, c}} = x;
 endmodule
+
+// CHECK-LABEL: moore.module @PackedLvalue5(
+module PackedLvalue5(input logic [1023:0] x);
+  logic [7:0][63:0] a, b;
+  always_comb {a, b[0]} = x;
+endmodule
