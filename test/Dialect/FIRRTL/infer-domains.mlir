@@ -146,16 +146,18 @@ firrtl.circuit "UnsafeSequenceCast" {
 // Test case 9: Illegal domain crossing - both matchingconnect and connect should fail
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.module @IllegalDomainCrossing(
-    in %A: !firrtl.domain, // expected-note {{source is in domain defined here}}
-    in %B: !firrtl.domain  // expected-note {{destination is in domain defined here}}
+    // expected-note@below {{source is in domain defined here}}
+    in %A: !firrtl.domain,
+    // expected-note@below {{destination is in domain defined here}}
+    in %B: !firrtl.domain
   ) {
     %a = firrtl.wire domains %A : !firrtl.uint<1>
     %b = firrtl.wire domains %B : !firrtl.uint<1>
 
-    // expected-error @+1 {{illegal domain crossing in connect operation}}
+    // expected-error @below {{illegal domain crossing in connect operation}}
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
 
-    // expected-error @+1 {{illegal domain crossing in connect operation}}
+    // expected-error @below {{illegal domain crossing in connect operation}}
     firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -165,19 +167,22 @@ firrtl.circuit "IllegalDomainCrossing" {
 // Test case 10: Multiple domain crossings
 firrtl.circuit "MultipleDomainCrossings" {
   firrtl.module @MultipleDomainCrossings(
-    in %A: !firrtl.domain, // expected-note {{source is in domain defined here}}
-    in %B: !firrtl.domain, // expected-note {{destination is in domain defined here}}
-                           // expected-note@-1 {{source is in domain defined here}}
-    in %C: !firrtl.domain  // expected-note {{destination is in domain defined here}}
+    // expected-note@below {{source is in domain defined here}}
+    in %A: !firrtl.domain,
+    // expected-note@below {{destination is in domain defined here}}
+    // expected-note@below {{source is in domain defined here}}
+    in %B: !firrtl.domain,
+    // expected-note@below {{destination is in domain defined here}}
+    in %C: !firrtl.domain
   ) {
     %a = firrtl.wire domains %A : !firrtl.uint<1>
     %b = firrtl.wire domains %B : !firrtl.uint<1>
     %c = firrtl.wire domains %C : !firrtl.uint<1>
 
-    // expected-error @+1 {{illegal domain crossing in connect operation}}
+    // expected-error@below {{illegal domain crossing in connect operation}}
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
 
-    // expected-error @+1 {{illegal domain crossing in connect operation}}
+    // expected-error@below {{illegal domain crossing in connect operation}}
     firrtl.matchingconnect %c, %b : !firrtl.uint<1>
   }
 }
@@ -187,14 +192,16 @@ firrtl.circuit "MultipleDomainCrossings" {
 // Test case 11: Domain sequence mismatch - different lengths
 firrtl.circuit "SequenceLengthMismatch" {
   firrtl.module @SequenceLengthMismatch(
-    in %A: !firrtl.domain, // expected-note {{source (domain 1 of 2) is in domain defined here}}
-    in %B: !firrtl.domain  // expected-note {{destination is in domain defined here}}
-                           // expected-note@-1 {{source (domain 2 of 2) is in domain defined here}}
+    // expected-note@below {{source (domain 1 of 2) is in domain defined here}}
+    in %A: !firrtl.domain,
+    // expected-note@below {{destination is in domain defined here}}
+    // expected-note@below {{source (domain 2 of 2) is in domain defined here}}
+    in %B: !firrtl.domain
   ) {
     %a = firrtl.wire domains %A, %B : !firrtl.uint<1>
     %b = firrtl.wire domains %B : !firrtl.uint<1>
 
-    // expected-error@+1 {{illegal domain crossing in connect operation}}
+    // expected-error@below {{illegal domain crossing in connect operation}}
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
