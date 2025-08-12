@@ -3076,7 +3076,7 @@ endmodule
 // CHECK-LABEL: moore.module @PackedLvalue2(
 module PackedLvalue2(input logic [1023:0] x);
   // CHECK: [[A:%.+]] = moore.variable : <array<8 x array<4 x l16>>>
-  //CHECK: [[B:%.+]] = moore.variable : <array<8 x array<4 x l16>>>
+  // CHECK: [[B:%.+]] = moore.variable : <array<8 x array<4 x l16>>>
 
   logic [7:0][3:0][15:0] a, b;
   // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x array<4 x l16>>>, !moore.ref<array<8 x array<4 x l16>>>) -> <l1024>
