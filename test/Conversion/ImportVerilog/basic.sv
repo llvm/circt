@@ -3096,8 +3096,10 @@ endmodule
 module PackedLvalue4(input logic [1023:0] x);
   // CHECK: [[A:%.+]] = moore.variable : <l512>
   logic [511:0] a;
-  // CHECK: [[B:%.+]] = moore.variable : <l128>
-  // CHECK: [[C:%.+]] = moore.variable : <l128>
-  logic [127:0] b, c;
+  // CHECK: [[B:%.+]] = moore.variable : <l256>
+  // CHECK: [[C:%.+]] = moore.variable : <l256>
+  logic [255:0] b, c;
+  // CHECK: moore.concat_ref [[B]], [[C]] : (!moore.ref<l256>, !moore.ref<l256>) -> <l512>
+  // CHECK: moore.concat_ref [[A]], [[X:%.*]] : (!moore.ref<l512>, !moore.ref<l512>) -> <l1024>
   always_comb {a, {b, c}} = x;
 endmodule
