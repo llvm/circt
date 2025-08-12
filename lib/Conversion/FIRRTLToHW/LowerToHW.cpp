@@ -3709,7 +3709,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   if (newInstance.getInnerSymAttr())
     if (auto forceName = circuitState.instanceForceNames.lookup(
-            {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
+            {newInstance->getParentOfType<hw::HWModuleOp>().getNameAttr(),
              newInstance.getInnerNameAttr()}))
       newInstance->setAttr("hw.verilogName", forceName);
 
