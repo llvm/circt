@@ -14,7 +14,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
@@ -679,8 +678,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
-      int32_t resultWidth =
-          hw::getBitWidth(resultType); // resultType.getIntOrFloatBitWidth();
+      int32_t resultWidth = resultType.getIntOrFloatBitWidth();
       int32_t high = low + resultWidth;
 
       SmallVector<Value> toConcat;
