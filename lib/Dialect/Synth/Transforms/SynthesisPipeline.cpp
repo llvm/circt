@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Conversion/CombToAIG.h"
+#include "circt/Conversion/CombToDatapath.h"
+#include "circt/Conversion/DatapathToComb.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -36,8 +38,15 @@ static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
 
-void circt::synth::buildAIGLoweringPipeline(OpPassManager &pm) {
+void circt::synth::buildAIGLoweringPipeline(
+    OpPassManager &pm, const AIGLoweringPipelineOptions &options) {
   {
+    if (!options.disableDatapath) {
+      pm.addPass(createConvertCombToDatapath());
+      pm.addPass(createSimpleCanonicalizerPass());
+      pm.addPass(createConvertDatapathToComb());
+      pm.addPass(createSimpleCanonicalizerPass());
+    }
     // Partially legalize Comb to AIG, run CSE and canonicalization.
     circt::ConvertCombToAIGOptions convOptions;
     partiallyLegalizeCombToAIG<comb::AndOp, comb::OrOp, comb::XorOp,
@@ -86,7 +95,7 @@ void circt::synth::buildAIGOptimizationPipeline(
 //===----------------------------------------------------------------------===//
 
 void circt::synth::registerSynthesisPipeline() {
-  PassPipelineRegistration<EmptyPipelineOptions>(
+  PassPipelineRegistration<AIGLoweringPipelineOptions>(
       "synth-aig-lowering-pipeline",
       "The default pipeline for until AIG lowering", buildAIGLoweringPipeline);
   PassPipelineRegistration<AIGOptimizationPipelineOptions>(

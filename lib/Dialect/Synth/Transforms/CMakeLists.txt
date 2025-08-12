@@ -26,6 +26,8 @@ add_circt_dialect_library(CIRCTSynthTransforms
   CIRCTSV
   CIRCTAIGTransforms
   CIRCTCombToAIG
+  CIRCTCombToDatapath
+  CIRCTDatapathToComb
   CIRCTHWTransforms
   CIRCTSupport
   CIRCTTransforms
