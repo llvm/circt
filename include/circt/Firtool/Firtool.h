@@ -129,7 +129,6 @@ public:
   bool shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround() const {
     return addVivadoRAMAddressConflictSynthesisBugWorkaround;
   }
-  bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
   bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
   bool shouldSelectDefaultInstanceChoice() const {
@@ -255,11 +254,6 @@ public:
 
   FirtoolOptions &setReplSeqMemFile(StringRef value) {
     replSeqMemFile = value;
-    return *this;
-  }
-
-  FirtoolOptions &setExtractTestCode(bool value) {
-    extractTestCode = value;
     return *this;
   }
 
@@ -420,7 +414,6 @@ private:
   std::string blackBoxRootPath;
   bool replSeqMem;
   std::string replSeqMemFile;
-  bool extractTestCode;
   bool ignoreReadEnableMem;
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
