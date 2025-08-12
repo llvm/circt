@@ -679,7 +679,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
-      int32_t resultWidth = hw::getBitWidth(resultType); 
+      int32_t resultWidth = hw::getBitWidth(resultType);
       int32_t high = low + resultWidth;
 
       SmallVector<Value> toConcat;
