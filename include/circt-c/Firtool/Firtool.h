@@ -149,10 +149,6 @@ circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
                                      MlirStringRef value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
-                                      bool value);
-
-MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetIgnoreReadEnableMem(CirctFirtoolFirtoolOptions options,
                                           bool value);
 
@@ -175,15 +171,6 @@ circtFirtoolOptionsSetVerificationFlavor(CirctFirtoolFirtoolOptions options,
                                          CirctFirtoolVerificationFlavor value);
 
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
-    CirctFirtoolFirtoolOptions options, bool value);
-
-MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableInstanceExtraction(
-    CirctFirtoolFirtoolOptions options, bool value);
-
-MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
-    CirctFirtoolFirtoolOptions options, bool value);
-
-MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableModuleInlining(
     CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void

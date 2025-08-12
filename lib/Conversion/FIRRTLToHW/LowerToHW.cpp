@@ -162,33 +162,6 @@ static Value castFromFIRRTLType(Value val, Type type,
   return val;
 }
 
-/// Move a ExtractTestCode related annotation from annotations to an attribute.
-static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
-                          StringRef annoClass, StringRef attrBase) {
-  auto anno = annos.getAnnotation(annoClass);
-  auto *ctx = top.getContext();
-  if (!anno)
-    return;
-  if (auto dir = anno.getMember<StringAttr>("directory")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(
-        StringAttr::get(ctx, attrBase),
-        hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
-    top->setAttrs(old);
-  }
-  if (auto file = anno.getMember<StringAttr>("filename")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
-                     hw::OutputFileAttr::getFromFilename(
-                         ctx, file.getValue(), /*excludeFromFileList=*/true));
-    top->setAttrs(old);
-  }
-}
-
 static unsigned getBitWidthFromVectorSize(unsigned size) {
   return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
 }
@@ -698,16 +671,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<Operation *, 32> opsToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, extractAssertionsAnnoClass,
-                "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, extractAssumptionsAnnoClass,
-                "firrtl.extract.assume");
-  moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
-                "firrtl.extract.cover");
-  circuitAnno.removeAnnotationsWithClass(extractAssertionsAnnoClass,
-                                         extractAssumptionsAnnoClass,
-                                         extractCoverageAnnoClass);
-
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
