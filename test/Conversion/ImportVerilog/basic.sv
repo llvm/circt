@@ -3060,3 +3060,15 @@ module TimeLiterals;
     time d0 = 89.1234ps;
   endmodule
 endmodule
+
+//===------------------------------------------------------------------===//
+// Packed Lvalue
+
+// CHECK-LABEL: moore.module @Foo(
+module Foo(input logic [1023:0] x);
+  // CHECK: [[A:%.+]] = moore.variable : <array<8 x l64>>
+  // CHECK: [[B:%.+]] = moore.variable : <array<8 x l64>>
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x l64>>, !moore.ref<array<8 x l64>>) -> <l1024>
+  logic [7:0][63:0] a, b;
+  always_comb {a, b} = x;
+endmodule
