@@ -3060,3 +3060,52 @@ module TimeLiterals;
     time d0 = 89.1234ps;
   endmodule
 endmodule
+
+//===------------------------------------------------------------------===//
+// Packed Lvalue
+
+// CHECK-LABEL: moore.module @PackedLvalue1(
+module PackedLvalue1(input logic [1023:0] x);
+  // CHECK: [[A:%.+]] = moore.variable : <array<8 x l64>>
+  // CHECK: [[B:%.+]] = moore.variable : <array<8 x l64>>
+  logic [7:0][63:0] a, b;
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x l64>>, !moore.ref<array<8 x l64>>) -> <l1024>
+  always_comb {a, b} = x;
+endmodule
+
+// CHECK-LABEL: moore.module @PackedLvalue2(
+module PackedLvalue2(input logic [1023:0] x);
+  // CHECK: [[A:%.+]] = moore.variable : <array<8 x array<4 x l16>>>
+  // CHECK: [[B:%.+]] = moore.variable : <array<8 x array<4 x l16>>>
+
+  logic [7:0][3:0][15:0] a, b;
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<array<8 x array<4 x l16>>>, !moore.ref<array<8 x array<4 x l16>>>) -> <l1024>
+  always_comb {a, b} = x;
+endmodule
+
+// CHECK-LABEL: moore.module @PackedLvalue3(
+module PackedLvalue3(input logic [1023:0] x);
+  // CHECK: [[A:%.+]] = moore.variable : <l512>
+  // CHECK: [[B:%.+]] = moore.variable : <l512>
+  logic [511:0] a, b;
+  // CHECK: moore.concat_ref [[A]], [[B]] : (!moore.ref<l512>, !moore.ref<l512>) -> <l1024>
+  always_comb {a, b} = x;
+endmodule
+
+// CHECK-LABEL: moore.module @PackedLvalue4(
+module PackedLvalue4(input logic [1023:0] x);
+  // CHECK: [[A:%.+]] = moore.variable : <l512>
+  logic [511:0] a;
+  // CHECK: [[B:%.+]] = moore.variable : <l256>
+  // CHECK: [[C:%.+]] = moore.variable : <l256>
+  logic [255:0] b, c;
+  // CHECK: moore.concat_ref [[B]], [[C]] : (!moore.ref<l256>, !moore.ref<l256>) -> <l512>
+  // CHECK: moore.concat_ref [[A]], [[X:%.*]] : (!moore.ref<l512>, !moore.ref<l512>) -> <l1024>
+  always_comb {a, {b, c}} = x;
+endmodule
+
+// CHECK-LABEL: moore.module @PackedLvalue5(
+module PackedLvalue5(input logic [1023:0] x);
+  logic [7:0][63:0] a, b;
+  always_comb {a, b[0]} = x;
+endmodule

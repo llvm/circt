@@ -663,11 +663,23 @@ LogicalResult ConcatRefOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
-  for (auto operand : operands) {
-    auto type = cast<IntType>(cast<RefType>(operand.getType()).getNestedType());
-    if (type.getDomain() == Domain::FourValued)
+  for (Value operand : operands) {
+    UnpackedType nestedType = cast<RefType>(operand.getType()).getNestedType();
+    PackedType packedType = dyn_cast<PackedType>(nestedType);
+
+    if (!packedType) {
+      return failure();
+    }
+
+    if (packedType.getDomain() == Domain::FourValued)
       domain = Domain::FourValued;
-    width += type.getWidth();
+
+    // getBitSize() for PackedType returns an optional, so we must check it.
+    std::optional<int> bitSize = packedType.getBitSize();
+    if (!bitSize) {
+      return failure();
+    }
+    width += *bitSize;
   }
   results.push_back(RefType::get(IntType::get(context, width, domain)));
   return success();
