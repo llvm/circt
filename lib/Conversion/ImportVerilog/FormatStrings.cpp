@@ -129,10 +129,10 @@ struct FormatStringParser {
                          std::isupper(specifier) ? IntFormat::HexUpper
                                                  : IntFormat::HexLower);
 
-	case 'e':
-	case 'g':
-	case 'f':
-	  return emitReal(arg, options, RealFormat::Float);
+    case 'e':
+    case 'g':
+    case 'f':
+      return emitReal(arg, options, RealFormat::Float);
 
     case 's':
       // Simplified handling for literals.
