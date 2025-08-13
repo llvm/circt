@@ -52,84 +52,101 @@ perhaps some pieces may even be adopted by proprietary tools in time.
 
 For more information, please see our longer [charter document](docs/Charter.md).
 
-## Setting this up
+## Getting Started
 
-These commands can be used to setup CIRCT project:
+To get started hacking on CIRCT quickly, run the following commands:
 
-1) **Install Dependencies** of LLVM/MLIR according to [the
-  instructions](https://mlir.llvm.org/getting_started/), including cmake and 
-  ninja.
+```sh
+# Clone the repository and its submodules
+git clone git@github.com:llvm/circt.git --recursive
+cd circt
 
-2) **Check out LLVM and CIRCT repos.**  CIRCT contains LLVM as a git
-submodule.  The LLVM repo here includes staged changes to MLIR which
-may be necessary to support CIRCT.  It also represents the version of
-LLVM that has been tested.  MLIR is still changing relatively rapidly,
-so feel free to use the current version of LLVM, but APIs may have
-changed.
-
-```
-$ git clone git@github.com:llvm/circt.git
-$ cd circt
-$ git submodule init
-$ git submodule update
-```
-
-*Note:* The repository is set up so that `git submodule update` performs a 
-shallow clone, meaning it downloads just enough of the LLVM repository to check 
-out the currently specified commit. If you wish to work with the full history of
-the LLVM repository, you can manually "unshallow" the the submodule:
-
-```
-$ cd llvm
-$ git fetch --unshallow
-```
-
-3) **Build and test LLVM/MLIR:**
-
-```
-$ cd circt
-$ mkdir llvm/build
-$ cd llvm/build
-$ cmake -G Ninja ../llvm \
-    -DLLVM_ENABLE_PROJECTS="mlir" \
-    -DLLVM_TARGETS_TO_BUILD="host" \
+# Configure the build
+cmake -G Ninja llvm/llvm -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-$ ninja
-$ ninja check-mlir
+    -DLLVM_TARGETS_TO_BUILD=host \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
+
+# Run the build
+ninja -C build check-circt
 ```
 
-4) **Build and test CIRCT:**
+The above builds the CIRCT tools and libraries and runs all regression tests.
+If you want to include `circt-verilog` in the build, add `-DCIRCT_SLANG_FRONTEND_ENABLED=ON` to the cmake call.
+You can ask ninja to only build a specific library or tool, such as `ninja -C build circt-opt`.
+This will only build the necessary parts of LLVM, MLIR, and CIRCT, which can be a lot quicker than building everything.
 
+### Dependencies
+
+If you have git, ninja, python3, cmake, and a C++ toolchain installed, you should be able to build CIRCT.
+For a more detailed description of dependencies, take a look at:
+
+- [Getting Started with MLIR](https://mlir.llvm.org/getting_started/)
+- [LLVM Requirements](https://llvm.org/docs/GettingStarted.html#requirements)
+
+### Useful Options
+
+The `-DCMAKE_BUILD_TYPE=Debug` flag enables debug information, which makes the whole tree compile slower, but allows you to step through code into the LLVM
+and MLIR frameworks.
+The `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` flag generates a `compile_commands.json` file, which can be used by editors and language servers for autocomplete and other IDE-like features.
+
+To get something that runs faster but is still easy to debug, use the `-DCMAKE_BUILD_TYPE=RelWithDebInfo` flag to do a release build with debug info.
+
+To do a release build that runs very fast, use the `-DCMAKE_BUILD_TYPE=Release` flag.
+Release mode makes a very large difference in performance.
+
+Consult the [Getting Started](docs/GettingStarted.md) page for detailed information on configuring and compiling CIRCT.
+
+Consult the [Python Bindings](docs/PythonBindings.md) page if you are mainly interested in using CIRCT from a Python prompt or script.
+
+### Submodules
+
+CIRCT contains LLVM as a git submodule.
+The LLVM repository here includes staged changes to MLIR which may be necessary to support CIRCT.
+It also represents the version of LLVM that has been tested.
+MLIR is still changing relatively rapidly, so feel free to use the current version of LLVM, but APIs may have changed.
+
+Whenever you checkout a new CIRCT branch that points to a different version of LLVM, run the following command to update the submodule:
+```sh
+git submodule update
 ```
-$ cd circt
-$ mkdir build
-$ cd build
-$ cmake -G Ninja .. \
+
+The repository is set up to perform a shallow clone of the submodules, meaning it downloads just enough of the LLVM repository to check out the currently specified commit.
+If you wish to work with the full history of the LLVM repository, you can manually "unshallow" the submodule:
+```sh
+cd llvm
+git fetch --unshallow
+```
+
+### Building LLVM/MLIR Separately
+
+You can also build LLVM/MLIR in isolation first, and then build CIRCT using that first build.
+This allows you to pick different compiler options for the two builds, such as building CIRCT in debug mode but LLVM/MLIR in release mode.
+
+First, build and test *LLVM/MLIR*:
+```sh
+cd llvm
+cmake -G Ninja llvm -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_TARGETS_TO_BUILD=host
+ninja -C build
+ninja -C build check-mlir
+cd ..
+```
+
+Then build and test *CIRCT*:
+```sh
+cmake -G Ninja . -B build \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
     -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
-    -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
-    -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-$ ninja
-$ ninja check-circt
-$ ninja check-circt-integration # Run the integration tests.
+    -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm
+ninja -C build
+ninja -C build check-circt
+ninja -C build check-circt-integration
 ```
-
-The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
-whole tree compile slower, but allows you to step through code into the LLVM
-and MLIR frameworks. The `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` flag generates
-a `build/compile_commands.json` file, which can be used by editors (or plugins)
-for autocomplete and/or IDE-like features.
-
-To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
-`-DCMAKE_BUILD_TYPE=RelWithDebInfo` if you want to go fast and optionally if
-you want debug info to go with it.  `Release` mode makes a very large difference
-in performance.
-
-Consult the [Getting Started](docs/GettingStarted.md) page for detailed 
-information on configuring and compiling CIRCT.
-
-Consult the [Python Bindings](docs/PythonBindings.md) page if you are mainly
-interested in using CIRCT from a Python prompt or script.
