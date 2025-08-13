@@ -75,6 +75,7 @@ struct ModuleExternalizer : public OpReduction<HWModuleOp> {
   }
 
   std::string getName() const override { return "hw-module-externalizer"; }
+  bool acceptSizeIncrease() const override { return true; }
 
   std::unique_ptr<InstanceGraph> instanceGraph;
   ModuleSizeCache moduleSizes;
@@ -115,6 +116,8 @@ struct HWOperandForwarder : public Reduction {
 struct HWConstantifier : public Reduction {
   void matches(Operation *op,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return;
     for (auto result : op->getResults())
       if (!result.use_empty())
         if (isa<IntegerType>(result.getType()))
@@ -133,6 +136,7 @@ struct HWConstantifier : public Reduction {
     return success();
   }
   std::string getName() const override { return "hw-constantifier"; }
+  bool acceptSizeIncrease() const override { return true; }
 };
 
 /// Remove unused module input ports.
@@ -196,6 +200,7 @@ struct ModuleInputPruner : public Reduction {
   }
 
   std::string getName() const override { return "hw-module-input-pruner"; }
+  bool acceptSizeIncrease() const override { return true; }
 
   std::unique_ptr<SymbolTableCollection> symbolTables;
   std::unique_ptr<SymbolUserMap> symbolUsers;
@@ -282,6 +287,7 @@ struct ModuleOutputPruner : public Reduction {
   }
 
   std::string getName() const override { return "hw-module-output-pruner"; }
+  bool acceptSizeIncrease() const override { return true; }
 
   std::unique_ptr<SymbolTableCollection> symbolTables;
   std::unique_ptr<SymbolUserMap> symbolUsers;
