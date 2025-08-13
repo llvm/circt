@@ -1611,7 +1611,7 @@ def RealFormatAttr : I32EnumAttr<"RealFormat", "Real format",
 def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   let summary = "Format a real number value";
   let description = [{
-  Format an real value as a string according to the specified format.
+  Format a real value as a string according to the specified format.
 
   See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
   }];
