@@ -1599,6 +1599,39 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
   }];
 }
 
+def FmtFlt:I32EnumAttrCase<"Float", 0, "float">;
+def FmtExp:I32EnumAttrCase<"Exponential", 1, "exponential">;
+def FmtGen:I32EnumAttrCase<"General", 2, "general">;
+
+def RealFormatAttr : I32EnumAttr<"RealFormat", "Real format",
+                               [FmtFlt, FmtExp, FmtGen]> {
+  let cppNamespace = "circt::moore";
+}
+
+def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
+  let summary = "Format a real number value";
+  let description = [{
+  Format an real value as a string according to the specified format.
+
+  See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
+  }];
+  let arguments = (ins
+  RealType:$value,
+  RealFormatAttr:$format,
+  I32Attr:$width,
+  IntAlignAttr:$alignment,
+  IntPaddingAttr:$padding
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+      $format $value `,`
+      `width` $width `,`
+      `align` $alignment `,`
+      `pad` $padding
+      attr-dict `:` type($value)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//

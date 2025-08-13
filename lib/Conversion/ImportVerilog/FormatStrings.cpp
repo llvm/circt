@@ -129,6 +129,11 @@ struct FormatStringParser {
                          std::isupper(specifier) ? IntFormat::HexUpper
                                                  : IntFormat::HexLower);
 
+	case 'e':
+	case 'g':
+	case 'f':
+	  return emitReal(arg, options, RealFormat::Float);
+
     case 's':
       // Simplified handling for literals.
       if (auto *lit = arg.as_if<slang::ast::StringLiteral>()) {
@@ -180,6 +185,31 @@ struct FormatStringParser {
     fragments.push_back(moore::FormatIntOp::create(builder, loc, value, format,
                                                    width, alignment, padding));
     return success();
+  }
+
+  LogicalResult emitReal(const slang::ast::Expression &arg,
+                         const FormatOptions &options, RealFormat format) {
+
+    // Ensures that the given value is moore.real
+    // i.e. $display("%f", 4) -> 4.000000, but 4 is not necessarily of real type
+    auto value = auto value = context.convertRvalueExpression(
+        arg, moore::RealType::get(context.getContext()));
+    if (!value)
+      return failure();
+
+    // Determine width to which formatted real value should be padded to
+    unsigned width;
+    if (options.width)
+      width = *options.width;
+    else
+      width = cast<moore::RealType>(value.getType()).getWidth();
+
+    auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
+    auto padding = IntPadding::Space;
+    fragments.push_back(moore::FormatRealOp::create(builder, loc, value, format,
+                                                    width, alignment, padding))
+
+        return success();
   }
 
   /// Emit an expression argument with the appropriate default formatting.
