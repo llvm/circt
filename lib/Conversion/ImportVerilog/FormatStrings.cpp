@@ -15,6 +15,7 @@ using namespace ImportVerilog;
 using moore::IntAlign;
 using moore::IntFormat;
 using moore::IntPadding;
+using moore::RealFormat;
 using slang::ast::SFormat::FormatOptions;
 
 namespace {
@@ -192,7 +193,7 @@ struct FormatStringParser {
 
     // Ensures that the given value is moore.real
     // i.e. $display("%f", 4) -> 4.000000, but 4 is not necessarily of real type
-    auto value = auto value = context.convertRvalueExpression(
+    auto value = context.convertRvalueExpression(
         arg, moore::RealType::get(context.getContext()));
     if (!value)
       return failure();
@@ -207,9 +208,9 @@ struct FormatStringParser {
     auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
     auto padding = IntPadding::Space;
     fragments.push_back(moore::FormatRealOp::create(builder, loc, value, format,
-                                                    width, alignment, padding))
+                                                    width, alignment, padding));
 
-        return success();
+    return success();
   }
 
   /// Emit an expression argument with the appropriate default formatting.
