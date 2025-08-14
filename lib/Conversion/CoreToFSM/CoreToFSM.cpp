@@ -165,19 +165,14 @@ static void generateConcatenatedValues(
 static llvm::DenseMap<mlir::Value, int>
 intToRegMap(std::vector<seq::CompRegOp> v, int i) {
   llvm::DenseMap<mlir::Value, int> m;
-  // int i = 0;
-  // int width = 0;
   for (size_t ci = 0; ci < v.size(); ci++) {
     seq::CompRegOp reg = v[ci];
     int bits = reg.getType().getIntOrFloatBitWidth();
     int v = i & ((1 << bits) - 1);
     m[reg] = v;
     i = i >> bits;
-    // i += m[reg] * 1ULL << width;
-    // width += (bits);
   }
   return m;
-  // return i;
 }
 static int regMapToInt(std::vector<seq::CompRegOp> v,
                        llvm::DenseMap<mlir::Value, int> m) {
