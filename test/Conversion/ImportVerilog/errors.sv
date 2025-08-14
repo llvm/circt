@@ -159,3 +159,10 @@ module Foo;
   // expected-error @below {{unsupported type: associative arrays with wildcard index}}
   int x[*];
 endmodule
+
+// -----
+function void foo();
+  int q[$];
+  // expected-error @below {{unsupported expression: range select with non-constant bounds}}
+  q = q[2:$];
+endfunction

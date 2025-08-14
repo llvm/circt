@@ -131,6 +131,14 @@ struct ExprVisitor {
     if (auto *constant = expr.right().getConstant())
       constRight = constant->integer().as<int32_t>();
 
+    // We currently require the right-hand-side of the range to be constant.
+    // This catches things like `[42:$]` which we don't support at the moment.
+    if (!constRight) {
+      mlir::emitError(loc)
+          << "unsupported expression: range select with non-constant bounds";
+      return {};
+    }
+
     // We need to determine the right bound of the range. This is the address of
     // the least significant bit of the underlying bit storage, which is the
     // offset we want to pass to the extract op.
