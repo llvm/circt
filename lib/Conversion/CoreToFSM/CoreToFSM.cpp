@@ -162,31 +162,33 @@ static void generateConcatenatedValues(
   }
 }
 
-static llvm::DenseMap<mlir::Value, int> intToRegMap(std::vector<seq::CompRegOp> v, int i){
-    llvm::DenseMap<mlir::Value, int> m;
-    // int i = 0;
-    // int width = 0;
-    for(size_t ci = 0; ci < v.size(); ci++){
-        seq::CompRegOp reg = v[ci];
-        int bits = reg.getType().getIntOrFloatBitWidth();
-        int v = i & ((1 << bits) - 1);
-        m[reg] = v;
-        i = i >> bits;
-        // i += m[reg] * 1ULL << width;
-        // width += (bits);
-    }
-    return m;
-    // return i;
+static llvm::DenseMap<mlir::Value, int>
+intToRegMap(std::vector<seq::CompRegOp> v, int i) {
+  llvm::DenseMap<mlir::Value, int> m;
+  // int i = 0;
+  // int width = 0;
+  for (size_t ci = 0; ci < v.size(); ci++) {
+    seq::CompRegOp reg = v[ci];
+    int bits = reg.getType().getIntOrFloatBitWidth();
+    int v = i & ((1 << bits) - 1);
+    m[reg] = v;
+    i = i >> bits;
+    // i += m[reg] * 1ULL << width;
+    // width += (bits);
+  }
+  return m;
+  // return i;
 }
-static int regMapToInt(std::vector<seq::CompRegOp> v, llvm::DenseMap<mlir::Value, int> m){
-    int i = 0;
-    int width = 0;
-    for(size_t ci = 0; ci < v.size(); ci++){
-        seq::CompRegOp reg = v[ci];
-        i += m[reg] * 1ULL << width;
-        width += (reg.getType().getIntOrFloatBitWidth());
-    }
-    return i;
+static int regMapToInt(std::vector<seq::CompRegOp> v,
+                       llvm::DenseMap<mlir::Value, int> m) {
+  int i = 0;
+  int width = 0;
+  for (size_t ci = 0; ci < v.size(); ci++) {
+    seq::CompRegOp reg = v[ci];
+    i += m[reg] * 1ULL << width;
+    width += (reg.getType().getIntOrFloatBitWidth());
+  }
+  return i;
 }
 /// @brief Computes the Cartesian product of a list of sets.
 /// This function takes a vector of sets, where each set contains the possible
@@ -197,8 +199,8 @@ static int regMapToInt(std::vector<seq::CompRegOp> v, llvm::DenseMap<mlir::Value
 /// values for one component of a state vector.
 /// @return A std::set of std::vectors, representing all possible complete
 /// state vectors.
-static std::set<std::vector<size_t>>
-calculateCartesianProduct(const std::vector<llvm::DenseSet<size_t>> &valueSets) {
+static std::set<std::vector<size_t>> calculateCartesianProduct(
+    const std::vector<llvm::DenseSet<size_t>> &valueSets) {
   std::set<std::vector<size_t>> product;
   if (valueSets.empty()) {
     // The Cartesian product of zero sets is a set containing one element:
@@ -237,47 +239,43 @@ calculateCartesianProduct(const std::vector<llvm::DenseSet<size_t>> &valueSets) 
   return product;
 }
 
-static FrozenRewritePatternSet loadPatterns(MLIRContext &context){
+static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
 
-    RewritePatternSet patterns(&context);
-    // Collect canonicalization patterns from the dialects you are using.
-    // This is what the canonicalizer pass does internally.
-    for (auto *dialect : context.getLoadedDialects())
-      dialect->getCanonicalizationPatterns(patterns);
-    comb::ICmpOp::getCanonicalizationPatterns(patterns, &context);
-    comb::AndOp::getCanonicalizationPatterns(patterns, &context);
-    comb::XorOp::getCanonicalizationPatterns(patterns, &context);
-    comb::MuxOp::getCanonicalizationPatterns(patterns, &context);
-    comb::ConcatOp::getCanonicalizationPatterns(patterns,
-                                                &context);
-    comb::ExtractOp::getCanonicalizationPatterns(patterns,
-                                                 &context);
-    comb::AddOp::getCanonicalizationPatterns(patterns, &context);
-    comb::OrOp::getCanonicalizationPatterns(patterns, &context);
-    comb::MulOp::getCanonicalizationPatterns(patterns, &context);
-    hw::ConstantOp::getCanonicalizationPatterns(patterns,
-                                                &context);
-    fsm::TransitionOp::getCanonicalizationPatterns(patterns,
-                                                   &context);
-    fsm::StateOp::getCanonicalizationPatterns(patterns, &context);
-    fsm::MachineOp::getCanonicalizationPatterns(patterns,
-                                                &context);
+  RewritePatternSet patterns(&context);
+  // Collect canonicalization patterns from the dialects you are using.
+  // This is what the canonicalizer pass does internally.
+  for (auto *dialect : context.getLoadedDialects())
+    dialect->getCanonicalizationPatterns(patterns);
+  comb::ICmpOp::getCanonicalizationPatterns(patterns, &context);
+  comb::AndOp::getCanonicalizationPatterns(patterns, &context);
+  comb::XorOp::getCanonicalizationPatterns(patterns, &context);
+  comb::MuxOp::getCanonicalizationPatterns(patterns, &context);
+  comb::ConcatOp::getCanonicalizationPatterns(patterns, &context);
+  comb::ExtractOp::getCanonicalizationPatterns(patterns, &context);
+  comb::AddOp::getCanonicalizationPatterns(patterns, &context);
+  comb::OrOp::getCanonicalizationPatterns(patterns, &context);
+  comb::MulOp::getCanonicalizationPatterns(patterns, &context);
+  hw::ConstantOp::getCanonicalizationPatterns(patterns, &context);
+  fsm::TransitionOp::getCanonicalizationPatterns(patterns, &context);
+  fsm::StateOp::getCanonicalizationPatterns(patterns, &context);
+  fsm::MachineOp::getCanonicalizationPatterns(patterns, &context);
 
-    FrozenRewritePatternSet frozenPatterns(std::move(patterns));
-    return frozenPatterns;
+  FrozenRewritePatternSet frozenPatterns(std::move(patterns));
+  return frozenPatterns;
 }
 
-static void
-getReachableStates(llvm::DenseSet<size_t> &vistableStates,
-                   circt::hw::HWModuleOp moduleOp, size_t currentStateIndex,
-                   std::vector<seq::CompRegOp> registers,
-                   OpBuilder opBuilder, bool isInitialState) {
+static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
+                               circt::hw::HWModuleOp moduleOp,
+                               size_t currentStateIndex,
+                               std::vector<seq::CompRegOp> registers,
+                               OpBuilder opBuilder, bool isInitialState) {
 
   IRMapping mapping;
   HWModuleOp clonedBody = llvm::dyn_cast<circt::hw::HWModuleOp>(
       opBuilder.clone(*moduleOp, mapping));
 
-  llvm::DenseMap<mlir::Value, int> stateMap = intToRegMap(registers,currentStateIndex);
+  llvm::DenseMap<mlir::Value, int> stateMap =
+      intToRegMap(registers, currentStateIndex);
   Operation *terminator = clonedBody.getBody().front().getTerminator();
   circt::hw::OutputOp output = dyn_cast<circt::hw::OutputOp>(terminator);
   int i = 0;
@@ -319,32 +317,28 @@ getReachableStates(llvm::DenseSet<size_t> &vistableStates,
   LogicalResult converged = mlir::applyOpPatternsGreedily(
       opsToProcess, frozenPatterns, config, &changed);
 
-    std::vector<llvm::DenseSet<size_t>> pv;
-    for (size_t j = 0; j < newOutput.getNumOperands(); j++) {
-      llvm::DenseSet<size_t> possibleValues;
+  std::vector<llvm::DenseSet<size_t>> pv;
+  for (size_t j = 0; j < newOutput.getNumOperands(); j++) {
+    llvm::DenseSet<size_t> possibleValues;
 
-      Value v = newOutput.getOperand(j);
-      getPossibleValues(possibleValues, v);
-      pv.push_back(possibleValues);
+    Value v = newOutput.getOperand(j);
+    getPossibleValues(possibleValues, v);
+    pv.push_back(possibleValues);
+  }
+  std::set<std::vector<size_t>> flipped = calculateCartesianProduct(pv);
+  for (std::vector<size_t> v : flipped) {
+    llvm::DenseMap<mlir::Value, int> m;
+    for (int k = 0; k < v.size(); k++) {
+      seq::CompRegOp r = registers[k];
+      m[r] = v[k];
     }
-    std::set<std::vector<size_t>> flipped =  calculateCartesianProduct(pv);
-    for(std::vector<size_t> v : flipped) {
-        llvm::DenseMap<mlir::Value, int> m;
-        for(int k = 0; k < v.size(); k++){
-            seq::CompRegOp r = registers[k];
-            m[r] = v[k];
-        }
 
-        int i = regMapToInt(registers, m);
-        vistableStates.insert(i);
-    }
+    int i = regMapToInt(registers, m);
+    vistableStates.insert(i);
+  }
 
   clonedBody.erase();
 };
-
-
-
-
 
 // A converter class to handle the logic of converting a single hw.module.
 class HWModuleOpConverter {
@@ -370,10 +364,10 @@ public:
     llvm::DenseMap<mlir::Value, size_t> regToIndexMap;
     int regIndex = 0;
     std::vector<seq::CompRegOp> registers;
-    for(seq::CompRegOp c : stateRegs){
-        regToIndexMap[c] = regIndex;
-        regIndex++;
-        registers.push_back(c);
+    for (seq::CompRegOp c : stateRegs) {
+      regToIndexMap[c] = regIndex;
+      regIndex++;
+      registers.push_back(c);
     }
 
     llvm::DenseMap<size_t, circt::fsm::StateOp> stateToStateOp;
@@ -395,17 +389,18 @@ public:
 
     //     enumerateStates(regsInGroup);
     llvm::DenseMap<mlir::Value, int> initialStateMap;
-    for(seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()){
-        mlir::Value resetValue = reg.getResetValue();
-        circt::hw::ConstantOp definingConstant =
-            resetValue.getDefiningOp<circt::hw::ConstantOp>();
-        if (!definingConstant) {
-          reg->emitError(
-              "Cannot find defining constant for reset value of register: ");
-          return failure();
-        }
-        int resetValueInt = definingConstant.getValueAttr().getValue().getZExtValue();
-        initialStateMap[reg] = resetValueInt;
+    for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {
+      mlir::Value resetValue = reg.getResetValue();
+      circt::hw::ConstantOp definingConstant =
+          resetValue.getDefiningOp<circt::hw::ConstantOp>();
+      if (!definingConstant) {
+        reg->emitError(
+            "Cannot find defining constant for reset value of register: ");
+        return failure();
+      }
+      int resetValueInt =
+          definingConstant.getValueAttr().getValue().getZExtValue();
+      initialStateMap[reg] = resetValueInt;
     }
     int initialStateIndex = regMapToInt(registers, initialStateMap);
 
@@ -439,7 +434,8 @@ public:
     }
 
     // A valid machine needs at least its initial state defined.
-    FrozenRewritePatternSet frozenPatterns = loadPatterns(*moduleOp.getContext());
+    FrozenRewritePatternSet frozenPatterns =
+        loadPatterns(*moduleOp.getContext());
 
     SetVector<int> reachableStates;
     SmallVector<int> worklist;
@@ -451,8 +447,8 @@ public:
 
       int currentStateIndex = worklist[i++];
 
-     llvm::DenseMap<mlir::Value, int> stateMap = intToRegMap(registers, currentStateIndex);
-      
+      llvm::DenseMap<mlir::Value, int> stateMap =
+          intToRegMap(registers, currentStateIndex);
 
       opBuilder.setInsertionPointToEnd(&machine.getBody().front());
 
@@ -508,7 +504,7 @@ public:
         assert(clonedRegValue && "Original register value not found in "
                                  "mapping; this is an internal error.");
         Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-        
+
         assert(clonedRegOp && "Cloned value must have a defining op.");
         opBuilder.setInsertionPoint(clonedRegOp);
         circt::seq::CompRegOp r = dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
@@ -624,7 +620,8 @@ public:
         // Position the builder to insert the new terminator right before
         // the old one.
 
-        llvm::DenseMap<mlir::Value, int> toStateMap = intToRegMap(registers, j);//states[j];
+        llvm::DenseMap<mlir::Value, int> toStateMap =
+            intToRegMap(registers, j); // states[j];
         SmallVector<mlir::Value> equalityChecks;
         // check if the input to each register matches the toState
         for (auto &[originalRegValue, variableOp] : variableMap) {
@@ -703,8 +700,9 @@ public:
         }
         // delete the arguments from the output block
         newGuardBlock.eraseArguments([](BlockArgument arg) { return true; });
-        llvm::DenseMap<mlir::Value, int> fromStateMap = intToRegMap(registers, currentStateIndex);
-           // states[currentStateIndex];
+        llvm::DenseMap<mlir::Value, int> fromStateMap =
+            intToRegMap(registers, currentStateIndex);
+        // states[currentStateIndex];
         for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
           //  Find the cloned register's result value using the mapping.
           Value clonedRegValue = mapping.lookup(originalRegValue);
@@ -828,7 +826,7 @@ public:
         for (TransitionOp transition :
              stateOp.getTransitions().getOps<TransitionOp>()) {
           StateOp nextState = transition.getNextStateOp();
-          int nextStateIndex =  stateOpToState.lookup(nextState);
+          int nextStateIndex = stateOpToState.lookup(nextState);
           hw::ConstantOp guardConst =
               transition.getGuardReturn()
                   .getOperand()
