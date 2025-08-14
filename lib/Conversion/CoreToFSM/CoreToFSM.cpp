@@ -29,7 +29,6 @@
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
-#include <memory>
 #include <string>
 namespace circt {
 #define GEN_PASS_DEF_CONVERTCORETOFSM
@@ -127,7 +126,6 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   return;
 };
 
-
 static bool isConstant(mlir::Value value) {
   Operation *getDefiningOp = value.getDefiningOp();
   if (!getDefiningOp) {
@@ -188,7 +186,7 @@ LogicalResult pushIcmp(comb::ICmpOp op, PatternRewriter &rewriter) {
     op.erase();
     return llvm::success();
   }
-   return llvm::failure();
+  return llvm::failure();
 }
 /// Recursively builds all possible concatenated integer values.
 static void generateConcatenatedValues(
@@ -397,7 +395,7 @@ public:
       emitError(moduleOp.getLoc())
           << "Cannot find state register in this FSM. You might need to "
              "manually specify which registers are state registers.\n";
-      return mlir::success();
+      return mlir::failure();
     }
     llvm::DenseMap<mlir::Value, size_t> regToIndexMap;
     int regIndex = 0;
@@ -649,8 +647,7 @@ public:
         // Position the builder to insert the new terminator right before
         // the old one.
 
-        llvm::DenseMap<mlir::Value, int> toStateMap =
-            intToRegMap(registers, j); 
+        llvm::DenseMap<mlir::Value, int> toStateMap = intToRegMap(registers, j);
         SmallVector<mlir::Value> equalityChecks;
         // check if the input to each register matches the toState
         for (auto &[originalRegValue, variableOp] : variableMap) {
@@ -676,8 +673,6 @@ public:
           if (registerReset) { // Ensure the register has a reset.
             if (BlockArgument blockArg =
                     mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
-              // asyncResetArguments.insert(blockArg.getArgNumber());
-              // blockArg.dump();
               ConstantOp falseConst = opBuilder.create<hw::ConstantOp>(
                   blockArg.getLoc(), clonedRegValue.getType(), 0);
               blockArg.replaceAllUsesWith(falseConst.getResult());
@@ -697,7 +692,7 @@ public:
             }
           }
           mlir::Type constantType =
-              registerInput.getType(); // Use the type of the value 
+              registerInput.getType(); // Use the type of the value
                                        // comparing against.
 
           IntegerAttr constantAttr =
@@ -957,4 +952,3 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
 std::unique_ptr<mlir::Pass> circt::createConvertCoreToFSMPass() {
   return std::make_unique<CoreToFSMPass>();
 }
-
