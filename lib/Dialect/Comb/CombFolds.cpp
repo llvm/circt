@@ -2952,7 +2952,7 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
-  
+
   // icmp 1, x -> icmp x, 1
   if (matchPattern(op.getLhs(), m_ConstantInt(&lhs))) {
     assert(!matchPattern(op.getRhs(), m_ConstantInt(&rhs)) &&
