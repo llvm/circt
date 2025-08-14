@@ -153,3 +153,9 @@ function time Foo;
   // expected-error @below {{time value is larger than 18446744073709549568 fs}}
   return 100000s;
 endfunction
+
+// -----
+module Foo;
+  // expected-error @below {{unsupported type: associative arrays with wildcard index}}
+  int x[*];
+endmodule
