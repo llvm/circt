@@ -28,10 +28,8 @@
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
-#include <boost/pending/disjoint_sets.hpp>
 #include <memory>
 #include <string>
-#include <vector>
 namespace circt {
 #define GEN_PASS_DEF_CONVERTCORETOFSM
 #include "circt/Conversion/Passes.h.inc"
@@ -46,8 +44,8 @@ namespace {
 
 // Forward declaration for our recursive helper function
 static void generateConcatenatedValues(
-    const std::vector<llvm::DenseSet<size_t>> &allOperandValues,
-    const std::vector<unsigned> &shifts,
+    const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
+    const llvm::SmallVector<unsigned> &shifts,
     llvm::DenseSet<size_t> &finalPossibleValues, size_t operandIdx,
     size_t currentValue);
 
@@ -65,8 +63,8 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 
   if (circt::comb::ConcatOp concatOp =
           dyn_cast_or_null<comb::ConcatOp>(v.getDefiningOp())) {
-    std::vector<llvm::DenseSet<size_t>> allOperandValues;
-    std::vector<unsigned> operandWidths;
+    llvm::SmallVector<llvm::DenseSet<size_t>> allOperandValues;
+    llvm::SmallVector<unsigned> operandWidths;
 
     for (Value operand : concatOp.getOperands()) {
       llvm::DenseSet<size_t> operandPossibleValues;
@@ -97,7 +95,7 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 
     // The shift for operand `i` is the sum of the widths of operands `i+1` to
     // `n-1`.
-    std::vector<unsigned> shifts(concatOp.getNumOperands(), 0);
+    llvm::SmallVector<unsigned> shifts(concatOp.getNumOperands(), 0);
     for (int i = concatOp.getNumOperands() - 2; i >= 0; --i) {
       shifts[i] = shifts[i + 1] + operandWidths[i + 1];
     }
@@ -128,18 +126,72 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   return;
 };
 
-/// @brief Recursively builds all possible concatenated integer values.
-/// @param allOperandValues Vector of sets, where each set contains the possible
-/// values for an operand.
-/// @param shifts The pre-calculated left-shift amount for each operand index.
-/// @param finalPossibleValues The output set to populate with final combined
-/// values.
-/// @param operandIdx The current operand index we are processing.
-/// @param currentValue The bitwise-OR'd value accumulated so far from previous
-/// operands.
+
+static bool isConstant(mlir::Value value) {
+  Operation *getDefiningOp = value.getDefiningOp();
+  if (!getDefiningOp) {
+    return false;
+  }
+  if (circt::hw::ConstantOp constantOp =
+          mlir::dyn_cast<circt::hw::ConstantOp>(getDefiningOp)) {
+    return true;
+  }
+  if (circt::comb::MuxOp muxOp =
+          mlir::dyn_cast<circt::comb::MuxOp>(getDefiningOp)) {
+    return isConstant(muxOp.getTrueValue()) &&
+           isConstant(muxOp.getFalseValue());
+  }
+  return false;
+}
+LogicalResult pushIcmp(comb::ICmpOp op, PatternRewriter &rewriter) {
+  APInt lhs, rhs;
+  if (op.getPredicate() == circt::comb::ICmpPredicate::eq &&
+      op.getLhs().getDefiningOp<circt::comb::MuxOp>() &&
+      (isConstant(op.getLhs()) ||
+       op.getRhs().getDefiningOp<circt::hw::ConstantOp>())) {
+    rewriter.setInsertionPointAfter(op);
+    circt::comb::MuxOp mux = op.getLhs().getDefiningOp<circt::comb::MuxOp>();
+    mlir::Value x = mux.getTrueValue();
+    mlir::Value y = mux.getFalseValue();
+    mlir::Value b = op.getRhs();
+    Location loc = op.getLoc();
+    circt::comb::ICmpOp eq1 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, x, b);
+    circt::comb::ICmpOp eq2 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, y, b);
+    circt::comb::MuxOp newMux = rewriter.create<circt::comb::MuxOp>(
+        loc, mux.getCond(), eq1.getResult(), eq2.getResult());
+    Operation *o = newMux;
+    op.replaceAllUsesWith(o);
+    op.erase();
+    return llvm::success();
+  }
+  if (op.getPredicate() == circt::comb::ICmpPredicate::eq &&
+      op.getRhs().getDefiningOp<circt::comb::MuxOp>() &&
+      (isConstant(op.getRhs()) ||
+       op.getLhs().getDefiningOp<circt::hw::ConstantOp>())) {
+    rewriter.setInsertionPointAfter(op);
+    circt::comb::MuxOp mux = op.getRhs().getDefiningOp<circt::comb::MuxOp>();
+    mlir::Value x = mux.getTrueValue();
+    mlir::Value y = mux.getFalseValue();
+    mlir::Value b = op.getLhs();
+    Location loc = op.getLoc();
+    circt::comb::ICmpOp eq1 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, x, b);
+    circt::comb::ICmpOp eq2 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, y, b);
+    circt::comb::MuxOp newMux = rewriter.create<circt::comb::MuxOp>(
+        loc, mux.getCond(), eq1.getResult(), eq2.getResult());
+    Operation *o = newMux;
+    op.replaceAllUsesWith(o);
+    op.erase();
+    return llvm::success();
+  }
+}
+/// Recursively builds all possible concatenated integer values.
 static void generateConcatenatedValues(
-    const std::vector<llvm::DenseSet<size_t>> &allOperandValues,
-    const std::vector<unsigned> &shifts,
+    const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
+    const llvm::SmallVector<unsigned> &shifts,
     llvm::DenseSet<size_t> &finalPossibleValues, size_t operandIdx,
     size_t currentValue) {
 
@@ -163,7 +215,7 @@ static void generateConcatenatedValues(
 }
 
 static llvm::DenseMap<mlir::Value, int>
-intToRegMap(std::vector<seq::CompRegOp> v, int i) {
+intToRegMap(llvm::SmallVector<seq::CompRegOp> v, int i) {
   llvm::DenseMap<mlir::Value, int> m;
   for (size_t ci = 0; ci < v.size(); ci++) {
     seq::CompRegOp reg = v[ci];
@@ -174,7 +226,7 @@ intToRegMap(std::vector<seq::CompRegOp> v, int i) {
   }
   return m;
 }
-static int regMapToInt(std::vector<seq::CompRegOp> v,
+static int regMapToInt(llvm::SmallVector<seq::CompRegOp> v,
                        llvm::DenseMap<mlir::Value, int> m) {
   int i = 0;
   int width = 0;
@@ -185,18 +237,11 @@ static int regMapToInt(std::vector<seq::CompRegOp> v,
   }
   return i;
 }
-/// @brief Computes the Cartesian product of a list of sets.
-/// This function takes a vector of sets, where each set contains the possible
-/// values for a particular element (e.g., a register). It returns a set of
-/// vectors, where each vector represents one complete and unique combination of
-/// values, drawing one value from each of the input sets.
-/// @param valueSets A vector of DenseSets, each representing the possible
-/// values for one component of a state vector.
-/// @return A std::set of std::vectors, representing all possible complete
-/// state vectors.
-static std::set<std::vector<size_t>> calculateCartesianProduct(
-    const std::vector<llvm::DenseSet<size_t>> &valueSets) {
-  std::set<std::vector<size_t>> product;
+
+/// Computes the Cartesian product of a list of sets.
+static std::set<llvm::SmallVector<size_t>> calculateCartesianProduct(
+    const llvm::SmallVector<llvm::DenseSet<size_t>> &valueSets) {
+  std::set<llvm::SmallVector<size_t>> product;
   if (valueSets.empty()) {
     // The Cartesian product of zero sets is a set containing one element:
     // the empty tuple (represented here by an empty vector).
@@ -220,10 +265,10 @@ static std::set<std::vector<size_t>> calculateCartesianProduct(
       return {};
     }
 
-    std::set<std::vector<size_t>> newProduct;
+    std::set<llvm::SmallVector<size_t>> newProduct;
     for (const auto &existingVector : product) {
       for (size_t newValue : currentSet) {
-        std::vector<size_t> newVector = existingVector;
+        llvm::SmallVector<size_t> newVector = existingVector;
         newVector.push_back(newValue);
         newProduct.insert(std::move(newVector));
       }
@@ -254,7 +299,7 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
   fsm::TransitionOp::getCanonicalizationPatterns(patterns, &context);
   fsm::StateOp::getCanonicalizationPatterns(patterns, &context);
   fsm::MachineOp::getCanonicalizationPatterns(patterns, &context);
-
+  patterns.add(pushIcmp);
   FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   return frozenPatterns;
 }
@@ -262,7 +307,7 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
 static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
                                circt::hw::HWModuleOp moduleOp,
                                size_t currentStateIndex,
-                               std::vector<seq::CompRegOp> registers,
+                               llvm::SmallVector<seq::CompRegOp> registers,
                                OpBuilder opBuilder, bool isInitialState) {
 
   IRMapping mapping;
@@ -274,8 +319,8 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
   Operation *terminator = clonedBody.getBody().front().getTerminator();
   circt::hw::OutputOp output = dyn_cast<circt::hw::OutputOp>(terminator);
   int i = 0;
-  std::vector<mlir::Value> values;
-  std::vector<mlir::Type> types;
+  llvm::SmallVector<mlir::Value> values;
+  llvm::SmallVector<mlir::Type> types;
   llvm::DenseMap<int, mlir::Value> regMap;
 
   for (auto [originalRegValue, constStateValue] : stateMap) {
@@ -312,7 +357,7 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
   LogicalResult converged = mlir::applyOpPatternsGreedily(
       opsToProcess, frozenPatterns, config, &changed);
 
-  std::vector<llvm::DenseSet<size_t>> pv;
+  llvm::SmallVector<llvm::DenseSet<size_t>> pv;
   for (size_t j = 0; j < newOutput.getNumOperands(); j++) {
     llvm::DenseSet<size_t> possibleValues;
 
@@ -320,8 +365,8 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
     getPossibleValues(possibleValues, v);
     pv.push_back(possibleValues);
   }
-  std::set<std::vector<size_t>> flipped = calculateCartesianProduct(pv);
-  for (std::vector<size_t> v : flipped) {
+  std::set<llvm::SmallVector<size_t>> flipped = calculateCartesianProduct(pv);
+  for (llvm::SmallVector<size_t> v : flipped) {
     llvm::DenseMap<mlir::Value, int> m;
     for (int k = 0; k < v.size(); k++) {
       seq::CompRegOp r = registers[k];
@@ -358,7 +403,7 @@ public:
     }
     llvm::DenseMap<mlir::Value, size_t> regToIndexMap;
     int regIndex = 0;
-    std::vector<seq::CompRegOp> registers;
+    llvm::SmallVector<seq::CompRegOp> registers;
     for (seq::CompRegOp c : stateRegs) {
       regToIndexMap[c] = regIndex;
       regIndex++;
@@ -379,10 +424,6 @@ public:
         FunctionType::get(opBuilder.getContext(), inputTypes, resultTypes);
     StringRef machineName = moduleOp.getName();
 
-    // int initialStateIndex = 0;
-    // std::vector<llvm::DenseMap<mlir::Value, int>> states =
-
-    //     enumerateStates(regsInGroup);
     llvm::DenseMap<mlir::Value, int> initialStateMap;
     for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {
       mlir::Value resetValue = reg.getResetValue();
@@ -616,7 +657,7 @@ public:
         // the old one.
 
         llvm::DenseMap<mlir::Value, int> toStateMap =
-            intToRegMap(registers, j); // states[j];
+            intToRegMap(registers, j); 
         SmallVector<mlir::Value> equalityChecks;
         // check if the input to each register matches the toState
         for (auto &[originalRegValue, variableOp] : variableMap) {
@@ -697,7 +738,6 @@ public:
         newGuardBlock.eraseArguments([](BlockArgument arg) { return true; });
         llvm::DenseMap<mlir::Value, int> fromStateMap =
             intToRegMap(registers, currentStateIndex);
-        // states[currentStateIndex];
         for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
           //  Find the cloned register's result value using the mapping.
           Value clonedRegValue = mapping.lookup(originalRegValue);
@@ -924,3 +964,4 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
 std::unique_ptr<mlir::Pass> circt::createConvertCoreToFSMPass() {
   return std::make_unique<CoreToFSMPass>();
 }
+
