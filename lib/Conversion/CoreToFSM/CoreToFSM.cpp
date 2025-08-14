@@ -11,6 +11,7 @@
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Value.h"
@@ -187,6 +188,7 @@ LogicalResult pushIcmp(comb::ICmpOp op, PatternRewriter &rewriter) {
     op.erase();
     return llvm::success();
   }
+   return llvm::failure();
 }
 /// Recursively builds all possible concatenated integer values.
 static void generateConcatenatedValues(
@@ -282,8 +284,6 @@ static std::set<llvm::SmallVector<size_t>> calculateCartesianProduct(
 static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
 
   RewritePatternSet patterns(&context);
-  // Collect canonicalization patterns from the dialects you are using.
-  // This is what the canonicalizer pass does internally.
   for (auto *dialect : context.getLoadedDialects())
     dialect->getCanonicalizationPatterns(patterns);
   comb::ICmpOp::getCanonicalizationPatterns(patterns, &context);
@@ -345,8 +345,6 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
   circt::hw::OutputOp newOutput =
       opBuilder.create<circt::hw::OutputOp>(output.getLoc(), values);
   output.erase();
-  // Collect canonicalization patterns from the dialects you are using.
-  // This is what the canonicalizer pass does internally.
   FrozenRewritePatternSet frozenPatterns = loadPatterns(*moduleOp.getContext());
 
   SmallVector<Operation *> opsToProcess;
@@ -396,7 +394,7 @@ public:
       }
     });
     if (stateRegs.empty()) {
-      llvm::outs()
+      emitError(moduleOp.getLoc())
           << "Cannot find state register in this FSM. You might need to "
              "manually specify which registers are state registers.\n";
       return mlir::success();
@@ -585,9 +583,6 @@ public:
         clonedRegOp->erase();
       }
       mlir::GreedyRewriteConfig config;
-      // You could add more patterns here if needed.
-      // This function will apply folding and DCE, which is exactly what
-      // you need.
       SmallVector<Operation *> opsToProcess;
       outputRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
       // replace references to arguments in the output block with
@@ -603,8 +598,6 @@ public:
       // delete the arguments from the output block
       outputRegion.front().eraseArguments(
           [](BlockArgument arg) { return true; });
-      // Create your pattern set. For simple DCE and folding, an empty
-      //    native pattern set is often sufficient, as folding is built-in.
       FrozenRewritePatternSet patterns(
           opBuilder.getContext()); // Or add specific patterns
 
@@ -704,7 +697,7 @@ public:
             }
           }
           mlir::Type constantType =
-              registerInput.getType(); // Use the type of the value you're
+              registerInput.getType(); // Use the type of the value 
                                        // comparing against.
 
           IntegerAttr constantAttr =
