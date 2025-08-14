@@ -1007,13 +1007,14 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   SmallVector<Type, 1> outputTypes;
 
   for (const auto *arg : subroutine.getArguments()) {
-    auto type = cast<moore::UnpackedType>(convertType(arg->getType()));
+    auto type = convertType(arg->getType());
     if (!type)
       return {};
     if (arg->direction == ArgumentDirection::In) {
       inputTypes.push_back(type);
     } else {
-      inputTypes.push_back(moore::RefType::get(type));
+      inputTypes.push_back(
+          moore::RefType::get(cast<moore::UnpackedType>(type)));
     }
   }
 

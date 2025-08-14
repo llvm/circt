@@ -39,9 +39,8 @@ struct StmtVisitor {
                                  uint32_t level) {
     // find current dimension we are operate.
     const auto &loopDim = stmt.loopDims[level];
-    if (!loopDim.range.has_value()) {
-      emitError(loc) << "dynamic loop variable is unsupported";
-    }
+    if (!loopDim.range.has_value())
+      return mlir::emitError(loc) << "dynamic loop variable is unsupported";
     auto &exitBlock = createBlock();
     auto &stepBlock = createBlock();
     auto &bodyBlock = createBlock();
