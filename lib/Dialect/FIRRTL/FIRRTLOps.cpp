@@ -1238,7 +1238,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
       portDirections.push_back(Direction::Out);
-    else if (succeeded(parser.parseKeyword("in", "or 'out'")))
+    else if (succeeded(parser.parseKeyword("in", " or 'out'")))
       portDirections.push_back(Direction::In);
     else
       return failure();
