@@ -46,9 +46,10 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
+namespace cl = llvm::cl;
+using llvm::WithColor;
 
 //===----------------------------------------------------------------------===//
 // Command Line Options
@@ -529,7 +530,15 @@ static LogicalResult execute(MLIRContext *context) {
 
   // Open the input files.
   llvm::SourceMgr sourceMgr;
+  DenseSet<StringRef> seenInputFilenames;
   for (const auto &inputFilename : opts.inputFilenames) {
+    // Don't add the same file multiple times.
+    if (!seenInputFilenames.insert(inputFilename).second) {
+      WithColor::warning() << "redundant input file `" << inputFilename
+                           << "`\n";
+      continue;
+    }
+
     std::string errorMessage;
     auto buffer = openInputFile(inputFilename, &errorMessage);
     if (!buffer) {
@@ -552,11 +561,11 @@ static LogicalResult execute(MLIRContext *context) {
 }
 
 int main(int argc, char **argv) {
-  InitLLVM y(argc, argv);
+  llvm::InitLLVM y(argc, argv);
 
   // Set the bug report message to indicate users should file issues on
   // llvm/circt and not llvm/llvm-project.
-  setBugReportMsg(circtBugReportMsg);
+  llvm::setBugReportMsg(circtBugReportMsg);
 
   // Print the CIRCT and Slang versions when requested.
   cl::AddExtraVersionPrinter([](raw_ostream &os) {

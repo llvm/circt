@@ -186,10 +186,14 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   // source text in memory. At a later stage we'll want to extend slang's
   // SourceManager such that it can contain non-owned buffers. This will do
   // for now.
+  DenseSet<StringRef> seenBuffers;
   for (unsigned i = 0, e = sourceMgr.getNumBuffers(); i < e; ++i) {
     const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(i + 1);
-    auto slangBuffer = driver.sourceManager.assignText(
-        mlirBuffer->getBufferIdentifier(), mlirBuffer->getBuffer());
+    auto name = mlirBuffer->getBufferIdentifier();
+    if (!name.empty() && !seenBuffers.insert(name).second)
+      continue; // Slang doesn't like listing the same buffer twice
+    auto slangBuffer =
+        driver.sourceManager.assignText(name, mlirBuffer->getBuffer());
     driver.sourceLoader.addBuffer(slangBuffer);
   }
 
