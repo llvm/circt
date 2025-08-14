@@ -51,6 +51,7 @@
 #include "circt/Conversion/SimToSV.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/VerifToSV.h"
+#include "circt/Conversion/CoreToFSM.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"

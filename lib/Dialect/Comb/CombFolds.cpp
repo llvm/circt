@@ -2950,9 +2950,67 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
       rewriter, cmpOp, cmpOp.getPredicate(), newLHS, newRHS, false);
 }
 
+static bool isConstant(mlir::Value value) {
+  Operation *getDefiningOp = value.getDefiningOp();
+  if (!getDefiningOp) {
+    return false;
+  }
+  if (circt::hw::ConstantOp constantOp =
+          mlir::dyn_cast<circt::hw::ConstantOp>(getDefiningOp)) {
+    return true;
+  }
+  if (circt::comb::MuxOp muxOp =
+          mlir::dyn_cast<circt::comb::MuxOp>(getDefiningOp)) {
+    return isConstant(muxOp.getTrueValue()) &&
+           isConstant(muxOp.getFalseValue());
+  }
+  return false;
+}
+
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
-
+  if (op.getPredicate() == circt::comb::ICmpPredicate::eq &&
+      op.getLhs().getDefiningOp<circt::comb::MuxOp>() &&
+      (isConstant(op.getLhs()) ||
+       op.getRhs().getDefiningOp<circt::hw::ConstantOp>())) {
+    rewriter.setInsertionPointAfter(op);
+    circt::comb::MuxOp mux = op.getLhs().getDefiningOp<circt::comb::MuxOp>();
+    mlir::Value x = mux.getTrueValue();
+    mlir::Value y = mux.getFalseValue();
+    mlir::Value b = op.getRhs();
+    Location loc = op.getLoc();
+    circt::comb::ICmpOp eq1 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, x, b);
+    circt::comb::ICmpOp eq2 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, y, b);
+    circt::comb::MuxOp newMux = rewriter.create<circt::comb::MuxOp>(
+        loc, mux.getCond(), eq1.getResult(), eq2.getResult());
+    Operation *o = newMux;
+    op.replaceAllUsesWith(o);
+    op.erase();
+    return llvm::success();
+  }
+  if (op.getPredicate() == circt::comb::ICmpPredicate::eq &&
+      op.getRhs().getDefiningOp<circt::comb::MuxOp>() &&
+      (isConstant(op.getRhs()) ||
+       op.getLhs().getDefiningOp<circt::hw::ConstantOp>())) {
+    rewriter.setInsertionPointAfter(op);
+    circt::comb::MuxOp mux = op.getRhs().getDefiningOp<circt::comb::MuxOp>();
+    mlir::Value x = mux.getTrueValue();
+    mlir::Value y = mux.getFalseValue();
+    mlir::Value b = op.getLhs();
+    Location loc = op.getLoc();
+    circt::comb::ICmpOp eq1 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, x, b);
+    circt::comb::ICmpOp eq2 = rewriter.create<circt::comb::ICmpOp>(
+        loc, circt::comb::ICmpPredicate::eq, y, b);
+    circt::comb::MuxOp newMux = rewriter.create<circt::comb::MuxOp>(
+        loc, mux.getCond(), eq1.getResult(), eq2.getResult());
+    Operation *o = newMux;
+    op.replaceAllUsesWith(o);
+    op.erase();
+    return llvm::success();
+  }
   // icmp 1, x -> icmp x, 1
   if (matchPattern(op.getLhs(), m_ConstantInt(&lhs))) {
     assert(!matchPattern(op.getRhs(), m_ConstantInt(&rhs)) &&

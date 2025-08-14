@@ -409,6 +409,18 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CoreToFSM
+//===----------------------------------------------------------------------===//
+
+
+def ConvertCoreToFSM : Pass<"convert-core-to-fsm", "mlir::ModuleOp"> {
+  let summary = "Convert Core to FSM";
+  let constructor = "circt::createConvertCoreToFSMPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect", "circt::fsm::FSMDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
