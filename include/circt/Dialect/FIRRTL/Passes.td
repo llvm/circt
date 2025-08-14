@@ -734,6 +734,10 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
     pass, all layer blocks and layers are removed.
   }];
   let dependentDialects = ["sv::SVDialect", "emit::EmitDialect"];
+  let options = [
+    Option<"emitAllBindFiles", "emit-all-bind-files", "bool", "false",
+      "Emit bind files for private modules.">
+  ];
 }
 
 def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {

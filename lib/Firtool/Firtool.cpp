@@ -250,7 +250,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
   //   https://github.com/llvm/circt/issues/7896
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayers());
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createLowerLayers({opt.getEmitAllBindFiles()}));
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
@@ -766,6 +767,11 @@ struct FirtoolCmdOptions {
       "disable-wire-elimination", llvm::cl::desc("Disable wire elimination"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> emitAllBindFiles{
+      "emit-all-bind-files",
+      llvm::cl::desc("Emit bindfiles for private modules"),
+      llvm::cl::init(false)};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -818,7 +824,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
-      lintXmrsInDesign(true) {
+      lintXmrsInDesign(true), emitAllBindFiles(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -871,4 +877,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableWireElimination = clOptions->disableWireElimination;
   lintStaticAsserts = clOptions->lintStaticAsserts;
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
+  emitAllBindFiles = clOptions->emitAllBindFiles;
 }
