@@ -237,3 +237,37 @@ hw.module @SkipIfEntryAndWaitConvergeWithSideEffectingOps(in %a : i42) {
     llhd.wait yield (%a : i42), (%a : i42), ^bb1
   }
 }
+
+// CHECK-LABEL: @PruneWaitOperands
+hw.module @PruneWaitOperands(in %clock : i1, in %f1 : i2, in %f2 : i3) {
+  %false = hw.constant false
+  %c10_i8 = hw.constant 10 : i8
+  %c20_i8 = hw.constant 20 : i8
+  %c100_i10 = hw.constant 100 : i10
+  %c110_i10 = hw.constant 110 : i10
+  %true = hw.constant true
+  // CHECK:      llhd.process -> i1 {
+  // CHECK-NEXT:   cf.br ^bb1(%c10_i8, %c100_i10 : i8, i10)
+  // CHECK-NEXT: ^bb1(%1: i8, %2: i10):
+  // CHECK-NEXT:   llhd.wait yield (%false : i1), (%clock : i1), ^bb2
+  // CHECK-NEXT: ^bb2:
+  // CHECK:        cf.cond_br {{.*}}, ^bb3, ^bb1(%c20_i8, %c110_i10 : i8, i10)
+  // CHECK-NEXT: ^bb3:
+  // CHECK:        cf.cond_br {{.*}}, ^bb1(%c10_i8, %c100_i10 : i8, i10), ^bb1(%c20_i8, %c110_i10 : i8, i10)
+  // CHECK-NEXT: }
+  %0 = llhd.process -> i1 {
+    cf.br ^bb1(%clock, %c10_i8, %f1, %c100_i10, %f2 : i1, i8, i2, i10, i3)
+  ^bb1(%1: i1, %2: i8, %3: i2, %4: i10, %5: i3):
+    llhd.wait yield (%false : i1), (%clock : i1), ^bb2(%2, %1, %3, %5, %4 : i8, i1, i2, i3, i10)
+  ^bb2(%6: i8, %7: i1, %8: i2, %9: i3, %10: i10):
+    %15 = comb.xor bin %7, %true : i1
+    %16 = comb.and bin %15, %clock : i1
+    cf.cond_br %16, ^bb3, ^bb1(%clock, %c20_i8, %f1, %c110_i10, %f2 : i1, i8, i2, i10, i3)
+  ^bb3:
+    %25 = comb.and %true, %clock : i1
+    cf.cond_br %25,
+      ^bb1(%clock, %c10_i8, %f1, %c100_i10, %f2 : i1, i8, i2, i10, i3),
+      ^bb1(%clock, %c20_i8, %f1, %c110_i10, %f2 : i1, i8, i2, i10, i3)
+  }
+  hw.output
+}
