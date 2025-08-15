@@ -40,4 +40,5 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTCFToHandshake
   CIRCTVerifToSMT
   CIRCTVerifToSV
+  CIRCTCoreToFSM
 )

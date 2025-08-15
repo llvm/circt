@@ -541,7 +541,6 @@ public:
         opBuilder.setInsertionPoint(clonedRegOp);
         circt::seq::CompRegOp r = dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
         assert(r && "Must be a register.");
-        auto input = r.getInput();
         TypedValue<IntegerType> registerReset = r.getReset();
         if (registerReset) { // Ensure the register has a reset.
           if (BlockArgument blockArg =
