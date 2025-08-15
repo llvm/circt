@@ -31,6 +31,7 @@ using namespace circt;
 using namespace llhd;
 using llvm::PointerIntPair;
 using llvm::SmallDenseSet;
+using llvm::SmallSetVector;
 using llvm::SpecificBumpPtrAllocator;
 
 /// Check whether a value is defined by `llhd.constant_time <0ns, 0d, 1e>`.
@@ -220,6 +221,7 @@ struct LatticeNode;
 struct BlockExit;
 struct ProbeNode;
 struct DriveNode;
+struct SignalNode;
 
 struct LatticeValue {
   LatticeNode *nodeBefore = nullptr;
@@ -229,7 +231,7 @@ struct LatticeValue {
 };
 
 struct LatticeNode {
-  enum class Kind { BlockEntry, BlockExit, Probe, Drive };
+  enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
   const Kind kind;
   LatticeNode(Kind kind) : kind(kind) {}
 };
@@ -288,7 +290,7 @@ struct OpNode : public LatticeNode {
   }
 
   static bool classof(const LatticeNode *n) {
-    return isa<ProbeNode, DriveNode>(n);
+    return isa<ProbeNode, DriveNode, SignalNode>(n);
   }
 };
 
@@ -322,6 +324,19 @@ struct DriveNode : public OpNode {
   DrvOp getDriveOp() const { return cast<DrvOp>(op); }
 
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
+};
+
+struct SignalNode : public OpNode {
+  Def *def;
+
+  SignalNode(SignalOp op, Def *def, LatticeValue *valueBefore,
+             LatticeValue *valueAfter)
+      : OpNode(Kind::Signal, op, valueBefore, valueAfter), def(def) {}
+
+  SignalOp getSignalOp() const { return cast<SignalOp>(op); }
+  DefSlot getSlot() const { return blockingSlot(getSignalOp()); }
+
+  static bool classof(const LatticeNode *n) { return n->kind == Kind::Signal; }
 };
 
 /// A lattice of block entry and exit nodes, nodes for relevant operations such
@@ -383,6 +398,7 @@ private:
   SpecificBumpPtrAllocator<BlockExit> blockExitAllocator;
   SpecificBumpPtrAllocator<ProbeNode> probeAllocator;
   SpecificBumpPtrAllocator<DriveNode> driveAllocator;
+  SpecificBumpPtrAllocator<SignalNode> signalAllocator;
 
   // Helper function to get the correct allocator given a lattice node class.
   template <class T>
@@ -406,6 +422,10 @@ SpecificBumpPtrAllocator<ProbeNode> &Lattice::getAllocator() {
 template <>
 SpecificBumpPtrAllocator<DriveNode> &Lattice::getAllocator() {
   return driveAllocator;
+}
+template <>
+SpecificBumpPtrAllocator<SignalNode> &Lattice::getAllocator() {
+  return signalAllocator;
 }
 
 } // namespace
@@ -489,6 +509,8 @@ void Lattice::dump(llvm::raw_ostream &os) {
         os << "    probe " << memName(blockingSlot(node->slot)) << "\n";
       else if (auto *node = dyn_cast<DriveNode>(value->nodeAfter))
         os << "    drive " << memName(node->slot) << "\n";
+      else if (auto *node = dyn_cast<SignalNode>(value->nodeAfter))
+        os << "    signal " << memName(node->getSlot()) << "\n";
       else
         os << "    unknown\n";
 
@@ -663,6 +685,9 @@ struct Promoter {
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
 
+  void removeUnusedLocalSignals();
+  void removeUnusedLocalSignal(SignalNode *signal);
+
   /// The region we are promoting in.
   Region &region;
 
@@ -738,6 +763,9 @@ LogicalResult Promoter::promote() {
 
   // Insert the necessary block arguments.
   insertBlockArgs();
+
+  // Remove local signals that are never probed.
+  removeUnusedLocalSignals();
 
   // Erase operations that have become unused.
   pruner.eraseNow();
@@ -982,6 +1010,18 @@ void Promoter::constructLattice() {
         valueBefore = node->valueAfter;
         continue;
       }
+
+      // Handle local signals.
+      if (auto signalOp = dyn_cast<SignalOp>(op)) {
+        if (!promotable.contains(signalOp))
+          continue;
+        auto *def =
+            lattice.createDef(signalOp.getInit(), DriveCondition::never());
+        auto *node = lattice.createNode<SignalNode>(signalOp, def, valueBefore,
+                                                    lattice.createValue());
+        valueBefore = node->valueAfter;
+        continue;
+      }
     }
 
     // Create the exit node for the block.
@@ -1037,6 +1077,16 @@ void Promoter::propagateBackward(LatticeNode *node) {
     else if (!isDelayed(drive->slot) && !drive->getDriveOp().getEnable())
       needed.erase(getSlot(drive->slot));
     update(drive->valueBefore, needed);
+    return;
+  }
+
+  // Local signal declarations kill the need for a definition to be available,
+  // since the op is the first time a signal becomes available and the op
+  // provides an initial value as a definition.
+  if (auto *signal = dyn_cast<SignalNode>(node)) {
+    auto needed = signal->valueAfter->neededDefs;
+    needed.erase(signal->getSignalOp());
+    update(signal->valueBefore, needed);
     return;
   }
 
@@ -1136,6 +1186,17 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
     if (!isDelayed(drive->slot))
       reaching.erase(delayedSlot(getSlot(drive->slot)));
     update(drive->valueAfter, reaching);
+    return;
+  }
+
+  // Signals propagate their initial value as a reaching def. They also kill any
+  // earlier definitions, which should not be able to reach the signal in the
+  // first place.
+  if (auto *signal = dyn_cast<SignalNode>(node)) {
+    auto reaching = signal->valueBefore->reachingDefs;
+    reaching[signal->getSlot()] = signal->def;
+    reaching.erase(delayedSlot(signal->getSignalOp()));
+    update(signal->valueAfter, reaching);
     return;
   }
 
@@ -1719,6 +1780,43 @@ void Promoter::replaceValueWith(Value oldValue, Value newValue) {
         def->condition.getCondition() == oldValue)
       def->condition.setCondition(newValue);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Cleanup
+//===----------------------------------------------------------------------===//
+
+/// Remove all unused local signals.
+void Promoter::removeUnusedLocalSignals() {
+  for (auto *node : lattice.nodes)
+    if (auto *signal = dyn_cast<SignalNode>(node))
+      removeUnusedLocalSignal(signal);
+}
+
+/// Remove a local signal if it is only used by projection ops and drives, but
+/// never probed. Since the signal is local and cannot be observed in any other
+/// way, we can safely remove it along with any projection ops and drives.
+void Promoter::removeUnusedLocalSignal(SignalNode *signal) {
+  // Check if the signal is only ever projected into and driven, but never
+  // probed.
+  SmallSetVector<Operation *, 8> users;
+  SmallVector<Operation *> worklist;
+  worklist.push_back(signal->op);
+  while (!worklist.empty()) {
+    auto *op = worklist.pop_back_val();
+    if (!isa<SignalOp, DrvOp, SigArrayGetOp, SigArraySliceOp, SigExtractOp,
+             SigStructExtractOp>(op))
+      return;
+    for (auto *user : op->getUsers())
+      if (users.insert(user))
+        worklist.push_back(user);
+  }
+
+  // If we get here, the local signal is never probed. This means we can safely
+  // remove it.
+  LLVM_DEBUG(llvm::dbgs() << "- Removing local signal " << *signal->op << "\n");
+  for (auto *op : llvm::reverse(users))
+    pruner.eraseNow(op);
 }
 
 //===----------------------------------------------------------------------===//
