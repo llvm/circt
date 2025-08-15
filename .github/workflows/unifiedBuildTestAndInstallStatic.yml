@@ -120,14 +120,14 @@ jobs:
 # Build static mimalloc
       - name: Build microsoft/mimalloc
         run: |
-          mkdir build/mimalloc/build
+          mkdir -p build/mimalloc/build
           cd build/mimalloc/build
           cmake ../ -G Ninja -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DMI_OVERRIDE=ON -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19
           ninja
 # Configure
       - name: Configure CIRCT
         run: |
-          mkdir build
+          mkdir -p build
           cd build
           cmake -G Ninja -S "$(pwd)/../llvm/llvm" $EXTRA_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_BUILD_STATIC=ON -DLLVM_LINK_LLVM_DYLIB=OFF -DLLVM_ENABLE_PIC=OFF -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=${{ inputs.llvm_force_enable_stats }} -DLLVM_ENABLE_ZSTD=OFF -DVERILATOR_DISABLE=ON -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON -DCMAKE_EXE_LINKER_FLAGS_INIT="-Wl,-z,stack-size=8388608 -Wl,--whole-archive $(pwd)/build/mimalloc/libmimalloc.a -Wl,--no-whole-archive"
 # Optionally test
