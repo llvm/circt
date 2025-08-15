@@ -955,4 +955,16 @@ firrtl.circuit "Foo" {
     %cat_3_node = firrtl.node %cat_3_tmp : !firrtl.uint<3>
   }
 
+  // CHECK-LABEL: module Domains :
+  firrtl.module @Domains(
+    // CHECK-NEXT: input A : Domain
+    // CHECK-NEXT: input B : Domain
+    // CHECK-NEXT: input a : UInt<1> domains [A]
+    // CHECK-NEXT: input ab : UInt<1> domains [A, B]
+    in %A: !firrtl.domain,
+    in %B: !firrtl.domain,
+    in %a: !firrtl.uint<1> domains [%A],
+    in %ab: !firrtl.uint<1> domains [%A, %B]
+  ) {}
+
 }

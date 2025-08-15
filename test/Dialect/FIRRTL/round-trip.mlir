@@ -201,13 +201,19 @@ firrtl.domain @ClockDomain {
 }
 
 // CHECK-LABEL: firrtl.module @Domains
-// CHECK-SAME:    in %clockDomain: !firrtl.domain
+// CHECK-SAME:    in %A: !firrtl.domain
+// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
+// CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
 firrtl.module @Domains(
-  in %clockDomain: !firrtl.domain
+  in %A: !firrtl.domain,
+  in %B: !firrtl.domain,
+  in %a: !firrtl.uint<1> domains [%A],
+  out %b: !firrtl.uint<1> domains [%B]
 ) {
-  %a = firrtl.wire : !firrtl.uint<1>
-  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %clockDomain : !firrtl.uint<1>
-  %0 = firrtl.unsafe_domain_cast %a domains %clockDomain : !firrtl.uint<1>
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
 }
 
 }

@@ -549,13 +549,15 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
 
         auto portName = op.getPortName(index);
         auto portDirection = op.getPortDirection(index);
+        auto portDomain = op.getPortDomain(index);
         auto loc = op.getLoc();
 
         // Create new hw-only port, this will generally replace this port.
         if (pmi.hwType) {
           PortInfo hwPort(portName, pmi.hwType, portDirection,
                           /*symName=*/StringAttr{}, loc,
-                          AnnotationSet(op.getPortAnnotation(index)));
+                          AnnotationSet(op.getPortAnnotation(index)),
+                          portDomain);
           newPorts.emplace_back(idxOfInsertPoint, hwPort);
 
           // If want to run this pass later, need to fixup annotations.
@@ -575,7 +577,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
           auto orientation =
               (Direction)((unsigned)portDirection ^ field.isFlip);
           PortInfo pi(name, field.type, orientation, /*symName=*/StringAttr{},
-                      loc, std::nullopt);
+                      loc, std::nullopt, portDomain);
           newPorts.emplace_back(idxOfInsertPoint, pi);
         }
         return success();

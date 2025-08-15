@@ -144,7 +144,8 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
            ArrayRefAttr:$portNames,
            ArrayRefAttr:$portTypes,
            DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
+           DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
       );
 
   let results = (outs);
@@ -205,7 +206,8 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       LayerArrayAttr:$knownLayers,
       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
       DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-      OptionalAttr<InternalPathArrayAttr>:$internalPaths);
+      OptionalAttr<InternalPathArrayAttr>:$internalPaths,
+      DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -244,7 +246,8 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
            ArrayRefAttr:$portTypes,
            DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations,
            DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-           OptionalAttr<InternalPathArrayAttr>:$internalPaths
+           OptionalAttr<InternalPathArrayAttr>:$internalPaths,
+           DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
       );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -294,7 +297,8 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
            DefaultValuedAttr<RUWBehaviorAttr,
              "firrtl::RUWBehavior::Undefined">:$ruw,
            AnnotationArrayAttr:$annotations,
-           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
+           DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
       );
 
   let results = (outs);
@@ -344,7 +348,8 @@ def ClassOp : FIRRTLModuleLike<"class", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
-                       ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations);
+                       ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations,
+                       DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -416,7 +421,8 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
-                       ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations);
+                       ArrayRefAttr:$portSymbols, ArrayRefAttr:$portLocations,
+                       DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
   let results = (outs);
   let regions = (region AnyRegion:$body);
   let skipDefaultBuilders = 1;
