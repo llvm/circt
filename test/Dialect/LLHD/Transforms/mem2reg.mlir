@@ -908,6 +908,32 @@ hw.module @BasicSigExtract(in %u: i42, in %v: i10, in %i: i6, in %q: i1) {
   }
 }
 
+// CHECK-LABEL: @BasicStructExtract
+hw.module @BasicStructExtract(in %u: !hw.struct<f: i42>, in %v: i42, in %q: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.struct<f: i42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<struct<f: i42>>
+    // CHECK-NOT: llhd.sig.struct_extract
+    %1 = llhd.sig.struct_extract %a["f"] : !hw.inout<struct<f: i42>>
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[EXT:%.+]] = hw.struct_extract %u["f"]
+    // CHECK-NEXT: [[MUX:%.+]] = comb.mux %q, %v, [[EXT]]
+    // CHECK-NEXT: [[INJ:%.+]] = hw.struct_inject %u["f"], [[MUX]]
+    llhd.drv %1, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NOT: llhd.prb
+    %2 = llhd.prb %1 : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42([[MUX]])
+    func.call @use_i42(%2) : (i42) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 // CHECK-LABEL: @CombCreateDynamicInject
 hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
