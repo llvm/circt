@@ -1053,9 +1053,7 @@ hw.module @DominanceTest1() {
   ^bb3:
     // CHECK-NEXT: ^bb2:
     // CHECK-NEXT: [[TMP1:%.+]] = llhd.prb %clock
-    // CHECK: %ready_T = llhd.sig
-    // CHECK: llhd.drv %ready_T
-    // CHECK: cf.br ^bb1([[TMP1]] : i1)
+    // CHECK-NEXT: cf.br ^bb1([[TMP1]] : i1)
     %c0_i4 = hw.constant 0 : i4
     %ready_T = llhd.sig %c0_i4 : i4
     llhd.drv %ready_T, %c0_i4 after %3 : !hw.inout<i4>
@@ -1071,11 +1069,10 @@ hw.module @DominanceTest2() {
   %b = llhd.sig %false : i1
   // CHECK: llhd.combinational
   llhd.combinational {
+    // CHECK-NEXT: cf.br ^bb3
     cf.br ^bb3
-  // CHECK: ^bb1:
   ^bb1:
-    // CHECK-NEXT: [[PRB1:%.+]] = llhd.prb %b
-    // CHECK-NEXT: [[SIG1:%.+]] = llhd.sig %false
+    // CHECK-NEXT: ^bb1:
     // CHECK-NEXT: cf.br ^bb2
     %0 = llhd.prb %b : !hw.inout<i1>
     %1 = llhd.constant_time <0ns, 0d, 1e>
@@ -1084,8 +1081,6 @@ hw.module @DominanceTest2() {
     cf.br ^bb2
   ^bb2:
     // CHECK-NEXT: ^bb2
-    // CHECK-NEXT: [[TIME1:%.+]] = llhd.constant_time
-    // CHECK-NEXT: llhd.drv [[SIG1]], [[PRB1]]
     // CHECK-NEXT: cf.br ^bb3
     cf.br ^bb3
   ^bb3:
@@ -1115,6 +1110,29 @@ hw.module @ProjectionAndDriveInDifferentBlocks(in %u: !hw.struct<f: i42>, in %v:
     llhd.drv %1, %v after %0 if %q : !hw.inout<i42>
     // CHECK-NEXT: llhd.constant_time
     // CHECK-NEXT: llhd.drv %a, [[INJ]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Local signals should be removed.
+// CHECK-LABEL: @LocalSignals
+hw.module @LocalSignals(in %u: i42, in %v: i42) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.sig
+    %a = llhd.sig %u : i42
+    // CHECK-NOT: llhd.prb
+    %1 = llhd.prb %a : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42(%u)
+    func.call @use_i42(%1) : (i42) -> ()
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %v after %0 : !hw.inout<i42>
+    // CHECK-NOT: llhd.prb
+    %2 = llhd.prb %a : !hw.inout<i42>
+    // CHECK-NEXT: call @use_i42(%v)
+    func.call @use_i42(%2) : (i42) -> ()
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
