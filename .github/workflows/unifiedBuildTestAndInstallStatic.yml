@@ -101,7 +101,7 @@ jobs:
         with:
           repository: microsoft/mimalloc
           fetch-depth: 1
-          ref: v3.0.8
+          ref: v3.1.5
           path: build/mimalloc
 # Setup Caching
       - name: sccache
