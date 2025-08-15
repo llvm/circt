@@ -166,3 +166,10 @@ function void foo();
   // expected-error @below {{unsupported expression: range select with non-constant bounds}}
   q = q[2:$];
 endfunction
+
+// -----
+function void foo;
+  int a[string];
+  // expected-error @below {{unsupported expression: element select into}}
+  a["foo"] = 1;
+endfunction

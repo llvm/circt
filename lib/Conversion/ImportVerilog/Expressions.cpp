@@ -90,10 +90,23 @@ struct ExprVisitor {
     auto value = convertLvalueOrRvalueExpression(expr.value());
     if (!type || !value)
       return {};
+
+    // We only support indexing into a few select types for now.
+    auto derefType = value.getType();
+    if (isLvalue)
+      derefType = cast<moore::RefType>(derefType).getNestedType();
+    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType>(
+            derefType)) {
+      mlir::emitError(loc) << "unsupported expression: element select into "
+                           << expr.value().type->toString() << "\n";
+      return {};
+    }
+
     auto resultType =
         isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
     auto range = expr.value().type->getFixedRange();
-    if (auto *constValue = expr.selector().getConstant()) {
+    if (auto *constValue = expr.selector().getConstant();
+        constValue && constValue->isInteger()) {
       assert(!constValue->hasUnknown());
       assert(constValue->size() <= 32);
 
@@ -105,6 +118,7 @@ struct ExprVisitor {
         return moore::ExtractOp::create(builder, loc, resultType, value,
                                         range.translateIndex(lowBit));
     }
+
     auto lowBit = context.convertRvalueExpression(expr.selector());
     if (!lowBit)
       return {};
