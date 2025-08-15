@@ -122,7 +122,7 @@ jobs:
         run: |
           mkdir build/mimalloc/build
           cd build/mimalloc/build
-          cmake ../ -G ninja -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DMI_OVERRIDE=ON
+          cmake ../ -G Ninja -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DMI_OVERRIDE=ON
           ninja
 # Configure
       - name: Configure CIRCT
