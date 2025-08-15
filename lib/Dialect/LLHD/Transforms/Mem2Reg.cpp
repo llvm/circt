@@ -770,15 +770,11 @@ void Promoter::findPromotableSlots() {
         // Ignore uses outside of the region.
         if (user->getParentRegion() != &region)
           return true;
-        // Projection operations are okay as long as they are in the same block
-        // as any of their users.
+        // Projection operations are okay.
         if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
-          for (auto *projectionUser : user->getUsers()) {
-            if (projectionUser->getBlock() != user->getBlock())
-              return false;
+          for (auto *projectionUser : user->getUsers())
             if (checkedUsers.insert(projectionUser).second)
               userWorklist.push_back(projectionUser);
-          }
           projections.insert({user->getResult(0), operand});
           return true;
         }
