@@ -1797,7 +1797,7 @@ void Promoter::removeUnusedLocalSignals() {
 /// never probed. Since the signal is local and cannot be observed in any other
 /// way, we can safely remove it along with any projection ops and drives.
 void Promoter::removeUnusedLocalSignal(SignalNode *signal) {
-  // Check if the signal is only ever projected into an driven, but never
+  // Check if the signal is only ever projected into and driven, but never
   // probed.
   SmallSetVector<Operation *, 8> users;
   SmallVector<Operation *> worklist;
