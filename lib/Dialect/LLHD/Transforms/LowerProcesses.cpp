@@ -287,10 +287,116 @@ struct LowerProcessesPass
     : public llhd::impl::LowerProcessesPassBase<LowerProcessesPass> {
   void runOnOperation() override;
 };
+
+static bool simplifyBlocksArgs(ProcessOp &processOp) {
+  SmallVector<Block *> worklist;
+  for (auto &block : processOp.getBody()) {
+    auto waitOp = dyn_cast<WaitOp>(block.getTerminator());
+    if (!waitOp)
+      continue;
+
+    auto dstOperands = waitOp.getDestOperands();
+    if (dstOperands.empty())
+      continue;
+
+    if (llvm::none_of(dstOperands,
+                      [](auto operand) { return isa<BlockArgument>(operand); }))
+      continue;
+
+    worklist.push_back(&block);
+  }
+
+  while (!worklist.empty()) {
+    auto *block = worklist.pop_back_val();
+
+    DenseMap<BlockArgument, Value> blockArgsToPrune;
+    for (auto &blockArg : block->getArguments()) {
+      SmallPtrSet<Value, 4> branchOperands;
+      for (auto it = block->pred_begin(); it != block->pred_end(); ++it) {
+        Block *predecessor = *it;
+
+        if (auto branchOp =
+                dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
+          SuccessorOperands successorOperands =
+              branchOp.getSuccessorOperands(it.getSuccessorIndex());
+
+          if (Value operand = successorOperands[blockArg.getArgNumber()])
+            branchOperands.insert(operand);
+        } else if (auto waitOp =
+                       dyn_cast<WaitOp>(predecessor->getTerminator())) {
+          auto destOperands = waitOp.getDestOperands();
+          branchOperands.insert(destOperands[blockArg.getArgNumber()]);
+        } else {
+          llvm_unreachable("TODO");
+        }
+      }
+
+      if (branchOperands.size() == 1) {
+        blockArgsToPrune.insert(
+            std::make_pair(blockArg, *branchOperands.begin()));
+      }
+    }
+
+    if (blockArgsToPrune.empty())
+      continue;
+
+    SmallVector<unsigned> argNums;
+    llvm::BitVector argsToRemove(block->getNumArguments());
+    for (auto &[dstOperand, replaceValue] : blockArgsToPrune) {
+      LLVM_DEBUG(llvm::dbgs() << "replace" << dstOperand << " with "
+                              << replaceValue << "\n");
+
+      argNums.push_back(dstOperand.getArgNumber());
+      argsToRemove.set(dstOperand.getArgNumber());
+    }
+
+    // prune all branch ops operands
+    // replace all block argument uses
+    // prune block argument list
+    llvm::sort(argNums);
+    for (auto it = block->pred_begin(); it != block->pred_end(); ++it) {
+      Block *predecessor = *it;
+
+      if (auto branchOp =
+              dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
+
+        SuccessorOperands successorOperands =
+            branchOp.getSuccessorOperands(it.getSuccessorIndex());
+
+        const auto argOff = successorOperands.getProducedOperandCount();
+        for (const auto argNum : llvm::reverse(argNums)) {
+          int start = argOff + argNum;
+          successorOperands.erase(start);
+        }
+      } else if (auto waitOp = dyn_cast<WaitOp>(predecessor->getTerminator())) {
+        auto destOperands = waitOp.getDestOperandsMutable();
+        for (const auto argNum : llvm::reverse(argNums)) {
+          destOperands.erase(argNum);
+        }
+      } else {
+        llvm_unreachable("TODO");
+      }
+    }
+
+    for (auto &[dstOperand, replaceValue] : blockArgsToPrune) {
+      dstOperand.replaceAllUsesWith(replaceValue);
+    }
+
+    block->eraseArguments(argsToRemove);
+
+    for (auto *successor : block->getSuccessors())
+      worklist.push_back(successor);
+  }
+
+  return true;
+}
+
 } // namespace
 
 void LowerProcessesPass::runOnOperation() {
   SmallVector<ProcessOp> processOps(getOperation().getOps<ProcessOp>());
-  for (auto processOp : processOps)
+  for (auto processOp : processOps) {
+    simplifyBlocksArgs(processOp);
     Lowering(processOp).lower();
+  }
 }
