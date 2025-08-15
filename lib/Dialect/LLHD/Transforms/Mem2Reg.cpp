@@ -571,6 +571,10 @@ static Value unpackProjections(OpBuilder &builder, Value value,
               return builder.createOrFold<hw::ArrayGetOp>(op.getLoc(), value,
                                                           op.getIndex());
             })
+            .Case<SigStructExtractOp>([&](auto op) {
+              return builder.createOrFold<hw::StructExtractOp>(
+                  op.getLoc(), value, op.getFieldAttr());
+            })
             .Case<SigExtractOp>([&](auto op) {
               auto type = cast<hw::InOutType>(op.getType()).getElementType();
               auto width = type.getIntOrFloatBitWidth();
@@ -600,6 +604,10 @@ static Value packProjections(OpBuilder &builder, Value value,
                 .Case<SigArrayGetOp>([&](auto op) {
                   return builder.createOrFold<hw::ArrayInjectOp>(
                       op.getLoc(), projection.into, op.getIndex(), value);
+                })
+                .Case<SigStructExtractOp>([&](auto op) {
+                  return builder.createOrFold<hw::StructInjectOp>(
+                      op.getLoc(), projection.into, op.getFieldAttr(), value);
                 })
                 .Case<SigExtractOp>([&](auto op) {
                   return comb::createDynamicInject(builder, op.getLoc(),
@@ -764,7 +772,7 @@ void Promoter::findPromotableSlots() {
           return true;
         // Projection operations are okay as long as they are in the same block
         // as any of their users.
-        if (isa<SigArrayGetOp, SigExtractOp>(user)) {
+        if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
           for (auto *projectionUser : user->getUsers()) {
             if (projectionUser->getBlock() != user->getBlock())
               return false;
