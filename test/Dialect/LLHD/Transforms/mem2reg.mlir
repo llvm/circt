@@ -1093,3 +1093,29 @@ hw.module @DominanceTest2() {
   }
   hw.output
 }
+
+// CHECK-LABEL: @ProjectionAndDriveInDifferentBlocks
+hw.module @ProjectionAndDriveInDifferentBlocks(in %u: !hw.struct<f: i42>, in %v: i42, in %q: i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %a = llhd.sig %u : !hw.struct<f: i42>
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.inout<struct<f: i42>>
+    // CHECK-NOT: llhd.sig.struct_extract
+    %1 = llhd.sig.struct_extract %a["f"] : !hw.inout<struct<f: i42>>
+    // CHECK-NEXT: cf.br ^bb1
+    cf.br ^bb1
+  ^bb1:
+    // CHECK-NEXT: ^bb1
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[EXT:%.+]] = hw.struct_extract %u["f"]
+    // CHECK-NEXT: [[MUX:%.+]] = comb.mux %q, %v, [[EXT]]
+    // CHECK-NEXT: [[INJ:%.+]] = hw.struct_inject %u["f"], [[MUX]]
+    llhd.drv %1, %v after %0 if %q : !hw.inout<i42>
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
