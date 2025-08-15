@@ -40,6 +40,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
@@ -942,6 +943,7 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
 ///      ::= 'UInt' optional-width
 ///      ::= 'SInt' optional-width
 ///      ::= 'Analog' optional-width
+///      ::= 'Domain'
 ///      ::= {' field* '}'
 ///      ::= type '[' intLit ']'
 ///      ::= 'Probe' '<' type '>'
@@ -1030,6 +1032,14 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       assert(kind == FIRToken::kw_Analog);
       result = AnalogType::get(getContext(), width);
     }
+    break;
+  }
+
+  case FIRToken::kw_Domain: {
+    if (requireFeature(missingSpecFIRVersion, "domains"))
+      return failure();
+    consumeToken();
+    result = DomainType::get(getContext());
     break;
   }
 
@@ -5261,6 +5271,9 @@ private:
 
   ParseResult parseLayer(CircuitOp circuit);
 
+  ParseResult parseDomains(SmallVectorImpl<Attribute> &domains,
+                           const DenseMap<Attribute, size_t> &nameToIndex);
+
   struct DeferredModuleToParse {
     FModuleLike moduleOp;
     SmallVector<SMLoc> portLocs;
@@ -5417,6 +5430,9 @@ ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
                                 unsigned indent) {
+  // Record the index of each port name for domain assignment.
+  DenseMap<Attribute, size_t> nameToIndex;
+
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -5444,14 +5460,25 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     LocWithInfo info(getToken().getLoc(), this);
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType(type, "expected a type in port declaration") ||
-        info.parseOptionalInfo())
+        parseType(type, "expected a type in port declaration"))
+      return failure();
+    SmallVector<Attribute, 4> domains;
+    if (getToken().is(FIRToken::kw_domains))
+      if (parseDomains(domains, nameToIndex))
+        return failure();
+    if (info.parseOptionalInfo())
       return failure();
 
     StringAttr innerSym = {};
-    resultPorts.push_back(
-        {name, type, direction::get(isOutput), innerSym, info.getLoc()});
+    resultPorts.push_back(PortInfo{name,
+                                   type,
+                                   direction::get(isOutput),
+                                   innerSym,
+                                   info.getLoc(),
+                                   {},
+                                   ArrayAttr::get(getContext(), domains)});
     resultPortLocs.push_back(info.getFIRLoc());
+    nameToIndex.insert({name, resultPorts.size() - 1});
   }
 
   // Check for port name collisions.
@@ -6143,6 +6170,36 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return emitError("expected 'layer'"), failure();
     }
   }
+
+  return success();
+}
+
+ParseResult
+FIRCircuitParser::parseDomains(SmallVectorImpl<Attribute> &domains,
+                               const DenseMap<Attribute, size_t> &nameToIndex) {
+  if (requireFeature(missingSpecFIRVersion, "domains"))
+    return failure();
+  if (parseToken(FIRToken::kw_domains, "expected 'domains'") ||
+      parseToken(FIRToken::l_square, "expected '['"))
+    return failure();
+
+  if (parseListUntil(FIRToken::r_square, [&]() -> ParseResult {
+        StringAttr domain;
+        auto domainLoc = getToken().getLoc();
+        if (parseId(domain, "expected domain name"))
+          return failure();
+        auto indexItr = nameToIndex.find(domain);
+        if (indexItr == nameToIndex.end()) {
+          emitError(domainLoc)
+              << "unknown domain name '" << domain.getValue() << "'";
+          return failure();
+        }
+        return domains.push_back(IntegerAttr::get(
+                   IntegerType::get(getContext(), 32, IntegerType::Unsigned),
+                   indexItr->second)),
+               success();
+      }))
+    return failure();
 
   return success();
 }

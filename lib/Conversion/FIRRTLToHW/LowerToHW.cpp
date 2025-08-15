@@ -1224,11 +1224,12 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule.setCommentAttr(comment);
 
   // Copy over any attributes which are not required for FModuleOp.
-  SmallVector<StringRef, 12> attrNames = {
+  SmallVector<StringRef, 13> attrNames = {
       "annotations",   "convention",      "layers",
       "portNames",     "sym_name",        "portDirections",
       "portTypes",     "portAnnotations", "portSymbols",
-      "portLocations", "parameters",      SymbolTable::getVisibilityAttrName()};
+      "portLocations", "parameters",      SymbolTable::getVisibilityAttrName(),
+      "domainInfo"};
 
   DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
   SmallVector<NamedAttribute> newAttrs(newModule->getAttrs());

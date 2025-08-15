@@ -203,6 +203,10 @@ struct Emitter {
     emitType(type);
   }
 
+  // Domains
+  void emitDomains(ArrayAttr domains,
+                   const DenseMap<size_t, StringRef> &domainMap);
+
   // Locations
   void emitLocation(Location loc);
   void emitLocation(Operation *op) { emitLocation(op->getLoc()); }
@@ -609,15 +613,19 @@ void Emitter::emitModule(FIntModuleOp op) {
 /// during expression emission.
 void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
                               Block::BlockArgListType arguments) {
+  DenseMap<size_t, StringRef> domainMap;
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
     startStatement();
     const auto &port = ports[i];
     ps << (port.direction == Direction::In ? "input " : "output ");
     auto legalName = legalize(port.name);
+    if (isa<DomainType>(port.type))
+      domainMap.insert({i, port.name});
     if (!arguments.empty())
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    emitDomains(port.domains, domainMap);
     emitLocation(ports[i].loc);
     setPendingNewline();
   }
@@ -1748,9 +1756,25 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
+      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
+}
+
+void Emitter::emitDomains(ArrayAttr domains,
+                          const DenseMap<size_t, StringRef> &domainMap) {
+  if (!domains || domains.empty())
+    return;
+  ps << " domains [";
+  ps.scopedBox(PP::ibox0, [&]() {
+    interleaveComma(domains, [&](Attribute attr) {
+      auto itr = domainMap.find(cast<IntegerAttr>(attr).getUInt());
+      assert(itr != domainMap.end() && "Unable to find domain");
+      ps.addAsString(itr->second);
+    });
+    ps << "]";
+  });
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a

@@ -212,6 +212,40 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Domain Information
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get domain information attribute",
+    "ArrayAttr", "getDomainInfoAttr", (ins), /*body=*/[{}],
+    /*defaultImplementation=*/[{
+      return {};
+    }]>,
+
+    InterfaceMethod<
+      "Get domain information",
+      "ArrayRef<Attribute>",
+      "getDomainInfo", (ins), [{
+        return $_op.getDomainInfoAttr().getValue();
+      }]
+    >,
+
+    InterfaceMethod<"Get a port's domain info attribute",
+    "ArrayAttr", "getDomainInfoAttrForPort", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      auto domains = $_op.getDomainInfoAttr();
+      if (domains.empty())
+        return domains; // domains already is an empty array
+      return llvm::cast<ArrayAttr>(domains[portIndex]);
+    }]>,
+
+    InterfaceMethod<"Get a port's domain info",
+    "ArrayRef<Attribute>", "getDomainInfoForPort",
+    (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getDomainInfoAttrForPort(portIndex).getValue();
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
 

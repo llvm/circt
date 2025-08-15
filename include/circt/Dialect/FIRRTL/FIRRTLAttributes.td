@@ -38,6 +38,22 @@ def PortAnnotationsAttr : ArrayAttrBase<
 }
 
 //===----------------------------------------------------------------------===//
+// Domain-related attributes
+//===----------------------------------------------------------------------===//
+
+def DomainInfoAttr : ArrayAttrBase<
+    And<[
+      // Guarantee this is an ArrayAttr first
+      CPred<"llvm::isa<::mlir::ArrayAttr>($_self)">,
+      // Guarantee all elements are an array.
+      CPred<"::llvm::all_of(cast<mlir::ArrayAttr>($_self), "
+            "[&](::mlir::Attribute attr) { return isa_and_nonnull<"
+            "::mlir::FlatSymbolRefAttr, ::mlir::ArrayAttr>(attr);})">]>,
+    "domain attributes must be an empty array or array-of-arrays"> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
+
+//===----------------------------------------------------------------------===//
 // Grand Central-related Annotations
 //===----------------------------------------------------------------------===//
 

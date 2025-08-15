@@ -66,9 +66,9 @@ def InstanceOp : HardwareDeclOp<"instance", [
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
       NameKindAttr:$nameKind, DenseBoolArrayAttr:$portDirections,
-      StrArrayAttr:$portNames, AnnotationArrayAttr:$annotations,
-      PortAnnotationsAttr:$portAnnotations, LayerArrayAttr:$layers,
-      UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
+      StrArrayAttr:$portNames, DomainInfoAttr:$domainInfo,
+      AnnotationArrayAttr:$annotations, PortAnnotationsAttr:$portAnnotations,
+      LayerArrayAttr:$layers, UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
       OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<AnyType>:$results);
@@ -81,6 +81,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
            "::circt::firrtl::NameKindEnum":$nameKind,
            "::mlir::ArrayRef<Direction>":$portDirections,
            "::mlir::ArrayRef<Attribute>":$portNames,
+           "::mlir::ArrayRef<Attribute>":$domainInfo,
            CArg<"ArrayRef<Attribute>", "{}">:$annotations,
            CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
            CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
@@ -92,6 +93,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
            "::circt::firrtl::NameKindEnum":$nameKind,
            "::mlir::ArrayRef<Direction>":$portDirections,
            "::mlir::ArrayRef<Attribute>":$portNames,
+           "::mlir::ArrayRef<Attribute>":$domainInfo,
            "ArrayRef<Attribute>":$annotations,
            "ArrayRef<Attribute>":$portAnnotations,
            "::mlir::ArrayRef<Attribute>":$layers, "bool":$lowerToBind,
@@ -133,6 +135,9 @@ def InstanceOp : HardwareDeclOp<"instance", [
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Hooks for domain information.
+    ArrayAttr getPortDomain(unsigned portIdx);
 
     /// Builds a new instance with the ports listed in `portIndices` erased, and
     /// updates any users of the remaining ports to point at the new instance.
@@ -185,6 +190,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                        SymbolRefArrayAttr:$caseNames,
                        StrAttr:$name, NameKindAttr:$nameKind,
                        DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
+                       DomainInfoAttr:$domainInfo,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,

@@ -37,6 +37,7 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using llvm::SmallDenseSet;
@@ -679,11 +680,13 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 
 static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
+  ArrayRef<Attribute> domains = module.getDomainInfo();
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
-    results.push_back({module.getPortNameAttr(i), module.getPortType(i),
-                       module.getPortDirection(i), module.getPortSymbolAttr(i),
-                       module.getPortLocation(i),
-                       AnnotationSet::forPort(module, i)});
+    results.push_back(
+        {module.getPortNameAttr(i), module.getPortType(i),
+         module.getPortDirection(i), module.getPortSymbolAttr(i),
+         module.getPortLocation(i), AnnotationSet::forPort(module, i),
+         domains.empty() ? ArrayAttr() : cast<ArrayAttr>(domains[i])});
   }
   return results;
 }
@@ -806,11 +809,12 @@ static void insertPorts(FModuleLike op,
   }
 
   SmallVector<bool> newDirections;
-  SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs,
-      newInternalPaths;
+  SmallVector<Attribute> newNames, newTypes, newDomains, newAnnos, newSyms,
+      newLocs, newInternalPaths;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
+  newDomains.reserve(newNumArgs);
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
@@ -824,6 +828,7 @@ static void insertPorts(FModuleLike op,
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
+      newDomains.push_back(op.getDomainInfoAttrForPort(oldIdx));
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
@@ -839,6 +844,8 @@ static void insertPorts(FModuleLike op,
     newDirections.push_back(direction::unGet(port.direction));
     newNames.push_back(port.name);
     newTypes.push_back(TypeAttr::get(port.type));
+    auto domains = port.domains;
+    newDomains.push_back(domains ? domains : emptyArray);
     auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
@@ -855,11 +862,19 @@ static void insertPorts(FModuleLike op,
       }))
     newAnnos.clear();
 
+  // The lack of *any* domains is also represented by an empty `domainInfo`
+  // attribute.
+  if (llvm::all_of(newDomains, [](Attribute attr) {
+        return !attr || cast<ArrayAttr>(attr).empty();
+      }))
+    newDomains.clear();
+
   // Apply these changed markers.
   op->setAttr("portDirections",
               direction::packAttribute(op.getContext(), newDirections));
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newNames));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newTypes));
+  op->setAttr("domainInfo", ArrayAttr::get(op.getContext(), newDomains));
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
   FModuleLike::fixupPortSymsArray(newSyms, op.getContext());
   op.setPortSymbols(newSyms);
@@ -889,6 +904,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
   ArrayRef<Attribute> portLocs = op.getPortLocations();
+  ArrayRef<Attribute> portDomains = op.getDomainInfo();
   auto numPorts = op.getNumPorts();
   (void)numPorts;
   assert(portDirections.size() == numPorts);
@@ -897,16 +913,18 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   assert(portTypes.size() == numPorts);
   assert(portSyms.size() == numPorts || portSyms.empty());
   assert(portLocs.size() == numPorts);
+  assert(portDomains.size() == numPorts || portDomains.empty());
 
   SmallVector<bool> newPortDirections =
       removeElementsAtIndices<bool>(portDirections, portIndices);
   SmallVector<Attribute> newPortNames, newPortTypes, newPortAnnos, newPortSyms,
-      newPortLocs;
+      newPortLocs, newPortDomains;
   newPortNames = removeElementsAtIndices(portNames, portIndices);
   newPortTypes = removeElementsAtIndices(portTypes, portIndices);
   newPortAnnos = removeElementsAtIndices(portAnnos, portIndices);
   newPortSyms = removeElementsAtIndices(portSyms, portIndices);
   newPortLocs = removeElementsAtIndices(portLocs, portIndices);
+  newPortDomains = removeElementsAtIndices(portDomains, portIndices);
   op->setAttr("portDirections",
               direction::packAttribute(op.getContext(), newPortDirections));
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newPortNames));
@@ -915,6 +933,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   FModuleLike::fixupPortSymsArray(newPortSyms, op.getContext());
   op->setAttr("portSymbols", ArrayAttr::get(op.getContext(), newPortSyms));
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
+  op->setAttr("domainInfo", ArrayAttr::get(op.getContext(), newPortDomains));
 }
 
 template <typename T>
@@ -1002,13 +1021,19 @@ void buildModuleLike(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> portDomains;
   for (const auto &port : ports) {
     portDirections.push_back(port.direction);
     portNames.push_back(port.name);
     portTypes.push_back(TypeAttr::get(port.type));
     portSyms.push_back(port.sym);
     portLocs.push_back(port.loc);
+    portDomains.push_back(port.domains);
   }
+  if (llvm::all_of(portDomains, [](Attribute attr) {
+        return !attr || cast<ArrayAttr>(attr).empty();
+      }))
+    portDomains.clear();
 
   FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
 
@@ -1019,6 +1044,7 @@ void buildModuleLike(OpBuilder &builder, OperationState &result,
   properties.setPortTypes(builder.getArrayAttr(portTypes));
   properties.setPortSymbols(builder.getArrayAttr(portSyms));
   properties.setPortLocations(builder.getArrayAttr(portLocs));
+  properties.setDomainInfo(builder.getArrayAttr(portDomains));
 
   result.addRegion();
 }
@@ -1152,7 +1178,8 @@ static bool
 printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
                  ArrayRef<Attribute> portNames, ArrayRef<Attribute> portTypes,
                  ArrayRef<Attribute> portAnnotations,
-                 ArrayRef<Attribute> portSyms, ArrayRef<Attribute> portLocs) {
+                 ArrayRef<Attribute> portSyms, ArrayRef<Attribute> portLocs,
+                 ArrayRef<Attribute> domainInfo) {
   // When printing port names as SSA values, we can fail to print them
   // identically.
   bool printedNamesDontMatch = false;
@@ -1162,6 +1189,7 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
   // If we are printing the ports as block arguments the op must have a first
   // block.
   SmallString<32> resultNameStr;
+  DenseMap<unsigned, std::string> domainPortNames;
   p << '(';
   for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
     if (i > 0)
@@ -1172,6 +1200,7 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
     // Print the port name.  If there is a valid block, we print it as a block
     // argument.
+    auto portType = cast<TypeAttr>(portTypes[i]).getValue();
     if (block) {
       // Get the printed format for the argument name.
       resultNameStr.clear();
@@ -1183,13 +1212,17 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
       if (tmpStream.str().drop_front() != portName)
         printedNamesDontMatch = true;
       p << tmpStream.str();
+      if (isa<DomainType>(portType))
+        domainPortNames[i] = tmpStream.str();
     } else {
-      p.printKeywordOrString(cast<StringAttr>(portNames[i]).getValue());
+      auto name = cast<StringAttr>(portNames[i]).getValue();
+      p.printKeywordOrString(name);
+      if (isa<DomainType>(portType))
+        domainPortNames[i] = name.str();
     }
 
     // Print the port type.
     p << ": ";
-    auto portType = cast<TypeAttr>(portTypes[i]).getValue();
     p.printType(portType);
 
     // Print the optional port symbol.
@@ -1197,6 +1230,22 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
       if (!cast<hw::InnerSymAttr>(portSyms[i]).empty()) {
         p << " sym ";
         cast<hw::InnerSymAttr>(portSyms[i]).print(p);
+      }
+    }
+
+    // Print domain information.
+    if (!domainInfo.empty()) {
+      if (auto domainKind = dyn_cast<FlatSymbolRefAttr>(domainInfo[i])) {
+        p << " of " << domainKind;
+      } else {
+        auto domains = cast<ArrayAttr>(domainInfo[i]);
+        if (!domains.empty()) {
+          p << " domains [";
+          llvm::interleaveComma(domains, p, [&](Attribute attr) {
+            p << domainPortNames[cast<IntegerAttr>(attr).getUInt()];
+          });
+          p << "]";
+        }
       }
     }
 
@@ -1222,17 +1271,19 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
 /// Parse a list of module ports.  If port names are SSA identifiers, then this
 /// will populate `entryArgs`.
-static ParseResult
-parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
-                 bool supportsSymbols,
-                 SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
-                 SmallVectorImpl<Direction> &portDirections,
-                 SmallVectorImpl<Attribute> &portNames,
-                 SmallVectorImpl<Attribute> &portTypes,
-                 SmallVectorImpl<Attribute> &portAnnotations,
-                 SmallVectorImpl<Attribute> &portSyms,
-                 SmallVectorImpl<Attribute> &portLocs) {
+static ParseResult parseModulePorts(
+    OpAsmParser &parser, bool hasSSAIdentifiers, bool supportsSymbols,
+    bool supportsDomains, SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
+    SmallVectorImpl<Direction> &portDirections,
+    SmallVectorImpl<Attribute> &portNames,
+    SmallVectorImpl<Attribute> &portTypes,
+    SmallVectorImpl<Attribute> &portAnnotations,
+    SmallVectorImpl<Attribute> &portSyms, SmallVectorImpl<Attribute> &portLocs,
+    SmallVectorImpl<Attribute> &domains) {
   auto *context = parser.getContext();
+
+  // Mapping of domain name to port index.
+  DenseMap<Attribute, size_t> domainIndex;
 
   auto parseArgument = [&]() -> ParseResult {
     // Parse port direction.
@@ -1280,6 +1331,8 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     if (parser.parseColonType(portType))
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
+    if (isa<DomainType>(portType))
+      domainIndex[portNames.back()] = portNames.size() - 1;
 
     if (hasSSAIdentifiers)
       entryArgs.back().type = portType;
@@ -1297,6 +1350,44 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       }
       portSyms.push_back(innerSymAttr);
     }
+
+    // Parse optional port domain information if it exists.
+    ArrayAttr domainsAttr;
+    if (supportsDomains && succeeded(parser.parseOptionalKeyword("domains"))) {
+      SmallVector<Attribute> portDomains;
+      auto result = parser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+            StringAttr argName;
+            if (hasSSAIdentifiers) {
+              OpAsmParser::Argument arg;
+              if (parser.parseArgument(arg))
+                return failure();
+              argName = StringAttr::get(context, arg.ssaName.name.drop_front());
+            } else {
+              std::string portName;
+              if (parser.parseKeywordOrString(&portName))
+                return failure();
+              argName = StringAttr::get(context, portName);
+            }
+
+            auto index = domainIndex.find(argName);
+            if (index == domainIndex.end()) {
+              parser.emitError(irLoc)
+                  << "domain name '" << argName << "' not found";
+              return failure();
+            }
+            portDomains.push_back(IntegerAttr::get(
+                IntegerType::get(context, 32, IntegerType::Unsigned),
+                index->second));
+            return success();
+          });
+      if (failed(result))
+        return failure();
+      domainsAttr = parser.getBuilder().getArrayAttr(portDomains);
+    }
+    if (!domainsAttr)
+      domainsAttr = parser.getBuilder().getArrayAttr({});
+    domains.push_back(domainsAttr);
 
     // Parse the port annotations.
     ArrayAttr annos;
@@ -1364,11 +1455,13 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
   auto needPortNamesAttr = printModulePorts(
       p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
-      op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
+      op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations(),
+      op.getDomainInfo());
 
   SmallVector<StringRef, 13> omittedAttrs = {
-      "sym_name",    "portDirections", "portTypes",  "portAnnotations",
-      "portSymbols", "portLocations",  "parameters", visibilityAttrName};
+      "sym_name",        "portDirections",   "portTypes",
+      "portAnnotations", "portSymbols",      "portLocations",
+      "parameters",      visibilityAttrName, "domainInfo"};
 
   if (op.getConvention() == Convention::Internal)
     omittedAttrs.push_back("convention");
@@ -1501,9 +1594,11 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   if (parseModulePorts(parser, hasSSAIdentifiers, /*supportsSymbols=*/true,
-                       entryArgs, portDirections, portNames, portTypes,
-                       portAnnotations, portSyms, portLocs))
+                       /*supportsDomains=*/true, entryArgs, portDirections,
+                       portNames, portTypes, portAnnotations, portSyms,
+                       portLocs, domains))
     return failure();
 
   // If module attributes are present, parse them.
@@ -1543,6 +1638,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 
   // The annotations attribute is always present, but not printed when empty.
   properties.setAnnotations(builder.getArrayAttr({}));
+
+  // Add domains.
+  properties.setDomainInfo(ArrayAttr::get(context, domains));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1917,10 +2015,11 @@ ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   if (parseModulePorts(parser, hasSSAIdentifiers,
-                       /*supportsSymbols=*/false, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       /*supportsSymbols=*/false, /*supportsDomains=*/false,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs, domains))
     return failure();
 
   // Ports on ClassLike ops cannot have annotations
@@ -1990,12 +2089,12 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
 
   auto needPortNamesAttr = printModulePorts(
       p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
-      {}, op.getPortSymbols(), op.getPortLocations());
+      {}, op.getPortSymbols(), op.getPortLocations(), {});
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
-      "sym_name",    "portNames",     "portTypes",       "portDirections",
-      "portSymbols", "portLocations", visibilityAttrName};
+      "sym_name",    "portNames",     "portTypes",        "portDirections",
+      "portSymbols", "portLocations", visibilityAttrName, "domainInfo"};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -2232,30 +2331,26 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations,
-                       ArrayRef<Attribute> layers, bool lowerToBind,
-                       bool doNotPrint, StringAttr innerSym) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> domainInfo, ArrayRef<Attribute> annotations,
+    ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> layers,
+    bool lowerToBind, bool doNotPrint, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
-        portDirections, portNames, annotations, portAnnotations, layers,
-        lowerToBind, doNotPrint,
+        portDirections, portNames, domainInfo, annotations, portAnnotations,
+        layers, lowerToBind, doNotPrint,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations,
-                       ArrayRef<Attribute> layers, bool lowerToBind,
-                       bool doNotPrint, hw::InnerSymAttr innerSym) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> domainInfo, ArrayRef<Attribute> annotations,
+    ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> layers,
+    bool lowerToBind, bool doNotPrint, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.getOrAddProperties<Properties>().setModuleName(
       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -2264,6 +2359,18 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.getOrAddProperties<Properties>().setPortNames(
       builder.getArrayAttr(portNames));
+
+  if (domainInfo.empty()) {
+    SmallVector<Attribute, 16> domainInfoVec(resultTypes.size(),
+                                             builder.getArrayAttr({}));
+    result.getOrAddProperties<Properties>().setDomainInfo(
+        builder.getArrayAttr(domainInfoVec));
+  } else {
+    assert(domainInfo.size() == resultTypes.size());
+    result.getOrAddProperties<Properties>().setDomainInfo(
+        builder.getArrayAttr(domainInfo));
+  }
+
   result.getOrAddProperties<Properties>().setAnnotations(
       builder.getArrayAttr(annotations));
   result.getOrAddProperties<Properties>().setLayers(
@@ -2305,7 +2412,9 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortTypes(), std::back_inserter(resultTypes),
       [](Attribute typeAttr) { return cast<TypeAttr>(typeAttr).getValue(); });
 
-  // Create the port annotations.
+  // The storage for annotations and domains on the module uses an empty array
+  // if there are no annotations or domains.  However, the instance op always
+  // stores one-array-per-port.  Do this massaging here.
   ArrayAttr portAnnotationsAttr;
   if (portAnnotations.empty()) {
     portAnnotationsAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
@@ -2313,13 +2422,18 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   } else {
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
+  ArrayAttr domainInfoAttr = module.getDomainInfoAttr();
+  if (domainInfoAttr.empty()) {
+    domainInfoAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
+        resultTypes.size(), builder.getArrayAttr({})));
+  }
 
   return build(
       builder, result, resultTypes,
       SymbolRefAttr::get(builder.getContext(), module.getModuleNameAttr()),
       builder.getStringAttr(name),
       NameKindEnumAttr::get(builder.getContext(), nameKind),
-      module.getPortDirectionsAttr(), module.getPortNamesAttr(),
+      module.getPortDirectionsAttr(), module.getPortNamesAttr(), domainInfoAttr,
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
       doNotPrint ? builder.getUnitAttr() : UnitAttr(), innerSym);
@@ -2336,16 +2450,21 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
   SmallVector<Direction> newPortDirections;
   SmallVector<Attribute> newPortNames;
   SmallVector<Attribute> newPortAnnotations;
+  SmallVector<Attribute> newDomainInfo;
   for (auto &p : ports) {
     newResultTypes.push_back(p.type);
     newPortDirections.push_back(p.direction);
     newPortNames.push_back(p.name);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    if (p.domains)
+      newDomainInfo.push_back(p.domains);
+    else
+      newDomainInfo.push_back(builder.getArrayAttr({}));
   }
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
-               newPortDirections, newPortNames, annotations, newPortAnnotations,
-               layers, lowerToBind, doNotPrint, innerSym);
+               newPortDirections, newPortNames, newDomainInfo, annotations,
+               newPortAnnotations, layers, lowerToBind, doNotPrint, innerSym);
 }
 
 LogicalResult InstanceOp::verify() {
@@ -2385,10 +2504,12 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       removeElementsAtIndices(getPortNames().getValue(), portIndices);
   SmallVector<Attribute> newPortAnnotations =
       removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+  SmallVector<Attribute> newDomainInfo =
+      removeElementsAtIndices(getDomainInfo().getValue(), portIndices);
 
   auto newOp = InstanceOp::create(
       builder, getLoc(), newResultTypes, getModuleName(), getName(),
-      getNameKind(), newPortDirections, newPortNames,
+      getNameKind(), newPortDirections, newPortNames, newDomainInfo,
       getAnnotations().getValue(), newPortAnnotations, getLayers(),
       getLowerToBind(), getDoNotPrint(), getInnerSymAttr());
 
@@ -2425,6 +2546,12 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
+ArrayAttr InstanceOp::getPortDomain(unsigned portIdx) {
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
+  return cast<ArrayAttr>(getDomainInfo()[portIdx]);
+}
+
 InstanceOp
 InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   auto portSize = ports.size();
@@ -2437,6 +2564,8 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   newPortTypes.reserve(newPortCount);
   SmallVector<Attribute> newPortAnnos;
   newPortAnnos.reserve(newPortCount);
+  SmallVector<Attribute> newDomainInfo;
+  newDomainInfo.reserve(newPortCount);
 
   unsigned oldIndex = 0;
   unsigned newIndex = 0;
@@ -2448,6 +2577,9 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newPortNames.push_back(newPort.name);
       newPortTypes.push_back(newPort.type);
       newPortAnnos.push_back(newPort.annotations.getArrayAttr());
+      auto domain = newPort.domains;
+      newDomainInfo.push_back(domain ? domain
+                                     : ArrayAttr::get(getContext(), {}));
       ++newIndex;
     } else {
       // Copy the next old port.
@@ -2455,17 +2587,18 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newPortNames.push_back(getPortName(oldIndex));
       newPortTypes.push_back(getType(oldIndex));
       newPortAnnos.push_back(getPortAnnotation(oldIndex));
+      newDomainInfo.push_back(getDomainInfo()[oldIndex]);
       ++oldIndex;
     }
   }
 
   // Create a new instance op with the reset inserted.
   OpBuilder builder(*this);
-  return InstanceOp::create(builder, getLoc(), newPortTypes, getModuleName(),
-                            getName(), getNameKind(), newPortDirections,
-                            newPortNames, getAnnotations().getValue(),
-                            newPortAnnos, getLayers(), getLowerToBind(),
-                            getDoNotPrint(), getInnerSymAttr());
+  return InstanceOp::create(
+      builder, getLoc(), newPortTypes, getModuleName(), getName(),
+      getNameKind(), newPortDirections, newPortNames, newDomainInfo,
+      getAnnotations().getValue(), newPortAnnos, getLayers(), getLowerToBind(),
+      getDoNotPrint(), getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -2492,7 +2625,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   SmallVector<StringRef, 10> omittedAttrs = {
       "moduleName", "name",      "portDirections",
       "portNames",  "portTypes", "portAnnotations",
-      "inner_sym",  "nameKind"};
+      "inner_sym",  "nameKind",  "domainInfo"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
   if (getLayers().empty())
@@ -2508,9 +2641,11 @@ void InstanceOp::print(OpAsmPrinter &p) {
   portTypes.reserve(getNumResults());
   llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
+  // This needs to be passed domain information.
   printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
-                   getPortAnnotations().getValue(), {}, {});
+                   getPortAnnotations().getValue(), {}, {},
+                   getDomainInfo().getValue());
 }
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -2527,6 +2662,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
@@ -2543,9 +2679,9 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
-                       /*supportsSymbols=*/false, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       /*supportsSymbols=*/false, /*supportsDomains=*/true,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs, domains))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
@@ -2563,6 +2699,9 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   // if they are empty, empty, and false (respectively).
   properties.setAnnotations(parser.getBuilder().getArrayAttr({}));
   properties.setLayers(parser.getBuilder().getArrayAttr({}));
+
+  // Add domain information.
+  properties.setDomainInfo(ArrayAttr::get(context, domains));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2621,14 +2760,14 @@ void InstanceChoiceOp::build(
     moduleNames.push_back(SymbolRefAttr::get(caseModule.getModuleNameAttr()));
   }
 
-  return build(builder, result, resultTypes, builder.getArrayAttr(moduleNames),
-               builder.getArrayAttr(caseNames), builder.getStringAttr(name),
-               NameKindEnumAttr::get(builder.getContext(), nameKind),
-               defaultModule.getPortDirectionsAttr(),
-               defaultModule.getPortNamesAttr(),
-               builder.getArrayAttr(annotations), portAnnotationsAttr,
-               defaultModule.getLayersAttr(),
-               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+  return build(
+      builder, result, resultTypes, builder.getArrayAttr(moduleNames),
+      builder.getArrayAttr(caseNames), builder.getStringAttr(name),
+      NameKindEnumAttr::get(builder.getContext(), nameKind),
+      defaultModule.getPortDirectionsAttr(), defaultModule.getPortNamesAttr(),
+      defaultModule.getDomainInfoAttr(), builder.getArrayAttr(annotations),
+      portAnnotationsAttr, defaultModule.getLayersAttr(),
+      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
@@ -2647,10 +2786,11 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 10> omittedAttrs = {
+  SmallVector<StringRef, 11> omittedAttrs = {
       "moduleNames",     "caseNames", "name",
       "portDirections",  "portNames", "portTypes",
-      "portAnnotations", "inner_sym", "nameKind"};
+      "portAnnotations", "inner_sym", "nameKind",
+      "domainInfo"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
   if (getLayers().empty())
@@ -2688,7 +2828,8 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
                   &TypeAttr::get);
   printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
-                   getPortAnnotations().getValue(), {}, {});
+                   getPortAnnotations().getValue(), {}, {},
+                   getDomainInfo().getValue());
 }
 
 ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
@@ -2707,6 +2848,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
@@ -2751,9 +2893,9 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   }
 
   if (parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
-                       /*supportsSymbols=*/false, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       /*supportsSymbols=*/false, /*supportsDomains=*/false,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs, domains))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
@@ -2765,6 +2907,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   properties.setPortDirections(
       direction::packAttribute(context, portDirections));
   properties.setPortNames(ArrayAttr::get(context, portNames));
+  properties.setDomainInfo(ArrayAttr::get(context, domains));
   properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
 
   // Annotations, layers, and LowerToBind are omitted in the printed format if
@@ -2883,12 +3026,14 @@ InstanceChoiceOp::erasePorts(OpBuilder &builder,
       removeElementsAtIndices(getPortNames().getValue(), portIndices);
   SmallVector<Attribute> newPortAnnotations =
       removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+  SmallVector<Attribute> newPortDomains;
 
   auto newOp = InstanceChoiceOp::create(
       builder, getLoc(), newResultTypes, getModuleNames(), getCaseNames(),
       getName(), getNameKind(),
       direction::packAttribute(getContext(), newPortDirections),
-      ArrayAttr::get(getContext(), newPortNames), getAnnotationsAttr(),
+      ArrayAttr::get(getContext(), newPortNames),
+      ArrayAttr::get(getContext(), newPortDomains), getAnnotationsAttr(),
       ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
       getInnerSymAttr());
 

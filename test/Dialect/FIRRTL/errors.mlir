@@ -2455,6 +2455,7 @@ firrtl.circuit "NoCases" {
       nameKind = #firrtl<name_kind interesting_name>,
       portDirections = array<i1>,
       portNames = [],
+      domainInfo = [],
       annotations = [],
       portAnnotations = [],
       layers = []
@@ -2486,6 +2487,7 @@ firrtl.circuit "MismatchedCases" {
       nameKind = #firrtl<name_kind interesting_name>,
       portDirections = array<i1>,
       portNames = [],
+      domainInfo = [],
       annotations = [],
       portAnnotations = [],
       layers = []

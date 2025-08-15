@@ -201,9 +201,15 @@ firrtl.domain @ClockDomain {
 }
 
 // CHECK-LABEL: firrtl.module @Domains
-// CHECK-SAME:    in %clockDomain: !firrtl.domain
+// CHECK-SAME:    in %A: !firrtl.domain
+// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
+// CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
 firrtl.module @Domains(
-  in %clockDomain: !firrtl.domain
+  in %A: !firrtl.domain,
+  in %B: !firrtl.domain,
+  in %a: !firrtl.uint<1> domains [%A],
+  out %b: !firrtl.uint<1> domains [%B]
 ) {
 }
 

@@ -82,9 +82,10 @@ struct SpecializeOptionPass
             auto newInst = InstanceOp::create(
                 builder, inst->getResultTypes(), target, inst.getNameAttr(),
                 inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
-                inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
-                inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),
-                UnitAttr{}, UnitAttr{}, inst.getInnerSymAttr());
+                inst.getPortNamesAttr(), inst.getDomainInfoAttr(),
+                inst.getAnnotationsAttr(), inst.getPortAnnotationsAttr(),
+                builder.getArrayAttr({}), UnitAttr{}, UnitAttr{},
+                inst.getInnerSymAttr());
             inst.replaceAllUsesWith(newInst);
             inst.erase();
 

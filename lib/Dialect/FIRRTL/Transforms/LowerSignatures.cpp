@@ -48,12 +48,15 @@ struct AttrCache {
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
+    sPortDomains = StringAttr::get(context, "domainInfo");
     sInternalPaths = StringAttr::get(context, "internalPaths");
+    aEmpty = ArrayAttr::get(context, {});
   }
   AttrCache(const AttrCache &) = default;
 
   StringAttr nameAttr, sPortDirections, sPortNames, sPortTypes, sPortLocations,
-      sPortAnnotations, sInternalPaths;
+      sPortAnnotations, sPortDomains, sInternalPaths;
+  ArrayAttr aEmpty;
 };
 
 struct FieldMapEntry : public PortInfo {
@@ -151,7 +154,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
-                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+                annosForFieldIDRange(ctx, annos, fieldID, lastId),
+                port.domains},
                portID,
                newPorts.size(),
                fieldID});
@@ -193,7 +197,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
-                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+                annosForFieldIDRange(ctx, annos, fieldID, lastId),
+                port.domains},
                portID,
                newPorts.size(),
                fieldID});
@@ -233,7 +238,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
             {{StringAttr::get(ctx, name), type,
               isFlip ? Direction::Out : Direction::In,
               symbolsForFieldIDRange(ctx, syms, fieldID, fieldID), port.loc,
-              annosForFieldIDRange(ctx, annos, fieldID, fieldID)},
+              annosForFieldIDRange(ctx, annos, fieldID, fieldID), port.domains},
              portID,
              newPorts.size(),
              fieldID});
@@ -334,6 +339,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   SmallVector<Attribute> newPortSyms;
   SmallVector<Attribute> newPortLocations;
   SmallVector<Attribute, 8> newPortAnnotations;
+  SmallVector<Attribute> newPortDomains;
   SmallVector<Attribute> newInternalPaths;
 
   bool hasInternalPaths = false;
@@ -345,6 +351,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     newPortSyms.push_back(p.sym);
     newPortLocations.push_back(p.loc);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    newPortDomains.push_back(p.domains ? p.domains : cache.aEmpty);
     if (internalPaths) {
       auto internalPath = cast<InternalPathAttr>(internalPaths[p.portID]);
       newInternalPaths.push_back(internalPath);
@@ -368,6 +375,9 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, theBuilder.getArrayAttr(newPortAnnotations)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortDomains, theBuilder.getArrayAttr(newPortDomains)));
 
   assert(newInternalPaths.empty() ||
          newInternalPaths.size() == newPorts.size());
