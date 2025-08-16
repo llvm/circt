@@ -3498,11 +3498,15 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       memSummary.readUnderWrite, memSummary.writeUnderWrite, op.getNameAttr(),
       op.getInnerSymAttr(), memInit, op.getPrefixAttr(), Attribute{});
 
-  // If the module is outside the DUT, set the appropriate output directory for
-  // the memory.
-  if (!circuitState.isInDUT(theModule))
-    if (auto testBenchDir = circuitState.getTestBenchDirectory())
-      memDecl.setOutputFileAttr(testBenchDir);
+  if (auto parent = op->getParentOfType<hw::HWModuleOp>()) {
+    if (auto file = parent->getAttrOfType<hw::OutputFileAttr>("output_file")) {
+      auto dir = file;
+      if (!file.isDirectory())
+        dir = hw::OutputFileAttr::getAsDirectory(builder.getContext(),
+                                                 file.getDirectory());
+      memDecl.setOutputFileAttr(dir);
+    }
+  }
 
   // Memories return multiple structs, one for each port, which means we
   // have two layers of type to split apart.
