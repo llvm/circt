@@ -1496,13 +1496,79 @@ hw.module @InjectOnInjectChain(in %a: !hw.struct<a: i1, b: i1, c: i1>, in %p: i1
   hw.output %d : !hw.struct<a: i1, b: i1, c: i1>
 }
 
-// CHECK-LABEL: hw.module @InjectToCreate
-hw.module @InjectToCreate(in %a: !hw.struct<a: i1, b: i1>, in %p: i1, in %q: i1, out result : !hw.struct<a: i1, b: i1>) {
-  %b = hw.struct_inject %a["a"], %p : !hw.struct<a: i1, b: i1>
-  %c = hw.struct_inject %b["b"], %q : !hw.struct<a: i1, b: i1>
-  // CHECK: [[STRUCT:%.+]] = hw.struct_create (%p, %q) : !hw.struct<a: i1, b: i1>
+// CHECK-LABEL: hw.module @StructInjectToCreate
+hw.module @StructInjectToCreate(in %a: !hw.struct<a: i1, b: i1, c: i1>, in %p: i1, in %q: i1, in %r: i1, out result : !hw.struct<a: i1, b: i1, c: i1>) {
+  %0 = hw.struct_inject %a["a"], %p : !hw.struct<a: i1, b: i1, c: i1>
+  %1 = hw.struct_inject %0["b"], %q : !hw.struct<a: i1, b: i1, c: i1>
+  %2 = hw.struct_inject %1["c"], %r : !hw.struct<a: i1, b: i1, c: i1>
+  // CHECK: [[STRUCT:%.+]] = hw.struct_create (%p, %q, %r) : !hw.struct<a: i1, b: i1, c: i1>
   // CHECK-NEXT: hw.output [[STRUCT]]
-  hw.output %c : !hw.struct<a: i1, b: i1>
+  hw.output %2 : !hw.struct<a: i1, b: i1, c: i1>
+}
+
+// CHECK-LABEL: hw.module @StructInjectLoopToCreate
+hw.module @StructInjectLoopToCreate(in %p: i1, in %q: i1, in %r: i1, out result : !hw.struct<a: i1, b: i1, c: i1>) {
+  %0 = hw.struct_inject %2["a"], %p : !hw.struct<a: i1, b: i1, c: i1>
+  %1 = hw.struct_inject %0["b"], %q : !hw.struct<a: i1, b: i1, c: i1>
+  %2 = hw.struct_inject %1["c"], %r : !hw.struct<a: i1, b: i1, c: i1>
+  // CHECK: [[STRUCT:%.+]] = hw.struct_create (%p, %q, %r) : !hw.struct<a: i1, b: i1, c: i1>
+  // CHECK-NEXT: hw.output [[STRUCT]]
+  hw.output %2 : !hw.struct<a: i1, b: i1, c: i1>
+}
+
+// CHECK-LABEL: hw.module @ArrayInjectOnCreate
+hw.module @ArrayInjectOnCreate(in %p: i42, in %q: i42, in %r: i42, out result : !hw.array<3xi42>) {
+  %c0_i2 = hw.constant 0 : i2
+  %c2_i2 = hw.constant 2 : i2
+  %0 = hw.array_create %p, %p, %p : i42
+  %1 = hw.array_inject %0[%c0_i2], %q : !hw.array<3xi42>, i2
+  %2 = hw.array_inject %1[%c2_i2], %r : !hw.array<3xi42>, i2
+  // CHECK-NEXT: [[ARRAY:%.+]] = hw.array_create %r, %p, %q : i42
+  // CHECK-NEXT: hw.output [[ARRAY]]
+  hw.output %2 : !hw.array<3xi42>
+}
+
+// CHECK-LABEL: hw.module @ArrayInjectToCreate
+hw.module @ArrayInjectToCreate(in %a: !hw.array<3xi42>, in %p: i42, in %q: i42, in %r: i42, out result : !hw.array<3xi42>) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c2_i2 = hw.constant 2 : i2
+  %b = hw.array_inject %a[%c0_i2], %p : !hw.array<3xi42>, i2
+  %c = hw.array_inject %b[%c1_i2], %q : !hw.array<3xi42>, i2
+  %d = hw.array_inject %c[%c2_i2], %r : !hw.array<3xi42>, i2
+  // CHECK-NEXT: [[ARRAY:%.+]] = hw.array_create %r, %q, %p : i42
+  // CHECK-NEXT: hw.output [[ARRAY]]
+  hw.output %d : !hw.array<3xi42>
+}
+
+// CHECK-LABEL: hw.module @ArrayInjectLoopToCreate
+hw.module @ArrayInjectLoopToCreate(in %p: i42, in %q: i42, in %r: i42, out result : !hw.array<3xi42>) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c2_i2 = hw.constant 2 : i2
+  %0 = hw.array_inject %2[%c0_i2], %p : !hw.array<3xi42>, i2
+  %1 = hw.array_inject %0[%c1_i2], %q : !hw.array<3xi42>, i2
+  %2 = hw.array_inject %1[%c2_i2], %r : !hw.array<3xi42>, i2
+  // CHECK-NEXT: [[ARRAY:%.+]] = hw.array_create %r, %q, %p : i42
+  // CHECK-NEXT: hw.output [[ARRAY]]
+  hw.output %2 : !hw.array<3xi42>
+}
+
+// CHECK-LABEL: hw.module @ArrayInjectTreeToMultipleCreates
+hw.module @ArrayInjectTreeToMultipleCreates(in %a: !hw.array<3xi42>, in %p: i42, in %q: i42, in %r: i42, out result0 : !hw.array<3xi42>, out result1 : !hw.array<3xi42>, out result2 : !hw.array<3xi42>) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c2_i2 = hw.constant 2 : i2
+  %0 = hw.array_inject %a[%c0_i2], %p : !hw.array<3xi42>, i2
+  %1 = hw.array_inject %0[%c1_i2], %q : !hw.array<3xi42>, i2
+  %2 = hw.array_inject %1[%c2_i2], %r : !hw.array<3xi42>, i2
+  %3 = hw.array_inject %1[%c2_i2], %q : !hw.array<3xi42>, i2
+  %4 = hw.array_inject %2[%c1_i2], %r : !hw.array<3xi42>, i2
+  // CHECK-NEXT: [[ARRAY0:%.+]] = hw.array_create %r, %q, %p : i42
+  // CHECK-NEXT: [[ARRAY1:%.+]] = hw.array_create %q, %q, %p : i42
+  // CHECK-NEXT: [[ARRAY2:%.+]] = hw.array_create %r, %r, %p : i42
+  // CHECK-NEXT: hw.output [[ARRAY0]], [[ARRAY1]], [[ARRAY2]]
+  hw.output %2, %3, %4 : !hw.array<3xi42>, !hw.array<3xi42>, !hw.array<3xi42>
 }
 
 // CHECK-LABEL: hw.module @GetOfConcat

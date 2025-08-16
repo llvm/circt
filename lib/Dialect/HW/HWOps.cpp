@@ -21,6 +21,7 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
@@ -2670,6 +2671,15 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
+  // If this inject is only used as an input to another inject, don't try to
+  // canonicalize it. It will be included in that other op's canonicalization
+  // attempt. This avoids doing redundant work.
+  if (op->hasOneUse()) {
+    auto &use = *op->use_begin();
+    if (isa<StructInjectOp>(use.getOwner()) && use.getOperandNumber() == 0)
+      return failure();
+  }
+
   // Canonicalize multiple injects into a create op and eliminate overwrites.
   SmallPtrSet<Operation *, 4> injects;
   DenseMap<StringAttr, Value> fields;
@@ -2679,7 +2689,7 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
   Value input;
   do {
     if (!injects.insert(inject).second)
-      return failure();
+      break;
 
     fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
     input = inject.getInput();
@@ -2977,9 +2987,80 @@ OpFoldResult ArrayInjectOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+static LogicalResult canonicalizeArrayInjectChain(ArrayInjectOp op,
+                                                  PatternRewriter &rewriter) {
+  // If this inject is only used as an input to another inject, don't try to
+  // canonicalize it. It will be included in that other op's canonicalization
+  // attempt. This avoids doing redundant work.
+  if (op->hasOneUse()) {
+    auto &use = *op->use_begin();
+    if (isa<ArrayInjectOp>(use.getOwner()) && use.getOperandNumber() == 0)
+      return failure();
+  }
+
+  // Collect all injects to constant indices.
+  auto arrayLength = type_cast<ArrayType>(op.getType()).getNumElements();
+  Value input = op;
+  SmallDenseMap<uint32_t, Value> elements;
+  while (auto inject = input.getDefiningOp<ArrayInjectOp>()) {
+    // Determine the constant index.
+    APInt indexAPInt;
+    if (!matchPattern(inject.getIndex(), mlir::m_ConstantInt(&indexAPInt)))
+      break;
+    if (indexAPInt.getActiveBits() > 32)
+      break;
+    uint32_t index = indexAPInt.getZExtValue();
+
+    // Track the injected value. Make sure to only track indices that are in bounds.
+    // This will allow us to later check if `elements.size()` matches the array
+    // length.
+    if (index < arrayLength)
+      elements.insert({index, inject.getElement()});
+
+    // Step to the next inject op.
+    input = inject.getInput();
+    if (input == op)
+      break; // break cycles
+  }
+
+  // If we are assigning every single element, replace the op with an
+  // `hw.array_create`.
+  if (elements.size() == arrayLength) {
+    SmallVector<Value, 4> operands;
+    operands.reserve(arrayLength);
+    for (uint32_t idx = 0; idx < arrayLength; ++idx)
+      operands.push_back(elements.at(arrayLength - idx - 1));
+    rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(), operands);
+    return success();
+  }
+
+  return failure();
+}
+
+static LogicalResult
+canonicalizeArrayInjectIntoCreate(ArrayInjectOp op, PatternRewriter &rewriter) {
+  auto createOp = op.getInput().getDefiningOp<ArrayCreateOp>();
+  if (!createOp)
+    return failure();
+
+  // Make sure the access is in bounds.
+  APInt indexAPInt;
+  if (!matchPattern(op.getIndex(), mlir::m_ConstantInt(&indexAPInt)) ||
+      !indexAPInt.ult(createOp.getInputs().size()))
+    return failure();
+
+  // Substitute the injected value.
+  SmallVector<Value> elements = createOp.getInputs();
+  elements[elements.size() - indexAPInt.getZExtValue() - 1] = op.getElement();
+  rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, elements);
+  return success();
+}
+
 void ArrayInjectOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                 MLIRContext *context) {
   patterns.add<ArrayInjectToSameIndex>(context);
+  patterns.add(canonicalizeArrayInjectChain);
+  patterns.add(canonicalizeArrayInjectIntoCreate);
 }
 
 //===----------------------------------------------------------------------===//
