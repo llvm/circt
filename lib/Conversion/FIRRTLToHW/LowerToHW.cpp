@@ -3502,7 +3502,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     if (auto file = parent->getAttrOfType<hw::OutputFileAttr>("output_file")) {
       auto dir = file;
       if (!file.isDirectory())
-        dir = hw::OutputFileAttr::getAsDirectory(builder.getContext(), file.getDirectory());
+        dir = hw::OutputFileAttr::getAsDirectory(builder.getContext(),
+                                                 file.getDirectory());
       memDecl.setOutputFileAttr(dir);
     }
   }
