@@ -3011,9 +3011,9 @@ static LogicalResult canonicalizeArrayInjectChain(ArrayInjectOp op,
       break;
     uint32_t index = indexAPInt.getZExtValue();
 
-    // Track the injected value. Make sure to only track indices that are in bounds.
-    // This will allow us to later check if `elements.size()` matches the array
-    // length.
+    // Track the injected value. Make sure to only track indices that are in
+    // bounds. This will allow us to later check if `elements.size()` matches
+    // the array length.
     if (index < arrayLength)
       elements.insert({index, inject.getElement()});
 
