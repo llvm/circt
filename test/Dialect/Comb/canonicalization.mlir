@@ -1,5 +1,7 @@
 // RUN: circt-opt %s -canonicalize='top-down=true region-simplify=disabled' --allow-unregistered-dialect | FileCheck %s
 
+func.func private @use_i10(%arg0: i10)
+
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(in %a: i8, in %b: i8, in %c: i1, out o: i4) {
 // CHECK-NEXT: %0 = comb.extract %a from 1 : (i8) -> i4
@@ -959,39 +961,39 @@ hw.module @shru_zero(in %a: i8, out y: i8) {
 }
 
 // CHECK-LABEL: hw.module @logical_concat_cst1
-hw.module @logical_concat_cst1(in %value: i38, in %v2: i39, out a: i39) {
+hw.module @logical_concat_cst1(in %v1: i38, in %v2: i39, out a: i39) {
   %true = hw.constant true
-  %0 = comb.concat %true, %value : i1, i38
+  %0 = comb.concat %true, %v1 : i1, i38
 
-  %c255 = hw.constant 255 : i39
-  %1 = comb.and %0, %v2, %c255 : i39
+  %c255_i39 = hw.constant 255 : i39
+  %1 = comb.and %0, %v2, %c255_i39 : i39
   hw.output %1 : i39
 
-  // CHECK: %false = hw.constant false
-  // CHECK: %c255_i38 = hw.constant 255 : i38
-  // CHECK: %0 = comb.and %value, %c255_i38 : i38
-  // CHECK: %1 = comb.concat %false, %0 : i1, i38
-  // CHECK: %2 = comb.and %v2, %1 : i39
-  // CHECK: hw.output %2 : i39
+  // CHECK-NEXT: %c0_i31 = hw.constant 0 : i31
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %v1 from 0 : (i38) -> i8
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %v2 from 0 : (i39) -> i8
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]] : i8
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.concat %c0_i31, [[TMP3]] : i31, i8
+  // CHECK-NEXT: hw.output [[TMP4]] : i39
 }
 
 // CHECK-LABEL: hw.module @logical_concat_cst2
-hw.module @logical_concat_cst2(in %value: i8, in %v2: i16, out a: i16) {
-  %c15 = hw.constant 15 : i8
-  %0 = comb.and %value, %c15 : i8
+hw.module @logical_concat_cst2(in %v1: i8, in %v2: i16, out a: i16) {
+  %c15_i8 = hw.constant 15 : i8
+  %0 = comb.and %v1, %c15_i8 : i8
 
-  %1 = comb.concat %value, %0 : i8, i8
+  %1 = comb.concat %v1, %0 : i8, i8
 
-  %c7 = hw.constant 7 : i16
-  %2 = comb.and %v2, %1, %c7 : i16
+  %c7_i16 = hw.constant 7 : i16
+  %2 = comb.and %v2, %1, %c7_i16 : i16
   hw.output %2 : i16
 
-  // CHECK: %c0_i8 = hw.constant 0 : i8
-  // CHECK: %c7_i8 = hw.constant 7 : i8
-  // CHECK: %0 = comb.and %value, %c7_i8 : i8
-  // CHECK: %1 = comb.concat %c0_i8, %0 : i8, i8
-  // CHECK: %2 = comb.and %v2, %1 : i16
-  // CHECK: hw.output %2 : i16
+  // CHECK-NEXT: %c0_i13 = hw.constant 0 : i13
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %v2 from 0 : (i16) -> i3
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %v1 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]] : i3
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.concat %c0_i13, [[TMP3]] : i13, i3
+  // CHECK-NEXT: hw.output [[TMP4]] : i16
 }
 
 // CHECK-LABEL: hw.module @concat_fold
@@ -1306,17 +1308,27 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
 }
 
 // CHECK-LABEL: @flatten_multi_use_and
-hw.module @flatten_multi_use_and(in %arg0 : i8, in %arg1 : i8, in %arg2: i8,
-  out o1: i8, out o2: i8) {
-  %c1 = hw.constant 15 : i8
-  %0 = comb.and %arg0, %c1 : i8
-  // CHECK: %0 = comb.and %arg0, %c15_i8 : i8
+hw.module @flatten_multi_use_and(
+  in %arg0: i8, in %arg1: i8, in %arg2: i8,
+  out o1: i8, out o2: i8
+) {
+  // CHECK-NEXT: %c0_i5 = hw.constant 0 : i5
+  // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
 
-  %c2 = hw.constant 7 : i8
-  %1 = comb.and %arg1, %0, %arg2, %c2 : i8
-  // CHECK: %1 = comb.and %arg1, %arg0, %arg2, %c7_i8 : i8
+  %c15_i8 = hw.constant 15 : i8
+  %0 = comb.and %arg0, %c15_i8 : i8
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %arg0 from 0 : (i8) -> i4
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.concat %c0_i4, [[TMP1]] : i4, i4
 
-  // CHECK: hw.output %0, %1 
+  %c7_i8 = hw.constant 7 : i8
+  %1 = comb.and %arg1, %0, %arg2, %c7_i8 : i8
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.extract %arg1 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.extract %arg0 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP5:%.+]] = comb.extract %arg2 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP6:%.+]] = comb.and [[TMP3]], [[TMP4]], [[TMP5]] : i3
+  // CHECK-NEXT: [[TMP7:%.+]] = comb.concat %c0_i5, [[TMP6]] : i5, i3
+
+  // CHECK-NEXT: hw.output [[TMP2]], [[TMP7]]
   hw.output %0, %1 : i8, i8
 }
 
@@ -1840,3 +1852,50 @@ hw.module @test_reverse_canonicalize(in %in : i8, out out_double_rev : i8, out o
 
 // CHECK: %[[CST:.*]] = hw.constant -80 : i8
 // CHECK: hw.output %[[IN]], %[[CST]] : i8, i8
+
+// CHECK-LABEL: @AndMaskToConcat
+func.func @AndMaskToConcat(%arg0: i10, %arg1: i10, %arg2: i20) {
+  %b0000111100 = hw.constant 60 : i10   // 0b0000111100
+  %b0000001111 = hw.constant 15 : i10   // 0b0000001111
+  %b1111000000 = hw.constant 960 : i10  // 0b1111000000
+  %b0000101100 = hw.constant 44 : i10   // 0b0000101100
+
+  // Contiguous masks.
+  // CHECK:      [[TMP:%.+]] = comb.extract %arg0 from 2 : (i10) -> i4
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP]], %c0_i2
+  %a = comb.and %arg0, %b0000111100 : i10
+  // CHECK-NEXT: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i10) -> i4
+  // CHECK-NEXT: comb.concat %c0_i6, [[TMP]]
+  %b = comb.and %arg0, %b0000001111 : i10
+  // CHECK-NEXT: [[TMP:%.+]] = comb.extract %arg0 from 6 : (i10) -> i4
+  // CHECK-NEXT: comb.concat [[TMP]], %c0_i6
+  %c = comb.and %arg0, %b1111000000 : i10
+
+  // Non-contiguous mask.
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %arg0 from 2 : (i10) -> i4
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.and [[TMP1]], %c-5_i4
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP2]], %c0_i2
+  %d = comb.and %arg0, %b0000101100 : i10
+
+  // Multiple operands.
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %arg0 from 2 : (i10) -> i4
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %arg1 from 2 : (i10) -> i4
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]]
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP3]], %c0_i2
+  %e = comb.and %arg0, %arg1, %b0000111100 : i10
+
+  // look through extracts.
+  // CHECK-NEXT: [[TMP:%.+]] = comb.extract %arg2 from 6 : (i20) -> i4
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP]], %c0_i2
+  %f0 = comb.extract %arg2 from 1 : (i20) -> i15
+  %f1 = comb.extract %f0 from 3 : (i15) -> i10
+  %f2 = comb.and %f1, %b0000111100 : i10
+
+  call @use_i10(%a) : (i10) -> ()
+  call @use_i10(%b) : (i10) -> ()
+  call @use_i10(%c) : (i10) -> ()
+  call @use_i10(%d) : (i10) -> ()
+  call @use_i10(%e) : (i10) -> ()
+  call @use_i10(%f2) : (i10) -> ()
+  return
+}
