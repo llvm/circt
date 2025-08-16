@@ -2999,8 +2999,7 @@ static LogicalResult canonicalizeArrayInjectChain(ArrayInjectOp op,
   }
 
   // Collect all injects to constant indices.
-  auto arrayLength =
-      cast<ArrayType>(hw::getCanonicalType(op.getType())).getNumElements();
+  auto arrayLength = type_cast<ArrayType>(op.getType()).getNumElements();
   Value input = op;
   SmallDenseMap<uint32_t, Value> elements;
   while (auto inject = input.getDefiningOp<ArrayInjectOp>()) {
@@ -3012,7 +3011,7 @@ static LogicalResult canonicalizeArrayInjectChain(ArrayInjectOp op,
       break;
     uint32_t index = indexAPInt.getZExtValue();
 
-    // Track the injected value. Make sure to only indices that are in bounds.
+    // Track the injected value. Make sure to only track indices that are in bounds.
     // This will allow us to later check if `elements.size()` matches the array
     // length.
     if (index < arrayLength)
