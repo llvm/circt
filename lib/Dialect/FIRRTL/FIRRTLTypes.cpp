@@ -46,9 +46,19 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
   if (isConst(type))
     os << "const.";
 
-  auto printWidthQualifier = [&](std::optional<int32_t> width) {
-    if (width)
-      os << '<' << *width << '>';
+  auto printWidthQualifier = [&](std::optional<int32_t> width,
+                                 ArrayRef<FlatSymbolRefAttr> domains) {
+    if (width || !domains.empty()) {
+      os << "<";
+      if (width)
+        os << *width;
+      if (!domains.empty()) {
+        if (width)
+          os << ", ";
+        os << "[" << domains << "]";
+      }
+      os << ">";
+    }
   };
   bool anyFailed = false;
   TypeSwitch<Type>(type)
@@ -57,15 +67,15 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       .Case<AsyncResetType>([&](auto) { os << "asyncreset"; })
       .Case<SIntType>([&](auto sIntType) {
         os << "sint";
-        printWidthQualifier(sIntType.getWidth());
+        printWidthQualifier(sIntType.getWidth(), sIntType.getDomains());
       })
       .Case<UIntType>([&](auto uIntType) {
         os << "uint";
-        printWidthQualifier(uIntType.getWidth());
+        printWidthQualifier(uIntType.getWidth(), uIntType.getDomains());
       })
       .Case<AnalogType>([&](auto analogType) {
         os << "analog";
-        printWidthQualifier(analogType.getWidth());
+        printWidthQualifier(analogType.getWidth(), analogType.getDomains());
       })
       .Case<BundleType, OpenBundleType>([&](auto bundleType) {
         if (firrtl::type_isa<OpenBundleType>(bundleType))
@@ -166,6 +176,9 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
       .Case<FStringType>([&](auto) { os << "fstring"; })
+      .Case<DomainType>([&](DomainType type) {
+        os << "domain<" << type.getImpl()->name << ">";
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -199,9 +212,9 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= clock
 ///   ::= reset
 ///   ::= asyncreset
-///   ::= sint ('<' int '>')?
-///   ::= uint ('<' int '>')?
-///   ::= analog ('<' int '>')?
+///   ::= sint ('<' int | domain-array | int ',' domain-array '>')?
+///   ::= uint ('<' int | domain-array | int ',' domain-array '>')?
+///   ::= analog ('<' int | domain-array | int ',' domain-array '>')?
 ///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
 ///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
@@ -209,6 +222,7 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= 'property.' firrtl-phased-type
 /// bundle-elt ::= identifier flip? ':' type
 /// enum-elt ::= identifier ':' type
+/// domain-array ::= '[' (domain (',' domain)*)? ']'
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
@@ -227,11 +241,35 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   if (name == "asyncreset")
     return result = AsyncResetType::get(context, isConst), success();
 
-  if (name == "sint" || name == "uint" || name == "analog") {
+  if (name == "uint" || name == "sint" || name == "analog") {
     // Parse the width specifier if it exists.
     int32_t width = -1;
+    SmallVector<FlatSymbolRefAttr, 2> domains;
+
+    auto parseDomains = [&]() {
+      if (parser.parseLSquare())
+        return failure();
+      do {
+        StringAttr symbol;
+        if (!parser.parseOptionalSymbolName(symbol))
+          domains.push_back(FlatSymbolRefAttr::get(symbol));
+      } while (!parser.parseOptionalComma());
+      if (parser.parseRSquare())
+        return failure();
+      return success();
+    };
+
     if (!parser.parseOptionalLess()) {
-      if (parser.parseInteger(width) || parser.parseGreater())
+      if (parser.parseOptionalInteger(width).has_value()) {
+        if (!parser.parseOptionalComma())
+          if (failed(parseDomains()))
+            return failure();
+      } else {
+        if (failed(parseDomains()))
+          return failure();
+      }
+
+      if (parser.parseGreater())
         return failure();
 
       if (width < 0)
@@ -240,16 +278,15 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     }
 
     if (name == "sint")
-      result = SIntType::get(context, width, isConst);
+      result = SIntType::get(context, width, isConst, domains);
     else if (name == "uint")
-      result = UIntType::get(context, width, isConst);
+      result = UIntType::get(context, width, isConst, domains);
     else {
       assert(name == "analog");
-      result = AnalogType::get(context, width, isConst);
+      result = AnalogType::get(context, width, isConst, domains);
     }
     return success();
   }
-
   if (name == "bundle") {
     SmallVector<BundleType::BundleElement, 4> elements;
 
@@ -538,6 +575,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   if (name == "fstring") {
     return result = FStringType::get(context), success();
   }
+  if (name == "domain") {
+    StringAttr name;
+    if (parser.parseLess() || parser.parseSymbolName(name) ||
+        parser.parseGreater())
+      return failure();
+    result = DomainType::get(context, FlatSymbolRefAttr::get(name));
+    return success();
+  }
 
   return {};
 }
@@ -748,6 +793,10 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
       .Case<LHSType>(
           [](auto type) { return type.getType().getRecursiveTypeProperties(); })
       .Case<FStringType>([](auto type) {
+        return RecursiveTypeProperties{true,  false, false, false,
+                                       false, false, false};
+      })
+      .Case<DomainType>([](auto type) {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
@@ -1316,21 +1365,30 @@ int32_t IntType::getWidthOrSentinel() const {
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
-  WidthTypeStorage(int32_t width, bool isConst)
-      : FIRRTLBaseTypeStorage(isConst), width(width) {}
-  using KeyTy = std::pair<int32_t, char>;
+  WidthTypeStorage(int32_t width, bool isConst,
+                   ArrayRef<FlatSymbolRefAttr> domains)
+      : FIRRTLBaseTypeStorage(isConst), width(width), domains(domains) {
+    // Domains must be sorted and uniqued.  This provides a canonical
+    // representation of domains that allows for pointer comparison of types.
+    llvm::sort(this->domains, [](FlatSymbolRefAttr lhs, FlatSymbolRefAttr rhs) {
+      return lhs.getValue() < rhs.getValue();
+    });
+    this->domains.erase(llvm::unique(this->domains), this->domains.end());
+  }
+  using KeyTy = std::tuple<int32_t, char, ArrayRef<FlatSymbolRefAttr>>;
 
   bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
-  KeyTy getAsKey() const { return KeyTy(width, isConst); }
+  KeyTy getAsKey() const { return KeyTy(width, isConst, domains); }
 
   static WidthTypeStorage *construct(TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
     return new (allocator.allocate<WidthTypeStorage>())
-        WidthTypeStorage(key.first, key.second);
+        WidthTypeStorage(std::get<0>(key), std::get<1>(key), std::get<2>(key));
   }
 
   int32_t width;
+  SmallVector<FlatSymbolRefAttr, 2> domains;
 };
 
 IntType IntType::getConstType(bool isConst) const {
@@ -1347,12 +1405,13 @@ IntType IntType::getConstType(bool isConst) const {
 SIntType SIntType::get(MLIRContext *context) { return get(context, -1, false); }
 
 SIntType SIntType::get(MLIRContext *context, std::optional<int32_t> width,
-                       bool isConst) {
-  return get(context, width ? *width : -1, isConst);
+                       bool isConst, ArrayRef<FlatSymbolRefAttr> domains) {
+  return get(context, width ? *width : -1, isConst, domains);
 }
 
 LogicalResult SIntType::verify(function_ref<InFlightDiagnostic()> emitError,
-                               int32_t widthOrSentinel, bool isConst) {
+                               int32_t widthOrSentinel, bool isConst,
+                               ArrayRef<FlatSymbolRefAttr> domains) {
   if (widthOrSentinel < -1)
     return emitError() << "invalid width";
   return success();
@@ -1366,6 +1425,10 @@ SIntType SIntType::getConstType(bool isConst) const {
   return get(getContext(), getWidthOrSentinel(), isConst);
 }
 
+ArrayRef<FlatSymbolRefAttr> SIntType::getDomains() const {
+  return getImpl()->domains;
+}
+
 //===----------------------------------------------------------------------===//
 // UIntType
 //===----------------------------------------------------------------------===//
@@ -1373,12 +1436,13 @@ SIntType SIntType::getConstType(bool isConst) const {
 UIntType UIntType::get(MLIRContext *context) { return get(context, -1, false); }
 
 UIntType UIntType::get(MLIRContext *context, std::optional<int32_t> width,
-                       bool isConst) {
-  return get(context, width ? *width : -1, isConst);
+                       bool isConst, ArrayRef<FlatSymbolRefAttr> domains) {
+  return get(context, width ? *width : -1, isConst, domains);
 }
 
 LogicalResult UIntType::verify(function_ref<InFlightDiagnostic()> emitError,
-                               int32_t widthOrSentinel, bool isConst) {
+                               int32_t widthOrSentinel, bool isConst,
+                               ArrayRef<FlatSymbolRefAttr> domains) {
   if (widthOrSentinel < -1)
     return emitError() << "invalid width";
   return success();
@@ -1390,6 +1454,10 @@ UIntType UIntType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getWidthOrSentinel(), isConst);
+}
+
+ArrayRef<FlatSymbolRefAttr> UIntType::getDomains() const {
+  return getImpl()->domains;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2553,12 +2621,14 @@ AnalogType AnalogType::get(mlir::MLIRContext *context) {
 }
 
 AnalogType AnalogType::get(mlir::MLIRContext *context,
-                           std::optional<int32_t> width, bool isConst) {
-  return AnalogType::get(context, width ? *width : -1, isConst);
+                           std::optional<int32_t> width, bool isConst,
+                           ArrayRef<FlatSymbolRefAttr> domains) {
+  return AnalogType::get(context, width ? *width : -1, isConst, domains);
 }
 
 LogicalResult AnalogType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 int32_t widthOrSentinel, bool isConst) {
+                                 int32_t widthOrSentinel, bool isConst,
+                                 ArrayRef<FlatSymbolRefAttr> domains) {
   if (widthOrSentinel < -1)
     return emitError() << "invalid width";
   return success();
@@ -2570,6 +2640,10 @@ AnalogType AnalogType::getConstType(bool isConst) const {
   if (isConst == this->isConst())
     return *this;
   return get(getContext(), getWidthOrSentinel(), isConst);
+}
+
+ArrayRef<FlatSymbolRefAttr> AnalogType::getDomains() const {
+  return getImpl()->domains;
 }
 
 //===----------------------------------------------------------------------===//
