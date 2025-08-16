@@ -1,0 +1,354 @@
+//===- InferDomains.cpp - Infer and Check FIRRTL Domains ------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This pass implements FIRRTL domain inference and checking with canonical
+// domain representation. Domain sequences are canonicalized by sorting and
+// removing duplicates, making domain order irrelevant and allowing duplicate
+// domains to be treated as equivalent. The result of this pass is either a
+// correctly domain-inferred circuit or pass failure if the circuit contains
+// illegal domain crossings.
+//
+//===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
+#include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/EquivalenceClasses.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "firrtl-infer-domains"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INFERDOMAINS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
+using namespace circt;
+using namespace firrtl;
+
+namespace {
+
+/// Union-Find data structure for domain variables using LLVM's
+/// EquivalenceClasses. Handles sequences of domains with canonical
+/// representation where domain order is irrelevant and duplicates are removed.
+/// This allows 'domains %A, %B' to be equivalent to 'domains %B, %A' and
+/// 'domains %A, %A' to be equivalent to 'domains %A'.
+class DomainUnionFind {
+public:
+  using DomainSequence = llvm::SmallVector<Value, 4>;
+
+private:
+  /// Canonicalize a domain sequence by sorting and removing duplicates.
+  /// This ensures that domain order doesn't matter and duplicate domains
+  /// are treated as equivalent. For example:
+  /// - 'domains %A, %B' and 'domains %B, %A' become the same canonical form
+  /// - 'domains %A, %A' becomes 'domains %A'
+  static DomainSequence canonicalizeDomains(ArrayRef<Value> domains) {
+    DomainSequence canonical(domains.begin(), domains.end());
+
+    // Sort domains by their pointer value for deterministic ordering.
+    llvm::sort(canonical, [](Value a, Value b) {
+      return a.getAsOpaquePointer() < b.getAsOpaquePointer();
+    });
+
+    // Remove duplicates to handle cases like 'domains %A, %A'.
+    canonical.erase(std::unique(canonical.begin(), canonical.end()),
+                    canonical.end());
+
+    return canonical;
+  }
+
+public:
+  /// Get or create a domain variable for a value.
+  Value getDomainVar(Value value) {
+    auto it = valueToVar.find(value);
+    if (it != valueToVar.end())
+      return it->second;
+
+    // Create a new representative value for this domain variable.
+    Value representative = value;
+    valueToVar[value] = representative;
+    equivalenceClasses.insert(representative);
+    return representative;
+  }
+
+  /// Union two domain variables.  Returns success if successful, failure if
+  /// there's a domain conflict.  With canonical representation, conflicts only
+  /// occur when connecting values with truly different domain sets (not just
+  /// different ordering).
+  [[nodiscard]] LogicalResult unifyDomains(Value var1, Value var2) {
+    Value rep1 = equivalenceClasses.getLeaderValue(var1);
+    Value rep2 = equivalenceClasses.getLeaderValue(var2);
+
+    if (rep1 == rep2)
+      return success();
+
+    // Check for domain conflicts using canonical representation.
+    const DomainSequence &domains1 = getDomains(rep1);
+    const DomainSequence &domains2 = getDomains(rep2);
+
+    // Since domains are already canonical, we can compare them directly.
+    // Conflicts only occur when connecting truly different domain sets.  For
+    // example: 'domains %A' vs 'domains %B' is a conflict, but 'domains %A, %B'
+    // vs 'domains %B, %A' is not (same canonical form).
+    if (!domains1.empty() && !domains2.empty() && domains1 != domains2) {
+      // Conflict: both have different concrete domain sequences
+      return failure();
+    }
+
+    // Merge the concrete domain sequences (both are already canonical)
+    const DomainSequence &mergedDomains =
+        !domains1.empty() ? domains1 : domains2;
+
+    // Union the equivalence classes
+    equivalenceClasses.unionSets(rep1, rep2);
+
+    // Set the merged domain sequence on the new representative
+    if (!mergedDomains.empty()) {
+      Value newRep = equivalenceClasses.getLeaderValue(rep1);
+      concreteDomains[newRep] = mergedDomains;
+    }
+
+    return success();
+  }
+
+  /// Set the concrete domain sequence for a variable.
+  /// The domain sequence is automatically canonicalized to ensure consistent
+  /// representation regardless of input order or duplicates.
+  void setDomains(Value var, ArrayRef<Value> domains) {
+    Value rep = equivalenceClasses.getLeaderValue(var);
+    concreteDomains[rep] = canonicalizeDomains(domains);
+  }
+
+  /// Get the concrete domain sequence for a variable.
+  /// Returns the canonical domain sequence (sorted, no duplicates).
+  const DomainSequence &getDomains(Value var) {
+    Value rep = equivalenceClasses.getLeaderValue(var);
+    auto it = concreteDomains.find(rep);
+    if (it != concreteDomains.end())
+      return it->second;
+
+    // Return empty sequence if no domains are set
+    static const DomainSequence emptySequence;
+    return emptySequence;
+  }
+
+  /// Clear all state.
+  void clear() {
+    equivalenceClasses = llvm::EquivalenceClasses<Value>();
+    concreteDomains.clear();
+    valueToVar.clear();
+  }
+
+private:
+  llvm::EquivalenceClasses<Value> equivalenceClasses;
+  llvm::DenseMap<Value, DomainSequence> concreteDomains;
+  llvm::DenseMap<Value, Value> valueToVar;
+};
+
+/// Domain inference and checking pass implementation.
+/// Uses canonical domain representation to allow domain order independence
+/// and duplicate domain handling.
+class InferDomainsPass
+    : public circt::firrtl::impl::InferDomainsBase<InferDomainsPass> {
+
+public:
+  InferDomainsPass() = default;
+
+  void runOnOperation() override;
+
+  std::unique_ptr<mlir::Pass> clonePass() const override {
+    return std::make_unique<InferDomainsPass>();
+  }
+
+private:
+  /// Union-find structure for domain variables.
+  DomainUnionFind domainUF;
+
+  /// Track if any domain crossing errors were found.
+  bool hasErrors = false;
+
+  /// Process a module and infer domains.
+  LogicalResult processModule(FModuleOp module);
+
+  /// Process domain constraints from operations.
+  void processOperation(Operation *op);
+
+  /// Unify domains of two values.
+  [[nodiscard]] LogicalResult unifyDomains(Value lhs, Value rhs);
+
+  /// Set explicit domain sequence for a value.
+  void setExplicitDomains(Value value, OperandRange domains);
+
+  /// Helper to add domain sequence notes to diagnostics.
+  void addDomainSequenceNotes(InFlightDiagnostic &diag,
+                              const DomainUnionFind::DomainSequence &domains,
+                              StringRef prefix);
+
+  /// Helper to emit domain crossing error with detailed notes.
+  /// Sets hasErrors flag.
+  void emitDomainCrossingError(Operation *op, Value lhs, Value rhs,
+                               StringRef errorMessage, StringRef lhsLabel,
+                               StringRef rhsLabel);
+};
+
+} // namespace
+
+LogicalResult InferDomainsPass::unifyDomains(Value lhs, Value rhs) {
+  Value lhsVar = domainUF.getDomainVar(lhs);
+  Value rhsVar = domainUF.getDomainVar(rhs);
+
+  return domainUF.unifyDomains(lhsVar, rhsVar);
+}
+
+void InferDomainsPass::setExplicitDomains(Value value, OperandRange domains) {
+  Value domainVar = domainUF.getDomainVar(value);
+  // Convert OperandRange to SmallVector for setDomains.
+  llvm::SmallVector<Value, 4> domainVec(domains.begin(), domains.end());
+  domainUF.setDomains(domainVar, domainVec);
+}
+
+void InferDomainsPass::addDomainSequenceNotes(
+    InFlightDiagnostic &diag, const DomainUnionFind::DomainSequence &domains,
+    StringRef prefix) {
+  if (domains.empty())
+    return;
+
+  for (size_t i = 0; i < domains.size(); ++i) {
+    if (domains[i]) {
+      std::string message = prefix.str();
+      if (domains.size() > 1) {
+        message += " (domain " + std::to_string(i + 1) + " of " +
+                   std::to_string(domains.size()) + ")";
+      }
+      message += " is in domain defined here";
+      diag.attachNote(domains[i].getLoc()).append(message);
+    }
+  }
+}
+
+void InferDomainsPass::emitDomainCrossingError(Operation *op, Value lhs,
+                                               Value rhs,
+                                               StringRef errorMessage,
+                                               StringRef lhsLabel,
+                                               StringRef rhsLabel) {
+  // Get the concrete domain sequences for error reporting
+  Value lhsVar = domainUF.getDomainVar(lhs);
+  Value rhsVar = domainUF.getDomainVar(rhs);
+  const auto &lhsDomains = domainUF.getDomains(lhsVar);
+  const auto &rhsDomains = domainUF.getDomains(rhsVar);
+
+  auto diag = op->emitError(errorMessage);
+  addDomainSequenceNotes(diag, lhsDomains, lhsLabel);
+  addDomainSequenceNotes(diag, rhsDomains, rhsLabel);
+  hasErrors = true;
+}
+
+void InferDomainsPass::processOperation(Operation *op) {
+  // Handle wire operations with explicit domains.
+  if (auto wireOp = dyn_cast<WireOp>(op)) {
+    if (!wireOp.getDomains().empty()) {
+      // Wire has explicit domain sequence specification.
+      setExplicitDomains(wireOp.getResult(), wireOp.getDomains());
+    }
+    return;
+  }
+
+  // Handle connections - they create domain constraints
+  if (auto connectOp = dyn_cast<FConnectLike>(op)) {
+    // Source and destination must have the same domain sequence.
+    if (failed(unifyDomains(connectOp.getDest(), connectOp.getSrc()))) {
+      emitDomainCrossingError(op, connectOp.getDest(), connectOp.getSrc(),
+                              "illegal domain crossing in connect operation",
+                              "destination", "source");
+    }
+    return;
+  }
+
+  // Handle unsafe domain casts
+  if (auto domainCastOp = dyn_cast<UnsafeDomainCastOp>(op)) {
+    if (!domainCastOp.getDomains().empty()) {
+      // Explicitly cast to specified domain sequence
+      setExplicitDomains(domainCastOp.getResult(), domainCastOp.getDomains());
+    }
+    return;
+  }
+
+  // For other operations, propagate domains from operands to results
+  // This is a conservative approach - all operands and results share domains
+  if (!op->getOperands().empty() && !op->getResults().empty()) {
+    Value firstOperand = op->getOperand(0);
+    for (auto operand : op->getOperands()) {
+      if (failed(unifyDomains(firstOperand, operand))) {
+        emitDomainCrossingError(op, firstOperand, operand,
+                                "illegal domain crossing in operation",
+                                "first operand", "operand");
+      }
+    }
+    for (auto result : op->getResults()) {
+      if (failed(unifyDomains(firstOperand, result))) {
+        emitDomainCrossingError(op, firstOperand, result,
+                                "illegal domain crossing in operation",
+                                "operand", "result");
+      }
+    }
+  }
+}
+
+LogicalResult InferDomainsPass::processModule(FModuleOp module) {
+  LLVM_DEBUG(llvm::dbgs() << "Processing module: " << module.getName() << "\n");
+
+  // Process module ports - domain ports define explicit domains
+  for (auto [index, port] : llvm::enumerate(module.getPorts())) {
+    Value portValue = module.getArgument(index);
+    if (isa<DomainType>(port.type)) {
+      // This is a domain port - it defines its own domain
+      Value domainVar = domainUF.getDomainVar(portValue);
+      domainUF.setDomains(domainVar, {portValue});
+    }
+  }
+
+  // Process all operations in the module
+  module.walk([&](Operation *op) { processOperation(op); });
+
+  // Check if any errors were found during processing
+  if (hasErrors)
+    return failure();
+
+  return success();
+}
+
+void InferDomainsPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
+
+  // Clear state from any previous runs
+  domainUF.clear();
+  hasErrors = false;
+
+  auto circuit = getOperation();
+
+  // Process each module in the circuit
+  for (auto module : circuit.getOps<FModuleOp>()) {
+    if (failed(processModule(module))) {
+      signalPassFailure();
+      return;
+    }
+  }
+
+  // Signal failure if any domain crossing errors were found
+  if (hasErrors) {
+    signalPassFailure();
+  }
+
+  LLVM_DEBUG(debugFooter() << "\n");
+}
