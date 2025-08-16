@@ -199,7 +199,7 @@ struct BindFileInfo {
 
 class LowerLayersPass
     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
-  using LowerLayersBase::LowerLayersBase;
+  using Base::Base;
 
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
     auto layer = symbolToLayer.lookup(layerName);
