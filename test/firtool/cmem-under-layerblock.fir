@@ -16,4 +16,4 @@ circuit Top:
       connect wr, d
       assert(c, rd, UInt<1>(1), "hello")
 
-; CHECK: ----- 8< ----- FILE "verification/memory_2x1.sv" ----- 8< -----
+; CHECK: ----- 8< ----- FILE "verification{{[/\]}}memory_2x1.sv" ----- 8< -----
