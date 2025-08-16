@@ -145,6 +145,8 @@ public:
 
   bool getLintXmrsInDesign() const { return lintXmrsInDesign; }
 
+  bool getEmitAllBindFiles() const { return emitAllBindFiles; }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -394,6 +396,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setEmitAllBindFiles(bool value) {
+    emitAllBindFiles = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -448,6 +455,7 @@ private:
   bool disableWireElimination;
   bool lintStaticAsserts;
   bool lintXmrsInDesign;
+  bool emitAllBindFiles;
 };
 
 void registerFirtoolCLOptions();

@@ -199,6 +199,8 @@ struct BindFileInfo {
 
 class LowerLayersPass
     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
+  using Base::Base;
+
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
     auto layer = symbolToLayer.lookup(layerName);
     if (!layer)
@@ -917,7 +919,7 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
   llvm::SmallDenseSet<LayerOp> layersRequiringBindFiles;
 
   // If the module is public, create a bind file for all layers.
-  if (module.isPublic())
+  if (module.isPublic() || emitAllBindFiles)
     for (auto [_, layer] : symbolToLayer)
       if (layer.getConvention() == LayerConvention::Bind)
         layersRequiringBindFiles.insert(layer);
