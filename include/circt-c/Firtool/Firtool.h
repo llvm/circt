@@ -148,10 +148,6 @@ circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
                                      MlirStringRef value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
-                                      bool value);
-
-MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetIgnoreReadEnableMem(CirctFirtoolFirtoolOptions options,
                                           bool value);
 
