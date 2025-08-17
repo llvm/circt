@@ -305,7 +305,7 @@ struct StructInjectOpConversion
         op.getInput().getType(), op.getFieldIndex());
 
     rewriter.replaceOpWithNewOp<LLVM::InsertValueOp>(
-        op, adaptor.getInput(), op.getNewValue(), fieldIndex);
+        op, adaptor.getInput(), adaptor.getNewValue(), fieldIndex);
 
     return success();
   }
