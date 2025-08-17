@@ -1,4 +1,11 @@
-//===- CoreToFSM.cpp - Convert Core to FSM Dialect ------------------------===//
+//===- CoreToFSM.cpp - Convert Core Dialects (Seq + Comb) to FSM Dialect ------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Conversion/CoreToFSM.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
