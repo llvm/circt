@@ -223,3 +223,12 @@ func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>, %arg
 
   return
 }
+
+// CHECK-LABEL: @nestedStructInject
+func.func @nestedStructInject(%arg0: !hw.struct<a: i1, b: !hw.struct<c: i1>>, %arg1: !hw.struct<c: i1>) {
+  // CHECK-NEXT: [[ARG1:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<c: i1> to !llvm.struct<(i1)>
+  // CHECK-NEXT: [[ARG0:%.+]] = builtin.unrealized_conversion_cast %arg0 : !hw.struct<a: i1, b: !hw.struct<c: i1>> to !llvm.struct<(struct<(i1)>, i1)>
+  // CHECK-NEXT: llvm.insertvalue [[ARG1]], [[ARG0]][0] : !llvm.struct<(struct<(i1)>, i1)>
+  %0 = hw.struct_inject %arg0["b"], %arg1 : !hw.struct<a: i1, b: !hw.struct<c: i1>>
+  return
+}
