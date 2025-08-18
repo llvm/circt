@@ -992,41 +992,49 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
       }
     }
 
-    // If this is an and from an extract op, try shrinking the extract.
-    if (auto extractOp = inputs[0].getDefiningOp<ExtractOp>()) {
-      if (size == 2 &&
-          // We can shrink it if the mask has leading or trailing zeros.
-          (value.countLeadingZeros() || value.countTrailingZeros())) {
-        unsigned lz = value.countLeadingZeros();
-        unsigned tz = value.countTrailingZeros();
+    // Narrow the op if the constant has leading or trailing zeros.
+    //
+    // and(a, 0b00101100) -> concat(0b00, and(extract(a), 0b1011), 0b00)
+    unsigned leadingZeros = value.countLeadingZeros();
+    unsigned trailingZeros = value.countTrailingZeros();
+    if (leadingZeros > 0 || trailingZeros > 0) {
+      unsigned maskLength = value.getBitWidth() - leadingZeros - trailingZeros;
 
-        // Start by extracting the smaller number of bits.
-        auto smallTy = rewriter.getIntegerType(value.getBitWidth() - lz - tz);
-        Value smallElt = rewriter.createOrFold<ExtractOp>(
-            extractOp.getLoc(), smallTy, extractOp->getOperand(0),
-            extractOp.getLowBit() + tz);
-        // Apply the 'and' mask if needed.
-        APInt smallMask = value.extractBits(smallTy.getWidth(), tz);
-        if (!smallMask.isAllOnes()) {
-          auto loc = inputs.back().getLoc();
-          smallElt = rewriter.createOrFold<AndOp>(
-              loc, smallElt, hw::ConstantOp::create(rewriter, loc, smallMask),
-              false);
+      // Extract the non-zero regions of the operands. Look through extracts.
+      SmallVector<Value> operands;
+      for (auto input : inputs.drop_back()) {
+        unsigned offset = trailingZeros;
+        while (auto extractOp = input.getDefiningOp<ExtractOp>()) {
+          input = extractOp.getInput();
+          offset += extractOp.getLowBit();
         }
-
-        // The final replacement will be a concat of the leading/trailing zeros
-        // along with the smaller extracted value.
-        SmallVector<Value> resultElts;
-        if (lz)
-          resultElts.push_back(hw::ConstantOp::create(rewriter, op.getLoc(),
-                                                      APInt::getZero(lz)));
-        resultElts.push_back(smallElt);
-        if (tz)
-          resultElts.push_back(hw::ConstantOp::create(rewriter, op.getLoc(),
-                                                      APInt::getZero(tz)));
-        replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, resultElts);
-        return success();
+        operands.push_back(ExtractOp::create(rewriter, op.getLoc(), input,
+                                             offset, maskLength));
       }
+
+      // Add the narrowed mask if needed.
+      auto narrowMask = value.extractBits(maskLength, trailingZeros);
+      if (!narrowMask.isAllOnes())
+        operands.push_back(hw::ConstantOp::create(
+            rewriter, inputs.back().getLoc(), narrowMask));
+
+      // Create the narrow and op.
+      Value narrowValue = operands.back();
+      if (operands.size() > 1)
+        narrowValue =
+            AndOp::create(rewriter, op.getLoc(), operands, op.getTwoState());
+      operands.clear();
+
+      // Concatenate the narrow and with the leading and trailing zeros.
+      if (leadingZeros > 0)
+        operands.push_back(hw::ConstantOp::create(
+            rewriter, op.getLoc(), APInt::getZero(leadingZeros)));
+      operands.push_back(narrowValue);
+      if (trailingZeros > 0)
+        operands.push_back(hw::ConstantOp::create(
+            rewriter, op.getLoc(), APInt::getZero(trailingZeros)));
+      replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, operands);
+      return success();
     }
 
     // and(concat(x, cst1), a, b, c, cst2)

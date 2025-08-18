@@ -21,9 +21,10 @@ hw.module @extract_cstfold(out result : i3) {
 }
 
 // CHECK-LABEL: hw.module @and_cstfold(in %arg0 : i7, out result : i7) {
-// CHECK-NEXT:    %c1_i7 = hw.constant 1 : i7
-// CHECK-NEXT:    %0 = comb.and %arg0, %c1_i7 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %c0_i6 = hw.constant 0 : i6
+// CHECK-NEXT:    [[TMP1:%.+]] = comb.extract %arg0 from 0 : (i7) -> i1
+// CHECK-NEXT:    [[TMP2:%.+]] = comb.concat %c0_i6, [[TMP1]] : i6, i1
+// CHECK-NEXT:    hw.output [[TMP2]] : i7
 
 hw.module @and_cstfold(in %arg0 : i7, out result : i7) {
   %c11_i7 = hw.constant 11 : i7
@@ -398,13 +399,11 @@ hw.module @mul_identity(in %arg0 : i11, in %arg1 : i11, out result : i11) {
 // Idempotency
 
 // CHECK-LABEL: hw.module @and_idempotent(in %arg0 : i11, in %arg1 : i11, out result : i11) {
-// CHECK-NEXT:    %c9_i11 = hw.constant 9 : i11
-// CHECK-NEXT:    [[RES:%[0-9]+]] = comb.and %arg0, %arg1, %c9_i11
+// CHECK-NEXT:    [[RES:%[0-9]+]] = comb.and %arg0, %arg1
 // CHECK-NEXT:    hw.output [[RES]]
 
 hw.module @and_idempotent(in %arg0 : i11, in %arg1 : i11, out result : i11) {
-  %c9_i11 = hw.constant 9 : i11
-  %0 = comb.and %arg0, %arg1, %c9_i11, %c9_i11 : i11
+  %0 = comb.and %arg0, %arg1, %arg1, %arg1 : i11
   hw.output %0 : i11
 }
 
