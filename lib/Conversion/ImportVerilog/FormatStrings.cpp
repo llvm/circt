@@ -195,18 +195,19 @@ struct FormatStringParser {
     // i.e. $display("%f", 4) -> 4.000000, but 4 is not necessarily of real type
     auto value = context.convertRvalueExpression(
         arg, moore::RealType::get(context.getContext()));
+
     if (!value)
       return failure();
 
-    // Determine width to which formatted real value should be padded to
     unsigned width;
     if (options.width)
       width = *options.width;
     else
-      width = cast<moore::RealType>(value.getType()).getWidth();
+      width = 64;
 
-    auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
+    auto alignment = IntAlign::Left;
     auto padding = IntPadding::Space;
+
     fragments.push_back(moore::FormatRealOp::create(builder, loc, value, format,
                                                     width, alignment, padding));
 
