@@ -1503,7 +1503,7 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 // CHECK-LABEL:   "test.acrossBlockCanonicalizationBarrier"() ({
 // CHECK:         ^bb0(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[C:.*]]: i32):
 // CHECK:           %[[ADD1:.*]] = comb.add %[[A]], %[[B]] : i32
-// CHECK:           "terminator"() : () -> ()
+// CHECK:           "terminator"()[^bb1] : () -> ()
 // CHECK:         ^bb1:
 // CHECK:           %[[ADD2:.*]] = comb.add %[[ADD1]], %[[C]] : i32
 // CHECK:           "terminator"(%[[ADD2]]) : (i32) -> ()
@@ -1511,7 +1511,7 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 "test.acrossBlockCanonicalizationBarrier"() ({
   ^bb0(%a : i32, %b : i32, %c : i32):
     %add1 = comb.add %a, %b : i32
-    "terminator"() : () -> ()
+    "terminator"()[^bb1] : () -> ()
   ^bb1:
     // Canonicalization should _not_ pull %add1 into a combined add op when %add1
     // is defined in another block.
@@ -1528,8 +1528,8 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
   %0 = comb.or %arg0, %arg1 : i32
   %1 = comb.or %arg1, %arg2 : i32
   %2 = comb.or %arg0, %arg2 : i32
-  "terminator"() : () -> ()
-^bb1:  // no predecessors
+  "terminator"()[^bb1] : () -> ()
+^bb1:
   // Flatten and unique, but not across blocks.
   %3 = comb.or %0, %1 : i32
   %4 = comb.or %1, %2 : i32
@@ -1547,8 +1547,8 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 ^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
   %0 = comb.or %arg0, %arg1 : i32
   %1 = comb.or %arg1, %arg2 : i32
-  "terminator"() : () -> ()
-^bb1:  // no predecessors
+  "terminator"()[^bb1] : () -> ()
+^bb1:
   %2 = comb.or %0, %1, %1 : i32
   %3 = comb.or %2, %0, %1, %arg0 : i32
 
