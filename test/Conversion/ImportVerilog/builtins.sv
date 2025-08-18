@@ -160,6 +160,12 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP3]]
   $displayh(x);
 
+  // CHECK: [[TMP1:%.+]] = moore.fmt.real float [[R]], width 64, align left, pad space : real
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.display [[TMP3]]
+  $display("%f", r);
+
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity info [[TMP]]
   $info;
