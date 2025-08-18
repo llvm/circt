@@ -2,6 +2,57 @@
 
 func.func private @use_i10(%arg0: i10)
 
+// CHECK-LABEL: @bailOnRecursiveOps
+hw.module @bailOnRecursiveOps(in %a: i1, in %b: i1, out z0: i42, out z1: i1) {
+  %c1_i42 = hw.constant 1 : i42
+  %false = hw.constant false
+
+  // CHECK: [[TMP:%.+]] = comb.add [[TMP]], %c1_i42 : i42
+  %0 = comb.add %0, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.sub [[TMP]], %c1_i42 : i42
+  %1 = comb.sub %1, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.mul [[TMP]], %c1_i42 : i42
+  %2 = comb.mul %2, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.shl [[TMP]], %c1_i42 : i42
+  %3 = comb.shl %3, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.shru [[TMP]], %c1_i42 : i42
+  %4 = comb.shru %4, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.shrs [[TMP]], %c1_i42 : i42
+  %5 = comb.shrs %5, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.and [[TMP]], %c1_i42 : i42
+  %6 = comb.and %6, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.or [[TMP]], %c1_i42 : i42
+  %7 = comb.or %7, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.xor [[TMP]], %c1_i42 : i42
+  %8 = comb.xor %8, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.extract [[TMP]] from 0 : (i42) -> i42
+  %9 = comb.extract %9 from 0 : (i42) -> i42
+  // CHECK: [[TMP:%.+]] = comb.concat [[TMP]] : i42
+  %10 = comb.concat %10 : i42
+  // CHECK: [[TMP:%.+]] = comb.icmp eq [[TMP]], %false : i1
+  %11 = comb.icmp eq %11, %false : i1
+  // CHECK: [[TMP:%.+]] = comb.divu [[TMP]], %c1_i42 : i42
+  %12 = comb.divu %12, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.divs [[TMP]], %c1_i42 : i42
+  %13 = comb.divs %13, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.modu [[TMP]], %c1_i42 : i42
+  %14 = comb.modu %14, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.mods [[TMP]], %c1_i42 : i42
+  %15 = comb.mods %15, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.mux %a, [[TMP]], [[TMP]] : i42
+  %16 = comb.mux %a, %16, %16 : i42
+  // CHECK: [[TMP:%.+]] = comb.mux [[TMP]], %a, %b : i1
+  %17 = comb.mux %17, %a, %b : i1
+  // CHECK: [[TMP:%.+]] = comb.parity [[TMP]] : i1
+  %18 = comb.parity %18 : i1
+  // CHECK: [[TMP:%.+]] = comb.replicate [[TMP]] : (i42) -> i42
+  %19 = comb.replicate %19 : (i42) -> i42
+
+  %z0 = comb.xor %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %12, %13, %14, %15, %16, %19 : i42
+  %z1 = comb.xor %11, %17, %18 : i1
+  hw.output %z0, %z1 : i42, i1
+}
+
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(in %a: i8, in %b: i8, in %c: i1, out o: i4) {
 // CHECK-NEXT: %0 = comb.extract %a from 1 : (i8) -> i4
@@ -1295,8 +1346,8 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
 
   // Avoid a non-terminating case
   // CHECK: [[LOOPMUX:%.+]] = comb.mux %cond, %arg1, %2
-  // CHECK: [[MUXONLOOP:%.+]] = comb.mux %cond2, %arg0, [[LOOPMUX]] : i32
-  // CHECK: [[O12:%.+]] = comb.mux %cond3, %arg0, [[MUXONLOOP]] : i32
+  // CHECK: [[TMP:%.+]] = comb.or %cond3, %cond2 : i1
+  // CHECK: [[O12:%.+]] = comb.mux [[TMP]], %arg0, [[LOOPMUX]] : i32
   %2 = comb.mux %cond, %arg1, %2 : i32
   %3 = comb.mux %cond2, %arg0, %2 : i32
   %o12 = comb.mux %cond3, %arg0, %3 : i32
