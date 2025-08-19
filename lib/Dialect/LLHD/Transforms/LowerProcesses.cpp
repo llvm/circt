@@ -288,6 +288,42 @@ struct LowerProcessesPass
   void runOnOperation() override;
 };
 
+static std::optional<DenseMap<BlockArgument, Value>>
+getBlockArgsToPrune(Block &block) {
+  DenseMap<BlockArgument, Value> result;
+  SmallPtrSet<Value, 4> branchOperands;
+
+  for (auto &arg : block.getArguments()) {
+    for (auto it = block.pred_begin(); it != block.pred_end(); ++it) {
+      Block *predecessor = *it;
+      if (auto branchOp =
+              dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
+        SuccessorOperands successorOperands =
+            branchOp.getSuccessorOperands(it.getSuccessorIndex());
+
+        if (Value operand = successorOperands[arg.getArgNumber()]) {
+          branchOperands.insert(operand);
+        } else {
+          return {};
+        }
+      } else if (auto waitOp = dyn_cast<WaitOp>(predecessor->getTerminator())) {
+        auto destOperands = waitOp.getDestOperands();
+        branchOperands.insert(destOperands[arg.getArgNumber()]);
+      } else {
+        return {};
+      }
+    }
+
+    if (branchOperands.size() == 1) {
+      result.insert(std::make_pair(arg, *branchOperands.begin()));
+    }
+
+    branchOperands.clear();
+  }
+
+  return result;
+}
+
 static bool simplifyBlocksArgs(ProcessOp &processOp) {
   SmallVector<Block *> worklist;
   for (auto &block : processOp.getBody()) {
@@ -308,58 +344,23 @@ static bool simplifyBlocksArgs(ProcessOp &processOp) {
 
   while (!worklist.empty()) {
     auto *block = worklist.pop_back_val();
-
-    DenseMap<BlockArgument, Value> blockArgsToPrune;
-    for (auto &blockArg : block->getArguments()) {
-      SmallPtrSet<Value, 4> branchOperands;
-      for (auto it = block->pred_begin(); it != block->pred_end(); ++it) {
-        Block *predecessor = *it;
-
-        if (auto branchOp =
-                dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
-          SuccessorOperands successorOperands =
-              branchOp.getSuccessorOperands(it.getSuccessorIndex());
-
-          if (Value operand = successorOperands[blockArg.getArgNumber()])
-            branchOperands.insert(operand);
-        } else if (auto waitOp =
-                       dyn_cast<WaitOp>(predecessor->getTerminator())) {
-          auto destOperands = waitOp.getDestOperands();
-          branchOperands.insert(destOperands[blockArg.getArgNumber()]);
-        } else {
-          llvm_unreachable("TODO");
-        }
-      }
-
-      if (branchOperands.size() == 1) {
-        blockArgsToPrune.insert(
-            std::make_pair(blockArg, *branchOperands.begin()));
-      }
-    }
-
-    if (blockArgsToPrune.empty())
+    auto blockArgsToPrune = getBlockArgsToPrune(*block);
+    if (!blockArgsToPrune.has_value() || blockArgsToPrune->empty())
       continue;
 
-    SmallVector<unsigned> argNums;
-    llvm::BitVector argsToRemove(block->getNumArguments());
-    for (auto &[dstOperand, replaceValue] : blockArgsToPrune) {
-      LLVM_DEBUG(llvm::dbgs() << "replace" << dstOperand << " with "
-                              << replaceValue << "\n");
+    llvm::BitVector argsToErase(block->getNumArguments());
+    for (auto &[blockArg, replaceValue] : *blockArgsToPrune) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "replace" << blockArg << " with " << replaceValue << "\n");
 
-      argNums.push_back(dstOperand.getArgNumber());
-      argsToRemove.set(dstOperand.getArgNumber());
+      argsToErase.set(blockArg.getArgNumber());
     }
 
-    // prune all branch ops operands
-    // replace all block argument uses
-    // prune block argument list
-    llvm::sort(argNums);
+    auto argNums = llvm::to_vector(argsToErase.set_bits());
     for (auto it = block->pred_begin(); it != block->pred_end(); ++it) {
       Block *predecessor = *it;
-
       if (auto branchOp =
               dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
-
         SuccessorOperands successorOperands =
             branchOp.getSuccessorOperands(it.getSuccessorIndex());
 
@@ -374,15 +375,15 @@ static bool simplifyBlocksArgs(ProcessOp &processOp) {
           destOperands.erase(argNum);
         }
       } else {
-        llvm_unreachable("TODO");
+        llvm_unreachable("Unexpected predecessor terminator");
       }
     }
 
-    for (auto &[dstOperand, replaceValue] : blockArgsToPrune) {
-      dstOperand.replaceAllUsesWith(replaceValue);
+    for (auto &[blockArg, replaceValue] : *blockArgsToPrune) {
+      blockArg.replaceAllUsesWith(replaceValue);
     }
 
-    block->eraseArguments(argsToRemove);
+    block->eraseArguments(argsToErase);
 
     for (auto *successor : block->getSuccessors())
       worklist.push_back(successor);
