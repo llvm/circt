@@ -83,7 +83,10 @@ hw.module @area_flow(in %a : i1, in %b : i1, in %c: i1, out result : i1) attribu
 }
 
 // This is a test that needs area-flow to get an optimal result.
+// Area-flow is an optimization technique that considers the area impact
+// of a gate choice on its fanout, not just the gate itself.
 // It produces sub-optimal mappings since currently area-flow is not implemented.
+// See "Heuristics for Area Minimization in LUT-Based FPGA Technology Mapping" for more details. 
 // CHECK-LABEL: @area_flow_test
 hw.module @area_flow_test(in %a : i1, in %b : i1, in %c: i1, out result : i1) {
     // FIXME: If area-flow is implemented, this should be mapped to @area_flow with area strategy.

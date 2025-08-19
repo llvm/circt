@@ -16,7 +16,7 @@ hw.module @do_nothing(in %a : i1, out result : i1) attributes {hw.techlib.info =
     hw.output %a : i1
 }
 
-// No tech library found so pattern matching is failed.
+// Test for too many operands in AIG operation
 hw.module @test(in %a : i1, in %b : i1, out result : i1) {
     // expected-error-re@+1 {{Cut enumeration supports at most 2 operands, found: 3}}
     %0 = aig.and_inv %a, %b, %a : i1
@@ -46,9 +46,10 @@ hw.module @multibit(in %a : i2, in %b: i1, out result : i1) attributes {hw.techl
 // -----
 
 
-// expected-error@+1 {{All input ports must be single bit}}
-hw.module @multibit(in %a : i1, in %b: i2, out result : i2) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [2]]}} {
-  hw.output %b: i2
+// expected-error@+1 {{All output ports must be single bit}}
+hw.module @multibit(in %a : i1, in %b: i1, out result : i2) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [2]]}} {
+  %0 = comb.concat %a, %b : i1, i1
+  hw.output %0: i2
 }
 
 // -----

@@ -464,7 +464,7 @@ bool CutSet::isMatched() const {
   return matchedPattern.has_value() && matchedPattern->getPattern();
 }
 
-std::optional<MatchedPattern> CutSet::getMatchedPattern() const {
+std::optional<MatchedPattern> CutSet::getBestMatchedPattern() const {
   return matchedPattern;
 }
 
@@ -580,17 +580,15 @@ CutRewritePatternSet::CutRewritePatternSet(
   // Initialize the NPN to pattern map
   for (auto &pattern : this->patterns) {
     SmallVector<NPNClass, 2> npnClasses;
-    if (pattern->useTruthTableMatcher(npnClasses)) {
-      for (auto npnClass : npnClasses) {
-        // Create a NPN class from the truth table
-        npnToPatternMap[{npnClass.truthTable.table,
-                         npnClass.truthTable.numInputs}]
-            .push_back(std::make_pair(std::move(npnClass), pattern.get()));
-      }
-    } else {
-      // If the pattern does not use truth table matcher, add it to the
-      // non-truth table patterns
-      nonTruthTablePatterns.push_back(pattern.get());
+    auto result = pattern->useTruthTableMatcher(npnClasses);
+    (void)result;
+    assert(result && "Currently all patterns must use truth table matcher");
+
+    for (auto npnClass : npnClasses) {
+      // Create a NPN class from the truth table
+      npnToPatternMap[{npnClass.truthTable.table,
+                       npnClass.truthTable.numInputs}]
+          .push_back(std::make_pair(std::move(npnClass), pattern.get()));
     }
   }
 }
@@ -801,7 +799,7 @@ LogicalResult CutRewriter::enumerateCuts(Operation *topOp) {
 }
 
 ArrayRef<std::pair<NPNClass, const CutRewritePattern *>>
-CutRewriter::getMatchingPatternFromTruthTable(const Cut &cut) const {
+CutRewriter::getMatchingPatternsFromTruthTable(const Cut &cut) const {
   if (patterns.npnToPatternMap.empty())
     return {};
 
@@ -836,7 +834,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(Cut &cut) {
     auto *cutSet = cutEnumerator.getCutSet(input);
     assert(cutSet && "Input must have a valid cut set");
 
-    auto matchedPattern = cutSet->getMatchedPattern();
+    auto matchedPattern = cutSet->getBestMatchedPattern();
     // If there is no matching pattern, it means it's not possilbe to use the
     // input in the cut rewriting. So abort early.
     if (!matchedPattern)
@@ -900,7 +898,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(Cut &cut) {
         }
       };
 
-  for (auto &[patternNPN, pattern] : getMatchingPatternFromTruthTable(cut)) {
+  for (auto &[patternNPN, pattern] : getMatchingPatternsFromTruthTable(cut)) {
     assert(pattern->getNumInputs() == cut.getInputSize() &&
            "Pattern input size must match cut input size");
     if (!pattern->match(cut))
@@ -944,7 +942,7 @@ LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {
     }
 
     LLVM_DEBUG(llvm::dbgs() << "Cut set for value: " << value << "\n");
-    auto matchedPattern = cutSet->getMatchedPattern();
+    auto matchedPattern = cutSet->getBestMatchedPattern();
     if (!matchedPattern) {
       if (options.allowNoMatch)
         continue; // No matching pattern found, skip this value

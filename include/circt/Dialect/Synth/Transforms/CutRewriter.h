@@ -31,7 +31,7 @@ namespace circt {
 namespace synth {
 // Type for representing delays in the circuit. It's user's responsibility to
 // use consistent units, i.e., all delays should be in the same unit (usually
-// femto, but not limited to it).
+// femtoseconds, but not limited to it).
 using DelayType = int64_t;
 
 /// Maximum number of inputs supported for truth table generation.
@@ -140,7 +140,8 @@ class MatchedPattern {
 private:
   const CutRewritePattern *pattern = nullptr; ///< The matched library pattern
   Cut *cut = nullptr;                         ///< The cut that was matched
-  SmallVector<DelayType, 2> arrivalTimes; ///< Arrival time through this pattern
+  SmallVector<DelayType, 2>
+      arrivalTimes; ///< Arrival times of outputs from this pattern
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -187,7 +188,7 @@ private:
 
 public:
   /// Get the best matched pattern for this cut set.
-  std::optional<MatchedPattern> getMatchedPattern() const;
+  std::optional<MatchedPattern> getBestMatchedPattern() const;
 
   /// Check if this cut set has a valid matched pattern.
   bool isMatched() const;
@@ -340,7 +341,10 @@ struct CutRewritePattern {
   ///
   /// If this method returns true, the pattern matcher will use truth table
   /// comparison for efficient pre-filtering. Only cuts with matching truth
-  /// tables will be passed to the match() method.
+  /// tables will be passed to the match() method. If it returns false, the
+  /// pattern will be checked against all cuts regardless of their truth tables.
+  /// This is useful for patterns that match regardless of their truth tables,
+  /// such as LUT-based patterns.
   virtual bool
   useTruthTableMatcher(SmallVectorImpl<NPNClass> &matchingNPNClasses) const;
 
@@ -465,11 +469,13 @@ public:
 
 private:
   /// Enumerate cuts for all nodes in the given module.
+  /// Note: This preserves module boundaries and does not perform
+  /// rewriting across the hierarchy.
   LogicalResult enumerateCuts(Operation *topOp);
 
   /// Find patterns that match a cut's truth table.
   ArrayRef<std::pair<NPNClass, const CutRewritePattern *>>
-  getMatchingPatternFromTruthTable(const Cut &cut) const;
+  getMatchingPatternsFromTruthTable(const Cut &cut) const;
 
   /// Match a cut against available patterns and compute arrival time.
   std::optional<MatchedPattern> patternMatchCut(Cut &cut);
