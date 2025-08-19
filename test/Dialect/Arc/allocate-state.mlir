@@ -79,3 +79,21 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   }
   // CHECK-NEXT: }
 }
+
+// CHECK-LABEL: arc.model @StructPadding
+// CHECK-NEXT: !arc.storage<4>
+arc.model @StructPadding io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // This !hw.struct is only 11 bits wide, but mapped to an !llvm.struct, each
+  // field gets byte-aligned.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.struct<tag: i5, sign_ext: i1, offset: i3, size: i2>>
+}
+
+// CHECK-LABEL: arc.model @ArrayPadding
+// CHECK-NEXT: !arc.storage<4>
+arc.model @ArrayPadding io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // This !hw.array is only 18 bits wide, but mapped to an !llvm.array, each
+  // element gets aligned to the next power-of-two.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.array<2xi9>>
+}
