@@ -89,14 +89,64 @@ Value createInject(OpBuilder &builder, Location loc, Value value,
 /// Construct a full adder for three 1-bit inputs.
 std::pair<Value, Value> fullAdder(OpBuilder &builder, Location loc, Value a,
                                   Value b, Value c);
+struct CompressorBit {
+  Value val;
+  size_t delay;
+};
+
+std::pair<CompressorBit, CompressorBit>
+fullAdderWithDelay(OpBuilder &builder, Location loc, CompressorBit a,
+                   CompressorBit b, CompressorBit c);
 
 /// Perform Wallace tree reduction on partial products.
 /// See https://en.wikipedia.org/wiki/Wallace_tree
-/// \param targetAddends The number of addends to reduce to (2 for carry-save).
-/// \param inputAddends The rows of bits to be summed.
+/// \param targetAddends The number of addends to reduce to (2 for
+/// carry-save). \param inputAddends The rows of bits to be summed.
 SmallVector<Value> wallaceReduction(OpBuilder &builder, Location loc,
                                     size_t width, size_t targetAddends,
                                     SmallVector<SmallVector<Value>> &addends);
+
+class CompressorTree {
+public:
+  // Constructor takes addends as input and converts to column representation
+  CompressorTree(const SmallVector<SmallVector<Value>> &addends, Location loc);
+
+  // Get the number of columns (bit positions)
+  size_t getWidth() const { return columns.size(); }
+
+  // Get the maximum height of the addend array
+  size_t getMaxHeight() const;
+
+  // Apply a compression step (reduce columns with >2 bits using compressors)
+  SmallVector<Value> compressToHeight(OpBuilder &builder, size_t targetHeight);
+
+  // Debug: print the tree structure
+  void dump() const;
+
+private:
+  // Original addends representation as bitvectors (kept for reference)
+  SmallVector<SmallVector<Value>> originalAddends;
+
+  // Column-wise bit storage - columns[i] contains all bits at bit position i
+  SmallVector<SmallVector<CompressorBit>> columns;
+
+  // Bitwidth of compressor tree
+  size_t width;
+
+  // Number of reduction stages
+  size_t numStages;
+
+  // Number of full adders used
+  size_t numFullAdders;
+
+  // Location of compressor to replace
+  Location loc;
+
+  SmallVector<Value> columnsToAddends(OpBuilder &builder, size_t targetHeight);
+
+  // Helper method to extract bit at position from a value
+  Value extractBit(Value val, unsigned bitPos) const;
+};
 
 } // namespace comb
 } // namespace circt
