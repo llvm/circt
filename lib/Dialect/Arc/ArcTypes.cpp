@@ -21,18 +21,66 @@ using namespace mlir;
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Arc/ArcTypes.cpp.inc"
 
-unsigned StateType::getBitWidth() {
-  if (llvm::isa<seq::ClockType>(getType()))
+/// Compute the bit width a type will have when allocated as part of the
+/// simulator's storage. This includes any padding and alignment that may be
+/// necessary once the type has been mapped to LLVM. The idea is for this
+/// function to be conservative, such that we provide sufficient storage bytes
+/// for any type.
+static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
+  if (isa<seq::ClockType>(type))
     return 1;
-  return hw::getBitWidth(getType());
+
+  if (auto intType = dyn_cast<IntegerType>(type))
+    return intType.getWidth();
+
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+    // Compute element width.
+    auto maybeWidth = computeLLVMBitWidth(arrayType.getElementType());
+    if (!maybeWidth)
+      return {};
+    // Each element must be at least one byte.
+    auto width = std::max<uint64_t>(*maybeWidth, 8);
+    // Align elements to their own size, up to 16 bytes.
+    auto alignment = llvm::bit_ceil(std::min<uint64_t>(width, 16 * 8));
+    auto alignedWidth = llvm::alignToPowerOf2(width, alignment);
+    // Multiply by the number of elements in the array.
+    return arrayType.getNumElements() * alignedWidth;
+  }
+
+  if (auto structType = dyn_cast<hw::StructType>(type)) {
+    uint64_t structWidth = 0;
+    uint64_t structAlignment = 8;
+    for (auto element : structType.getElements()) {
+      // Compute element width.
+      auto maybeWidth = computeLLVMBitWidth(element.type);
+      if (!maybeWidth)
+        return {};
+      // Each element must be at least one byte.
+      auto width = std::max<uint64_t>(*maybeWidth, 8);
+      // Align elements to their own size, up to 16 bytes.
+      auto alignment = llvm::bit_ceil(std::min<uint64_t>(width, 16 * 8));
+      auto alignedWidth = llvm::alignToPowerOf2(width, alignment);
+      // Pad the struct size to align the element to its alignment need, and add
+      // the element.
+      structWidth = llvm::alignToPowerOf2(structWidth, alignment);
+      structWidth += alignedWidth;
+      // Keep track of the struct's alignment need.
+      structAlignment = std::max<uint64_t>(alignment, structAlignment);
+    }
+    // Pad the struct size to align its end with the alignment.
+    return llvm::alignToPowerOf2(structWidth, structAlignment);
+  }
+
+  // We don't know anything about any other types.
+  return {};
 }
+
+unsigned StateType::getBitWidth() { return *computeLLVMBitWidth(getType()); }
 
 LogicalResult
 StateType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                   Type innerType) {
-  if (llvm::isa<seq::ClockType>(innerType))
-    return success();
-  if (hw::getBitWidth(innerType) < 0)
+  if (!computeLLVMBitWidth(innerType))
     return emitError() << "state type must have a known bit width; got "
                        << innerType;
   return success();
