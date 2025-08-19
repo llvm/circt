@@ -19,6 +19,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/KnownBits.h"
 #include <algorithm>
 
 #define DEBUG_TYPE "comb-ops"
@@ -336,6 +337,9 @@ CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
     for (size_t i = 0; i < width; ++i) {
       // TODO - incorporate non-zero arrival delays
       CompressorBit bit = {row[i], 0};
+      auto knownBits = computeKnownBits(bit.val);
+      if (knownBits.isZero())
+        continue;
       if (columns.size() < width) {
         SmallVector<CompressorBit> col{bit};
         columns.push_back(col);

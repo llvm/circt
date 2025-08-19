@@ -258,21 +258,33 @@ void ConvertDatapathToCombPass::runOnOperation() {
   ConversionTarget target(getContext());
 
   target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-  target.addIllegalDialect<DatapathDialect>();
+  // target.addIllegalDialect<DatapathDialect>();
+  // Will lower compress operators last
+  target.addLegalOp<datapath::CompressOp>();
+  target.addIllegalOp<datapath::PartialProductOp>();
 
   RewritePatternSet patterns(&getContext());
 
   patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
                                                    forceBooth);
 
-  if (lowerCompressToAdd)
-    // Lower compressors to simple add operations for downstream optimisations
-    patterns.add<DatapathCompressOpAddConversion>(patterns.getContext());
-  else
-    // Lower compressors to a complete gate-level implementation
-    patterns.add<DatapathCompressOpConversion>(patterns.getContext());
-
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
+    return signalPassFailure();
+
+  // Lower Compress operators last to expose known bits
+  RewritePatternSet compressorPatterns(&getContext());
+  target.addIllegalOp<datapath::CompressOp>();
+  if (lowerCompressToAdd)
+    // Lower compressors to simple add operations for downstream optimisations
+    compressorPatterns.add<DatapathCompressOpAddConversion>(
+        compressorPatterns.getContext());
+  else
+    // Lower compressors to a complete gate-level implementation
+    compressorPatterns.add<DatapathCompressOpConversion>(
+        compressorPatterns.getContext());
+
+  if (failed(mlir::applyPartialConversion(getOperation(), target,
+                                          std::move(compressorPatterns))))
     return signalPassFailure();
 }
