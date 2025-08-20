@@ -9,6 +9,7 @@
 add_circt_dialect_library(CIRCTSynthTransforms
   CutRewriter.cpp
   SynthesisPipeline.cpp
+  TechMapper.cpp
   TestPriorityCuts.cpp
 
   ADDITIONAL_HEADER_DIRS

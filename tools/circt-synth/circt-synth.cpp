@@ -27,6 +27,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
@@ -92,10 +93,11 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
-enum Until { UntilAIGLowering, UntilEnd };
+enum Until { UntilAIGLowering, UntilMapping, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
     clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
+    clEnumValN(UntilMapping, "mapping", "Run technology/lut mapping"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 
 static llvm::cl::opt<Until> runUntilBefore(
@@ -153,6 +155,18 @@ static cl::opt<bool>
                     cl::desc("Disable datapath optimization passes"),
                     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
+                                      cl::desc("Maximum cut size per root"),
+                                      cl::init(6), cl::cat(mainCategory));
+
+static cl::opt<synth::OptimizationStrategy> synthesisStrategy(
+    "synthesis-strategy", cl::desc("Synthesis strategy to use"),
+    cl::values(clEnumValN(synth::OptimizationStrategyArea, "area",
+                          "Optimize for area"),
+               clEnumValN(synth::OptimizationStrategyTiming, "timing",
+                          "Optimize for timing")),
+    cl::init(synth::OptimizationStrategyTiming), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -205,6 +219,13 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
   };
 
   nestOrAddToHierarchicalRunner(pm, pipeline, topName);
+
+  if (!untilReached(UntilMapping)) {
+    synth::TechMapperOptions options;
+    options.maxCutsPerRoot = maxCutSizePerRoot;
+    options.strategy = synthesisStrategy;
+    pm.addPass(synth::createTechMapper(options));
+  }
 
   // Run analysis if requested.
   if (!outputLongestPath.empty()) {
