@@ -731,7 +731,10 @@ void LowerArcToLLVMPass::runOnOperation() {
       converter, &getContext(), modelMap);
 
   // Apply the conversion.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns),
+                                 config)))
     signalPassFailure();
 }
 

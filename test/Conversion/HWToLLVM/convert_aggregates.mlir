@@ -29,10 +29,13 @@ func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struc
 // CHECK-LABEL: @convertArray
 func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: i32, %arg4: i32, %arg5: i32) {
   // CHECK-NEXT: %[[CAST0:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[CAST1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[CAST2:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[CAST3:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
 
   // CHECK-NEXT: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA:.*]] = llvm.alloca %[[ONE]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA]] : !llvm.array<2 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[CAST3]], %[[ALLOCA]] : !llvm.array<2 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[ZEXT:.*]] = llvm.zext %arg0 : i1 to i2
   // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[ALLOCA]][0, %[[ZEXT]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.load %[[GEP]] : !llvm.ptr -> i32
@@ -40,7 +43,7 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
 
   // CHECK-NEXT: %[[ONE4:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA1:.*]] = llvm.alloca %[[ONE4]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA1]] : !llvm.array<2 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[CAST2]], %[[ALLOCA1]] : !llvm.array<2 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[ZEXT1:.*]] = llvm.zext %arg0 : i1 to i2
   // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ALLOCA1]][0, %[[ZEXT1]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<1 x i32>
   // CHECK-NEXT: llvm.load %[[GEP1]] : !llvm.ptr -> !llvm.array<1 x i32>
@@ -51,9 +54,9 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
   // CHECK-NEXT: %[[I1:.*]] = llvm.insertvalue %[[E1]], %[[UNDEF]][0] : !llvm.array<4 x i32>
   // CHECK-NEXT: %[[E2:.*]] = llvm.extractvalue %[[CAST0]][1] : !llvm.array<2 x i32>
   // CHECK-NEXT: %[[I2:.*]] = llvm.insertvalue %[[E2]], %[[I1]][1] : !llvm.array<4 x i32>
-  // CHECK-NEXT: %[[E3:.*]] = llvm.extractvalue %[[CAST0]][0] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[E3:.*]] = llvm.extractvalue %[[CAST1]][0] : !llvm.array<2 x i32>
   // CHECK-NEXT: %[[I3:.*]] = llvm.insertvalue %[[E3]], %[[I2]][2] : !llvm.array<4 x i32>
-  // CHECK: %[[E4:.*]] = llvm.extractvalue %[[CAST0]][1] : !llvm.array<2 x i32>
+  // CHECK: %[[E4:.*]] = llvm.extractvalue %[[CAST1]][1] : !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.insertvalue %[[E4]], %[[I3]][3] : !llvm.array<4 x i32>
   %2 = hw.array_concat %arg1, %arg1 : !hw.array<2xi32>, !hw.array<2xi32>
 
@@ -195,22 +198,24 @@ func.func @convertConstStruct() {
   // CHECK-NEXT: [[V0:%.+]] = llvm.mlir.addressof @[[GLOB4]] : !llvm.ptr
   // CHECK-NEXT: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr -> !llvm.struct<(i2, i32)>
   %0 = hw.aggregate_constant [0 : i32, 1 : i2] : !hw.struct<a: i32, b: i2>
-  // CHECK-NEXT: {{%.+}} = llvm.mlir.constant(0 : i32) : i32
+  // CHECK-NEXT: {{%.+}} = llvm.extractvalue [[V1]][1] : !llvm.struct<(i2, i32)>
   %1 = hw.struct_extract %0["a"] : !hw.struct<a: i32, b: i2>
   return
 }
 
 // CHECK-LABEL: @convertStruct
 func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>, %arg2: !hw.struct<>, %arg3 : i1, %arg4 : i2) {
-  // CHECK-NEXT: [[ARG1:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
-  // CHECK-NEXT: llvm.extractvalue [[ARG1]][1] : !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: [[ARG1_0:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: [[ARG1_1:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: [[ARG1_2:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: llvm.extractvalue [[ARG1_2]][1] : !llvm.struct<(i8, i32)>
   %0 = hw.struct_extract %arg1["foo"] : !hw.struct<foo: i32, bar: i8>
 
-  // CHECK: llvm.insertvalue %arg0, [[ARG1]][1] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.insertvalue %arg0, [[ARG1_1]][1] : !llvm.struct<(i8, i32)>
   %1 = hw.struct_inject %arg1["foo"], %arg0 : !hw.struct<foo: i32, bar: i8>
 
-  // CHECK: llvm.extractvalue [[ARG1]][1] : !llvm.struct<(i8, i32)>
-  // CHECK: llvm.extractvalue [[ARG1]][0] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.extractvalue [[ARG1_0]][1] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.extractvalue [[ARG1_0]][0] : !llvm.struct<(i8, i32)>
   %2:2 = hw.struct_explode %arg1 : !hw.struct<foo: i32, bar: i8>
 
   hw.struct_explode %arg2 : !hw.struct<>

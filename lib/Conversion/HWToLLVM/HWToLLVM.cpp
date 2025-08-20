@@ -753,8 +753,10 @@ void HWToLLVMLoweringPass::runOnOperation() {
                                      constAggregateGlobalsMap);
 
   // Apply the partial conversion.
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns),
+                                    config)))
     signalPassFailure();
 }
 

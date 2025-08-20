@@ -335,8 +335,10 @@ void ConvertCombToArithPass::runOnOperation() {
   // TODO: a pattern for comb.parity
   populateCombToArithConversionPatterns(converter, patterns);
 
+  ConversionConfig config;
+  config.allowPatternRollback = false;
   if (failed(mlir::applyPartialConversion(getOperation(), target,
-                                          std::move(patterns))))
+                                          std::move(patterns), config)))
     signalPassFailure();
 }
 
