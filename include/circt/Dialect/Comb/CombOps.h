@@ -98,14 +98,10 @@ std::pair<CompressorBit, CompressorBit>
 fullAdderWithDelay(OpBuilder &builder, Location loc, CompressorBit a,
                    CompressorBit b, CompressorBit c);
 
-/// Perform Wallace tree reduction on partial products.
-/// See https://en.wikipedia.org/wiki/Wallace_tree
-/// \param targetAddends The number of addends to reduce to (2 for
-/// carry-save). \param inputAddends The rows of bits to be summed.
-SmallVector<Value> wallaceReduction(OpBuilder &builder, Location loc,
-                                    size_t width, size_t targetAddends,
-                                    SmallVector<SmallVector<Value>> &addends);
-
+std::pair<CompressorBit, CompressorBit> halfAdderWithDelay(OpBuilder &builder,
+                                                           Location loc,
+                                                           CompressorBit a,
+                                                           CompressorBit b);
 class CompressorTree {
 public:
   // Constructor takes addends as input and converts to column representation
@@ -116,6 +112,12 @@ public:
 
   // Get the maximum height of the addend array
   size_t getMaxHeight() const;
+
+  // Get the maximum height of the addend array
+  void setUsingTiming(bool useTiming) { this->usingTiming = useTiming; }
+
+  // Get the target height of next stage
+  size_t getNextStageTargetHeight() const;
 
   // Apply a compression step (reduce columns with >2 bits using compressors)
   SmallVector<Value> compressToHeight(OpBuilder &builder, size_t targetHeight);
@@ -130,6 +132,11 @@ private:
   // Column-wise bit storage - columns[i] contains all bits at bit position i
   SmallVector<SmallVector<CompressorBit>> columns;
 
+  // Whether to use a timing driven compression algorithm
+  // If true, use a timing driven compression algorithm (Dadda's algorithm).
+  // If false, use a simple compression algorithm (e.g., Wallace).
+  bool usingTiming;
+
   // Bitwidth of compressor tree
   size_t width;
 
@@ -143,6 +150,15 @@ private:
   Location loc;
 
   SmallVector<Value> columnsToAddends(OpBuilder &builder, size_t targetHeight);
+
+  // Perform timing driven compression using Dadda's algorithm
+  SmallVector<Value> compressUsingTiming(OpBuilder &builder,
+                                         size_t targetHeight);
+
+  // Perform Wallace tree reduction on partial products.
+  // See https://en.wikipedia.org/wiki/Wallace_tree
+  SmallVector<Value> compressWithoutTiming(OpBuilder &builder,
+                                           size_t targetHeight);
 
   // Helper method to extract bit at position from a value
   Value extractBit(Value val, unsigned bitPos) const;

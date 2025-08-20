@@ -62,12 +62,14 @@ struct DatapathCompressOpAddConversion : OpConversionPattern<CompressOp> {
 // Replace compressor by a wallace tree of full-adders
 struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
   using OpConversionPattern<CompressOp>::OpConversionPattern;
+  bool useTiming;
+  DatapathCompressOpConversion(MLIRContext *context, bool useTiming = true)
+      : OpConversionPattern<CompressOp>(context), useTiming(useTiming) {}
   LogicalResult
   matchAndRewrite(CompressOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
-    unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
 
     SmallVector<SmallVector<Value>> addends;
     for (auto input : inputs) {
@@ -75,13 +77,15 @@ struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
           extractBits(rewriter, input)); // Extract bits from each input
     }
 
-    // Wallace tree reduction
+    // Compressor tree reduction
     // TODO - implement a more efficient compression algorithm to compete with
     // yosys's `alumacc` lowering - a coarse grained timing model would help to
     // sort the inputs according to arrival time.
     auto targetAddends = op.getNumResults();
-    rewriter.replaceOp(op, comb::wallaceReduction(rewriter, loc, width,
-                                                  targetAddends, addends));
+    comb::CompressorTree comp(addends, loc);
+    // For benchmarking purposes, can disable timing driven compression
+    comp.setUsingTiming(useTiming);
+    rewriter.replaceOp(op, comp.compressToHeight(rewriter, targetAddends));
     return success();
   }
 };
@@ -282,7 +286,7 @@ void ConvertDatapathToCombPass::runOnOperation() {
   else
     // Lower compressors to a complete gate-level implementation
     compressorPatterns.add<DatapathCompressOpConversion>(
-        compressorPatterns.getContext());
+        compressorPatterns.getContext(), timingDrivenCompressor);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(compressorPatterns))))
