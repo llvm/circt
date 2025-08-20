@@ -108,9 +108,12 @@ py::object getPyType(std::optional<const Type *> t) {
 // NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<Type>(m, "Type")
+      .def(py::init<const Type::ID &>(), py::arg("id"))
       .def_property_readonly("id", &Type::getID)
       .def("__repr__", [](Type &t) { return "<" + t.getID() + ">"; });
   py::class_<ChannelType, Type>(m, "ChannelType")
+      .def(py::init<const Type::ID &, const Type *>(), py::arg("id"),
+           py::arg("inner"))
       .def_property_readonly("inner", &ChannelType::getInner,
                              py::return_value_policy::reference);
   py::enum_<BundleType::Direction>(m, "Direction")
@@ -118,20 +121,38 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .value("From", BundleType::Direction::From)
       .export_values();
   py::class_<BundleType, Type>(m, "BundleType")
+      .def(py::init<const Type::ID &, const BundleType::ChannelVector &>(),
+           py::arg("id"), py::arg("channels"))
       .def_property_readonly("channels", &BundleType::getChannels,
                              py::return_value_policy::reference);
-  py::class_<VoidType, Type>(m, "VoidType");
-  py::class_<AnyType, Type>(m, "AnyType");
+  py::class_<VoidType, Type>(m, "VoidType")
+      .def(py::init<const Type::ID &>(), py::arg("id"));
+  py::class_<AnyType, Type>(m, "AnyType")
+      .def(py::init<const Type::ID &>(), py::arg("id"));
   py::class_<BitVectorType, Type>(m, "BitVectorType")
+      .def(py::init<const Type::ID &, uint64_t>(), py::arg("id"),
+           py::arg("width"))
       .def_property_readonly("width", &BitVectorType::getWidth);
-  py::class_<BitsType, BitVectorType>(m, "BitsType");
-  py::class_<IntegerType, BitVectorType>(m, "IntegerType");
-  py::class_<SIntType, IntegerType>(m, "SIntType");
-  py::class_<UIntType, IntegerType>(m, "UIntType");
+  py::class_<BitsType, BitVectorType>(m, "BitsType")
+      .def(py::init<const Type::ID &, uint64_t>(), py::arg("id"),
+           py::arg("width"));
+  py::class_<IntegerType, BitVectorType>(m, "IntegerType")
+      .def(py::init<const Type::ID &, uint64_t>(), py::arg("id"),
+           py::arg("width"));
+  py::class_<SIntType, IntegerType>(m, "SIntType")
+      .def(py::init<const Type::ID &, uint64_t>(), py::arg("id"),
+           py::arg("width"));
+  py::class_<UIntType, IntegerType>(m, "UIntType")
+      .def(py::init<const Type::ID &, uint64_t>(), py::arg("id"),
+           py::arg("width"));
   py::class_<StructType, Type>(m, "StructType")
+      .def(py::init<const Type::ID &, const StructType::FieldVector &>(),
+           py::arg("id"), py::arg("fields"))
       .def_property_readonly("fields", &StructType::getFields,
                              py::return_value_policy::reference);
   py::class_<ArrayType, Type>(m, "ArrayType")
+      .def(py::init<const Type::ID &, const Type *, uint64_t>(), py::arg("id"),
+           py::arg("element_type"), py::arg("size"))
       .def_property_readonly("element", &ArrayType::getElementType,
                              py::return_value_policy::reference)
       .def_property_readonly("size", &ArrayType::getSize);
