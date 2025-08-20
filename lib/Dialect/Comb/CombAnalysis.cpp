@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
 
 using namespace circt;
@@ -40,6 +41,26 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
       result.One =
           (result.One.zext(newWidth) << width) | otherBits.One.zext(newWidth);
     }
+    return result;
+  }
+
+  // `extract(x from y)` has whatever is known about the operands concat'd.
+  if (auto extractOp = dyn_cast<ExtractOp>(op)) {
+    unsigned lowBit = extractOp.getLowBit();
+    unsigned width = extractOp.getType().getIntOrFloatBitWidth();
+    // Compute known bits of the input
+    KnownBits inputBits = computeKnownBits(extractOp.getInput(), depth + 1);
+    // Shift down to start at the extract position
+    APInt inputZero = inputBits.Zero.lshr(lowBit);
+    APInt inputOne = inputBits.One.lshr(lowBit);
+
+    // Truncate to the width of the extract result
+    APInt knownZero = inputZero.trunc(width);
+    APInt knownOne = inputOne.trunc(width);
+
+    KnownBits result(width);
+    result.Zero = knownZero;
+    result.One = knownOne;
     return result;
   }
 
@@ -76,6 +97,14 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     auto lhs = computeKnownBits(muxOp.getTrueValue(), depth + 1);
     auto rhs = computeKnownBits(muxOp.getFalseValue(), depth + 1);
     return lhs.intersectWith(rhs);
+  }
+
+  // `shl(x, y)` is the intersection of the known bits of `x` and `y`.
+  if (auto shlOp = dyn_cast<ShlOp>(op)) {
+    auto lhs = computeKnownBits(shlOp.getOperand(0), depth + 1);
+    auto rhs = computeKnownBits(shlOp.getOperand(1), depth + 1);
+    auto res = KnownBits::shl(lhs, rhs);
+    return res;
   }
 
   return KnownBits(v.getType().getIntOrFloatBitWidth());
