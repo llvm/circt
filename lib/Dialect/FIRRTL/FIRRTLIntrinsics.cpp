@@ -924,8 +924,10 @@ public:
         StringAttr::get(gi.op.getContext(), augmentedGroundTypeClass);
     auto augBundleAttr =
         StringAttr::get(gi.op.getContext(), augmentedBundleTypeClass);
+    (void)augBundleAttr;
     auto augVectorAttr =
         StringAttr::get(gi.op.getContext(), augmentedVectorTypeClass);
+    (void)augVectorAttr;
     while (!worklist.empty()) {
       auto dict = worklist.pop_back_val();
       auto clazz = dict.getAs<StringAttr>("class");

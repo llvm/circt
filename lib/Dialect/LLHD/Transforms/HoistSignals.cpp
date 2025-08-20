@@ -590,6 +590,7 @@ void DriveHoister::hoistDrives() {
                       : Value{};
     auto newDrive =
         DrvOp::create(builder, slot.getLoc(), slot, value, delay, enable);
+    (void)newDrive;
     LLVM_DEBUG(llvm::dbgs() << "- Add " << newDrive << "\n");
 
     // Remove the old drives inside of the process.

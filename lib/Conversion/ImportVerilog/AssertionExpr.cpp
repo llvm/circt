@@ -116,6 +116,7 @@ struct AssertionExprVisitor {
         return {};
 
       Type valueType = sequenceValue.getType();
+      (void)valueType;
       assert(valueType.isInteger(1) || mlir::isa<ltl::SequenceType>(valueType));
 
       auto [delayMin, delayRange] =

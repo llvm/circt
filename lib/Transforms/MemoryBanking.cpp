@@ -116,6 +116,7 @@ void verifyBankingConfigurations(unsigned bankingFactor,
                                  unsigned bankingDimension,
                                  MemRefType originalType) {
   ArrayRef<int64_t> originalShape = originalType.getShape();
+  (void)originalShape;
   assert(!originalShape.empty() && "memref shape should not be empty");
   assert(bankingDimension < originalType.getRank() &&
          "dimension must be within the memref rank");
@@ -760,6 +761,7 @@ void verifyBankingAttributesSize(Attribute bankingFactorsAttr,
              "Banking factors/dimensions must be paired together");
     } else {
       auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      (void)dimsIntAttr;
       assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
                             "array of integers");
       assert(factorsArrayAttr.size() == 1 &&
@@ -767,6 +769,7 @@ void verifyBankingAttributesSize(Attribute bankingFactorsAttr,
     }
   } else {
     auto factorsIntAttr = dyn_cast<IntegerAttr>(bankingFactorsAttr);
+    (void)factorsIntAttr;
     assert(factorsIntAttr &&
            "banking.factors can either be an integer or an array of integers");
     if (auto dimsArrayAttr = dyn_cast<ArrayAttr>(bankingDimensionsAttr)) {
@@ -774,6 +777,7 @@ void verifyBankingAttributesSize(Attribute bankingFactorsAttr,
              "Banking factors/dimensions must be paired together");
     } else {
       auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      (void)dimsIntAttr;
       assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
                             "array of integers");
     }

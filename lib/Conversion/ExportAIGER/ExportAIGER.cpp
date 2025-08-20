@@ -437,7 +437,7 @@ unsigned AIGERExporter::getLiteral(Object obj, bool inverted) {
                << pos << "]\n";
 
   // This should not happen if analysis was done correctly
-  assert(false && "Value not found in literal map");
+  llvm_unreachable("Value not found in literal map");
 }
 
 LogicalResult AIGERExporter::analyzePorts(hw::HWModuleOp hwModule) {

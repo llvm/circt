@@ -14,6 +14,7 @@
 #define CIRCT_SUPPORT_LOWERINGOPTIONSPARSER_H
 
 #include "circt/Support/LLVM.h"
+#include "circt/Support/LoweringOptions.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 

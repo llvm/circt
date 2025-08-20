@@ -680,6 +680,7 @@ LogicalResult LocalVisitor::markEquivalent(Value from, size_t fromBitPos,
   (void)leader;
   // Merge classes, and visit the leader.
   auto newLeader = ec.unionSets({to, toBitPos}, {from, fromBitPos});
+  (void)newLeader;
   assert(leader == *newLeader);
   return visitValue(to, toBitPos, results);
 }
