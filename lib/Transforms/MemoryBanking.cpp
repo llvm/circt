@@ -115,7 +115,7 @@ DenseSet<Value> collectMemRefs(affine::AffineParallelOp affineParallelOp) {
 void verifyBankingConfigurations(unsigned bankingFactor,
                                  unsigned bankingDimension,
                                  MemRefType originalType) {
-  ArrayRef<int64_t> originalShape = originalType.getShape();
+  [[maybe_unused]] ArrayRef<int64_t> originalShape = originalType.getShape();
   assert(!originalShape.empty() && "memref shape should not be empty");
   assert(bankingDimension < originalType.getRank() &&
          "dimension must be within the memref rank");
@@ -759,21 +759,24 @@ void verifyBankingAttributesSize(Attribute bankingFactorsAttr,
       assert(factorsArrayAttr.size() == dimsArrayAttr.size() &&
              "Banking factors/dimensions must be paired together");
     } else {
-      auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      [[maybe_unused]] auto dimsIntAttr =
+          dyn_cast<IntegerAttr>(bankingDimensionsAttr);
       assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
                             "array of integers");
       assert(factorsArrayAttr.size() == 1 &&
              "Banking factors/dimensions must be paired together");
     }
   } else {
-    auto factorsIntAttr = dyn_cast<IntegerAttr>(bankingFactorsAttr);
+    [[maybe_unused]] auto factorsIntAttr =
+        dyn_cast<IntegerAttr>(bankingFactorsAttr);
     assert(factorsIntAttr &&
            "banking.factors can either be an integer or an array of integers");
     if (auto dimsArrayAttr = dyn_cast<ArrayAttr>(bankingDimensionsAttr)) {
       assert(dimsArrayAttr.size() == 1 &&
              "Banking factors/dimensions must be paired together");
     } else {
-      auto dimsIntAttr = dyn_cast<IntegerAttr>(bankingDimensionsAttr);
+      [[maybe_unused]] auto dimsIntAttr =
+          dyn_cast<IntegerAttr>(bankingDimensionsAttr);
       assert(dimsIntAttr && "banking.dimensions can either be an integer or an "
                             "array of integers");
     }

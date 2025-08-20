@@ -316,7 +316,7 @@ struct CombLowerVariadicOp : OpConversionPattern<OpTy> {
     Value lhs, rhs;
     switch (operands.size()) {
     case 0:
-      assert(false && "cannot be called with empty operand range");
+      llvm_unreachable("cannot be called with empty operand range");
       break;
     case 1:
       return operands[0];

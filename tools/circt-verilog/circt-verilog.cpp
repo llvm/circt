@@ -24,7 +24,6 @@
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
-#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
@@ -598,7 +597,6 @@ int main(int argc, char **argv) {
     moore::MooreDialect,
     scf::SCFDialect,
     seq::SeqDialect,
-    sim::SimDialect,
     verif::VerifDialect
   >();
   // clang-format on

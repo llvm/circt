@@ -15,7 +15,6 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"

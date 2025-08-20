@@ -922,9 +922,9 @@ public:
     size_t numLeaves = 0;
     auto augGroundAttr =
         StringAttr::get(gi.op.getContext(), augmentedGroundTypeClass);
-    auto augBundleAttr =
+    [[maybe_unused]] auto augBundleAttr =
         StringAttr::get(gi.op.getContext(), augmentedBundleTypeClass);
-    auto augVectorAttr =
+    [[maybe_unused]] auto augVectorAttr =
         StringAttr::get(gi.op.getContext(), augmentedVectorTypeClass);
     while (!worklist.empty()) {
       auto dict = worklist.pop_back_val();

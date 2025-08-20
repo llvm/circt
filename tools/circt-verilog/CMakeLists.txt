@@ -10,7 +10,6 @@ set(libs
   CIRCTMooreTransforms
   CIRCTSeq
   CIRCTSeqTransforms
-  CIRCTSim
   CIRCTSupport
   CIRCTTransforms
   CIRCTVerif

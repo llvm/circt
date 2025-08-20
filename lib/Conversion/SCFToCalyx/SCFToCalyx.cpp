@@ -143,7 +143,8 @@ class IfLoweringStateInterface {
 public:
   void setCondReg(scf::IfOp op, calyx::RegisterOp regOp) {
     Operation *operation = op.getOperation();
-    auto [it, succeeded] = condReg.insert(std::make_pair(operation, regOp));
+    [[maybe_unused]] auto [it, succeeded] =
+        condReg.insert(std::make_pair(operation, regOp));
     assert(succeeded &&
            "A condition register was already set for this scf::IfOp!");
   }
@@ -277,9 +278,10 @@ public:
 class SeqOpLoweringStateInterface {
 public:
   void setSeqResReg(Operation *op, calyx::RegisterOp reg) {
-    auto cellOp = dyn_cast<calyx::CellInterface>(op);
+    [[maybe_unused]] auto cellOp = dyn_cast<calyx::CellInterface>(op);
     assert(cellOp && !cellOp.isCombinational());
-    auto [it, succeeded] = resultRegs.insert(std::make_pair(op, reg));
+    [[maybe_unused]] auto [it, succeeded] =
+        resultRegs.insert(std::make_pair(op, reg));
     assert(succeeded &&
            "A register was already set for this sequential operation!");
   }
@@ -459,7 +461,7 @@ private:
                    calyx::RegisterOp &condReg, calyx::RegisterOp &resReg,
                    TCalyxLibOp calyxOp) const {
     bool lhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getLhs());
-    bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
+    [[maybe_unused]] bool rhsIsSeqOp = calyx::parentIsSeqCell(cmpIOp.getRhs());
 
     StringRef opName = cmpIOp.getOperationName().split(".").second;
     Type width = cmpIOp.getResult().getType();
