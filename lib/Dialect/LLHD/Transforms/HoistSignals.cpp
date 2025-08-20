@@ -588,9 +588,8 @@ void DriveHoister::hoistDrives() {
     auto enable = driveSet.uniform.enable != DriveValue(trueAttr)
                       ? useResultValue(driveSet.uniform.enable)
                       : Value{};
-    auto newDrive =
+    [[maybe_unused]] auto newDrive =
         DrvOp::create(builder, slot.getLoc(), slot, value, delay, enable);
-    (void)newDrive;
     LLVM_DEBUG(llvm::dbgs() << "- Add " << newDrive << "\n");
 
     // Remove the old drives inside of the process.

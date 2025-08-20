@@ -676,11 +676,10 @@ LogicalResult LocalVisitor::markRegFanOut(Value fanOut, Value start,
 LogicalResult LocalVisitor::markEquivalent(Value from, size_t fromBitPos,
                                            Value to, size_t toBitPos,
                                            SmallVectorImpl<OpenPath> &results) {
-  auto leader = ec.getOrInsertLeaderValue({to, toBitPos});
-  (void)leader;
+  [[maybe_unused]] auto leader = ec.getOrInsertLeaderValue({to, toBitPos});
   // Merge classes, and visit the leader.
-  auto newLeader = ec.unionSets({to, toBitPos}, {from, fromBitPos});
-  (void)newLeader;
+  [[maybe_unused]] auto newLeader =
+      ec.unionSets({to, toBitPos}, {from, fromBitPos});
   assert(leader == *newLeader);
   return visitValue(to, toBitPos, results);
 }

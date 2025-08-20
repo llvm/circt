@@ -202,9 +202,8 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
 
         // At this point, only `pipeline.src` operations are legally allowed to
         // reference operands from other stages.
-        SourceOp srcOp =
+        [[maybe_unused]] SourceOp srcOp =
             llvm::dyn_cast_or_null<pipeline::SourceOp>(operand.getOwner());
-        (void)srcOp;
         assert(
             srcOp &&
             "Only pipeline.srcOp's should be allowed to reference "
