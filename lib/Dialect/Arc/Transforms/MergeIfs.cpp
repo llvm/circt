@@ -33,6 +33,8 @@ struct MergeIfsPass : public arc::impl::MergeIfsPassBase<MergeIfsPass> {
 
 private:
   bool anyChanges;
+  DenseMap<scf::IfOp, DenseSet<Value>> ifWrites, ifReads;
+  DenseMap<scf::IfOp, bool> ifHasSideEffects;
 };
 } // namespace
 
@@ -257,10 +259,25 @@ void MergeIfsPass::sinkOps(Block &rootBlock) {
 }
 
 void MergeIfsPass::mergeIfs(Block &rootBlock) {
-  DenseSet<Value> prevIfWrites, prevIfReads;
+  ifReads.clear();
+  ifWrites.clear();
+  ifHasSideEffects.clear();
 
   scf::IfOp lastOp;
-  for (auto ifOp : rootBlock.getOps<scf::IfOp>()) {
+  SmallVector<scf::IfOp> ifOps(rootBlock.getOps<scf::IfOp>());
+  for (auto ifOp : ifOps) {
+    ifHasSideEffects[ifOp] = false;
+    ifOp.walk([&](Operation *op) {
+      if (auto ptr = getPointerWrittenByOp(op))
+        ifWrites[ifOp].insert(ptr);
+      else if (auto ptr = getPointerReadByOp(op))
+        ifReads[ifOp].insert(ptr);
+      else if (!ifHasSideEffects[ifOp] && hasSideEffects(op))
+        ifHasSideEffects[ifOp] = true;
+    });
+  }
+
+  for (auto ifOp : ifOps) {
     auto prevIfOp = std::exchange(lastOp, ifOp);
     if (!prevIfOp)
       continue;
@@ -277,19 +294,6 @@ void MergeIfsPass::mergeIfs(Block &rootBlock) {
     // Try to move ops in between the `scf.if` ops above the previous `scf.if`
     // in order to make them immediately adjacent.
     if (ifOp->getPrevNode() != prevIfOp) {
-      // Determine the side effects inside the previous if op.
-      bool prevIfHasSideEffects = false;
-      prevIfWrites.clear();
-      prevIfReads.clear();
-      prevIfOp.walk([&](Operation *op) {
-        if (auto ptr = getPointerWrittenByOp(op))
-          prevIfWrites.insert(ptr);
-        else if (auto ptr = getPointerReadByOp(op))
-          prevIfReads.insert(ptr);
-        else if (!prevIfHasSideEffects && hasSideEffects(op))
-          prevIfHasSideEffects = true;
-      });
-
       // Check if it is legal to throw all ops over the previous `scf.if` op,
       // given the side effects. We don't move the ops yet to ensure we can move
       // *all* of them at once afterwards. Otherwise this optimization would
@@ -300,15 +304,16 @@ void MergeIfsPass::mergeIfs(Block &rootBlock) {
         auto result = op.walk([&](Operation *subOp) {
           if (auto ptr = getPointerWrittenByOp(subOp)) {
             // We can't move writes over writes or reads of the same state.
-            if (prevIfWrites.contains(ptr) || prevIfReads.contains(ptr))
+            if (ifWrites[prevIfOp].contains(ptr) ||
+                ifReads[prevIfOp].contains(ptr))
               return WalkResult::interrupt();
           } else if (auto ptr = getPointerReadByOp(subOp)) {
             // We can't move reads over writes to the same state.
-            if (prevIfWrites.contains(ptr))
+            if (ifWrites[prevIfOp].contains(ptr))
               return WalkResult::interrupt();
           } else if (hasSideEffects(subOp)) {
             // We can't move side-effecting ops over other side-effecting ops.
-            if (prevIfHasSideEffects)
+            if (ifHasSideEffects[prevIfOp])
               return WalkResult::interrupt();
           }
           return WalkResult::advance();
@@ -333,18 +338,26 @@ void MergeIfsPass::mergeIfs(Block &rootBlock) {
 
     // Merge the then-blocks.
     prevIfOp.thenYield().erase();
-    ifOp.thenBlock()->getOperations().splice(
-        ifOp.thenBlock()->begin(), prevIfOp.thenBlock()->getOperations());
+    prevIfOp.thenBlock()->getOperations().splice(
+        prevIfOp.thenBlock()->end(), ifOp.thenBlock()->getOperations());
 
     // Merge the else-blocks if present.
     if (ifOp.elseBlock()) {
       prevIfOp.elseYield().erase();
-      ifOp.elseBlock()->getOperations().splice(
-          ifOp.elseBlock()->begin(), prevIfOp.elseBlock()->getOperations());
+      prevIfOp.elseBlock()->getOperations().splice(
+          prevIfOp.elseBlock()->end(), ifOp.elseBlock()->getOperations());
     }
 
+    ifReads[prevIfOp].insert_range(ifReads[ifOp]);
+    ifWrites[prevIfOp].insert_range(ifWrites[ifOp]);
+    ifHasSideEffects[prevIfOp] |= ifHasSideEffects[ifOp];
+    ifReads.erase(ifOp);
+    ifWrites.erase(ifOp);
+    ifHasSideEffects.erase(ifOp);
+
     // Clean up.
-    prevIfOp.erase();
+    ifOp.erase();
+    lastOp = prevIfOp;
     anyChanges = true;
     ++numIfsMerged;
     LLVM_DEBUG(llvm::dbgs() << "- Merged adjacent if ops\n");
