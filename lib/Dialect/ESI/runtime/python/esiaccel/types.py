@@ -56,7 +56,7 @@ class ESIType:
   @property
   def supports_host(self) -> Tuple[bool, Optional[str]]:
     """Does this type support host communication via Python? Returns either
-        '(True, None)' if it is, or '(False, reason)' if it is not."""
+    '(True, None)' if it is, or '(False, reason)' if it is not."""
 
     if self.bit_width % 8 != 0:
       return (False, "runtime only supports types with multiple of 8 bits")
@@ -64,7 +64,7 @@ class ESIType:
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     """Is a Python object compatible with HW type?  Returns either '(True,
-        None)' if it is, or '(False, reason)' if it is not."""
+    None)' if it is, or '(False, reason)' if it is not."""
     assert False, "unimplemented"
 
   @property
