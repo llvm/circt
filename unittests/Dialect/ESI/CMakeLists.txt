@@ -7,3 +7,7 @@ target_link_libraries(CIRCTESITests
   CIRCTHW
   CIRCTESI
 )
+
+if(ESI_RUNTIME)
+  add_subdirectory(runtime)
+endif()
