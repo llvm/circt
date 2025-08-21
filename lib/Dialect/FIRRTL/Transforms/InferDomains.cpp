@@ -382,13 +382,17 @@ LogicalResult InferDomainsPass::processModule(FModuleOp module) {
     for (auto [index, port] : llvm::enumerate(module.getPorts())) {
       llvm::dbgs() << "  - port: " << port.getName() << "\n"
                    << "    domains:\n";
-      for (auto domain : domainUF.getDomains(module.getArgument(index))) {
+      auto domains = domainUF.getDomains(module.getArgument(index));
+      if (domains.empty()) {
+        llvm::dbgs() << "      - inferred\n";
+        continue;
+      }
+      for (auto domain : domains) {
         if (auto port = dyn_cast<BlockArgument>(domain)) {
           llvm::dbgs() << "      - " << module.getPortName(port.getArgNumber())
                        << "\n";
           continue;
         }
-        llvm::dbgs() << "      - inferred\n";
       }
     }
   });
