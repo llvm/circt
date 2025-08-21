@@ -201,3 +201,22 @@ firrtl.circuit "DomainInferenceThroughWires" {
 }
 // CHECK-LABEL: firrtl.circuit "DomainInferenceThroughWires"
 // CHECK: out %output: !firrtl.uint<1> domains [%A]
+
+// -----
+
+// Test case 12: Register inference
+firrtl.circuit "RegisterInference" {
+  firrtl.module @RegisterInference(
+    in %A: !firrtl.domain,
+    in %clock: !firrtl.clock domains [%A],
+    in %d: !firrtl.uint<1>,
+    out %q: !firrtl.uint<1>
+  ) {
+    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<1>
+    firrtl.matchingconnect %q, %r : !firrtl.uint<1>
+  }
+}
+// CHECK-LABEL: firrtl.circuit "RegisterInference"
+// CHECK: in %d: !firrtl.uint<1> domains [%A]
+// CHECK: out %q: !firrtl.uint<1> domains [%A]
