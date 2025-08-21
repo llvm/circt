@@ -89,10 +89,10 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.fmt.int octal [[X]], width 19, align left, pad zero : i32
   $write("%-19o", x);
 
-  // CHECK: moore.fmt.real float [[R]], width 64, align left, pad space : real
+  // CHECK: moore.fmt.real float [[R]]
   $write("%f", r);
   // CHECK: [[XR:%.+]] = moore.conversion [[X]] : !moore.i32 -> !moore.real
-  // CHECK: [[TMP:%.+]] = moore.fmt.real float [[XR]], width 64, align left, pad space : real
+  // CHECK: [[TMP:%.+]] = moore.fmt.real float [[XR]]
   // CHECK: moore.builtin.display [[TMP]]
   $write("%f", x);
 
@@ -160,7 +160,7 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP3]]
   $displayh(x);
 
-  // CHECK: [[TMP1:%.+]] = moore.fmt.real float [[R]], width 64, align left, pad space : real
+  // CHECK: [[TMP1:%.+]] = moore.fmt.real float [[R]]
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]

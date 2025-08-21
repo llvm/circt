@@ -199,17 +199,10 @@ struct FormatStringParser {
     if (!value)
       return failure();
 
-    unsigned width;
-    if (options.width)
-      width = *options.width;
-    else
-      width = 64;
+    // TODO add support for specifics such as width etc
 
-    auto alignment = IntAlign::Left;
-    auto padding = IntPadding::Space;
-
-    fragments.push_back(moore::FormatRealOp::create(builder, loc, value, format,
-                                                    width, alignment, padding));
+    fragments.push_back(
+        moore::FormatRealOp::create(builder, loc, value, format));
 
     return success();
   }

@@ -1617,17 +1617,11 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   }];
   let arguments = (ins
   RealType:$value,
-  RealFormatAttr:$format,
-  I32Attr:$width,
-  IntAlignAttr:$alignment,
-  IntPaddingAttr:$padding
+  RealFormatAttr:$format
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
       $format $value `,`
-      `width` $width `,`
-      `align` $alignment `,`
-      `pad` $padding
       attr-dict `:` type($value)
   }];
 }
