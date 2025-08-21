@@ -73,4 +73,19 @@ def ImmediateAttr : RTGISAAttrDef<"Immediate", [
   let genStorageClass = false;
 }
 
+def VirtualRegConfigAttr : RTGISAAttrDef<"VirtualRegConfig", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an allowed register configuration for a virtual register";
+
+  let parameters = (ins ArrayRefParameter<"rtg::RegisterAttrInterface",
+                                          "allowed registers">:$allowedRegs);
+
+  let mnemonic = "virtual_reg_config";
+  let assemblyFormat = "`<` $allowedRegs `>`";
+
+  // TODO: must verify that all registers are of the same type, register type
+  // should be part of the config type.
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD

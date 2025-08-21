@@ -200,6 +200,21 @@ uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type) {
   return cast<MemoryBlockType>(unwrap(type)).getAddressWidth();
 }
 
+// VirtualRegConfigType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAVirtualRegConfig(MlirType type) {
+  return isa<VirtualRegConfigType>(unwrap(type));
+}
+
+MlirType rtgVirtualRegConfigTypeGet(MlirContext ctxt, MlirType regType) {
+  return wrap(VirtualRegConfigType::get(unwrap(ctxt), unwrap(regType)));
+}
+
+MlirType rtgVirtualRegConfigTypeGetRegType(MlirType type) {
+  return wrap(cast<VirtualRegConfigType>(unwrap(type)).getRegType());
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -280,6 +295,30 @@ bool rtgAttrIsAAnyContextAttr(MlirAttribute attr) {
 
 MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt, MlirType type) {
   return wrap(AnyContextAttr::get(unwrap(ctxt), unwrap(type)));
+}
+
+// VirtualRegConfigAttr
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsAVirtualRegConfig(MlirAttribute attr) {
+  return isa<VirtualRegConfigAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgVirtualRegConfigAttrGet(MlirContext ctxt, intptr_t numRegs,
+                                         MlirAttribute const *allowedRegs) {
+  SmallVector<rtg::RegisterAttrInterface> regs;
+  for (intptr_t i = 0; i < numRegs; ++i)
+    regs.push_back(cast<rtg::RegisterAttrInterface>(unwrap(allowedRegs[i])));
+  return wrap(VirtualRegConfigAttr::get(unwrap(ctxt), regs));
+}
+
+intptr_t rtgVirtualRegConfigAttrGetNumRegs(MlirAttribute attr) {
+  return cast<VirtualRegConfigAttr>(unwrap(attr)).getAllowedRegs().size();
+}
+
+MlirAttribute rtgVirtualRegConfigAttrGetReg(MlirAttribute attr, intptr_t index) {
+  auto allowedRegs = cast<VirtualRegConfigAttr>(unwrap(attr)).getAllowedRegs();
+  return wrap(allowedRegs[index]);
 }
 
 //===----------------------------------------------------------------------===//

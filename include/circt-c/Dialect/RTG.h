@@ -134,6 +134,16 @@ MLIR_CAPI_EXPORTED MlirType rtgMemoryBlockTypeGet(MlirContext ctx,
 /// Returns the address with of an RTG memory block type.
 MLIR_CAPI_EXPORTED uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type);
 
+/// If the type is an RTG virtual register config.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAVirtualRegConfig(MlirType type);
+
+/// Creates an RTG virtual register config type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgVirtualRegConfigTypeGet(MlirContext ctxt,
+                                                       MlirType regType);
+
+/// Return the register type of the RTG virtual register config.
+MLIR_CAPI_EXPORTED MlirType rtgVirtualRegConfigTypeGetRegType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -184,6 +194,20 @@ MLIR_CAPI_EXPORTED bool rtgAttrIsAAnyContextAttr(MlirAttribute attr);
 /// Creates an RTG any context attribute in the context.
 MLIR_CAPI_EXPORTED MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt,
                                                       MlirType type);
+
+/// Checks if the attribute is an RTG virtual register config attribute.
+MLIR_CAPI_EXPORTED bool rtgAttrIsAVirtualRegConfig(MlirAttribute attr);
+
+/// Creates an RTG virtual register config attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgVirtualRegConfigAttrGet(MlirContext ctxt,
+                                                            intptr_t numRegs,
+                                                            MlirAttribute const *allowedRegs);
+
+/// Returns the number of allowed registers in the RTG virtual register config attribute.
+MLIR_CAPI_EXPORTED intptr_t rtgVirtualRegConfigAttrGetNumRegs(MlirAttribute attr);
+
+/// Returns the allowed register at the given index in the RTG virtual register config attribute.
+MLIR_CAPI_EXPORTED MlirAttribute rtgVirtualRegConfigAttrGetReg(MlirAttribute attr, intptr_t index);
 
 #ifdef __cplusplus
 }

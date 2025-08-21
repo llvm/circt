@@ -105,6 +105,10 @@ void ImmediateAttr::print(AsmPrinter &odsPrinter) const {
   odsPrinter << "<" << getValue().getBitWidth() << ", " << getValue() << ">";
 }
 
+Type VirtualRegConfigAttr::getType() const {
+  return VirtualRegConfigType::get(getContext(), getAllowedRegs()[0].getType());
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

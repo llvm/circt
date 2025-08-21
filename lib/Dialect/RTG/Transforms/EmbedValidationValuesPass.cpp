@@ -71,8 +71,10 @@ LogicalResult EmbedValidationValuesPass::parseFile(
              << "cannot parse value of type " << op.getValue().getType()
              << " from string '" << value << "'";
 
-    if (!valueMap.insert({idAttr, valueAttr}).second)
-      return emitError(idLoc) << "duplicate ID in input file: " << idAttr;
+    if (!valueMap.insert({idAttr, valueAttr}).second) {
+      if (valueMap[idAttr] != valueAttr)
+        return emitError(idLoc) << "duplicate ID in input file: " << idAttr;
+    }
 
     LLVM_DEBUG(llvm::dbgs() << "- Parsed value for " << idAttr << "\n");
   }

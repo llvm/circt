@@ -16,6 +16,7 @@ include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -657,6 +658,7 @@ def CommentOp : RTGOp<"comment", []> {
 def FixedRegisterOp : RTGOp<"fixed_reg", [
   Pure, ConstantLike,
   DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "returns a value representing a fixed register";
   let description = [{
@@ -683,11 +685,10 @@ def VirtualRegisterOp : RTGOp<"virtual_reg", [
   }];
 
   // ArrayAttr of RegisterAttrInterfaces
-  let arguments = (ins ArrayAttr:$allowedRegs);
+  let arguments = (ins VirtualRegConfigType:$allowedRegs);
   let results = (outs RegisterTypeInterface:$result);
 
-  let assemblyFormat = "$allowedRegs attr-dict";
-  let hasVerifier = 1;
+  let assemblyFormat = "$allowedRegs `:` qualified(type($allowedRegs)) attr-dict";
 }
 
 //===- Test Specification Operations --------------------------------------===//
@@ -1003,4 +1004,31 @@ def MemorySizeOp : RTGISAOp<"memory_size", [Pure]> {
   let results = (outs Index:$result);
 
   let assemblyFormat = "$memory `:` qualified(type($memory)) attr-dict";
+}
+
+def SpaceOp : RTGISAOp<"space", []> {
+  let summary = "reserve the given number of bytes";
+
+  let arguments = (ins IndexAttr:$size);
+
+  let assemblyFormat = "$size attr-dict";
+}
+
+def SegmentKindAttr : I32EnumAttr<"SegmentKind", "kind of segment", [
+  I32EnumAttrCase<"Data", 0, "data">,
+  I32EnumAttrCase<"Text", 1, "text">
+]> {
+  let cppNamespace = "::circt::rtg";
+}
+
+def SegmentOp : RTGISAOp<"segment", [
+  SingleBlock,
+  NoTerminator,
+]> {
+  let summary = "defines a new segment";
+
+  let arguments = (ins SegmentKindAttr:$kind);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
 }

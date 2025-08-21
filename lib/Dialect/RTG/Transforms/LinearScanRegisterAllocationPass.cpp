@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
@@ -75,17 +76,25 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
 
   DenseMap<Operation *, unsigned> opIndices;
   unsigned maxIdx;
-  for (auto [i, op] :
-       llvm::enumerate(getOperation()->getRegion(0).getBlocks().front())) {
-    // TODO: ideally check that the IR is already fully elaborated
-    opIndices[&op] = i;
-    maxIdx = i;
-  }
+  // Find Text segment and walk its operations
+  // FIXME: assumes there is exactly one such segment
+  rtg::SegmentOp textSeg;
+  getOperation()->walk([&](rtg::SegmentOp segOp) {
+    if (segOp.getKind() != rtg::SegmentKind::Text)
+      return;
+    
+    textSeg = segOp;
+    for (auto [i, op] : llvm::enumerate(*segOp.getBody())) {
+      // TODO: ideally check that the IR is already fully elaborated
+      opIndices[&op] = i;
+      maxIdx = i;
+    }
+  });
 
   // Collect all the register intervals we have to consider.
   SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
   SmallVector<RegisterLiveRange *> active;
-  for (auto &op : getOperation()->getRegion(0).getBlocks().front()) {
+  for (auto &op : *textSeg.getBody()) {
     if (!isa<rtg::FixedRegisterOp, rtg::VirtualRegisterOp>(&op))
       continue;
 
@@ -137,8 +146,22 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       continue;
 
     // Handle virtual registers.
+    auto constOp = lr->regOp.getAllowedRegs().getDefiningOp<rtg::ConstantOp>();
+    if (!constOp) {
+      lr->regOp->emitError("only constant register configurations are supported "
+                           "yet");
+      return signalPassFailure();
+    }
+
+    auto configAttr = dyn_cast<rtg::VirtualRegConfigAttr>(constOp.getValue());
+    if (!configAttr) {
+      lr->regOp->emitError("only virtual register configurations are supported "
+                           "yet");
+      return signalPassFailure();
+    }
+      
     rtg::RegisterAttrInterface availableReg;
-    for (auto reg : lr->regOp.getAllowedRegs()) {
+    for (auto reg : configAttr.getAllowedRegs()) {
       if (llvm::none_of(active, [&](auto *r) { return r->fixedReg == reg; })) {
         availableReg = cast<rtg::RegisterAttrInterface>(reg);
         break;

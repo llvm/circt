@@ -427,7 +427,7 @@ struct IdentityValue {
 
 /// Represents a unique virtual register.
 struct VirtualRegisterStorage : IdentityValue {
-  VirtualRegisterStorage(ArrayAttr allowedRegs, Type type)
+  VirtualRegisterStorage(ElaboratorValue allowedRegs, Type type)
       : IdentityValue(type), allowedRegs(allowedRegs) {}
 
   // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
@@ -435,7 +435,7 @@ struct VirtualRegisterStorage : IdentityValue {
 
   // The list of fixed registers allowed to be selected for this virtual
   // register.
-  const ArrayAttr allowedRegs;
+  const ElaboratorValue allowedRegs;
 };
 
 struct UniqueLabelStorage : IdentityValue {
@@ -1102,7 +1102,13 @@ private:
 
   Value visit(VirtualRegisterStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = VirtualRegisterOp::create(builder, loc, val->allowedRegs);
+    Value regConfig = materialize(val->allowedRegs, loc, emitError);
+    if (!regConfig) {
+      emitError() << "failed to materialize virtual register configuration";
+      return {};
+    }
+    
+    Value res = VirtualRegisterOp::create(builder, loc, regConfig);
     materializedValues[val] = res;
     return res;
   }
@@ -1600,7 +1606,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {
     auto *val = sharedState.internalizer.create<VirtualRegisterStorage>(
-        op.getAllowedRegsAttr(), op.getType());
+        state[op.getAllowedRegs()], op.getType());
     state[op.getResult()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;

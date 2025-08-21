@@ -230,4 +230,11 @@ def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
 
 def ISAMemory : AnyTypeOf<[MemoryType, ImmediateType, LabelType]>;
 
+def VirtualRegConfigType : RTGISATypeDef<"VirtualRegConfig", "virtual_reg_config"> {
+  let summary = "a virtual register configuration";
+
+  let parameters = (ins "mlir::Type":$regType);
+  let assemblyFormat = "`<` $regType `>`";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

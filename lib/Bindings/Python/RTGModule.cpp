@@ -172,6 +172,17 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return rtgMemoryTypeGetAddressWidth(self);
       });
 
+  mlir_type_subclass(m, "VirtualRegConfigType", rtgTypeIsAVirtualRegConfig)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType regType, MlirContext ctxt) {
+            return cls(rtgVirtualRegConfigTypeGet(ctxt, regType));
+          },
+          nb::arg("self"), nb::arg("reg_type"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("reg_type", [](MlirType self) {
+        return rtgVirtualRegConfigTypeGetRegType(self);
+      });
+
   //===--------------------------------------------------------------------===//
   // Attributes
   //===--------------------------------------------------------------------===//
@@ -226,5 +237,21 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           [](MlirAttribute self) { return rtgImmediateAttrGetWidth(self); })
       .def_property_readonly("value", [](MlirAttribute self) {
         return rtgImmediateAttrGetValue(self);
+      });
+
+  mlir_attribute_subclass(m, "VirtualRegConfigAttr", rtgAttrIsAVirtualRegConfig)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, const std::vector<MlirAttribute> &allowedRegs,
+             MlirContext ctxt) {
+            return cls(rtgVirtualRegConfigAttrGet(ctxt, allowedRegs.size(),
+                                                  allowedRegs.data()));
+          },
+          nb::arg("self"), nb::arg("allowed_regs"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("regs", [](MlirAttribute self) {
+        std::vector<MlirAttribute> regs;
+        for (unsigned i = 0, numRegs = rtgVirtualRegConfigAttrGetNumRegs(self); i < numRegs; ++i)
+          regs.push_back(rtgVirtualRegConfigAttrGetReg(self, i));
+        return regs;
       });
 }
