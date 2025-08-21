@@ -27,6 +27,9 @@ import traceback
 
 def _get_esi_type(cpp_type: cpp.Type):
   """Get the wrapper class for a C++ type."""
+  if isinstance(cpp_type, cpp.ChannelType):
+    return _get_esi_type(cpp_type.inner)
+
   for cpp_type_cls, wrapper_cls in __esi_mapping.items():
     if isinstance(cpp_type, cpp_type_cls):
       return wrapper_cls.wrap_cpp(cpp_type)
