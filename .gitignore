@@ -20,3 +20,4 @@ lit.site.cfg.py
 
 # External software
 /ext
+env
