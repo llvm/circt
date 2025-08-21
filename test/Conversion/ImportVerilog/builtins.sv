@@ -43,7 +43,8 @@ endfunction
 // IEEE 1800-2017 § 21.2 "Display system tasks"
 // CHECK-LABEL: func.func private @DisplayAndSeverityBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
-function void DisplayAndSeverityBuiltins(int x);
+// CHECK-SAME: [[R:%.+]]: !moore.real
+function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: [[TMP:%.+]] = moore.fmt.literal "\0A"
   // CHECK: moore.builtin.display [[TMP]]
   $display;
@@ -87,6 +88,13 @@ function void DisplayAndSeverityBuiltins(int x);
   $write("%19o", x);
   // CHECK: moore.fmt.int octal [[X]], width 19, align left, pad zero : i32
   $write("%-19o", x);
+
+  // CHECK: moore.fmt.real float [[R]]
+  $write("%f", r);
+  // CHECK: [[XR:%.+]] = moore.conversion [[X]] : !moore.i32 -> !moore.real
+  // CHECK: [[TMP:%.+]] = moore.fmt.real float [[XR]]
+  // CHECK: moore.builtin.display [[TMP]]
+  $write("%f", x);
 
   // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
   $write("%d", x);
@@ -152,24 +160,39 @@ function void DisplayAndSeverityBuiltins(int x);
   // CHECK: moore.builtin.display [[TMP3]]
   $displayh(x);
 
+  // CHECK: [[TMP1:%.+]] = moore.fmt.real float [[R]]
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.display [[TMP3]]
+  $display("%f", r);
+
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity info [[TMP]]
   $info;
   // CHECK: [[TMP:%.+]] = moore.fmt.int
   // CHECK: moore.builtin.severity info [[TMP]]
   $info("%d", x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.real
+  // CHECK: moore.builtin.severity info [[TMP]]
+  $info("%f", r);
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity warning [[TMP]]
   $warning;
   // CHECK: [[TMP:%.+]] = moore.fmt.int
   // CHECK: moore.builtin.severity warning [[TMP]]
   $warning("%d", x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.real
+  // CHECK: moore.builtin.severity warning [[TMP]]
+  $warning("%f", r);
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity error [[TMP]]
   $error;
   // CHECK: [[TMP:%.+]] = moore.fmt.int
   // CHECK: moore.builtin.severity error [[TMP]]
   $error("%d", x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.real
+  // CHECK: moore.builtin.severity error [[TMP]]
+  $error("%f", r);
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity fatal [[TMP]]
   // CHECK: moore.builtin.finish_message false
@@ -186,6 +209,10 @@ function void DisplayAndSeverityBuiltins(int x);
   // CHECK: moore.builtin.severity fatal [[TMP]]
   // CHECK: moore.unreachable
   if (0) $fatal(1, "%d", x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.real
+  // CHECK: moore.builtin.severity fatal [[TMP]]
+  // CHECK: moore.unreachable
+  if (0) $fatal(1, "%f", r);
 endfunction
 
 // IEEE 1800-2017 § 20.8 "Math functions"
