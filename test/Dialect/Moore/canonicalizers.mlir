@@ -10,6 +10,40 @@ func.func @Casts(%arg0: !moore.i1) -> (!moore.i1, !moore.i1) {
   return %0, %1 : !moore.i1, !moore.i1
 }
 
+// CHECK-LABEL: func.func @LogicToInt
+func.func @LogicToInt(%arg0: !moore.i42) -> (!moore.i42, !moore.i42, !moore.i42) {
+  // CHECK-NOT: moore.int_to_logic
+  // CHECK-NOT: moore.logic_to_int
+  %0 = moore.int_to_logic %arg0 : i42
+  %1 = moore.logic_to_int %0 : l42
+
+  // CHECK-DAG: [[TMP2:%.+]] = moore.constant 9001 : i42
+  %2 = moore.constant 9001 : l42
+  %3 = moore.logic_to_int %2 : l42
+
+  // CHECK-DAG: [[TMP3:%.+]] = moore.constant 36865 : i42
+  %4 = moore.constant h9XZ1 : l42
+  %5 = moore.logic_to_int %4 : l42
+
+  // CHECK: return %arg0, [[TMP2]], [[TMP3]] :
+  return %1, %3, %5 : !moore.i42, !moore.i42, !moore.i42
+}
+
+// CHECK-LABEL: func.func @IntToLogic
+func.func @IntToLogic(%arg0: !moore.l42) -> (!moore.l42, !moore.l42) {
+  // CHECK-DAG: [[TMP1:%.+]] = moore.logic_to_int %arg0
+  // CHECK-DAG: [[TMP2:%.+]] = moore.int_to_logic [[TMP1]]
+  %0 = moore.logic_to_int %arg0 : l42
+  %1 = moore.int_to_logic %0 : i42
+
+  // CHECK-DAG: [[TMP3:%.+]] = moore.constant 9001 : l42
+  %2 = moore.constant 9001 : i42
+  %3 = moore.int_to_logic %2 : i42
+
+  // CHECK: return [[TMP2]], [[TMP3]] :
+  return %1, %3 : !moore.l42, !moore.l42
+}
+
 // CHECK-LABEL: moore.module @OptimizeUniquelyAssignedVars
 moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42, in %w: !moore.i42) {
   // Unique continuous assignments to variables should remove the `ref<T>`
