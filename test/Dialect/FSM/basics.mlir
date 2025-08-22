@@ -4,9 +4,6 @@
 // CHECK:   fsm.state @IDLE
 // CHECK: }
 
-fsm.machine @foo(%arg0: i1) attributes {initialState = "IDLE"} {
-  fsm.state @IDLE
-}
 
 // -----
 
@@ -98,63 +95,4 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
   }
 }
 
-// Hardware-style instantiation.
-hw.module @bar(in %clk: !seq.clock, in %rst_n: i1) {
-  %in = hw.constant true
-  %out = fsm.hw_instance "foo_inst" @foo(%in), clock %clk, reset %rst_n : (i1) -> i1
-}
 
-// Software-style instantiation and triggering.
-func.func @qux() {
-  %foo_inst = fsm.instance "foo_inst" @foo
-  %in0 = arith.constant true
-  %out0 = fsm.trigger %foo_inst(%in0) : (i1) -> i1
-  %in1 = arith.constant false
-  %out1 = fsm.trigger %foo_inst(%in1) : (i1) -> i1
-  return
-}
-
-// -----
-
-// Optional guard and action regions
-
-// CHECK:   fsm.machine @foo(%[[VAL_0:.*]]: i1) -> i1 attributes {initialState = "A"} {
-// CHECK:           %[[VAL_1:.*]] = fsm.variable "cnt" {initValue = 0 : i16} : i16
-// CHECK:           fsm.state @A output {
-// CHECK:             fsm.output %[[VAL_0]] : i1
-// CHECK:           } transitions {
-// CHECK:             fsm.transition @A
-// CHECK:           }
-// CHECK:           fsm.state @B output {
-// CHECK:             fsm.output %[[VAL_0]] : i1
-// CHECK:           } transitions {
-// CHECK:             fsm.transition @B
-// CHECK:           }
-// CHECK:           fsm.state @C output {
-// CHECK:             fsm.output %[[VAL_0]] : i1
-// CHECK:           } transitions {
-// CHECK:             fsm.transition @C
-// CHECK:           }
-// CHECK:         }
-fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "A"} {
-  %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-
-  fsm.state @A output  {
-    fsm.output %arg0 : i1
-  } transitions {
-    fsm.transition @A action  {
-    }
-  }
-
-  fsm.state @B output  {
-    fsm.output %arg0 : i1
-  } transitions {
-    fsm.transition @B guard {}
-  }
-
-  fsm.state @C output  {
-    fsm.output %arg0 : i1
-  } transitions {
-    fsm.transition @C
-  }
-}

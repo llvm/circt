@@ -31,6 +31,7 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Conversion/FSMToSV.h"
+#include "circt/Conversion/FSMToSMTSafety.h"
 #include "circt/Conversion/HWArithToHW.h"
 #include "circt/Conversion/HWToBTOR2.h"
 #include "circt/Conversion/HWToLLVM.h"
