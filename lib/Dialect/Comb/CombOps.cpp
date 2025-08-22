@@ -272,8 +272,8 @@ comb::halfAdderWithDelay(OpBuilder &builder, Location loc, CompressorBit a,
 
 CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
                                Location loc)
-    : originalAddends(addends), loc(loc), numStages(0), numFullAdders(0),
-      usingTiming(true) {
+    : originalAddends(addends), usingTiming(true), numStages(0),
+      numFullAdders(0), loc(loc) {
   assert(addends.size() > 2);
   // Number of bits in a row == bitwidth of input addends
   // Compressors will be formed of uniform bitwidth addends
@@ -306,15 +306,14 @@ size_t CompressorTree::getMaxHeight() const {
 }
 
 size_t CompressorTree::getNextStageTargetHeight() const {
-  // TODO - improve computation of Dadda sequence
   auto maxHeight = getMaxHeight();
-  SmallVector<size_t> daddaSequence{2, 3, 4, 6, 9, 13, 19, 28, 42};
-  for (size_t i = 0; i < daddaSequence.size() - 1; ++i) {
-    if (daddaSequence[i + 1] >= maxHeight)
-      return daddaSequence[i];
+  size_t m_prev = 2;
+  while (true) {
+    size_t m = static_cast<size_t>(std::floor(1.5 * m_prev));
+    if (m >= maxHeight)
+      return m_prev;
+    m_prev = m;
   }
-
-  return daddaSequence.back();
 }
 
 SmallVector<Value> CompressorTree::columnsToAddends(OpBuilder &builder,
@@ -451,7 +450,6 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
 
 SmallVector<Value> CompressorTree::compressWithoutTiming(OpBuilder &builder,
                                                          size_t targetHeight) {
-  auto falseValue = hw::ConstantOp::create(builder, loc, APInt(1, 0));
   SmallVector<SmallVector<CompressorBit>> newColumns;
   newColumns.reserve(width);
   // Continue reduction until we have only two rows. The length of
