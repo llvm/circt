@@ -4,7 +4,7 @@
 // CHECK-LABEL: # Longest Path Analysis result for "counter"
 // CHECK-NEXT: Found 288 paths
 // CHECK-NEXT: Found 32 unique fanout points
-// CHECK-NEXT: Maximum path delay: 48
+// CHECK-NEXT: Maximum path delay: 42
 // Don't test detailed reports as they are not stable.
 
 // Make sure json is emitted.
