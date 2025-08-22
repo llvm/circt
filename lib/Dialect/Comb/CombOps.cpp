@@ -278,7 +278,8 @@ CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
   // Number of bits in a row == bitwidth of input addends
   // Compressors will be formed of uniform bitwidth addends
   width = addends[0].size();
-
+  SmallVector<SmallVector<CompressorBit>> initColumns(width);
+  columns = initColumns;
   // Known bits analysis constructs a minimal array
   for (auto row : addends) {
     for (size_t i = 0; i < width; ++i) {
@@ -287,12 +288,9 @@ CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
       auto knownBits = computeKnownBits(bit.val);
       if (knownBits.isZero())
         continue;
-      if (columns.size() < width) {
-        SmallVector<CompressorBit> col{bit};
-        columns.push_back(col);
-      } else {
-        columns[i].push_back(bit);
-      }
+
+      // Add non-zero bit to the column
+      columns[i].push_back(bit);
     }
   }
 }
@@ -347,7 +345,6 @@ SmallVector<Value> CompressorTree::compressToHeight(OpBuilder &builder,
                                                     size_t targetHeight) {
 
   auto maxHeight = getMaxHeight();
-  dump();
 
   if (maxHeight <= targetHeight)
     return columnsToAddends(builder, targetHeight);
@@ -375,10 +372,6 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
   ++numStages;
   // Initialize empty newColumns
   SmallVector<SmallVector<CompressorBit>> newColumns(width);
-  // newColumns.reserve(width);
-  // SmallVector<CompressorBit> empty{};
-  // while (newColumns.size() < width)
-  // newColumns.push_back(empty);
 
   for (size_t i = 0; i < width; ++i) {
     auto col = columns[i];

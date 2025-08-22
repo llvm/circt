@@ -114,8 +114,8 @@ struct DatapathPartialProductOpConversion
       return success();
     }
 
-    // Use width as a heuristic to guide partial product implementation
-    if (width > 16 || forceBooth)
+    // Use result rows as a heuristic to guide partial product implementation
+    if (op.getNumResults() > 16 || forceBooth)
       return lowerBoothArray(rewriter, a, b, op, width);
     else
       return lowerAndArray(rewriter, a, b, op, width);
