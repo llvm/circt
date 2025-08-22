@@ -15,6 +15,7 @@ from __future__ import annotations
 from . import esiCppAccel as cpp
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
   from .accelerator import HWModule
 
@@ -26,22 +27,33 @@ import traceback
 
 def _get_esi_type(cpp_type: cpp.Type):
   """Get the wrapper class for a C++ type."""
-  for cpp_type_cls, fn in __esi_mapping.items():
+  if isinstance(cpp_type, cpp.ChannelType):
+    return _get_esi_type(cpp_type.inner)
+
+  for cpp_type_cls, wrapper_cls in __esi_mapping.items():
     if isinstance(cpp_type, cpp_type_cls):
-      return fn(cpp_type)
-  return ESIType(cpp_type)
+      return wrapper_cls.wrap_cpp(cpp_type)
+  return ESIType.wrap_cpp(cpp_type)
 
 
-# Mapping from C++ types to functions constructing the Python object
-# corresponding to that type.
-__esi_mapping: Dict[Type, Callable] = {
-    cpp.ChannelType: lambda cpp_type: _get_esi_type(cpp_type.inner)
-}
+# Mapping from C++ types to wrapper classes
+__esi_mapping: Dict[Type, Type] = {}
 
 
 class ESIType:
 
-  def __init__(self, cpp_type: cpp.Type):
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.Type(id))
+
+  @classmethod
+  def wrap_cpp(cls, cpp_type: cpp.Type):
+    """Wrap a C++ ESI type with its corresponding Python ESI Type."""
+    instance = cls.__new__(cls)
+    instance._init_from_cpp(cpp_type)
+    return instance
+
+  def _init_from_cpp(self, cpp_type: cpp.Type):
+    """Initialize instance attributes from a C++ type object."""
     self.cpp_type = cpp_type
 
   @property
@@ -86,6 +98,9 @@ class ESIType:
 
 class VoidType(ESIType):
 
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.VoidType(id))
+
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if obj is not None:
       return (False, f"void type cannot must represented by None, not {obj}")
@@ -110,8 +125,8 @@ __esi_mapping[cpp.VoidType] = VoidType
 
 class BitsType(ESIType):
 
-  def __init__(self, cpp_type: cpp.BitsType):
-    self.cpp_type: cpp.BitsType = cpp_type
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.BitsType(id, width))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, (bytearray, bytes, list)):
@@ -143,8 +158,8 @@ __esi_mapping[cpp.BitsType] = BitsType
 
 class IntType(ESIType):
 
-  def __init__(self, cpp_type: cpp.IntegerType):
-    self.cpp_type: cpp.IntegerType = cpp_type
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.IntegerType(id, width))
 
   @property
   def bit_width(self) -> int:
@@ -152,6 +167,9 @@ class IntType(ESIType):
 
 
 class UIntType(IntType):
+
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.UIntType(id, width))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, int):
@@ -175,6 +193,9 @@ __esi_mapping[cpp.UIntType] = UIntType
 
 
 class SIntType(IntType):
+
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.SIntType(id, width))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, int):
@@ -203,11 +224,16 @@ __esi_mapping[cpp.SIntType] = SIntType
 
 class StructType(ESIType):
 
-  def __init__(self, cpp_type: cpp.StructType):
-    self.cpp_type = cpp_type
-    self.fields: List[Tuple[str, ESIType]] = [
-        (name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields
-    ]
+  def __init__(self, id: str, fields: List[Tuple[str, "ESIType"]]):
+    # Convert Python ESIType fields to cpp Type fields
+    cpp_fields = [(name, field_type.cpp_type) for name, field_type in fields]
+    self._init_from_cpp(cpp.StructType(id, cpp_fields))
+
+  def _init_from_cpp(self, cpp_type: cpp.StructType):
+    """Initialize instance attributes from a C++ type object."""
+    super()._init_from_cpp(cpp_type)
+    # For wrap_cpp path, we need to convert C++ fields back to Python
+    self.fields = [(name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields]
 
   @property
   def bit_width(self) -> int:
@@ -252,8 +278,12 @@ __esi_mapping[cpp.StructType] = StructType
 
 class ArrayType(ESIType):
 
-  def __init__(self, cpp_type: cpp.ArrayType):
-    self.cpp_type = cpp_type
+  def __init__(self, id: str, element_type: "ESIType", size: int):
+    self._init_from_cpp(cpp.ArrayType(id, element_type.cpp_type, size))
+
+  def _init_from_cpp(self, cpp_type: cpp.ArrayType):
+    """Initialize instance attributes from a C++ type object."""
+    super()._init_from_cpp(cpp_type)
     self.element_type = _get_esi_type(cpp_type.element)
     self.size = cpp_type.size
 
