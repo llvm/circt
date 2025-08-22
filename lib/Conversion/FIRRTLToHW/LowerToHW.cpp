@@ -3016,7 +3016,8 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
 FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // FIRRTL operations must explicitly handle their regions.
-  if (!op->getRegions().empty() && isa<FIRRTLDialect>(op->getDialect())) {
+  if (!op->getRegions().empty() &&
+      isa_and_nonnull<FIRRTLDialect>(op->getDialect())) {
     op->emitOpError("must explicitly handle its regions");
     return LoweringFailure;
   }
@@ -3025,7 +3026,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // lowered. This allows us to handled partially lowered inputs, and also allow
   // other FIRRTL operations to spawn additional already-lowered operations,
   // like `hw.output`.
-  if (!isa<FIRRTLDialect>(op->getDialect())) {
+  if (!isa_and_nonnull<FIRRTLDialect>(op->getDialect())) {
     // Push nested operations onto the worklist such that they are lowered.
     for (auto &region : op->getRegions())
       addToWorklist(region);
@@ -5401,7 +5402,8 @@ LogicalResult FIRRTLLowering::fixupLTLOps() {
     for (auto *user : op->getUsers()) {
       if (!usersReported.insert(user).second)
         continue;
-      if (isa<ltl::LTLDialect, verif::VerifDialect>(user->getDialect()))
+      if (isa_and_nonnull<ltl::LTLDialect, verif::VerifDialect>(
+              user->getDialect()))
         continue;
       if (isa<hw::WireOp>(user))
         continue;

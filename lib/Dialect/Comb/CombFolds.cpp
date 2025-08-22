@@ -2352,7 +2352,7 @@ static bool assumeMuxCondInOperand(Value muxCond, Value muxValue,
   if (!muxValue.hasOneUse())
     return false;
   auto *op = muxValue.getDefiningOp();
-  if (!op || !isa<CombDialect>(op->getDialect()))
+  if (!op || !isa_and_nonnull<CombDialect>(op->getDialect()))
     return false;
   if (!llvm::is_contained(op->getOperands(), muxCond))
     return false;
