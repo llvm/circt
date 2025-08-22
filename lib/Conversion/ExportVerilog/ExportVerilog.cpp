@@ -823,7 +823,8 @@ enum class BlockStatementCount { Zero, One, TwoOrMore };
 static BlockStatementCount countStatements(Block &block) {
   unsigned numStatements = 0;
   block.walk([&](Operation *op) {
-    if (isVerilogExpression(op) || isa<ltl::LTLDialect>(op->getDialect()))
+    if (isVerilogExpression(op) ||
+        isa_and_nonnull<ltl::LTLDialect>(op->getDialect()))
       return WalkResult::advance();
     numStatements +=
         TypeSwitch<Operation *, unsigned>(op)
@@ -5777,7 +5778,7 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   // Ignore LTL expressions as they are emitted as part of verification
   // statements. Ignore debug ops as they are emitted as part of debug info.
-  if (isa<ltl::LTLDialect, debug::DebugDialect>(op->getDialect()))
+  if (isa_and_nonnull<ltl::LTLDialect, debug::DebugDialect>(op->getDialect()))
     return;
 
   // Handle HW statements, SV statements.

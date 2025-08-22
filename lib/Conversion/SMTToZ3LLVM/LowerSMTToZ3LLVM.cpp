@@ -769,7 +769,7 @@ struct YieldOpLowering : public SMTLoweringPattern<YieldOp> {
       rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, adaptor.getValues());
       return success();
     }
-    if (isa<scf::SCFDialect>(op->getParentOp()->getDialect())) {
+    if (isa_and_nonnull<scf::SCFDialect>(op->getParentOp()->getDialect())) {
       rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getValues());
       return success();
     }

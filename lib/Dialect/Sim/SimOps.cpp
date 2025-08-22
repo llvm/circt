@@ -369,13 +369,13 @@ LogicalResult PrintFormattedProcOp::verify() {
   if (!parentOp)
     return emitOpError("must be within a procedural region.");
 
-  if (isa<hw::HWDialect>(parentOp->getDialect())) {
+  if (isa_and_nonnull<hw::HWDialect>(parentOp->getDialect())) {
     if (!isa<hw::TriggeredOp>(parentOp))
       return emitOpError("must be within a procedural region.");
     return success();
   }
 
-  if (isa<sv::SVDialect>(parentOp->getDialect())) {
+  if (isa_and_nonnull<sv::SVDialect>(parentOp->getDialect())) {
     if (!parentOp->hasTrait<sv::ProceduralRegion>())
       return emitOpError("must be within a procedural region.");
     return success();
