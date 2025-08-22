@@ -2195,6 +2195,9 @@ circuit NullaryCat:
 ;// -----
 FIRRTL version 5.1.0
 circuit Domains:
+  ; CHECK-LABEL: firrtl.domain @ClockDomain
+  domain ClockDomain:
+
   ; CHECK-LABEL: firrtl.module @Domains
   ; CHECK-SAME:    in %A: !firrtl.domain
   ; CHECK-SAME:    in %B: !firrtl.domain
