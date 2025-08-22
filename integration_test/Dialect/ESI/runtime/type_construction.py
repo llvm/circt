@@ -30,10 +30,16 @@ struct_type = types.StructType("mystruct",
                                 ("field2", types.UIntType("uint16", 16))])
 assert struct_type is not None
 assert isinstance(struct_type, types.StructType)
+assert isinstance(struct_type.field("field1"), types.UIntType)
+assert isinstance(struct_type.field("field2"), types.UIntType)
 
 # Test ArrayType construction
 array_type = types.ArrayType("uint8_array", types.UIntType("uint8", 8), 10)
 assert array_type is not None
 assert isinstance(array_type, types.ArrayType)
+assert hasattr(array_type, "element_type")
+assert isinstance(array_type.element_type, types.UIntType)
+assert hasattr(array_type, "size")
+assert array_type.size == 10
 
 print("SUCCESS!")
