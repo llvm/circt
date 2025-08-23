@@ -22,6 +22,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Operation.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/SmallVector.h"
@@ -171,6 +172,11 @@ llvm::json::Value toJSON(const circt::aig::DataflowPath &path);
 // Options for the longest path analysis.
 struct LongestPathAnalysisOption {
   bool traceDebugPoints = false;
+  bool incremental = false;
+
+  LongestPathAnalysisOption(bool traceDebugPoints, bool incremental)
+      : traceDebugPoints(traceDebugPoints), incremental(incremental) {}
+  LongestPathAnalysisOption() = default;
 };
 
 // This analysis finds the longest paths in the dataflow graph across modules.
@@ -248,11 +254,39 @@ public:
 
   MLIRContext *getContext() const { return ctx; }
 
-private:
+protected:
+  friend class IncrementalLongestPathAnalysis;
   struct Impl;
   Impl *impl;
 
+private:
   mlir::MLIRContext *ctx;
+};
+
+// For incremental updates, this class exposes subset of the analysis results
+// and allows incremental updates.
+class IncrementalLongestPathAnalysis : private LongestPathAnalysis,
+                                       public mlir::PatternRewriter::Listener {
+public:
+  IncrementalLongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am)
+      : LongestPathAnalysis(moduleOp, am,
+                            LongestPathAnalysisOption(false, true)) {}
+
+  FailureOr<int64_t> getOrComputeDelay(Value value, size_t bitPos);
+  FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
+
+  // Returns true if the analysis is still valid after the value is erased.
+  // If the client erased a value, then the analyais cannot be used anymore.
+  // A client should check this before erasing a value, and if this
+  // returns false, the client should raise an error or should not rely on the
+  // analysis.
+  bool isValueValidToErase(Value value) const;
+
+  // MLIR PatternRewriter::Listener interface.
+  void notifyOperationReplaced(Operation *op, ValueRange replacement) override;
+  void notifyOperationErased(Operation *op) override;
+
+  bool isAnalysisValid = true;
 };
 
 // A wrapper class for the longest path analysis that also traces debug points.
@@ -260,7 +294,7 @@ private:
 class LongestPathAnalysisWithTrace : public LongestPathAnalysis {
 public:
   LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
-      : LongestPathAnalysis(moduleOp, am, {true}) {}
+      : LongestPathAnalysis(moduleOp, am, {true, false}) {}
 };
 
 // A collection of longest paths. The data structure owns the paths, and used

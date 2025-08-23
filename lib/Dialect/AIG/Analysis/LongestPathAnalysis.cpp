@@ -65,6 +65,7 @@
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/raw_ostream.h"
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -73,7 +74,7 @@
 using namespace circt;
 using namespace aig;
 
-static size_t getBitWidth(Value value) {
+static int64_t getBitWidth(Value value) {
   if (auto vecType = dyn_cast<seq::ClockType>(value.getType()))
     return 1;
   if (auto memory = dyn_cast<seq::FirMemType>(value.getType()))
@@ -409,12 +410,16 @@ public:
   // Lookup a local visitor for `name`, and wait until it's done.
   const LocalVisitor *getAndWaitLocalVisitor(StringAttr name) const;
 
+  // Lookup a mutable local visitor for `name`.
+  LocalVisitor *getLocalVisitorMutable(StringAttr name) const;
+
   // A map from the module name to the local visitor.
   llvm::MapVector<StringAttr, std::unique_ptr<LocalVisitor>> localVisitors;
   // This is non-null only if `module` is a ModuleOp.
   circt::igraph::InstanceGraph *instanceGraph = nullptr;
 
   bool doTraceDebugPoints() const { return option.traceDebugPoints; }
+  bool doIncremental() const { return option.incremental; }
 
 private:
   llvm::sys::SmartMutex<true> mutex;
@@ -1057,6 +1062,9 @@ LogicalResult LocalVisitor::initializeAndRun(hw::OutputOp output) {
 }
 
 LogicalResult LocalVisitor::initializeAndRun() {
+  if (ctx->doIncremental())
+    return success();
+
   LLVM_DEBUG({ ctx->notifyStart(module.getModuleNameAttr()); });
   // Initialize the results for the block arguments.
   for (auto blockArgument : module.getBodyBlock()->getArguments())
@@ -1129,6 +1137,15 @@ const LocalVisitor *Context::getAndWaitLocalVisitor(StringAttr name) const {
   return visitor;
 }
 
+LocalVisitor *Context::getLocalVisitorMutable(StringAttr name) const {
+  auto *it = localVisitors.find(name);
+  if (it == localVisitors.end())
+    return nullptr;
+
+  // NOTE: Don't call waitUntilDone here.
+  return it->second.get();
+}
+
 //===----------------------------------------------------------------------===//
 // LongestPathAnalysis::Impl
 //===----------------------------------------------------------------------===//
@@ -1158,6 +1175,13 @@ struct LongestPathAnalysis::Impl {
       StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
 
   llvm::ArrayRef<hw::HWModuleOp> getTopModules() const { return topModules; }
+
+  // Incremental mode.
+  bool doIncremental() const { return ctx.doIncremental(); }
+
+protected:
+  friend class IncrementalLongestPathAnalysis;
+  FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
 
 private:
   LogicalResult getResultsImpl(
@@ -1330,6 +1354,7 @@ LongestPathAnalysis::Impl::Impl(Operation *moduleOp, mlir::AnalysisManager &am,
     llvm::report_fatal_error("Analysis scheduled on invalid operation");
   }
 }
+
 LogicalResult
 LongestPathAnalysis::Impl::initializeAndRun(hw::HWModuleOp module) {
   auto it =
@@ -1459,6 +1484,31 @@ int64_t LongestPathAnalysis::Impl::getMaxDelay(Value value) const {
   return maxDelay;
 }
 
+FailureOr<ArrayRef<OpenPath>>
+LongestPathAnalysis::Impl::getOrComputePaths(Value value, size_t bitPos) {
+  if (!doIncremental())
+    return mlir::emitError(value.getLoc())
+           << "getOrComputeMaxDelay is only available in incremental mode";
+  if (ctx.instanceGraph)
+    return mlir::emitError(value.getLoc())
+           << "inceremental mode is not supported for global analysis";
+  auto parentHWModule =
+      value.getParentRegion()->getParentOfType<hw::HWModuleOp>();
+  if (!parentHWModule)
+    return mlir::emitError(value.getLoc())
+           << "query value is not in a HWModuleOp";
+  assert(ctx.localVisitors.size() == 1 &&
+         "In incremental mode, there should be only one local visitor");
+
+  auto *localVisitor =
+      ctx.getLocalVisitorMutable(parentHWModule.getModuleNameAttr());
+  if (!localVisitor)
+    return mlir::emitError(value.getLoc())
+           << "the local visitor for the given value does not exist";
+  auto path = localVisitor->getOrComputeResults(value, bitPos);
+  return path;
+}
+
 //===----------------------------------------------------------------------===//
 // LongestPathAnalysis
 //===----------------------------------------------------------------------===//
@@ -1468,7 +1518,13 @@ LongestPathAnalysis::~LongestPathAnalysis() { delete impl; }
 LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
     const LongestPathAnalysisOption &option)
-    : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {}
+    : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {
+  llvm::errs() << "LongestPathAnalysis created\n";
+  if (option.traceDebugPoints)
+    llvm::errs() << " - Tracing debug points\n";
+  if (option.incremental)
+    llvm::errs() << " - Incremental analysis enabled\n";
+}
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return impl->isAnalysisAvailable(moduleName);
@@ -1516,6 +1572,82 @@ LongestPathAnalysis::getAllPaths(StringAttr moduleName,
 
 ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
+}
+
+// === --------------------------------------------------------------------===//
+// InrementalLongestPathAnalysis
+// === --------------------------------------------------------------------===//
+
+FailureOr<ArrayRef<OpenPath>>
+IncrementalLongestPathAnalysis::getOrComputePaths(Value value, size_t bitPos) {
+  if (!isAnalysisValid)
+    return failure();
+
+  return impl->getOrComputePaths(value, bitPos);
+}
+
+FailureOr<int64_t>
+IncrementalLongestPathAnalysis::getOrComputeDelay(Value value, size_t bitPos) {
+  if (!isAnalysisValid)
+    return failure();
+
+  auto result = impl->getOrComputePaths(value, bitPos);
+  if (failed(result))
+    return failure();
+  int64_t maxDelay = 0;
+  for (auto &path : *result)
+    maxDelay = std::max(maxDelay, path.delay);
+  return maxDelay;
+}
+
+bool IncrementalLongestPathAnalysis::isValueValidToErase(Value value) const {
+  if (!isAnalysisValid)
+    return false;
+
+  auto parentHWModule =
+      value.getParentRegion()->getParentOfType<hw::HWModuleOp>();
+  if (!parentHWModule)
+    return true;
+  auto *localVisitor =
+      impl->ctx.getLocalVisitor(parentHWModule.getModuleNameAttr());
+  if (!localVisitor)
+    return true;
+
+  auto end = getBitWidth(value);
+  if (end <= 0)
+    return true;
+
+  for (int64_t i = 0, e = getBitWidth(value); i < e; ++i) {
+    auto path = localVisitor->getResults(value, i);
+    if (!path.empty())
+      return false;
+  }
+  return true;
+}
+
+void IncrementalLongestPathAnalysis::notifyOperationReplaced(
+    Operation *op, ValueRange replacement) {
+  for (auto value : op->getResults()) {
+    if (isValueValidToErase(value)) {
+      mlir::emitError(value.getLoc())
+          << "value " << value
+          << " replaced but contained in longest path analysis. It's required "
+             "to perform the IR mutation from buttom-up";
+      isAnalysisValid = false;
+    }
+  }
+}
+
+void IncrementalLongestPathAnalysis::notifyOperationErased(Operation *op) {
+  for (auto value : op->getResults()) {
+    if (isValueValidToErase(value)) {
+      mlir::emitError(value.getLoc())
+          << "value " << value
+          << " replaced but contained in longest path analysis. It's required "
+             "to perform the IR mutation from buttom-up";
+      isAnalysisValid = false;
+    }
+  }
 }
 
 // ===----------------------------------------------------------------------===//

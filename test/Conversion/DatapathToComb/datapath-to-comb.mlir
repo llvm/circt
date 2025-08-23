@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-datapath-to-comb | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-datapath-to-comb))" | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-datapath-to-comb{lower-compress-to-add=true}))" | FileCheck %s --check-prefix=TO-ADD
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-datapath-to-comb{lower-partial-product-to-booth=true}, canonicalize))" | FileCheck %s --check-prefix=FORCE-BOOTH
 
