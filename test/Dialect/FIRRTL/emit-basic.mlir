@@ -960,12 +960,12 @@ firrtl.circuit "Foo" {
 
   // CHECK-LABEL: module Domains :
   firrtl.module @Domains(
-    // CHECK-NEXT: input A : Domain
-    // CHECK-NEXT: input B : Domain
+    // CHECK-NEXT: input A : Domain of ClockDomain
+    // CHECK-NEXT: input B : Domain of ClockDomain
     // CHECK-NEXT: input a : UInt<1> domains [A]
     // CHECK-NEXT: input ab : UInt<1> domains [A, B]
-    in %A: !firrtl.domain,
-    in %B: !firrtl.domain,
+    in %A: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain of @ClockDomain,
     in %a: !firrtl.uint<1> domains [%A],
     in %ab: !firrtl.uint<1> domains [%A, %B]
   ) {

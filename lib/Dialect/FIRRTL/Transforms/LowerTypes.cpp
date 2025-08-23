@@ -1108,8 +1108,10 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgSyms.push_back(port.pi.sym);
     newArgLocations.push_back(port.pi.loc);
     newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
-    auto domains = port.pi.domains;
-    newArgDomains.push_back(domains ? domains : cache.aEmpty);
+    if (auto domains = port.pi.domains)
+      newArgDomains.push_back(domains);
+    else
+      newArgDomains.push_back(cache.aEmpty);
     if (internalPaths)
       newInternalPaths.push_back(port.internalPath.value_or(emptyInternalPath));
   }
@@ -1209,8 +1211,10 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgSyms.push_back(port.pi.sym);
     newArgLocations.push_back(port.pi.loc);
     newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
-    auto domains = port.pi.domains;
-    newPortDomains.push_back(domains ? domains : cache.aEmpty);
+    if (auto domains = port.pi.domains)
+      newPortDomains.push_back(domains);
+    else
+      newPortDomains.push_back(cache.aEmpty);
   }
 
   newModuleAttrs.push_back(

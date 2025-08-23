@@ -3024,3 +3024,52 @@ firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
     %0 = firrtl.xmr.deref @Target : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "UndefinedDomainKind" {
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "WrongDomainKind" {
+  firrtl.module @ClockDomain() {}
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "DomainInfoNotArray" {
+  firrtl.domain @ClockDomain {}
+  // expected-error @below {{requires valid port domains}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {domainInfo = 0 : i32} {}
+}
+
+// -----
+
+firrtl.circuit "WrongDomainPortInfo" {
+  firrtl.domain @ClockDomain {}
+  // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {domainInfo = [0 : i32]} {}
+}
+
+// -----
+
+firrtl.circuit "WrongNonDomainPortInfo" {
+  firrtl.domain @ClockDomain {}
+  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
+  firrtl.module @WrongNonDomainPortInfo(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [["hello"]]} {}
+}

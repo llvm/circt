@@ -682,11 +682,11 @@ static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
   ArrayRef<Attribute> domains = module.getDomainInfo();
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
-    results.push_back(
-        {module.getPortNameAttr(i), module.getPortType(i),
-         module.getPortDirection(i), module.getPortSymbolAttr(i),
-         module.getPortLocation(i), AnnotationSet::forPort(module, i),
-         domains.empty() ? ArrayAttr() : cast<ArrayAttr>(domains[i])});
+    results.push_back({module.getPortNameAttr(i), module.getPortType(i),
+                       module.getPortDirection(i), module.getPortSymbolAttr(i),
+                       module.getPortLocation(i),
+                       AnnotationSet::forPort(module, i),
+                       domains.empty() ? Attribute{} : domains[i]});
   }
   return results;
 }
@@ -1031,7 +1031,11 @@ void buildModuleLike(OpBuilder &builder, OperationState &result,
     portDomains.push_back(port.domains);
   }
   if (llvm::all_of(portDomains, [](Attribute attr) {
-        return !attr || cast<ArrayAttr>(attr).empty();
+        if (!attr)
+          return true;
+        if (auto arrayAttr = dyn_cast<ArrayAttr>(attr))
+          return arrayAttr.empty();
+        return false;
       }))
     portDomains.clear();
 
@@ -1352,38 +1356,48 @@ static ParseResult parseModulePorts(
     }
 
     // Parse optional port domain information if it exists.
-    ArrayAttr domainsAttr;
-    if (supportsDomains && succeeded(parser.parseOptionalKeyword("domains"))) {
-      SmallVector<Attribute> portDomains;
-      auto result = parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
-            StringAttr argName;
-            if (hasSSAIdentifiers) {
-              OpAsmParser::Argument arg;
-              if (parser.parseArgument(arg))
-                return failure();
-              argName = StringAttr::get(context, arg.ssaName.name.drop_front());
-            } else {
-              std::string portName;
-              if (parser.parseKeywordOrString(&portName))
-                return failure();
-              argName = StringAttr::get(context, portName);
-            }
+    Attribute domainsAttr;
+    SmallVector<Attribute> portDomains;
+    if (supportsDomains) {
+      if (isa<DomainType>(portType)) {
+        if (parser.parseKeyword("of"))
+          return failure();
+        StringAttr domainKind;
+        if (parser.parseSymbolName(domainKind))
+          return failure();
+        domainsAttr = FlatSymbolRefAttr::get(context, domainKind);
+      } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
+        auto result = parser.parseCommaSeparatedList(
+            OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+              StringAttr argName;
+              if (hasSSAIdentifiers) {
+                OpAsmParser::Argument arg;
+                if (parser.parseArgument(arg))
+                  return failure();
+                argName =
+                    StringAttr::get(context, arg.ssaName.name.drop_front());
+              } else {
+                std::string portName;
+                if (parser.parseKeywordOrString(&portName))
+                  return failure();
+                argName = StringAttr::get(context, portName);
+              }
 
-            auto index = domainIndex.find(argName);
-            if (index == domainIndex.end()) {
-              parser.emitError(irLoc)
-                  << "domain name '" << argName << "' not found";
-              return failure();
-            }
-            portDomains.push_back(IntegerAttr::get(
-                IntegerType::get(context, 32, IntegerType::Unsigned),
-                index->second));
-            return success();
-          });
-      if (failed(result))
-        return failure();
-      domainsAttr = parser.getBuilder().getArrayAttr(portDomains);
+              auto index = domainIndex.find(argName);
+              if (index == domainIndex.end()) {
+                parser.emitError(irLoc)
+                    << "domain name '" << argName << "' not found";
+                return failure();
+              }
+              portDomains.push_back(IntegerAttr::get(
+                  IntegerType::get(context, 32, IntegerType::Unsigned),
+                  index->second));
+              return success();
+            });
+        if (failed(result))
+          return failure();
+        domainsAttr = parser.getBuilder().getArrayAttr(portDomains);
+      }
     }
     if (!domainsAttr)
       domainsAttr = parser.getBuilder().getArrayAttr({});
@@ -1845,6 +1859,16 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
                                     [&]() { return module.emitOpError(); })))
         return failure();
       continue;
+    }
+
+    if (isa<DomainType>(type)) {
+      auto domainInfo = module.getDomainInfoAttrForPort(i);
+      if (auto kind = dyn_cast<FlatSymbolRefAttr>(domainInfo))
+        if (!dyn_cast_or_null<DomainOp>(
+                symbolTable.lookupSymbolIn(circuitOp, kind)))
+          return mlir::emitError(module.getPortLocation(i))
+                 << "domain port '" << module.getPortName(i)
+                 << "' has undefined domain kind '" << kind.getValue() << "'";
     }
   }
 

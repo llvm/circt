@@ -230,19 +230,12 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     >,
 
     InterfaceMethod<"Get a port's domain info attribute",
-    "ArrayAttr", "getDomainInfoAttrForPort", (ins "size_t":$portIndex), [{}],
+    "Attribute", "getDomainInfoAttrForPort", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
       auto domains = $_op.getDomainInfoAttr();
       if (domains.empty())
         return domains; // domains already is an empty array
-      return llvm::cast<ArrayAttr>(domains[portIndex]);
-    }]>,
-
-    InterfaceMethod<"Get a port's domain info",
-    "ArrayRef<Attribute>", "getDomainInfoForPort",
-    (ins "size_t":$portIndex), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getDomainInfoAttrForPort(portIndex).getValue();
+      return domains[portIndex];
     }]>,
 
     //===------------------------------------------------------------------===//

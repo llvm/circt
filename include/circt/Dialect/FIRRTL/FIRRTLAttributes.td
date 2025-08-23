@@ -45,7 +45,7 @@ def DomainInfoAttr : ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
       CPred<"llvm::isa<::mlir::ArrayAttr>($_self)">,
-      // Guarantee all elements are an array.
+      // Guarantee all elements are a FlatSymbolRefAttr or ArrayAttr.
       CPred<"::llvm::all_of(cast<mlir::ArrayAttr>($_self), "
             "[&](::mlir::Attribute attr) { return isa_and_nonnull<"
             "::mlir::FlatSymbolRefAttr, ::mlir::ArrayAttr>(attr);})">]>,

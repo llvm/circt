@@ -5496,10 +5496,21 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration"))
       return failure();
-    SmallVector<Attribute, 4> domains;
-    if (getToken().is(FIRToken::kw_domains))
-      if (parseDomains(domains, nameToIndex))
+    Attribute domainInfoElement;
+    if (isa<DomainType>(type)) {
+      StringAttr domainKind;
+      if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type port") ||
+          parseId(domainKind, "expected domain kind"))
         return failure();
+      domainInfoElement = FlatSymbolRefAttr::get(domainKind);
+    } else {
+      SmallVector<Attribute, 4> domains;
+      if (getToken().is(FIRToken::kw_domains))
+        if (parseDomains(domains, nameToIndex))
+          return failure();
+      domainInfoElement = ArrayAttr::get(getContext(), domains);
+    }
+
     if (info.parseOptionalInfo())
       return failure();
 
@@ -5510,7 +5521,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                    innerSym,
                                    info.getLoc(),
                                    {},
-                                   ArrayAttr::get(getContext(), domains)});
+                                   domainInfoElement});
     resultPortLocs.push_back(info.getFIRLoc());
     nameToIndex.insert({name, resultPorts.size() - 1});
   }

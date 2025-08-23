@@ -205,7 +205,7 @@ struct Emitter {
   }
 
   // Domains
-  void emitDomains(ArrayAttr domains,
+  void emitDomains(Attribute domains,
                    const DenseMap<size_t, StringRef> &domainMap);
 
   // Locations
@@ -1770,19 +1770,26 @@ void Emitter::emitType(Type type, bool includeConst) {
       });
 }
 
-void Emitter::emitDomains(ArrayAttr domains,
+void Emitter::emitDomains(Attribute attr,
                           const DenseMap<size_t, StringRef> &domainMap) {
-  if (!domains || domains.empty())
+  if (!attr)
     return;
-  ps << " domains [";
-  ps.scopedBox(PP::ibox0, [&]() {
-    interleaveComma(domains, [&](Attribute attr) {
-      auto itr = domainMap.find(cast<IntegerAttr>(attr).getUInt());
-      assert(itr != domainMap.end() && "Unable to find domain");
-      ps.addAsString(itr->second);
+  if (auto domains = dyn_cast<ArrayAttr>(attr)) {
+    if (domains.empty())
+      return;
+    ps << " domains [";
+    ps.scopedBox(PP::ibox0, [&]() {
+      interleaveComma(domains, [&](Attribute attr) {
+        auto itr = domainMap.find(cast<IntegerAttr>(attr).getUInt());
+        assert(itr != domainMap.end() && "Unable to find domain");
+        ps.addAsString(itr->second);
+      });
+      ps << "]";
     });
-    ps << "]";
-  });
+  } else {
+    auto kind = cast<FlatSymbolRefAttr>(attr);
+    ps << " of " << PPExtString(kind.getValue());
+  }
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a
