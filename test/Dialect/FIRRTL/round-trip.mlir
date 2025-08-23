@@ -206,8 +206,8 @@ firrtl.domain @ClockDomain {
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
 // CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
 firrtl.module @Domains(
-  in %A: !firrtl.domain,
-  in %B: !firrtl.domain,
+  in %A: !firrtl.domain of @ClockDomain,
+  in %B: !firrtl.domain of @ClockDomain,
   in %a: !firrtl.uint<1> domains [%A],
   out %b: !firrtl.uint<1> domains [%B]
 ) {

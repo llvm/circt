@@ -2199,12 +2199,12 @@ circuit Domains:
   domain ClockDomain:
 
   ; CHECK-LABEL: firrtl.module @Domains
-  ; CHECK-SAME:    in %A: !firrtl.domain
-  ; CHECK-SAME:    in %B: !firrtl.domain
+  ; CHECK-SAME:    in %A: !firrtl.domain of @ClockDomain
+  ; CHECK-SAME:    in %B: !firrtl.domain of @ClockDomain
   ; CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
   ; CHECK-SAME:    in %ab: !firrtl.uint<1> domains [%A, %B]
   public module Domains:
-    input A: Domain
-    input B: Domain
+    input A: Domain of ClockDomain
+    input B: Domain of ClockDomain
     input a: UInt<1> domains [A]
     input ab: UInt<1> domains [A, B]

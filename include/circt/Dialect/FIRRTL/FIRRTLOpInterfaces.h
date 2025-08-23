@@ -45,7 +45,7 @@ struct PortInfo {
   hw::InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
-  ArrayAttr domains;
+  Attribute domains;
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
@@ -66,7 +66,7 @@ struct PortInfo {
   PortInfo(StringAttr name, Type type, Direction dir, StringAttr symName = {},
            std::optional<Location> location = {},
            std::optional<AnnotationSet> annos = {},
-           std::optional<ArrayAttr> domains = {})
+           std::optional<Attribute> domains = {})
       : name(name), type(type), direction(dir) {
     if (symName)
       sym = hw::InnerSymAttr::get(symName);
@@ -78,7 +78,7 @@ struct PortInfo {
       this->domains = *domains;
   };
   PortInfo(StringAttr name, Type type, Direction dir, hw::InnerSymAttr sym,
-           Location loc, AnnotationSet annos, ArrayAttr domains)
+           Location loc, AnnotationSet annos, Attribute domains)
       : name(name), type(type), direction(dir), sym(sym), loc(loc),
         annotations(annos), domains(domains) {}
 };
