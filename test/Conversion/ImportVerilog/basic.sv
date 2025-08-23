@@ -2081,6 +2081,19 @@ task automatic ImplicitEventControl(ref int x, ref int y);
   @* dummyD(x + y);
 endtask
 
+// CHECK-LABEL: func.func private @DelayControl(
+// CHECK-SAME: [[X:%[^:]+]]: !moore.time
+task automatic DelayControl(time x);
+  // CHECK: [[TMP:%.+]] = moore.constant_time 1234000 fs
+  // CHECK: moore.wait_delay [[TMP]]
+  // CHECK: call @dummyA()
+  #1.234ns dummyA();
+
+  // CHECK: moore.wait_delay [[X]]
+  // CHECK: call @dummyA()
+  #x dummyA();
+endtask
+
 // CHECK-LABEL: func.func private @SignalEventControl(
 // CHECK-SAME: [[X:%[^:]+]]: !moore.ref<i32>
 // CHECK-SAME: [[Y:%[^:]+]]: !moore.ref<i32>
