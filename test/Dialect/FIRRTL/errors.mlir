@@ -3022,3 +3022,12 @@ firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
     %0 = firrtl.xmr.deref @Target : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "UndefinedDomainKind" {
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}

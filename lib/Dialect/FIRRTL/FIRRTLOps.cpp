@@ -1861,6 +1861,15 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
         return failure();
       continue;
     }
+
+    if (isa<DomainType>(type)) {
+      auto domainInfo = module.getDomainInfoAttrForPort(i);
+      if (auto kind = dyn_cast<FlatSymbolRefAttr>(domainInfo))
+        if (!symbolTable.lookupSymbolIn(circuitOp, kind))
+          return mlir::emitError(module.getPortLocation(i))
+                 << "domain port '" << module.getPortName(i)
+                 << "' has undefined domain kind '" << kind.getValue() << "'";
+    }
   }
 
   return success();
