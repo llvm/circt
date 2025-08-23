@@ -77,7 +77,8 @@ TEST(LongestPathTest, BasicTest) {
 
   // Check global analysis
   {
-    LongestPathAnalysis longestPath(module.get(), am, {true});
+    LongestPathAnalysis longestPath(module.get(), am,
+                                    LongestPathAnalysisOption(true, false));
     llvm::SmallVector<DataflowPath> results;
     auto closedPath =
         longestPath.getClosedPaths(basicModule.getModuleNameAttr(), results);
@@ -132,7 +133,8 @@ TEST(LongestPathTest, BasicTest) {
   // Check local paths
   {
     auto nestedAm = am.nest(basicModule);
-    LongestPathAnalysis longestPath(basicModule, nestedAm, {true});
+    LongestPathAnalysis longestPath(basicModule, nestedAm,
+                                    LongestPathAnalysisOption(true, false));
     llvm::SmallVector<DataflowPath> results;
     auto closedPath =
         longestPath.getClosedPaths(basicModule.getModuleNameAttr(), results);
@@ -182,7 +184,8 @@ TEST(LongestPathTest, ElaborationTest) {
   ModuleAnalysisManager mam(module.get(), nullptr);
   AnalysisManager am(mam);
 
-  LongestPathAnalysis longestPath(module.get(), am, {true});
+  LongestPathAnalysis longestPath(module.get(), am,
+                                  LongestPathAnalysisOption(true, false));
   llvm::SmallVector<DataflowPath> elaboratedPaths, unelaboratedPaths;
   auto elaborated =
       longestPath.getClosedPaths(basicModule.getModuleNameAttr(),
