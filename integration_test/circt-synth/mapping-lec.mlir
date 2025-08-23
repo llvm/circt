@@ -45,7 +45,8 @@ hw.module @some(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.
 // CHECK-NOT: comb.xor
 // CHECK-DAG: hw.instance {{".+"}} @and_inv
 // CHECK-DAG: hw.instance {{".+"}} @some
-// CHECK-DAG: hw.instance {{".+"}} @nand_nand
+// FIXME: To map @nand_nand it's necessary to implement supergate generation.
+// CHECK-NOT: hw.instance {{".+"}} @nand_nand
 // CHECK-DAG: hw.instance {{".+"}} @and_inv_n
 // CHECK-DAG: hw.instance {{".+"}} @and_inv_nn
 hw.module @mul(in %arg0: i4, in %arg1: i4, out add: i4) {
