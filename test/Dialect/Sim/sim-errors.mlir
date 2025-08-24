@@ -51,3 +51,47 @@ hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
   // expected-error @below {{callee must be 'sim.dpi.func' or 'func.func' but got 'hw.module.extern'}}
   %0, %1 = sim.func.dpi.call @non_func(%in) : (i1) -> (i1, i1)
 }
+
+// -----
+
+hw.module @not_enough_triggers(in %in : !sim.trigger.edge) {
+  // expected-error @below {{operation defines 1 results but was provided 2 to bind}}
+  %res:2 = sim.trigger_sequence %in, 1 : !sim.trigger.edge
+}
+
+// -----
+
+hw.module @recursive_trigger() {
+  // expected-warning @below {{Recursive trigger sequence}}
+  %res = sim.trigger_sequence %res, 1 : !sim.trigger.edge
+}
+
+// -----
+
+hw.module @missing_tieoffs(in %trig : !sim.trigger.edge) {
+  // expected-error @below {{Tie-off constants must be provided for all results}}
+  %res = sim.triggered () on (%trig : !sim.trigger.edge) {
+    %cst = hw.constant 0 : i2
+    sim.yield_seq %cst : i2
+  } : () -> i2
+}
+
+// -----
+
+hw.module @wrong_tieoff(in %trig : !sim.trigger.edge) {
+  // expected-error @below {{Tie-off type does not match for result at index 0}}
+  %res = sim.triggered () on (%trig : !sim.trigger.edge) tieoff [0 : i1] {
+    %cst = hw.constant 0 : i2
+    sim.yield_seq %cst : i2
+  } : () -> i2
+}
+
+// -----
+
+hw.module @too_many_tieoffs(in %trig : !sim.trigger.edge) {
+  // expected-error @below {{Number of tie-off constants does not match number of results}}
+  %res = sim.triggered () on (%trig : !sim.trigger.edge) tieoff [0 : i2, 0 : i2] {
+    %cst = hw.constant 0 : i2
+    sim.yield_seq %cst : i2
+  } : () -> i2
+}

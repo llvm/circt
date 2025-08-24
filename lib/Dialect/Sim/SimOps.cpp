@@ -397,6 +397,186 @@ LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
   return failure();
 }
 
+// --- TriggeredOp ---
+
+LogicalResult TriggeredOp::verify() {
+  if (getNumResults() > 0 && !getTieoffs())
+    return emitError("Tie-off constants must be provided for all results.");
+  auto numTieoffs = !getTieoffs() ? 0 : getTieoffsAttr().size();
+  if (numTieoffs != getNumResults())
+    return emitError(
+        "Number of tie-off constants does not match number of results.");
+  if (numTieoffs == 0)
+    return success();
+  unsigned idx = 0;
+  bool failed = false;
+  for (const auto &[res, tieoff] :
+       llvm::zip(getResultTypes(), getTieoffsAttr())) {
+    if (res != cast<TypedAttr>(tieoff).getType()) {
+      emitError("Tie-off type does not match for result at index " +
+                Twine(idx));
+      failed = true;
+    }
+    ++idx;
+  }
+  return success(!failed);
+}
+
+LogicalResult TriggeredOp::canonicalize(TriggeredOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getNumResults() > 0)
+    return failure();
+
+  auto *bodyBlock = &op.getBodyRegion().front();
+  if (bodyBlock->without_terminator().empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+// --- TriggerSequenceOp ---
+
+LogicalResult TriggerSequenceOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  // Create N results matching the type of the parent trigger, where N is the
+  // specified length of the sequence.
+  auto lengthAttr =
+      properties.as<TriggerSequenceOp::Properties *>()->getLength();
+  uint32_t len = lengthAttr.getValue().getZExtValue();
+  Type trigType = operands.front().getType();
+  inferredReturnTypes.resize_for_overwrite(len);
+  for (size_t i = 0; i < len; ++i)
+    inferredReturnTypes[i] = trigType;
+  return success();
+}
+
+LogicalResult TriggerSequenceOp::verify() {
+  if (getLength() != getNumResults())
+    return emitOpError("specified length does not match number of results.");
+  return success();
+}
+
+LogicalResult TriggerSequenceOp::fold(FoldAdaptor adaptor,
+                                      SmallVectorImpl<OpFoldResult> &results) {
+  // Fold trivial sequences to the parent trigger.
+  if (getLength() == 1 && getResult(0) != getParent()) {
+    results.push_back(getParent());
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult TriggerSequenceOp::canonicalize(TriggerSequenceOp op,
+                                              PatternRewriter &rewriter) {
+  if (op.getNumResults() == 0) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  // If the current op can be inlined into the parent,
+  // leave it to the parent's canonicalization.
+  if (auto parentSeq = op.getParent().getDefiningOp<TriggerSequenceOp>()) {
+    if (parentSeq == op) {
+      op.emitWarning("Recursive trigger sequence.");
+      return failure();
+    }
+    if (op.getParent().hasOneUse())
+      return failure();
+  }
+
+  auto getSingleSequenceUser = [](Value trigger) -> TriggerSequenceOp {
+    if (!trigger.hasOneUse())
+      return {};
+    return dyn_cast<TriggerSequenceOp>(trigger.use_begin()->getOwner());
+  };
+
+  // Check if there are unused results (which can be removed) or
+  // non-concurrent sub-sequences (which can be inlined).
+
+  bool canBeChanged = false;
+  for (auto res : op.getResults()) {
+    auto singleSeqUser = getSingleSequenceUser(res);
+    if (res.use_empty() || !!singleSeqUser) {
+      canBeChanged = true;
+      break;
+    }
+  }
+
+  if (!canBeChanged)
+    return failure();
+
+  // DFS for inlinable values.
+  SmallVector<Value> newResultValues;
+  SmallVector<TriggerSequenceOp> inlinedSequences;
+  llvm::SmallVector<std::pair<TriggerSequenceOp, unsigned>> sequenceOpStack;
+
+  sequenceOpStack.push_back({op, 0});
+  while (!sequenceOpStack.empty()) {
+    auto &top = sequenceOpStack.back();
+    auto currentSequence = top.first;
+    unsigned resultIndex = top.second;
+
+    while (resultIndex < currentSequence.getNumResults()) {
+      auto currentResult = currentSequence.getResult(resultIndex);
+      // Check we do not walk in a cycle.
+      if (currentResult == op.getParent()) {
+        op.emitWarning("Recursive trigger sequence.");
+        return failure();
+      }
+
+      if (auto inlinableChildSequence = getSingleSequenceUser(currentResult)) {
+        // Save the next result index to visit on the
+        // stack and put the new sequence on top.
+        top.second = resultIndex + 1;
+        sequenceOpStack.push_back({inlinableChildSequence, 0});
+        inlinedSequences.push_back(inlinableChildSequence);
+        inlinableChildSequence->dropAllReferences();
+        break;
+      }
+
+      if (!currentResult.use_empty())
+        newResultValues.push_back(currentResult);
+      resultIndex++;
+    }
+    // Pop the sequence off of the stack if we have visited all results.
+    if (resultIndex >= currentSequence.getNumResults())
+      sequenceOpStack.pop_back();
+  }
+
+  // Remove dead sequences.
+  if (newResultValues.empty()) {
+    for (auto deadSubSequence : inlinedSequences)
+      rewriter.eraseOp(deadSubSequence);
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  // Replace the current operation with a new sequence.
+  rewriter.setInsertionPoint(op);
+
+  SmallVector<Location> inlinedLocs;
+  inlinedLocs.reserve(inlinedSequences.size() + 1);
+  inlinedLocs.push_back(op.getLoc());
+  for (auto subSequence : inlinedSequences)
+    inlinedLocs.push_back(subSequence.getLoc());
+  auto fusedLoc = FusedLoc::get(op.getContext(), inlinedLocs);
+  inlinedLocs.clear();
+
+  auto newOp = rewriter.create<TriggerSequenceOp>(fusedLoc, op.getParent(),
+                                                  newResultValues.size());
+  for (auto [rval, newRes] : llvm::zip(newResultValues, newOp.getResults()))
+    rewriter.replaceAllUsesWith(rval, newRes);
+
+  for (auto deadSubSequence : inlinedSequences)
+    rewriter.eraseOp(deadSubSequence);
+  rewriter.eraseOp(op);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
