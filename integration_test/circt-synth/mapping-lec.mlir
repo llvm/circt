@@ -1,10 +1,11 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
+// RUN: circt-opt %s --convert-aig-to-comb -o %t.comb.mlir
+
 // RUN: circt-synth %s -o %t1.mlir -convert-to-comb --top mul
 // RUN: cat %t1.mlir | FileCheck %s
-// RUN: circt-opt %s --convert-aig-to-comb -o %t2.mlir
-// RUN: circt-lec %t1.mlir %t2.mlir -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_TECHMAP
+// RUN: circt-lec %t1.mlir %t.comb.mlir -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_TECHMAP
 
 // COMB_MUL_TECHMAP: c1 == c2
 
@@ -43,11 +44,11 @@ hw.module @some(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.
 // CHECK-NOT: aig.and_inv
 // CHECK-NOT: comb.and
 // CHECK-NOT: comb.xor
-// CHECK-DAG: hw.instance {{".+"}} @and_inv
-// CHECK-DAG: hw.instance {{".+"}} @some
-// CHECK-DAG: hw.instance {{".+"}} @nand_nand
-// CHECK-DAG: hw.instance {{".+"}} @and_inv_n
-// CHECK-DAG: hw.instance {{".+"}} @and_inv_nn
+// CHECK: hw.instance "mapped" @and_inv
+// CHECK: hw.instance "mapped" @some
+// CHECK: hw.instance "mapped" @nand_nand
+// CHECK: hw.instance "mapped" @and_inv_n
+// CHECK: hw.instance "mapped" @and_inv_nn
 hw.module @mul(in %arg0: i4, in %arg1: i4, out add: i4) {
   %0 = comb.mul %arg0, %arg1 : i4
   hw.output %0 : i4
