@@ -314,17 +314,16 @@ LogicalResult InferDomainsPass::processModule(FModuleOp module) {
     }
 
     // This is a port with explicit domain information.
-    if (auto domains = port.domains) {
-      if (domains.empty())
-        continue;
-      SmallVector<Value, 4> domainPorts;
-      for (auto domain : domains) {
-        auto index = cast<IntegerAttr>(domain).getUInt();
-        domainPorts.push_back(module.getArgument(index));
-      }
-      Value domainVar = domainUF.getDomainVar(portValue);
-      domainUF.setDomains(domainVar, domainPorts);
+    auto domains = cast<ArrayAttr>(port.domains);
+    if (domains.empty())
+      continue;
+    SmallVector<Value, 4> domainPorts;
+    for (auto domain : domains) {
+      auto index = cast<IntegerAttr>(domain).getUInt();
+      domainPorts.push_back(module.getArgument(index));
     }
+    Value domainVar = domainUF.getDomainVar(portValue);
+    domainUF.setDomains(domainVar, domainPorts);
   }
 
   // Process all operations in the module
