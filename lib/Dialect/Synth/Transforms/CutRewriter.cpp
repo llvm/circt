@@ -492,7 +492,7 @@ static void removeDuplicateAndNonMinimalCuts(SmallVectorImpl<Cut> &cuts) {
   // iterate through the cuts, we always encounter smaller cuts first, allowing
   // us to efficiently check for non-minimality. Stable sort to maintain
   // relative order of cuts with the same input size.
-  std::sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
+  std::stable_sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
     return a.getInputSize() < b.getInputSize();
   });
 
@@ -558,7 +558,7 @@ void CutSet::finalize(
     // TODO: Make this configurable.
     // TODO: Implement pruning based on dominance.
 
-    std::sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
+    std::stable_sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
       if (a.getDepth() == b.getDepth())
         return a.getInputSize() < b.getInputSize();
       return a.getDepth() < b.getDepth();
