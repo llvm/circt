@@ -4973,10 +4973,9 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       sv::MacroRefExprOp::create(builder, cond.getType(), "STOP_COND_");
   Value exitCond = builder.createOrFold<comb::AndOp>(stopCond, cond, true);
 
-  if (op.getExitCode())
-    sim::FatalOp::create(builder, clock, exitCond);
-  else
-    sim::FinishOp::create(builder, clock, exitCond);
+  sim::ClockedExitOp::create(builder, clock, exitCond,
+                             /*success=*/op.getExitCode() == 0,
+                             /*verbose=*/true);
 
   return success();
 }
