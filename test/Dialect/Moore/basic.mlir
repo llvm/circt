@@ -366,6 +366,12 @@ func.func @WaitEvent(%arg0: !moore.i1, %arg1: !moore.i1) {
   return
 }
 
+// CHECK-LABEL: func.func @WaitDelay
+func.func @WaitDelay(%arg0: !moore.time) {
+  // CHECK: moore.wait_delay %arg0
+  moore.wait_delay %arg0
+  return
+}
 
 // CHECK-LABEL: func.func @FormatStrings
 // CHECK-SAME: %arg0: !moore.format_string

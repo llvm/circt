@@ -481,6 +481,19 @@ def DetectEventOp : MooreOp<"detect_event", [
   }];
 }
 
+def WaitDelayOp : MooreOp<"wait_delay"> {
+  let summary = "Suspend execution for a given amount of time";
+  let description = [{
+    The `moore.wait_delay` op suspends execution of the current process for the
+    amount of time specified by its operand. Corresponds to the `#` delay
+    control in SystemVerilog.
+
+    See IEEE 1800-2017 § 9.4.1 "Delay control".
+  }];
+  let arguments = (ins TimeType:$delay);
+  let assemblyFormat = [{ $delay attr-dict }];
+}
+
 //===----------------------------------------------------------------------===//
 // Constants
 //===----------------------------------------------------------------------===//

@@ -508,6 +508,23 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
   }
 };
 
+struct WaitDelayOpConversion : public OpConversionPattern<WaitDelayOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WaitDelayOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto *resumeBlock =
+        rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+    rewriter.setInsertionPoint(op);
+    rewriter.replaceOpWithNewOp<llhd::WaitOp>(op, ValueRange{},
+                                              adaptor.getDelay(), ValueRange{},
+                                              ValueRange{}, resumeBlock);
+    rewriter.setInsertionPointToStart(resumeBlock);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Declaration Conversion
 //===----------------------------------------------------------------------===//
@@ -1850,7 +1867,11 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
 
     // Patterns of structural operations.
-    SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion, WaitEventOpConversion,
+    SVModuleOpConversion,
+    InstanceOpConversion,
+    ProcedureOpConversion,
+    WaitEventOpConversion,
+    WaitDelayOpConversion,
 
     // Patterns of shifting operations.
     ShrOpConversion, ShlOpConversion, AShrOpConversion,

@@ -1001,6 +1001,31 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
   moore.output %1 : !moore.l32
 }
 
+
+// CHECK-LABEL: hw.module @WaitDelay
+moore.module @WaitDelay(in %d: !moore.time) {
+  // CHECK: llhd.process {
+  // CHECK:   [[TMP:%.+]] = llhd.constant_time <1000000fs, 0d, 0e>
+  // CHECK:   func.call @dummyA()
+  // CHECK:   llhd.wait delay [[TMP]], ^[[RESUME1:.+]]
+  // CHECK: ^[[RESUME1]]:
+  // CHECK:   func.call @dummyB()
+  // CHECK:   llhd.wait delay %d, ^[[RESUME2:.+]]
+  // CHECK: ^[[RESUME2]]:
+  // CHECK:   func.call @dummyC()
+  // CHECK:   llhd.halt
+  // CHECK: }
+  moore.procedure initial {
+    %0 = moore.constant_time 1000000 fs
+    func.call @dummyA() : () -> ()
+    moore.wait_delay %0
+    func.call @dummyB() : () -> ()
+    moore.wait_delay %d
+    func.call @dummyC() : () -> ()
+    moore.return
+  }
+}
+
 // Just check that block without predecessors are handled without crashing
 // CHECK-LABEL: @NoPredecessorBlockErasure
 moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !moore.array<2 x l5>, out rdata_o : !moore.array<2 x l32>, in %waddr_i : !moore.array<1 x l5>, in %wdata_i : !moore.array<1 x l32>, in %we_i : !moore.l1) {
