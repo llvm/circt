@@ -288,108 +288,31 @@ struct LowerProcessesPass
   void runOnOperation() override;
 };
 
-static std::optional<DenseMap<BlockArgument, Value>>
-getBlockArgsToPrune(Block &block) {
-  DenseMap<BlockArgument, Value> result;
-  SmallPtrSet<Value, 4> branchOperands;
-
-  for (auto &arg : block.getArguments()) {
-    for (auto it = block.pred_begin(); it != block.pred_end(); ++it) {
-      Block *predecessor = *it;
-      if (auto branchOp =
-              dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
-        SuccessorOperands successorOperands =
-            branchOp.getSuccessorOperands(it.getSuccessorIndex());
-
-        if (Value operand = successorOperands[arg.getArgNumber()]) {
-          branchOperands.insert(operand);
-        } else {
-          return {};
-        }
-      } else if (auto waitOp = dyn_cast<WaitOp>(predecessor->getTerminator())) {
-        auto destOperands = waitOp.getDestOperands();
-        branchOperands.insert(destOperands[arg.getArgNumber()]);
-      } else {
-        return {};
-      }
-    }
-
-    if (branchOperands.size() == 1) {
-      result.insert(std::make_pair(arg, *branchOperands.begin()));
-    }
-
-    branchOperands.clear();
-  }
-
-  return result;
-}
-
-static bool simplifyBlocksArgs(ProcessOp &processOp) {
-  SmallVector<Block *> worklist;
-  for (auto &block : processOp.getBody()) {
-    auto waitOp = dyn_cast<WaitOp>(block.getTerminator());
-    if (!waitOp)
-      continue;
-
-    auto dstOperands = waitOp.getDestOperands();
-    if (dstOperands.empty())
-      continue;
-
-    if (llvm::none_of(dstOperands,
-                      [](auto operand) { return isa<BlockArgument>(operand); }))
-      continue;
-
-    worklist.push_back(&block);
-  }
-
-  while (!worklist.empty()) {
-    auto *block = worklist.pop_back_val();
-    auto blockArgsToPrune = getBlockArgsToPrune(*block);
-    if (!blockArgsToPrune.has_value() || blockArgsToPrune->empty())
-      continue;
-
-    llvm::BitVector argsToErase(block->getNumArguments());
-    for (auto &[blockArg, replaceValue] : *blockArgsToPrune) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "replace" << blockArg << " with " << replaceValue << "\n");
-
-      argsToErase.set(blockArg.getArgNumber());
-    }
-
-    auto argNums = llvm::to_vector(argsToErase.set_bits());
-    for (auto it = block->pred_begin(); it != block->pred_end(); ++it) {
-      Block *predecessor = *it;
-      if (auto branchOp =
-              dyn_cast<BranchOpInterface>(predecessor->getTerminator())) {
-        SuccessorOperands successorOperands =
-            branchOp.getSuccessorOperands(it.getSuccessorIndex());
-
-        const auto argOff = successorOperands.getProducedOperandCount();
-        for (const auto argNum : llvm::reverse(argNums)) {
-          int start = argOff + argNum;
-          successorOperands.erase(start);
-        }
-      } else if (auto waitOp = dyn_cast<WaitOp>(predecessor->getTerminator())) {
-        auto destOperands = waitOp.getDestOperandsMutable();
-        for (const auto argNum : llvm::reverse(argNums)) {
-          destOperands.erase(argNum);
-        }
-      } else {
-        llvm_unreachable("Unexpected predecessor terminator");
-      }
-    }
-
-    for (auto &[blockArg, replaceValue] : *blockArgsToPrune) {
-      blockArg.replaceAllUsesWith(replaceValue);
-    }
-
-    block->eraseArguments(argsToErase);
-
-    for (auto *successor : block->getSuccessors())
-      worklist.push_back(successor);
-  }
-
-  return true;
+// Perform cleanup on the process operation prior to lowering.
+// This can remove redundant operands passed to the successor of llhd.wait.
+//
+// ^bb0
+//  cf.br ^bb1(%clock : i1)
+// ^bb1(%1: i1): // pred: ^bb0, ^bb2
+//  llhd.wait yield (...), (%clock : i1), ^bb2(%1 : i1)
+// ^bb2(%2: i1): // pred: ^bb1
+//  cf.cond_br %true, ^bb3, ^bb1(%2 : i1)
+// ^bb3:
+//
+// The above IR can be rewritten as:
+//
+// ^bb0
+//  cf.br ^bb1
+// ^bb1: // pred: ^bb0, ^bb2
+//  llhd.wait yield (...), (%clock : i1), ^bb2
+// ^bb2: // pred: ^bb1
+//  cf.cond_br %true, ^bb3, ^bb1
+// ^bb3:
+//
+static void simplifyProcess(ProcessOp &processOp) {
+  OpBuilder builder(processOp);
+  IRRewriter rewriter(builder);
+  (void)simplifyRegions(rewriter, processOp->getRegions());
 }
 
 } // namespace
@@ -397,7 +320,7 @@ static bool simplifyBlocksArgs(ProcessOp &processOp) {
 void LowerProcessesPass::runOnOperation() {
   SmallVector<ProcessOp> processOps(getOperation().getOps<ProcessOp>());
   for (auto processOp : processOps) {
-    simplifyBlocksArgs(processOp);
+    simplifyProcess(processOp);
     Lowering(processOp).lower();
   }
 }
