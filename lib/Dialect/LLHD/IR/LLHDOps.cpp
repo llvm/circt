@@ -546,6 +546,15 @@ static LogicalResult verifyYieldResults(Operation *op,
   return success();
 }
 
+SuccessorOperands WaitOp::getSuccessorOperands(unsigned index) {
+  assert(index == 0 && "invalid successor index");
+  return SuccessorOperands(getDestOperandsMutable());
+}
+
+Block *WaitOp::getSuccessorForOperands(ArrayRef<Attribute>) {
+  return getDest();
+}
+
 LogicalResult WaitOp::verify() {
   return verifyYieldResults(*this, getYieldOperands());
 }

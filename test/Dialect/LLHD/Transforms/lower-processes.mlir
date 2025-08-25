@@ -158,50 +158,57 @@ hw.module @SkipIfNoWaits() {
 }
 
 // CHECK-LABEL: @SkipIfWaitHasDestinationOperands(
-hw.module @SkipIfWaitHasDestinationOperands(in %a: i42) {
+hw.module @SkipIfWaitHasDestinationOperands(in %a: i42, in %b: i42) {
   // CHECK: llhd.process
-  llhd.process {
-    cf.br ^bb1
-  ^bb1:
-    llhd.wait ^bb2(%a : i42)
-  ^bb2(%0: i42):
-    cf.br ^bb1
+  // CHECK: llhd.wait yield ({{.*}} : i42), ^bb2({{.*}} : i42)
+  %0 = llhd.process -> i42 {
+    cf.br ^bb1(%a : i42)
+  ^bb1(%1: i42):
+    %false = hw.constant false
+    %c100 = hw.constant 100 : i42
+    cf.cond_br %false, ^bb2(%1 : i42), ^bb3(%c100 : i42)
+  ^bb2(%2: i42):
+    llhd.wait yield (%2 : i42), ^bb2(%2 : i42)
+  ^bb3(%3: i42):
+    %4 = comb.add %3, %b : i42
+    cf.br ^bb1(%4 : i42)
   }
 }
 
 // CHECK-LABEL: @SkipIfEntryAndWaitConvergeInWrongSpot(
 hw.module @SkipIfEntryAndWaitConvergeInWrongSpot(in %a: i42) {
   // CHECK: llhd.process
+  %c100 = hw.constant 100 : i42
   llhd.process {
-    cf.br ^bb2  // skip logic after wait
+    cf.br ^bb2(%c100 : i42)
   ^bb1:
     %0 = comb.add %a, %a : i42
-    cf.br ^bb2
-  ^bb2:
-    llhd.wait ^bb1
+    cf.br ^bb2(%0 : i42)
+  ^bb2(%1 : i42):
+    llhd.wait (%1 : i42), ^bb1
   }
 }
 
 // CHECK-LABEL: @SkipIfEntryAndWaitConvergeWithDifferentBlockArgs(
 hw.module @SkipIfEntryAndWaitConvergeWithDifferentBlockArgs(in %a: i42, in %b: i42) {
   // CHECK: llhd.process
-  llhd.process {
+  %0 = llhd.process -> i42 {
     cf.br ^bb2(%a : i42)
   ^bb1:
     cf.br ^bb2(%b : i42)
   ^bb2(%0: i42):
-    llhd.wait ^bb1
+    llhd.wait yield (%0 : i42), ^bb1
   }
 }
 
 // CHECK-LABEL: @SkipIfValueUnobserved(
 hw.module @SkipIfValueUnobserved(in %a: i42) {
   // CHECK: llhd.process
-  llhd.process {
+  %0 = llhd.process -> i42 {
     cf.br ^bb1
   ^bb1:
     %0 = comb.add %a, %a : i42
-    llhd.wait ^bb1
+    llhd.wait yield (%0 : i42), ^bb1
   }
 }
 
@@ -246,19 +253,19 @@ hw.module @PruneWaitOperands(in %clock : i1, in %f1 : i2, in %f2 : i3) {
   %c100_i10 = hw.constant 100 : i10
   %c110_i10 = hw.constant 110 : i10
   %true = hw.constant true
-  // CHECK:      llhd.process -> i1 {
+  // CHECK:      llhd.process -> i1, i8, i2, i10, i3 {
   // CHECK-NEXT:   cf.br ^bb1(%c10_i8, %c100_i10 : i8, i10)
   // CHECK-NEXT: ^bb1(%1: i8, %2: i10):
-  // CHECK-NEXT:   llhd.wait yield (%false : i1), (%clock : i1), ^bb2
+  // CHECK-NEXT:   llhd.wait yield (%clock, %1, %f1, %2, %f2 : i1, i8, i2, i10, i3), (%clock : i1), ^bb2
   // CHECK-NEXT: ^bb2:
   // CHECK:        cf.cond_br {{.*}}, ^bb3, ^bb1(%c20_i8, %c110_i10 : i8, i10)
   // CHECK-NEXT: ^bb3:
   // CHECK:        cf.cond_br {{.*}}, ^bb1(%c10_i8, %c100_i10 : i8, i10), ^bb1(%c20_i8, %c110_i10 : i8, i10)
   // CHECK-NEXT: }
-  %0 = llhd.process -> i1 {
+  %0:5 = llhd.process -> i1, i8, i2, i10, i3 {
     cf.br ^bb1(%clock, %c10_i8, %f1, %c100_i10, %f2 : i1, i8, i2, i10, i3)
   ^bb1(%1: i1, %2: i8, %3: i2, %4: i10, %5: i3):
-    llhd.wait yield (%false : i1), (%clock : i1), ^bb2(%2, %1, %3, %5, %4 : i8, i1, i2, i3, i10)
+    llhd.wait yield (%1, %2, %3, %4, %5 : i1, i8, i2, i10, i3), (%clock : i1), ^bb2(%2, %1, %3, %5, %4 : i8, i1, i2, i3, i10)
   ^bb2(%6: i8, %7: i1, %8: i2, %9: i3, %10: i10):
     %15 = comb.xor bin %7, %true : i1
     %16 = comb.and bin %15, %clock : i1
