@@ -485,7 +485,7 @@ void CutSet::addCut(Cut cut) {
 ArrayRef<Cut> CutSet::getCuts() const { return cuts; }
 
 // Remove duplicate cuts and non-minimal cuts. A cut is non-minimal if there
-// exists another cut that is a subset of it We use a bitset to represent the
+// exists another cut that is a subset of it. We use a bitset to represent the
 // inputs of each cut for efficient subset checking.
 static void removeDuplicateAndNonMinimalCuts(SmallVectorImpl<Cut> &cuts) {
   // First sort the cuts by input size (ascending). This ensures that when we
