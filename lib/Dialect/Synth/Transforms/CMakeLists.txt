@@ -8,6 +8,7 @@
 
 add_circt_dialect_library(CIRCTSynthTransforms
   CutRewriter.cpp
+  GenericLUTMapper.cpp
   SynthesisPipeline.cpp
   TechMapper.cpp
   TestPriorityCuts.cpp
