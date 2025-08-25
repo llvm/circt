@@ -41,6 +41,13 @@ class TypeDomainsMatch<list<string> values> :
     cast<moore::UnpackedType>($_self.getType()).getDomain()
   }], "domain">;
 
+class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
+  TypesMatchWith<
+    sbvType # " type is simple bit vector equivalent of " # packedType,
+    sbvType, packedType, [{
+      cast<PackedType>($_self).getSimpleBitVector()
+    }]>;
+
 //===----------------------------------------------------------------------===//
 // Structure
 //===----------------------------------------------------------------------===//
@@ -564,6 +571,70 @@ def ConversionOp : MooreOp<"conversion", [Pure]> {
     $input attr-dict `:` type($input) `->` type($result)
   }];
   let hasFolder = 1;
+}
+
+def PackedToSBVOp : MooreOp<"packed_to_sbv", [
+  Pure,
+  TypeIsSimpleBitVectorOf<"input", "result">,
+]> {
+  let summary = "Convert a packed type to its simple bit vector equivalent";
+  let arguments = (ins PackedTypeWithKnownSize:$input);
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def SBVToPackedOp : MooreOp<"sbv_to_packed", [
+  Pure,
+  TypeIsSimpleBitVectorOf<"result", "input">,
+]> {
+  let summary = "Convert a simple bit vector to an equivalent packed type";
+  let arguments = (ins IntType:$input);
+  let results = (outs PackedTypeWithKnownSize:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
+  }];
+}
+
+def LogicToIntOp : MooreOp<"logic_to_int", [
+  Pure,
+  TypesMatchWith<"result matches input with two-valued domain",
+    "input", "result", "cast<IntType>($_self).getTwoValued()">
+]> {
+  let summary = "Convert a four-valued to a two-valued integer";
+  let arguments = (ins FourValuedIntType:$input);
+  let results = (outs TwoValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+}
+
+def IntToLogicOp : MooreOp<"int_to_logic", [
+  Pure,
+  TypesMatchWith<"result matches input with four-valued domain",
+    "input", "result", "cast<IntType>($_self).getFourValued()">
+]> {
+  let summary = "Convert a two-valued to a four-valued integer";
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs FourValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+}
+
+def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
+  let summary = "Convert a `!moore.l1` or `!moore.i1` to a builtin `i1`";
+  let description = [{
+    Maps `X` and `Z` to 0, and passes through 1 and 0 unchanged.
+  }];
+  let arguments = (ins AnySingleBitType:$input);
+  let results = (outs I1:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
 }
 
 def TruncOp : MooreOp<"trunc", [

@@ -309,6 +309,5 @@ Value Context::convertToI1(Value value) {
     return {};
   }
 
-  return moore::ConversionOp::create(builder, value.getLoc(),
-                                     builder.getI1Type(), value);
+  return moore::ToBuiltinBoolOp::create(builder, value.getLoc(), value);
 }
