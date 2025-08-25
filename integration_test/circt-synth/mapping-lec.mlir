@@ -1,7 +1,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-synth %s -o %t1.mlir -convert-to-comb --top mul
+// RUN: circt-synth %s -o %t1.mlir -convert-to-comb
 // RUN: cat %t1.mlir | FileCheck %s
 // RUN: circt-opt %s --convert-aig-to-comb -o %t2.mlir
 // RUN: circt-lec %t1.mlir %t2.mlir -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_TECHMAP
