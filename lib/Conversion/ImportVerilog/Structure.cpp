@@ -407,9 +407,8 @@ struct ModuleVisitor : public BaseVisitor {
     // Insert conversions for input ports.
     for (auto [value, type] :
          llvm::zip(inputValues, moduleType.getInputTypes()))
-      if (value.getType() != type)
-        value =
-            moore::ConversionOp::create(builder, value.getLoc(), type, value);
+      // TODO: This should honor signedness in the conversion.
+      value = context.materializeConversion(type, value, false, value.getLoc());
 
     // Here we use the hierarchical value recorded in `Context::valueSymbols`.
     // Then we pass it as the input port with the ref<T> type of the instance.
@@ -439,8 +438,8 @@ struct ModuleVisitor : public BaseVisitor {
         continue;
       Value rvalue = output;
       auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
-      if (dstType != rvalue.getType())
-        rvalue = moore::ConversionOp::create(builder, loc, dstType, rvalue);
+      // TODO: This should honor signedness in the conversion.
+      rvalue = context.materializeConversion(dstType, rvalue, false, loc);
       moore::ContinuousAssignOp::create(builder, loc, lvalue, rvalue);
     }
 

@@ -146,6 +146,10 @@ public:
   /// Returns `None` if any of the type's dimensions is unsized.
   std::optional<unsigned> getBitSize() const;
 
+  /// Get the simple bit vector type equivalent to this packed type. Returns
+  /// null if the type does not have a known bit size.
+  IntType getSimpleBitVector() const;
+
 protected:
   using UnpackedType::UnpackedType;
 };

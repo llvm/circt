@@ -1051,6 +1051,38 @@ OpFoldResult ConversionOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// LogicToIntOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult LogicToIntOp::fold(FoldAdaptor adaptor) {
+  // logic_to_int(int_to_logic(x)) -> x
+  if (auto reverseOp = getInput().getDefiningOp<IntToLogicOp>())
+    return reverseOp.getInput();
+
+  // Map all unknown bits to zero (the default in SystemVerilog) and return a
+  // new constant.
+  if (auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
+    return FVIntegerAttr::get(getContext(), intInput.getValue().toAPInt(false));
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// IntToLogicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntToLogicOp::fold(FoldAdaptor adaptor) {
+  // Cannot fold int_to_logic(logic_to_int(x)) -> x since that would lose
+  // information.
+
+  // Simply pass through constants.
+  if (auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
+    return intInput;
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // BoolCastOp
 //===----------------------------------------------------------------------===//
 

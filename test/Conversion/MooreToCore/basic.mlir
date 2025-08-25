@@ -343,9 +343,9 @@ func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
   %0 = moore.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
   // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>> 
-  %1 = moore.conversion %0 : !moore.i320 -> !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>
+  %1 = moore.sbv_to_packed %0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
   // CHECK: [[V2:%.+]] = hw.bitcast %arg0 : (!hw.array<5xstruct<exp_bits: i32, man_bits: i32>>) -> i320
-  %2 = moore.conversion %arg0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>> -> !moore.i320  
+  %2 = moore.packed_to_sbv %arg0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
   // CHECK: return [[V1]], [[V2]]
   return %1, %2 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320
 }
@@ -1001,6 +1001,31 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
   moore.output %1 : !moore.l32
 }
 
+
+// CHECK-LABEL: hw.module @WaitDelay
+moore.module @WaitDelay(in %d: !moore.time) {
+  // CHECK: llhd.process {
+  // CHECK:   [[TMP:%.+]] = llhd.constant_time <1000000fs, 0d, 0e>
+  // CHECK:   func.call @dummyA()
+  // CHECK:   llhd.wait delay [[TMP]], ^[[RESUME1:.+]]
+  // CHECK: ^[[RESUME1]]:
+  // CHECK:   func.call @dummyB()
+  // CHECK:   llhd.wait delay %d, ^[[RESUME2:.+]]
+  // CHECK: ^[[RESUME2]]:
+  // CHECK:   func.call @dummyC()
+  // CHECK:   llhd.halt
+  // CHECK: }
+  moore.procedure initial {
+    %0 = moore.constant_time 1000000 fs
+    func.call @dummyA() : () -> ()
+    moore.wait_delay %0
+    func.call @dummyB() : () -> ()
+    moore.wait_delay %d
+    func.call @dummyC() : () -> ()
+    moore.return
+  }
+}
+
 // Just check that block without predecessors are handled without crashing
 // CHECK-LABEL: @NoPredecessorBlockErasure
 moore.module @NoPredecessorBlockErasure(in %clk_i : !moore.l1, in %raddr_i : !moore.array<2 x l5>, out rdata_o : !moore.array<2 x l32>, in %waddr_i : !moore.array<1 x l5>, in %wdata_i : !moore.array<1 x l32>, in %we_i : !moore.l1) {
@@ -1109,7 +1134,7 @@ func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
 }
 
 // CHECK-LABEL: func.func @Conversions
-func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
+func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
   // CHECK: dbg.variable "trunc", [[TMP]]
   %0 = moore.trunc %arg0 : i16 -> i8
@@ -1129,12 +1154,16 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   dbg.variable "sext", %2 : !moore.i32
 
   // CHECK: dbg.variable "i2l", %arg0 : i16
-  %3 = moore.conversion %arg0 : !moore.i16 -> !moore.l16
+  %3 = moore.int_to_logic %arg0 : i16
   dbg.variable "i2l", %3 : !moore.l16
 
   // CHECK: dbg.variable "l2i", %arg1 : i16
-  %4 = moore.conversion %arg1 : !moore.l16 -> !moore.i16
+  %4 = moore.logic_to_int %arg1 : l16
   dbg.variable "l2i", %4 : !moore.i16
+
+  // CHECK: dbg.variable "builtin_bool", %arg2 : i1
+  %5 = moore.to_builtin_bool %arg2 : l1
+  dbg.variable "builtin_bool", %5 : i1
 
   return
 }

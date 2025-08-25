@@ -419,7 +419,7 @@ public:
 private:
   llvm::sys::SmartMutex<true> mutex;
   llvm::SetVector<StringAttr> running;
-  const LongestPathAnalysisOption &option;
+  LongestPathAnalysisOption option;
 };
 
 // -----------------------------------------------------------------------------

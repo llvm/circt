@@ -144,8 +144,8 @@ Then build and test *CIRCT*:
 cmake -G Ninja . -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
-    -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm
+    -DMLIR_DIR=$PWD/llvm/build/lib/cmake/mlir \
+    -DLLVM_DIR=$PWD/llvm/build/lib/cmake/llvm
 ninja -C build
 ninja -C build check-circt
 ninja -C build check-circt-integration

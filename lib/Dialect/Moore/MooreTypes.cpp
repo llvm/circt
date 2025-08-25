@@ -101,6 +101,7 @@ Domain PackedType::getDomain() const {
   return TypeSwitch<PackedType, Domain>(*this)
       .Case<VoidType>([](auto) { return Domain::TwoValued; })
       .Case<IntType>([&](auto type) { return type.getDomain(); })
+      .Case<TimeType>([](auto) { return Domain::FourValued; })
       .Case<ArrayType, OpenArrayType>(
           [&](auto type) { return type.getElementType().getDomain(); })
       .Case<StructType, UnionType>([](auto type) {
@@ -115,6 +116,7 @@ std::optional<unsigned> PackedType::getBitSize() const {
   return TypeSwitch<PackedType, std::optional<unsigned>>(*this)
       .Case<VoidType>([](auto) { return 0; })
       .Case<IntType>([](auto type) { return type.getWidth(); })
+      .Case<TimeType>([](auto type) { return 64; })
       .Case<ArrayType>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getElementType().getBitSize())
           return (*size) * type.getSize();
@@ -144,6 +146,14 @@ std::optional<unsigned> PackedType::getBitSize() const {
         return size;
       })
       .Default([](auto) { return std::nullopt; });
+}
+
+IntType PackedType::getSimpleBitVector() const {
+  if (auto intType = dyn_cast<IntType>(*this))
+    return intType;
+  if (auto bitSize = getBitSize())
+    return IntType::get(getContext(), *bitSize, getDomain());
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

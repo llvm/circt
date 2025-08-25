@@ -616,14 +616,17 @@ CutRewritePatternSet::CutRewritePatternSet(
   for (auto &pattern : this->patterns) {
     SmallVector<NPNClass, 2> npnClasses;
     auto result = pattern->useTruthTableMatcher(npnClasses);
-    (void)result;
-    assert(result && "Currently all patterns must use truth table matcher");
-
-    for (auto npnClass : npnClasses) {
-      // Create a NPN class from the truth table
-      npnToPatternMap[{npnClass.truthTable.table,
-                       npnClass.truthTable.numInputs}]
-          .push_back(std::make_pair(std::move(npnClass), pattern.get()));
+    if (result) {
+      for (auto npnClass : npnClasses) {
+        // Create a NPN class from the truth table
+        npnToPatternMap[{npnClass.truthTable.table,
+                         npnClass.truthTable.numInputs}]
+            .push_back(std::make_pair(std::move(npnClass), pattern.get()));
+      }
+    } else {
+      // If the pattern does not provide NPN classes, we use a special key
+      // to indicate that it should be considered for all cuts.
+      nonTruthTablePatterns.push_back(pattern.get());
     }
   }
 }
