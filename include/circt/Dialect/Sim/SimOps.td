@@ -1,12 +1,8 @@
-//===- SimOps.td - `sim` dialect ops -----------------------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This describes the MLIR ops for `sim`.
 //
 //===----------------------------------------------------------------------===//
 
@@ -169,6 +165,10 @@ def DPICallOp : SimOp<"func.dpi.call",
 
 }
 
+//===----------------------------------------------------------------------===//
+// String Formatting
+//===----------------------------------------------------------------------===//
+
 def FormatLitOp : SimOp<"fmt.lit", [Pure, ConstantLike]> {
   let summary = "Literal string fragment";
   let description = [{
@@ -255,7 +255,9 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
 
   let hasFolder = true;
 
-  let assemblyFormat = "(`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    (`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))
+  }];
 
   let extraClassDeclaration = [{
       static inline unsigned getDecimalWidth(unsigned bits, bool isSigned) {
@@ -268,7 +270,8 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
           bits--;
 
         // Should be precise up until bits = 13301
-        const double baseConversionFactor = 0.30103; // log(2) / log(10) + epsilon
+        // log(2) / log(10) + epsilon
+        const double baseConversionFactor = 0.30103;
         unsigned digits = std::ceil(bits * baseConversionFactor);
 
         return isSigned ? digits + 1 : digits;
@@ -337,13 +340,13 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
     /// On encountering a cycle, the result of the concat operation
     /// forming the cycle is pushed into the list of flattened values
     /// and flattening continues without recursing into the cycle.
-    LogicalResult getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands);
+    LogicalResult getFlattenedInputs(
+      llvm::SmallVectorImpl<Value> &flatOperands);
   }];
 }
 
 def PrintFormattedOp : SimOp<"print"> {
   let summary = "Print a formatted string on a given clock and condition";
-
   let description = [{
     Evaluate a format string and print it to the simulation console on the
     rising edge of the given clock, if, and only if, the condition argument
@@ -354,28 +357,25 @@ def PrintFormattedOp : SimOp<"print"> {
     of printing for operations in different modules, instances or on different
     clocks is undefined.
   }];
-
-
-  let arguments = (ins FormatStringType:$input, ClockType:$clock, I1:$condition);
-
+  let arguments = (ins
+    FormatStringType:$input,
+    ClockType:$clock,
+    I1:$condition
+  );
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
 }
 
 def PrintFormattedProcOp : SimOp<"proc.print"> {
   let summary = "Print a formatted string within a procedural region";
-
   let description = [{
     Evaluate a format string and print it to the simulation console.
 
     This operation must be within a procedural region.
   }];
-
   let arguments = (ins FormatStringType:$input);
-
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
-
   let assemblyFormat = "$input attr-dict";
 }
 
