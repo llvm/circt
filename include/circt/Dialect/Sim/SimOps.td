@@ -38,24 +38,6 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 
-def FinishOp : SimOp<"finish"> {
-  let summary = "Simulation finish condition";
-
-  let arguments = (ins ClockType:$clk, I1:$cond);
-  let results = (outs);
-
-  let assemblyFormat = "$clk `,` $cond attr-dict";
-}
-
-def FatalOp : SimOp<"fatal"> {
-  let summary = "Simulation failure condition";
-
-  let arguments = (ins ClockType:$clk, I1:$cond);
-  let results = (outs);
-
-  let assemblyFormat = "$clk `,` $cond attr-dict";
-}
-
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
       FunctionOpInterface]> {
@@ -377,6 +359,98 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Control
+//===----------------------------------------------------------------------===//
+
+def ClockedTerminateOp : SimOp<"clocked_terminate"> {
+  let summary = "Terminate the simulation";
+  let description = [{
+    Implements the semantics of `sim.terminate` if the given condition is true
+    on the rising edge of the clock operand.
+  }];
+  let arguments = (ins
+    ClockType:$clock,
+    I1:$condition,
+    BoolAttr:$success,
+    BoolAttr:$verbose
+  );
+  let assemblyFormat = [{
+    $clock `,` $condition `,`
+    custom<KeywordBool>($success, "\"success\"", "\"failure\"") `,`
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
+}
+
+def ClockedPauseOp : SimOp<"clocked_pause"> {
+  let summary = "Pause the simulation";
+  let description = [{
+    Implements the semantics of `sim.pause` if the given condition is true on
+    the rising edge of the clock operand.
+  }];
+  let arguments = (ins
+    ClockType:$clock,
+    I1:$condition,
+    BoolAttr:$verbose
+  );
+  let assemblyFormat = [{
+    $clock `,` $condition `,`
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
+}
+
+def TerminateOp : SimOp<"terminate"> {
+  let summary = "Terminate the simulation";
+  let description = [{
+    Terminate the simulation with a success or failure exit code. Depending on
+    the `verbose` operand, simulators may print additional information about the
+    current simulation time and hierarchical location of the op.
+
+    This op correpsonds to the following SystemVerilog constructs:
+
+    | Operation                        | SystemVerilog             |
+    |----------------------------------|---------------------------|
+    | `sim.terminate success, quiet`   | `$finish(0)`              |
+    | `sim.terminate success, verbose` | `$finish` or `$finish(1)` |
+    | `sim.terminate failure, quiet`   | `$fatal(0)`               |
+    | `sim.terminate failure, verbose` | `$fatal` or `$fatal(1)`   |
+
+    Note that this op does not match the behavior of the `$exit` system task in
+    SystemVerilog, which blocks execution of the calling process until all
+    `program` instances have terminated, and then calls `$finish`.
+  }];
+  let arguments = (ins
+    BoolAttr:$success,
+    BoolAttr:$verbose
+  );
+  let assemblyFormat = [{
+    custom<KeywordBool>($success, "\"success\"", "\"failure\"") `,`
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
+}
+
+def PauseOp : SimOp<"pause"> {
+  let summary = "Pause the simulation";
+  let description = [{
+    Interrupt the simulation and give control back to the user in case of an
+    interactive simulation. Non-interactive simulations may choose to terminate
+    instead. Depending on the `verbose` operand, simulators may print additional
+    information about the current simulation time and hierarchical location of
+    the op.
+
+    This op corresponds to the following SystemVerilog constructs:
+
+    | Operation           | SystemVerilog          |
+    |---------------------|------------------------|
+    | `sim.pause quiet`   | `$stop(0)`             |
+    | `sim.pause verbose` | `$stop` or `$stop(1)`  |
+  }];
+  let arguments = (ins BoolAttr:$verbose);
+  let assemblyFormat = [{
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

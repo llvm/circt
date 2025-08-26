@@ -36,6 +36,23 @@ namespace circt {
 using namespace circt;
 using namespace sim;
 
+/// Check whether an op should be placed inside an ifdef guard that prevents it
+/// from affecting synthesis runs.
+static bool needsIfdefGuard(Operation *op) {
+  return isa<ClockedTerminateOp, ClockedPauseOp, TerminateOp, PauseOp>(op);
+}
+
+/// Check whether an op should be placed inside an always process triggered on a
+/// clock, and an if statement checking for a condition.
+static std::pair<Value, Value> needsClockAndConditionWrapper(Operation *op) {
+  return TypeSwitch<Operation *, std::pair<Value, Value>>(op)
+      .Case<ClockedTerminateOp, ClockedPauseOp>(
+          [](auto op) -> std::pair<Value, Value> {
+            return {op.getClock(), op.getCondition()};
+          })
+      .Default({});
+}
+
 namespace {
 
 struct SimConversionState {
@@ -146,34 +163,31 @@ public:
   }
 };
 
-template <typename FromOp, typename ToOp>
-class SimulatorStopLowering : public SimConversionPattern<FromOp> {
-public:
-  using SimConversionPattern<FromOp>::SimConversionPattern;
+static LogicalResult convert(ClockedTerminateOp op, PatternRewriter &rewriter) {
+  if (op.getSuccess())
+    rewriter.replaceOpWithNewOp<sv::FinishOp>(op, op.getVerbose());
+  else
+    rewriter.replaceOpWithNewOp<sv::FatalOp>(op, op.getVerbose());
+  return success();
+}
 
-  LogicalResult
-  matchAndRewrite(FromOp op, typename FromOp::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto loc = op.getLoc();
+static LogicalResult convert(ClockedPauseOp op, PatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<sv::StopOp>(op, op.getVerbose());
+  return success();
+}
 
-    Value clockCast = seq::FromClockOp::create(rewriter, loc, adaptor.getClk());
+static LogicalResult convert(TerminateOp op, PatternRewriter &rewriter) {
+  if (op.getSuccess())
+    rewriter.replaceOpWithNewOp<sv::FinishOp>(op, op.getVerbose());
+  else
+    rewriter.replaceOpWithNewOp<sv::FatalOp>(op, op.getVerbose());
+  return success();
+}
 
-    this->state.usedSynthesisMacro = true;
-    sv::IfDefOp::create(
-        rewriter, loc, "SYNTHESIS", [&] {},
-        [&] {
-          sv::AlwaysOp::create(
-              rewriter, loc, sv::EventControl::AtPosEdge, clockCast, [&] {
-                sv::IfOp::create(rewriter, loc, adaptor.getCond(),
-                                 [&] { ToOp::create(rewriter, loc); });
-              });
-        });
-
-    rewriter.eraseOp(op);
-
-    return success();
-  }
-};
+static LogicalResult convert(PauseOp op, PatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<sv::StopOp>(op, op.getVerbose());
+  return success();
+}
 
 class DPICallLowering : public SimConversionPattern<DPICallOp> {
 public:
@@ -315,6 +329,96 @@ void LowerDPIFunc::addFragments(hw::HWModuleOp module,
         ArrayAttr::get(module.getContext(), fragments.takeVector()));
 }
 
+static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
+  bool usedSynthesisMacro = false;
+
+  rootOp->walk([&](Operation *op) {
+    auto loc = op->getLoc();
+
+    // Move the op into an ifdef guard if needed.
+    if (needsIfdefGuard(op)) {
+      // Try to reuse an ifdef guard immediately before the op.
+      Block *block = nullptr;
+      if (op->getPrevNode())
+        block = TypeSwitch<Operation *, Block *>(op->getPrevNode())
+                    .Case<sv::IfDefOp, sv::IfDefProceduralOp>(
+                        [&](auto guardOp) -> Block * {
+                          if (guardOp.getCond().getIdent().getAttr() ==
+                                  "SYNTHESIS" &&
+                              guardOp.hasElse())
+                            return guardOp.getElseBlock();
+                          return nullptr;
+                        })
+                    .Default([](auto) { return nullptr; });
+
+      // If there was no pre-existing guard, create one.
+      if (!block) {
+        OpBuilder builder(op);
+        if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+          block = sv::IfDefProceduralOp::create(
+                      builder, loc, "SYNTHESIS", [] {}, [] {})
+                      .getElseBlock();
+        else
+          block = sv::IfDefOp::create(
+                      builder, loc, "SYNTHESIS", [] {}, [] {})
+                      .getElseBlock();
+        usedSynthesisMacro = true;
+      }
+
+      // Move the op into the guard block.
+      op->moveBefore(block, block->end());
+    }
+
+    // Check if the op requires an clock and condition wrapper.
+    auto [clock, condition] = needsClockAndConditionWrapper(op);
+
+    // Create an enclosing always process.
+    if (clock) {
+      // Try to reuse an always process immediately before the op.
+      Block *block = nullptr;
+      if (auto alwaysOp = dyn_cast_or_null<sv::AlwaysOp>(op->getPrevNode()))
+        if (alwaysOp.getNumConditions() == 1 &&
+            alwaysOp.getCondition(0).event == sv::EventControl::AtPosEdge)
+          if (auto clockOp = alwaysOp.getCondition(0)
+                                 .value.getDefiningOp<seq::FromClockOp>())
+            if (clockOp.getInput() == clock)
+              block = alwaysOp.getBodyBlock();
+
+      // If there was no pre-existing always process, create one.
+      if (!block) {
+        OpBuilder builder(op);
+        clock = seq::FromClockOp::create(builder, loc, clock);
+        block = sv::AlwaysOp::create(builder, loc, sv::EventControl::AtPosEdge,
+                                     clock, [] {})
+                    .getBodyBlock();
+      }
+
+      // Move the op into the process.
+      op->moveBefore(block, block->end());
+    }
+
+    // Create an enclosing if condition.
+    if (condition) {
+      // Try to reuse an if statement immediately before the op.
+      Block *block = nullptr;
+      if (auto ifOp = dyn_cast_or_null<sv::IfOp>(op->getPrevNode()))
+        if (ifOp.getCond() == condition)
+          block = ifOp.getThenBlock();
+
+      // If there was no pre-existing if statement, create one.
+      if (!block) {
+        OpBuilder builder(op);
+        block = sv::IfOp::create(builder, loc, condition, [] {}).getThenBlock();
+      }
+
+      // Move the op into the if body.
+      op->moveBefore(block, block->end());
+    }
+  });
+
+  return usedSynthesisMacro;
+}
+
 namespace {
 struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
   void runOnOperation() override {
@@ -329,6 +433,9 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
 
     std::atomic<bool> usedSynthesisMacro = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
+      if (moveOpsIntoIfdefGuardsAndProcesses(module))
+        usedSynthesisMacro = true;
+
       SimConversionState state;
       ConversionTarget target(*context);
       target.addIllegalDialect<SimDialect>();
@@ -340,10 +447,10 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       RewritePatternSet patterns(context);
       patterns.add<PlusArgsTestLowering>(context, state);
       patterns.add<PlusArgsValueLowering>(context, state);
-      patterns.add<SimulatorStopLowering<sim::FinishOp, sv::FinishOp>>(context,
-                                                                       state);
-      patterns.add<SimulatorStopLowering<sim::FatalOp, sv::FatalOp>>(context,
-                                                                     state);
+      patterns.add<ClockedTerminateOp>(convert);
+      patterns.add<ClockedPauseOp>(convert);
+      patterns.add<TerminateOp>(convert);
+      patterns.add<PauseOp>(convert);
       patterns.add<DPICallLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 

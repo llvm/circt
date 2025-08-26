@@ -851,7 +851,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
     sv::IfDefOp::create(
-        b, guard, []() {}, body);
+        b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib) {
@@ -2895,7 +2895,7 @@ void FIRRTLLowering::addToAlwaysBlock(
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
         insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+            builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -4973,10 +4973,9 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       sv::MacroRefExprOp::create(builder, cond.getType(), "STOP_COND_");
   Value exitCond = builder.createOrFold<comb::AndOp>(stopCond, cond, true);
 
-  if (op.getExitCode())
-    sim::FatalOp::create(builder, clock, exitCond);
-  else
-    sim::FinishOp::create(builder, clock, exitCond);
+  sim::ClockedTerminateOp::create(builder, clock, exitCond,
+                                  /*success=*/op.getExitCode() == 0,
+                                  /*verbose=*/true);
 
   return success();
 }
