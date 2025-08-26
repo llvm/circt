@@ -1196,7 +1196,7 @@ static LogicalResult legalizeHWModule(Block &block,
     // statements.
     // TODO: This is checking the Commutative property, which doesn't seem
     // right in general.  MLIR doesn't have a "fully associative" property.
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
+    if (op.getNumOperands() != 2 && op.getNumResults() == 1 &&
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::isMemoryEffectFree(&op) && op.getNumRegions() == 0 &&
         op.getNumSuccessors() == 0 &&
@@ -1211,7 +1211,8 @@ static LogicalResult legalizeHWModule(Block &block,
       op.erase();
 
       // Make sure we revisit the newly inserted operations.
-      opIterator = Block::iterator(newOps.front());
+      if (!newOps.empty())
+        opIterator = Block::iterator(newOps.front());
       continue;
     }
 
