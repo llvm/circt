@@ -499,7 +499,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     // Sum bit 0 is just p[0] since carry_in = 0
     results[width - 1] = p[0];
 
-    // For remaining bits, sum_i = p_i XOR c_(i-1)
+    // For remaining bits, sum_i = p_i XOR g_(i-1)
     // The carry into position i is the group generate from position i-1
     for (int64_t i = 1; i < width; ++i)
       results[width - 1 - i] =
@@ -523,6 +523,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                                  SmallVector<Value> &pPrefix,
                                  SmallVector<Value> &gPrefix) const {
     auto width = op.getType().getIntOrFloatBitWidth();
+    SmallVector<Value> pPrefixNew = pPrefix;
+    SmallVector<Value> gPrefixNew = gPrefix;
 
     // Kogge-Stone parallel prefix computation
     for (int64_t stride = 1; stride < width; stride *= 2) {
@@ -531,13 +533,15 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefix[i] =
+        gPrefixNew[i] =
             comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
-        pPrefix[i] =
+        pPrefixNew[i] =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
       }
+      pPrefix = pPrefixNew;
+      gPrefix = gPrefixNew;
     }
     LLVM_DEBUG({
       int64_t stage = 0;
@@ -569,7 +573,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                                 SmallVector<Value> &pPrefix,
                                 SmallVector<Value> &gPrefix) const {
     auto width = op.getType().getIntOrFloatBitWidth();
-
+    SmallVector<Value> pPrefixNew = pPrefix;
+    SmallVector<Value> gPrefixNew = gPrefix;
     // Brent-Kung parallel prefix computation
     // Forward phase
     int64_t stride;
@@ -580,13 +585,15 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefix[i] =
+        gPrefixNew[i] =
             comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
-        pPrefix[i] =
+        pPrefixNew[i] =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
       }
+      pPrefix = pPrefixNew;
+      gPrefix = gPrefixNew;
     }
 
     // Backward phase
@@ -597,12 +604,14 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefix[i] = OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
+        gPrefixNew[i] = OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
-        pPrefix[i] =
+        pPrefixNew[i] =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
       }
+      pPrefix = pPrefixNew;
+      gPrefix = gPrefixNew;
     }
 
     LLVM_DEBUG({
