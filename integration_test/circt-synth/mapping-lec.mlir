@@ -3,7 +3,7 @@
 
 // RUN: circt-opt %s --convert-aig-to-comb -o %t.comb.mlir
 
-// RUN: circt-synth %s -o %t1.mlir -convert-to-comb --top mul
+// RUN: circt-synth %s -o %t1.mlir -convert-to-comb
 // RUN: cat %t1.mlir | FileCheck %s
 // RUN: circt-lec %t1.mlir %t.comb.mlir -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_TECHMAP
 
@@ -53,7 +53,8 @@ hw.module @some(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.
 // CHECK-NOT: comb.xor
 // CHECK-DAG: hw.instance {{".+"}} @and_inv
 // CHECK-DAG: hw.instance {{".+"}} @some
-// CHECK-DAG: hw.instance {{".+"}} @nand_nand
+// FIXME: To map @nand_nand it's necessary to implement supergate generation.
+// CHECK-NOT: hw.instance {{".+"}} @nand_nand
 // CHECK-DAG: hw.instance {{".+"}} @and_inv_n
 // CHECK-DAG: hw.instance {{".+"}} @and_inv_nn
 // LUT: hw.module @mul

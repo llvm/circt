@@ -34,6 +34,7 @@
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/Bitset.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -483,38 +484,72 @@ void CutSet::addCut(Cut cut) {
 
 ArrayRef<Cut> CutSet::getCuts() const { return cuts; }
 
-void CutSet::finalize(
-    const CutRewriterOptions &options,
-    llvm::function_ref<std::optional<MatchedPattern>(Cut &)> matchCut) {
-  DenseSet<std::pair<ArrayRef<Value>, Operation *>> uniqueCuts;
-  unsigned uniqueCount = 0;
+// Remove duplicate cuts and non-minimal cuts. A cut is non-minimal if there
+// exists another cut that is a subset of it. We use a bitset to represent the
+// inputs of each cut for efficient subset checking.
+static void removeDuplicateAndNonMinimalCuts(SmallVectorImpl<Cut> &cuts) {
+  // First sort the cuts by input size (ascending). This ensures that when we
+  // iterate through the cuts, we always encounter smaller cuts first, allowing
+  // us to efficiently check for non-minimality. Stable sort to maintain
+  // relative order of cuts with the same input size.
+  std::stable_sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
+    return a.getInputSize() < b.getInputSize();
+  });
+
+  llvm::SmallVector<llvm::Bitset<64>, 4> inputBitMasks;
+  DenseMap<Value, unsigned> inputIndices;
+  auto getIndex = [&](Value v) -> unsigned {
+    auto it = inputIndices.find(v);
+    if (it != inputIndices.end())
+      return it->second;
+    unsigned index = inputIndices.size();
+    if (LLVM_UNLIKELY(index >= 64))
+      llvm::report_fatal_error(
+          "Too many unique inputs across cuts. Max 64 supported. Consider "
+          "increasing the compile-time constant.");
+    inputIndices[v] = index;
+    return index;
+  };
+
   for (unsigned i = 0; i < cuts.size(); ++i) {
     auto &cut = cuts[i];
     // Create a unique identifier for the cut based on its inputs.
-    auto inputs = cut.inputs.getArrayRef();
+    llvm::Bitset<64> inputsMask;
+    for (auto input : cut.inputs.getArrayRef())
+      inputsMask.set(getIndex(input));
 
-    // If the cut is a duplicate, skip it.
-    if (uniqueCuts.contains({inputs, cut.getRoot()}))
+    bool isUnique = llvm::all_of(
+        inputBitMasks, [&](const llvm::Bitset<64> &existingCutInputMask) {
+          // If the bitset is a subset of the current inputsMask, it is not
+          // unique
+          return (existingCutInputMask & inputsMask) != existingCutInputMask;
+        });
+
+    if (!isUnique)
       continue;
 
-    if (i != uniqueCount) {
-      // Move the unique cut to the front of the vector
-      // This maintains the order of cuts while removing duplicates
-      // by swapping with the last unique cut found.
-      cuts[uniqueCount] = std::move(cuts[i]);
-    }
-
-    // Beaware of lifetime of ArrayRef. `cuts[uniqueCount]` is always valid
-    // after this point.
-    uniqueCuts.insert(
-        {cuts[uniqueCount].inputs.getArrayRef(), cuts[uniqueCount].getRoot()});
-    ++uniqueCount;
+    // If the cut is unique, keep it
+    size_t uniqueCount = inputBitMasks.size();
+    if (i != uniqueCount)
+      cuts[uniqueCount] = std::move(cut);
+    inputBitMasks.push_back(inputsMask);
   }
+
+  unsigned uniqueCount = inputBitMasks.size();
 
   LLVM_DEBUG(llvm::dbgs() << "Original cuts: " << cuts.size()
                           << " Unique cuts: " << uniqueCount << "\n");
+
   // Resize the cuts vector to the number of unique cuts found
   cuts.resize(uniqueCount);
+}
+
+void CutSet::finalize(
+    const CutRewriterOptions &options,
+    llvm::function_ref<std::optional<MatchedPattern>(Cut &)> matchCut) {
+
+  // First, remove duplicate and non-minimal cuts.
+  removeDuplicateAndNonMinimalCuts(cuts);
 
   // Maintain size limit by removing worst cuts
   if (cuts.size() > options.maxCutSizePerRoot) {
@@ -523,7 +558,7 @@ void CutSet::finalize(
     // TODO: Make this configurable.
     // TODO: Implement pruning based on dominance.
 
-    std::sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
+    std::stable_sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) {
       if (a.getDepth() == b.getDepth())
         return a.getInputSize() < b.getInputSize();
       return a.getDepth() < b.getDepth();

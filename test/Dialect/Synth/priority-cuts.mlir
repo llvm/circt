@@ -97,3 +97,21 @@ hw.module @test(in %a : i4, in %b : i2, out result : i3) {
 
     hw.output %result_concat : i3
 }
+
+// CHECK-LABEL: Enumerating cuts for module: Issue8885
+// ROOT8: xor0 3 cuts:
+// ROOT8-SAME: {xor0}
+// ROOT8-SAME: {and0, and1}
+// ROOT8-SAME: {b_0, a_0}
+// ROOT2: xor0 2 cuts:
+// ROOT2-SAME: {xor0}
+// ROOT2-SAME: {and0, and1}
+hw.module @Issue8885(in %a : i2, in %b : i2) {
+  %0 = comb.extract %b from 0 {sv.namehint = "b_0"} : (i2) -> i1
+  %1 = comb.extract %b from 1 {sv.namehint = "b_1"} : (i2) -> i1
+  %2 = comb.extract %a from 0 {sv.namehint = "a_0"} : (i2) -> i1
+  %3 = comb.extract %a from 1 {sv.namehint = "a_1"} : (i2) -> i1
+  %4 = aig.and_inv not %0, not %2 {sv.namehint = "and0"} : i1
+  %5 = aig.and_inv %0, %2 {sv.namehint = "and1"} : i1
+  %6 = aig.and_inv not %4, not %5 {sv.namehint = "xor0"} : i1
+}
