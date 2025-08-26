@@ -1859,11 +1859,11 @@ module GenerateConstructs;
     // CHECK: [[TMP:%.+]] = moore.constant 0
     // CHECK: dbg.variable "i", [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 0
-    // CHECK: %g1 = moore.variable [[TMP]]
+    // CHECK: g1 = moore.variable [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 1
     // CHECK: dbg.variable "i", [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 1
-    // CHECK: moore.variable name "g1" [[TMP]]
+    // CHECK: g1 = moore.variable [[TMP]]
     for (i = 0; i < 2; i = i + 1) begin
       integer g1 = i;
     end
