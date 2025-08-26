@@ -778,6 +778,29 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+/// Return an updated domain info Attribute with domain indices updated based on
+/// port insertions.
+static Attribute
+fixDomainInfoInsertions(MLIRContext *context, Attribute domainInfoAttr,
+                        const SmallVectorImpl<unsigned> &numInserted) {
+  // This is a domain type port.  Return the original domain info unmodified.
+  auto di = dyn_cast_or_null<ArrayAttr>(domainInfoAttr);
+  if (!di)
+    return domainInfoAttr;
+  // This is a non-domain type port.  Update any indeices referenced.
+  SmallVector<Attribute> domainInfo;
+  for (auto attr : di) {
+    auto oldIdx = cast<IntegerAttr>(attr).getUInt();
+    auto newIdx = oldIdx + numInserted[oldIdx];
+    if (oldIdx == newIdx)
+      domainInfo.push_back(attr);
+    else
+      domainInfo.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), newIdx));
+  }
+  return ArrayAttr::get(context, domainInfo);
+}
+
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
@@ -811,6 +834,7 @@ static void insertPorts(FModuleLike op,
   SmallVector<bool> newDirections;
   SmallVector<Attribute> newNames, newTypes, newDomains, newAnnos, newSyms,
       newLocs, newInternalPaths;
+  SmallVector<unsigned> numInserted;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
@@ -819,6 +843,7 @@ static void insertPorts(FModuleLike op,
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
   newInternalPaths.reserve(newNumArgs);
+  numInserted.resize(op.getNumPorts());
 
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
@@ -828,12 +853,17 @@ static void insertPorts(FModuleLike op,
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
-      newDomains.push_back(op.getDomainInfoAttrForPort(oldIdx));
+      newDomains.push_back(fixDomainInfoInsertions(
+          op.getContext(), op.getDomainInfoAttrForPort(oldIdx), numInserted));
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
       if (supportsInternalPaths)
         newInternalPaths.push_back(internalPaths[oldIdx]);
+      if (oldIdx == 0)
+        numInserted[0] = 0;
+      else
+        numInserted[oldIdx] = numInserted[oldIdx - 1];
       ++oldIdx;
     }
   };
@@ -844,14 +874,18 @@ static void insertPorts(FModuleLike op,
     newDirections.push_back(direction::unGet(port.direction));
     newNames.push_back(port.name);
     newTypes.push_back(TypeAttr::get(port.type));
-    auto domains = port.domains;
-    newDomains.push_back(domains ? domains : emptyArray);
+    newDomains.push_back(fixDomainInfoInsertions(
+        op.getContext(),
+        port.domains ? port.domains : ArrayAttr::get(op.getContext(), {}),
+        numInserted));
     auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
     newLocs.push_back(port.loc);
     if (supportsInternalPaths)
       newInternalPaths.push_back(emptyInternalPath);
+    if (idx < oldNumArgs)
+      numInserted[idx] += 1;
   }
   migrateOldPorts(oldNumArgs);
 
@@ -865,7 +899,11 @@ static void insertPorts(FModuleLike op,
   // The lack of *any* domains is also represented by an empty `domainInfo`
   // attribute.
   if (llvm::all_of(newDomains, [](Attribute attr) {
-        return !attr || cast<ArrayAttr>(attr).empty();
+        if (!attr)
+          return true;
+        if (auto arrayAttr = dyn_cast<ArrayAttr>(attr))
+          return arrayAttr.empty();
+        return false;
       }))
     newDomains.clear();
 
@@ -890,6 +928,88 @@ static void insertPorts(FModuleLike op,
       op->setAttr("internalPaths",
                   ArrayAttr::get(op.getContext(), newInternalPaths));
   }
+}
+
+// Return an Attribute with updated port domain information based on information
+// about which ports have been deleted.  This is necessary because the port
+// domain storage uses an integer to indicate the index of a domain port with
+// which it is associated.
+//
+// Note: this will _always_ return one-entry-per-port.  While this is not
+// required for FModuleLike, InstanceOps have this restriction.
+static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
+                                        ArrayAttr domainInfoAttr,
+                                        const llvm::BitVector &portIndices,
+                                        bool supportsEmptyAttr) {
+  if (supportsEmptyAttr && domainInfoAttr.empty())
+    return domainInfoAttr;
+
+  // Compute an array where each entry is the number of ports before that
+  // index that have been deleted.  This is used to update domain information.
+  SmallVector<unsigned> numDeleted;
+  numDeleted.resize(portIndices.size());
+  size_t deletionIndex = portIndices.find_first();
+  for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
+    if (i == deletionIndex) {
+      if (i == 0)
+        numDeleted[i] = 1;
+      else
+        numDeleted[i] = numDeleted[i - 1] + 1;
+      deletionIndex = portIndices.find_next(i);
+      continue;
+    }
+    if (i == 0)
+      numDeleted[i] = 0;
+    else
+      numDeleted[i] = numDeleted[i - 1];
+  }
+
+  // Return a cached empty ArrayAttr.
+  ArrayAttr eEmpty;
+  auto getEmpty = [&]() {
+    if (!eEmpty)
+      eEmpty = ArrayAttr::get(context, {});
+    return eEmpty;
+  };
+
+  // Update the domain indices.
+  SmallVector<Attribute> newPortDomains;
+  newPortDomains.reserve(portIndices.size() - portIndices.count());
+  for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
+    // If this port is deleted, then do nothing.
+    if (portIndices.test(i))
+      continue;
+    // If there is no domain info, then add an empty attribute.
+    if (domainInfoAttr.empty()) {
+      newPortDomains.push_back(getEmpty());
+      continue;
+    }
+    auto attr = domainInfoAttr[i];
+    // If this is a Domain Type (indicating domain kind) or an empty domain.
+    auto domains = dyn_cast<ArrayAttr>(attr);
+    if (!domains || domains.empty()) {
+      newPortDomains.push_back(attr);
+      continue;
+    }
+    // This contains indexes to domain ports.  Update them.
+    for (auto domain : domains) {
+      // If the domain port was deleted, drop the association.
+      auto oldIdx = cast<IntegerAttr>(domain).getUInt();
+      if (portIndices.test(oldIdx))
+        continue;
+      // If the new index is the same, do nothing.
+      auto newIdx = oldIdx - numDeleted[oldIdx];
+      if (oldIdx == newIdx) {
+        newPortDomains.push_back(attr);
+        continue;
+      }
+      // Update the index.
+      newPortDomains.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), newIdx));
+    }
+  }
+
+  return ArrayAttr::get(context, newPortDomains);
 }
 
 /// Erases the ports that have their corresponding bit set in `portIndices`.
@@ -918,13 +1038,13 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   SmallVector<bool> newPortDirections =
       removeElementsAtIndices<bool>(portDirections, portIndices);
   SmallVector<Attribute> newPortNames, newPortTypes, newPortAnnos, newPortSyms,
-      newPortLocs, newPortDomains;
+      newPortLocs;
   newPortNames = removeElementsAtIndices(portNames, portIndices);
   newPortTypes = removeElementsAtIndices(portTypes, portIndices);
   newPortAnnos = removeElementsAtIndices(portAnnos, portIndices);
   newPortSyms = removeElementsAtIndices(portSyms, portIndices);
   newPortLocs = removeElementsAtIndices(portLocs, portIndices);
-  newPortDomains = removeElementsAtIndices(portDomains, portIndices);
+
   op->setAttr("portDirections",
               direction::packAttribute(op.getContext(), newPortDirections));
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newPortNames));
@@ -933,7 +1053,9 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   FModuleLike::fixupPortSymsArray(newPortSyms, op.getContext());
   op->setAttr("portSymbols", ArrayAttr::get(op.getContext(), newPortSyms));
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
-  op->setAttr("domainInfo", ArrayAttr::get(op.getContext(), newPortDomains));
+  op->setAttr("domainInfo",
+              fixDomainInfoDeletions(op.getContext(), op.getDomainInfoAttr(),
+                                     portIndices, /*supportsEmptyAttr=*/true));
 }
 
 template <typename T>
@@ -2528,12 +2650,13 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
       removeElementsAtIndices(getPortNames().getValue(), portIndices);
   SmallVector<Attribute> newPortAnnotations =
       removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
-  SmallVector<Attribute> newDomainInfo =
-      removeElementsAtIndices(getDomainInfo().getValue(), portIndices);
+  ArrayAttr newDomainInfo =
+      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), portIndices,
+                             /*supportsEmptyAttr=*/false);
 
   auto newOp = InstanceOp::create(
       builder, getLoc(), newResultTypes, getModuleName(), getName(),
-      getNameKind(), newPortDirections, newPortNames, newDomainInfo,
+      getNameKind(), newPortDirections, newPortNames, newDomainInfo.getValue(),
       getAnnotations().getValue(), newPortAnnotations, getLayers(),
       getLowerToBind(), getDoNotPrint(), getInnerSymAttr());
 
@@ -2590,6 +2713,8 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   newPortAnnos.reserve(newPortCount);
   SmallVector<Attribute> newDomainInfo;
   newDomainInfo.reserve(newPortCount);
+  SmallVector<unsigned> numInserted;
+  numInserted.resize(getNumResults());
 
   unsigned oldIndex = 0;
   unsigned newIndex = 0;
@@ -2601,9 +2726,12 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newPortNames.push_back(newPort.name);
       newPortTypes.push_back(newPort.type);
       newPortAnnos.push_back(newPort.annotations.getArrayAttr());
-      auto domain = newPort.domains;
-      newDomainInfo.push_back(domain ? domain
-                                     : ArrayAttr::get(getContext(), {}));
+      newDomainInfo.push_back(fixDomainInfoInsertions(
+          getContext(),
+          newPort.domains ? newPort.domains : ArrayAttr::get(getContext(), {}),
+          numInserted));
+      if (oldIndex < getNumResults())
+        numInserted[oldIndex] += 1;
       ++newIndex;
     } else {
       // Copy the next old port.
@@ -2612,6 +2740,10 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newPortTypes.push_back(getType(oldIndex));
       newPortAnnos.push_back(getPortAnnotation(oldIndex));
       newDomainInfo.push_back(getDomainInfo()[oldIndex]);
+      if (oldIndex == 0)
+        numInserted[oldIndex] = 0;
+      else
+        numInserted[oldIndex] += numInserted[oldIndex - 1];
       ++oldIndex;
     }
   }
@@ -3050,7 +3182,9 @@ InstanceChoiceOp::erasePorts(OpBuilder &builder,
       removeElementsAtIndices(getPortNames().getValue(), portIndices);
   SmallVector<Attribute> newPortAnnotations =
       removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
-  SmallVector<Attribute> newPortDomains;
+  ArrayAttr newPortDomains =
+      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), portIndices,
+                             /*supportsEmptyAttr=*/false);
 
   auto newOp = InstanceChoiceOp::create(
       builder, getLoc(), newResultTypes, getModuleNames(), getCaseNames(),
