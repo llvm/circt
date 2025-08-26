@@ -288,31 +288,112 @@ struct LowerProcessesPass
   void runOnOperation() override;
 };
 
-// Perform cleanup on the process operation prior to lowering.
-// This can remove redundant operands passed to the successor of llhd.wait.
-//
-// ^bb0
-//  cf.br ^bb1(%clock : i1)
-// ^bb1(%1: i1): // pred: ^bb0, ^bb2
-//  llhd.wait yield (...), (%clock : i1), ^bb2(%1 : i1)
-// ^bb2(%2: i1): // pred: ^bb1
-//  cf.cond_br %true, ^bb3, ^bb1(%2 : i1)
-// ^bb3:
-//
-// The above IR can be rewritten as:
-//
-// ^bb0
-//  cf.br ^bb1
-// ^bb1: // pred: ^bb0, ^bb2
-//  llhd.wait yield (...), (%clock : i1), ^bb2
-// ^bb2: // pred: ^bb1
-//  cf.cond_br %true, ^bb3, ^bb1
-// ^bb3:
-//
+static LogicalResult dropRedundantArguments(RewriterBase &rewriter,
+                                            Block &block) {
+  SmallVector<size_t> argsToErase;
+
+  // Go through the arguments of the block.
+  for (auto [argIdx, blockOperand] : llvm::enumerate(block.getArguments())) {
+    bool sameArg = true;
+    Value commonValue;
+
+    // Go through the block predecessor and flag if they pass to the block
+    // different values for the same argument.
+    for (Block::pred_iterator predIt = block.pred_begin(),
+                              predE = block.pred_end();
+         predIt != predE; ++predIt) {
+      Operation *terminator = (*predIt)->getTerminator();
+      auto branchOperand =
+          llvm::TypeSwitch<Operation *, std::optional<Value>>(terminator)
+              .Case([&, argIdx = argIdx](BranchOpInterface branchOp) {
+                auto succIndex = predIt.getSuccessorIndex();
+                SuccessorOperands succOperands =
+                    branchOp.getSuccessorOperands(succIndex);
+                auto branchOperands = succOperands.getForwardedOperands();
+                return branchOperands[argIdx];
+              })
+              .Case([&, argIdx = argIdx](WaitOp waitOp) {
+                auto destOperands = waitOp.getDestOperands();
+                return destOperands[argIdx];
+              })
+              .Default([](Operation *) { return std::nullopt; });
+
+      if (!branchOperand.has_value()) {
+        sameArg = false;
+        break;
+      }
+
+      if (!commonValue) {
+        commonValue = *branchOperand;
+        continue;
+      }
+
+      if (*branchOperand != commonValue) {
+        sameArg = false;
+        break;
+      }
+    }
+
+    // If they are passing the same value, drop the argument.
+    if (commonValue && sameArg) {
+      argsToErase.push_back(argIdx);
+
+      // Remove the argument from the block.
+      rewriter.replaceAllUsesWith(blockOperand, commonValue);
+    }
+  }
+
+  // Remove the arguments.
+  for (size_t argIdx : llvm::reverse(argsToErase)) {
+    block.eraseArgument(argIdx);
+
+    // Remove the argument from the branch ops.
+    for (auto predIt = block.pred_begin(), predE = block.pred_end();
+         predIt != predE; ++predIt) {
+      llvm::TypeSwitch<Operation *, void>((*predIt)->getTerminator())
+          .Case([&](BranchOpInterface branchOp) {
+            auto branch = cast<BranchOpInterface>((*predIt)->getTerminator());
+            unsigned succIndex = predIt.getSuccessorIndex();
+            SuccessorOperands succOperands =
+                branch.getSuccessorOperands(succIndex);
+            succOperands.erase(argIdx);
+          })
+          .Case([&](WaitOp waitOp) {
+            auto destOperands = waitOp.getDestOperandsMutable();
+            destOperands.erase(argIdx);
+          })
+          .Default([](Operation *) {
+            llvm_unreachable("Unexpected predecessor terminator");
+          });
+    }
+  }
+
+  return success(!argsToErase.empty());
+}
+
 static void simplifyProcess(ProcessOp &processOp) {
   OpBuilder builder(processOp);
   IRRewriter rewriter(builder);
   (void)simplifyRegions(rewriter, processOp->getRegions());
+
+  // simplifyRegions does not prune the destination operands of the
+  // `llhd.wait` operation because it does not implement BranchOpInterface, due
+  // to its side-effect semantics. Implementing BranchOpInterface could allow
+  // other optimizations to forward branch operands from the llhd.wait
+  // operation to the destination block where execution resumes. However, this
+  // would be invalid, as the SSA value might change across the wait operation.
+  // Therefore, we manually prune the destination block arguments ourselves.
+  for (auto &block : processOp.getBody()) {
+    auto waitOp = dyn_cast<WaitOp>(block.getTerminator());
+    if (!waitOp)
+      continue;
+
+    auto dstOperands = waitOp.getDestOperands();
+    if (dstOperands.empty())
+      continue;
+
+    (void)dropRedundantArguments(rewriter, *waitOp.getDest());
+  }
 }
 
 } // namespace
