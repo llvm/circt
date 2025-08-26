@@ -1,5 +1,4 @@
 ; RUN: firtool %s | FileCheck %s
-; RUN: firtool %s --extract-test-code | FileCheck --check-prefix=ETC %s
 
 FIRRTL version 5.1.0
 ; CHECK: `ifndef SYNTHESIS
@@ -23,10 +22,6 @@ FIRRTL version 5.1.0
 ; CHECK-NEXT: `endif // not def SYNTHESIS
 circuit PrintTest:
   ; CHECK-LABEL: module PrintTest
-  ; ETC-LABEL: module PrintTest_assert
-  ; ETC-LABEL: PrintTest
-  ; ETC-NOT: $fwrite
-  ; ETC-NOT: $fflush
   public module PrintTest :
     input clock : Clock
     input cond : UInt<1>
