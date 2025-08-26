@@ -287,10 +287,40 @@ struct LowerProcessesPass
     : public llhd::impl::LowerProcessesPassBase<LowerProcessesPass> {
   void runOnOperation() override;
 };
+
+// Perform cleanup on the process operation prior to lowering.
+// This can remove redundant operands passed to the successor of llhd.wait.
+//
+// ^bb0
+//  cf.br ^bb1(%clock : i1)
+// ^bb1(%1: i1): // pred: ^bb0, ^bb2
+//  llhd.wait yield (...), (%clock : i1), ^bb2(%1 : i1)
+// ^bb2(%2: i1): // pred: ^bb1
+//  cf.cond_br %true, ^bb3, ^bb1(%2 : i1)
+// ^bb3:
+//
+// The above IR can be rewritten as:
+//
+// ^bb0
+//  cf.br ^bb1
+// ^bb1: // pred: ^bb0, ^bb2
+//  llhd.wait yield (...), (%clock : i1), ^bb2
+// ^bb2: // pred: ^bb1
+//  cf.cond_br %true, ^bb3, ^bb1
+// ^bb3:
+//
+static void simplifyProcess(ProcessOp &processOp) {
+  OpBuilder builder(processOp);
+  IRRewriter rewriter(builder);
+  (void)simplifyRegions(rewriter, processOp->getRegions());
+}
+
 } // namespace
 
 void LowerProcessesPass::runOnOperation() {
   SmallVector<ProcessOp> processOps(getOperation().getOps<ProcessOp>());
-  for (auto processOp : processOps)
+  for (auto processOp : processOps) {
+    simplifyProcess(processOp);
     Lowering(processOp).lower();
+  }
 }
