@@ -44,7 +44,8 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     return result;
   }
 
-  // `extract(x from y)` has whatever is known about the operands concat'd.
+  // `extract(x from y)` has whatever is known about the extracted bits of the
+  // operand.
   if (auto extractOp = dyn_cast<ExtractOp>(op)) {
     unsigned lowBit = extractOp.getLowBit();
     unsigned width = extractOp.getType().getIntOrFloatBitWidth();
@@ -99,7 +100,7 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     return lhs.intersectWith(rhs);
   }
 
-  // `shl(x, y)` is the intersection of the known bits of `x` and `y`.
+  // `shl(x, y)` is the known bits of `x` >> known bits of `y`.
   if (auto shlOp = dyn_cast<ShlOp>(op)) {
     auto lhs = computeKnownBits(shlOp.getOperand(0), depth + 1);
     auto rhs = computeKnownBits(shlOp.getOperand(1), depth + 1);
