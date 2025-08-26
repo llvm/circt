@@ -155,7 +155,7 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
   auto addPort = [&](const Twine &name, FIRRTLType type, Direction direction) {
     auto nameAttr = StringAttr::get(context, name);
     ports.push_back(
-        {nameAttr, type, direction, hw::InnerSymAttr{}, loc, annotations});
+        {nameAttr, type, direction, hw::InnerSymAttr{}, loc, annotations, {}});
   };
 
   auto makePortCommon = [&](StringRef prefix, size_t idx, FIRRTLType addrType) {
@@ -363,6 +363,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   SmallVector<Type, 8> portTypes;
   SmallVector<Direction> portDirections;
   SmallVector<Attribute> portNames;
+  SmallVector<Attribute> domainInfo;
   DenseMap<Operation *, size_t> returnHolder;
   mlir::DominanceInfo domInfo(op->getParentOfType<FModuleOp>());
 
@@ -413,6 +414,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
         portDirections.push_back(direction);
         portNames.push_back(
             builder.getStringAttr(portLabel + Twine(portNumber) + "_" + field));
+        domainInfo.push_back(builder.getArrayAttr({}));
       };
 
       auto getDriver = [&](StringRef field) -> Operation * {
@@ -496,6 +498,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   auto inst = InstanceOp::create(
       builder, op.getLoc(), portTypes, module.getNameAttr(),
       summary.getFirMemoryName(), op.getNameKind(), portDirections, portNames,
+      domainInfo,
       /*annotations=*/ArrayRef<Attribute>(),
       /*portAnnotations=*/ArrayRef<Attribute>(),
       /*layers=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,

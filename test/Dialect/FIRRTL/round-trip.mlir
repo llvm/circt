@@ -196,4 +196,24 @@ firrtl.module @Fprintf(
   firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.domain @ClockDomain
+firrtl.domain @ClockDomain {
+}
+
+// CHECK-LABEL: firrtl.module @Domains
+// CHECK-SAME:    in %A: !firrtl.domain
+// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
+// CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
+firrtl.module @Domains(
+  in %A: !firrtl.domain of @ClockDomain,
+  in %B: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%A],
+  out %b: !firrtl.uint<1> domains [%B]
+) {
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+}
+
 }

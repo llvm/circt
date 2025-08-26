@@ -317,13 +317,16 @@ struct AttrCache {
     sPortSymbols = StringAttr::get(context, "portSymbols");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
+    sPortDomains = StringAttr::get(context, "domainInfo");
     sEmpty = StringAttr::get(context, "");
+    aEmpty = ArrayAttr::get(context, {});
   }
   AttrCache(const AttrCache &) = default;
 
   Type i64ty;
   StringAttr nameAttr, nameKindAttr, sPortDirections, sPortNames, sPortTypes,
-      sPortSymbols, sPortLocations, sPortAnnotations, sEmpty;
+      sPortSymbols, sPortLocations, sPortAnnotations, sPortDomains, sEmpty;
+  ArrayAttr aEmpty;
 };
 
 // The visitors all return true if the operation should be deleted, false if
@@ -798,7 +801,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   return std::make_pair(
       newValue,
       PortInfoWithIP{PortInfo{name, fieldType, direction, newSym, oldArg.pi.loc,
-                              AnnotationSet(newAnnotations)},
+                              AnnotationSet(newAnnotations), oldArg.pi.domains},
                      oldArg.internalPath});
 }
 
@@ -1094,6 +1097,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<Attribute, 8> newArgSyms;
   SmallVector<Attribute, 8> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
+  SmallVector<Attribute, 8> newArgDomains;
   SmallVector<Attribute, 8> newInternalPaths;
 
   auto emptyInternalPath = InternalPathAttr::get(context);
@@ -1104,6 +1108,10 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgSyms.push_back(port.pi.sym);
     newArgLocations.push_back(port.pi.loc);
     newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
+    if (auto domains = port.pi.domains)
+      newArgDomains.push_back(domains);
+    else
+      newArgDomains.push_back(cache.aEmpty);
     if (internalPaths)
       newInternalPaths.push_back(port.internalPath.value_or(emptyInternalPath));
   }
@@ -1123,6 +1131,9 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
+
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortDomains, builder.getArrayAttr(newArgDomains)));
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
@@ -1192,6 +1203,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   SmallVector<Attribute> newArgSyms;
   SmallVector<Attribute> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
+  SmallVector<Attribute> newPortDomains;
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.pi.direction);
     newArgNames.push_back(port.pi.name);
@@ -1199,6 +1211,10 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgSyms.push_back(port.pi.sym);
     newArgLocations.push_back(port.pi.loc);
     newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
+    if (auto domains = port.pi.domains)
+      newPortDomains.push_back(domains);
+    else
+      newPortDomains.push_back(cache.aEmpty);
   }
 
   newModuleAttrs.push_back(
@@ -1216,6 +1232,9 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortDomains, builder->getArrayAttr(newPortDomains)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -1465,6 +1484,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   auto oldPortAnno = op.getPortAnnotations();
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
+  // TODO: Properly lower `newDomains`.
+  SmallVector<Attribute> newDomains;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
       cast<FModuleLike>(op.getReferencedOperation(symTbl)));
@@ -1478,6 +1499,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     if (!peelType(srcType, fieldTypes, mode)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
+      newDomains.push_back(builder->getArrayAttr({}));
       resultTypes.push_back(srcType);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
@@ -1488,6 +1510,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
+        newDomains.push_back(builder->getArrayAttr({}));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
         auto annos = filterAnnotations(
             context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
@@ -1508,9 +1531,9 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
-      builder->getArrayAttr(newNames), op.getAnnotations(),
-      builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
-      op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
+      builder->getArrayAttr(newNames), builder->getArrayAttr(newDomains),
+      op.getAnnotations(), builder->getArrayAttr(newPortAnno),
+      op.getLayersAttr(), op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());

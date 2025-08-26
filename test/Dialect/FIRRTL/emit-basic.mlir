@@ -955,4 +955,19 @@ firrtl.circuit "Foo" {
     %cat_3_node = firrtl.node %cat_3_tmp : !firrtl.uint<3>
   }
 
+  // CHECK-LABEL: domain ClockDomain :
+  firrtl.domain @ClockDomain {}
+
+  // CHECK-LABEL: module Domains :
+  firrtl.module @Domains(
+    // CHECK-NEXT: input A : Domain of ClockDomain
+    // CHECK-NEXT: input B : Domain of ClockDomain
+    // CHECK-NEXT: input a : UInt<1> domains [A]
+    // CHECK-NEXT: input ab : UInt<1> domains [A, B]
+    in %A: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A],
+    in %ab: !firrtl.uint<1> domains [%A, %B]
+  ) {}
+
 }

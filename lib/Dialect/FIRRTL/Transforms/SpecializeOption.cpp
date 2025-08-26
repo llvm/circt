@@ -79,12 +79,15 @@ struct SpecializeOptionPass
               target = inst.getTargetOrDefaultAttr(it->second);
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+            // TODO: Fixup this to lower domains.
+            SmallVector<Attribute> domains;
             auto newInst = InstanceOp::create(
                 builder, inst->getResultTypes(), target, inst.getNameAttr(),
                 inst.getNameKindAttr(), inst.getPortDirectionsAttr(),
-                inst.getPortNamesAttr(), inst.getAnnotationsAttr(),
-                inst.getPortAnnotationsAttr(), builder.getArrayAttr({}),
-                UnitAttr{}, UnitAttr{}, inst.getInnerSymAttr());
+                inst.getPortNamesAttr(), builder.getArrayAttr(domains),
+                inst.getAnnotationsAttr(), inst.getPortAnnotationsAttr(),
+                builder.getArrayAttr({}), UnitAttr{}, UnitAttr{},
+                inst.getInnerSymAttr());
             inst.replaceAllUsesWith(newInst);
             inst.erase();
 
