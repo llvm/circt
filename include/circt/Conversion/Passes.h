@@ -25,6 +25,7 @@
 #include "circt/Conversion/CombToDatapath.h"
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/CoreToFSM.h"
 #include "circt/Conversion/DCToHW.h"
 #include "circt/Conversion/DatapathToComb.h"
 #include "circt/Conversion/DatapathToSMT.h"
