@@ -219,6 +219,54 @@ firrtl.circuit "Test" {
     }
   }
 
+  // Test that subfield and subindex ops are captured as normal when the input is passive.
+  //
+  // CHECK:      hw.hierpath private @[[vec_path:.+]] [@SubOpsCapturingPassiveInput::@[[vec_sym:.+]]]
+  // CHECK-NEXT: hw.hierpath private @[[bun_path:.+]] [@SubOpsCapturingPassiveInput::@[[bun_sym:.+]]]
+  // CHECK-NEXT: firrtl.module private @SubOpsCapturingPassiveInput_A() {
+  // CHECK-NEXT:   %0 = firrtl.xmr.deref @[[bun_path]] : !firrtl.bundle<a: uint<1>>
+  // CHECK-NEXT:   %1 = firrtl.xmr.deref @[[vec_path]] : !firrtl.vector<uint<1>, 1>
+  // CHECK-NEXT:   %2 = firrtl.subindex %1[0] : !firrtl.vector<uint<1>, 1>
+  // CHECK-NEXT:   %3 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<1>>
+  // CHECK-NEXT: }
+  // CHECK:      firrtl.module @SubOpsCapturingPassiveInput(
+  // CHECK-SAME:     in %vec: !firrtl.vector<uint<1>, 1> sym @[[vec_sym]],
+  // CHECK-SAME:     in %bun: !firrtl.bundle<a: uint<1>> sym @[[bun_sym]]) {
+  // CHECK-NEXT:   firrtl.instance a {{.*}}
+  // CHECK-NEXT: }
+  firrtl.module @SubOpsCapturingPassiveInput (
+    in %vec: !firrtl.vector<uint<1>, 1>,
+    in %bun: !firrtl.bundle<a: uint<1>>
+  ) {
+    firrtl.layerblock @A {
+      %0 = firrtl.subindex %vec[0] : !firrtl.vector<uint<1>, 1>
+      %1 = firrtl.subfield %bun[a] : !firrtl.bundle<a: uint<1>>
+    }
+  }
+
+  // Test that subaccess op operands are captured as normal when the input is passive.
+  //
+  // CHECK:      hw.hierpath private @[[input_path:.+]] [@SubaccessOpCapturingPassiveInput::@[[input_sym:.+]]]
+  // CHECK-NEXT: hw.hierpath private @[[index_path:.+]] [@SubaccessOpCapturingPassiveInput::@[[index_sym:.+]]]
+  // CHECK-NEXT: firrtl.module private @SubaccessOpCapturingPassiveInput_A() {
+  // CHECK-NEXT:  %0 = firrtl.xmr.deref @[[index_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:  %1 = firrtl.xmr.deref @[[input_path]] : !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT:  %2 = firrtl.subaccess %1[%0] : !firrtl.vector<uint<1>, 2>, !firrtl.uint<1>
+  // CHECK-NEXT: }
+  // CHECK:      firrtl.module @SubaccessOpCapturingPassiveInput(
+  // CHECK-SAME:    in %input: !firrtl.vector<uint<1>, 2> sym @[[input_sym]],
+  // CHECK-SAME:    in %index: !firrtl.uint<1> sym @[[index_sym]]) {
+  // CHECK-NEXT:  firrtl.instance a {{.*}}
+  // CHECK-NEXT: }
+  firrtl.module @SubaccessOpCapturingPassiveInput (
+    in %input: !firrtl.vector<uint<1>, 2>,
+    in %index: !firrtl.uint<1>
+  ) {
+    firrtl.layerblock @A {
+      %0 = firrtl.subaccess %input[%index] : !firrtl.vector<uint<1>, 2>, !firrtl.uint<1>
+    }
+  }
+
   // CHECK:      hw.hierpath private @[[CaptureWhen2_a_path:.+]] [@CaptureWhen2::@[[CaptureWhen2_a_sym:.+]]]
   // CHECK-NEXT: hw.hierpath private @[[CaptureWhen2_cond_path:.+]] [@CaptureWhen2::@[[CaptureWhen2_cond_sym:.+]]]
   // CHECK-NEXT: firrtl.module private @CaptureWhen2_A() {
