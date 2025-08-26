@@ -376,12 +376,12 @@ static void simplifyProcess(ProcessOp &processOp) {
   IRRewriter rewriter(builder);
   (void)simplifyRegions(rewriter, processOp->getRegions());
 
-  // simplifyRegions does not prune the destination operands of the
-  // `llhd.wait` operation because it does not implement BranchOpInterface, due
-  // to its side-effect semantics. Implementing BranchOpInterface could allow
-  // other optimizations to forward branch operands from the llhd.wait
-  // operation to the destination block where execution resumes. However, this
-  // would be invalid, as the SSA value might change across the wait operation.
+  // simplifyRegions does not prune the destination operands of the `llhd.wait`
+  // operation because it does not implement BranchOpInterface, due to its
+  // side-effect semantics. Implementing BranchOpInterface could allow other
+  // optimizations to forward branch operands from the `llhd.wait` operation to
+  // the destination block where execution resumes. However, this would be
+  // invalid, as the SSA value might change across the wait operation.
   // Therefore, we manually prune the destination block arguments ourselves.
   for (auto &block : processOp.getBody()) {
     auto waitOp = dyn_cast<WaitOp>(block.getTerminator());
