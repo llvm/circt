@@ -26,4 +26,17 @@ def FormatStringType : SimTypeDef<"FormatString"> {
   }];
 }
 
+
+def EdgeTriggerType : SimTypeDef<"EdgeTrigger"> {
+  let summary = "Trigger derived from an edge event.";
+  let mnemonic = "trigger.edge";
+}
+
+def InitTriggerType : SimTypeDef<"InitTrigger"> {
+  let summary = "Trigger derived from the simulation start event.";
+  let mnemonic = "trigger.init";
+}
+
+def AnyTriggerType : AnyTypeOf<[EdgeTriggerType, InitTriggerType]>;
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD
