@@ -1,12 +1,8 @@
-//===- MooreToCore.cpp - Moore To Core Conversion Pass --------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This is the main Moore to Core Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
@@ -1821,17 +1817,31 @@ static void populateOpConversion(RewritePatternSet &patterns,
     SExtOpConversion,
 
     // Patterns of miscellaneous operations.
-    ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
+    ConstantOpConv,
+    ConcatOpConversion,
+    ReplicateOpConversion,
     ConstantTimeOpConv,
-    ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
+    ExtractOpConversion,
+    DynExtractOpConversion,
+    DynExtractRefOpConversion,
     ReadOpConversion,
-    StructExtractOpConversion, StructExtractRefOpConversion,
-    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion, ArrayCreateOpConversion,
-    YieldOpConversion, OutputOpConversion, StringConstantOpConv,
+    StructExtractOpConversion,
+    StructExtractRefOpConversion,
+    ExtractRefOpConversion,
+    StructCreateOpConversion,
+    ConditionalOpConversion,
+    ArrayCreateOpConversion,
+    YieldOpConversion,
+    OutputOpConversion,
+    StringConstantOpConv,
 
     // Patterns of unary operations.
-    ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
-    BoolCastOpConversion, NotOpConversion, NegOpConversion,
+    ReduceAndOpConversion,
+    ReduceOrOpConversion,
+    ReduceXorOpConversion,
+    BoolCastOpConversion,
+    NotOpConversion,
+    NegOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,
@@ -1874,7 +1884,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
     WaitDelayOpConversion,
 
     // Patterns of shifting operations.
-    ShrOpConversion, ShlOpConversion, AShrOpConversion,
+    ShrOpConversion,
+    ShlOpConversion,
+    AShrOpConversion,
 
     // Patterns of assignment operations.
     AssignOpConversion<ContinuousAssignOp, 0, 1>,
@@ -1883,11 +1895,14 @@ static void populateOpConversion(RewritePatternSet &patterns,
     AssignedVariableOpConversion,
 
     // Patterns of branch operations.
-    CondBranchOpConversion, BranchOpConversion,
+    CondBranchOpConversion,
+    BranchOpConversion,
 
     // Patterns of other operations outside Moore dialect.
-    HWInstanceOpConversion, ReturnOpConversion,
-    CallOpConversion, UnrealizedConversionCastConversion,
+    HWInstanceOpConversion,
+    ReturnOpConversion,
+    CallOpConversion,
+    UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,
     InPlaceOpConversion<debug::VariableOp>,
