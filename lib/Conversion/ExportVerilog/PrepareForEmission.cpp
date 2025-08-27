@@ -1193,7 +1193,8 @@ static LogicalResult legalizeHWModule(Block &block,
 
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple
-    // statements.
+    // statements. Variadic and full-associative operations with only one
+    // operand are replaced with its operand.
     // TODO: This is checking the Commutative property, which doesn't seem
     // right in general.  MLIR doesn't have a "fully associative" property.
     if (op.getNumOperands() != 2 && op.getNumResults() == 1 &&
