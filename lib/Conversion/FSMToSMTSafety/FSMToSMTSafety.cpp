@@ -27,6 +27,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Casting.h"
 #include <algorithm>
 #include <circt/Dialect/HW/HWTypes.h>
 #include <cstdlib>
@@ -77,6 +78,40 @@ int insertStates(llvm::SmallVector<std::string> &states, std::string &st) {
   states.push_back(st);
   return states.size() - 1;
 }
+static mlir::Value bv1ToBool(OpBuilder &b, Location loc, mlir::Value v) {
+  if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType())) {
+    if (bvTy.getWidth() == 1) {
+      auto one = b.create<smt::BVConstantOp>(loc, 1, 1);
+      return b.create<smt::EqOp>(loc, v, one);
+    }
+  }
+  // Already a Bool? Return as is.
+  if (llvm::isa<smt::BoolType>(v.getType()))
+    return v;
+
+  v.getDefiningOp()->emitError()
+      << "bv1ToBool expected !smt.bv<1> or !smt.bool, got " << v;
+  assert(false && "bv1ToBool type mismatch");
+  return v;
+}
+
+static mlir::Value boolToBV1(OpBuilder &b, Location loc, mlir::Value pred) {
+  if (llvm::isa<smt::BoolType>(pred.getType())) {
+    auto one = b.create<smt::BVConstantOp>(loc, 1, 1);
+    auto zero = b.create<smt::BVConstantOp>(loc, 0, 1);
+    return b.create<smt::IteOp>(loc, b.getType<smt::BitVectorType>(1), pred,
+                                one, zero);
+  }
+  // Already BV1? Return as is.
+  if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(pred.getType()))
+    if (bvTy.getWidth() == 1)
+      return pred;
+
+  pred.getDefiningOp()->emitError()
+      << "boolToBV1 expected !smt.bool or !smt.bv<1>, got " << pred;
+  assert(false && "boolToBV1 type mismatch");
+  return pred;
+}
 
 void printFsmArgVals(
     const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> &fsmArgVals) {
@@ -103,21 +138,56 @@ mlir::smt::BVCmpPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate) {
   case comb::ICmpPredicate::uge:
     return smt::BVCmpPredicate::uge;
   }
+  assert(false && "unsupported comparison predicate");
 }
 
 mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
                          llvm::SmallVector<mlir::Value> args) {
+  // llvm::SmallVector<int> widths;
+  // for (auto arg : args) {
+  //   // assert(arg.getType().isA<smt::BitVectorType>)
+  //   llvm::outs() << "\n\narg: " << arg;
+  //   auto a = llvm::dyn_cast<smt::BitVectorType>(arg.getType());
+  //   if (!a) {
+  //     llvm::outs() << "a is null";
+  //   }
+  //   llvm::outs() << "\n\ntype: " << arg;
+  //   widths.push_back(a.getWidth());
+  // }
+  static auto asBV = [&](mlir::Value v) -> mlir::Value {
+    if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
+      return v;
+    if (llvm::isa<smt::BoolType>(v.getType()))
+      return boolToBV1(b, loc, v);
+    op.emitError() << "expected SMT BV or Bool operand, got " << v;
+    assert(false && "unexpected SMT operand type");
+    return v;
+  };
+
+  static auto bvWidth = [&](mlir::Value v) -> int {
+    if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
+      return bvTy.getWidth();
+    if (llvm::isa<smt::BoolType>(v.getType()))
+      return 1;
+    op.emitError() << "expected SMT BV or Bool operand, got " << v;
+    assert(false && "unexpected SMT operand type");
+    return 1;
+  };
+
   llvm::SmallVector<int> widths;
   for (auto arg : args) {
-    // assert(arg.getType().isA<smt::BitVectorType>)
-    llvm::outs() << "\n\narg: " << arg;
-    auto a = llvm::dyn_cast<smt::BitVectorType>(arg.getType());
-    if (!a) {
-      llvm::outs() << "a is null";
+    if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(arg.getType())) {
+      widths.push_back(bvTy.getWidth());
+    } else if (llvm::isa<smt::BoolType>(arg.getType())) {
+      // In practice, comb ops should not receive SMT Bool; treat as width-1 BV
+      // if it ever slips through.
+      widths.push_back(1);
+    } else {
+      op.emitError() << "getCombValue received a non-SMT value: " << arg;
+      assert(false && "Non-SMT value passed to getCombValue");
     }
-    llvm::outs() << "\n\ntype: " << arg;
-    widths.push_back(a.getWidth());
   }
+
   // we need to modulo all the operations considering the width of the mlir
   // value!
   if (auto addOp = mlir::dyn_cast<comb::AddOp>(op)) {
@@ -129,9 +199,19 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
       return args[0];
 
     // Chain binary 'and' operations
-    mlir::Value result = args[0];
+    mlir::Value result = asBV(args[0]);
     for (size_t i = 1; i < args.size(); ++i) {
-      result = b.create<smt::BVAndOp>(loc, result, args[i]);
+      assert(llvm::isa<smt::BitVectorType>(result.getType()) &&
+             "I expect the result to be a bit-vector");
+
+      if (!(llvm::isa<smt::BitVectorType>(args[i].getType()))) {
+        llvm::outs() << "\n\n I expected args[" << i
+                     << "] to be a bit-vector, but it is not:";
+        args[i].dump();
+      }
+      assert(llvm::isa<smt::BitVectorType>(args[i].getType()) &&
+             "I expaect args[i] to be a bit-vector:");
+      result = b.create<smt::BVAndOp>(loc, result, asBV(args[i]));
     }
     return result;
     // return b.create<smt::BVAndOp>(loc,
@@ -140,9 +220,20 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
   if (auto xorOp = mlir::dyn_cast<comb::XorOp>(op))
     return b.create<smt::BVXOrOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
                                   args);
-  if (auto orOp = mlir::dyn_cast<comb::OrOp>(op))
-    return b.create<smt::BVOrOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
-                                 args);
+  if (auto orOp = mlir::dyn_cast<comb::OrOp>(op)) {
+    //     if (args.empty()) {
+    //   op.emitError() << "comb.or with no operands";
+    //   assert(false);
+    // }
+    mlir::Value result = asBV(args[0]);
+    for (size_t i = 1; i < args.size(); ++i)
+      result = b.create<smt::BVOrOp>(loc, result, asBV(args[i]));
+    return result;
+    // return b.create<smt::BVOrOp>(loc,
+    // b.getType<smt::BitVectorType>(widths[0]),
+    //                          args);
+  }
+
   if (comb::MuxOp m = mlir::dyn_cast<comb::MuxOp>(op)) {
 
     assert(args.size() == 3 && "MuxOp should have 3 arguments");
@@ -172,14 +263,46 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
   if (auto icmp = mlir::dyn_cast<comb::ICmpOp>(op)) {
     if (icmp.getPredicate() == circt::comb::ICmpPredicate::eq) {
       auto eq = b.create<smt::EqOp>(loc, args);
-      return eq; // b.getType<smt::BitVectorType>(widths[0], eq)
+      return boolToBV1(b, icmp.getLoc(),
+                       eq); // b.getType<smt::BitVectorType>(widths[0], eq)
     }
     if (icmp.getPredicate() == circt::comb::ICmpPredicate::ne) {
-      return b.create<smt::DistinctOp>(loc, args);
+      smt::DistinctOp dis = b.create<smt::DistinctOp>(loc, args);
+      return boolToBV1(b, icmp.getLoc(), dis);
     }
     auto predicate = getSmtPred(icmp.getPredicate());
     return b.create<smt::BVCmpOp>(loc, predicate, args[0], args[1]);
   }
+  // Option A (smt.bv.extract infers width from result type and takes only
+  // lowBit)
+  if (auto extOp = mlir::dyn_cast<comb::ExtractOp>(op)) {
+    unsigned low = extOp.getLowBit();
+    unsigned width = extOp.getType().getIntOrFloatBitWidth();
+    auto resTy = b.getType<smt::BitVectorType>(width);
+
+    // args.front() is the already-translated SMT BV operand (!smt.bv<...>)
+    return b.create<smt::ExtractOp>(loc, resTy, /*lowBit=*/low,
+                                    /*input=*/args.front());
+  }
+
+  // if (auto extOp = mlir::dyn_cast<comb::ExtractOp>(op)) {
+  //   unsigned low = extOp.getLowBit();
+  //   unsigned width = extOp.getType().getIntOrFloatBitWidth();
+  //   unsigned high = low + width - 1;
+
+  //   auto resTy = b.getType<smt::BitVectorType>(width);
+
+  //   // Choose the correct extract op class for the SMT dialect you’re using.
+  //   // If your dialect defines smt::BVExtractOp:
+  //   // return b.create<smt::ExtractOp>(loc, resTy, args.front(),
+  //   //                                   b.getI32IntegerAttr(high),
+  //   //                                   b.getI32IntegerAttr(low));
+
+  //   // If instead it’s smt::ExtractOp and the builder takes integer indices:
+  //   return b.create<smt::ExtractOp>(loc, resTy, low,extOp.getInput());
+  // }
+
+  assert(false && "unsupported comb operation");
 }
 
 mlir::Value getSmtValue(
@@ -198,11 +321,6 @@ mlir::Value getSmtValue(
   }
   if (op.getDefiningOp()->getName().getDialect()->getNamespace() == "comb") {
     // op can be the result of a comb operation
-    auto op1 =
-        getSmtValue(op.getDefiningOp()->getOperand(0), fsmArgVals, b, loc);
-    auto op2 =
-        getSmtValue(op.getDefiningOp()->getOperand(1), fsmArgVals, b, loc);
-    // llvm::SmallVector<mlir::Value> combArgs = {op1, op2};
     llvm::SmallVector<mlir::Value> combArgs;
     for (auto arg : op.getDefiningOp()->getOperands()) {
       auto toRet = getSmtValue(arg, fsmArgVals, b, loc);
@@ -352,7 +470,12 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // initial condition
   // the key is the number of the state in `stateFunctions`
-  llvm::SmallVector<std::pair<int, mlir::Value>> assertions;
+  // llvm::SmallVector<std::pair<int, mlir::Value>> assertions;
+  struct PendingAssertion {
+    int stateId;
+    mlir::Value predicateFsm;
+  };
+  llvm::SmallVector<PendingAssertion> assertions;
 
   auto forall = b.create<smt::ForallOp>(
       loc, argVarWidths,
@@ -383,11 +506,21 @@ LogicalResult MachineOpConverter::dispatch() {
 
         if (!initOutputReg->empty()) {
           llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
+          // for (auto [i, a] : llvm::enumerate(argVars)) {
+          //   if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1)
+          //   {
+          //     avToSmt.push_back({a, initVarValues[i - numOut - numArgs]});
+          //   } else {
+          //     avToSmt.push_back({a, a});
+          //   }
+          // }
           for (auto [i, a] : llvm::enumerate(argVars)) {
             if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
+              // Variables: map to their SMT initial constants.
               avToSmt.push_back({a, initVarValues[i - numOut - numArgs]});
             } else {
-              avToSmt.push_back({a, a});
+              // Inputs/outputs: map to the quantified SMT variables.
+              avToSmt.push_back({a, forallArgs[i]});
             }
           }
 
@@ -459,10 +592,15 @@ LogicalResult MachineOpConverter::dispatch() {
           }
           // if we find a verif.assert operation, we store the SMT formula it
           // checks in `assertions`
-          if (auto outputOp = mlir::dyn_cast<verif::AssertOp>(op)) {
-            auto operand = outputOp->getOperand(0);
-            auto assertion = getSmtValue(operand, avToSmt, b, loc);
-            assertions.push_back({t1.from, assertion});
+          // if (auto outputOp = mlir::dyn_cast<verif::AssertOp>(op)) {
+          //   auto operand = outputOp->getOperand(0);
+          //   auto assertion = getSmtValue(operand, avToSmt, b, loc);
+          //   assertions.push_back({t1.from, assertion});
+          // }
+          // inside the action lambda, when walking t1.output->getOps()
+          if (auto a = mlir::dyn_cast<verif::AssertOp>(op)) {
+            // store original FSM value; do NOT translate to SMT here
+            assertions.push_back({t1.to, a.getOperand(0)});
           }
         }
       }
@@ -498,6 +636,8 @@ LogicalResult MachineOpConverter::dispatch() {
         auto newTime = b.create<smt::BVAddOp>(
             loc, b.getType<smt::BitVectorType>(32), timeArgs);
         updatedSmtValues.push_back(newTime);
+        // new (bit-vector 1 of width 32)
+
         // push output values
         for (auto [i, outputVal] : llvm::enumerate(outputSmtValues)) {
           updatedSmtValues[numArgs + i] = outputVal;
@@ -513,11 +653,15 @@ LogicalResult MachineOpConverter::dispatch() {
       }
       // update time
       // mlir::IntegerAttr intAttr = b.getI32IntegerAttr(1);
-      auto oAttr = b.getI32IntegerAttr(1);
-      auto c1 = b.create<smt::IntConstantOp>(loc, oAttr);
+      auto c1 = b.create<smt::BVConstantOp>(loc, 1, 32);
       llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
       auto newTime = b.create<smt::BVAddOp>(
           loc, b.getType<smt::BitVectorType>(32), timeArgs);
+      // auto oAttr = b.getI32IntegerAttr(1);
+      // auto c1 = b.create<smt::IntConstantOp>(loc, oAttr);
+      // llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
+      // auto newTime = b.create<smt::BVAddOp>(
+      // loc, b.getType<smt::BitVectorType>(32), timeArgs);
       updatedSmtValues.push_back(newTime);
       // push output values
       for (auto [i, outputVal] : llvm::enumerate(outputSmtValues)) {
@@ -600,26 +744,52 @@ LogicalResult MachineOpConverter::dispatch() {
     b.create<smt::AssertOp>(loc, forall);
   }
 
-  for (auto assertion : assertions) {
-
+  for (auto &pa : assertions) {
     auto forall = b.create<smt::ForallOp>(
         loc, argVarWidths,
-        [&stateFunctions, &assertion](OpBuilder &b, Location loc,
-                                      ValueRange forallInputs) {
-          auto stateFun = b.create<smt::ApplyFuncOp>(
-              loc, stateFunctions[assertion.first], forallInputs);
-          // SMT formula representing the negation of the safety property
-          // expressed in verif.assert
-          auto negatedProperty = b.create<smt::NotOp>(loc, assertion.second);
-          auto rhs = b.create<smt::BoolConstantOp>(loc, false);
+        [&](OpBuilder &b, Location loc, ValueRange forallInputs) {
+          // 1) Build mapping from FSM arguments/vars to the SMT forall args.
+          llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> avToSmt;
+          for (auto [i, av] : llvm::enumerate(argVars))
+            avToSmt.push_back({av, forallInputs[i]});
 
-          auto lhs = b.create<smt::AndOp>(loc, stateFun, negatedProperty);
-          auto ret = b.create<smt::ImpliesOp>(loc, lhs, rhs);
-          return ret;
+          // 2) Translate the original FSM predicate to SMT in-scope.
+          mlir::Value predBV = getSmtValue(pa.predicateFsm, avToSmt, b, loc);
+          mlir::Value predBool = bv1ToBool(b, loc, predBV);
+
+          // 3) In-state predicate.
+          mlir::Value inState = b.create<smt::ApplyFuncOp>(
+              loc, stateFunctions[pa.stateId], forallInputs);
+
+          // 4) Assert: inState implies predBool (safety)
+          //   or equivalently: (inState AND NOT predBool) => false
+          mlir::Value ok = b.create<smt::ImpliesOp>(loc, inState, predBool);
+          return ok;
         });
-
     b.create<smt::AssertOp>(loc, forall);
   }
+
+  // for (auto assertion : assertions) {
+
+  //   auto forall = b.create<smt::ForallOp>(
+  //       loc, argVarWidths,
+  //       [&stateFunctions, &assertion](OpBuilder &b, Location loc,
+  //                                     ValueRange forallInputs) {
+  //         auto stateFun = b.create<smt::ApplyFuncOp>(
+  //             loc, stateFunctions[assertion.first], forallInputs);
+  //         // SMT formula representing the negation of the safety property
+  //         // expressed in verif.assert
+  //         auto bvassert = bv1ToBool(b, loc, assertion.second);
+  //         auto negatedProperty = b.create<smt::NotOp>(loc, bvassert);
+  //         auto rhs = b.create<smt::BoolConstantOp>(loc, false);
+
+  //         auto lhs = b.create<smt::AndOp>(loc, stateFun, negatedProperty);
+  //         auto ret = b.create<smt::ImpliesOp>(loc, lhs, rhs);
+  //         return ret;
+  //       });
+
+  //   b.create<smt::AssertOp>(loc, forall);
+  // }
 
   // b.getBlock()->dump();
 
