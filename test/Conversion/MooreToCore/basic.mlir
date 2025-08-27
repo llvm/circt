@@ -1219,3 +1219,29 @@ func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
   // CHECK-NEXT: return %arg0, [[TMP]] : !llhd.time, !llhd.time
   return %arg0, %0 : !moore.time, !moore.time
 }
+
+// CHECK-LABEL: @Unreachable
+moore.module @Unreachable() {
+  // CHECK: llhd.process
+  moore.procedure initial {
+    // CHECK-NEXT: llhd.halt
+    moore.unreachable
+  }
+}
+
+// CHECK-LABEL: @SimulationControl
+func.func @SimulationControl() {
+  // CHECK-NOT: moore.builtin.finish_message
+  moore.builtin.finish_message false
+  moore.builtin.finish_message true
+
+  // CHECK-NEXT: sim.pause quiet
+  moore.builtin.stop
+
+  // CHECK-NEXT: sim.terminate success, quiet
+  moore.builtin.finish 0
+  // CHECK-NEXT: sim.terminate failure, quiet
+  moore.builtin.finish 42
+
+  return
+}
