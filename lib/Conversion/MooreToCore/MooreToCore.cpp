@@ -16,6 +16,7 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -504,22 +505,24 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
   }
 };
 
-struct WaitDelayOpConversion : public OpConversionPattern<WaitDelayOp> {
-  using OpConversionPattern::OpConversionPattern;
+// moore.wait_delay -> llhd.wait
+static LogicalResult convert(WaitDelayOp op, WaitDelayOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  auto *resumeBlock =
+      rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+  rewriter.setInsertionPoint(op);
+  rewriter.replaceOpWithNewOp<llhd::WaitOp>(op, ValueRange{},
+                                            adaptor.getDelay(), ValueRange{},
+                                            ValueRange{}, resumeBlock);
+  rewriter.setInsertionPointToStart(resumeBlock);
+  return success();
+}
 
-  LogicalResult
-  matchAndRewrite(WaitDelayOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto *resumeBlock =
-        rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
-    rewriter.setInsertionPoint(op);
-    rewriter.replaceOpWithNewOp<llhd::WaitOp>(op, ValueRange{},
-                                              adaptor.getDelay(), ValueRange{},
-                                              ValueRange{}, resumeBlock);
-    rewriter.setInsertionPointToStart(resumeBlock);
-    return success();
-  }
-};
+// moore.unreachable -> llhd.halt
+static LogicalResult convert(UnreachableOp op, PatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // Declaration Conversion
@@ -1636,6 +1639,30 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Simulation Control Conversion
+//===----------------------------------------------------------------------===//
+
+// moore.builtin.stop -> sim.pause
+static LogicalResult convert(StopBIOp op, PatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<sim::PauseOp>(op, /*verbose=*/false);
+  return success();
+}
+
+// moore.builtin.finish -> sim.terminate
+static LogicalResult convert(FinishBIOp op, PatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<sim::TerminateOp>(op, op.getExitCode() == 0,
+                                                /*verbose=*/false);
+  return success();
+}
+
+// moore.builtin.finish_message
+static LogicalResult convert(FinishMessageBIOp op, PatternRewriter &rewriter) {
+  // We don't support printing termination/pause messages yet.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -1796,9 +1823,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
       });
 }
 
-static void populateOpConversion(RewritePatternSet &patterns,
+static void populateOpConversion(ConversionPatternSet &patterns,
                                  TypeConverter &typeConverter) {
-  auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
     // Patterns of declaration operations.
@@ -1881,7 +1907,6 @@ static void populateOpConversion(RewritePatternSet &patterns,
     InstanceOpConversion,
     ProcedureOpConversion,
     WaitEventOpConversion,
-    WaitDelayOpConversion,
 
     // Patterns of shifting operations.
     ShrOpConversion,
@@ -1917,8 +1942,17 @@ static void populateOpConversion(RewritePatternSet &patterns,
     FormatConcatOpConversion,
     FormatIntOpConversion,
     DisplayBIOpConversion
-  >(typeConverter, context);
+  >(typeConverter, patterns.getContext());
   // clang-format on
+
+  // Structural operations
+  patterns.add<WaitDelayOp>(convert);
+  patterns.add<UnreachableOp>(convert);
+
+  // Simulation control
+  patterns.add<StopBIOp>(convert);
+  patterns.add<FinishBIOp>(convert);
+  patterns.add<FinishMessageBIOp>(convert);
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
@@ -1952,11 +1986,13 @@ void MooreToCorePass::runOnOperation() {
   IRRewriter rewriter(module);
   (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
 
-  ConversionTarget target(context);
   TypeConverter typeConverter;
-  RewritePatternSet patterns(&context);
   populateTypeConversion(typeConverter);
+
+  ConversionTarget target(context);
   populateLegality(target, typeConverter);
+
+  ConversionPatternSet patterns(&context, typeConverter);
   populateOpConversion(patterns, typeConverter);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
