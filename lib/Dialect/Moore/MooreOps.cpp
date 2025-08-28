@@ -1083,6 +1083,48 @@ OpFoldResult IntToLogicOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// TruncOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult TruncOp::fold(FoldAdaptor adaptor) {
+  // Truncate constants.
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput())) {
+    auto width = getType().getWidth();
+    return FVIntegerAttr::get(getContext(), intAttr.getValue().trunc(width));
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ZExtOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ZExtOp::fold(FoldAdaptor adaptor) {
+  // Zero-extend constants.
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput())) {
+    auto width = getType().getWidth();
+    return FVIntegerAttr::get(getContext(), intAttr.getValue().zext(width));
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// SExtOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SExtOp::fold(FoldAdaptor adaptor) {
+  // Sign-extend constants.
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput())) {
+    auto width = getType().getWidth();
+    return FVIntegerAttr::get(getContext(), intAttr.getValue().sext(width));
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // BoolCastOp
 //===----------------------------------------------------------------------===//
 

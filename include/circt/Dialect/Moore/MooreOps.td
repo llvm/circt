@@ -668,6 +668,7 @@ def TruncOp : MooreOp<"trunc", [
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasFolder = 1;
 }
 
 class ExtOpBase<string mnemonic> : MooreOp<mnemonic, [
@@ -683,6 +684,7 @@ class ExtOpBase<string mnemonic> : MooreOp<mnemonic, [
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasFolder = 1;
 }
 
 def ZExtOp : ExtOpBase<"zext"> {

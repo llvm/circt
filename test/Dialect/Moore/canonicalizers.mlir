@@ -44,6 +44,67 @@ func.func @IntToLogic(%arg0: !moore.l42) -> (!moore.l42, !moore.l42) {
   return %1, %3 : !moore.l42, !moore.l42
 }
 
+// CHECK-LABEL: func.func @ConstTrunc
+func.func @ConstTrunc() -> (!moore.i4, !moore.l4) {
+  // CHECK-NEXT: moore.constant 5 : i4
+  // CHECK-NEXT: moore.constant bZX01 : l4
+  %0 = moore.constant b10100101 : i8
+  %1 = moore.constant b10XZZX01 : l8
+  %2 = moore.trunc %0 : i8 -> i4
+  %3 = moore.trunc %1 : l8 -> l4
+  return %2, %3 : !moore.i4, !moore.l4
+}
+
+// CHECK-LABEL: func.func @ConstZExt
+func.func @ConstZExt() -> (!moore.i8, !moore.i8, !moore.l8, !moore.l8, !moore.l8, !moore.l8) {
+  // CHECK-NEXT: moore.constant 5 : i8
+  // CHECK-NEXT: moore.constant 13 : i8
+  %i0 = moore.constant b0101 : i4
+  %i1 = moore.constant b1101 : i4
+  %ei0 = moore.zext %i0 : i4 -> i8
+  %ei1 = moore.zext %i1 : i4 -> i8
+
+  // CHECK-NEXT: moore.constant 5 : l8
+  // CHECK-NEXT: moore.constant 13 : l8
+  // CHECK-NEXT: moore.constant bX101 : l8
+  // CHECK-NEXT: moore.constant bZ101 : l8
+  %l0 = moore.constant b0101 : l4
+  %l1 = moore.constant b1101 : l4
+  %l2 = moore.constant bX101 : l4
+  %l3 = moore.constant bZ101 : l4
+  %el0 = moore.zext %l0 : l4 -> l8
+  %el1 = moore.zext %l1 : l4 -> l8
+  %el2 = moore.zext %l2 : l4 -> l8
+  %el3 = moore.zext %l3 : l4 -> l8
+
+  return %ei0, %ei1, %el0, %el1, %el2, %el3 : !moore.i8, !moore.i8, !moore.l8, !moore.l8, !moore.l8, !moore.l8
+}
+
+// CHECK-LABEL: func.func @ConstSExt
+func.func @ConstSExt() -> (!moore.i8, !moore.i8, !moore.l8, !moore.l8, !moore.l8, !moore.l8) {
+  // CHECK-NEXT: moore.constant 5 : i8
+  // CHECK-NEXT: moore.constant -3 : i8
+  %i0 = moore.constant b0101 : i4
+  %i1 = moore.constant b1101 : i4
+  %ei0 = moore.sext %i0 : i4 -> i8
+  %ei1 = moore.sext %i1 : i4 -> i8
+
+  // CHECK-NEXT: moore.constant 5 : l8
+  // CHECK-NEXT: moore.constant -3 : l8
+  // CHECK-NEXT: moore.constant bXXXXX101 : l8
+  // CHECK-NEXT: moore.constant bZZZZZ101 : l8
+  %l0 = moore.constant b0101 : l4
+  %l1 = moore.constant b1101 : l4
+  %l2 = moore.constant bX101 : l4
+  %l3 = moore.constant bZ101 : l4
+  %el0 = moore.sext %l0 : l4 -> l8
+  %el1 = moore.sext %l1 : l4 -> l8
+  %el2 = moore.sext %l2 : l4 -> l8
+  %el3 = moore.sext %l3 : l4 -> l8
+
+  return %ei0, %ei1, %el0, %el1, %el2, %el3 : !moore.i8, !moore.i8, !moore.l8, !moore.l8, !moore.l8, !moore.l8
+}
+
 // CHECK-LABEL: moore.module @OptimizeUniquelyAssignedVars
 moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42, in %w: !moore.i42) {
   // Unique continuous assignments to variables should remove the `ref<T>`
