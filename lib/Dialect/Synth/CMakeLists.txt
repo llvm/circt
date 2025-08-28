@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTSynth
 
   LINK_LIBS PUBLIC
   MLIRIR
+  CIRCTSupport
 )
 
 add_subdirectory(Transforms)

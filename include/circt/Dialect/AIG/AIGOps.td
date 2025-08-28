@@ -56,9 +56,9 @@ def AndInverterOp : AIGOp<"and_inv", [SameOperandsAndResultType, Pure]> {
   let arguments = (ins Variadic<AnyType>:$inputs, DenseBoolArrayAttr:$inverted);
   let results = (outs AnyType:$result);
 
-  // NOTE: Custom assembly format is needed to pretty print the `inverted`
-  // attribute.
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    custom<VariadicInvertibleOperands>($inputs, type($result), $inverted, attr-dict)
+  }];
 
   let builders = [
     OpBuilder<(ins "Value":$input, CArg<"bool", "false">:$invert), [{
