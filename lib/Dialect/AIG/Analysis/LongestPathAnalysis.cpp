@@ -523,6 +523,8 @@ private:
                       SmallVectorImpl<OpenPath> &results);
   LogicalResult addLogicOp(Operation *op, size_t bitPos,
                            SmallVectorImpl<OpenPath> &results);
+  LogicalResult visit(comb::TruthTableOp op, size_t bitPos,
+                      SmallVectorImpl<OpenPath> &results);
 
   // Constants.
   LogicalResult visit(hw::ConstantOp op, size_t bitPos,
@@ -724,6 +726,16 @@ LogicalResult LocalVisitor::visit(comb::MuxOp op, size_t bitPos,
       failed(addEdge(op.getTrueValue(), bitPos, 1, results)) ||
       failed(addEdge(op.getFalseValue(), bitPos, 1, results)))
     return failure();
+  deduplicatePaths(results);
+  return success();
+}
+
+LogicalResult LocalVisitor::visit(comb::TruthTableOp op, size_t bitPos,
+                                  SmallVectorImpl<OpenPath> &results) {
+  for (auto input : op.getInputs()) {
+    if (failed(addEdge(input, 0, 1, results)))
+      return failure();
+  }
   deduplicatePaths(results);
   return success();
 }
@@ -940,25 +952,25 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
       TypeSwitch<Operation *, LogicalResult>(op)
           .Case<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
                 aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::MuxOp,
-                comb::XorOp, seq::FirRegOp, seq::CompRegOp, hw::ConstantOp,
-                seq::FirMemReadOp, seq::FirMemReadWriteOp, hw::WireOp>(
-              [&](auto op) {
-                size_t idx = results.size();
-                auto result = visit(op, bitPos, results);
-                if (ctx->doTraceDebugPoints())
-                  if (auto name = op->template getAttrOfType<StringAttr>(
-                          "sv.namehint")) {
+                comb::XorOp, comb::TruthTableOp, seq::FirRegOp, seq::CompRegOp,
+                hw::ConstantOp, seq::FirMemReadOp, seq::FirMemReadWriteOp,
+                hw::WireOp>([&](auto op) {
+            size_t idx = results.size();
+            auto result = visit(op, bitPos, results);
+            if (ctx->doTraceDebugPoints())
+              if (auto name =
+                      op->template getAttrOfType<StringAttr>("sv.namehint")) {
 
-                    for (auto i = idx, e = results.size(); i < e; ++i) {
-                      DebugPoint debugPoint({}, value, bitPos, results[i].delay,
-                                            "namehint");
-                      auto newHistory = debugPointFactory->add(
-                          debugPoint, results[i].history);
-                      results[i].history = newHistory;
-                    }
-                  }
-                return result;
-              })
+                for (auto i = idx, e = results.size(); i < e; ++i) {
+                  DebugPoint debugPoint({}, value, bitPos, results[i].delay,
+                                        "namehint");
+                  auto newHistory =
+                      debugPointFactory->add(debugPoint, results[i].history);
+                  results[i].history = newHistory;
+                }
+              }
+            return result;
+          })
           .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
             return visit(op, bitPos, cast<OpResult>(value).getResultNumber(),
                          results);

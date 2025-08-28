@@ -99,9 +99,12 @@ hw.module private @compreg(in %a : i1, in %clk : !seq.clock, out x : i1) {
 // expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.cond[0], delay=1, history=[{{.+}}])}}
 // expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=1, history=[{{.+}}])}}
 // expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.b[0], delay=1, history=[{{.+}}])}}
-hw.module private @comb(in %cond : i1, in %a : i1, in %b : i1, out x : i1) {
+// expected-remark-re @below {{fanOut=Object($root.y[0]), fanIn=Object($root.a[0], delay=1, history=[{{.+}}])}}
+// expected-remark-re @below {{fanOut=Object($root.y[0]), fanIn=Object($root.b[0], delay=1, history=[{{.+}}])}}
+hw.module private @comb(in %cond : i1, in %a : i1, in %b : i1, out x : i1, out y: i1) {
   %r = comb.mux %cond, %a, %b : i1
-  hw.output %r : i1
+  %table = comb.truth_table %a, %b -> [true, false, false, true]
+  hw.output %r, %table: i1, i1
 }
 
 // expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=2, history=[{{.+}}])}}
