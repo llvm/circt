@@ -10,6 +10,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
@@ -50,4 +51,25 @@ bool svSVAttributeAttrGetEmitAsComment(MlirAttribute attribute) {
   return llvm::cast<SVAttributeAttr>(unwrap(attribute))
       .getEmitAsComment()
       .getValue();
+}
+//===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+bool svTypeIsAInterfaceType(MlirType cAttr) {
+  return llvm::isa<InterfaceType>(unwrap(cAttr));
+}
+
+MlirType svInterfaceTypeGet(MlirContext cCtxt, MlirStringRef cInterfaceSym) {
+  mlir::MLIRContext *ctxt = unwrap(cCtxt);
+
+  auto interfaceSym = mlir::FlatSymbolRefAttr::get(
+      mlir::StringAttr::get(ctxt, unwrap(cInterfaceSym)));
+
+  return wrap(InterfaceType::get(ctxt, interfaceSym));
+}
+
+MlirStringRef svInterfaceTypeGetInterfaceSym(MlirType cType) {
+  return wrap(
+      llvm::cast<InterfaceType>(unwrap(cType)).getInterface().getValue());
 }

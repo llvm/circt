@@ -31,6 +31,14 @@ MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute);
 MLIR_CAPI_EXPORTED bool svSVAttributeAttrGetEmitAsComment(MlirAttribute);
 
+//===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool svTypeIsAInterfaceType(MlirType);
+MLIR_CAPI_EXPORTED MlirType svInterfaceTypeGet(MlirContext, MlirStringRef);
+MLIR_CAPI_EXPORTED MlirStringRef svInterfaceTypeGetInterfaceSym(MlirType);
+
 #ifdef __cplusplus
 }
 #endif

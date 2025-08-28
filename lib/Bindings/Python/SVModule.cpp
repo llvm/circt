@@ -68,4 +68,17 @@ void circt::python::populateDialectSVSubmodule(nb::module_ &m) {
       .def_property_readonly("emit_as_comment", [](MlirAttribute self) {
         return svSVAttributeAttrGetEmitAsComment(self);
       });
+
+  mlir_type_subclass(m, "InterfaceType", svTypeIsAInterfaceType)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, std::string interfaceSym, MlirContext ctxt) {
+            return cls(svInterfaceTypeGet(
+                ctxt, mlirStringRefCreateFromCString(interfaceSym.c_str())));
+          },
+          "Create a SystemVerilog InterfaceType", nb::arg(),
+          nb::arg("interface_sym"), nb::arg("ctxt") = nb::none())
+      .def_property_readonly("interface_sym", [](MlirType self) {
+        return svInterfaceTypeGetInterfaceSym(self);
+      });
 }
