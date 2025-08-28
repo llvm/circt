@@ -519,7 +519,8 @@ static LogicalResult convert(WaitDelayOp op, WaitDelayOp::Adaptor adaptor,
 }
 
 // moore.unreachable -> llhd.halt
-static LogicalResult convert(UnreachableOp op, PatternRewriter &rewriter) {
+static LogicalResult convert(UnreachableOp op, UnreachableOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
   rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
   return success();
 }
@@ -1643,20 +1644,24 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
 //===----------------------------------------------------------------------===//
 
 // moore.builtin.stop -> sim.pause
-static LogicalResult convert(StopBIOp op, PatternRewriter &rewriter) {
+static LogicalResult convert(StopBIOp op, StopBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
   rewriter.replaceOpWithNewOp<sim::PauseOp>(op, /*verbose=*/false);
   return success();
 }
 
 // moore.builtin.finish -> sim.terminate
-static LogicalResult convert(FinishBIOp op, PatternRewriter &rewriter) {
+static LogicalResult convert(FinishBIOp op, FinishBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
   rewriter.replaceOpWithNewOp<sim::TerminateOp>(op, op.getExitCode() == 0,
                                                 /*verbose=*/false);
   return success();
 }
 
 // moore.builtin.finish_message
-static LogicalResult convert(FinishMessageBIOp op, PatternRewriter &rewriter) {
+static LogicalResult convert(FinishMessageBIOp op,
+                             FinishMessageBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
   // We don't support printing termination/pause messages yet.
   rewriter.eraseOp(op);
   return success();
