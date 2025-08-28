@@ -1869,7 +1869,7 @@ module GenerateConstructs;
     end
 
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %g2 = moore.variable [[TMP]] : <i32>
+    // CHECK: g2 = moore.variable [[TMP]] : <i32>
     if (p == 2) begin
       int g2 = 2;
     end else begin
@@ -1877,7 +1877,7 @@ module GenerateConstructs;
     end
     
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %g3 = moore.variable [[TMP]] : <i32>
+    // CHECK: g3 = moore.variable [[TMP]] : <i32>
     case (p)
       2: begin
         int g3 = 2;
