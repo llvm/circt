@@ -1862,17 +1862,17 @@ module GenerateConstructs;
     // CHECK: [[TMP:%.+]] = moore.constant 0
     // CHECK: dbg.variable "i", [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 0
-    // CHECK: %g1 = moore.variable [[TMP]]
+    // CHECK: g1 = moore.variable [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 1
     // CHECK: dbg.variable "i", [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 1
-    // CHECK: moore.variable name "g1" [[TMP]]
+    // CHECK: g1 = moore.variable [[TMP]]
     for (i = 0; i < 2; i = i + 1) begin
       integer g1 = i;
     end
 
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %g2 = moore.variable [[TMP]] : <i32>
+    // CHECK: g2 = moore.variable [[TMP]] : <i32>
     if (p == 2) begin
       int g2 = 2;
     end else begin
@@ -1880,7 +1880,7 @@ module GenerateConstructs;
     end
     
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %g3 = moore.variable [[TMP]] : <i32>
+    // CHECK: g3 = moore.variable [[TMP]] : <i32>
     case (p)
       2: begin
         int g3 = 2;
