@@ -401,7 +401,7 @@ static void simplifyProcess(ProcessOp &processOp) {
 void LowerProcessesPass::runOnOperation() {
   SmallVector<ProcessOp> processOps(getOperation().getOps<ProcessOp>());
   for (auto processOp : processOps) {
-    simplifyProcess(processOp);
+    // simplifyProcess(processOp);
     Lowering(processOp).lower();
   }
 }
