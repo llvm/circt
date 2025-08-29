@@ -569,7 +569,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   // Create stages along with maps
   for (auto startTime : startTimes) {
     auto group = startGroups[startTime];
-    llvm::sort(group, [&](Operation* a, Operation* b) {
+    llvm::sort(group, [&](Operation *a, Operation *b) {
       return dom.properlyDominates(a, b);
     });
     auto stageTypes = registerTypes[startTime];
