@@ -8,6 +8,7 @@
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 
@@ -49,7 +50,14 @@ const char *ir = R"MLIR(
       %0 = hw.instance "inst1" @nest(clock: %clock: !seq.clock, a: %a: i1) -> (x: i1)
       %1 = hw.instance "inst2" @nest(clock: %clock: !seq.clock, a: %a: i1) -> (x: i1)
     }
+    )MLIR";
 
+const char *combIR = R"MLIR(
+    hw.module private @comb(in %a: i4, in %b: i4, in %c: i4, out x: i4, out y: i4) {
+       %0 = comb.add %a, %b : i4
+       %1 = comb.mul %0, %c : i4
+       hw.output %0, %1 : i4, i4
+    }
     )MLIR";
 
 TEST(LongestPathTest, BasicTest) {
@@ -216,6 +224,49 @@ TEST(LongestPathTest, ElaborationTest) {
   EXPECT_NE(
       elaboratedPaths[0].getFanIn().instancePath.leaf().getInstanceNameAttr(),
       elaboratedPaths[1].getFanIn().instancePath.leaf().getInstanceNameAttr());
+}
+
+TEST(LongestPathTest, Incremental) {
+  MLIRContext context;
+  context.loadDialect<AIGDialect>();
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<comb::CombDialect>();
+  // Register prerequisite passes needed to convert Comb IR to AIG
+  circt::aig::registerAIGAnalysisPrerequisitePasses();
+
+  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(combIR, &context);
+  ASSERT_TRUE(module);
+
+  SymbolTable symbolTable(module.get());
+  auto basicModule = symbolTable.lookup<hw::HWModuleOp>("comb");
+  ASSERT_TRUE(basicModule);
+  ModuleAnalysisManager mam(module.get(), nullptr);
+  AnalysisManager am(mam);
+
+  // Create incremental analysis that lazily computes delays
+  IncrementalLongestPathAnalysis longestPath(basicModule, am);
+  auto it = basicModule.getBodyBlock()->begin();
+  auto add = cast<comb::AddOp>(*it++);
+  auto mul = cast<comb::MulOp>(*it++);
+
+  // Compute delay for add operation (bit 1)
+  // This should trigger analysis and mark the add operation as analyzed
+  auto delayAdd = longestPath.getOrComputeMaxDelay(add.getResult(), 1);
+  ASSERT_TRUE(succeeded(delayAdd));
+  ASSERT_EQ(*delayAdd, 5);
+  // Once analyzed, the add operation cannot be safely mutated since it's been
+  // marked as analyzed.
+  ASSERT_TRUE(!longestPath.isOperationValidToMutate(add));
+  // Mul is still safe to mutate since it hasn't been analyzed yet
+  ASSERT_TRUE(longestPath.isOperationValidToMutate(mul));
+
+  // Now compute delay for mul operation (bit 1)
+  // This depends on the add result, so it includes add's delay
+  auto delayMul = longestPath.getOrComputeMaxDelay(mul.getResult(), 1);
+  ASSERT_TRUE(succeeded(delayMul));
+  ASSERT_EQ(*delayMul, 8);
+  // After analysis, mul can no longer be safely mutated
+  ASSERT_TRUE(!longestPath.isOperationValidToMutate(mul));
 }
 
 } // namespace

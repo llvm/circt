@@ -33,6 +33,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/PortImplementation.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/InstanceGraph.h"
@@ -45,6 +46,8 @@
 #include "mlir/IR/Value.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/AnalysisManager.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT//MapVector.h"
@@ -212,6 +215,14 @@ static void printObjectImpl(llvm::raw_ostream &os, const Object &object,
   if (!comment.empty())
     os << ", comment=\"" << comment << "\"";
   os << ")";
+}
+
+template <typename T>
+static int64_t getMaxDelayInPaths(ArrayRef<T> paths) {
+  int64_t maxDelay = 0;
+  for (auto &path : paths)
+    maxDelay = std::max(maxDelay, path.getDelay());
+  return maxDelay;
 }
 
 using namespace circt;
@@ -427,6 +438,85 @@ private:
   LongestPathAnalysisOption option;
 };
 
+//===----------------------------------------------------------------------===//
+// OperationAnalyzer
+//===----------------------------------------------------------------------===//
+
+// OperationAnalyzer handles timing analysis for individual operations that
+// haven't been converted to AIG yet. It creates isolated modules for each
+// unique operation type/signature combination, runs the conversion pipeline
+// (HW -> Comb -> AIG), and analyzes the resulting AIG representation.
+//
+// This is used as a fallback when the main analysis encounters operations
+// that don't have direct AIG equivalents. The analyzer:
+// 1. Creates a wrapper HW module for the operation
+// 2. Runs the standard conversion pipeline to lower it to AIG
+// 3. Analyzes the resulting AIG to compute timing paths
+// 4. Caches results based on operation name and function signature
+class OperationAnalyzer {
+public:
+  // Constructor creates a new analyzer with an empty module for building
+  // temporary operation wrappers.
+  OperationAnalyzer(Context *ctx, Location loc) : ctx(ctx), loc(loc) {
+    mlir::OpBuilder builder(loc->getContext());
+    moduleOp = builder.create<mlir::ModuleOp>(loc);
+    emptyName = StringAttr::get(loc->getContext(), "");
+  }
+
+  // Initialize the pass pipeline used to lower operations to AIG.
+  // This sets up the standard conversion sequence: HW -> Comb -> AIG -> cleanup
+  LogicalResult initializePipeline();
+
+  // Analyze timing paths for a specific operation result and bit position.
+  // Creates a wrapper module if needed, runs conversion, and returns timing
+  // information as input dependencies.
+  // Results are tuples of (input operand index, bit position in operand, delay)
+  LogicalResult
+  getResults(OpResult value, size_t bitPos,
+             SmallVectorImpl<std::tuple<size_t, size_t, int64_t>> &results);
+
+private:
+  // Get or create a LocalVisitor for analyzing the given operation.
+  // Uses caching based on operation name and function signature to avoid
+  // recomputing analysis for identical operations.
+  FailureOr<LocalVisitor *> getOrComputeLocalVisitor(Operation *op);
+
+  // Extract the function signature (input/output types) from an operation.
+  // This is used as part of the cache key to distinguish operations with
+  // different type signatures.
+  static mlir::FunctionType getFunctionTypeForOp(Operation *op);
+
+  // Build the wrapper HW module containing the operation to analyze.
+  // Creates a module with appropriate input/output ports, clones the
+  // operation inside, and handles any necessary type conversions.
+  FailureOr<hw::HWModuleOp> createWrapperModule(Operation *op);
+
+  // Cache mapping (operation_name, function_type) -> analyzed LocalVisitor
+  // This avoids recomputing analysis for operations with identical signatures
+  llvm::DenseMap<std::pair<mlir::OperationName, mlir::FunctionType>,
+                 std::unique_ptr<LocalVisitor>>
+      cache;
+
+  // Standard conversion pipeline: HW -> Comb -> AIG -> cleanup passes
+  // This pipeline is applied to wrapper modules to prepare them for analysis
+  constexpr static StringRef pipelineStr =
+      "hw.module(hw-aggregate-to-comb,convert-comb-to-aig,cse,canonicalize)";
+  std::unique_ptr<mlir::PassManager> passManager;
+
+  // Temporary module used to hold wrapper modules during analysis
+  // Each operation gets its own wrapper module created inside this parent
+  mlir::OwningOpRef<mlir::ModuleOp> moduleOp;
+
+  Context *ctx; // Analysis context and configuration
+  Location loc; // Source location for error reporting
+  StringAttr emptyName;
+};
+
+mlir::FunctionType OperationAnalyzer::getFunctionTypeForOp(Operation *op) {
+  return mlir::FunctionType::get(op->getContext(), op->getOperandTypes(),
+                                 op->getResultTypes());
+}
+
 // -----------------------------------------------------------------------------
 // LocalVisitor
 // -----------------------------------------------------------------------------
@@ -558,7 +648,7 @@ private:
     return markFanIn(op, bitPos, results);
   }
 
-  LogicalResult visitDefault(Operation *op, size_t bitPos,
+  LogicalResult visitDefault(OpResult result, size_t bitPos,
                              SmallVectorImpl<OpenPath> &results);
 
   // Helper functions.
@@ -584,6 +674,9 @@ private:
   // A map from the object to the longest paths.
   DenseMap<Object, SmallVector<OpenPath>> fanOutResults;
 
+  // The operation analyzer for comb/hw operations remaining in the circuit.
+  std::unique_ptr<OperationAnalyzer> operationAnalyzer;
+
   // This is set to true when the thread is done.
   std::atomic_bool done;
   mutable std::condition_variable cv;
@@ -601,6 +694,9 @@ LocalVisitor::LocalVisitor(hw::HWModuleOp module, Context *ctx)
                           ? std::make_unique<circt::igraph::InstancePathCache>(
                                 *ctx->instanceGraph)
                           : nullptr;
+  operationAnalyzer =
+      std::make_unique<OperationAnalyzer>(ctx, module->getLoc());
+
   done = false;
 }
 
@@ -886,8 +982,36 @@ LogicalResult LocalVisitor::addLogicOp(Operation *op, size_t bitPos,
   return success();
 }
 
-LogicalResult LocalVisitor::visitDefault(Operation *op, size_t bitPos,
+LogicalResult LocalVisitor::visitDefault(OpResult value, size_t bitPos,
                                          SmallVectorImpl<OpenPath> &results) {
+  if (!isa_and_nonnull<hw::HWDialect, comb::CombDialect>(
+          value.getDefiningOp()->getDialect()))
+    return success();
+  // Query it to an operation analyzer.
+  LLVM_DEBUG({
+    llvm::dbgs() << "Visiting default: ";
+    llvm::dbgs() << " " << value << "[" << bitPos << "]\n";
+  });
+  SmallVector<std::tuple<size_t, size_t, int64_t>> oracleResults;
+  auto paths = operationAnalyzer->getResults(value, bitPos, oracleResults);
+  if (failed(paths)) {
+    LLVM_DEBUG({
+      llvm::dbgs() << "Failed to get results for: " << value << "[" << bitPos
+                   << "]\n";
+    });
+    return success();
+  }
+  auto *op = value.getDefiningOp();
+  for (auto [inputPortIndex, fanInBitPos, delay] : oracleResults) {
+    LLVM_DEBUG({
+      llvm::dbgs() << "Adding edge: " << value << "[" << bitPos << "] -> "
+                   << op->getOperand(inputPortIndex) << "[" << fanInBitPos
+                   << "] with delay " << delay << "\n";
+    });
+    if (failed(addEdge(op->getOperand(inputPortIndex), fanInBitPos, delay,
+                       results)))
+      return failure();
+  }
   return success();
 }
 
@@ -980,7 +1104,9 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
             return visit(op, bitPos, cast<OpResult>(value).getResultNumber(),
                          results);
           })
-          .Default([&](auto op) { return visitDefault(op, bitPos, results); });
+          .Default([&](auto op) {
+            return visitDefault(cast<OpResult>(value), bitPos, results);
+          });
   return result;
 }
 
@@ -1010,8 +1136,8 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
         auto newHistory = ctx->doTraceDebugPoints()
                               ? mapList(debugPointFactory.get(), history,
                                         [&](DebugPoint p) {
-                                          // Update the instance path to prepend
-                                          // the current instance.
+                                          // Update the instance path to
+                                          // prepend the current instance.
                                           p.object.instancePath = newPath;
                                           p.delay += result.delay;
                                           return p;
@@ -1062,10 +1188,10 @@ LogicalResult LocalVisitor::initializeAndRun(hw::OutputOp output) {
 }
 
 LogicalResult LocalVisitor::initializeAndRun() {
+  LLVM_DEBUG({ ctx->notifyStart(module.getModuleNameAttr()); });
   if (ctx->doIncremental())
     return success();
 
-  LLVM_DEBUG({ ctx->notifyStart(module.getModuleNameAttr()); });
   // Initialize the results for the block arguments.
   for (auto blockArgument : module.getBodyBlock()->getArguments())
     for (size_t i = 0, e = getBitWidth(blockArgument); i < e; ++i)
@@ -1144,6 +1270,159 @@ LocalVisitor *Context::getLocalVisitorMutable(StringAttr name) const {
 
   // NOTE: Don't call waitUntilDone here.
   return it->second.get();
+}
+
+// ===----------------------------------------------------------------------===//
+// OperationAnalyzer
+// ===----------------------------------------------------------------------===//
+
+FailureOr<LocalVisitor *>
+OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
+  // Check cache first.
+  auto opName = op->getName();
+  auto functionType = getFunctionTypeForOp(op);
+  auto key = std::make_pair(opName, functionType);
+  auto it = cache.find(key);
+  if (it != cache.end())
+    return it->second.get();
+
+  SmallVector<hw::PortInfo> ports;
+  // Helper to convert types into integer types.
+  auto getType = [&](Type type) -> Type {
+    if (type.isInteger())
+      return type;
+    auto bitWidth = hw::getBitWidth(type);
+    if (bitWidth < 0)
+      return Type(); // Unsupported type
+    return IntegerType::get(op->getContext(), bitWidth);
+  };
+
+  // Helper to add a port to the module definition
+  auto addPort = [&](Type type, hw::ModulePort::Direction dir) {
+    hw::PortInfo portInfo;
+    portInfo.dir = dir;
+    portInfo.name = emptyName;
+    portInfo.type = type;
+    ports.push_back(portInfo);
+  };
+
+  // Create input ports for each operand
+  for (auto input : op->getOperands()) {
+    auto type = getType(input.getType());
+    if (!type)
+      return failure(); // Unsupported operand type
+    addPort(type, hw::ModulePort::Direction::Input);
+  }
+
+  // Create output ports for each result.
+  SmallVector<Type> resultsTypes;
+  for (Value result : op->getResults()) {
+    auto type = getType(result.getType());
+    if (!type)
+      return failure(); // Unsupported result type
+    addPort(type, hw::ModulePort::Direction::Output);
+    resultsTypes.push_back(type);
+  }
+
+  // Build the wrapper HW module
+  OpBuilder builder(op->getContext());
+  builder.setInsertionPointToEnd(moduleOp->getBody());
+
+  // Generate unique module name.
+  auto moduleName = builder.getStringAttr("module_" + Twine(cache.size()));
+  hw::HWModuleOp hwModule =
+      builder.create<hw::HWModuleOp>(op->getLoc(), moduleName, ports);
+
+  // Clone the operation inside the wrapper module
+  builder.setInsertionPointToStart(hwModule.getBodyBlock());
+  auto *cloned = builder.clone(*op);
+
+  // Connect module inputs to cloned operation operands
+  // Handle type mismatches with bitcast operations
+  for (auto arg : hwModule.getBodyBlock()->getArguments()) {
+    Value input = arg;
+    auto idx = arg.getArgNumber();
+
+    // Insert bitcast if input port type differs from operand type
+    if (input.getType() != cloned->getOperand(idx).getType())
+      input = builder.create<hw::BitcastOp>(
+          op->getLoc(), cloned->getOperand(idx).getType(), input);
+
+    cloned->setOperand(idx, input);
+  }
+
+  // Connect cloned operation results to module outputs
+  // Handle type mismatches with bitcast operations
+  SmallVector<Value> outputs;
+  for (auto result : cloned->getResults()) {
+    auto idx = result.getResultNumber();
+
+    // Insert bitcast if result type differs from output port type
+    if (result.getType() != resultsTypes[idx])
+      result =
+          builder
+              .create<hw::BitcastOp>(op->getLoc(), resultsTypes[idx], result)
+              ->getResult(0);
+
+    outputs.push_back(result);
+  }
+
+  hwModule.getBodyBlock()->getTerminator()->setOperands(outputs);
+
+  // Run conversion pipeline (HW -> Comb -> AIG -> cleanup)
+  if (!passManager && failed(initializePipeline()))
+    return mlir::emitError(loc)
+           << "Failed to initialize pipeline, possibly passes used in the "
+              "analysis are not registered";
+
+  if (failed(passManager->run(moduleOp->getOperation())))
+    return mlir::emitError(loc) << "Failed to run lowering pipeline";
+
+  // Create LocalVisitor to analyze the converted AIG module
+  auto localVisitor = std::make_unique<LocalVisitor>(hwModule, ctx);
+  if (failed(localVisitor->initializeAndRun()))
+    return failure();
+
+  // Cache the result and return
+  auto [iterator, inserted] = cache.insert({key, std::move(localVisitor)});
+  assert(inserted && "Cache insertion must succeed for new key");
+  return iterator->second.get();
+}
+
+LogicalResult OperationAnalyzer::getResults(
+    OpResult value, size_t bitPos,
+    SmallVectorImpl<std::tuple<size_t, size_t, int64_t>> &results) {
+  auto *op = value.getDefiningOp();
+  auto localVisitorResult = getOrComputeLocalVisitor(op);
+  if (failed(localVisitorResult))
+    return failure();
+
+  auto *localVisitor = *localVisitorResult;
+
+  // Get output.
+  Value operand =
+      localVisitor->getHWModuleOp().getBodyBlock()->getTerminator()->getOperand(
+          value.getResultNumber());
+  auto openPaths = localVisitor->getOrComputeResults(operand, bitPos);
+  if (failed(openPaths))
+    return failure();
+
+  results.reserve(openPaths->size() + results.size());
+  for (auto &path : *openPaths) {
+    // Fan-in is always a block argument since there is no other value that
+    // could be a fan-in.
+    BlockArgument blockArg = cast<BlockArgument>(path.fanIn.value);
+    auto inputPortIndex = blockArg.getArgNumber();
+    results.push_back(
+        std::make_tuple(inputPortIndex, path.fanIn.bitPos, path.delay));
+  }
+
+  return success();
+}
+
+LogicalResult OperationAnalyzer::initializePipeline() {
+  passManager = std::make_unique<mlir::PassManager>(loc->getContext());
+  return parsePassPipeline(pipelineStr, *passManager);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1457,9 +1736,7 @@ int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) const {
     if (failed(result))
       return 0;
 
-    int64_t maxDelay = 0;
-    for (auto &path : results)
-      maxDelay = std::max(maxDelay, path.getDelay());
+    int64_t maxDelay = getMaxDelayInPaths(ArrayRef<DataflowPath>(results));
     totalDelay += maxDelay;
   }
   return llvm::divideCeil(totalDelay, bitWidth);
@@ -1472,14 +1749,14 @@ int64_t LongestPathAnalysis::Impl::getMaxDelay(Value value) const {
     return 0;
   int64_t maxDelay = 0;
   for (size_t i = 0; i < bitWidth; ++i) {
-    // Clear results from previous iteration.
     results.clear();
+
     auto result = getResults(value, i, results);
     if (failed(result))
       return 0;
 
-    for (auto &path : results)
-      maxDelay = std::max(maxDelay, path.getDelay());
+    maxDelay =
+        std::max(maxDelay, getMaxDelayInPaths(ArrayRef<DataflowPath>(results)));
   }
   return maxDelay;
 }
@@ -1519,11 +1796,13 @@ LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
     const LongestPathAnalysisOption &option)
     : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {
-  llvm::errs() << "LongestPathAnalysis created\n";
-  if (option.traceDebugPoints)
-    llvm::errs() << " - Tracing debug points\n";
-  if (option.incremental)
-    llvm::errs() << " - Incremental analysis enabled\n";
+  LLVM_DEBUG({
+    llvm::dbgs() << "LongestPathAnalysis created\n";
+    if (option.traceDebugPoints)
+      llvm::dbgs() << " - Tracing debug points\n";
+    if (option.incremental)
+      llvm::dbgs() << " - Incremental analysis enabled\n";
+  });
 }
 
 bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
@@ -1574,9 +1853,9 @@ ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
 }
 
-// === --------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 // InrementalLongestPathAnalysis
-// === --------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 FailureOr<ArrayRef<OpenPath>>
 IncrementalLongestPathAnalysis::getOrComputePaths(Value value, size_t bitPos) {
@@ -1587,25 +1866,24 @@ IncrementalLongestPathAnalysis::getOrComputePaths(Value value, size_t bitPos) {
 }
 
 FailureOr<int64_t>
-IncrementalLongestPathAnalysis::getOrComputeDelay(Value value, size_t bitPos) {
+IncrementalLongestPathAnalysis::getOrComputeMaxDelay(Value value,
+                                                     size_t bitPos) {
   if (!isAnalysisValid)
-    return failure();
+    return mlir::emitError(value.getLoc()) << "analysis has been invalidated";
 
   auto result = impl->getOrComputePaths(value, bitPos);
   if (failed(result))
     return failure();
-  int64_t maxDelay = 0;
-  for (auto &path : *result)
-    maxDelay = std::max(maxDelay, path.delay);
-  return maxDelay;
+  return getMaxDelayInPaths(ArrayRef<OpenPath>(*result));
 }
 
-bool IncrementalLongestPathAnalysis::isValueValidToErase(Value value) const {
+bool IncrementalLongestPathAnalysis::isOperationValidToMutate(
+    Operation *op) const {
   if (!isAnalysisValid)
     return false;
 
   auto parentHWModule =
-      value.getParentRegion()->getParentOfType<hw::HWModuleOp>();
+      op->getParentRegion()->getParentOfType<hw::HWModuleOp>();
   if (!parentHWModule)
     return true;
   auto *localVisitor =
@@ -1613,41 +1891,29 @@ bool IncrementalLongestPathAnalysis::isValueValidToErase(Value value) const {
   if (!localVisitor)
     return true;
 
-  auto end = getBitWidth(value);
-  if (end <= 0)
+  // If all results of the operation have no paths, then it is safe to mutate
+  // the operation.
+  return llvm::all_of(op->getResults(), [localVisitor](Value value) {
+    for (int64_t i = 0, e = getBitWidth(value); i < e; ++i) {
+      auto path = localVisitor->getResults(value, i);
+      if (!path.empty())
+        return false;
+    }
     return true;
-
-  for (int64_t i = 0, e = getBitWidth(value); i < e; ++i) {
-    auto path = localVisitor->getResults(value, i);
-    if (!path.empty())
-      return false;
-  }
-  return true;
+  });
 }
 
+void IncrementalLongestPathAnalysis::notifyOperationModified(Operation *op) {
+  if (!isOperationValidToMutate(op))
+    isAnalysisValid = false;
+}
 void IncrementalLongestPathAnalysis::notifyOperationReplaced(
     Operation *op, ValueRange replacement) {
-  for (auto value : op->getResults()) {
-    if (isValueValidToErase(value)) {
-      mlir::emitError(value.getLoc())
-          << "value " << value
-          << " replaced but contained in longest path analysis. It's required "
-             "to perform the IR mutation from buttom-up";
-      isAnalysisValid = false;
-    }
-  }
+  notifyOperationModified(op);
 }
 
 void IncrementalLongestPathAnalysis::notifyOperationErased(Operation *op) {
-  for (auto value : op->getResults()) {
-    if (isValueValidToErase(value)) {
-      mlir::emitError(value.getLoc())
-          << "value " << value
-          << " replaced but contained in longest path analysis. It's required "
-             "to perform the IR mutation from buttom-up";
-      isAnalysisValid = false;
-    }
-  }
+  notifyOperationModified(op);
 }
 
 // ===----------------------------------------------------------------------===//
