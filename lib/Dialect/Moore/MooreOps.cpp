@@ -16,6 +16,7 @@
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -634,6 +635,14 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantTimeOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConstantTimeOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
@@ -1083,6 +1092,39 @@ OpFoldResult IntToLogicOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// TimeToLogicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult TimeToLogicOp::fold(FoldAdaptor adaptor) {
+  // time_to_logic(logic_to_time(x)) -> x
+  if (auto reverseOp = getInput().getDefiningOp<LogicToTimeOp>())
+    return reverseOp.getInput();
+
+  // Convert constants.
+  if (auto attr = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
+    return FVIntegerAttr::get(getContext(), attr.getValue());
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// LogicToTimeOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult LogicToTimeOp::fold(FoldAdaptor adaptor) {
+  // logic_to_time(time_to_logic(x)) -> x
+  if (auto reverseOp = getInput().getDefiningOp<TimeToLogicOp>())
+    return reverseOp.getInput();
+
+  // Convert constants.
+  if (auto attr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
+    return IntegerAttr::get(getContext(), APSInt(attr.getValue().toAPInt(false),
+                                                 /*isUnsigned=*/true));
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TruncOp
 //===----------------------------------------------------------------------===//
 
@@ -1283,6 +1325,44 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
     if (intAttr.getValue().isZero())
       return getLhs();
 
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// MulOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs());
+  if (lhs && rhs)
+    return FVIntegerAttr::get(getContext(), lhs.getValue() * rhs.getValue());
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// DivUOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult DivUOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs());
+  if (lhs && rhs)
+    return FVIntegerAttr::get(getContext(),
+                              lhs.getValue().udiv(rhs.getValue()));
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// DivSOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs());
+  if (lhs && rhs)
+    return FVIntegerAttr::get(getContext(),
+                              lhs.getValue().sdiv(rhs.getValue()));
   return {};
 }
 

@@ -443,5 +443,9 @@ func.func @TimeConversion(%arg0: !moore.time, %arg1: !moore.l64) {
   moore.packed_to_sbv %arg0 : time
   // CHECK: moore.sbv_to_packed %arg1 : time
   moore.sbv_to_packed %arg1 : time
+  // CHECK: moore.time_to_logic %arg0
+  moore.time_to_logic %arg0
+  // CHECK: moore.logic_to_time %arg1
+  moore.logic_to_time %arg1
   return
 }

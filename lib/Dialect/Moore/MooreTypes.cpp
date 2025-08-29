@@ -21,6 +21,24 @@ using namespace circt::moore;
 using mlir::AsmParser;
 using mlir::AsmPrinter;
 
+bool moore::isIntType(Type type, unsigned width) {
+  if (auto intType = dyn_cast<IntType>(type))
+    return intType.getWidth() == width;
+  return false;
+}
+
+bool moore::isIntType(Type type, Domain domain) {
+  if (auto intType = dyn_cast<IntType>(type))
+    return intType.getDomain() == domain;
+  return false;
+}
+
+bool moore::isIntType(Type type, unsigned width, Domain domain) {
+  if (auto intType = dyn_cast<IntType>(type))
+    return intType.getWidth() == width && intType.getDomain() == domain;
+  return false;
+}
+
 static LogicalResult parseMembers(AsmParser &parser,
                                   SmallVector<StructLikeMember> &members);
 static void printMembers(AsmPrinter &printer,
@@ -154,6 +172,19 @@ IntType PackedType::getSimpleBitVector() const {
   if (auto bitSize = getBitSize())
     return IntType::get(getContext(), *bitSize, getDomain());
   return {};
+}
+
+bool PackedType::containsTimeType() const {
+  return TypeSwitch<PackedType, bool>(*this)
+      .Case<VoidType, IntType>([](auto) { return false; })
+      .Case<TimeType>([](auto) { return true; })
+      .Case<ArrayType, OpenArrayType>(
+          [](auto type) { return type.getElementType().containsTimeType(); })
+      .Case<StructType, UnionType>([](auto type) {
+        return llvm::any_of(type.getMembers(), [](auto &member) {
+          return cast<PackedType>(member.type).containsTimeType();
+        });
+      });
 }
 
 //===----------------------------------------------------------------------===//

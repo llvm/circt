@@ -512,11 +512,12 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   ];
 }
 
-def ConstantTimeOp : MooreOp<"constant_time", [Pure]> {
+def ConstantTimeOp : MooreOp<"constant_time", [Pure, ConstantLike]> {
   let summary = "A constant time value in femtoseconds";
   let arguments = (ins UI64Attr:$value);
   let results = (outs TimeType:$result);
   let assemblyFormat = "$value `fs` attr-dict";
+  let hasFolder = 1;
 }
 
 def StringConstantOp : MooreOp<"string_constant", [Pure]> {
@@ -552,7 +553,7 @@ def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Casting and Resizing
+// Casting
 //===----------------------------------------------------------------------===//
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
@@ -649,6 +650,26 @@ def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
     $input attr-dict `:` type($input)
   }];
 }
+
+def TimeToLogicOp : MooreOp<"time_to_logic", [Pure]> {
+  let summary = "Convert a time type to an integer number of femtoseconds";
+  let arguments = (ins TimeType:$input);
+  let results = (outs FourValuedI64:$result);
+  let assemblyFormat = "$input attr-dict";
+  let hasFolder = 1;
+}
+
+def LogicToTimeOp : MooreOp<"logic_to_time", [Pure]> {
+  let summary = "Convert an integer number of femtoseconds to a time type";
+  let arguments = (ins FourValuedI64:$input);
+  let results = (outs TimeType:$result);
+  let assemblyFormat = "$input attr-dict";
+  let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Resizing
+//===----------------------------------------------------------------------===//
 
 def TruncOp : MooreOp<"trunc", [
   Pure,
@@ -839,7 +860,6 @@ def SubOp : BinaryOpBase<"sub"> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
-
   let hasFolder = 1;
 }
 
@@ -851,6 +871,7 @@ def MulOp : BinaryOpBase<"mul", [Commutative]> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+  let hasFolder = 1;
 }
 
 class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
@@ -863,6 +884,7 @@ class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+  let hasFolder = 1;
 }
 
 def DivUOp : DivOpBase<"divu">;
