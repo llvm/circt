@@ -8,7 +8,6 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
 
 using namespace circt;
@@ -100,11 +99,19 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     return lhs.intersectWith(rhs);
   }
 
-  // `shl(x, y)` is the known bits of `x` >> known bits of `y`.
+  // `shl(x, y)` is the known bits of `x` << known bits of `y`.
   if (auto shlOp = dyn_cast<ShlOp>(op)) {
     auto lhs = computeKnownBits(shlOp.getOperand(0), depth + 1);
     auto rhs = computeKnownBits(shlOp.getOperand(1), depth + 1);
     auto res = KnownBits::shl(lhs, rhs);
+    return res;
+  }
+
+  // `shr(x, y)` is the known bits of `x` >> known bits of `y`.
+  if (auto shrOp = dyn_cast<ShrUOp>(op)) {
+    auto lhs = computeKnownBits(shrOp.getOperand(0), depth + 1);
+    auto rhs = computeKnownBits(shrOp.getOperand(1), depth + 1);
+    auto res = KnownBits::lshr(lhs, rhs);
     return res;
   }
 
