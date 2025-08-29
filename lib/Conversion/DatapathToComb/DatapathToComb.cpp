@@ -48,8 +48,6 @@ struct DatapathCompressOpAddConversion : mlir::OpRewritePattern<CompressOp> {
   LogicalResult
   matchAndRewrite(CompressOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    llvm::errs() << "Going to be replaced\n" << op;
-
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
     unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
@@ -102,6 +100,8 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
             return rewriter.notifyMatchFailure(op,
                                                "Failed to get delay for input");
           }
+          llvm::errs() << "Delay for input " << addends[i][j] << " is "
+                       << *delay << "\n";
 
           delays.push_back(std::make_pair(*delay, addends[i][j]));
         }
@@ -309,16 +309,17 @@ void ConvertDatapathToCombPass::runOnOperation() {
 
   patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
                                                    forceBooth);
-  auto &analysis = getAnalysis<aig::IncrementalLongestPathAnalysis>();
+  aig::IncrementalLongestPathAnalysis *analysis = nullptr;
+  if (timingAware)
+    analysis = &getAnalysis<aig::IncrementalLongestPathAnalysis>();
   if (lowerCompressToAdd)
     // Lower compressors to simple add operations for downstream optimizations
     patterns.add<DatapathCompressOpAddConversion>(patterns.getContext());
   else
     // Lower compressors to a complete gate-level implementation
-    patterns.add<DatapathCompressOpConversion>(patterns.getContext(),
-                                               &analysis);
+    patterns.add<DatapathCompressOpConversion>(patterns.getContext(), analysis);
 
   if (failed(applyPatternsGreedilyWithTimingInfo(
-          getOperation(), std::move(patterns), &analysis)))
+          getOperation(), std::move(patterns), analysis)))
     return signalPassFailure();
 }

@@ -31,6 +31,10 @@ struct AIGLoweringPipelineOptions
       *this, "disable-datapath",
       llvm::cl::desc("Disable datapath optimization passes"),
       llvm::cl::init(false)};
+  PassOptions::Option<bool> timingAware{
+      *this, "timing-aware",
+      llvm::cl::desc("Lower operators in a timing-aware fashion"),
+      llvm::cl::init(false)};
 };
 
 /// Options for the aig optimization pipeline.
