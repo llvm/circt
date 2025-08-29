@@ -885,7 +885,9 @@ def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
     Option<"lowerCompressToAdd", "lower-compress-to-add", "bool", "false",
            "Lower compress operators to variadic add.">,
     Option<"forceBooth", "lower-partial-product-to-booth", "bool", "false",
-           "Force all partial products to be lowered to Booth arrays.">
+           "Force all partial products to be lowered to Booth arrays.">,
+    Option<"timingAware", "timing-aware", "bool", "false",
+           "Lower operators in a timing-aware fashion.">
   ];
 }
 

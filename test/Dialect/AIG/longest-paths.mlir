@@ -113,3 +113,13 @@ hw.module private @fix_duplication(in %a : i1, in %b : i1, out x : i1) {
   %0 = aig.and_inv %a, %a, %b : i1
   hw.output %0 : i1
 }
+
+
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=3, history=[{{.+}}])}}
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[1], delay=3, history=[{{.+}}])}}
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.b[0], delay=3, history=[{{.+}}])}}
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.b[1], delay=3, history=[{{.+}}])}}
+hw.module private @comb_others(in %a : i2, in %b : i2, out x : i1) {
+  %0 = comb.icmp eq %a, %b : i2
+  hw.output %0 : i1
+}
