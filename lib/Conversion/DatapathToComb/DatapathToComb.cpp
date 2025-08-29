@@ -154,22 +154,29 @@ private:
     auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
     auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
 
-    // Simplify leading zeros in multiplicand
+    // Detect leading zeros in multiplicand due to zero-extension
+    // and truncate to reduce partial product bits
+    // {'0, a} * {'0, b}
     auto rowWidth = width;
     auto knownBitsA = comb::computeKnownBits(a);
     if (!knownBitsA.Zero.isZero()) {
       if (knownBitsA.Zero.countLeadingOnes() > 1) {
+        // Retain one leading zero to represent 2*{1'b0, a} = {a, 1'b0}
+        // {'0, a} -> {1'b0, a}
         rowWidth -= knownBitsA.Zero.countLeadingOnes() - 1;
         a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
       }
     }
     auto oneRowWidth =
         hw::ConstantOp::create(rewriter, loc, APInt(rowWidth, 1));
+    // Booth encoding will select each row from {-2a, -1a, 0, 1a, 2a}
     Value twoA = rewriter.createOrFold<comb::ShlOp>(loc, a, oneRowWidth);
 
+    // Encode based on the bits of b
+    // TODO: sort a and b based on non-zero bits to encode the smaller input
     SmallVector<Value> bBits = extractBits(rewriter, b);
 
-    // Simplify leading zeros in encoding input
+    // Identify zero bits of b to reduce height of partial product array
     auto knownBitsB = comb::computeKnownBits(b);
     if (!knownBitsB.Zero.isZero()) {
       for (unsigned i = 0; i < width; ++i)
@@ -230,7 +237,18 @@ private:
       Value ppRow =
           rewriter.createOrFold<comb::XorOp>(loc, magA, encNegRepl, true);
 
+      // Sign-extension Optimisation:
+      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin & Kumm
       // Handle sign-extension and padding to full width
+      // s = encNeg (sign-bit)
+      // {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
+      //                     + {0, 0, 0, 0,!s, '0}
+      // Applying this to every row we create an upper-triangle of 1s that can
+      // be optimised away since they will not affect the final sum.
+      // {!s3,  0,!s2,  0,!s1,  0}
+      // {  1,  1,  1,  1,  1, p1}
+      // {  1,  1,  1,   p2      }
+      // {  1,       p3          }
       if (rowWidth < width) {
         auto padding = width - rowWidth;
         auto encNegInv = bip1Inv;
@@ -251,7 +269,7 @@ private:
               loc, ValueRange{constOne, encNegInv, ppRow});
         }
 
-        // Pad to full width
+        // Zero pad to full width
         auto rowWidth = ppRow.getType().getIntOrFloatBitWidth();
         if (rowWidth < width) {
           auto zeroPad =
