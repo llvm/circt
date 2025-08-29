@@ -433,6 +433,7 @@ private:
 // -----------------------------------------------------------------------------
 // OperationAnalyzer
 // -----------------------------------------------------------------------------
+
 // This class returns longest paths for comb/hw operations remaining in the
 // circuit.
 class OperationAnalyzer {
@@ -453,7 +454,6 @@ public:
 
 private:
   FailureOr<LocalVisitor *> getOrComputeLocalVisitor(Operation *add);
-  Location loc;
 
   static mlir::FunctionType getFunctionTypeForOp(Operation *op);
 
@@ -461,30 +461,21 @@ private:
   llvm::DenseMap<std::pair<mlir::OperationName, mlir::FunctionType>,
                  std::unique_ptr<LocalVisitor>>
       cache;
-  // This is the module created as part of the analysis.
-  // Make sure to destroy it last.
-  mlir::OwningOpRef<mlir::ModuleOp> moduleOp;
 
   constexpr static StringRef pipelineStr =
       "hw.module(hw-aggregate-to-comb,convert-comb-to-aig,cse,canonicalize)";
   std::unique_ptr<mlir::PassManager> passManager;
 
+  // This is the module created as part of the analysis.
+  mlir::OwningOpRef<mlir::ModuleOp> moduleOp;
+
   Context *ctx;
+  Location loc;
 };
 
 mlir::FunctionType OperationAnalyzer::getFunctionTypeForOp(Operation *op) {
-  auto *ctx = op->getContext();
-  SmallVector<mlir::Type> argTypes;
-  SmallVector<mlir::Type> resultTypes;
-
-  for (auto &operand : op->getOpOperands()) {
-    argTypes.push_back(operand.get().getType());
-  }
-  for (auto result : op->getResults()) {
-    resultTypes.push_back(result.getType());
-  }
-
-  return mlir::FunctionType::get(ctx, argTypes, resultTypes);
+  return mlir::FunctionType::get(op->getContext(), op->getOperandTypes(),
+                                 op->getResultTypes());
 }
 
 // -----------------------------------------------------------------------------
