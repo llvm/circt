@@ -16,6 +16,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 
 namespace circt {
 namespace synth {
@@ -35,19 +36,22 @@ using namespace circt::synth;
 
 namespace {
 
-StringRef getTestVariableName(Value value) {
-  if (auto *op = value.getDefiningOp()) {
-    if (auto name = op->getAttrOfType<StringAttr>("sv.namehint"))
-      return name.getValue();
-    return "<unknown>";
+// Dummy pattern that matches any cut.
+struct DummyPattern : public CutRewritePattern {
+  DummyPattern(mlir::MLIRContext *ctx) : CutRewritePattern(ctx) {}
+  bool match(const Cut &cut) const override { return true; }
+  FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
+                                 Cut &cut) const override {
+    return failure();
   }
 
-  auto blockArg = cast<BlockArgument>(value);
-  auto hwOp = dyn_cast<hw::HWModuleOp>(blockArg.getOwner()->getParentOp());
-  if (!hwOp)
-    return "<unknown>";
-  return hwOp.getInputName(blockArg.getArgNumber());
-}
+  unsigned getNumOutputs() const override { return 1; }
+
+  double getArea() const override { return 1; }
+  DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const override {
+    return 1;
+  }
+};
 
 struct TestPriorityCutsPass
     : public impl::TestPriorityCutsBase<TestPriorityCutsPass> {
@@ -66,42 +70,19 @@ struct TestPriorityCutsPass
     // Currently there is no behavioral difference between timing and area
     // so just test with timing strategy.
     options.strategy = circt::synth::OptimizationStrategyTiming;
-
-    // Create cut enumerator to test priority cuts
+    options.testPriorityCuts = true;
+    SmallVector<std::unique_ptr<CutRewritePattern>, 4> patterns;
+    patterns.push_back(std::make_unique<DummyPattern>(hwModule->getContext()));
+    CutRewritePatternSet patternSet(std::move(patterns));
+    CutRewriter rewriter(options, patternSet);
     CutEnumerator enumerator(options);
     llvm::outs() << "Enumerating cuts for module: " << hwModule.getModuleName()
                  << "\n";
 
-    // Test cut enumeration - this will generate and prioritize cuts
-    auto result = enumerator.enumerateCuts(hwModule);
-
-    if (failed(result)) {
-      LLVM_DEBUG(llvm::dbgs() << "Cut enumeration failed\n");
+    if (failed(rewriter.run(hwModule))) {
       signalPassFailure();
       return;
     }
-
-    // Get the enumerated cuts and report statistics
-    auto cutSets = enumerator.takeVector();
-    for (auto &[value, cutSetPtr] : cutSets) {
-      auto &cutSet = *cutSetPtr;
-      llvm::outs() << getTestVariableName(value) << " "
-                   << cutSet.getCuts().size() << " cuts:";
-      for (const Cut &cut : cutSet.getCuts()) {
-        llvm::outs() << " {";
-        llvm::interleaveComma(cut.inputs, llvm::outs(), [&](Value input) {
-          llvm::outs() << getTestVariableName(input);
-        });
-        llvm::outs() << "}"
-                     << "@t" << cut.getTruthTable().table.getZExtValue() << ""
-                     << "d" << cut.getDepth();
-      }
-      llvm::outs() << "\n";
-    }
-    llvm::outs() << "Cut enumeration completed successfully\n";
-
-    // This is a test pass, so we don't modify the IR
-    markAllAnalysesPreserved();
   }
 };
 
