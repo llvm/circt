@@ -105,6 +105,105 @@ func.func @ConstSExt() -> (!moore.i8, !moore.i8, !moore.l8, !moore.l8, !moore.l8
   return %ei0, %ei1, %el0, %el1, %el2, %el3 : !moore.i8, !moore.i8, !moore.l8, !moore.l8, !moore.l8, !moore.l8
 }
 
+// CHECK-LABEL: func.func @ConstTimeToLogic
+func.func @ConstTimeToLogic() -> !moore.l64 {
+  // CHECK-NEXT: moore.constant 1234 : l64
+  %0 = moore.constant_time 1234 fs
+  %1 = moore.time_to_logic %0
+  return %1 : !moore.l64
+}
+
+// CHECK-LABEL: func.func @ConstLogicToTime
+func.func @ConstLogicToTime() -> !moore.time {
+  // CHECK-NEXT: moore.constant_time 1234 fs
+  %0 = moore.constant 1234 : l64
+  %1 = moore.logic_to_time %0
+  return %1 : !moore.time
+}
+
+// CHECK-LABEL: func.func @RedundantTimeLogicConversions
+func.func @RedundantTimeLogicConversions(%arg0: !moore.time, %arg1: !moore.l64) -> (!moore.time, !moore.l64) {
+  // CHECK-NEXT: return %arg0, %arg1
+  %0 = moore.time_to_logic %arg0
+  %1 = moore.logic_to_time %0
+  %2 = moore.logic_to_time %arg1
+  %3 = moore.time_to_logic %2
+  return %1, %3 : !moore.time, !moore.l64
+}
+
+// CHECK-LABEL: func.func @ConstMul
+func.func @ConstMul() -> (!moore.i24, !moore.l24, !moore.l24) {
+  %c2_i24 = moore.constant 2 : i24
+  %c2_l24 = moore.constant 2 : l24
+  %c3_i24 = moore.constant 3 : i24
+  %c3_l24 = moore.constant 3 : l24
+  %cXZ_l24 = moore.constant bXZ : l24
+
+  // CHECK-DAG: [[V0:%.+]] = moore.constant 6 : i24
+  %0 = moore.mul %c2_i24, %c3_i24 : i24
+  // CHECK-DAG: [[V1:%.+]] = moore.constant 6 : l24
+  %1 = moore.mul %c2_l24, %c3_l24 : l24
+  // CHECK-DAG: [[V2:%.+]] = moore.constant hXXXXXX : l24
+  %2 = moore.mul %c2_l24, %cXZ_l24 : l24
+
+  // CHECK: return [[V0]], [[V1]], [[V2]]
+  return %0, %1, %2 : !moore.i24, !moore.l24, !moore.l24
+}
+
+// CHECK-LABEL: func.func @ConstDivU
+func.func @ConstDivU() -> (!moore.i24, !moore.l24, !moore.l24, !moore.l24) {
+  %c6_i24 = moore.constant 6 : i24
+  %c6_l24 = moore.constant 6 : l24
+  %c3_i24 = moore.constant 3 : i24
+  %c3_l24 = moore.constant 3 : l24
+  %cXZ_l24 = moore.constant bXZ : l24
+  %c0_l24 = moore.constant 0 : l24
+
+  // CHECK-DAG: [[I2:%.+]] = moore.constant 2 : i24
+  // CHECK-DAG: [[L2:%.+]] = moore.constant 2 : l24
+  // CHECK-DAG: [[X:%.+]] = moore.constant hXXXXXX : l24
+  %0 = moore.divu %c6_i24, %c3_i24 : i24
+  %1 = moore.divu %c6_l24, %c3_l24 : l24
+  %2 = moore.divu %c6_l24, %cXZ_l24 : l24
+  %3 = moore.divu %c6_l24, %c0_l24 : l24
+
+  // CHECK: return [[I2]], [[L2]], [[X]], [[X]]
+  return %0, %1, %2, %3 : !moore.i24, !moore.l24, !moore.l24, !moore.l24
+}
+
+// CHECK-LABEL: func.func @ConstDivS
+func.func @ConstDivS() -> (!moore.i24, !moore.l24, !moore.i24, !moore.l24, !moore.i24, !moore.l24, !moore.i24, !moore.l24, !moore.l24, !moore.l24) {
+  %c6_i24 = moore.constant 6 : i24
+  %c6_l24 = moore.constant 6 : l24
+  %c3_i24 = moore.constant 3 : i24
+  %c3_l24 = moore.constant 3 : l24
+  %c-6_i24 = moore.constant -6 : i24
+  %c-6_l24 = moore.constant -6 : l24
+  %c-3_i24 = moore.constant -3 : i24
+  %c-3_l24 = moore.constant -3 : l24
+  %cXZ_l24 = moore.constant bXZ : l24
+  %c0_l24 = moore.constant 0 : l24
+
+  // CHECK-DAG: [[I2:%.+]] = moore.constant 2 : i24
+  // CHECK-DAG: [[L2:%.+]] = moore.constant 2 : l24
+  // CHECK-DAG: [[IM2:%.+]] = moore.constant -2 : i24
+  // CHECK-DAG: [[LM2:%.+]] = moore.constant -2 : l24
+  // CHECK-DAG: [[X:%.+]] = moore.constant hXXXXXX : l24
+  %0 = moore.divs %c6_i24, %c3_i24 : i24
+  %1 = moore.divs %c6_l24, %c3_l24 : l24
+  %2 = moore.divs %c6_i24, %c-3_i24 : i24
+  %3 = moore.divs %c6_l24, %c-3_l24 : l24
+  %4 = moore.divs %c-6_i24, %c3_i24 : i24
+  %5 = moore.divs %c-6_l24, %c3_l24 : l24
+  %6 = moore.divs %c-6_i24, %c-3_i24 : i24
+  %7 = moore.divs %c-6_l24, %c-3_l24 : l24
+  %8 = moore.divs %c6_l24, %cXZ_l24 : l24
+  %9 = moore.divs %c6_l24, %c0_l24 : l24
+
+  // CHECK: return [[I2]], [[L2]], [[IM2]], [[LM2]], [[IM2]], [[LM2]], [[I2]], [[L2]], [[X]], [[X]]
+  return %0, %1, %2, %3, %4, %5, %6, %7, %8, %9: !moore.i24, !moore.l24, !moore.i24, !moore.l24, !moore.i24, !moore.l24, !moore.i24, !moore.l24, !moore.l24, !moore.l24
+}
+
 // CHECK-LABEL: moore.module @OptimizeUniquelyAssignedVars
 moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42, in %w: !moore.i42) {
   // Unique continuous assignments to variables should remove the `ref<T>`

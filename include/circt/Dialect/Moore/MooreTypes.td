@@ -454,15 +454,12 @@ def SimpleBitVectorType : MooreType<CPred<[{
 
 /// A single two or four-valued bit.
 def AnySingleBitType : MooreType<CPred<[{
-    llvm::isa<moore::IntType>($_self) &&
-    llvm::cast<moore::IntType>($_self).getWidth() == 1
+    moore::isIntType($_self, 1)
   }]>, "single bit type", "moore::IntType">;
 
 /// A single two-valued bit.
 def BitType : MooreType<CPred<[{
-    llvm::isa<moore::IntType>($_self) &&
-    llvm::cast<moore::IntType>($_self).getWidth() == 1 &&
-    llvm::cast<moore::IntType>($_self).getDomain() == moore::Domain::TwoValued
+    moore::isIntType($_self, 1, moore::Domain::TwoValued)
   }]>, "`bit` type", "moore::IntType"> {
   let builderCall = [{
     IntType::getInt($_builder.getContext(), 1)
@@ -471,15 +468,20 @@ def BitType : MooreType<CPred<[{
 
 /// A two-valued integer.
 def TwoValuedIntType : MooreType<CPred<[{
-    llvm::isa<moore::IntType>($_self) &&
-    llvm::cast<moore::IntType>($_self).getDomain() == moore::Domain::TwoValued
+    moore::isIntType($_self, moore::Domain::TwoValued)
   }]>, "two-valued integer type", "moore::IntType">;
 
 /// A four-valued integer.
 def FourValuedIntType : MooreType<CPred<[{
-    llvm::isa<moore::IntType>($_self) &&
-    llvm::cast<moore::IntType>($_self).getDomain() == moore::Domain::FourValued
+    moore::isIntType($_self, moore::Domain::FourValued)
   }]>, "four-valued integer type", "moore::IntType">;
+
+/// A 64-bit four-valued integer.
+def FourValuedI64 : MooreType<CPred<[{
+    moore::isIntType($_self, 64, moore::Domain::FourValued)
+  }]>, "64-bit four-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getLogic($_builder.getContext(), 64)";
+}
 
 /// A packed or unpacked array type with a fixed size.
 def AnyStaticArrayType : MooreType<

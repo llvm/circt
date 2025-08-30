@@ -833,9 +833,8 @@ module Expressions;
     // CHECK: [[TMP5:%.+]] = moore.zext [[TMP4]] : i6 -> i32
     // CHECK: moore.blocking_assign %a, [[TMP5]] : i32
     a = { << 4 { 6'b11_0101 }};
-    // CHECK: [[TMP1:%.+]] = moore.constant -11 : i6
-    // CHECK: [[TMP2:%.+]] = moore.zext [[TMP1]] : i6 -> i32
-    // CHECK: moore.blocking_assign %a, [[TMP2]] : i32
+    // CHECK: [[TMP1:%.+]] = moore.constant 53 : i32
+    // CHECK: moore.blocking_assign %a, [[TMP1]] : i32
     a = { >> 4 { 6'b11_0101 }};
     // CHECK: [[TMP1:%.+]] = moore.constant -3 : i4
     // CHECK: [[TMP2:%.+]] = moore.extract [[TMP1]] from 0 : i4 -> i1
@@ -867,9 +866,8 @@ module Expressions;
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 96'b1;
     // CHECK: [[TMP1:%.+]] = moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> <i96>
-    // CHECK: [[TMP2:%.+]] = moore.constant 31 : i100
-    // CHECK: [[TMP3:%.+]] = moore.trunc [[TMP2]] : i100 -> i96
-    // CHECK: moore.blocking_assign [[TMP1]], [[TMP3]] : i96
+    // CHECK: [[TMP2:%.+]] = moore.constant 31 : i96
+    // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 100'b11111;
     // CHECK: [[TMP1:%.+]] = moore.concat_ref %p1, %p2, %p3, %p4 : (!moore.ref<l11>, !moore.ref<l11>, !moore.ref<l11>, !moore.ref<l11>) -> <l44>
     // CHECK: [[TMP2:%.+]] = moore.read %up : <uarray<4 x l11>>
@@ -1525,15 +1523,12 @@ module Expressions;
     struct0 = '{43, 9002};
 
 
-    // CHECK: [[TMP0:%.+]] = moore.constant 43 : i32
-    // CHECK: [[TMP1:%.+]] = moore.sext [[TMP0]] : i32 -> i64
+    // CHECK: [[TMP1:%.+]] = moore.constant 43 : i64
     // CHECK: [[TMP2:%.+]] = moore.read %struct0 : <struct<{a: i32, b: i32}>>
     // CHECK: [[TMP3:%.+]] = moore.packed_to_sbv [[TMP2]] : struct<{a: i32, b: i32}>
     // CHECK: [[TMP4:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP3]] : i64 -> i1
     // CHECK: [[TMP5:%.+]] = moore.zext [[TMP4]] : i1 -> i32
-    // CHECK: [[TMP6:%.+]] = moore.int_to_logic [[TMP5]] : i32
-    // CHECK: [[TMP7:%.+]] = moore.logic_to_int [[TMP6]] : l32
-    // CHECK: moore.blocking_assign %c, [[TMP7]] : i32
+    // CHECK: moore.blocking_assign %c, [[TMP5]] : i32
     c = 43 inside {struct0};
 
     // CHECK: [[TMP0:%.+]] = moore.constant 44
@@ -1625,6 +1620,28 @@ module Conversion;
   // CHECK: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : struct<{a: i32, b: i32}>
   // CHECK: %f = moore.variable [[TMP2]]
   struct packed { int a; int b; } f = '0;
+endmodule
+
+// CHECK-LABEL: moore.module @TimeConversion1
+module TimeConversion1;
+  timeunit 10fs / 1fs;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant_time 12340 fs
+  // CHECK: moore.variable [[TMP]] : <time>
+  time t = 1234;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant 1234 : i32
+  // CHECK: moore.variable [[TMP]] : <i32>
+  int i = 12.34ps;
+endmodule
+
+// CHECK-LABEL: moore.module @TimeConversion2
+module TimeConversion2;
+  timeunit 100fs / 1fs;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant_time 123400 fs
+  // CHECK: moore.variable [[TMP]] : <time>
+  time t = 1234;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant 123 : i32
+  // CHECK: moore.variable [[TMP]] : <i32>
+  int i = 12.34ps;
 endmodule
 
 // CHECK-LABEL: moore.module @PortsTop
