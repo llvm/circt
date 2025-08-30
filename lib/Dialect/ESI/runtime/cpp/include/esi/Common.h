@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -114,6 +115,11 @@ public:
 
   /// Get the data as a vector of bytes.
   const std::vector<uint8_t> &getData() const { return data; }
+
+  /// Implicit conversion to a vector/span of bytes, to play nice with other
+  /// APIs that accept bytearray-like things.
+  operator const std::vector<uint8_t> &() const { return data; }
+  operator std::span<const uint8_t>() const { return data; }
 
   /// Move the data out of this object.
   std::vector<uint8_t> takeData() { return std::move(data); }
