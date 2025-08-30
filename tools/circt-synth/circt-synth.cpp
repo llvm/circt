@@ -12,6 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/AIGToComb.h"
+#include "circt/Conversion/CombToAIG.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
@@ -22,6 +24,7 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -49,6 +52,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include <mlir/Conversion/Passes.h>
 
 namespace cl = llvm::cl;
 
@@ -155,6 +159,10 @@ static cl::opt<bool>
     disableDatapath("disable-datapath",
                     cl::desc("Disable datapath optimization passes"),
                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool>
+    disableTimingAware("disable-timing-aware",
+                       cl::desc("Disable datapath optimization passes"),
+                       cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
@@ -211,6 +219,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
   auto pipeline = [](OpPassManager &pm) {
     circt::synth::AIGLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
+    loweringOptions.timingAware = !disableTimingAware;
     circt::synth::buildAIGLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilAIGLowering))
       return;
@@ -356,6 +365,10 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
+  hw::registerHWAggregateToCombPass();
+  circt::registerConvertCombToAIGPass();
+  mlir::registerCSEPass();
+  mlir::registerCanonicalizer();
 
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
