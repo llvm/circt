@@ -184,6 +184,9 @@ public:
     addConversion([](hw::ArrayType t) -> Type {
       return IntegerType::get(t.getContext(), hw::getBitWidth(t));
     });
+    addConversion([](hw::StructType t) -> Type {
+      return IntegerType::get(t.getContext(), hw::getBitWidth(t));
+    });
     addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
                                 mlir::ValueRange inputs,
                                 mlir::Location loc) -> mlir::Value {
