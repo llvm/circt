@@ -377,8 +377,9 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
     auto col = columns[i];
 
     // Sort the column by arrival time - fastest at the end
-    std::sort(col.begin(), col.end(),
-              [](const auto &a, const auto &b) { return a.delay > b.delay; });
+    std::stable_sort(col.begin(), col.end(), [](const auto &a, const auto &b) {
+      return a.delay > b.delay;
+    });
     // Only compress to reach the target stage height - Dadda's Algorithm
     while (col.size() + newColumns[i].size() > targetStageHeight) {
       if (col.size() < 2) {
