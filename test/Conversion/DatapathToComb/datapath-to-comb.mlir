@@ -91,6 +91,44 @@ hw.module @partial_product_booth(in %a : i3, in %b : i3, out pp0 : i3, out pp1 :
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
 
+// CHECK-LABEL: @partial_product_booth_zext
+// FORCE-BOOTH-LABEL: @partial_product_booth_zext
+hw.module @partial_product_booth_zext(in %a : i3, in %b : i3, out pp0 : i6, out pp1 : i6, out pp2 : i6) {
+  // FORCE-BOOTH-NEXT: %true = hw.constant true
+  // FORCE-BOOTH-NEXT: %c0_i6 = hw.constant 0 : i6
+  // FORCE-BOOTH-NEXT: %false = hw.constant false
+  // FORCE-BOOTH-NEXT: %[[A:.*]] = comb.concat %false, %a : i1, i3
+  // FORCE-BOOTH-NEXT: %[[TWOA:.*]] = comb.concat %a, %false : i3, i1
+  // FORCE-BOOTH-NEXT: %[[B0:.*]] = comb.extract %b from 0 : (i3) -> i1
+  // FORCE-BOOTH-NEXT: %[[B1:.*]] = comb.extract %b from 1 : (i3) -> i1
+  // FORCE-BOOTH-NEXT: %[[B2:.*]] = comb.extract %b from 2 : (i3) -> i1
+  // FORCE-BOOTH-NEXT: %[[NB0:.*]] = comb.xor bin %[[B0]], %true : i1
+  // FORCE-BOOTH-NEXT: %[[B1NB0:.*]] = comb.and %[[B1]], %[[NB0]] : i1
+  // FORCE-BOOTH-NEXT: %[[RB1:.*]] = comb.replicate %[[B1]] : (i1) -> i4
+  // FORCE-BOOTH-NEXT: %[[RB0:.*]] = comb.replicate %[[B0]] : (i1) -> i4
+  // FORCE-BOOTH-NEXT: %[[RB1NB0:.*]] = comb.replicate %[[B1NB0]] : (i1) -> i4
+  // FORCE-BOOTH-NEXT: %[[ROW02A:.*]] = comb.and %[[RB1NB0]], %[[TWOA]] : i4
+  // FORCE-BOOTH-NEXT: %[[ROW0A:.*]] = comb.and %[[RB0]], %[[A]] : i4
+  // FORCE-BOOTH-NEXT: %[[ROW0:.*]] = comb.or bin %[[ROW02A]], %[[ROW0A]] : i4
+  // FORCE-BOOTH-NEXT: %[[NROW0:.*]] = comb.xor bin %[[ROW0]], %[[RB1]] : i4
+  // FORCE-BOOTH-NEXT: %[[SEXTB1:.*]] = comb.replicate %[[B1]] : (i1) -> i2
+  // FORCE-BOOTH-NEXT: %[[PP0:.*]] = comb.concat %[[SEXTB1]], %[[NROW0]] : i2, i4
+  // FORCE-BOOTH-NEXT: %[[B2XORB1:.*]] = comb.xor bin %[[B2]], %[[B1]] : i1
+  // FORCE-BOOTH-NEXT: %[[B2B1:.*]] = comb.and %[[B2]], %[[B1]] : i1
+  // FORCE-BOOTH-NEXT: %[[RB2XORB1:.*]] = comb.replicate %[[B2XORB1]] : (i1) -> i4
+  // FORCE-BOOTH-NEXT: %[[RB2B1:.*]] = comb.replicate %[[B2B1]] : (i1) -> i4
+  // FORCE-BOOTH-NEXT: %[[ROW12A:.*]] = comb.and %[[RB2B1]], %[[TWOA]] : i4
+  // FORCE-BOOTH-NEXT: %[[ROW1A:.*]] = comb.and %[[RB2XORB1]], %[[A]] : i4
+  // FORCE-BOOTH-NEXT: %[[ROW1:.*]] = comb.or bin %[[ROW12A]], %[[ROW1A]] : i4
+  // FORCE-BOOTH-NEXT: %[[PP1:.*]] = comb.concat %[[ROW1]], %false, %[[B1]] : i4, i1, i1
+  // FORCE-BOOTH-NEXT: hw.output %[[PP0]], %[[PP1]], %c0_i6 : i6, i6, i6
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.concat %c0_i3, %a : i3, i3
+  %1 = comb.concat %c0_i3, %b : i3, i3
+  %2:3 = datapath.partial_product %0, %1 : (i6, i6) -> (i6, i6, i6)
+  hw.output %2#0, %2#1, %2#2 : i6, i6, i6
+}
+
 // CHECK-LABEL: @partial_product_24
 hw.module @partial_product_24(in %a : i24, in %b : i24, out sum : i24) {
   %0:24 = datapath.partial_product %a, %b : (i24, i24) -> (i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24)
