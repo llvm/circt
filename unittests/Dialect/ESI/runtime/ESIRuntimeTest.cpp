@@ -31,7 +31,7 @@ TEST(ESITypesTest, VoidTypeSerialization) {
 
   // Test invalid void value
   std::any invalidValue = std::any(42);
-  EXPECT_THROW(voidType.isValid(invalidValue), std::runtime_error);
+  EXPECT_THROW(voidType.ensureValid(invalidValue), std::runtime_error);
 
   // Test serialization
   MessageData serialized = voidType.serialize(voidValue);
@@ -56,7 +56,7 @@ TEST(ESITypesTest, BitsTypeSerialization) {
   // Test invalid size
   std::vector<uint8_t> wrongSize = {0xAB, 0xCD};
   std::any invalidBits = std::any(wrongSize);
-  EXPECT_THROW(bitsType.isValid(invalidBits), std::runtime_error);
+  EXPECT_THROW(bitsType.ensureValid(invalidBits), std::runtime_error);
 
   // Test serialization
   MessageData serialized = bitsType.serialize(validBits);
@@ -83,7 +83,7 @@ TEST(ESITypesTest, UIntTypeSerialization) {
   // Test out of range value
   uint64_t outOfRange = 0x10000; // Too big for 16-bit
   std::any invalidUInt = std::any(outOfRange);
-  EXPECT_THROW(uintType.isValid(invalidUInt), std::runtime_error);
+  EXPECT_THROW(uintType.ensureValid(invalidUInt), std::runtime_error);
 
   // Test serialization (little-endian)
   MessageData serialized = uintType.serialize(validUInt);
@@ -278,7 +278,7 @@ TEST(ESITypesTest, StructTypeSerialization) {
   std::map<std::string, std::any> incompleteStruct = {
       {"field1", std::any(static_cast<uint64_t>(42))}};
   std::any invalidStruct = std::any(incompleteStruct);
-  EXPECT_THROW(structType.isValid(invalidStruct), std::runtime_error);
+  EXPECT_THROW(structType.ensureValid(invalidStruct), std::runtime_error);
 
   // Test serialization
   MessageData serialized = structType.serialize(validStruct);
@@ -319,7 +319,7 @@ TEST(ESITypesTest, ArrayTypeSerialization) {
   std::vector<std::any> wrongSizeArray = {std::any(static_cast<uint64_t>(10)),
                                           std::any(static_cast<uint64_t>(20))};
   std::any invalidArray = std::any(wrongSizeArray);
-  EXPECT_THROW(arrayType.isValid(invalidArray), std::runtime_error);
+  EXPECT_THROW(arrayType.ensureValid(invalidArray), std::runtime_error);
 
   // Test serialization
   MessageData serialized = arrayType.serialize(validArray);
