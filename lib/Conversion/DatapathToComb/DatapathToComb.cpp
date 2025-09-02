@@ -74,7 +74,6 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
                   mlir::PatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
-    unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
 
     SmallVector<SmallVector<Value>> addends;
     for (auto input : inputs) {
@@ -109,6 +108,15 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
     }
     rewriter.replaceOp(op, comb::wallaceReduction(rewriter, loc, width,
                                                   targetAddends, addends));
+    // Compressor tree reduction
+    // TODO - implement a more efficient compression algorithm to compete with
+    // yosys's `alumacc` lowering - a coarse grained timing model would help to
+    // sort the inputs according to arrival time.
+    auto targetAddends = op.getNumResults();
+    comb::CompressorTree comp(addends, loc);
+    // For benchmarking purposes, can disable timing driven compression
+    comp.setUsingTiming(useTiming);
+    rewriter.replaceOp(op, comp.compressToHeight(rewriter, targetAddends));
     return success();
   }
 
@@ -137,8 +145,8 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
       return success();
     }
 
-    // Use width as a heuristic to guide partial product implementation
-    if (width > 16 || forceBooth)
+    // Use result rows as a heuristic to guide partial product implementation
+    if (op.getNumResults() > 16 || forceBooth)
       return lowerBoothArray(rewriter, a, b, op, width);
     else
       return lowerAndArray(rewriter, a, b, op, width);
@@ -403,5 +411,21 @@ void ConvertDatapathToCombPass::runOnOperation() {
     return WalkResult::advance();
   });
   if (result.wasInterrupted())
+    return signalPassFailure();
+
+  // Lower Compress operators last to expose known bits
+  RewritePatternSet compressorPatterns(&getContext());
+  target.addIllegalOp<datapath::CompressOp>();
+  if (lowerCompressToAdd)
+    // Lower compressors to simple add operations for downstream optimisations
+    compressorPatterns.add<DatapathCompressOpAddConversion>(
+        compressorPatterns.getContext());
+  else
+    // Lower compressors to a complete gate-level implementation
+    compressorPatterns.add<DatapathCompressOpConversion>(
+        compressorPatterns.getContext(), timingDrivenCompressor);
+
+  if (failed(mlir::applyPartialConversion(getOperation(), target,
+                                          std::move(compressorPatterns))))
     return signalPassFailure();
 }

@@ -724,8 +724,9 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     }
 
     // Wallace tree reduction - reduce to two addends.
-    auto addends =
-        comb::wallaceReduction(rewriter, loc, width, 2, partialProducts);
+    comb::CompressorTree comp(partialProducts, loc);
+    auto addends = comp.compressToHeight(rewriter, 2);
+
     // Sum the two addends using a carry-propagate adder
     auto newAdd = comb::AddOp::create(rewriter, loc, addends, true);
     replaceOpAndCopyNamehint(rewriter, op, newAdd);

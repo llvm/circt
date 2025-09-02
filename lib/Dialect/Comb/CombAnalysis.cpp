@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
 
 using namespace circt;
