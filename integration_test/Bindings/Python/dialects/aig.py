@@ -102,3 +102,15 @@ with Context() as ctx, Location.unknown():
     # CHECK: top:test_aig;c[0] 0
     # CHECK: top:test_aig;child:test_child;a[0] 2
     print(collection.longest_path.to_flamegraph())
+
+    analysis = LongestPathAnalysis(m.operation, trace_debug_points=True, only_max_delay=True, incremental=True)
+    # Get result2 from get_paths()
+    # Access the second module (test_aig), then its body block, then the first operation (hw.instance), then its second result
+    test_aig_module = m.body.operations[1]
+    body_block = test_aig_module.regions[0].blocks[0]
+    instance_op = body_block.operations[0]
+    result = instance_op.results[1]
+    collection = analysis.get_paths(result, 0)
+    # CHECK-NEXT: only_max_delay: True
+    print("only_max_delay:", collection.longest_path.delay == 2)
+

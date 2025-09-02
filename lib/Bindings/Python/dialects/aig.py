@@ -320,6 +320,10 @@ class LongestPathCollection:
     print(f"95th percentile delay: {self.get_by_delay_ratio(0.95).delay}")
     print(f"99th percentile delay: {self.get_by_delay_ratio(0.99).delay}")
     print(f"99.9th percentile delay: {self.get_by_delay_ratio(0.999).delay}")
+  
+  def merge(self, src: "LongestPathCollection") -> "LongestPathCollection":
+    self.collection.merge(src.collection)
+    return LongestPathCollection(self.collection)
 
 
 # ============================================================================
@@ -337,7 +341,8 @@ class LongestPathAnalysis:
         analysis: The underlying C++ analysis object
     """
 
-  def __init__(self, module, trace_debug_points: bool = True):
+  def __init__(self, module, trace_debug_points: bool = True, only_max_delay: bool = False,
+               incremental: bool = False):
     """
         Initialize the longest path analysis for a given module.
         Args:
@@ -345,14 +350,34 @@ class LongestPathAnalysis:
             trace_debug_points: Whether to include debug points in the analysis.
                               The debug points provide additional information about the path,
                               but increase the analysis time and memory usage.
+            only_max_delay: Whether to only compute the maximum delay.
+            incremental: Whether to use incremental analysis mode.
         """
-    self.analysis = aig._LongestPathAnalysis(module, trace_debug_points)
+    self.analysis = aig._LongestPathAnalysis(module, trace_debug_points, only_max_delay, incremental)
+  
+  def get_paths(self,
+                value,
+                bit_pos: int,
+                elaborate_paths: bool = True) -> LongestPathCollection:
+      """
+        Perform longest path analysis and return all timing paths to the
+        specified value and bit position.
+        Args:
+            value: The value to analyze
+            bit_pos: The bit position to analyze
+            elaborate_paths: Whether to elaborate the paths with detailed information
+        Returns:
+            LongestPathCollection containing all paths sorted by delay
+      """
+      return LongestPathCollection(
+          self.analysis.get_paths(value, bit_pos, elaborate_paths))
 
   def get_all_paths(self,
                     module_name: str,
                     elaborate_paths: bool = True) -> LongestPathCollection:
     """
-        Perform longest path analysis and return all timing paths.
+        Perform longest path analysis and return all timing paths in side
+        the module hierarchy.
         This method analyzes the specified module and returns a collection
         of all timing paths, sorted by delay in descending order.
         Args:

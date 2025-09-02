@@ -32,14 +32,28 @@ void circt::python::populateDialectAIGSubmodule(nb::module_ &m) {
       .def(
           "__init__",
           [](AIGLongestPathAnalysis *self, MlirOperation module,
-             bool traceDebugPoints) {
-            new (self) AIGLongestPathAnalysis(
-                aigLongestPathAnalysisCreate(module, traceDebugPoints));
+             bool traceDebugPoints, bool onlyMaxDelay, bool incremental) {
+            new (self) AIGLongestPathAnalysis(aigLongestPathAnalysisCreate(
+                module, traceDebugPoints, onlyMaxDelay, incremental));
           },
-          nb::arg("module"), nb::arg("trace_debug_points") = true)
+          nb::arg("module"), nb::arg("trace_debug_points") = false,
+          nb::arg("only_max_delay") = false, nb::arg("incremental") = false)
       .def("__del__",
            [](AIGLongestPathAnalysis &self) {
              aigLongestPathAnalysisDestroy(self);
+           })
+      .def("get_paths",
+           [](AIGLongestPathAnalysis *self, MlirValue value, int64_t bitPos,
+              bool elaboratePaths) -> AIGLongestPathCollection {
+             auto collection =
+                 AIGLongestPathCollection(aigLongestPathAnalysisGetPaths(
+                     *self, value, bitPos, elaboratePaths));
+
+             if (aigLongestPathCollectionIsNull(collection))
+               throw nb::value_error(
+                   "Failed to get all paths, see previous error(s).");
+
+             return collection;
            })
       .def("get_all_paths",
            [](AIGLongestPathAnalysis *self, const std::string &moduleName,
@@ -71,6 +85,10 @@ void circt::python::populateDialectAIGSubmodule(nb::module_ &m) {
            [](AIGLongestPathCollection &self,
               int pathIndex) -> AIGLongestPathDataflowPath {
              return aigLongestPathCollectionGetDataflowPath(self, pathIndex);
+           })
+      .def("merge",
+           [](AIGLongestPathCollection &self, AIGLongestPathCollection &src) {
+             aigLongestPathCollectionMerge(self, src);
            });
 
   nb::class_<AIGLongestPathDataflowPath>(m, "_LongestPathDataflowPath")

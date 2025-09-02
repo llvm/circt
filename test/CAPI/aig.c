@@ -61,7 +61,7 @@ void testLongestPathAnalysis(void) {
   // Test with debug points enabled
   {
     AIGLongestPathAnalysis analysis =
-        aigLongestPathAnalysisCreate(moduleOp, true);
+        aigLongestPathAnalysisCreate(moduleOp, true, false, false);
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     AIGLongestPathCollection collection1 =
@@ -156,7 +156,7 @@ void testLongestPathAnalysis(void) {
   // Test without debug points
   {
     AIGLongestPathAnalysis analysis =
-        aigLongestPathAnalysisCreate(moduleOp, false);
+        aigLongestPathAnalysisCreate(moduleOp, false, false, false);
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     AIGLongestPathCollection collection =
@@ -205,7 +205,7 @@ void testErrorHandling(void) {
   MlirOperation moduleOp = mlirModuleGetOperation(module);
 
   AIGLongestPathAnalysis analysis =
-      aigLongestPathAnalysisCreate(moduleOp, true);
+      aigLongestPathAnalysisCreate(moduleOp, true, false, false);
 
   MlirStringRef invalidModuleName = mlirStringRefCreateFromCString("unknown");
   AIGLongestPathCollection invalidCollection =
