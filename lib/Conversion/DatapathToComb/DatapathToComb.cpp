@@ -316,4 +316,16 @@ void ConvertDatapathToCombPass::runOnOperation() {
   if (failed(applyPatternsGreedilyWithTimingInfo(
           getOperation(), std::move(patterns), analysis)))
     return signalPassFailure();
+
+  // Verify that all Datapath operations have been successfully converted.
+  // Walk the operation and check for any remaining Datapath dialect operations.
+  auto result = getOperation()->walk([&](Operation *op) {
+    if (llvm::isa_and_nonnull<datapath::DatapathDialect>(op->getDialect())) {
+      op->emitError("Datapath operation not converted: ") << *op;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  if (result.wasInterrupted())
+    return signalPassFailure();
 }

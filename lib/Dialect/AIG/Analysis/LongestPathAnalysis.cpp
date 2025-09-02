@@ -1339,6 +1339,10 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
 
   // Connect module inputs to cloned operation operands
   // Handle type mismatches with bitcast operations
+  // Type mismatches can occur when the original operation uses non-integer
+  // types (e.g., structs, arrays) that get converted to integer types for the
+  // wrapper module ports. Since we use the same bit width via
+  // hw::getBitWidth(), bitcast is safe for bit-compatible types.
   for (auto arg : hwModule.getBodyBlock()->getArguments()) {
     Value input = arg;
     auto idx = arg.getArgNumber();
