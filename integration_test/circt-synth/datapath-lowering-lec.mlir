@@ -18,6 +18,31 @@ hw.module @partial_product_4(in %a : i4, in %b : i4, out sum : i4) {
   hw.output %1 : i4
 }
 
+// RUN: circt-lec %t.mlir %s -c1=partial_product_zext -c2=partial_product_zext --shared-libs=%libz3 | FileCheck %s --check-prefix=AND3_ZEXT
+// AND3_ZEXT: c1 == c2
+hw.module @partial_product_zext(in %a : i3, in %b : i3, out sum : i6) {
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.concat %c0_i3, %a : i3, i3
+  %1 = comb.concat %c0_i3, %b : i3, i3
+  %2:3 = datapath.partial_product %0, %1 : (i6, i6) -> (i6, i6, i6)
+  %3 = comb.add %2#0, %2#1, %2#2 : i6
+  hw.output %3 : i6
+}
+
+// RUN: circt-lec %t.mlir %s -c1=partial_product_sext -c2=partial_product_sext --shared-libs=%libz3 | FileCheck %s --check-prefix=AND3_SEXT
+// AND3_SEXT: c1 == c2
+hw.module @partial_product_sext(in %a : i3, in %b : i3, out sum : i6) {
+  %0 = comb.extract %a from 2 : (i3) -> i1
+  %1 = comb.extract %b from 2 : (i3) -> i1
+  %2 = comb.replicate %0 : (i1) -> i3
+  %3 = comb.replicate %1 : (i1) -> i3
+  %4 = comb.concat %2, %a : i3, i3
+  %5 = comb.concat %3, %b : i3, i3
+  %6:6 = datapath.partial_product %4, %5 : (i6, i6) -> (i6, i6, i6, i6, i6, i6)
+  %7 = comb.add %6#0, %6#1, %6#2, %6#3, %6#4, %6#5 : i6
+  hw.output %7 : i6
+}
+
 // RUN: circt-lec %t.mlir %s -c1=compress_3 -c2=compress_3 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMP3
 // COMP3: c1 == c2
 hw.module @compress_3(in %a : i4, in %b : i4, in %c : i4, out sum : i4) {
@@ -40,6 +65,12 @@ hw.module @compress_6(in %a : i4, in %b : i4, in %c : i4, in %d : i4, in %e : i4
 
 // RUN: circt-lec %t.mlir %s -c1=partial_product_4 -c2=partial_product_4 --shared-libs=%libz3 | FileCheck %s --check-prefix=BOOTH4
 // BOOTH4: c1 == c2
+
+// RUN: circt-lec %t.mlir %s -c1=partial_product_zext -c2=partial_product_zext --shared-libs=%libz3 | FileCheck %s --check-prefix=BOOTH3_ZEXT
+// BOOTH3_ZEXT: c1 == c2
+
+// RUN: circt-lec %t.mlir %s -c1=partial_product_sext -c2=partial_product_sext --shared-libs=%libz3 | FileCheck %s --check-prefix=BOOTH3_SEXT
+// BOOTH3_SEXT: c1 == c2
 
 // RUN: circt-lec %t.mlir %s -c1=compress_3 -c2=compress_3 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMPADD3
 // COMPADD3: c1 == c2

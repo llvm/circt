@@ -17,6 +17,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/KnownBits.h"
 
 #define DEBUG_TYPE "datapath-to-comb"
 
@@ -160,8 +161,9 @@ private:
            "Cannot return more results than the operator width");
 
     for (unsigned i = 0; i < op.getNumResults(); ++i) {
-      auto repl = comb::ReplicateOp::create(rewriter, loc, bBits[i], width);
-      auto ppRow = comb::AndOp::create(rewriter, loc, repl, a);
+      auto repl =
+          rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], width);
+      auto ppRow = rewriter.createOrFold<comb::AndOp>(loc, repl, a);
       auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(width, i));
       auto ppAlign = comb::ShlOp::create(rewriter, loc, ppRow, shiftBy);
       partialProducts.push_back(ppAlign);
@@ -177,10 +179,36 @@ private:
     Location loc = op.getLoc();
     auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
     auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-    auto oneWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 1));
-    Value twoA = comb::ShlOp::create(rewriter, loc, a, oneWidth);
 
+    // Detect leading zeros in multiplicand due to zero-extension
+    // and truncate to reduce partial product bits
+    // {'0, a} * {'0, b}
+    auto rowWidth = width;
+    auto knownBitsA = comb::computeKnownBits(a);
+    if (!knownBitsA.Zero.isZero()) {
+      if (knownBitsA.Zero.countLeadingOnes() > 1) {
+        // Retain one leading zero to represent 2*{1'b0, a} = {a, 1'b0}
+        // {'0, a} -> {1'b0, a}
+        rowWidth -= knownBitsA.Zero.countLeadingOnes() - 1;
+        a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
+      }
+    }
+    auto oneRowWidth =
+        hw::ConstantOp::create(rewriter, loc, APInt(rowWidth, 1));
+    // Booth encoding will select each row from {-2a, -1a, 0, 1a, 2a}
+    Value twoA = rewriter.createOrFold<comb::ShlOp>(loc, a, oneRowWidth);
+
+    // Encode based on the bits of b
+    // TODO: sort a and b based on non-zero bits to encode the smaller input
     SmallVector<Value> bBits = extractBits(rewriter, b);
+
+    // Identify zero bits of b to reduce height of partial product array
+    auto knownBitsB = comb::computeKnownBits(b);
+    if (!knownBitsB.Zero.isZero()) {
+      for (unsigned i = 0; i < width; ++i)
+        if (knownBitsB.Zero[i])
+          bBits[i] = zeroFalse;
+    }
 
     SmallVector<Value> partialProducts;
     partialProducts.reserve(width);
@@ -202,33 +230,80 @@ private:
       // Is the encoding zero or negative (an approximation)
       Value encNeg = bip1;
       // Is the encoding one = b[i] xor b[i-1]
-      Value encOne = comb::XorOp::create(rewriter, loc, bi, bim1, true);
+      Value encOne = rewriter.createOrFold<comb::XorOp>(loc, bi, bim1, true);
       // Is the encoding two = (bip1 & ~bi & ~bim1) | (~bip1 & bi & bim1)
       Value constOne = hw::ConstantOp::create(rewriter, loc, APInt(1, 1));
-      Value biInv = comb::XorOp::create(rewriter, loc, bi, constOne, true);
-      Value bip1Inv = comb::XorOp::create(rewriter, loc, bip1, constOne, true);
-      Value bim1Inv = comb::XorOp::create(rewriter, loc, bim1, constOne, true);
+      Value biInv = rewriter.createOrFold<comb::XorOp>(loc, bi, constOne, true);
+      Value bip1Inv =
+          rewriter.createOrFold<comb::XorOp>(loc, bip1, constOne, true);
+      Value bim1Inv =
+          rewriter.createOrFold<comb::XorOp>(loc, bim1, constOne, true);
 
-      Value andLeft = comb::AndOp::create(rewriter, loc,
-                                          ValueRange{bip1Inv, bi, bim1}, true);
-      Value andRight = comb::AndOp::create(
-          rewriter, loc, ValueRange{bip1, biInv, bim1Inv}, true);
-      Value encTwo = comb::OrOp::create(rewriter, loc, andLeft, andRight, true);
+      Value andLeft = rewriter.createOrFold<comb::AndOp>(
+          loc, ValueRange{bip1Inv, bi, bim1}, true);
+      Value andRight = rewriter.createOrFold<comb::AndOp>(
+          loc, ValueRange{bip1, biInv, bim1Inv}, true);
+      Value encTwo =
+          rewriter.createOrFold<comb::OrOp>(loc, andLeft, andRight, true);
 
       Value encNegRepl =
-          comb::ReplicateOp::create(rewriter, loc, encNeg, width);
+          rewriter.createOrFold<comb::ReplicateOp>(loc, encNeg, rowWidth);
       Value encOneRepl =
-          comb::ReplicateOp::create(rewriter, loc, encOne, width);
+          rewriter.createOrFold<comb::ReplicateOp>(loc, encOne, rowWidth);
       Value encTwoRepl =
-          comb::ReplicateOp::create(rewriter, loc, encTwo, width);
+          rewriter.createOrFold<comb::ReplicateOp>(loc, encTwo, rowWidth);
 
       // Select between 2*a or 1*a or 0*a
-      Value selTwoA = comb::AndOp::create(rewriter, loc, encTwoRepl, twoA);
-      Value selOneA = comb::AndOp::create(rewriter, loc, encOneRepl, a);
-      Value magA = comb::OrOp::create(rewriter, loc, selTwoA, selOneA, true);
+      Value selTwoA = rewriter.createOrFold<comb::AndOp>(loc, encTwoRepl, twoA);
+      Value selOneA = rewriter.createOrFold<comb::AndOp>(loc, encOneRepl, a);
+      Value magA =
+          rewriter.createOrFold<comb::OrOp>(loc, selTwoA, selOneA, true);
 
       // Conditionally invert the row
-      Value ppRow = comb::XorOp::create(rewriter, loc, magA, encNegRepl, true);
+      Value ppRow =
+          rewriter.createOrFold<comb::XorOp>(loc, magA, encNegRepl, true);
+
+      // Sign-extension Optimisation:
+      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin & Kumm
+      // Handle sign-extension and padding to full width
+      // s = encNeg (sign-bit)
+      // {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
+      //                     + {0, 0, 0, 0,!s, '0}
+      // Applying this to every row we create an upper-triangle of 1s that can
+      // be optimised away since they will not affect the final sum.
+      // {!s3,  0,!s2,  0,!s1,  0}
+      // {  1,  1,  1,  1,  1, p1}
+      // {  1,  1,  1,   p2      }
+      // {  1,       p3          }
+      if (rowWidth < width) {
+        auto padding = width - rowWidth;
+        auto encNegInv = bip1Inv;
+
+        // Sign-extension trick not worth it for padding < 3
+        if (padding < 3) {
+          Value encNegPad =
+              rewriter.createOrFold<comb::ReplicateOp>(loc, encNeg, padding);
+          ppRow = rewriter.createOrFold<comb::ConcatOp>(
+              loc, ValueRange{encNegPad, ppRow}); // Pad to full width
+        } else if (i == 0) {
+          // First row = {!encNeg, encNeg, encNeg, ppRow}
+          ppRow = rewriter.createOrFold<comb::ConcatOp>(
+              loc, ValueRange{encNegInv, encNeg, encNeg, ppRow});
+        } else {
+          // Remaining rows = {1, !encNeg, ppRow}
+          ppRow = rewriter.createOrFold<comb::ConcatOp>(
+              loc, ValueRange{constOne, encNegInv, ppRow});
+        }
+
+        // Zero pad to full width
+        auto rowWidth = ppRow.getType().getIntOrFloatBitWidth();
+        if (rowWidth < width) {
+          auto zeroPad =
+              hw::ConstantOp::create(rewriter, loc, APInt(width - rowWidth, 0));
+          ppRow = rewriter.createOrFold<comb::ConcatOp>(
+              loc, ValueRange{zeroPad, ppRow});
+        }
+      }
 
       // No sign-correction in the first row
       if (i == 0) {
@@ -240,13 +315,14 @@ private:
       // Insert a sign-correction from the previous row
       assert(i >= 2 && "Expected i to be at least 2 for sign correction");
       // {ppRow, 0, encNegPrev} << 2*(i-1)
-      Value withSignCorrection = comb::ConcatOp::create(
-          rewriter, loc, ValueRange{ppRow, zeroFalse, encNegPrev});
-      Value ppAlignPre =
-          comb::ExtractOp::create(rewriter, loc, withSignCorrection, 0, width);
+      Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
+          loc, ValueRange{ppRow, zeroFalse, encNegPrev});
+      Value ppAlignPre = rewriter.createOrFold<comb::ExtractOp>(
+          loc, withSignCorrection, 0, width);
       Value shiftBy =
           hw::ConstantOp::create(rewriter, loc, APInt(width, i - 2));
-      Value ppAlign = comb::ShlOp::create(rewriter, loc, ppAlignPre, shiftBy);
+      Value ppAlign =
+          rewriter.createOrFold<comb::ShlOp>(loc, ppAlignPre, shiftBy);
       partialProducts.push_back(ppAlign);
       encNegPrev = encNeg;
 
