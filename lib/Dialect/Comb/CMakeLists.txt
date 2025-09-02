@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTComb
 
   DEPENDS
   CIRCTHW
+  
   MLIRCombIncGen
   MLIRCombEnumsIncGen
   

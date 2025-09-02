@@ -11,7 +11,6 @@
 
 #include "mlir/IR/OpImplementation.h"
 
-#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Datapath/DatapathDialect.h"
 #include "circt/Dialect/HW/HWTypes.h"
 
@@ -37,8 +36,7 @@ std::pair<CompressorBit, CompressorBit> halfAdderWithDelay(OpBuilder &builder,
 class CompressorTree {
 public:
   // Constructor takes addends as input and converts to column representation
-  CompressorTree(const SmallVector<SmallVector<Value>> &addends,
-                 aig::IncrementalLongestPathAnalysis *analysis, Location loc);
+  CompressorTree(const SmallVector<SmallVector<Value>> &addends, Location loc);
 
   // Get the number of columns (bit positions)
   size_t getWidth() const { return columns.size(); }
@@ -48,6 +46,9 @@ public:
 
   // Get the target height of next stage
   size_t getNextStageTargetHeight() const;
+
+  // Update the input delays based on longest path analysis
+  void withInputDelays(const SmallVector<SmallVector<int64_t>> inputDelays);
 
   // Apply a compression step (reduce columns with >2 bits using compressors)
   SmallVector<Value> compressToHeight(OpBuilder &builder, size_t targetHeight);

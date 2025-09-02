@@ -83,7 +83,23 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
 
     // Compressor tree reduction
     auto targetAddends = op.getNumResults();
-    datapath::CompressorTree comp(addends, analysis, loc);
+    datapath::CompressorTree comp(addends, loc);
+
+    SmallVector<SmallVector<int64_t>> addendsDelays(addends.size());
+    if (analysis) {
+      // Sort the addends row based on the delay of the input.
+      for (size_t i = 0; i < addends.size(); ++i) {
+        for (size_t j = 0; j < addends[i].size(); ++j) {
+          auto delay = analysis->getOrComputeMaxDelay(addends[i][j], 0);
+          if (failed(delay))
+            return rewriter.notifyMatchFailure(op,
+                                               "Failed to get delay for input");
+          addendsDelays[i].push_back(*delay);
+        }
+      }
+      comp.withInputDelays(addendsDelays);
+    }
+
     rewriter.replaceOp(op, comp.compressToHeight(rewriter, targetAddends));
     return success();
   }
@@ -113,7 +129,8 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
       return success();
     }
 
-    // Use result rows as a heuristic to guide partial product implementation
+    // Use result rows as a heuristic to guide partial product
+    // implementation
     if (op.getNumResults() > 16 || forceBooth)
       return lowerBoothArray(rewriter, a, b, op, width);
     else
@@ -247,13 +264,12 @@ private:
           rewriter.createOrFold<comb::XorOp>(loc, magA, encNegRepl, true);
 
       // Sign-extension Optimisation:
-      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin & Kumm
-      // Handle sign-extension and padding to full width
-      // s = encNeg (sign-bit)
-      // {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
+      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin &
+      // Kumm Handle sign-extension and padding to full width s = encNeg
+      // (sign-bit) {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
       //                     + {0, 0, 0, 0,!s, '0}
-      // Applying this to every row we create an upper-triangle of 1s that can
-      // be optimised away since they will not affect the final sum.
+      // Applying this to every row we create an upper-triangle of 1s that
+      // can be optimised away since they will not affect the final sum.
       // {!s3,  0,!s2,  0,!s1,  0}
       // {  1,  1,  1,  1,  1, p1}
       // {  1,  1,  1,   p2      }
@@ -346,8 +362,9 @@ static LogicalResult applyPatternsGreedilyWithTimingInfo(
   // dependencies are processed before their users.
   mlir::GreedyRewriteConfig config;
   // Set the listener to update timing information
-  // HACK: Setting max iterations to 2 to ensure that the patterns are one-shot,
-  // making sure target operations are datapath operations are replaced.
+  // HACK: Setting max iterations to 2 to ensure that the patterns are
+  // one-shot, making sure target operations are datapath operations are
+  // replaced.
   config.setMaxIterations(2).setListener(analysis).setUseTopDownTraversal(true);
 
   // Apply the patterns greedily
@@ -377,7 +394,8 @@ void ConvertDatapathToCombPass::runOnOperation() {
     return signalPassFailure();
 
   // Verify that all Datapath operations have been successfully converted.
-  // Walk the operation and check for any remaining Datapath dialect operations.
+  // Walk the operation and check for any remaining Datapath dialect
+  // operations.
   auto result = getOperation()->walk([&](Operation *op) {
     if (llvm::isa_and_nonnull<datapath::DatapathDialect>(op->getDialect())) {
       op->emitError("Datapath operation not converted: ") << *op;

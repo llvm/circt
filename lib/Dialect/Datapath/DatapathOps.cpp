@@ -102,13 +102,12 @@ datapath::halfAdderWithDelay(OpBuilder &builder, Location loc, CompressorBit a,
 }
 
 CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
-                               aig::IncrementalLongestPathAnalysis *analysis,
                                Location loc)
-    : originalAddends(addends), numStages(0), numFullAdders(0), loc(loc) {
+    : originalAddends(addends), usingTiming(false), numStages(0),
+      numFullAdders(0), loc(loc) {
   assert(addends.size() > 2);
   // Number of bits in a row == bitwidth of input addends
   // Compressors will be formed of uniform bitwidth addends
-  usingTiming = analysis != nullptr;
   width = addends[0].size();
   SmallVector<SmallVector<CompressorBit>> initColumns(width);
   columns = initColumns;
@@ -119,18 +118,30 @@ CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
       auto knownBits = comb::computeKnownBits(bit.val);
       if (knownBits.isZero())
         continue;
-
-      if (usingTiming) {
-        // If using timing information, query the analysis for the delay
-        auto delay = analysis->getOrComputeMaxDelay(bit.val, 0);
-        if (failed(delay))
-          assert(false && "Failed to get delay compressor for input");
-        bit.delay = *delay;
-      }
       // Add non-zero bit to the column
       columns[i].push_back(bit);
     }
   }
+}
+
+void CompressorTree::withInputDelays(
+    const SmallVector<SmallVector<int64_t>> inputDelays) {
+  assert(inputDelays.size() == originalAddends.size() &&
+         "Input delays must match number of addends");
+  for (size_t i = 0; i < inputDelays.size(); ++i) {
+    assert(inputDelays[i].size() == width &&
+           "Input delays must match bitwidth of addends");
+    for (size_t j = 0; j < width; ++j) {
+      // Find the corresponding bit in the column and update its delay
+      auto it = std::find_if(columns[j].begin(), columns[j].end(),
+                             [val = originalAddends[i][j]](const auto &bit) {
+                               return bit.val == val;
+                             });
+      if (it != columns[j].end())
+        it->delay = inputDelays[i][j];
+    }
+  }
+  usingTiming = true;
 }
 
 size_t CompressorTree::getMaxHeight() const {
@@ -197,7 +208,6 @@ SmallVector<Value> CompressorTree::compressToHeight(OpBuilder &builder,
 // target height - this currently uses Dadda's algorithm
 SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
                                                        size_t targetHeight) {
-
   dump();
   auto maxHeight = getMaxHeight();
   auto targetStageHeight = getNextStageTargetHeight();

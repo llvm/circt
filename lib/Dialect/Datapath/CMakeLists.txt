@@ -13,7 +13,6 @@ add_circt_dialect_library(CIRCTDatapath
   Support
 
   LINK_LIBS PUBLIC
-  CIRCTAIGAnalysis
   CIRCTHW
   CIRCTComb
   MLIRIR
