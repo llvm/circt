@@ -1,4 +1,5 @@
 add_subdirectory(AIG)
+add_subdirectory(Comb)
 add_subdirectory(Moore)
 add_subdirectory(FIRRTL)
 add_subdirectory(ESI)
