@@ -155,6 +155,10 @@ static cl::opt<bool>
     disableDatapath("disable-datapath",
                     cl::desc("Disable datapath optimization passes"),
                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool>
+    disableTimingAware("disable-timing-aware",
+                       cl::desc("Disable datapath optimization passes"),
+                       cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
@@ -211,6 +215,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
   auto pipeline = [](OpPassManager &pm) {
     circt::synth::AIGLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
+    loweringOptions.timingAware = !disableTimingAware;
     circt::synth::buildAIGLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilAIGLowering))
       return;
@@ -356,6 +361,7 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
+  circt::aig::registerAIGAnalysisPrerequisitePasses();
 
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });

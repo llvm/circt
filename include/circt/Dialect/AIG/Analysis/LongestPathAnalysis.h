@@ -17,11 +17,15 @@
 #ifndef CIRCT_ANALYSIS_AIG_ANALYSIS_H
 #define CIRCT_ANALYSIS_AIG_ANALYSIS_H
 
+#include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/SmallVector.h"
@@ -171,6 +175,11 @@ llvm::json::Value toJSON(const circt::aig::DataflowPath &path);
 // Options for the longest path analysis.
 struct LongestPathAnalysisOption {
   bool traceDebugPoints = false;
+  bool incremental = false;
+
+  LongestPathAnalysisOption(bool traceDebugPoints, bool incremental)
+      : traceDebugPoints(traceDebugPoints), incremental(incremental) {}
+  LongestPathAnalysisOption() = default;
 };
 
 // This analysis finds the longest paths in the dataflow graph across modules.
@@ -248,11 +257,40 @@ public:
 
   MLIRContext *getContext() const { return ctx; }
 
-private:
+protected:
+  friend class IncrementalLongestPathAnalysis;
   struct Impl;
   Impl *impl;
 
+private:
   mlir::MLIRContext *ctx;
+};
+
+// Incremental version of longest path analysis that supports on-demand
+// computation and tracks IR modifications to maintain validity.
+class IncrementalLongestPathAnalysis : private LongestPathAnalysis,
+                                       public mlir::PatternRewriter::Listener {
+public:
+  IncrementalLongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am)
+      : LongestPathAnalysis(moduleOp, am,
+                            LongestPathAnalysisOption(false, true)) {}
+
+  // Compute maximum delay for specified value and bit.
+  FailureOr<int64_t> getOrComputeMaxDelay(Value value, size_t bitPos);
+
+  // Compute all paths for specified value and bit.
+  FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
+
+  // Check if operation can be safely modified without invalidating analysis.
+  bool isOperationValidToMutate(Operation *op) const;
+
+  // PatternRewriter::Listener interface - called automatically.
+  void notifyOperationModified(Operation *op) override;
+  void notifyOperationReplaced(Operation *op, ValueRange replacement) override;
+  void notifyOperationErased(Operation *op) override;
+
+private:
+  bool isAnalysisValid = true;
 };
 
 // A wrapper class for the longest path analysis that also traces debug points.
@@ -260,7 +298,7 @@ private:
 class LongestPathAnalysisWithTrace : public LongestPathAnalysis {
 public:
   LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
-      : LongestPathAnalysis(moduleOp, am, {true}) {}
+      : LongestPathAnalysis(moduleOp, am, {true, false}) {}
 };
 
 // A collection of longest paths. The data structure owns the paths, and used
@@ -281,6 +319,18 @@ public:
 private:
   MLIRContext *ctx;
 };
+
+// Register prerequisite passes for AIG longest path analysis.
+// This includes the Comb to AIG conversion pass and necessary
+// canonicalization passes to clean up the IR.
+inline void registerAIGAnalysisPrerequisitePasses() {
+  hw::registerHWAggregateToCombPass();
+  ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return createConvertCombToAIG();
+  });
+  mlir::registerCSEPass();
+  mlir::registerCanonicalizerPass();
+}
 
 } // namespace aig
 } // namespace circt
@@ -310,6 +360,7 @@ struct DenseMapInfo<circt::aig::Object> {
                          {b.instancePath, b.value, b.bitPos});
   }
 };
+
 } // namespace llvm
 
 #endif // CIRCT_ANALYSIS_AIG_ANALYSIS_H

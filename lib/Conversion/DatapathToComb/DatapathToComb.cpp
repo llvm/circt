@@ -7,12 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/DatapathToComb.h"
+#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "datapath-to-comb"
@@ -40,11 +43,11 @@ namespace {
 // Replace compressor by an adder of the inputs and zero for the other results:
 // compress(a,b,c,d) -> {a+b+c+d, 0}
 // Facilitates use of downstream compression algorithms e.g. Yosys
-struct DatapathCompressOpAddConversion : OpConversionPattern<CompressOp> {
-  using OpConversionPattern<CompressOp>::OpConversionPattern;
+struct DatapathCompressOpAddConversion : mlir::OpRewritePattern<CompressOp> {
+  using mlir::OpRewritePattern<CompressOp>::OpRewritePattern;
   LogicalResult
-  matchAndRewrite(CompressOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
+  matchAndRewrite(CompressOp op,
+                  mlir::PatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
     unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
@@ -60,11 +63,14 @@ struct DatapathCompressOpAddConversion : OpConversionPattern<CompressOp> {
 };
 
 // Replace compressor by a wallace tree of full-adders
-struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
-  using OpConversionPattern<CompressOp>::OpConversionPattern;
+struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
+  DatapathCompressOpConversion(MLIRContext *context,
+                               aig::IncrementalLongestPathAnalysis *analysis)
+      : mlir::OpRewritePattern<CompressOp>(context), analysis(analysis) {}
+
   LogicalResult
-  matchAndRewrite(CompressOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
+  matchAndRewrite(CompressOp op,
+                  mlir::PatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
     unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
@@ -76,29 +82,49 @@ struct DatapathCompressOpConversion : OpConversionPattern<CompressOp> {
     }
 
     // Wallace tree reduction
-    // TODO - implement a more efficient compression algorithm to compete with
+    // TODO: Implement a more efficient compression algorithm to compete with
     // yosys's `alumacc` lowering - a coarse grained timing model would help to
     // sort the inputs according to arrival time.
     auto targetAddends = op.getNumResults();
+    if (analysis) {
+      // Sort the addends row based on the delay of the input.
+      for (size_t j = 0; j < addends[0].size(); ++j) {
+        SmallVector<std::pair<int64_t, Value>> delays;
+        for (auto &addend : addends) {
+          auto delay = analysis->getOrComputeMaxDelay(addend[j], 0);
+          if (failed(delay))
+            return rewriter.notifyMatchFailure(op,
+                                               "Failed to get delay for input");
+          delays.push_back(std::make_pair(*delay, addend[j]));
+        }
+        std::stable_sort(delays.begin(), delays.end(),
+                         [](const std::pair<int64_t, Value> &a,
+                            const std::pair<int64_t, Value> &b) {
+                           return a.first < b.first;
+                         });
+        for (size_t i = 0; i < addends.size(); ++i)
+          addends[i][j] = delays[i].second;
+      }
+    }
     rewriter.replaceOp(op, comb::wallaceReduction(rewriter, loc, width,
                                                   targetAddends, addends));
     return success();
   }
+
+private:
+  aig::IncrementalLongestPathAnalysis *analysis = nullptr;
 };
 
-struct DatapathPartialProductOpConversion
-    : OpConversionPattern<PartialProductOp> {
-  using OpConversionPattern<PartialProductOp>::OpConversionPattern;
+struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
+  using OpRewritePattern<PartialProductOp>::OpRewritePattern;
 
   DatapathPartialProductOpConversion(MLIRContext *context, bool forceBooth)
-      : OpConversionPattern<PartialProductOp>(context),
-        forceBooth(forceBooth){};
+      : OpRewritePattern<PartialProductOp>(context), forceBooth(forceBooth){};
 
   const bool forceBooth;
 
-  LogicalResult
-  matchAndRewrite(PartialProductOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(PartialProductOp op,
+                                PatternRewriter &rewriter) const override {
 
     Value a = op.getLhs();
     Value b = op.getRhs();
@@ -118,8 +144,8 @@ struct DatapathPartialProductOpConversion
   }
 
 private:
-  static LogicalResult lowerAndArray(ConversionPatternRewriter &rewriter,
-                                     Value a, Value b, PartialProductOp op,
+  static LogicalResult lowerAndArray(PatternRewriter &rewriter, Value a,
+                                     Value b, PartialProductOp op,
                                      unsigned width) {
 
     Location loc = op.getLoc();
@@ -145,8 +171,8 @@ private:
     return success();
   }
 
-  static LogicalResult lowerBoothArray(ConversionPatternRewriter &rewriter,
-                                       Value a, Value b, PartialProductOp op,
+  static LogicalResult lowerBoothArray(PatternRewriter &rewriter, Value a,
+                                       Value b, PartialProductOp op,
                                        unsigned width) {
     Location loc = op.getLoc();
     auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
@@ -254,25 +280,52 @@ struct ConvertDatapathToCombPass
 };
 } // namespace
 
+static LogicalResult applyPatternsGreedilyWithTimingInfo(
+    Operation *op, RewritePatternSet &&patterns,
+    aig::IncrementalLongestPathAnalysis *analysis) {
+  // TODO: Topologically sort the operations in the module to ensure that all
+  // dependencies are processed before their users.
+  mlir::GreedyRewriteConfig config;
+  // Set the listener to update timing information
+  // HACK: Setting max iterations to 2 to ensure that the patterns are one-shot,
+  // making sure target operations are datapath operations are replaced.
+  config.setMaxIterations(2).setListener(analysis).setUseTopDownTraversal(true);
+
+  // Apply the patterns greedily
+  if (failed(mlir::applyPatternsGreedily(op, std::move(patterns), config)))
+    return failure();
+
+  return success();
+}
+
 void ConvertDatapathToCombPass::runOnOperation() {
-  ConversionTarget target(getContext());
-
-  target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-  target.addIllegalDialect<DatapathDialect>();
-
   RewritePatternSet patterns(&getContext());
 
   patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
                                                    forceBooth);
-
+  aig::IncrementalLongestPathAnalysis *analysis = nullptr;
+  if (timingAware)
+    analysis = &getAnalysis<aig::IncrementalLongestPathAnalysis>();
   if (lowerCompressToAdd)
     // Lower compressors to simple add operations for downstream optimisations
     patterns.add<DatapathCompressOpAddConversion>(patterns.getContext());
   else
     // Lower compressors to a complete gate-level implementation
-    patterns.add<DatapathCompressOpConversion>(patterns.getContext());
+    patterns.add<DatapathCompressOpConversion>(patterns.getContext(), analysis);
 
-  if (failed(mlir::applyPartialConversion(getOperation(), target,
-                                          std::move(patterns))))
+  if (failed(applyPatternsGreedilyWithTimingInfo(
+          getOperation(), std::move(patterns), analysis)))
+    return signalPassFailure();
+
+  // Verify that all Datapath operations have been successfully converted.
+  // Walk the operation and check for any remaining Datapath dialect operations.
+  auto result = getOperation()->walk([&](Operation *op) {
+    if (llvm::isa_and_nonnull<datapath::DatapathDialect>(op->getDialect())) {
+      op->emitError("Datapath operation not converted: ") << *op;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  if (result.wasInterrupted())
     return signalPassFailure();
 }

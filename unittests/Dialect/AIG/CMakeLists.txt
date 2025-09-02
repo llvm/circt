@@ -8,6 +8,9 @@ target_link_libraries(CIRCTAIGTests
   CIRCTHW
   CIRCTSeq
   CIRCTAIGAnalysis
+  CIRCTHWTransforms
+  CIRCTCombToAIG
+  MLIRTransforms
   MLIRIR
   MLIRParser
 )
