@@ -81,41 +81,9 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
           extractBits(rewriter, input)); // Extract bits from each input
     }
 
-    // Wallace tree reduction
-    // TODO: Implement a more efficient compression algorithm to compete with
-    // yosys's `alumacc` lowering - a coarse grained timing model would help to
-    // sort the inputs according to arrival time.
-    auto targetAddends = op.getNumResults();
-    if (analysis) {
-      // Sort the addends row based on the delay of the input.
-      for (size_t j = 0; j < addends[0].size(); ++j) {
-        SmallVector<std::pair<int64_t, Value>> delays;
-        for (auto &addend : addends) {
-          auto delay = analysis->getOrComputeMaxDelay(addend[j], 0);
-          if (failed(delay))
-            return rewriter.notifyMatchFailure(op,
-                                               "Failed to get delay for input");
-          delays.push_back(std::make_pair(*delay, addend[j]));
-        }
-        std::stable_sort(delays.begin(), delays.end(),
-                         [](const std::pair<int64_t, Value> &a,
-                            const std::pair<int64_t, Value> &b) {
-                           return a.first < b.first;
-                         });
-        for (size_t i = 0; i < addends.size(); ++i)
-          addends[i][j] = delays[i].second;
-      }
-    }
-    rewriter.replaceOp(op, comb::wallaceReduction(rewriter, loc, width,
-                                                  targetAddends, addends));
     // Compressor tree reduction
-    // TODO - implement a more efficient compression algorithm to compete with
-    // yosys's `alumacc` lowering - a coarse grained timing model would help to
-    // sort the inputs according to arrival time.
     auto targetAddends = op.getNumResults();
-    comb::CompressorTree comp(addends, loc);
-    // For benchmarking purposes, can disable timing driven compression
-    comp.setUsingTiming(useTiming);
+    datapath::CompressorTree comp(addends, analysis, loc);
     rewriter.replaceOp(op, comp.compressToHeight(rewriter, targetAddends));
     return success();
   }
@@ -172,9 +140,16 @@ private:
       auto repl =
           rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], width);
       auto ppRow = rewriter.createOrFold<comb::AndOp>(loc, repl, a);
-      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(width, i));
-      auto ppAlign = comb::ShlOp::create(rewriter, loc, ppRow, shiftBy);
-      partialProducts.push_back(ppAlign);
+      if (i == 0) {
+        partialProducts.push_back(ppRow);
+        continue;
+      }
+      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i, 0));
+      auto ppAlign =
+          comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
+      auto ppAlignTrunc = rewriter.createOrFold<comb::ExtractOp>(
+          loc, ppAlign, 0, width); // Truncate to width+i bits
+      partialProducts.push_back(ppAlignTrunc);
     }
 
     rewriter.replaceOp(op, partialProducts);
@@ -411,21 +386,5 @@ void ConvertDatapathToCombPass::runOnOperation() {
     return WalkResult::advance();
   });
   if (result.wasInterrupted())
-    return signalPassFailure();
-
-  // Lower Compress operators last to expose known bits
-  RewritePatternSet compressorPatterns(&getContext());
-  target.addIllegalOp<datapath::CompressOp>();
-  if (lowerCompressToAdd)
-    // Lower compressors to simple add operations for downstream optimisations
-    compressorPatterns.add<DatapathCompressOpAddConversion>(
-        compressorPatterns.getContext());
-  else
-    // Lower compressors to a complete gate-level implementation
-    compressorPatterns.add<DatapathCompressOpConversion>(
-        compressorPatterns.getContext(), timingDrivenCompressor);
-
-  if (failed(mlir::applyPartialConversion(getOperation(), target,
-                                          std::move(compressorPatterns))))
     return signalPassFailure();
 }

@@ -13,6 +13,7 @@
 #include "circt/Conversion/CombToAIG.h"
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Datapath/DatapathOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Naming.h"
 #include "mlir/Pass/Pass.h"
@@ -724,7 +725,7 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
     }
 
     // Wallace tree reduction - reduce to two addends.
-    comb::CompressorTree comp(partialProducts, loc);
+    datapath::CompressorTree comp(partialProducts, nullptr, loc);
     auto addends = comp.compressToHeight(rewriter, 2);
 
     // Sum the two addends using a carry-propagate adder

@@ -11,10 +11,90 @@
 
 #include "mlir/IR/OpImplementation.h"
 
+#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Datapath/DatapathDialect.h"
 #include "circt/Dialect/HW/HWTypes.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Datapath/Datapath.h.inc"
+
+namespace circt {
+namespace datapath {
+
+struct CompressorBit {
+  Value val;
+  size_t delay;
+};
+
+std::pair<CompressorBit, CompressorBit>
+fullAdderWithDelay(OpBuilder &builder, Location loc, CompressorBit a,
+                   CompressorBit b, CompressorBit c);
+
+std::pair<CompressorBit, CompressorBit> halfAdderWithDelay(OpBuilder &builder,
+                                                           Location loc,
+                                                           CompressorBit a,
+                                                           CompressorBit b);
+class CompressorTree {
+public:
+  // Constructor takes addends as input and converts to column representation
+  CompressorTree(const SmallVector<SmallVector<Value>> &addends,
+                 aig::IncrementalLongestPathAnalysis *analysis, Location loc);
+
+  // Get the number of columns (bit positions)
+  size_t getWidth() const { return columns.size(); }
+
+  // Get the maximum height of the addend array
+  size_t getMaxHeight() const;
+
+  // Get the target height of next stage
+  size_t getNextStageTargetHeight() const;
+
+  // Apply a compression step (reduce columns with >2 bits using compressors)
+  SmallVector<Value> compressToHeight(OpBuilder &builder, size_t targetHeight);
+
+  // Debug: print the tree structure
+  void dump() const;
+
+private:
+  // Original addends representation as bitvectors (kept for reference)
+  SmallVector<SmallVector<Value>> originalAddends;
+
+  // Column-wise bit storage - columns[i] contains all bits at bit position i
+  SmallVector<SmallVector<CompressorBit>> columns;
+
+  // Whether to use a timing driven compression algorithm
+  // If true, use a timing driven compression algorithm (Dadda's algorithm).
+  // If false, use a simple compression algorithm (e.g., Wallace).
+  bool usingTiming;
+
+  // Bitwidth of compressor tree
+  size_t width;
+
+  // Number of reduction stages
+  size_t numStages;
+
+  // Number of full adders used
+  size_t numFullAdders;
+
+  // Location of compressor to replace
+  Location loc;
+
+  SmallVector<Value> columnsToAddends(OpBuilder &builder, size_t targetHeight);
+
+  // Perform timing driven compression using Dadda's algorithm
+  SmallVector<Value> compressUsingTiming(OpBuilder &builder,
+                                         size_t targetHeight);
+
+  // Perform Wallace tree reduction on partial products.
+  // See https://en.wikipedia.org/wiki/Wallace_tree
+  SmallVector<Value> compressWithoutTiming(OpBuilder &builder,
+                                           size_t targetHeight);
+
+  // Helper method to extract bit at position from a value
+  Value extractBit(Value val, unsigned bitPos) const;
+};
+
+} // namespace datapath
+} // namespace circt
 
 #endif // CIRCT_DIALECT_DATAPATH_DATAPATHOPS_H
