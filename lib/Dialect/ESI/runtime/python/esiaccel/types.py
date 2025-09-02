@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 import sys
-import traceback
 
 
 def _get_esi_type(cpp_type: cpp.Type):
@@ -521,17 +520,13 @@ class CallbackPort(BundlePort):
 
     def type_convert_wrapper(cb: Callable[[Any], Any],
                              msg: bytearray) -> Optional[bytearray]:
-      try:
-        (obj, leftover) = self.arg_type.deserialize(msg)
-        if len(leftover) != 0:
-          raise ValueError(f"leftover bytes: {leftover}")
-        result = cb(obj)
-        if result is None:
-          return None
-        return self.result_type.serialize(result)
-      except Exception as e:
-        traceback.print_exception(e)
+      (obj, leftover) = self.arg_type.deserialize(msg)
+      if len(leftover) != 0:
+        raise ValueError(f"leftover bytes: {leftover}")
+      result = cb(obj)
+      if result is None:
         return None
+      return self.result_type.serialize(result)
 
     self.cpp_port.connect(lambda x: type_convert_wrapper(cb=cb, msg=x))
     self.connected = True
