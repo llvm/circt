@@ -525,7 +525,14 @@ class CallbackPort(BundlePort):
         (obj, leftover) = self.arg_type.deserialize(msg)
         if len(leftover) != 0:
           raise ValueError(f"leftover bytes: {leftover}")
-        result = cb(obj)
+
+        # Unpack dictionary arguments, allowing for more pythonic callbacks with
+        # named arguments.
+        if isinstance(obj, dict):
+          result = cb(**obj)
+        else:
+          result = cb(obj)
+
         if result is None:
           return None
         return self.result_type.serialize(result)
