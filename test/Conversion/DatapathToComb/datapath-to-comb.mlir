@@ -90,8 +90,8 @@ hw.module @partial_product_booth(in %a : i3, in %b : i3, out pp0 : i3, out pp1 :
 // CHECK-LABEL: @partial_product_booth_zext
 // FORCE-BOOTH-LABEL: @partial_product_booth_zext
 hw.module @partial_product_booth_zext(in %a : i3, in %b : i3, out pp0 : i6, out pp1 : i6, out pp2 : i6) {
-  // FORCE-BOOTH-NEXT: %true = hw.constant true
   // FORCE-BOOTH-NEXT: %c0_i6 = hw.constant 0 : i6
+  // FORCE-BOOTH-NEXT: %true = hw.constant true
   // FORCE-BOOTH-NEXT: %false = hw.constant false
   // FORCE-BOOTH-NEXT: %[[A:.*]] = comb.concat %false, %a : i1, i3
   // FORCE-BOOTH-NEXT: %[[TWOA:.*]] = comb.concat %a, %false : i3, i1
