@@ -262,6 +262,8 @@ class StructType(ESIType):
 
   def serialize(self, obj) -> bytearray:
     ret = bytearray()
+    if not isinstance(obj, dict):
+      obj = obj.__dict__
     for (fname, ftype) in reversed(self.fields):
       fval = obj[fname]
       ret.extend(ftype.serialize(fval))
