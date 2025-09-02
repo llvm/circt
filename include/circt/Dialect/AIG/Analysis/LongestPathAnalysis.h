@@ -29,6 +29,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/JSON.h"
 #include <variant>
 
@@ -172,14 +173,43 @@ private:
 // JSON serialization for DataflowPath
 llvm::json::Value toJSON(const circt::aig::DataflowPath &path);
 
-// Options for the longest path analysis.
+/// Configuration options for the longest path analysis.
+///
+/// This struct controls various aspects of the analysis behavior, including
+/// debugging features, computation modes, and optimization settings. Different
+/// combinations of options are suitable for different use cases.
+///
+/// Example usage:
+///   // For timing-driven optimization with debug info
+///   LongestPathAnalysisOption options(true, true, false);
+///
+///   // For fast critical path identification only
+///   LongestPathAnalysisOption options(false, false, true);
 struct LongestPathAnalysisOption {
-  bool traceDebugPoints = false;
-  bool incremental = false;
+  /// Enable collection of debug points along timing paths.
+  /// When enabled, records intermediate points with delay values and comments
+  /// for debugging, visualization, and understanding delay contributions.
+  /// Moderate performance impact.
+  bool collectDebugInfo = false;
 
-  LongestPathAnalysisOption(bool traceDebugPoints, bool incremental)
-      : traceDebugPoints(traceDebugPoints), incremental(incremental) {}
-  LongestPathAnalysisOption() = default;
+  /// Enable lazy computation mode for on-demand analysis.
+  /// Performs delay computations lazily and caches results, tracking IR
+  /// changes. Better for iterative workflows where only specific paths
+  /// are queried. Disables parallel processing.
+  bool lazyComputation = false;
+
+  /// Keep only the maximum delay path per fanout point.
+  /// Focuses on finding maximum delays, discarding non-critical paths.
+  /// Significantly faster and uses less memory when only delay bounds
+  /// are needed rather than complete path enumeration.
+  bool keepOnlyMaxDelayPaths = false;
+
+  /// Construct analysis options with the specified settings.
+  LongestPathAnalysisOption(bool collectDebugInfo = false,
+                            bool lazyComputation = false,
+                            bool keepOnlyMaxDelayPaths = false)
+      : collectDebugInfo(collectDebugInfo), lazyComputation(lazyComputation),
+        keepOnlyMaxDelayPaths(keepOnlyMaxDelayPaths) {}
 };
 
 // This analysis finds the longest paths in the dataflow graph across modules.
@@ -197,17 +227,22 @@ public:
 
   // Return all longest paths to each Fanin for the given value and bit
   // position.
-  LogicalResult getResults(Value value, size_t bitPos,
-                           SmallVectorImpl<DataflowPath> &results) const;
+  LogicalResult computeGlobalPaths(Value value, size_t bitPos,
+                                   SmallVectorImpl<DataflowPath> &results);
 
-  // Return the maximum delay to the given value for all bit positions.
-  int64_t getMaxDelay(Value value) const;
+  // Compute local paths for specified value and bit. Local paths are paths
+  // that are fully contained within a module.
+  FailureOr<ArrayRef<OpenPath>> computeLocalPaths(Value value, size_t bitPos);
+
+  // Return the maximum delay to the given value and bit position. If bitPos is
+  // negative, then return the maximum delay across all bits.
+  FailureOr<int64_t> getMaxDelay(Value value, int64_t bitPos = -1);
 
   // Return the average of the maximum delays across all bits of the given
   // value, which is useful approximation for the delay of the value. For each
   // bit position, finds all paths and takes the maximum delay. Then averages
   // these maximum delays across all bits of the value.
-  int64_t getAverageMaxDelay(Value value) const;
+  FailureOr<int64_t> getAverageMaxDelay(Value value);
 
   // Return paths that are closed under the given module. Closed paths are
   // typically register-to-register paths. A closed path is a path that starts
@@ -264,6 +299,7 @@ protected:
 
 private:
   mlir::MLIRContext *ctx;
+  bool isAnalysisValid = true;
 };
 
 // Incremental version of longest path analysis that supports on-demand
@@ -272,14 +308,20 @@ class IncrementalLongestPathAnalysis : private LongestPathAnalysis,
                                        public mlir::PatternRewriter::Listener {
 public:
   IncrementalLongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am)
-      : LongestPathAnalysis(moduleOp, am,
-                            LongestPathAnalysisOption(false, true)) {}
+      : LongestPathAnalysis(
+            moduleOp, am,
+            LongestPathAnalysisOption(/*collectDebugInfo=*/false,
+                                      /*lazyComputation=*/true,
+                                      /*keepOnlyMaxDelayPaths=*/true)) {}
 
-  // Compute maximum delay for specified value and bit.
-  FailureOr<int64_t> getOrComputeMaxDelay(Value value, size_t bitPos);
+  IncrementalLongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am,
+                                 const LongestPathAnalysisOption &option)
+      : LongestPathAnalysis(moduleOp, am, option) {
+    assert(option.lazyComputation && "Lazy computation must be enabled");
+  }
 
-  // Compute all paths for specified value and bit.
-  FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
+  using LongestPathAnalysis::getAverageMaxDelay;
+  using LongestPathAnalysis::getMaxDelay;
 
   // Check if operation can be safely modified without invalidating analysis.
   bool isOperationValidToMutate(Operation *op) const;
@@ -288,17 +330,6 @@ public:
   void notifyOperationModified(Operation *op) override;
   void notifyOperationReplaced(Operation *op, ValueRange replacement) override;
   void notifyOperationErased(Operation *op) override;
-
-private:
-  bool isAnalysisValid = true;
-};
-
-// A wrapper class for the longest path analysis that also traces debug points.
-// This is necessary for analysis manager to cache the analysis results.
-class LongestPathAnalysisWithTrace : public LongestPathAnalysis {
-public:
-  LongestPathAnalysisWithTrace(Operation *moduleOp, mlir::AnalysisManager &am)
-      : LongestPathAnalysis(moduleOp, am, {true, false}) {}
 };
 
 // A collection of longest paths. The data structure owns the paths, and used
@@ -315,6 +346,9 @@ public:
 
   // Sort and drop all paths except the longest path per fanout point.
   void sortAndDropNonCriticalPathsPerFanOut();
+
+  // Merge another collection into this one.
+  void merge(const LongestPathCollection &other);
 
 private:
   MLIRContext *ctx;

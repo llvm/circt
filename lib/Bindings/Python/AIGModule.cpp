@@ -32,14 +32,31 @@ void circt::python::populateDialectAIGSubmodule(nb::module_ &m) {
       .def(
           "__init__",
           [](AIGLongestPathAnalysis *self, MlirOperation module,
-             bool traceDebugPoints) {
-            new (self) AIGLongestPathAnalysis(
-                aigLongestPathAnalysisCreate(module, traceDebugPoints));
+             bool collectDebugInfo, bool keepOnlyMaxDelayPaths,
+             bool lazyComputation) {
+            new (self) AIGLongestPathAnalysis(aigLongestPathAnalysisCreate(
+                module, collectDebugInfo, keepOnlyMaxDelayPaths,
+                lazyComputation));
           },
-          nb::arg("module"), nb::arg("trace_debug_points") = true)
+          nb::arg("module"), nb::arg("collect_debug_info") = false,
+          nb::arg("keep_only_max_delay_paths") = false,
+          nb::arg("lazy_computation") = false)
       .def("__del__",
            [](AIGLongestPathAnalysis &self) {
              aigLongestPathAnalysisDestroy(self);
+           })
+      .def("get_paths",
+           [](AIGLongestPathAnalysis *self, MlirValue value, int64_t bitPos,
+              bool elaboratePaths) -> AIGLongestPathCollection {
+             auto collection =
+                 AIGLongestPathCollection(aigLongestPathAnalysisGetPaths(
+                     *self, value, bitPos, elaboratePaths));
+
+             if (aigLongestPathCollectionIsNull(collection))
+               throw nb::value_error(
+                   "Failed to get all paths, see previous error(s).");
+
+             return collection;
            })
       .def("get_all_paths",
            [](AIGLongestPathAnalysis *self, const std::string &moduleName,
@@ -71,6 +88,10 @@ void circt::python::populateDialectAIGSubmodule(nb::module_ &m) {
            [](AIGLongestPathCollection &self,
               int pathIndex) -> AIGLongestPathDataflowPath {
              return aigLongestPathCollectionGetDataflowPath(self, pathIndex);
+           })
+      .def("merge",
+           [](AIGLongestPathCollection &self, AIGLongestPathCollection &src) {
+             aigLongestPathCollectionMerge(self, src);
            });
 
   nb::class_<AIGLongestPathDataflowPath>(m, "_LongestPathDataflowPath")

@@ -321,6 +321,16 @@ class LongestPathCollection:
     print(f"99th percentile delay: {self.get_by_delay_ratio(0.99).delay}")
     print(f"99.9th percentile delay: {self.get_by_delay_ratio(0.999).delay}")
 
+  def merge(self, src: "LongestPathCollection"):
+    """
+        Merge another collection into this one.
+        Args:
+            src: The collection to merge into this one
+    """
+    self.collection.merge(src.collection)
+    # Re-initialize to reflect the merged collection
+    self.__init__(self.collection)
+
 
 # ============================================================================
 # Main Analysis Interface
@@ -337,22 +347,48 @@ class LongestPathAnalysis:
         analysis: The underlying C++ analysis object
     """
 
-  def __init__(self, module, trace_debug_points: bool = True):
+  def __init__(self,
+               module,
+               collect_debug_info: bool = True,
+               keep_only_max_delay_paths: bool = False,
+               lazy_computation: bool = False):
     """
         Initialize the longest path analysis for a given module.
         Args:
             module: The MLIR module to analyze
-            trace_debug_points: Whether to include debug points in the analysis.
-                              The debug points provide additional information about the path,
-                              but increase the analysis time and memory usage.
+            collect_debug_info: Whether to include debug points in the analysis.
+                                Debug points provide additional information about the path,
+                                but increase analysis time and memory usage.
+            keep_only_max_delay_paths: Keep only maximum-delay paths in collections.
+            lazy_computation: Enable lazy (on-demand) computation.
         """
-    self.analysis = aig._LongestPathAnalysis(module, trace_debug_points)
+    self.analysis = aig._LongestPathAnalysis(module, collect_debug_info,
+                                             keep_only_max_delay_paths,
+                                             lazy_computation)
+
+  def get_paths(self,
+                value,
+                bit_pos: int,
+                elaborate_paths: bool = True) -> LongestPathCollection:
+    """
+        Perform longest path analysis and return all timing paths to the
+        specified value and bit position.
+        Args:
+            value: The value to analyze
+            bit_pos: The bit position to analyze
+            elaborate_paths: Whether to elaborate the paths with detailed information
+        Returns:
+            LongestPathCollection containing all paths sorted by delay
+      """
+    return LongestPathCollection(
+        self.analysis.get_paths(value, bit_pos, elaborate_paths))
 
   def get_all_paths(self,
                     module_name: str,
                     elaborate_paths: bool = True) -> LongestPathCollection:
     """
-        Perform longest path analysis and return all timing paths.
+        Perform longest path analysis and return all timing paths in side
+        the module hierarchy.
         This method analyzes the specified module and returns a collection
         of all timing paths, sorted by delay in descending order.
         Args:

@@ -92,7 +92,7 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
       for (size_t j = 0; j < addends[0].size(); ++j) {
         SmallVector<std::pair<int64_t, Value>> delays;
         for (auto &addend : addends) {
-          auto delay = analysis->getOrComputeMaxDelay(addend[j], 0);
+          auto delay = analysis->getMaxDelay(addend[j], 0);
           if (failed(delay))
             return rewriter.notifyMatchFailure(op,
                                                "Failed to get delay for input");

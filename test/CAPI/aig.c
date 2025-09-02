@@ -61,7 +61,7 @@ void testLongestPathAnalysis(void) {
   // Test with debug points enabled
   {
     AIGLongestPathAnalysis analysis =
-        aigLongestPathAnalysisCreate(moduleOp, true);
+        aigLongestPathAnalysisCreate(moduleOp, true, false, false);
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     AIGLongestPathCollection collection1 =
@@ -156,7 +156,7 @@ void testLongestPathAnalysis(void) {
   // Test without debug points
   {
     AIGLongestPathAnalysis analysis =
-        aigLongestPathAnalysisCreate(moduleOp, false);
+        aigLongestPathAnalysisCreate(moduleOp, false, false, false);
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     AIGLongestPathCollection collection =
@@ -205,7 +205,7 @@ void testErrorHandling(void) {
   MlirOperation moduleOp = mlirModuleGetOperation(module);
 
   AIGLongestPathAnalysis analysis =
-      aigLongestPathAnalysisCreate(moduleOp, true);
+      aigLongestPathAnalysisCreate(moduleOp, true, false, false);
 
   MlirStringRef invalidModuleName = mlirStringRefCreateFromCString("unknown");
   AIGLongestPathCollection invalidCollection =
@@ -222,10 +222,80 @@ void testErrorHandling(void) {
   mlirContextDestroy(ctx);
 }
 
+void testGetPathsAndMerge(void) {
+  MlirContext ctx = mlirContextCreate();
+  mlirDialectHandleLoadDialect(mlirGetDialectHandle__aig__(), ctx);
+  mlirDialectHandleLoadDialect(mlirGetDialectHandle__hw__(), ctx);
+
+  // Minimal IR: single module with two aig.and_inv ops to produce two values.
+  // clang-format off
+  const char *moduleStr =
+      "hw.module @m(in %a : i1, in %b: i1, out x: i1) {\n"
+      "  %q = aig.and_inv %a, %b : i1\n"
+      "  %r = aig.and_inv %q, %b : i1\n"
+      "  hw.output %r: i1\n"
+      "}\n";
+  // clang-format on
+
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(moduleStr));
+  MlirOperation moduleOp = mlirModuleGetOperation(module);
+
+  // Create analysis (enable only-max-delay to keep collections small and
+  // stable).
+  AIGLongestPathAnalysis analysis =
+      aigLongestPathAnalysisCreate(moduleOp, /*collectDebugInfo=*/false,
+                                   /*keepOnlyMaxDelayPaths=*/true,
+                                   /*lazyComputation=*/false);
+
+  // Navigate to @m body and grab the two aig.and_inv results.
+  MlirRegion topRegion0 = mlirOperationGetRegion(moduleOp, 0);
+  MlirBlock topBlock0 = mlirRegionGetFirstBlock(topRegion0);
+  MlirOperation hwModule = mlirBlockGetFirstOperation(topBlock0);
+
+  MlirRegion mRegion = mlirOperationGetRegion(hwModule, 0);
+  MlirBlock mBlock = mlirRegionGetFirstBlock(mRegion);
+  MlirOperation and1 = mlirBlockGetFirstOperation(mBlock);
+  MlirOperation and2 = mlirOperationGetNextInBlock(and1);
+
+  MlirValue val1 = mlirOperationGetResult(and1, 0);
+  MlirValue val2 = mlirOperationGetResult(and2, 0);
+
+  AIGLongestPathCollection col1 =
+      aigLongestPathAnalysisGetPaths(analysis, val1, /*bitPos=*/0,
+                                     /*elaboratePaths=*/false);
+  AIGLongestPathCollection col2 =
+      aigLongestPathAnalysisGetPaths(analysis, val2, /*bitPos=*/0,
+                                     /*elaboratePaths=*/false);
+
+  bool ok = !aigLongestPathCollectionIsNull(col1) &&
+            !aigLongestPathCollectionIsNull(col2) &&
+            (aigLongestPathCollectionGetSize(col1) > 0) &&
+            (aigLongestPathCollectionGetSize(col2) > 0);
+  printf("C API get_paths non-empty: %s\n", ok ? "PASS" : "FAIL");
+  // CHECK: C API get_paths non-empty: PASS
+
+  size_t s1 = aigLongestPathCollectionGetSize(col1);
+  size_t s2 = aigLongestPathCollectionGetSize(col2);
+  aigLongestPathCollectionMerge(col1, col2);
+  size_t sMerged = aigLongestPathCollectionGetSize(col1);
+  bool mergedOk = sMerged == s1 + s2;
+  printf("C API collection merge: %s (s1=%zu, s2=%zu, merged=%zu)\n",
+         mergedOk ? "PASS" : "FAIL", s1, s2, sMerged);
+  // CHECK: C API collection merge: PASS
+
+  aigLongestPathCollectionDestroy(col1);
+  aigLongestPathCollectionDestroy(col2);
+  aigLongestPathAnalysisDestroy(analysis);
+  mlirModuleDestroy(module);
+  mlirContextDestroy(ctx);
+}
+
 int main(void) {
   testAIGDialectRegistration();
   testLongestPathAnalysis();
   testErrorHandling();
+  testGetPathsAndMerge();
 
   printf("=== All tests completed ===\n");
   // CHECK: === All tests completed ===

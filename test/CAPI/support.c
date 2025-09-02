@@ -56,7 +56,7 @@ void testInstancePath(void) {
   // APIs.
 
   AIGLongestPathAnalysis analysis =
-      aigLongestPathAnalysisCreate(moduleOp, true);
+      aigLongestPathAnalysisCreate(moduleOp, true, false, false);
 
   MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
   AIGLongestPathCollection collection =

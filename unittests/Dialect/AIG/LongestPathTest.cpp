@@ -251,7 +251,7 @@ TEST(LongestPathTest, Incremental) {
 
   // Compute delay for add operation (bit 1)
   // This should trigger analysis and mark the add operation as analyzed
-  auto delayAdd = longestPath.getOrComputeMaxDelay(add.getResult(), 1);
+  auto delayAdd = longestPath.getMaxDelay(add.getResult(), 1);
   ASSERT_TRUE(succeeded(delayAdd));
   ASSERT_EQ(*delayAdd, 5);
   // Once analyzed, the add operation cannot be safely mutated since it's been
@@ -262,7 +262,7 @@ TEST(LongestPathTest, Incremental) {
 
   // Now compute delay for mul operation (bit 1)
   // This depends on the add result, so it includes add's delay
-  auto delayMul = longestPath.getOrComputeMaxDelay(mul.getResult(), 1);
+  auto delayMul = longestPath.getMaxDelay(mul.getResult(), 1);
   ASSERT_TRUE(succeeded(delayMul));
   ASSERT_EQ(*delayMul, 8);
   // After analysis, mul can no longer be safely mutated
