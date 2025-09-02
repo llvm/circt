@@ -46,6 +46,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LogicalResult.h"
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -424,11 +425,6 @@ ArrayRef<DelayType> MatchedPattern::getArrivalTimes() const {
   return arrivalTimes;
 }
 
-DelayType MatchedPattern::getWorstOutputArrivalTime() const {
-  assert(pattern && "Pattern must be set to get arrival time");
-  return *std::max_element(arrivalTimes.begin(), arrivalTimes.end());
-}
-
 DelayType MatchedPattern::getArrivalTime(unsigned index) const {
   assert(pattern && "Pattern must be set to get arrival time");
   return arrivalTimes[index];
@@ -550,70 +546,54 @@ void CutSet::finalize(
   }
 
   // Step 3: Sort cuts by priority to select the best ones
-  // Priority is determined by timing optimization strategy:
+  // Priority is determined by the optimization strategy:
   // - Trivial cuts (direct connections) have highest priority
-  // - Among matched cuts, prefer better timing then lower complexity
+  // - Among matched cuts, compare by area/delay based on the strategy
   // - Matched cuts are preferred over unmatched cuts
-  // TODO: This is for timing strategy only. We need different heuristics for
-  // area strategy.
+  // See "Combinational and Sequential Mapping with Priority Cuts" by Mishchenko
+  // et al., ICCAD 2007 for more details.
   // TODO: Use a priority queue instead of sorting for better performance.
-  std::stable_sort(cuts.begin(), cuts.end(),
-                   [](const Cut &a, const Cut &b) -> bool {
-                     // Trivial cuts always have the highest priority since they
-                     // represent direct connections with no logic delay
-                     if (a.isTrivialCut() || b.isTrivialCut())
-                       return a.isTrivialCut();
+  std::stable_sort(
+      cuts.begin(), cuts.end(), [&options](const Cut &a, const Cut &b) -> bool {
+        // Trivial cuts always have the highest priority since they
+        // represent direct connections with no logic delay
+        if (a.isTrivialCut() || b.isTrivialCut())
+          return a.isTrivialCut();
 
-                     const auto &aMatched = a.getMatchedPattern();
-                     const auto &bMatched = b.getMatchedPattern();
+        const auto &aMatched = a.getMatchedPattern();
+        const auto &bMatched = b.getMatchedPattern();
 
-                     // Both cuts have matched patterns - compare by timing and
-                     // area
-                     if (aMatched && bMatched) {
-                       auto arrivalA = aMatched->getWorstOutputArrivalTime();
-                       auto arrivalB = bMatched->getWorstOutputArrivalTime();
+        // Both cuts have matched patterns.
+        if (aMatched && bMatched)
+          return compareDelayAndArea(options.strategy, aMatched->getArea(),
+                                     aMatched->getArrivalTimes(),
+                                     bMatched->getArea(),
+                                     bMatched->getArrivalTimes());
 
-                       // Prefer cuts with better (lower) arrival times for
-                       // timing optimization
-                       if (arrivalA != arrivalB)
-                         return arrivalA < arrivalB;
+        // Prefer cuts with matched patterns over those without
+        if (aMatched && !bMatched)
+          return true;
+        if (!aMatched && bMatched)
+          return false;
 
-                       // If timing is equal, prefer cuts with fewer inputs
-                       // (lower area/complexity)
-                       return a.getInputSize() < b.getInputSize();
-                     }
-
-                     // Prefer cuts with matched patterns over those without
-                     if (aMatched && !bMatched)
-                       return true;
-                     if (!aMatched && bMatched)
-                       return false;
-
-                     // Both cuts are unmatched - prefer smaller input size
-                     return a.getInputSize() < b.getInputSize();
-                   });
+        // Both cuts are unmatched - prefer smaller input size
+        return a.getInputSize() < b.getInputSize();
+      });
 
   // Step 4: Limit the number of cuts to prevent exponential growth
   // After sorting, keep only the best cuts up to the specified limit
   if (cuts.size() > options.maxCutSizePerRoot)
     cuts.resize(options.maxCutSizePerRoot);
 
-  // Step 5: Select the best cut from the remaining candidates
-  // This chooses the optimal cut based on the optimization strategy
+  // Select the best cut from the remaining candidates
   for (auto &cut : cuts) {
     const auto &currentMatch = cut.getMatchedPattern();
     if (!currentMatch)
       continue; // Skip cuts without matched patterns
 
-    // Compare this cut against the current best cut
-    if (!bestCut ||
-        compareDelayAndArea(options.strategy, currentMatch->getArea(),
-                            currentMatch->getArrivalTimes(),
-                            bestCut->getMatchedPattern()->getArea(),
-                            bestCut->getMatchedPattern()->getArrivalTimes())) {
-      // Found a better matching pattern according to the optimization strategy
-      bestCut = &cut;
-    }
+    // This is already sorted, so the first matched cut is the best.
+    bestCut = &cut;
+    break;
   }
 
   LLVM_DEBUG({
@@ -834,13 +814,15 @@ getTestVariableName(Value value, DenseMap<OperationName, unsigned> &opCounter) {
       auto count = opCounter[opName]++;
 
       // Create a unique name by appending a counter to the operation name
-      SmallString<16> nameStr(opName.getStringRef());
+      SmallString<16> nameStr;
+      nameStr += opName.getStringRef();
       nameStr += "_";
       nameStr += std::to_string(count);
 
       // Store the generated name as a hint attribute for future reference
-      op->setAttr("sv.namehint", StringAttr::get(op->getContext(), nameStr));
-      return nameStr;
+      auto nameAttr = StringAttr::get(op->getContext(), nameStr);
+      op->setAttr("sv.namehint", nameAttr);
+      return nameAttr;
     }
 
     // Multi-result operations or other cases get a generic name
@@ -873,7 +855,8 @@ void CutEnumerator::dump() const {
       llvm::outs() << "}"
                    << "@t" << cut.getTruthTable().table.getZExtValue() << "d";
       if (pattern) {
-        llvm::outs() << pattern->getWorstOutputArrivalTime();
+        llvm::outs() << *std::max_element(pattern->getArrivalTimes().begin(),
+                                          pattern->getArrivalTimes().end());
       } else {
         llvm::outs() << "0";
       }
@@ -919,7 +902,7 @@ LogicalResult CutRewriter::run(Operation *topOp) {
   if (failed(enumerateCuts(topOp)))
     return failure();
 
-  // If we are just testing the priority cuts, we are done.
+  // Dump cuts if testing priority cuts.
   if (options.testPriorityCuts) {
     cutEnumerator.dump();
     return success();
@@ -986,10 +969,10 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
 
     const auto &matchedPattern = *bestCut->getMatchedPattern();
 
-    // This must be a block argument must have been a cut input.
-    auto resultNumber = cast<mlir::OpResult>(input);
-    inputArrivalTimes.push_back(
-        matchedPattern.getArrivalTime(resultNumber.getResultNumber()));
+    // Otherwise, the cut input is an op result. Get the arrival time
+    // from the matched pattern.
+    inputArrivalTimes.push_back(matchedPattern.getArrivalTime(
+        cast<mlir::OpResult>(input).getResultNumber()));
   }
 
   auto computeArrivalTimeAndPickBest =
