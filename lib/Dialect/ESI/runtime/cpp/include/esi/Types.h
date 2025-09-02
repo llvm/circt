@@ -53,10 +53,21 @@ public:
     throw std::runtime_error("Deserialization not implemented for type " + id);
   }
 
-  /// Check if a std::any object is valid for this type. Throws
+  /// Ensure that a std::any object is valid for this type. Throws
   /// std::runtime_error if the object is not valid.
-  virtual void isValid(const std::any &obj) const {
+  virtual void ensureValid(const std::any &obj) const {
     throw std::runtime_error("Validation not implemented for type " + id);
+  }
+
+  // Check if a std::any object is valid for this type. Returns an optional
+  // error message if the object is not valid, else, std::nullopt.
+  std::optional<std::string> isValid(const std::any &obj) const {
+    try {
+      ensureValid(obj);
+      return std::nullopt;
+    } catch (const std::runtime_error &e) {
+      return e.what();
+    }
   }
 
 protected:
@@ -94,7 +105,7 @@ public:
   const Type *getInner() const { return inner; }
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 
@@ -112,7 +123,7 @@ public:
   // 'void' is 1 bit by convention.
   std::ptrdiff_t getBitWidth() const override { return 1; };
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 
@@ -148,7 +159,7 @@ class BitsType : public BitVectorType {
 public:
   using BitVectorType::BitVectorType;
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 
@@ -168,7 +179,7 @@ class SIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 
@@ -181,7 +192,7 @@ class UIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 
@@ -209,7 +220,7 @@ public:
     return size;
   }
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 
@@ -235,7 +246,7 @@ public:
     return elementSize * size;
   }
 
-  void isValid(const std::any &obj) const override;
+  void ensureValid(const std::any &obj) const override;
 
   MessageData serialize(const std::any &obj) const override;
 

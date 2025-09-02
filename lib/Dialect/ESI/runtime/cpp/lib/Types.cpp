@@ -29,8 +29,8 @@ BundleType::findChannel(std::string name) const {
       std::format("Channel '{}' not found in bundle", name));
 }
 
-void ChannelType::isValid(const std::any &obj) const {
-  return inner->isValid(obj);
+void ChannelType::ensureValid(const std::any &obj) const {
+  return inner->ensureValid(obj);
 }
 
 MessageData ChannelType::serialize(const std::any &obj) const {
@@ -42,7 +42,7 @@ ChannelType::deserialize(std::span<const uint8_t> data) const {
   return inner->deserialize(data);
 }
 
-void VoidType::isValid(const std::any &obj) const {
+void VoidType::ensureValid(const std::any &obj) const {
   // Void type should be represented by an empty std::any or nullptr
   if (!obj.has_value())
     return;
@@ -57,7 +57,7 @@ void VoidType::isValid(const std::any &obj) const {
 }
 
 MessageData VoidType::serialize(const std::any &obj) const {
-  isValid(obj);
+  ensureValid(obj);
 
   // By convention, void is represented by a single byte of value 0
   std::vector<uint8_t> data = {0};
@@ -73,7 +73,7 @@ VoidType::deserialize(std::span<const uint8_t> data) const {
   return {std::any{}, data.subspan(1)};
 }
 
-void BitsType::isValid(const std::any &obj) const {
+void BitsType::ensureValid(const std::any &obj) const {
   try {
     auto data = std::any_cast<std::vector<uint8_t>>(obj);
     size_t expectedSize = (getWidth() + 7) / 8; // Round up to nearest byte
@@ -87,7 +87,7 @@ void BitsType::isValid(const std::any &obj) const {
 }
 
 MessageData BitsType::serialize(const std::any &obj) const {
-  isValid(obj);
+  ensureValid(obj);
 
   auto data = std::any_cast<std::vector<uint8_t>>(obj);
   return MessageData(data);
@@ -106,7 +106,7 @@ BitsType::deserialize(std::span<const std::uint8_t> data) const {
   return {std::any(result), data.subspan(size)};
 }
 
-void SIntType::isValid(const std::any &obj) const {
+void SIntType::ensureValid(const std::any &obj) const {
   if (getWidth() > 64)
     throw std::runtime_error("Width exceeds 64 bits");
 
@@ -130,7 +130,7 @@ void SIntType::isValid(const std::any &obj) const {
 }
 
 MessageData SIntType::serialize(const std::any &obj) const {
-  isValid(obj);
+  ensureValid(obj);
 
   auto value = std::any_cast<int64_t>(obj);
   size_t byteSize = (getWidth() + 7) / 8;
@@ -164,7 +164,7 @@ SIntType::deserialize(std::span<const std::uint8_t> data) const {
   return {std::any(signedValue), data.subspan(byteSize)};
 }
 
-void UIntType::isValid(const std::any &obj) const {
+void UIntType::ensureValid(const std::any &obj) const {
   if (getWidth() > 64)
     throw std::runtime_error("Width exceeds 64 bits");
 
@@ -183,7 +183,7 @@ void UIntType::isValid(const std::any &obj) const {
 }
 
 MessageData UIntType::serialize(const std::any &obj) const {
-  isValid(obj);
+  ensureValid(obj);
 
   auto value = std::any_cast<uint64_t>(obj);
   size_t byteSize = (getWidth() + 7) / 8;
@@ -209,7 +209,7 @@ UIntType::deserialize(std::span<const std::uint8_t> data) const {
   return {std::any(value), data.subspan(byteSize)};
 }
 
-void StructType::isValid(const std::any &obj) const {
+void StructType::ensureValid(const std::any &obj) const {
   try {
     auto structData = std::any_cast<std::map<std::string, std::any>>(obj);
 
@@ -224,7 +224,7 @@ void StructType::isValid(const std::any &obj) const {
         throw std::runtime_error(std::format("missing field '{}'", fieldName));
 
       try {
-        fieldType->isValid(it->second);
+        fieldType->ensureValid(it->second);
       } catch (const std::runtime_error &e) {
         throw std::runtime_error(
             std::format("invalid field '{}': {}", fieldName, e.what()));
@@ -236,7 +236,7 @@ void StructType::isValid(const std::any &obj) const {
 }
 
 MessageData StructType::serialize(const std::any &obj) const {
-  isValid(obj);
+  ensureValid(obj);
 
   auto structData = std::any_cast<std::map<std::string, std::any>>(obj);
 
@@ -273,7 +273,7 @@ StructType::deserialize(std::span<const std::uint8_t> data) const {
   return {std::any(result), remaining};
 }
 
-void ArrayType::isValid(const std::any &obj) const {
+void ArrayType::ensureValid(const std::any &obj) const {
   try {
     auto arrayData = std::any_cast<std::vector<std::any>>(obj);
 
@@ -284,7 +284,7 @@ void ArrayType::isValid(const std::any &obj) const {
 
     for (size_t i = 0; i < arrayData.size(); ++i) {
       try {
-        elementType->isValid(arrayData[i]);
+        elementType->ensureValid(arrayData[i]);
       } catch (const std::runtime_error &e) {
         throw std::runtime_error(
             std::format("invalid element {}: {}", i, e.what()));
@@ -296,7 +296,7 @@ void ArrayType::isValid(const std::any &obj) const {
 }
 
 MessageData ArrayType::serialize(const std::any &obj) const {
-  isValid(obj);
+  ensureValid(obj);
 
   auto arrayData = std::any_cast<std::vector<std::any>>(obj);
 
