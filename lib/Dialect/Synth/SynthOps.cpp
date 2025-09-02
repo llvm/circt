@@ -7,9 +7,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 
 using namespace circt;
-using namespace synth;
+using namespace circt::synth::mig;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
+
+LogicalResult MajorityInverterOp::verify() {
+  if (getNumOperands() % 2 != 1)
+    return emitOpError("requires an odd number of operands");
+
+  return success();
+}
