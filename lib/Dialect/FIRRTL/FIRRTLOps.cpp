@@ -992,6 +992,7 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
       continue;
     }
     // This contains indexes to domain ports.  Update them.
+    SmallVector<Attribute> thisPortDomains;
     for (auto domain : domains) {
       // If the domain port was deleted, drop the association.
       auto oldIdx = cast<IntegerAttr>(domain).getUInt();
@@ -1004,9 +1005,10 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
         continue;
       }
       // Update the index.
-      newPortDomains.push_back(IntegerAttr::get(
+      thisPortDomains.push_back(IntegerAttr::get(
           IntegerType::get(context, 32, IntegerType::Unsigned), newIdx));
     }
+    newPortDomains.push_back(ArrayAttr::get(context, thisPortDomains));
   }
 
   return ArrayAttr::get(context, newPortDomains);
