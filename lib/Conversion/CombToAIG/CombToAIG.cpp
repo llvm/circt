@@ -1,4 +1,4 @@
-//===- CombToAIG.cpp - Comb to AIG Conversion Pass --------------*- C++ -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,15 +8,32 @@
 //
 // This is the main Comb to AIG Conversion Pass Implementation.
 //
+//  High-level Comb Operations
+//             |             |
+//             v             |
+//   +-------------------+   |
+//   | and, or, xor, mux |   |
+//   +---------+---------+   |
+//             |             |
+//     +-------+--------+    |
+//     v                v    v
+//     +-----+         +-----+
+//     | AIG |-------->| MIG |
+//     +-----+         +-----+
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CombToAIG.h"
+#include "circt/Dialect/AIG/AIGDialect.h"
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthDialect.h"
+#include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/Naming.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/Support/Debug.h"
 
@@ -93,6 +110,27 @@ static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
 
   return rewriter.createOrFold<comb::MuxOp>(loc, inBound, result,
                                             outOfBoundsValue);
+}
+
+// Return a majority operation if MIG is enabled, otherwise return a majority
+// function implemented with Comb operations. In that case `carry` has slightly
+// smaller depth than the other inputs.
+static Value createMajorityFunction(OpBuilder &rewriter, Location loc, Value a,
+                                    Value b, Value carry,
+                                    bool useMajorityInverterOp) {
+  if (useMajorityInverterOp) {
+    SmallVector<Value, 3> inputs = {a, b, carry};
+    SmallVector<bool, 3> inverts = {false, false, false};
+    return synth::mig::MajorityInverterOp::create(rewriter, loc, inputs,
+                                                  inverts);
+  }
+
+  // maj(a, b, c) = (c & (a ^ b)) | (a & b)
+  auto aXnorB = comb::XorOp::create(rewriter, loc, ValueRange{a, b}, true);
+  auto andOp =
+      comb::AndOp::create(rewriter, loc, ValueRange{carry, aXnorB}, true);
+  auto aAndB = comb::AndOp::create(rewriter, loc, ValueRange{a, b}, true);
+  return comb::OrOp::create(rewriter, loc, ValueRange{andOp, aAndB}, true);
 }
 
 namespace {
@@ -253,7 +291,7 @@ struct CombAndOpConversion : OpConversionPattern<AndOp> {
 };
 
 /// Lower a comb::OrOp operation to aig::AndInverterOp with invert flags
-struct CombOrOpConversion : OpConversionPattern<OrOp> {
+struct CombOrToAIGConversion : OpConversionPattern<OrOp> {
   using OpConversionPattern<OrOp>::OpConversionPattern;
 
   LogicalResult
@@ -265,6 +303,50 @@ struct CombOrOpConversion : OpConversionPattern<OrOp> {
                                             adaptor.getInputs(), allInverts);
     replaceOpWithNewOpAndCopyNamehint<aig::AndInverterOp>(rewriter, op, andOp,
                                                           /*invert=*/true);
+    return success();
+  }
+};
+
+struct CombOrToMIGConversion : OpConversionPattern<OrOp> {
+  using OpConversionPattern<OrOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(OrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() != 2)
+      return failure();
+    SmallVector<Value, 3> inputs(adaptor.getInputs());
+    auto one = hw::ConstantOp::create(
+        rewriter, op.getLoc(),
+        APInt::getAllOnes(hw::getBitWidth(op.getType())));
+    inputs.push_back(one);
+    SmallVector<bool, 3> inverts(inputs.size(), false);
+    replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
+        rewriter, op, inputs, inverts);
+    return success();
+  }
+};
+
+struct AndInverterToMIGConversion : OpConversionPattern<aig::AndInverterOp> {
+  using OpConversionPattern<aig::AndInverterOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(aig::AndInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() > 2)
+      return failure();
+    if (op.getNumOperands() == 1) {
+      SmallVector<bool, 1> inverts{op.getInverted()[0]};
+      replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
+          rewriter, op, adaptor.getInputs(), inverts);
+      return success();
+    }
+    SmallVector<Value, 3> inputs(adaptor.getInputs());
+    auto one = hw::ConstantOp::create(
+        rewriter, op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+    inputs.push_back(one);
+    SmallVector<bool, 3> inverts(adaptor.getInverted());
+    inverts.push_back(false);
+    replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
+        rewriter, op, inputs, inverts);
     return success();
   }
 };
@@ -342,8 +424,6 @@ struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
   LogicalResult
   matchAndRewrite(MuxOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Implement: c ? a : b = (replicate(c) & a) | (~replicate(c) & b)
-
     Value cond = op.getCond();
     auto trueVal = op.getTrueValue();
     auto falseVal = op.getFalseValue();
@@ -377,6 +457,7 @@ struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
   }
 };
 
+template <bool lowerToMIG>
 struct CombAddOpConversion : OpConversionPattern<AddOp> {
   using OpConversionPattern<AddOp>::OpConversionPattern;
   LogicalResult
@@ -430,20 +511,15 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
         break;
 
       // carry[i] = (carry[i-1] & (a[i] ^ b[i])) | (a[i] & b[i])
-      Value nextCarry = comb::AndOp::create(
-          rewriter, op.getLoc(), ValueRange{aBits[i], bBits[i]}, true);
       if (!carry) {
         // This is the first bit, so the carry is the next carry.
-        carry = nextCarry;
+        carry = comb::AndOp::create(rewriter, op.getLoc(),
+                                    ValueRange{aBits[i], bBits[i]}, true);
         continue;
       }
 
-      auto aXnorB = comb::XorOp::create(rewriter, op.getLoc(),
-                                        ValueRange{aBits[i], bBits[i]}, true);
-      auto andOp = comb::AndOp::create(rewriter, op.getLoc(),
-                                       ValueRange{carry, aXnorB}, true);
-      carry = comb::OrOp::create(rewriter, op.getLoc(),
-                                 ValueRange{andOp, nextCarry}, true);
+      carry = createMajorityFunction(rewriter, op.getLoc(), aBits[i], bBits[i],
+                                     carry, lowerToMIG);
     }
     LLVM_DEBUG(llvm::dbgs() << "Lower comb.add to Ripple-Carry Adder of width "
                             << width << "\n");
@@ -530,6 +606,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     for (int64_t stride = 1; stride < width; stride *= 2) {
       for (int64_t i = stride; i < width; ++i) {
         int64_t j = i - stride;
+
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
@@ -604,7 +681,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
         // Group generate: g_i OR (p_i AND g_j)
         Value andPG =
             comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefixNew[i] = OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
+        gPrefixNew[i] =
+            comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
 
         // Group propagate: p_i AND p_j
         pPrefixNew[i] =
@@ -1087,26 +1165,34 @@ struct ConvertCombToAIGPass
     : public impl::ConvertCombToAIGBase<ConvertCombToAIGPass> {
   void runOnOperation() override;
   using ConvertCombToAIGBase<ConvertCombToAIGPass>::ConvertCombToAIGBase;
-  using ConvertCombToAIGBase<ConvertCombToAIGPass>::additionalLegalOps;
-  using ConvertCombToAIGBase<ConvertCombToAIGPass>::maxEmulationUnknownBits;
 };
 } // namespace
 
 static void
 populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
-                                    uint32_t maxEmulationUnknownBits) {
+                                    uint32_t maxEmulationUnknownBits,
+                                    bool lowerToMIG) {
   patterns.add<
       // Bitwise Logical Ops
-      CombAndOpConversion, CombOrOpConversion, CombXorOpConversion,
-      CombMuxOpConversion, CombParityOpConversion,
+      CombAndOpConversion, CombXorOpConversion, CombMuxOpConversion,
+      CombParityOpConversion,
       // Arithmetic Ops
-      CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
-      CombICmpOpConversion,
+      CombSubOpConversion, CombMulOpConversion, CombICmpOpConversion,
       // Shift Ops
       CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
       CombLowerVariadicOp<MulOp>>(patterns.getContext());
+
+  if (lowerToMIG) {
+    patterns.add<CombOrToMIGConversion, CombLowerVariadicOp<OrOp>,
+                 AndInverterToMIGConversion,
+                 circt::aig::AndInverterVariadicOpConversion,
+                 CombAddOpConversion</*useMIG=*/true>>(patterns.getContext());
+  } else {
+    patterns.add<CombOrToAIGConversion, CombAddOpConversion</*useMIG=*/false>>(
+        patterns.getContext());
+  }
 
   // Add div/mod patterns with a threshold given by the pass option.
   patterns.add<CombDivUOpConversion, CombModUOpConversion, CombDivSOpConversion,
@@ -1130,8 +1216,15 @@ void ConvertCombToAIGPass::runOnOperation() {
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp>();
 
-  // AIG is target dialect.
-  target.addLegalDialect<aig::AIGDialect>();
+  if (targetIR == CombToAIGTargetIR::AIG) {
+    // AIG is target dialect.
+    target.addLegalDialect<aig::AIGDialect>();
+    target.addIllegalOp<synth::mig::MajorityInverterOp>();
+  } else if (targetIR == CombToAIGTargetIR::MIG) {
+    target.addLegalDialect<synth::SynthDialect>();
+    target.addLegalOp<synth::mig::MajorityInverterOp>();
+    target.addIllegalOp<aig::AndInverterOp>();
+  }
 
   // If additional legal ops are specified, add them to the target.
   if (!additionalLegalOps.empty())
@@ -1139,7 +1232,8 @@ void ConvertCombToAIGPass::runOnOperation() {
       target.addLegalOp(OperationName(opName, &getContext()));
 
   RewritePatternSet patterns(&getContext());
-  populateCombToAIGConversionPatterns(patterns, maxEmulationUnknownBits);
+  populateCombToAIGConversionPatterns(patterns, maxEmulationUnknownBits,
+                                      targetIR == CombToAIGTargetIR::MIG);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

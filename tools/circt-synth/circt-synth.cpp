@@ -28,6 +28,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -94,10 +95,10 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
-enum Until { UntilAIGLowering, UntilMapping, UntilEnd };
+enum Until { UntilCombLowering, UntilMapping, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
-    clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
+    clEnumValN(UntilCombLowering, "comb-lowering", "Lowering Comb to AIG/MIG"),
     clEnumValN(UntilMapping, "mapping", "Run technology/lut mapping"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 
@@ -177,6 +178,12 @@ static cl::opt<int>
                  cl::desc("Lower to generic a truth table op with K inputs"),
                  cl::init(0), cl::cat(mainCategory));
 
+static cl::opt<TargetIR>
+    targetIR("target-ir", cl::desc("Target IR to lower to"),
+             cl::values(clEnumValN(TargetIR::AIG, "aig", "AIG operation"),
+                        clEnumValN(TargetIR::MIG, "mig", "MIG operation")),
+             cl::init(TargetIR::AIG), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -200,11 +207,6 @@ nestOrAddToHierarchicalRunner(OpPassManager &pm,
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
-template <typename... AllowedOpTy>
-static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
-  (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
-}
-
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
   // ExtractTestCode is used to move verification code from design to
@@ -213,11 +215,12 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
       /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
       /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
-    circt::synth::AIGLoweringPipelineOptions loweringOptions;
+    circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
     loweringOptions.timingAware = !disableTimingAware;
-    circt::synth::buildAIGLoweringPipeline(pm, loweringOptions);
-    if (untilReached(UntilAIGLowering))
+    loweringOptions.targetIR = targetIR;
+    circt::synth::buildCombLoweringPipeline(pm, loweringOptions);
+    if (untilReached(UntilCombLowering))
       return;
 
     circt::synth::AIGOptimizationPipelineOptions optimizationOptions;
@@ -378,7 +381,7 @@ int main(int argc, char **argv) {
   registry.insert<aig::AIGDialect, comb::CombDialect, debug::DebugDialect,
                   emit::EmitDialect, hw::HWDialect, ltl::LTLDialect,
                   om::OMDialect, seq::SeqDialect, sim::SimDialect,
-                  sv::SVDialect, verif::VerifDialect>();
+                  synth::SynthDialect, sv::SVDialect, verif::VerifDialect>();
   MLIRContext context(registry);
   if (allowUnregisteredDialects)
     context.allowUnregisteredDialects();

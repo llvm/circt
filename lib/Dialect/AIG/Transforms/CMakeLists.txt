@@ -13,4 +13,5 @@ add_circt_dialect_library(CIRCTAIGTransforms
   CIRCTHW
   CIRCTImportAIGER
   CIRCTSeq
+  CIRCTSynth
 )

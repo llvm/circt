@@ -9,6 +9,7 @@ add_circt_dialect_library(CIRCTAIG
   MLIRIR
   CIRCTHW
   CIRCTSupport
+  CIRCTSynth
 
   DEPENDS
   MLIRAIGIncGen

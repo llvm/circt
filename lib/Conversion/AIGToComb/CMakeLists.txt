@@ -8,6 +8,7 @@ add_circt_conversion_library(CIRCTAIGToComb
   CIRCTAIG
   CIRCTHW
   CIRCTComb
+  CIRCTSynth
   MLIRIR
   MLIRPass
   MLIRSupport

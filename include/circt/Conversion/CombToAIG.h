@@ -16,6 +16,14 @@
 
 namespace circt {
 
+// FIXME: Rename to CombToSynthTargetIR
+enum CombToAIGTargetIR {
+  // Lower to And-Inverter
+  AIG,
+  // Lower to Majority-Inverter
+  MIG
+};
+
 #define GEN_PASS_DECL_CONVERTCOMBTOAIG
 #include "circt/Conversion/Passes.h.inc"
 
