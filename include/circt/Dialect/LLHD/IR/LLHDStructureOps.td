@@ -205,6 +205,7 @@ def HaltOp : LLHDOp<"halt", [
     attr-dict
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//
