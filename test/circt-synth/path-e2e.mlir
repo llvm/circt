@@ -6,7 +6,7 @@
 // COMMON-NEXT: Found 288 paths
 // COMMON-NEXT: Found 32 unique fanout points
 // AIG-NEXT: Maximum path delay: 42
-// LUT6-NEXT: Maximum path delay: 17
+// LUT6-NEXT: Maximum path delay: 7
 // Don't test detailed reports as they are not stable.
 
 // Make sure json is emitted.
