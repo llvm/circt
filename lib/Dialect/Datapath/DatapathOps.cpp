@@ -233,6 +233,7 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
     // Increment the number of reduction stages for debugging/reporting
     ++numStages;
 
+    // Use Dadda's algorithm to compute next stage height
     auto targetStageHeight = getNextStageTargetHeight();
     // Initialize empty newColumns
     SmallVector<SmallVector<CompressorBit>> newColumns(width);
@@ -293,7 +294,7 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
         }
       }
 
-      // Pass through remaining columns
+      // Pass through remaining bits
       for (auto bit : col)
         newColumns[i].push_back(bit);
     }
