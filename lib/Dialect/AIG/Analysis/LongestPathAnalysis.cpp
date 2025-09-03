@@ -77,7 +77,7 @@
 using namespace circt;
 using namespace aig;
 
-static int64_t getBitWidth(Value value) {
+static size_t getBitWidth(Value value) {
   if (auto vecType = dyn_cast<seq::ClockType>(value.getType()))
     return 1;
   if (auto memory = dyn_cast<seq::FirMemType>(value.getType()))
