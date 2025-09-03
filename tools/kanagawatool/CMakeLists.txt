@@ -9,7 +9,6 @@ llvm_update_compile_flags(kanagawatool)
 target_link_libraries(kanagawatool
     PRIVATE
 
-    CIRCTExportChiselInterface
     CIRCTExportVerilog
     CIRCTHandshake
     CIRCTHandshakeToHW

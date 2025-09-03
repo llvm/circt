@@ -13,7 +13,6 @@ target_link_libraries(hlstool
   CIRCTDCTransforms
   CIRCTDCToHW
   CIRCTESI
-  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTHandshake
   CIRCTHandshakeToDC
