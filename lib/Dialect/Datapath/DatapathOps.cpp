@@ -305,6 +305,9 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
   return columnsToAddends(builder, targetHeight);
 }
 
+// Compress using a greedy algorithm that just picks the top three bits
+// without any timing consideration - Wallace Tree Reduction
+// See https://en.wikipedia.org/wiki/Wallace_tree
 SmallVector<Value> CompressorTree::compressWithoutTiming(OpBuilder &builder,
                                                          size_t targetHeight) {
 

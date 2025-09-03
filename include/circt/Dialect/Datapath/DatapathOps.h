@@ -20,6 +20,7 @@
 namespace circt {
 namespace datapath {
 
+// A pair used to track compressor bits
 struct CompressorBit {
   Value val;
   size_t delay;
@@ -56,7 +57,7 @@ private:
   SmallVector<SmallVector<CompressorBit>> columns;
 
   // Whether to use a timing driven compression algorithm
-  // If true, use a timing driven compression algorithm (Dadda's algorithm).
+  // If true, use a timing driven compression algorithm.
   // If false, use a simple compression algorithm (e.g., Wallace).
   bool usingTiming;
 
@@ -83,14 +84,12 @@ private:
   SmallVector<Value> compressWithoutTiming(OpBuilder &builder,
                                            size_t targetHeight);
 
-  // Helper method to extract bit at position from a value
-  Value extractBit(Value val, unsigned bitPos) const;
-
+  // Create a full-adder and update delay of sum and carry bits
   std::pair<CompressorBit, CompressorBit> fullAdderWithDelay(OpBuilder &builder,
                                                              CompressorBit a,
                                                              CompressorBit b,
                                                              CompressorBit c);
-
+  // Create a half-adder and update delay of sum and carry bits
   std::pair<CompressorBit, CompressorBit>
   halfAdderWithDelay(OpBuilder &builder, CompressorBit a, CompressorBit b);
 };
