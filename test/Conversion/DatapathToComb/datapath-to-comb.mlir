@@ -52,7 +52,6 @@ hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, o
   // CHECK-NEXT: %[[PP2:.+]] = comb.and %[[B2R]], %a : i3
   // CHECK-NEXT: %[[CONCAT2:.+]] = comb.concat %[[PP2]], %c0_i2 : i3, i2
   // CHECK-NEXT: comb.extract %[[CONCAT2]] from 0 : (i5) -> i3
-// ...existing code...
   %0:3 = datapath.partial_product %a, %b : (i3, i3) -> (i3, i3, i3)
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }

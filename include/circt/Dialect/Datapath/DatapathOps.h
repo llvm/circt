@@ -26,6 +26,8 @@ struct CompressorBit {
   size_t delay;
 };
 
+// A general compressor tree interface based around a column-wise
+// representation. Contains alternative compression algorithms.
 class CompressorTree {
 public:
   // Constructor takes addends as input and converts to column representation
