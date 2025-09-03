@@ -61,32 +61,28 @@ hw.module @sub(in %lhs: i4, in %rhs: i4, out out: i4) {
 
 // CHECK-LABEL: @mul
 // ALLOW_ADD-LABEL:  hw.module @mul(in %lhs : i3, in %rhs : i3, out out : i3) {
-// ALLOW_ADD-NEXT:    %[[LHS0:.+]] = comb.extract %lhs from 0 : (i3) -> i1
-// ALLOW_ADD-NEXT:    %[[LHS1:.+]] = comb.extract %lhs from 1 : (i3) -> i1
-// ALLOW_ADD-NEXT:    %[[LHS2:.+]] = comb.extract %lhs from 2 : (i3) -> i1
-// ALLOW_ADD-NEXT:    %[[RHS0:.+]] = comb.extract %rhs from 0 : (i3) -> i1
-// ALLOW_ADD-NEXT:    %[[RHS1:.+]] = comb.extract %rhs from 1 : (i3) -> i1
-// ALLOW_ADD-NEXT:    %[[RHS2:.+]] = comb.extract %rhs from 2 : (i3) -> i1
-//                    Partial Products
-// ALLOW_ADD-NEXT:    %[[P_0_0:.+]] = comb.and %[[LHS0]], %[[RHS0]] : i1
-// ALLOW_ADD-NEXT:    %[[P_1_0:.+]] = comb.and %[[LHS1]], %[[RHS0]] : i1
-// ALLOW_ADD-NEXT:    %[[P_2_0:.+]] = comb.and %[[LHS2]], %[[RHS0]] : i1
-// ALLOW_ADD-NEXT:    %[[P_0_1:.+]] = comb.and %[[LHS0]], %[[RHS1]] : i1
-// ALLOW_ADD-NEXT:    %[[P_1_1:.+]] = comb.and %[[LHS1]], %[[RHS1]] : i1
-// ALLOW_ADD-NEXT:    %[[P_2_1:.+]] = comb.and %[[LHS0]], %[[RHS2]] : i1
+// ALLOW_ADD-NEXT: %[[LHS0:.+]] = comb.extract %lhs from 0 : (i3) -> i1
+// ALLOW_ADD-NEXT: %[[LHS1:.+]] = comb.extract %lhs from 1 : (i3) -> i1
+// ALLOW_ADD-NEXT: %[[LHS2:.+]] = comb.extract %lhs from 2 : (i3) -> i1
+// ALLOW_ADD-NEXT: %[[RHS0:.+]] = comb.extract %rhs from 0 : (i3) -> i1
+// ALLOW_ADD-NEXT: %[[RHS1:.+]] = comb.extract %rhs from 1 : (i3) -> i1
+// ALLOW_ADD-NEXT: %[[RHS2:.+]] = comb.extract %rhs from 2 : (i3) -> i1
+//                  Partial Products
+// ALLOW_ADD-NEXT: %[[P_0_0:.+]] = comb.and %[[LHS0]], %[[RHS0]] : i1
+// ALLOW_ADD-NEXT: %[[P_1_0:.+]] = comb.and %[[LHS1]], %[[RHS0]] : i1
+// ALLOW_ADD-NEXT: %[[P_2_0:.+]] = comb.and %[[LHS2]], %[[RHS0]] : i1
+// ALLOW_ADD-NEXT: %[[P_0_1:.+]] = comb.and %[[LHS0]], %[[RHS1]] : i1
+// ALLOW_ADD-NEXT: %[[P_1_1:.+]] = comb.and %[[LHS1]], %[[RHS1]] : i1
+// ALLOW_ADD-NEXT: %[[P_0_2:.+]] = comb.and %[[LHS0]], %[[RHS2]] : i1
 //                    Wallace Tree Reduction
-// ALLOW_ADD-NEXT:    %false = hw.constant false
-// ALLOW_ADD-NEXT:    %[[XOR0:.+]] = comb.xor bin %[[P_1_0]], %[[P_0_1]] : i1
-// ALLOW_ADD-NEXT:    %[[AND0:.+]] = comb.and bin %[[P_1_0]], %[[P_0_1]] : i1
-// ALLOW_ADD-NEXT:    %[[XOR1:.+]] = comb.xor bin %[[P_2_0]], %[[P_1_1]] : i1
-// ALLOW_ADD-NEXT:    %[[XOR2:.+]] = comb.xor bin %[[XOR1]], %[[P_2_1]] : i1
-// ALLOW_ADD-NEXT:    %[[AND1:.+]] = comb.and bin %[[P_2_0]], %[[P_1_1]] : i1
-// ALLOW_ADD-NEXT:    %[[AND2:.+]] = comb.and bin %[[XOR1]], %[[P_2_1]] : i1
-// ALLOW_ADD-NEXT:    %[[SUM_ROW:.+]] = comb.concat %[[XOR2]], %[[XOR0]], %[[P_0_0]] : i1, i1, i1
-// ALLOW_ADD-NEXT:    %[[CARRY_ROW:.+]] = comb.concat %[[AND0]], %false, %false : i1, i1, i1
-// ALLOW_ADD-NEXT:    %[[RESULT:.+]] = comb.add bin %[[SUM_ROW]], %[[CARRY_ROW]] : i3
-// ALLOW_ADD-NEXT:    hw.output %[[RESULT]] : i3
-// ALLOW_ADD-NEXT:  }
+// ALLOW_ADD-NEXT: %[[XOR0:.+]] = comb.xor bin %[[P_0_2]], %[[P_1_1]] : i1
+// ALLOW_ADD-NEXT: %[[XOR1:.+]] = comb.xor bin %[[XOR0]], %[[P_2_0]] : i1
+// ALLOW_ADD-NEXT: %[[AND0:.+]] = comb.and bin %[[P_0_2]], %[[P_1_1]] : i1
+// ALLOW_ADD-NEXT: %[[AND1:.+]] = comb.and bin %[[XOR0]], %[[P_2_0]] : i1
+// ALLOW_ADD-NEXT: %false = hw.constant false
+// ALLOW_ADD-NEXT: %[[SUM_ROW:.+]] = comb.concat %[[XOR1]], %[[P_1_0]], %[[P_0_0]] : i1, i1, i1
+// ALLOW_ADD-NEXT: %[[CARRY_ROW:.+]] = comb.concat %false, %[[P_0_1]], %false : i1, i1, i1
+// ALLOW_ADD-NEXT: comb.add bin %[[SUM_ROW]], %[[CARRY_ROW]] : i3
 hw.module @mul(in %lhs: i3, in %rhs: i3, out out: i3) {
   %0 = comb.mul %lhs, %rhs : i3
   hw.output %0 : i3
