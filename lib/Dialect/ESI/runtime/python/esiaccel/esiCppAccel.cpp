@@ -149,7 +149,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def(py::init<const Type::ID &, const StructType::FieldVector &>(),
            py::arg("id"), py::arg("fields"))
       .def_property_readonly("fields", &StructType::getFields,
-                             py::return_value_policy::reference);
+                             py::return_value_policy::reference)
+      .def_property_readonly("reverse", &StructType::isReverse);
   py::class_<ArrayType, Type>(m, "ArrayType")
       .def(py::init<const Type::ID &, const Type *, uint64_t>(), py::arg("id"),
            py::arg("element_type"), py::arg("size"))

@@ -264,14 +264,18 @@ class StructType(ESIType):
     ret = bytearray()
     if not isinstance(obj, dict):
       obj = obj.__dict__
-    for (fname, ftype) in reversed(self.fields):
+    ordered_fields = reversed(
+        self.fields) if self.cpp_type.reverse else self.fields
+    for (fname, ftype) in ordered_fields:
       fval = obj[fname]
       ret.extend(ftype.serialize(fval))
     return ret
 
   def deserialize(self, data: bytearray) -> Tuple[Dict[str, Any], bytearray]:
     ret = {}
-    for (fname, ftype) in reversed(self.fields):
+    ordered_fields = reversed(
+        self.fields) if self.cpp_type.reverse else self.fields
+    for (fname, ftype) in ordered_fields:
       (fval, data) = ftype.deserialize(data)
       ret[fname] = fval
     return (ret, data)
