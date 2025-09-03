@@ -42,3 +42,13 @@ def run_cppgen():
 
 def get_cmake_dir():
   return _thisdir / "cmake"
+
+
+def get_dll_dir():
+  """Return the directory where the ESI dll's are located"""
+  import sys
+  import os
+  if sys.platform == "win32":
+    return _thisdir
+  else:
+    return _thisdir / "lib"
