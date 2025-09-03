@@ -40,11 +40,11 @@ def run_cppgen():
   return codegen.run()
 
 
-def get_cmake_dir():
+def get_cmake_dir() -> Path:
   return _thisdir / "cmake"
 
 
-def get_dll_dir():
+def get_dll_dir() -> Path:
   """Return the directory where the ESI dll's are located"""
   import sys
   import os
