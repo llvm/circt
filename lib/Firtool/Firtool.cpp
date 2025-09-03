@@ -98,18 +98,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
 
-  if (opt.shouldExportChiselInterface()) {
-    StringRef outdir = opt.getChiselInterfaceOutputDirectory();
-    if (opt.isDefaultOutputFilename() && outdir.empty()) {
-      pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
-    } else {
-      if (outdir.empty())
-        outdir = opt.getOutputFilename();
-      pm.nest<firrtl::CircuitOp>().addPass(
-          createExportSplitChiselInterfacePass(outdir));
-    }
-  }
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConst());
 
   if (opt.shouldDedup())
@@ -553,18 +541,6 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable optimizations"),
   };
 
-  llvm::cl::opt<bool> exportChiselInterface{
-      "export-chisel-interface",
-      llvm::cl::desc("Generate a Scala Chisel interface to the top level "
-                     "module of the firrtl circuit"),
-      llvm::cl::init(false)};
-
-  llvm::cl::opt<std::string> chiselInterfaceOutDirectory{
-      "chisel-interface-out-dir",
-      llvm::cl::desc(
-          "The output directory for generated Chisel interface files"),
-      llvm::cl::init("")};
-
   llvm::cl::opt<bool> vbToBV{
       "vb-to-bv",
       llvm::cl::desc("Transform vectors of bundles to bundles of vectors"),
@@ -805,8 +781,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
-      disableOptimization(false), exportChiselInterface(false),
-      chiselInterfaceOutDirectory(""), vbToBV(false), noDedup(false),
+      disableOptimization(false), vbToBV(false), noDedup(false),
       companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), lowerMemories(false),
       blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
@@ -839,8 +814,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   buildMode = clOptions->buildMode;
   disableLayerSink = clOptions->disableLayerSink;
   disableOptimization = clOptions->disableOptimization;
-  exportChiselInterface = clOptions->exportChiselInterface;
-  chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
   companionMode = clOptions->companionMode;
