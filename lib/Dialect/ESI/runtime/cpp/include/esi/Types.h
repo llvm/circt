@@ -138,8 +138,8 @@ class StructType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;
 
-  StructType(const ID &id, const FieldVector &fields)
-      : Type(id), fields(fields) {}
+  StructType(const ID &id, const FieldVector &fields, bool reverse = true)
+      : Type(id), fields(fields), reverse(reverse) {}
 
   const FieldVector &getFields() const { return fields; }
   std::ptrdiff_t getBitWidth() const override {
@@ -153,8 +153,16 @@ public:
     return size;
   }
 
+  // Returns whether this struct type should be reversed when
+  // serializing/deserializing.
+  // By default, a truthy value here makes StructType's compatible with system
+  // verilog, which has reversed struct field ordering, wrt. C/software struct
+  // ordering.
+  bool isReverse() const { return reverse; }
+
 private:
   FieldVector fields;
+  bool reverse;
 };
 
 /// Arrays have a compile time specified (static) size and an element type.
