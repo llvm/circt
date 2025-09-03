@@ -86,9 +86,6 @@ Value createDynamicInject(OpBuilder &builder, Location loc, Value value,
 Value createInject(OpBuilder &builder, Location loc, Value value,
                    unsigned offset, Value replacement);
 
-/// Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> fullAdder(OpBuilder &builder, Location loc, Value a,
-                                  Value b, Value c);
 } // namespace comb
 } // namespace circt
 

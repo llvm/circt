@@ -16,13 +16,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/KnownBits.h"
-#include <algorithm>
-
-#define DEBUG_TYPE "comb-ops"
 
 using namespace circt;
 using namespace comb;
@@ -221,21 +215,6 @@ Value comb::createInject(OpBuilder &builder, Location loc, Value value,
     fragments.push_back(
         comb::ExtractOp::create(builder, loc, value, 0, offset));
   return builder.createOrFold<comb::ConcatOp>(loc, fragments);
-}
-
-// Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> comb::fullAdder(OpBuilder &builder, Location loc,
-                                        Value a, Value b, Value c) {
-  auto aXorB = builder.createOrFold<comb::XorOp>(loc, a, b, true);
-  Value sum = builder.createOrFold<comb::XorOp>(loc, aXorB, c, true);
-
-  auto carry = builder.createOrFold<comb::OrOp>(
-      loc,
-      ArrayRef<Value>{builder.createOrFold<comb::AndOp>(loc, a, b, true),
-                      builder.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
-      true);
-
-  return {sum, carry};
 }
 
 //===----------------------------------------------------------------------===//

@@ -25,14 +25,6 @@ struct CompressorBit {
   size_t delay;
 };
 
-std::pair<CompressorBit, CompressorBit>
-fullAdderWithDelay(OpBuilder &builder, Location loc, CompressorBit a,
-                   CompressorBit b, CompressorBit c);
-
-std::pair<CompressorBit, CompressorBit> halfAdderWithDelay(OpBuilder &builder,
-                                                           Location loc,
-                                                           CompressorBit a,
-                                                           CompressorBit b);
 class CompressorTree {
 public:
   // Constructor takes addends as input and converts to column representation
@@ -93,6 +85,14 @@ private:
 
   // Helper method to extract bit at position from a value
   Value extractBit(Value val, unsigned bitPos) const;
+
+  std::pair<CompressorBit, CompressorBit> fullAdderWithDelay(OpBuilder &builder,
+                                                             CompressorBit a,
+                                                             CompressorBit b,
+                                                             CompressorBit c);
+
+  std::pair<CompressorBit, CompressorBit>
+  halfAdderWithDelay(OpBuilder &builder, CompressorBit a, CompressorBit b);
 };
 
 } // namespace datapath
