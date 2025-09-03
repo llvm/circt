@@ -491,14 +491,14 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
     return failure();
 
   auto &block = op.getBody().front();
-  if (op.getNumResults() == 0) {
-    rewriter.eraseOp(op);
-    return success();
-  }
-
   auto haltOp = dyn_cast<HaltOp>(block.getTerminator());
   if (!haltOp)
     return failure();
+
+  if (op.getNumResults() == 0 && block.getOperations().size() == 1) {
+    rewriter.eraseOp(op);
+    return success();
+  }
 
   // Only constants and halt terminator are expected in a single block.
   if (!llvm::all_of(block.without_terminator(), [](auto &bodyOp) {
@@ -506,8 +506,12 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
       }))
     return failure();
 
-  llvm::BitVector resultsToErase(op.getNumResults());
-  for (auto [i, operand] : llvm::enumerate(haltOp.getYieldOperands())) {
+  auto yieldOperands = haltOp.getYieldOperands();
+  llvm::SmallDenseMap<Value, unsigned> uniqueOperands;
+  llvm::SmallDenseMap<unsigned, unsigned> origToNewPos;
+  llvm::BitVector operandsToErase(yieldOperands.size());
+
+  for (auto [operandNo, operand] : llvm::enumerate(yieldOperands)) {
     auto *defOp = operand.getDefiningOp();
     if (defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
       // If the constant is available outside the process, use it directly;
@@ -515,41 +519,49 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
       if (!defOp->getParentRegion()->isProperAncestor(&op.getBody())) {
         defOp->moveBefore(op);
       }
-      op.getResult(i).replaceAllUsesWith(operand);
-      resultsToErase.set(i);
+      rewriter.replaceAllUsesWith(op.getResult(operandNo), operand);
+      operandsToErase.set(operandNo);
+      continue;
+    }
+
+    // Identify duplicate operands to merge and compute updated result
+    // positions for the process operation.
+    if (!uniqueOperands.contains(operand)) {
+      const auto newPos = uniqueOperands.size();
+      uniqueOperands.insert(std::make_pair(operand, newPos));
+      origToNewPos.insert(std::make_pair(operandNo, newPos));
+    } else {
+      auto firstOccurrencePos = uniqueOperands.lookup(operand);
+      origToNewPos.insert(std::make_pair(operandNo, firstOccurrencePos));
+      operandsToErase.set(operandNo);
     }
   }
 
-  const auto countResultsToErase = resultsToErase.count();
-  if (countResultsToErase == 0)
+  const auto countOperandsToErase = operandsToErase.count();
+  if (countOperandsToErase == 0)
     return failure();
 
-  // Just remove whole process operation if we can replace all results.
-  if (countResultsToErase == op.getNumResults()) {
+  // Remove the process operation if all its results have been replaced with
+  // constants.
+  if (countOperandsToErase == op.getNumResults()) {
     rewriter.eraseOp(op);
     return success();
   }
 
-  // Otherwise, prune only those that are safe to remove.
-  haltOp->eraseOperands(resultsToErase);
+  haltOp->eraseOperands(operandsToErase);
 
-  SmallVector<Type> resultTypes;
-  resultsToErase.flip();
-  for (auto i : resultsToErase.set_bits()) {
-    resultTypes.push_back(op.getResult(i).getType());
-  }
-
+  SmallVector<Type> resultTypes = llvm::to_vector(haltOp->getOperandTypes());
   auto newProcessOp = ProcessOp::create(rewriter, op.getLoc(), resultTypes,
                                         op->getOperands(), op->getAttrs());
   newProcessOp.getBody().takeBody(op.getBody());
 
   // Update old results with new values, accounting for pruned halt operands.
-  unsigned off = 0;
   for (auto oldResult : op.getResults()) {
-    if (resultsToErase.test(oldResult.getResultNumber())) {
-      oldResult.replaceAllUsesWith(newProcessOp.getResult(off));
-      ++off;
-    }
+    auto newResultPos = origToNewPos.find(oldResult.getResultNumber());
+    if (newResultPos == origToNewPos.end())
+      continue;
+    auto newResult = newProcessOp.getResult(newResultPos->getSecond());
+    rewriter.replaceAllUsesWith(oldResult, newResult);
   }
 
   rewriter.eraseOp(op);
@@ -614,55 +626,6 @@ LogicalResult WaitOp::verify() {
 //===----------------------------------------------------------------------===//
 // HaltOp
 //===----------------------------------------------------------------------===//
-
-static LogicalResult deduplicateYieldOperands(PatternRewriter &rewriter,
-                                              HaltOp &op) {
-  auto processOp = dyn_cast<ProcessOp>(op->getParentOp());
-  if (!processOp || !processOp.getBody().hasOneBlock())
-    return failure();
-
-  auto yieldOperands = op.getYieldOperands();
-  llvm::SmallDenseMap<Value, unsigned> uniqueOperands;
-  llvm::SmallDenseMap<unsigned, unsigned> origToNewPos;
-  llvm::BitVector operandsToErase(yieldOperands.size());
-
-  for (auto [operandNo, operand] : llvm::enumerate(yieldOperands)) {
-    if (!uniqueOperands.contains(operand)) {
-      const auto newPos = uniqueOperands.size();
-      uniqueOperands.insert(std::make_pair(operand, newPos));
-      origToNewPos.insert(std::make_pair(operandNo, newPos));
-    } else {
-      auto firstOperandPos = uniqueOperands.lookup(operand);
-      origToNewPos.insert(std::make_pair(operandNo, firstOperandPos));
-      operandsToErase.set(operandNo);
-    }
-  }
-
-  if (uniqueOperands.size() == yieldOperands.size())
-    return failure();
-
-  op->eraseOperands(operandsToErase);
-  SmallVector<Type> resultTypes = llvm::to_vector(op->getOperandTypes());
-
-  rewriter.setInsertionPoint(processOp);
-  auto newProcessOp =
-      ProcessOp::create(rewriter, processOp->getLoc(), resultTypes,
-                        processOp->getOperands(), processOp->getAttrs());
-  newProcessOp.getBody().takeBody(processOp.getBody());
-
-  for (auto oldResult : processOp.getResults()) {
-    auto newResultPos = origToNewPos.lookup(oldResult.getResultNumber());
-    auto newResult = newProcessOp.getResult(newResultPos);
-    rewriter.replaceAllUsesWith(oldResult, newResult);
-  }
-
-  rewriter.eraseOp(processOp);
-  return success();
-}
-
-LogicalResult HaltOp::canonicalize(HaltOp op, PatternRewriter &rewriter) {
-  return deduplicateYieldOperands(rewriter, op);
-}
 
 LogicalResult HaltOp::verify() {
   return verifyYieldResults(*this, getYieldOperands());
