@@ -87,7 +87,7 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
 
     SmallVector<SmallVector<int64_t>> addendsDelays(addends.size());
     if (analysis) {
-      // Sort the addends row based on the delay of the input.
+      // Compute addend's delay to enable timing-driven compressor algorithm.
       for (size_t i = 0; i < addends.size(); ++i) {
         for (size_t j = 0; j < addends[i].size(); ++j) {
           auto delay = analysis->getOrComputeMaxDelay(addends[i][j], 0);
@@ -97,6 +97,7 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
           addendsDelays[i].push_back(*delay);
         }
       }
+      // Update delay information with arrival times
       comp.withInputDelays(addendsDelays);
     }
 
