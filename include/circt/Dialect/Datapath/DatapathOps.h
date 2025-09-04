@@ -64,7 +64,7 @@ private:
   bool usingTiming;
 
   // Bitwidth of compressor tree
-  size_t width;
+  const size_t width;
 
   // Number of reduction stages
   size_t numStages;

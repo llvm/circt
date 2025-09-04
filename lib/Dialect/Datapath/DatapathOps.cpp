@@ -76,37 +76,37 @@ CompressorTree::fullAdderWithDelay(OpBuilder &builder, CompressorBit a,
                                    CompressorBit b, CompressorBit c) {
 
   auto aXorB = builder.createOrFold<comb::XorOp>(loc, a.val, b.val, true);
-  Value sum_val = builder.createOrFold<comb::XorOp>(loc, aXorB, c.val, true);
+  Value sumVal = builder.createOrFold<comb::XorOp>(loc, aXorB, c.val, true);
 
-  auto carry_val = builder.createOrFold<comb::OrOp>(
+  auto carryVal = builder.createOrFold<comb::OrOp>(
       loc,
       ArrayRef<Value>{
           builder.createOrFold<comb::AndOp>(loc, a.val, b.val, true),
           builder.createOrFold<comb::AndOp>(loc, aXorB, c.val, true)},
       true);
 
-  auto sum_delay = std::max(std::max(a.delay, b.delay) + 1, c.delay) + 1;
-  auto carry_delay = sum_delay + 1;
+  auto sumDelay = std::max(std::max(a.delay, b.delay) + 1, c.delay) + 1;
+  auto carryDelay = sumDelay + 1;
 
-  CompressorBit sum = {sum_val, sum_delay};
-  CompressorBit carry = {carry_val, carry_delay};
+  CompressorBit sum = {sumVal, sumDelay};
+  CompressorBit carry = {carryVal, carryDelay};
   std::pair<CompressorBit, CompressorBit> fa{sum, carry};
   ++numFullAdders;
   return fa;
 }
 
-// Construct a full adder for three 1-bit inputs.
+// Construct a half adder for two 1-bit inputs.
 std::pair<CompressorBit, CompressorBit>
 CompressorTree::halfAdderWithDelay(OpBuilder &builder, CompressorBit a,
                                    CompressorBit b) {
-  auto sum_val = builder.createOrFold<comb::XorOp>(loc, a.val, b.val, true);
-  auto carry_val = builder.createOrFold<comb::AndOp>(loc, a.val, b.val, true);
+  auto sumVal = builder.createOrFold<comb::XorOp>(loc, a.val, b.val, true);
+  auto carryVal = builder.createOrFold<comb::AndOp>(loc, a.val, b.val, true);
 
-  auto sum_delay = std::max(a.delay, b.delay) + 1;
-  auto carry_delay = sum_delay;
+  auto sumDelay = std::max(a.delay, b.delay) + 1;
+  auto carryDelay = sumDelay;
 
-  CompressorBit sum = {sum_val, sum_delay};
-  CompressorBit carry = {carry_val, carry_delay};
+  CompressorBit sum = {sumVal, sumDelay};
+  CompressorBit carry = {carryVal, carryDelay};
   std::pair<CompressorBit, CompressorBit> ha{sum, carry};
   return ha;
 }
@@ -139,7 +139,7 @@ CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
 
 // Update the input delays based on longest path analysis
 void CompressorTree::withInputDelays(
-    const SmallVector<SmallVector<int64_t>> inputDelays) {
+    const SmallVector<SmallVector<int64_t>> &inputDelays) {
   assert(inputDelays.size() == originalAddends.size() &&
          "Input delays must match number of addends");
   for (size_t i = 0; i < inputDelays.size(); ++i) {
@@ -160,9 +160,9 @@ void CompressorTree::withInputDelays(
 
 size_t CompressorTree::getMaxHeight() const {
   size_t maxSize = 0;
-  for (const auto &column : columns) {
+  for (const auto &column : columns)
     maxSize = std::max(maxSize, column.size());
-  }
+
   return maxSize;
 }
 
@@ -248,7 +248,7 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
       // Only compress to reach the target stage height - Dadda's Algorithm
       while (col.size() + newColumns[i].size() > targetStageHeight) {
         if (col.size() < 2) {
-          llvm::dbgs() << "CompressorTree: Not enough bits in column " << i
+          llvm::errs() << "CompressorTree: Not enough bits in column " << i
                        << " to compress further.\n New Columns size: "
                        << newColumns[i].size()
                        << ", Current Column size: " << col.size() << "\n";
