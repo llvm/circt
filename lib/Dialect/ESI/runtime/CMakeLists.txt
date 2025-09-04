@@ -123,6 +123,7 @@ set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Types.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
