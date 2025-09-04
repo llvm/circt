@@ -102,4 +102,37 @@ def PartialProductOp : DatapathOp<"partial_product",
   ];
 }
 
+def PosPartialProductOp : DatapathOp<"pos_partial_product", 
+            [Pure, SameTypeOperands, SameOperandsAndResultType]> {
+  let summary = "Generate partial products for (a+b)*c";
+  let description = [{
+    A partial product array which when summed produces the result (a+b)*c. 
+    An efficient circuit can be constructed that encodes a carry-save input
+    without performing a full carry-propagation. The number of results 
+    corresponds to the rows of a partial product array, which by default is 
+    equal to the width of the inputs. 
+    
+    Example using `datapath` dialect:
+    ```mlir
+    %0:4 = datapath.sop_partial_product %a, %b, %c : (i3, i3, i3) 
+                                                  -> (i3, i3, i3)
+    ```
+  }];
+  let arguments = (ins HWIntegerType:$addend0, HWIntegerType:$addend1,
+                       HWIntegerType:$multiplicand);
+  let results   = (outs Variadic<HWIntegerType>:$results);
+
+  let assemblyFormat = [{
+    $addend0  `,` $addend1 `,` $multiplicand attr-dict `:` functional-type(operands, results)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
+      auto inputType = lhs.front().getType();
+      SmallVector<Type> resultTypes(targetRows, inputType);
+      return build($_builder, $_state, resultTypes, lhs);
+    }]>
+  ];
+}
+
 #endif // CIRCT_DIALECT_DATAPATH_OPS_TD

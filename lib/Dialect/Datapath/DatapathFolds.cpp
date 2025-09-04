@@ -252,8 +252,46 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
   }
 };
 
+struct PosPartialProducts : public OpRewritePattern<PartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // pp(add(a,b),c) -> pos_pp(a,b,c)
+  LogicalResult matchAndRewrite(PartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+    auto width = op.getType(0).getIntOrFloatBitWidth();
+
+    assert(op.getNumOperands() == 2);
+
+    // Detect if any input is an AddOp
+    auto lhsIsAdder = false;
+    if (op.getOperand(0).getDefiningOp())
+      lhsIsAdder = llvm::isa<comb::AddOp>(op.getOperand(0).getDefiningOp());
+    auto rhsIsAdder = false;
+    if (op.getOperand(1).getDefiningOp())
+      rhsIsAdder = llvm::isa<comb::AddOp>(op.getOperand(1).getDefiningOp());
+
+    // Support a single adder input
+    if ((lhsIsAdder & rhsIsAdder) | !(lhsIsAdder | rhsIsAdder))
+      return failure();
+
+    auto addInput = lhsIsAdder ? op.getOperand(0).getDefiningOp()
+                               : op.getOperand(1).getDefiningOp();
+    auto otherInput = lhsIsAdder ? op.getOperand(1) : op.getOperand(0);
+
+    if (addInput->getNumOperands() != 2)
+      return failure();
+
+    Value addend0 = addInput->getOperand(0);
+    Value addend1 = addInput->getOperand(1);
+
+    rewriter.replaceOpWithNewOp<PosPartialProductOp>(
+        op, ValueRange{addend0, addend1, otherInput}, width);
+    return success();
+  }
+};
+
 void PartialProductOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
 
-  results.add<ReduceNumPartialProducts>(context);
+  results.add<ReduceNumPartialProducts, PosPartialProducts>(context);
 }
