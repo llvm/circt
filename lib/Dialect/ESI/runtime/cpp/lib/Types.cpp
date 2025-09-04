@@ -219,6 +219,12 @@ void StructType::ensureValid(const std::any &obj) const {
     }
 
     for (const auto &[fieldName, fieldType] : fields) {
+      if (fieldType->getBitWidth() % 8 != 0)
+        throw std::runtime_error(std::format(
+            "C++ ser/de of struct types only supports "
+            "structs with byte-aligned fields, but field '{}' has {} bits",
+            fieldName, fieldType->getBitWidth()));
+
       auto it = structData.find(fieldName);
       if (it == structData.end())
         throw std::runtime_error(std::format("missing field '{}'", fieldName));
@@ -246,12 +252,21 @@ MessageData StructType::serialize(const std::any &obj) const {
   if (totalSize > 0)
     result.reserve((totalSize + 7) / 8);
 
-  // Serialize fields in reverse order (to match Python implementation)
-  for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
-    const auto &[fieldName, fieldType] = *it;
+  auto serializeField = [&](const std::pair<std::string, const Type *> &field) {
+    auto &fieldName = field.first;
+    auto &fieldType = field.second;
     auto fieldData = fieldType->serialize(structData.at(fieldName));
     const auto &fieldBytes = fieldData.getData();
     result.insert(result.end(), fieldBytes.begin(), fieldBytes.end());
+  };
+
+  // Serialize fields in reverse order.
+  if (isReverse()) {
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it)
+      serializeField(*it);
+  } else {
+    for (const auto &field : fields)
+      serializeField(field);
   }
 
   return MessageData(std::move(result));
@@ -262,12 +277,22 @@ StructType::deserialize(std::span<const std::uint8_t> data) const {
   std::map<std::string, std::any> result;
   std::span<const std::uint8_t> remaining = data;
 
-  // Deserialize fields in reverse order (to match Python implementation)
-  for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
-    const auto &[fieldName, fieldType] = *it;
-    auto [fieldValue, newRemaining] = fieldType->deserialize(remaining);
-    result[fieldName] = fieldValue;
-    remaining = newRemaining;
+  auto deserializeField =
+      [&](const std::pair<std::string, const Type *> &field) {
+        auto &fieldName = field.first;
+        auto &fieldType = field.second;
+        auto [fieldValue, newRemaining] = fieldType->deserialize(remaining);
+        result[fieldName] = fieldValue;
+        remaining = newRemaining;
+      };
+
+  if (isReverse()) {
+    // Deserialize fields in reverse order.
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it)
+      deserializeField(*it);
+  } else {
+    for (const auto &field : fields)
+      deserializeField(field);
   }
 
   return {std::any(result), remaining};

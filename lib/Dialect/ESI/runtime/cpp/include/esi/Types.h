@@ -106,9 +106,7 @@ public:
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 
@@ -124,9 +122,7 @@ public:
   std::ptrdiff_t getBitWidth() const override { return 1; };
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 };
@@ -160,9 +156,7 @@ public:
   using BitVectorType::BitVectorType;
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 };
@@ -180,9 +174,7 @@ public:
   using IntegerType::IntegerType;
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 };
@@ -193,9 +185,7 @@ public:
   using IntegerType::IntegerType;
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 };
@@ -221,9 +211,7 @@ public:
   }
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 
@@ -255,9 +243,7 @@ public:
   }
 
   void ensureValid(const std::any &obj) const override;
-
   MessageData serialize(const std::any &obj) const override;
-
   std::pair<std::any, std::span<const uint8_t>>
   deserialize(std::span<const uint8_t> data) const override;
 
