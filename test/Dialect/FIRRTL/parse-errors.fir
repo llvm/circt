@@ -1844,3 +1844,17 @@ circuit CatSign:
     node n = cat(UInt<1>(0),
     ; expected-note @below {{non-integer operand is here}}
                  a)
+
+// -----
+FIRRTL version 5.0.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
+    input A: Domain
+
+// -----
+FIRRTL version 5.0.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
+    input a: UInt<1> domains [A]

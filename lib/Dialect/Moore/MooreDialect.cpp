@@ -38,6 +38,9 @@ Operation *MooreDialect::materializeConstant(OpBuilder &builder,
   if (auto intType = dyn_cast<IntType>(type))
     if (auto intValue = dyn_cast<FVIntegerAttr>(value))
       return ConstantOp::create(builder, loc, intType, intValue);
+  if (auto timeType = dyn_cast<TimeType>(type))
+    if (auto timeValue = dyn_cast<IntegerAttr>(value))
+      return ConstantTimeOp::create(builder, loc, timeType, timeValue);
   return nullptr;
 }
 

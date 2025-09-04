@@ -21,7 +21,6 @@ target_link_libraries(circt-opt
 
   CIRCTAnalysisTestPasses
   CIRCTBMCTransforms
-  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTLECTransforms
   CIRCTTransforms

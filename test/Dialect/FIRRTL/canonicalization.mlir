@@ -3854,4 +3854,16 @@ firrtl.module private @RefTest() {
   // CHECK-NOT: firrtl.ref.sub
   %3 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<a: uint<1>>>
 }
+
+// CHECK-LABEL: firrtl.module @Domains
+firrtl.module @Domains(
+) {
+
+  %a = firrtl.wire : !firrtl.uint<1>
+  %b = firrtl.wire : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %b, %a
+  firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+
+}
 }

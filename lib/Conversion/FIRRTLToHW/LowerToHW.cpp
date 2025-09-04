@@ -851,7 +851,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
     sv::IfDefOp::create(
-        b, guard, []() {}, body);
+        b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib) {
@@ -1224,11 +1224,12 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule.setCommentAttr(comment);
 
   // Copy over any attributes which are not required for FModuleOp.
-  SmallVector<StringRef, 12> attrNames = {
+  SmallVector<StringRef, 13> attrNames = {
       "annotations",   "convention",      "layers",
       "portNames",     "sym_name",        "portDirections",
       "portTypes",     "portAnnotations", "portSymbols",
-      "portLocations", "parameters",      SymbolTable::getVisibilityAttrName()};
+      "portLocations", "parameters",      SymbolTable::getVisibilityAttrName(),
+      "domainInfo"};
 
   DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
   SmallVector<NamedAttribute> newAttrs(newModule->getAttrs());
@@ -2895,7 +2896,7 @@ void FIRRTLLowering::addToAlwaysBlock(
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
         insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+            builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -3016,7 +3017,8 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
 FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // FIRRTL operations must explicitly handle their regions.
-  if (!op->getRegions().empty() && isa<FIRRTLDialect>(op->getDialect())) {
+  if (!op->getRegions().empty() &&
+      isa_and_nonnull<FIRRTLDialect>(op->getDialect())) {
     op->emitOpError("must explicitly handle its regions");
     return LoweringFailure;
   }
@@ -3025,7 +3027,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // lowered. This allows us to handled partially lowered inputs, and also allow
   // other FIRRTL operations to spawn additional already-lowered operations,
   // like `hw.output`.
-  if (!isa<FIRRTLDialect>(op->getDialect())) {
+  if (!isa_and_nonnull<FIRRTLDialect>(op->getDialect())) {
     // Push nested operations onto the worklist such that they are lowered.
     for (auto &region : op->getRegions())
       addToWorklist(region);
@@ -4972,10 +4974,9 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       sv::MacroRefExprOp::create(builder, cond.getType(), "STOP_COND_");
   Value exitCond = builder.createOrFold<comb::AndOp>(stopCond, cond, true);
 
-  if (op.getExitCode())
-    sim::FatalOp::create(builder, clock, exitCond);
-  else
-    sim::FinishOp::create(builder, clock, exitCond);
+  sim::ClockedTerminateOp::create(builder, clock, exitCond,
+                                  /*success=*/op.getExitCode() == 0,
+                                  /*verbose=*/true);
 
   return success();
 }
@@ -5401,7 +5402,8 @@ LogicalResult FIRRTLLowering::fixupLTLOps() {
     for (auto *user : op->getUsers()) {
       if (!usersReported.insert(user).second)
         continue;
-      if (isa<ltl::LTLDialect, verif::VerifDialect>(user->getDialect()))
+      if (isa_and_nonnull<ltl::LTLDialect, verif::VerifDialect>(
+              user->getDialect()))
         continue;
       if (isa<hw::WireOp>(user))
         continue;

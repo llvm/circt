@@ -96,6 +96,16 @@ struct DelayControlVisitor {
   Location loc;
   OpBuilder &builder;
 
+  // Handle delays.
+  LogicalResult visit(const slang::ast::DelayControl &ctrl) {
+    auto delay = context.convertRvalueExpression(
+        ctrl.expr, moore::TimeType::get(builder.getContext()));
+    if (!delay)
+      return failure();
+    moore::WaitDelayOp::create(builder, loc, delay);
+    return success();
+  }
+
   // Emit an error for all other timing controls.
   template <typename T>
   LogicalResult visit(T &&ctrl) {

@@ -117,7 +117,7 @@ LogicalResult LoopSchedulePipelineOp::verify() {
   Block &conditionBlock = getCondition().front();
   Operation *nonCombinational;
   WalkResult conditionWalk = conditionBlock.walk([&](Operation *op) {
-    if (isa<LoopScheduleDialect>(op->getDialect()))
+    if (isa_and_nonnull<LoopScheduleDialect>(op->getDialect()))
       return WalkResult::advance();
 
     if (!isa<arith::AddIOp, arith::AndIOp, arith::BitcastOp, arith::CmpIOp,

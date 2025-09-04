@@ -220,7 +220,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
 
   if (isa<calyx::EnableOp>(op) &&
-      !isa<calyx::CalyxDialect>(parent->getDialect())) {
+      !isa_and_nonnull<calyx::CalyxDialect>(parent->getDialect())) {
     // Allow embedding calyx.enable ops within other dialects. This is motivated
     // by allowing experimentation with new styles of Calyx lowering. For more
     // info and the historical discussion, see:
@@ -1065,7 +1065,8 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
     return success();
 
   // Constants and logical operations are OK.
-  if (isa<comb::CombDialect, hw::HWDialect>(definingOp->getDialect()))
+  if (isa_and_nonnull<comb::CombDialect, hw::HWDialect>(
+          definingOp->getDialect()))
     return success();
 
   // Reads to MemoryOp and RegisterOp are combinational. Writes are not.

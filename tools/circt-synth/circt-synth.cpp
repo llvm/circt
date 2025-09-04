@@ -17,6 +17,7 @@
 #include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -154,6 +155,10 @@ static cl::opt<bool>
     disableDatapath("disable-datapath",
                     cl::desc("Disable datapath optimization passes"),
                     cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool>
+    disableTimingAware("disable-timing-aware",
+                       cl::desc("Disable datapath optimization passes"),
+                       cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
@@ -166,6 +171,11 @@ static cl::opt<synth::OptimizationStrategy> synthesisStrategy(
                clEnumValN(synth::OptimizationStrategyTiming, "timing",
                           "Optimize for timing")),
     cl::init(synth::OptimizationStrategyTiming), cl::cat(mainCategory));
+
+static cl::opt<int>
+    lowerToKLUTs("lower-to-k-lut",
+                 cl::desc("Lower to generic a truth table op with K inputs"),
+                 cl::init(0), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -205,6 +215,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
   auto pipeline = [](OpPassManager &pm) {
     circt::synth::AIGLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
+    loweringOptions.timingAware = !disableTimingAware;
     circt::synth::buildAIGLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilAIGLowering))
       return;
@@ -216,6 +227,14 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     optimizationOptions.disableWordToBits.setValue(disableWordToBits);
 
     circt::synth::buildAIGOptimizationPipeline(pm, optimizationOptions);
+    if (untilReached(UntilMapping))
+      return;
+    if (lowerToKLUTs) {
+      circt::synth::GenericLutMapperOptions lutOptions;
+      lutOptions.maxLutSize = lowerToKLUTs;
+      lutOptions.maxCutsPerRoot = maxCutSizePerRoot;
+      pm.addPass(circt::synth::createGenericLutMapper(lutOptions));
+    }
   };
 
   nestOrAddToHierarchicalRunner(pm, pipeline, topName);
@@ -241,6 +260,8 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
         pm,
         [&](OpPassManager &pm) {
           pm.addPass(circt::createConvertAIGToComb());
+          if (lowerToKLUTs)
+            pm.addPass(circt::comb::createLowerComb());
           pm.addPass(createCSEPass());
         },
         topName);
@@ -340,6 +361,7 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
+  circt::aig::registerAIGAnalysisPrerequisitePasses();
 
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });

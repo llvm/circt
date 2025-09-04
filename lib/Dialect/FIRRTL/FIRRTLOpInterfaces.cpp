@@ -120,6 +120,38 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       }))
     return module.emitOpError("port symbols should all be location attributes");
 
+  // Verify the port domains.  This can be either:
+  //   1. An empty ArrayAttr.
+  //   2. An ArrayAttr, one entry-per-port, of:
+  //      a. SymbolRefAttrs if the port is a domain type
+  //      b. IntegerAttrs if the port is a non-domain type
+  auto domains = module.getDomainInfoAttr();
+  if (!domains)
+    return module.emitOpError("requires valid port domains");
+  if (!domains.empty() && domains.size() != numPorts)
+    return module.emitOpError("requires ")
+           << numPorts << " port domains, but has " << domains.size();
+  for (auto [index, domain] : llvm::enumerate(domains)) {
+    auto type = cast<TypeAttr>(portTypes[index]).getValue();
+    if (isa<DomainType>(type)) {
+      if (!isa<FlatSymbolRefAttr>(domain))
+        return module.emitOpError() << "domain information for domain port '"
+                                    << module.getPortName(index)
+                                    << "' must be a 'FlatSymbolRefAttr'";
+      continue;
+    }
+    auto arrayAttr = dyn_cast<ArrayAttr>(domain);
+    if (!arrayAttr)
+      return module.emitOpError()
+             << "domain information for non-domain port '"
+             << module.getPortName(index) << "' must be an 'ArrayAttr'";
+    if (llvm::any_of(arrayAttr,
+                     [](Attribute attr) { return !isa<IntegerAttr>(attr); }))
+      return module.emitOpError() << "domain information for non-domain port '"
+                                  << module.getPortName(index)
+                                  << "' must be an 'ArrayAttr<IntegerAttr>'";
+  }
+
   // Verify the body.
   if (module->getNumRegions() != 1)
     return module.emitOpError("requires one region");

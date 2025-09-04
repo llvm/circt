@@ -40,6 +40,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
@@ -942,6 +943,7 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
 ///      ::= 'UInt' optional-width
 ///      ::= 'SInt' optional-width
 ///      ::= 'Analog' optional-width
+///      ::= 'Domain'
 ///      ::= {' field* '}'
 ///      ::= type '[' intLit ']'
 ///      ::= 'Probe' '<' type '>'
@@ -1030,6 +1032,14 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       assert(kind == FIRToken::kw_Analog);
       result = AnalogType::get(getContext(), width);
     }
+    break;
+  }
+
+  case FIRToken::kw_Domain: {
+    if (requireFeature(missingSpecFIRVersion, "domains"))
+      return failure();
+    consumeToken();
+    result = DomainType::get(getContext());
     break;
   }
 
@@ -1950,6 +1960,7 @@ private:
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
+  ParseResult parseUnsafeDomainCast(Value &result);
 
   template <typename T, size_t M, size_t N, size_t... Ms, size_t... Ns>
   ParseResult parsePrim(std::index_sequence<Ms...>, std::index_sequence<Ns...>,
@@ -2324,6 +2335,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_cat:
     if (parseCatExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_unsafe_domain_cast:
+    if (requireFeature(nextFIRVersion, "unsafe_domain_cast") ||
+        parseUnsafeDomainCast(result))
       return failure();
     break;
 
@@ -2725,6 +2742,33 @@ ParseResult FIRStmtParser::parseCatExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = CatPrimOp::create(builder, operands);
+  return success();
+}
+
+ParseResult FIRStmtParser::parseUnsafeDomainCast(Value &result) {
+  consumeToken(FIRToken::lp_unsafe_domain_cast);
+
+  auto loc = getToken().getLoc();
+  Value input;
+  if (parseExp(input, "expected input"))
+    return failure();
+
+  SmallVector<Value> domains;
+  if (consumeIf(FIRToken::comma)) {
+    if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          Value domain;
+          if (parseExp(domain, "expected domain"))
+            return failure();
+          domains.push_back(domain);
+          return success();
+        }))
+      return failure();
+  } else if (parseToken(FIRToken::r_paren, "expected closing parenthesis")) {
+    return failure();
+  }
+
+  locationProcessor.setLoc(loc);
+  result = UnsafeDomainCastOp::create(builder, input, domains);
   return success();
 }
 
@@ -5228,6 +5272,7 @@ private:
   ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
 
   ParseResult parseClass(CircuitOp circuit, unsigned indent);
+  ParseResult parseDomain(CircuitOp circuit, unsigned indent);
   ParseResult parseExtClass(CircuitOp circuit, unsigned indent);
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
@@ -5259,6 +5304,9 @@ private:
   ParseResult parseOptionDecl(CircuitOp circuit);
 
   ParseResult parseLayer(CircuitOp circuit);
+
+  ParseResult parseDomains(SmallVectorImpl<Attribute> &domains,
+                           const DenseMap<Attribute, size_t> &nameToIndex);
 
   struct DeferredModuleToParse {
     FModuleLike moduleOp;
@@ -5416,6 +5464,9 @@ ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
                                 unsigned indent) {
+  // Record the index of each port name for domain assignment.
+  DenseMap<Attribute, size_t> nameToIndex;
+
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -5443,14 +5494,36 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     LocWithInfo info(getToken().getLoc(), this);
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType(type, "expected a type in port declaration") ||
-        info.parseOptionalInfo())
+        parseType(type, "expected a type in port declaration"))
+      return failure();
+    Attribute domainInfoElement;
+    if (isa<DomainType>(type)) {
+      StringAttr domainKind;
+      if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type port") ||
+          parseId(domainKind, "expected domain kind"))
+        return failure();
+      domainInfoElement = FlatSymbolRefAttr::get(domainKind);
+    } else {
+      SmallVector<Attribute, 4> domains;
+      if (getToken().is(FIRToken::kw_domains))
+        if (parseDomains(domains, nameToIndex))
+          return failure();
+      domainInfoElement = ArrayAttr::get(getContext(), domains);
+    }
+
+    if (info.parseOptionalInfo())
       return failure();
 
     StringAttr innerSym = {};
-    resultPorts.push_back(
-        {name, type, direction::get(isOutput), innerSym, info.getLoc()});
+    resultPorts.push_back(PortInfo{name,
+                                   type,
+                                   direction::get(isOutput),
+                                   innerSym,
+                                   info.getLoc(),
+                                   {},
+                                   domainInfoElement});
     resultPortLocs.push_back(info.getFIRLoc());
+    nameToIndex.insert({name, resultPorts.size() - 1});
   }
 
   // Check for port name collisions.
@@ -5581,6 +5654,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
 
     // If we got to the next top-level declaration, then we're done.
     case FIRToken::kw_class:
+    case FIRToken::kw_domain:
     case FIRToken::kw_declgroup:
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
@@ -5664,6 +5738,25 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   // Stash the class name -> op in the constants, so we can resolve Inst types.
   getConstants().classMap[name.getValue()] = classOp;
   return skipToModuleEnd(indent);
+}
+
+/// domain ::= 'domain' id ':' info?
+ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
+  consumeToken(FIRToken::kw_domain);
+
+  StringAttr name;
+  LocWithInfo info(getToken().getLoc(), this);
+  if (parseId(name, "domain name") ||
+      parseToken(FIRToken::colon, "expected ':' after domain definition") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  auto builder = circuit.getBodyBuilder();
+  DomainOp::create(builder, info.getLoc(), name)
+      ->getRegion(0)
+      .push_back(new Block());
+
+  return success();
 }
 
 /// extclass ::= 'extclass' id ':' info? INDENT portlist DEDENT
@@ -5933,6 +6026,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
         removedFeature({3, 3, 0}, "optional groups"))
       return failure();
     return parseLayer(circuit);
+  case FIRToken::kw_domain:
+    if (requireFeature(missingSpecFIRVersion, "domains"))
+      return failure();
+    return parseDomain(circuit, indent);
   case FIRToken::kw_extclass:
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
@@ -6122,6 +6219,36 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
   return success();
 }
 
+ParseResult
+FIRCircuitParser::parseDomains(SmallVectorImpl<Attribute> &domains,
+                               const DenseMap<Attribute, size_t> &nameToIndex) {
+  if (requireFeature(missingSpecFIRVersion, "domains"))
+    return failure();
+  if (parseToken(FIRToken::kw_domains, "expected 'domains'") ||
+      parseToken(FIRToken::l_square, "expected '['"))
+    return failure();
+
+  if (parseListUntil(FIRToken::r_square, [&]() -> ParseResult {
+        StringAttr domain;
+        auto domainLoc = getToken().getLoc();
+        if (parseId(domain, "expected domain name"))
+          return failure();
+        auto indexItr = nameToIndex.find(domain);
+        if (indexItr == nameToIndex.end()) {
+          emitError(domainLoc)
+              << "unknown domain name '" << domain.getValue() << "'";
+          return failure();
+        }
+        return domains.push_back(IntegerAttr::get(
+                   IntegerType::get(getContext(), 32, IntegerType::Unsigned),
+                   indexItr->second)),
+               success();
+      }))
+    return failure();
+
+  return success();
+}
+
 // Parse the body of this module.
 ParseResult
 FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
@@ -6281,6 +6408,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
     case FIRToken::kw_class:
     case FIRToken::kw_declgroup:
+    case FIRToken::kw_domain:
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:

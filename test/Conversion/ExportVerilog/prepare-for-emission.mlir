@@ -343,3 +343,13 @@ hw.module @temporaryWireForReg() {
   %b = sv.reg init %0 : !hw.inout<i1>
   %a = sv.reg init %1 : !hw.inout<i1>
 }
+
+// -----
+
+// CHECK-LABEL:   @VariadicSingleOperand
+// CHECK-SAME:      (in %[[A:.*]] : i1, out b : i1) {
+hw.module @VariadicSingleOperand(in %a : i1, out b: i1) {
+  %0 = comb.and %a : i1
+// CHECK:           hw.output %[[A]] : i1
+  hw.output %0 : i1
+}

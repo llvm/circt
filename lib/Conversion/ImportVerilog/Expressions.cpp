@@ -31,35 +31,55 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
 /// Map an index into an array, with bounds `range`, to a bit offset of the
 /// underlying bit storage. This is a dynamic version of
 /// `slang::ConstantRange::translateIndex`.
-static Value getSelectIndex(OpBuilder &builder, Location loc, Value index,
+static Value getSelectIndex(Context &context, Location loc, Value index,
                             const slang::ConstantRange &range) {
+  auto &builder = context.builder;
   auto indexType = cast<moore::UnpackedType>(index.getType());
   auto bw = std::max(llvm::Log2_32_Ceil(std::max(std::abs(range.lower()),
                                                  std::abs(range.upper()))),
                      indexType.getBitSize().value());
+
+  auto offset = range.isLittleEndian() ? range.lower() : range.upper();
+  bool isSigned = (offset < 0);
   auto intType =
       moore::IntType::get(index.getContext(), bw, indexType.getDomain());
+  index = context.materializeConversion(intType, index, isSigned, loc);
 
-  if (range.isLittleEndian()) {
-    if (range.lower() == 0)
+  if (offset == 0) {
+    if (range.isLittleEndian())
       return index;
-
-    Value newIndex =
-        builder.createOrFold<moore::ConversionOp>(loc, intType, index);
-    Value offset =
-        moore::ConstantOp::create(builder, loc, intType, range.lower(),
-                                  /*isSigned = */ range.lower() < 0);
-    return builder.createOrFold<moore::SubOp>(loc, newIndex, offset);
+    else
+      return moore::NegOp::create(builder, loc, index);
   }
 
-  if (range.upper() == 0)
-    return builder.createOrFold<moore::NegOp>(loc, index);
+  auto offsetConst =
+      moore::ConstantOp::create(builder, loc, intType, offset, isSigned);
+  if (range.isLittleEndian())
+    return moore::SubOp::create(builder, loc, index, offsetConst);
+  else
+    return moore::SubOp::create(builder, loc, offsetConst, index);
+}
 
-  Value newIndex =
-      builder.createOrFold<moore::ConversionOp>(loc, intType, index);
-  Value offset = moore::ConstantOp::create(builder, loc, intType, range.upper(),
-                                           /* isSigned = */ range.upper() < 0);
-  return builder.createOrFold<moore::SubOp>(loc, offset, newIndex);
+/// Get the currently active timescale as an integer number of femtoseconds.
+static uint64_t getTimeScaleInFemtoseconds(Context &context) {
+  static_assert(int(slang::TimeUnit::Seconds) == 0);
+  static_assert(int(slang::TimeUnit::Milliseconds) == 1);
+  static_assert(int(slang::TimeUnit::Microseconds) == 2);
+  static_assert(int(slang::TimeUnit::Nanoseconds) == 3);
+  static_assert(int(slang::TimeUnit::Picoseconds) == 4);
+  static_assert(int(slang::TimeUnit::Femtoseconds) == 5);
+
+  static_assert(int(slang::TimeScaleMagnitude::One) == 1);
+  static_assert(int(slang::TimeScaleMagnitude::Ten) == 10);
+  static_assert(int(slang::TimeScaleMagnitude::Hundred) == 100);
+
+  auto exp = static_cast<unsigned>(context.timeScale.base.unit);
+  assert(exp <= 5);
+  exp = 5 - exp;
+  auto scale = static_cast<uint64_t>(context.timeScale.base.magnitude);
+  while (exp-- > 0)
+    scale *= 1000;
+  return scale;
 }
 
 namespace {
@@ -122,7 +142,7 @@ struct ExprVisitor {
     auto lowBit = context.convertRvalueExpression(expr.selector());
     if (!lowBit)
       return {};
-    lowBit = getSelectIndex(builder, loc, lowBit, range);
+    lowBit = getSelectIndex(context, loc, lowBit, range);
     if (isLvalue)
       return moore::DynExtractRefOp::create(builder, loc, resultType, value,
                                             lowBit);
@@ -245,7 +265,7 @@ struct ExprVisitor {
         isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
 
     if (offsetDyn) {
-      offsetDyn = getSelectIndex(builder, loc, offsetDyn, range);
+      offsetDyn = getSelectIndex(context, loc, offsetDyn, range);
       if (isLvalue) {
         return moore::DynExtractRefOp::create(builder, loc, resultType, value,
                                               offsetDyn);
@@ -570,8 +590,8 @@ struct RvalueExprVisitor : public ExprVisitor {
       // type, since the operator can return X even for two-valued inputs. To
       // maintain uniform types across operands and results, cast the RHS to
       // that four-valued type as well.
-      auto rhsCast =
-          moore::ConversionOp::create(builder, loc, lhs.getType(), rhs);
+      auto rhsCast = context.materializeConversion(
+          lhs.getType(), rhs, expr.right().type->isSigned(), rhs.getLoc());
       if (expr.type->isSigned())
         return createBinary<moore::PowSOp>(lhs, rhsCast);
       else
@@ -737,17 +757,8 @@ struct RvalueExprVisitor : public ExprVisitor {
   Value visit(const slang::ast::TimeLiteral &expr) {
     // The time literal is expressed in the current time scale. Determine the
     // conversion factor to convert the literal from the current time scale into
-    // femtoseconds.
-    static_assert(int(slang::TimeUnit::Seconds) == 0);
-    static_assert(int(slang::TimeUnit::Femtoseconds) == 5);
-    static_assert(int(slang::TimeScaleMagnitude::One) == 1);
-    static_assert(int(slang::TimeScaleMagnitude::Ten) == 10);
-    static_assert(int(slang::TimeScaleMagnitude::Hundred) == 100);
-    static constexpr double units[] = {1e15, 1e12, 1e9, 1e6, 1e3, 1e0};
-    auto base = context.timeScale.base;
-    double scale = units[int(base.unit)] * int(base.magnitude);
-
-    // Convert and round the value to femtoseconds.
+    // femtoseconds, and round the scaled value to femtoseconds.
+    double scale = getTimeScaleInFemtoseconds(context);
     double value = std::round(expr.getValue() * scale);
     assert(value >= 0.0);
 
@@ -1316,10 +1327,8 @@ Value Context::materializeSVInt(const slang::SVInt &svint,
                                      fvint.hasUnknown() || typeIsFourValued
                                          ? moore::Domain::FourValued
                                          : moore::Domain::TwoValued);
-  Value result = moore::ConstantOp::create(builder, loc, intType, fvint);
-  if (result.getType() != type)
-    result = moore::ConversionOp::create(builder, loc, type, result);
-  return result;
+  auto result = moore::ConstantOp::create(builder, loc, intType, fvint);
+  return materializeConversion(type, result, astType.isSigned(), loc);
 }
 
 Value Context::materializeConstant(const slang::ConstantValue &constant,
@@ -1346,9 +1355,7 @@ Value Context::convertToBool(Value value, Domain domain) {
   if (!value)
     return {};
   auto type = moore::IntType::get(getContext(), 1, domain);
-  if (value.getType() == type)
-    return value;
-  return moore::ConversionOp::create(builder, value.getLoc(), type, value);
+  return materializeConversion(type, value, false, value.getLoc());
 }
 
 Value Context::convertToSimpleBitVector(Value value) {
@@ -1361,55 +1368,139 @@ Value Context::convertToSimpleBitVector(Value value) {
   // packed struct/array operands to simple bit vectors but directly operate
   // on the struct/array. Since the corresponding IR ops operate only on
   // simple bit vectors, insert a conversion in this case.
-  if (auto packed = dyn_cast<moore::PackedType>(value.getType())) {
-    if (auto bits = packed.getBitSize()) {
-      auto sbvType =
-          moore::IntType::get(value.getContext(), *bits, packed.getDomain());
-      return moore::ConversionOp::create(builder, value.getLoc(), sbvType,
-                                         value);
-    }
-  }
+  if (auto packed = dyn_cast<moore::PackedType>(value.getType()))
+    if (auto sbvType = packed.getSimpleBitVector())
+      return materializeConversion(sbvType, value, false, value.getLoc());
 
   mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
                                   << " cannot be cast to a simple bit vector";
   return {};
 }
 
+/// Create the necessary operations to convert from a `PackedType` to the
+/// corresponding simple bit vector `IntType`. This will apply special handling
+/// to time values, which requires scaling by the local timescale.
+static Value materializePackedToSBVConversion(Context &context, Value value,
+                                              Location loc) {
+  if (isa<moore::IntType>(value.getType()))
+    return value;
+
+  auto &builder = context.builder;
+  auto packedType = cast<moore::PackedType>(value.getType());
+  auto intType = packedType.getSimpleBitVector();
+  assert(intType);
+
+  // If we are converting from a time to an integer, divide the integer by the
+  // timescale.
+  if (isa<moore::TimeType>(packedType) &&
+      moore::isIntType(intType, 64, moore::Domain::FourValued)) {
+    value = builder.createOrFold<moore::TimeToLogicOp>(loc, value);
+    auto scale = moore::ConstantOp::create(builder, loc, intType,
+                                           getTimeScaleInFemtoseconds(context));
+    return builder.createOrFold<moore::DivUOp>(loc, value, scale);
+  }
+
+  // If this is an aggregate type, make sure that it does not contain any
+  // `TimeType` fields. These require special conversion to ensure that the
+  // local timescale is in effect.
+  if (packedType.containsTimeType()) {
+    mlir::emitError(loc) << "unsupported conversion: " << packedType
+                         << " cannot be converted to " << intType
+                         << "; contains a time type";
+    return {};
+  }
+
+  // Otherwise create a simple `PackedToSBVOp` for the conversion.
+  return builder.createOrFold<moore::PackedToSBVOp>(loc, value);
+}
+
+/// Create the necessary operations to convert from a simple bit vector
+/// `IntType` to an equivalent `PackedType`. This will apply special handling to
+/// time values, which requires scaling by the local timescale.
+static Value materializeSBVToPackedConversion(Context &context,
+                                              moore::PackedType packedType,
+                                              Value value, Location loc) {
+  if (value.getType() == packedType)
+    return value;
+
+  auto &builder = context.builder;
+  auto intType = cast<moore::IntType>(value.getType());
+  assert(intType && intType == packedType.getSimpleBitVector());
+
+  // If we are converting from an integer to a time, multiply the integer by the
+  // timescale.
+  if (isa<moore::TimeType>(packedType) &&
+      moore::isIntType(intType, 64, moore::Domain::FourValued)) {
+    auto scale = moore::ConstantOp::create(builder, loc, intType,
+                                           getTimeScaleInFemtoseconds(context));
+    value = builder.createOrFold<moore::MulOp>(loc, value, scale);
+    return builder.createOrFold<moore::LogicToTimeOp>(loc, value);
+  }
+
+  // If this is an aggregate type, make sure that it does not contain any
+  // `TimeType` fields. These require special conversion to ensure that the
+  // local timescale is in effect.
+  if (packedType.containsTimeType()) {
+    mlir::emitError(loc) << "unsupported conversion: " << intType
+                         << " cannot be converted to " << packedType
+                         << "; contains a time type";
+    return {};
+  }
+
+  // Otherwise create a simple `PackedToSBVOp` for the conversion.
+  return builder.createOrFold<moore::SBVToPackedOp>(loc, packedType, value);
+}
+
 Value Context::materializeConversion(Type type, Value value, bool isSigned,
                                      Location loc) {
+  // Nothing to do if the types are already equal.
   if (type == value.getType())
     return value;
+
+  // Handle packed types which can be converted to a simple bit vector. This
+  // allows us to perform resizing and domain casting on that bit vector.
   auto dstPacked = dyn_cast<moore::PackedType>(type);
   auto srcPacked = dyn_cast<moore::PackedType>(value.getType());
+  auto dstInt = dstPacked ? dstPacked.getSimpleBitVector() : moore::IntType();
+  auto srcInt = srcPacked ? srcPacked.getSimpleBitVector() : moore::IntType();
 
-  // Resize the value if needed.
-  if (dstPacked && srcPacked && dstPacked.getBitSize() &&
-      srcPacked.getBitSize() &&
-      *dstPacked.getBitSize() != *srcPacked.getBitSize()) {
-    auto dstWidth = *dstPacked.getBitSize();
-    auto srcWidth = *srcPacked.getBitSize();
-
-    // Convert the value to a simple bit vector which we can extend or truncate.
-    auto srcWidthType = moore::IntType::get(value.getContext(), srcWidth,
-                                            srcPacked.getDomain());
-    if (value.getType() != srcWidthType)
-      value = moore::ConversionOp::create(builder, value.getLoc(), srcWidthType,
-                                          value);
+  if (dstInt && srcInt) {
+    // Convert the value to a simple bit vector if it isn't one already.
+    value = materializePackedToSBVConversion(*this, value, loc);
+    if (!value)
+      return {};
 
     // Create truncation or sign/zero extension ops depending on the source and
     // destination width.
-    auto dstWidthType = moore::IntType::get(value.getContext(), dstWidth,
-                                            srcPacked.getDomain());
-    if (dstWidth < srcWidth) {
-      value = moore::TruncOp::create(builder, loc, dstWidthType, value);
-    } else if (dstWidth > srcWidth) {
+    auto resizedType = moore::IntType::get(
+        value.getContext(), dstInt.getWidth(), srcPacked.getDomain());
+    if (dstInt.getWidth() < srcInt.getWidth()) {
+      value = builder.createOrFold<moore::TruncOp>(loc, resizedType, value);
+    } else if (dstInt.getWidth() > srcInt.getWidth()) {
       if (isSigned)
-        value = moore::SExtOp::create(builder, loc, dstWidthType, value);
+        value = builder.createOrFold<moore::SExtOp>(loc, resizedType, value);
       else
-        value = moore::ZExtOp::create(builder, loc, dstWidthType, value);
+        value = builder.createOrFold<moore::ZExtOp>(loc, resizedType, value);
     }
+
+    // Convert the domain if needed.
+    if (dstInt.getDomain() != srcInt.getDomain()) {
+      if (dstInt.getDomain() == moore::Domain::TwoValued)
+        value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+      else if (dstInt.getDomain() == moore::Domain::FourValued)
+        value = builder.createOrFold<moore::IntToLogicOp>(loc, value);
+    }
+
+    // Convert the value from a simple bit vector back to the packed type.
+    value = materializeSBVToPackedConversion(*this, dstPacked, value, loc);
+    if (!value)
+      return {};
+
+    assert(value.getType() == type);
+    return value;
   }
 
+  // TODO: Handle other conversions with dedicated ops.
   if (value.getType() != type)
     value = moore::ConversionOp::create(builder, loc, type, value);
   return value;

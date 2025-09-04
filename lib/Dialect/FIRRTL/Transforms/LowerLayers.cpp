@@ -608,26 +608,61 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // transparently referencing a spilled op, spill the node, too.  The node
       // provides an anchor for an inner symbol (which subfield, subindex, and
       // subaccess do not).
-      if (isa<SubfieldOp, SubindexOp>(op)) {
-        auto input = op->getOperand(0);
-        if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
-            !isAncestorOfValueOwner(layerBlock, input)) {
-          op->moveBefore(layerBlock);
-          spilledSubOps.insert(op);
-        }
-        return WalkResult::advance();
-      }
-      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+      auto fixSubOp = [&](auto subOp) {
         auto input = subOp.getInput();
-        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
+
+        // If the input is defined in this layerblock, we are done.
+        if (isAncestorOfValueOwner(layerBlock, input))
           return WalkResult::advance();
 
-        if (!isAncestorOfValueOwner(layerBlock, input) &&
-            !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
+        // Otherwise, capture the input operand, if possible.
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive()) {
+          subOp.getInputMutable().assign(getReplacement(subOp, input));
+          return WalkResult::advance();
+        }
+
+        // Otherwise, move the subfield op out of the layerblock.
+        op->moveBefore(layerBlock);
+        spilledSubOps.insert(op);
+        return WalkResult::advance();
+      };
+
+      if (auto subOp = dyn_cast<SubfieldOp>(op))
+        return fixSubOp(subOp);
+
+      if (auto subOp = dyn_cast<SubindexOp>(op))
+        return fixSubOp(subOp);
+
+      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+        auto input = subOp.getInput();
+        auto index = subOp.getIndex();
+
+        // If the input is defined in this layerblock, capture the index if
+        // needed, and we are done.
+        if (isAncestorOfValueOwner(layerBlock, input)) {
+          if (!isAncestorOfValueOwner(layerBlock, index)) {
+            subOp.getIndexMutable().assign(getReplacement(subOp, index));
+          }
+          return WalkResult::advance();
+        }
+
+        // Otherwise, capture the input operand, if possible.
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive()) {
+          subOp.getInputMutable().assign(getReplacement(subOp, input));
+          if (!isAncestorOfValueOwner(layerBlock, index))
+            subOp.getIndexMutable().assign(getReplacement(subOp, index));
+          return WalkResult::advance();
+        }
+
+        // Otherwise, move the subaccess op out of the layerblock, if possible.
+        if (!isAncestorOfValueOwner(layerBlock, index)) {
           subOp->moveBefore(layerBlock);
           spilledSubOps.insert(op);
           return WalkResult::advance();
         }
+
+        // When the input is not passive, but the index is defined inside this
+        // layerblock, we are out of options.
         auto diag = op->emitOpError()
                     << "has a non-passive operand and captures a value defined "
                        "outside its enclosing bind-convention layerblock.  The "
@@ -637,6 +672,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             << "the layerblock is defined here";
         return WalkResult::interrupt();
       }
+
       if (auto nodeOp = dyn_cast<NodeOp>(op)) {
         auto *definingOp = nodeOp.getInput().getDefiningOp();
         if (definingOp &&

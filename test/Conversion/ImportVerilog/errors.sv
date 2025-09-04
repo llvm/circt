@@ -173,3 +173,19 @@ function void foo;
   // expected-error @below {{unsupported expression: element select into}}
   a["foo"] = 1;
 endfunction
+
+// -----
+function void foo;
+  struct packed { time t; } a;
+  int b;
+  // expected-error @below {{contains a time type}}
+  a = b;
+endfunction
+
+// -----
+function void foo;
+  int a;
+  struct packed { time t; } b;
+  // expected-error @below {{contains a time type}}
+  a = b;
+endfunction

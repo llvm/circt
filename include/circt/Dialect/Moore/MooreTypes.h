@@ -52,6 +52,13 @@ enum class Domain {
   FourValued,
 };
 
+/// Check if a type is an `IntType` type of the given width.
+bool isIntType(Type type, unsigned width);
+/// Check if a type is an `IntType` type of the given domain.
+bool isIntType(Type type, Domain domain);
+/// Check if a type is an `IntType` type of the given width and domain.
+bool isIntType(Type type, unsigned width, Domain domain);
+
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
@@ -145,6 +152,14 @@ public:
   ///
   /// Returns `None` if any of the type's dimensions is unsized.
   std::optional<unsigned> getBitSize() const;
+
+  /// Get the simple bit vector type equivalent to this packed type. Returns
+  /// null if the type does not have a known bit size.
+  IntType getSimpleBitVector() const;
+
+  /// Check if this is a `TimeType`, or an aggregate that contains a nested
+  /// `TimeType`.
+  bool containsTimeType() const;
 
 protected:
   using UnpackedType::UnpackedType;

@@ -196,4 +196,51 @@ firrtl.module @Fprintf(
   firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.domain @ClockDomain
+firrtl.domain @ClockDomain {
+}
+
+firrtl.module @DomainsSubmodule(
+  in %A: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%A]
+) {}
+
+// CHECK-LABEL: firrtl.module @Domains(
+// CHECK-SAME:    in %A: !firrtl.domain
+// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
+// CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
+firrtl.module @Domains(
+  in %A: !firrtl.domain of @ClockDomain,
+  in %B: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%A],
+  out %b: !firrtl.uint<1> domains [%B]
+) {
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+
+  // CHECK:      %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
+  // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in a: !firrtl.uint<1> domains [A]
+  %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
+    in A: !firrtl.domain of @ClockDomain,
+    in a: !firrtl.uint<1> domains [A]
+  )
+}
+
+// CHECK-LABEL: firrtl.module @AnonymousDomains
+// CHECK-SAME:    in %arg0: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%arg0]
+// CHECK-SAME:    portNames = ["", "a"]
+firrtl.module @AnonymousDomains(
+  in %arg0: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%arg0]
+) attributes {
+  portNames = ["", "a"]
+} {
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
+}
+
 }

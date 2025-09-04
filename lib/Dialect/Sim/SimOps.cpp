@@ -13,6 +13,7 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
@@ -369,13 +370,13 @@ LogicalResult PrintFormattedProcOp::verify() {
   if (!parentOp)
     return emitOpError("must be within a procedural region.");
 
-  if (isa<hw::HWDialect>(parentOp->getDialect())) {
+  if (isa_and_nonnull<hw::HWDialect>(parentOp->getDialect())) {
     if (!isa<hw::TriggeredOp>(parentOp))
       return emitOpError("must be within a procedural region.");
     return success();
   }
 
-  if (isa<sv::SVDialect>(parentOp->getDialect())) {
+  if (isa_and_nonnull<sv::SVDialect>(parentOp->getDialect())) {
     if (!parentOp->hasTrait<sv::ProceduralRegion>())
       return emitOpError("must be within a procedural region.");
     return success();

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -102,48 +103,6 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   replaceOpWithNewOpAndCopyNamehint<aig::AndInverterOp>(
       rewriter, op, uniqueValues, uniqueInverts);
   return success();
-}
-
-ParseResult AndInverterOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand> operands;
-  SmallVector<bool> inverts;
-  auto loc = parser.getCurrentLocation();
-
-  while (true) {
-    inverts.push_back(succeeded(parser.parseOptionalKeyword("not")));
-    operands.push_back(OpAsmParser::UnresolvedOperand());
-
-    if (parser.parseOperand(operands.back()))
-      return failure();
-    if (parser.parseOptionalComma())
-      break;
-  }
-
-  Type type;
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseCustomTypeWithFallback(type))
-    return failure();
-
-  result.addTypes({type});
-  result.addAttribute("inverted",
-                      parser.getBuilder().getDenseBoolArrayAttr(inverts));
-  if (parser.resolveOperands(operands, type, loc, result.operands))
-    return failure();
-  return success();
-}
-
-void AndInverterOp::print(OpAsmPrinter &odsPrinter) {
-  odsPrinter << ' ';
-  llvm::interleaveComma(llvm::zip(getInverted(), getInputs()), odsPrinter,
-                        [&](auto &&pair) {
-                          auto [invert, input] = pair;
-                          if (invert) {
-                            odsPrinter << "not ";
-                          }
-                          odsPrinter << input;
-                        });
-  odsPrinter.printOptionalAttrDict((*this)->getAttrs(), {"inverted"});
-  odsPrinter << " : " << getResult().getType();
 }
 
 APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {

@@ -44,7 +44,9 @@ void circt::synth::buildAIGLoweringPipeline(
     if (!options.disableDatapath) {
       pm.addPass(createConvertCombToDatapath());
       pm.addPass(createSimpleCanonicalizerPass());
-      pm.addPass(createConvertDatapathToComb());
+      circt::ConvertDatapathToCombOptions datapathOptions;
+      datapathOptions.timingAware = options.timingAware;
+      pm.addPass(createConvertDatapathToComb(datapathOptions));
       pm.addPass(createSimpleCanonicalizerPass());
     }
     // Partially legalize Comb to AIG, run CSE and canonicalization.

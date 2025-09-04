@@ -132,13 +132,13 @@ struct TechLibraryPattern : public CutRewritePattern {
     return instanceOp.getOperation();
   }
 
-  double getArea(const Cut &cut) const override { return area; }
+  double getArea() const override { return area; }
 
   DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const override {
     return delay[inputIndex][outputIndex];
   }
 
-  unsigned getNumInputs() const override {
+  unsigned getNumInputs() const {
     return static_cast<hw::HWModuleOp>(module).getNumInputPorts();
   }
 
@@ -220,7 +220,7 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
       }
 
       // Create a CutRewritePattern for the library module
-      std::unique_ptr<CutRewritePattern> pattern =
+      std::unique_ptr<TechLibraryPattern> pattern =
           std::make_unique<TechLibraryPattern>(hwModule, area, std::move(delay),
                                                std::move(*npnClass));
 

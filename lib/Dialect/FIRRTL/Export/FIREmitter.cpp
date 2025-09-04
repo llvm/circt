@@ -58,6 +58,7 @@ struct Emitter {
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
+  void emitDeclaration(DomainOp op);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
   void emitDeclaration(FormalOp op);
@@ -139,6 +140,7 @@ struct Emitter {
   void emitExpression(UnresolvedPathOp op);
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
+  void emitExpression(UnsafeDomainCastOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -201,6 +203,10 @@ struct Emitter {
     ps << PP::space << ":" << PP::nbsp;
     emitType(type);
   }
+
+  // Domains
+  void emitDomains(Attribute domains,
+                   const DenseMap<size_t, StringRef> &domainMap);
 
   // Locations
   void emitLocation(Location loc);
@@ -418,7 +424,7 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<LayerOp, OptionOp, FormalOp, SimulationOp>(
+          .Case<DomainOp, LayerOp, OptionOp, FormalOp, SimulationOp>(
               [&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
@@ -608,15 +614,19 @@ void Emitter::emitModule(FIntModuleOp op) {
 /// during expression emission.
 void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
                               Block::BlockArgListType arguments) {
+  DenseMap<size_t, StringRef> domainMap;
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
     startStatement();
     const auto &port = ports[i];
     ps << (port.direction == Direction::In ? "input " : "output ");
     auto legalName = legalize(port.name);
+    if (isa<DomainType>(port.type))
+      domainMap.insert({i, port.name});
     if (!arguments.empty())
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    emitDomains(port.domains, domainMap);
     emitLocation(ports[i].loc);
     setPendingNewline();
   }
@@ -628,6 +638,12 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
     emitParamAssign(param, op, PPExtString("parameter"));
     setPendingNewline();
   }
+}
+
+void Emitter::emitDeclaration(DomainOp op) {
+  startStatement();
+  ps << "domain " << PPExtString(op.getSymName()) << " :";
+  emitLocationAndNewLine(op);
 }
 
 /// Emit a layer definition.
@@ -1387,7 +1403,7 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp,
+          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1628,6 +1644,13 @@ void Emitter::emitExpression(CatPrimOp op) {
   }
 }
 
+void Emitter::emitExpression(UnsafeDomainCastOp op) {
+  ps << "unsafe_domain_cast(" << PP::ibox0;
+  interleaveComma(op.getOperands(),
+                  [&](Value operand) { emitExpression(operand); });
+  ps << ")" << PP::end;
+}
+
 void Emitter::emitAttribute(MemDirAttr attr) {
   switch (attr) {
   case MemDirAttr::Infer:
@@ -1741,9 +1764,32 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
+      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
+}
+
+void Emitter::emitDomains(Attribute attr,
+                          const DenseMap<size_t, StringRef> &domainMap) {
+  if (!attr)
+    return;
+  if (auto domains = dyn_cast<ArrayAttr>(attr)) {
+    if (domains.empty())
+      return;
+    ps << " domains [";
+    ps.scopedBox(PP::ibox0, [&]() {
+      interleaveComma(domains, [&](Attribute attr) {
+        auto itr = domainMap.find(cast<IntegerAttr>(attr).getUInt());
+        assert(itr != domainMap.end() && "Unable to find domain");
+        ps.addAsString(itr->second);
+      });
+      ps << "]";
+    });
+  } else {
+    auto kind = cast<FlatSymbolRefAttr>(attr);
+    ps << " of " << PPExtString(kind.getValue());
+  }
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a

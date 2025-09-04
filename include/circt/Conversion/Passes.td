@@ -38,40 +38,6 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
 }
 
 //===----------------------------------------------------------------------===//
-// ExportChiselInterface and ExportSplitChiselInterface
-//===----------------------------------------------------------------------===//
-
-def ExportChiselInterface : Pass<"export-chisel-interface", "firrtl::CircuitOp"> {
-  let summary = "Emit a Chisel interface to a FIRRTL circuit";
-  let description = [{
-    This pass generates a Scala Chisel interface for the top level module of
-    a FIRRTL circuit.
-  }];
-
-  let constructor = "createExportChiselInterfacePass()";
-  let dependentDialects = [
-    "circt::firrtl::FIRRTLDialect"
-  ];
-}
-
-def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::CircuitOp"> {
-  let summary = "Emit a Chisel interface to a FIRRTL circuit to a directory of files";
-  let description = [{
-    This pass generates a Scala Chisel interface for the top level module of
-    a FIRRTL circuit.
-  }];
-
-  let constructor = "createExportSplitChiselInterfacePass()";
-  let dependentDialects = [
-    "circt::firrtl::FIRRTLDialect"
-  ];
-  let options = [
-    Option<"directoryName", "dir-name", "std::string",
-            "", "Directory to emit into">
-   ];
-}
-
-//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
@@ -885,7 +851,9 @@ def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
     Option<"lowerCompressToAdd", "lower-compress-to-add", "bool", "false",
            "Lower compress operators to variadic add.">,
     Option<"forceBooth", "lower-partial-product-to-booth", "bool", "false",
-           "Force all partial products to be lowered to Booth arrays.">
+           "Force all partial products to be lowered to Booth arrays.">,
+    Option<"timingAware", "timing-aware", "bool", "false",
+           "Lower operators in a timing-aware fashion.">
   ];
 }
 

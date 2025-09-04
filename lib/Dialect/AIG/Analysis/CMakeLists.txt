@@ -9,6 +9,8 @@ add_circt_dialect_library(CIRCTAIGAnalysis
   MLIRSupport
   CIRCTAIG
   CIRCTComb
+  CIRCTCombToAIG
+  CIRCTTransforms
   CIRCTHW
   CIRCTSeq
 )

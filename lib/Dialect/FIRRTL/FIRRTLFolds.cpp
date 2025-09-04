@@ -3746,3 +3746,15 @@ LogicalResult LayerBlockOp::canonicalize(LayerBlockOp op,
 
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// Domain-related Ops
+//===----------------------------------------------------------------------===//
+
+OpFoldResult UnsafeDomainCastOp::fold(FoldAdaptor adaptor) {
+  // If no domains are specified, then forward the input to the result.
+  if (getDomains().empty())
+    return getInput();
+
+  return {};
+}

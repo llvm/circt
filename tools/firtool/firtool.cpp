@@ -874,8 +874,6 @@ int main(int argc, char **argv) {
     verif::registerVerifyClockedAssertLikePass();
 
     // Export passes:
-    registerExportChiselInterfacePass();
-    registerExportSplitChiselInterfacePass();
     registerExportSplitVerilogPass();
     registerExportVerilogPass();
 

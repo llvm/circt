@@ -15,7 +15,10 @@
 
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.h.inc"

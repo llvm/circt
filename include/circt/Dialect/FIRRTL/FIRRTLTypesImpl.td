@@ -607,4 +607,11 @@ def FStringImpl : FIRRTLImplType<"FString", [], "::circt::firrtl::FIRRTLType" > 
   let typeName = "firrtl.fstring";
 }
 
+def DomainTypeImpl : FIRRTLImplType<"Domain", [], "::circt::firrtl::FIRRTLType"> {
+  let summary = "A domain type";
+  let parameters = (ins);
+  let genStorageClass = true;
+  let typeName = "firrtl.domain";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

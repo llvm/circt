@@ -564,8 +564,10 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v9.0
-      GIT_SHALLOW ON)
+      GIT_TAG dd16a7947e0586d0541477f1b4b60eda7c986e35
+      # Shallow check-out doesn't work if the tag is ref spec is far from HEAD.
+      # GIT_SHALLOW ON
+    )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
