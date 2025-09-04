@@ -28,6 +28,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <circt/Dialect/HW/HWTypes.h>
 #include <cstdlib>
@@ -118,6 +119,31 @@ void printFsmArgVals(
   for (auto [v1, v2] : fsmArgVals)
     llvm::outs() << "\n\nv1: " << v1 << ", v2: " << v2;
 }
+static unsigned getPackedBitWidth(mlir::Type t) {
+  if (auto intTy = llvm::dyn_cast<mlir::IntegerType>(t))
+    return intTy.getIntOrFloatBitWidth();
+
+  if (auto bvTy = llvm::dyn_cast<mlir::smt::BitVectorType>(t))
+    return bvTy.getWidth();
+
+  if (auto arrTy = llvm::dyn_cast<circt::hw::ArrayType>(t)) {
+    unsigned elemW = getPackedBitWidth(arrTy.getElementType());
+    return elemW * arrTy.getNumElements();
+  }
+
+  if (auto structTy = llvm::dyn_cast<circt::hw::StructType>(t)) {
+    unsigned w = 0;
+    for (auto elem : structTy.getElements()) // structTy.getElements()
+      w += getPackedBitWidth(elem.type);
+    return w;
+  }
+
+  // If you want to support more aggregates, add them here.
+  // Otherwise, fail clearly instead of asserting deep in MLIR.
+  llvm::errs() << "Unsupported type for bitwidth computation in FSMToSMTSafety: " << t << "\n";
+  assert(false && "Unsupported type in getPackedBitWidth");
+  return 0;
+}
 
 mlir::smt::BVCmpPredicate getSmtPred(circt::comb::ICmpPredicate cmpPredicate) {
   switch (cmpPredicate) {
@@ -154,7 +180,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
   //   llvm::outs() << "\n\ntype: " << arg;
   //   widths.push_back(a.getWidth());
   // }
-  static auto asBV = [&](mlir::Value v) -> mlir::Value {
+  auto asBV = [&](mlir::Value v) -> mlir::Value {
     if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
       return v;
     if (llvm::isa<smt::BoolType>(v.getType()))
@@ -164,7 +190,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
     return v;
   };
 
-  static auto bvWidth = [&](mlir::Value v) -> int {
+  auto bvWidth = [&](mlir::Value v) -> int {
     if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
       return bvTy.getWidth();
     if (llvm::isa<smt::BoolType>(v.getType()))
@@ -201,25 +227,31 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
     // Chain binary 'and' operations
     mlir::Value result = asBV(args[0]);
     for (size_t i = 1; i < args.size(); ++i) {
-      assert(llvm::isa<smt::BitVectorType>(result.getType()) &&
-             "I expect the result to be a bit-vector");
+      // assert(llvm::isa<smt::BitVectorType>(result.getType()) &&
+      //        "I expect the result to be a bit-vector");
 
-      if (!(llvm::isa<smt::BitVectorType>(args[i].getType()))) {
-        llvm::outs() << "\n\n I expected args[" << i
-                     << "] to be a bit-vector, but it is not:";
-        args[i].dump();
-      }
-      assert(llvm::isa<smt::BitVectorType>(args[i].getType()) &&
-             "I expaect args[i] to be a bit-vector:");
+      // if (!(llvm::isa<smt::BitVectorType>(args[i].getType()))) {
+      //   llvm::outs() << "\n\n I expected args[" << i
+      //                << "] to be a bit-vector, but it is not:";
+      //   args[i].dump();
+      // }
+      // assert(llvm::isa<smt::BitVectorType>(args[i].getType()) &&
+      //        "I expaect args[i] to be a bit-vector:");
       result = b.create<smt::BVAndOp>(loc, result, asBV(args[i]));
     }
     return result;
     // return b.create<smt::BVAndOp>(loc,
     // b.getType<smt::BitVectorType>(widths[0]), args);
   }
-  if (auto xorOp = mlir::dyn_cast<comb::XorOp>(op))
-    return b.create<smt::BVXOrOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
-                                  args);
+  if (auto xorOp = mlir::dyn_cast<comb::XorOp>(op)){
+
+  mlir::Value result = asBV(args[0]);
+  for (size_t i = 1; i < args.size(); ++i)
+    result = b.create<smt::BVXOrOp>(loc, result, asBV(args[i]));
+  return result;
+    // return b.create<smt::BVXOrOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
+    //                               args);
+  }
   if (auto orOp = mlir::dyn_cast<comb::OrOp>(op)) {
     //     if (args.empty()) {
     //   op.emitError() << "comb.or with no operands";
@@ -253,9 +285,25 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
     // return b.create<smt::IteOp>(loc,
     // b.getType<smt::BitVectorType>(widths[1]), args);
   }
-  if (auto concatOp = mlir::dyn_cast<comb::ConcatOp>(op))
-    return b.create<smt::ConcatOp>(
-        loc, b.getType<smt::BitVectorType>(widths[0] + widths[1]), args);
+
+  if (auto concatOp = mlir::dyn_cast<comb::ConcatOp>(op)) {
+ 
+    mlir::Value acc = asBV(args[0]);
+    int accW = bvWidth(acc);
+    for (size_t i = 1; i < args.size(); ++i) {
+      mlir::Value next = asBV(args[i]);
+      int nextW = bvWidth(next);
+      auto resTy = b.getType<smt::BitVectorType>(accW + nextW);
+      acc = b.create<smt::ConcatOp>(loc, resTy, acc, next);
+      accW += nextW;
+    }
+    return acc;
+  }
+
+
+  // if (auto concatOp = mlir::dyn_cast<comb::ConcatOp>(op))
+  //   return b.create<smt::ConcatOp>(
+  //       loc, b.getType<smt::BitVectorType>(widths[0] + widths[1]), args);
   if (auto mulOp = mlir::dyn_cast<comb::MulOp>(op)) {
     return b.create<smt::BVMulOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
                                   args);
@@ -284,6 +332,18 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
     return b.create<smt::ExtractOp>(loc, resTy, /*lowBit=*/low,
                                     /*input=*/args.front());
   }
+  if(auto replicateOp = mlir::dyn_cast<comb::ReplicateOp>(op)){
+    unsigned count = replicateOp.getMultiple();
+    mlir::Value width = args[0];
+    return b.create<smt::RepeatOp>(loc, count, width);
+  }
+  if(auto subOp = mlir::dyn_cast<comb::SubOp>(op)){
+    smt::BVNegOp neg = b.create<smt::BVNegOp>(loc,b.getType<smt::BitVectorType>(widths[1]), asBV(args[1]));
+    return b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(widths[0]), args[0], neg);
+  }
+  if(comb::ShrUOp shruOp = mlir::dyn_cast<comb::ShrUOp>(op)){
+    return b.create<smt::BVLShrOp>(loc, args);
+  }
 
   // if (auto extOp = mlir::dyn_cast<comb::ExtractOp>(op)) {
   //   unsigned low = extOp.getLowBit();
@@ -301,7 +361,7 @@ mlir::Value getCombValue(Operation &op, Location &loc, OpBuilder &b,
   //   // If instead it’s smt::ExtractOp and the builder takes integer indices:
   //   return b.create<smt::ExtractOp>(loc, resTy, low,extOp.getInput());
   // }
-
+  llvm::outs() << "\n\nunsupported comb op: " << op;
   assert(false && "unsupported comb operation");
 }
 
@@ -310,9 +370,9 @@ mlir::Value getSmtValue(
     const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> &fsmArgVals,
     OpBuilder &b, Location &loc) {
   // op can be an arg/var of the fsm
-  printFsmArgVals(fsmArgVals);
+  // printFsmArgVals(fsmArgVals);
 
-  llvm::outs() << "\n\nlooking for : " << op;
+  // llvm::outs() << "\n\nlooking for : " << op;
 
   for (auto fav : fsmArgVals) {
     if (op == fav.first) {
@@ -332,7 +392,14 @@ mlir::Value getSmtValue(
   if (auto constop = mlir::dyn_cast<hw::ConstantOp>(op.getDefiningOp())) {
     return b.create<smt::BVConstantOp>(loc, constop.getValue());
   }
-  assert(false);
+  // if(hw::BitcastOp bitCastOp = mlir::dyn_cast<hw::BitcastOp>(op.getDefiningOp())){
+  //   auto inner = getSmtValue(bitCastOp.getInput(), fsmArgVals, b, loc);
+  //   // assert(inner.getType().isa<smt::BitVectorType>() && "expected bv type");
+  //   return getSmtValue(, const llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> &fsmArgVals, OpBuilder &b, Location &loc)
+  // }
+  llvm::outs() << "\n\nunsupported getSmtValue op: " << op;
+  // assert(false && "unsupported getSmtValue operation");
+  return op;
 }
 
 Transition parseTransition(fsm::TransitionOp t, int from,
@@ -389,7 +456,8 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto a : machineArgs) {
     // auto cast = llvm::dyn_cast<smt::BitVectorType>(a.getType());
     argVarWidths.push_back(
-        b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
+      b.getType<smt::BitVectorType>(getPackedBitWidth(a.getType())));
+
     argVars.push_back(a);
     numArgs++;
   }
@@ -397,23 +465,28 @@ LogicalResult MachineOpConverter::dispatch() {
   // fsm outputs
   if (machineOp.getResultTypes().size() > 0) {
     for (auto o : machineOp.getResultTypes()) {
-      auto intVal = b.getType<smt::BitVectorType>(o.getIntOrFloatBitWidth());
+        unsigned w = getPackedBitWidth(o);
+      auto intVal = b.getType<smt::BitVectorType>(w);
+      auto ov = b.create<smt::BVConstantOp>(loc, 0, w);
+      // auto intVal = b.getType<smt::BitVectorType>(o.getIntOrFloatBitWidth());
       argVarWidths.push_back(intVal);
-      auto ov = b.create<smt::BVConstantOp>(loc, 0, o.getIntOrFloatBitWidth());
+      // auto ov = b.create<smt::BVConstantOp>(loc, 0, o.getIntOrFloatBitWidth());
       argVars.push_back(ov);
       numOut++;
     }
   }
 
-  llvm::SmallVector<int> varInitValues;
+  llvm::SmallVector<llvm::APInt> varInitValues;
 
   // fsm variables
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
-    auto intVal = b.getType<smt::BitVectorType>(
-        variableOp.getType().getIntOrFloatBitWidth());
+    auto intVal =
+      b.getType<smt::BitVectorType>(getPackedBitWidth(variableOp.getType()));
+    // auto intVal = b.getType<smt::BitVectorType>(
+    //     variableOp.getType().getIntOrFloatBitWidth());
     auto initVal = variableOp.getInitValueAttr();
     if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(initVal))
-      varInitValues.push_back(intAttr.getInt());
+      varInitValues.push_back(intAttr.getValue());
     argVarWidths.push_back(intVal);
     argVars.push_back(variableOp->getOpResult(0));
   }
@@ -496,11 +569,17 @@ LogicalResult MachineOpConverter::dispatch() {
         // first we collect the initial data of variables
         for (auto [i, a] : llvm::enumerate(forallArgs)) {
           if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
-            auto cast = llvm::dyn_cast<smt::BitVectorType>(a.getType());
-            llvm::outs() << "\n\nwidth is: " << cast.getWidth();
-            auto initVarVal = b.create<smt::BVConstantOp>(
-                loc, varInitValues[i - numOut - numArgs], cast.getWidth());
-            initVarValues.push_back(initVarVal);
+              auto cast = llvm::dyn_cast<smt::BitVectorType>(a.getType());
+              auto initAP = varInitValues[i - numOut - numArgs];
+              assert(initAP.getBitWidth() == cast.getWidth() &&
+                    "init width mismatch for variable");
+              auto initVarVal = b.create<smt::BVConstantOp>(loc, initAP);
+              initVarValues.push_back(initVarVal);
+            // auto cast = llvm::dyn_cast<smt::BitVectorType>(a.getType());
+            // llvm::outs() << "\n\nwidth is: " << cast.getWidth();
+            // auto initVarVal = b.create<smt::BVConstantOp>(
+            //     loc, varInitValues[i - numOut - numArgs], cast.getWidth());
+            // initVarValues.push_back(initVarVal);
           }
         }
 
@@ -826,6 +905,12 @@ void FSMToSMTSafetyPass::runOnOperation() {
       signalPassFailure();
       return;
     }
+    module.walk([&](circt::hw::ConstantOp cst) {
+
+      cst.erase();
+  });
+
+
   }
 }
 } // namespace
