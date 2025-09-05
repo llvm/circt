@@ -487,11 +487,84 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
-  if (op.getBody().hasOneBlock() && op.getNumResults() == 0) {
-    auto &block = op.getBody().front();
-    if (block.getOperations().size() == 1 && isa<HaltOp>(block.getTerminator()))
-      rewriter.eraseOp(op);
+  if (!op.getBody().hasOneBlock())
+    return failure();
+
+  auto &block = op.getBody().front();
+  auto haltOp = dyn_cast<HaltOp>(block.getTerminator());
+  if (!haltOp)
+    return failure();
+
+  if (op.getNumResults() == 0 && block.getOperations().size() == 1) {
+    rewriter.eraseOp(op);
+    return success();
   }
+
+  // Only constants and halt terminator are expected in a single block.
+  if (!llvm::all_of(block.without_terminator(), [](auto &bodyOp) {
+        return bodyOp.template hasTrait<OpTrait::ConstantLike>();
+      }))
+    return failure();
+
+  auto yieldOperands = haltOp.getYieldOperands();
+  llvm::SmallDenseMap<Value, unsigned> uniqueOperands;
+  llvm::SmallDenseMap<unsigned, unsigned> origToNewPos;
+  llvm::BitVector operandsToErase(yieldOperands.size());
+
+  for (auto [operandNo, operand] : llvm::enumerate(yieldOperands)) {
+    auto *defOp = operand.getDefiningOp();
+    if (defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
+      // If the constant is available outside the process, use it directly;
+      // otherwise move it outside.
+      if (!defOp->getParentRegion()->isProperAncestor(&op.getBody())) {
+        defOp->moveBefore(op);
+      }
+      rewriter.replaceAllUsesWith(op.getResult(operandNo), operand);
+      operandsToErase.set(operandNo);
+      continue;
+    }
+
+    // Identify duplicate operands to merge and compute updated result
+    // positions for the process operation.
+    if (!uniqueOperands.contains(operand)) {
+      const auto newPos = uniqueOperands.size();
+      uniqueOperands.insert(std::make_pair(operand, newPos));
+      origToNewPos.insert(std::make_pair(operandNo, newPos));
+    } else {
+      auto firstOccurrencePos = uniqueOperands.lookup(operand);
+      origToNewPos.insert(std::make_pair(operandNo, firstOccurrencePos));
+      operandsToErase.set(operandNo);
+    }
+  }
+
+  const auto countOperandsToErase = operandsToErase.count();
+  if (countOperandsToErase == 0)
+    return failure();
+
+  // Remove the process operation if all its results have been replaced with
+  // constants.
+  if (countOperandsToErase == op.getNumResults()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  haltOp->eraseOperands(operandsToErase);
+
+  SmallVector<Type> resultTypes = llvm::to_vector(haltOp->getOperandTypes());
+  auto newProcessOp = ProcessOp::create(rewriter, op.getLoc(), resultTypes,
+                                        op->getOperands(), op->getAttrs());
+  newProcessOp.getBody().takeBody(op.getBody());
+
+  // Update old results with new values, accounting for pruned halt operands.
+  for (auto oldResult : op.getResults()) {
+    auto newResultPos = origToNewPos.find(oldResult.getResultNumber());
+    if (newResultPos == origToNewPos.end())
+      continue;
+    auto newResult = newProcessOp.getResult(newResultPos->getSecond());
+    rewriter.replaceAllUsesWith(oldResult, newResult);
+  }
+
+  rewriter.eraseOp(op);
   return success();
 }
 
