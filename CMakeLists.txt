@@ -35,8 +35,13 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 # Options and settings
 #-------------------------------------------------------------------------------
 
+  # MSVC-specific compiler configuration
   if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
+    # Enable UTF-8 support for source files and string literals.  This is
+    # required by dependencies like fmt library.
+    string(APPEND CMAKE_CXX_FLAGS " /utf-8")
+    string(APPEND CMAKE_C_FLAGS " /utf-8")
   else ()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
   endif ()
