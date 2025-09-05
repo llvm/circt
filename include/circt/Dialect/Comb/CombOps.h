@@ -86,18 +86,6 @@ Value createDynamicInject(OpBuilder &builder, Location loc, Value value,
 Value createInject(OpBuilder &builder, Location loc, Value value,
                    unsigned offset, Value replacement);
 
-/// Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> fullAdder(OpBuilder &builder, Location loc, Value a,
-                                  Value b, Value c);
-
-/// Perform Wallace tree reduction on partial products.
-/// See https://en.wikipedia.org/wiki/Wallace_tree
-/// \param targetAddends The number of addends to reduce to (2 for carry-save).
-/// \param inputAddends The rows of bits to be summed.
-SmallVector<Value> wallaceReduction(OpBuilder &builder, Location loc,
-                                    size_t width, size_t targetAddends,
-                                    SmallVector<SmallVector<Value>> &addends);
-
 } // namespace comb
 } // namespace circt
 
