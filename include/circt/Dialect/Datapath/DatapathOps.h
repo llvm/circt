@@ -23,7 +23,7 @@ namespace datapath {
 // A pair used to track compressor bits
 struct CompressorBit {
   Value val;
-  size_t delay;
+  int64_t delay;
 };
 
 // A general compressor tree interface based around a column-wise
@@ -31,7 +31,8 @@ struct CompressorBit {
 class CompressorTree {
 public:
   // Constructor takes addends as input and converts to column representation
-  CompressorTree(const SmallVector<SmallVector<Value>> &addends, Location loc);
+  CompressorTree(size_t width, const SmallVector<SmallVector<Value>> &addends,
+                 Location loc);
 
   // Get the number of columns (bit positions)
   size_t getWidth() const { return columns.size(); }
@@ -43,7 +44,8 @@ public:
   size_t getNextStageTargetHeight() const;
 
   // Update the input delays based on longest path analysis
-  void withInputDelays(const SmallVector<SmallVector<int64_t>> inputDelays);
+  LogicalResult
+  withInputDelays(llvm::function_ref<FailureOr<int64_t>(Value)> getDelay);
 
   // Apply a compression step (reduce columns with >2 bits using compressors)
   SmallVector<Value> compressToHeight(OpBuilder &builder, size_t targetHeight);
@@ -52,16 +54,8 @@ public:
   void dump() const;
 
 private:
-  // Original addends representation as bitvectors (kept for reference)
-  SmallVector<SmallVector<Value>> originalAddends;
-
   // Column-wise bit storage - columns[i] contains all bits at bit position i
   SmallVector<SmallVector<CompressorBit>> columns;
-
-  // Whether to use a timing driven compression algorithm
-  // If true, use a timing driven compression algorithm.
-  // If false, use a simple compression algorithm (e.g., Wallace).
-  bool usingTiming;
 
   // Bitwidth of compressor tree
   const size_t width;
@@ -80,11 +74,6 @@ private:
   // Perform timing driven compression using Dadda's algorithm
   SmallVector<Value> compressUsingTiming(OpBuilder &builder,
                                          size_t targetHeight);
-
-  // Perform Wallace tree reduction on partial products.
-  // See https://en.wikipedia.org/wiki/Wallace_tree
-  SmallVector<Value> compressWithoutTiming(OpBuilder &builder,
-                                           size_t targetHeight);
 
   // Create a full-adder and update delay of sum and carry bits
   std::pair<CompressorBit, CompressorBit> fullAdderWithDelay(OpBuilder &builder,

@@ -82,23 +82,16 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
     }
 
     // Compressor tree reduction
+    auto width = inputs[0].getType().getIntOrFloatBitWidth();
     auto targetAddends = op.getNumResults();
-    datapath::CompressorTree comp(addends, loc);
+    datapath::CompressorTree comp(width, addends, loc);
 
     SmallVector<SmallVector<int64_t>> addendsDelays(addends.size());
     if (analysis) {
-      // Compute addend's delay to enable timing-driven compressor algorithm.
-      for (size_t i = 0; i < addends.size(); ++i) {
-        for (size_t j = 0; j < addends[i].size(); ++j) {
-          auto delay = analysis->getOrComputeMaxDelay(addends[i][j], 0);
-          if (failed(delay))
-            return rewriter.notifyMatchFailure(op,
-                                               "Failed to get delay for input");
-          addendsDelays[i].push_back(*delay);
-        }
-      }
       // Update delay information with arrival times
-      comp.withInputDelays(addendsDelays);
+      if (failed(comp.withInputDelays(
+              [&](Value v) { return analysis->getOrComputeMaxDelay(v, 0); })))
+        return failure();
     }
 
     rewriter.replaceOp(op, comp.compressToHeight(rewriter, targetAddends));

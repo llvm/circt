@@ -112,19 +112,18 @@ CompressorTree::halfAdderWithDelay(OpBuilder &builder, CompressorBit a,
 }
 
 // Map input rows to column representation
-CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
+CompressorTree::CompressorTree(size_t width,
+                               const SmallVector<SmallVector<Value>> &addends,
                                Location loc)
-    : originalAddends(addends), usingTiming(false), numStages(0),
-      numFullAdders(0), loc(loc) {
+    : columns(width), width(width), numStages(0), numFullAdders(0), loc(loc) {
   assert(addends.size() > 2);
-  // Number of bits in a row == bitwidth of input addends
-  // Compressors will be formed of uniform bitwidth addends
-  width = addends[0].size();
-  SmallVector<SmallVector<CompressorBit>> initColumns(width);
-  columns = initColumns;
+
   // Convert addends rows to columns
   // Known bits analysis constructs a minimal array - skipping zeros
   for (auto row : addends) {
+    // Number of bits in a row == bitwidth of input addends
+    // Compressors will be formed of uniform bitwidth addends
+    assert(row.size() == width);
     for (size_t i = 0; i < width; ++i) {
       CompressorBit bit = {row[i], 0};
       // TODO: Fold Constant 1s
@@ -138,24 +137,17 @@ CompressorTree::CompressorTree(const SmallVector<SmallVector<Value>> &addends,
 }
 
 // Update the input delays based on longest path analysis
-void CompressorTree::withInputDelays(
-    const SmallVector<SmallVector<int64_t>> &inputDelays) {
-  assert(inputDelays.size() == originalAddends.size() &&
-         "Input delays must match number of addends");
-  for (size_t i = 0; i < inputDelays.size(); ++i) {
-    assert(inputDelays[i].size() == width &&
-           "Input delays must match bitwidth of addends");
-    for (size_t j = 0; j < width; ++j) {
-      // Find the corresponding bit in the column and update its delay
-      auto it = std::find_if(columns[j].begin(), columns[j].end(),
-                             [val = originalAddends[i][j]](const auto &bit) {
-                               return bit.val == val;
-                             });
-      if (it != columns[j].end())
-        it->delay = inputDelays[i][j];
+LogicalResult CompressorTree::withInputDelays(
+    llvm::function_ref<FailureOr<int64_t>(Value)> getDelay) {
+  for (auto &column : columns) {
+    for (auto &[value, result] : column) {
+      auto delay = getDelay(value);
+      if (failed(delay))
+        return failure();
+      result = *delay;
     }
   }
-  usingTiming = true;
+  return success();
 }
 
 size_t CompressorTree::getMaxHeight() const {
@@ -215,10 +207,7 @@ SmallVector<Value> CompressorTree::compressToHeight(OpBuilder &builder,
   if (maxHeight <= targetHeight)
     return columnsToAddends(builder, targetHeight);
 
-  if (usingTiming)
-    return compressUsingTiming(builder, targetHeight);
-  else
-    return compressWithoutTiming(builder, targetHeight);
+  return compressUsingTiming(builder, targetHeight);
 }
 
 // Perform recursive compression using timing information until reduced to the
@@ -306,56 +295,13 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
   return columnsToAddends(builder, targetHeight);
 }
 
-// Compress using a greedy algorithm that just picks the top three bits
-// without any timing consideration - Wallace Tree Reduction
-// See https://en.wikipedia.org/wiki/Wallace_tree
-SmallVector<Value> CompressorTree::compressWithoutTiming(OpBuilder &builder,
-                                                         size_t targetHeight) {
-
-  // Continue reduction until we have only two rows. The length of
-  // `addends` is reduced by 1/3 in each iteration.
-  while (getMaxHeight() > targetHeight) {
-    SmallVector<SmallVector<CompressorBit>> newColumns(width);
-    dump();
-    // Increment the number of reduction stages for debugging/reporting
-    ++numStages;
-    // Take three rows at a time and reduce to two rows(sum and carry).
-    for (size_t i = 0; i < width; ++i) {
-      auto col = columns[i];
-      while (col.size() >= 3) {
-        auto bit0 = col.pop_back_val();
-        auto bit1 = col.pop_back_val();
-        auto bit2 = col.pop_back_val();
-
-        // If we have an additional bit we can apply a full adder
-        auto [sum, carry] = fullAdderWithDelay(builder, bit0, bit1, bit2);
-
-        newColumns[i].push_back(sum);
-        if (i + 1 < width)
-          newColumns[i + 1].push_back(carry);
-      }
-      // Pass through remaining bits
-      for (auto bit : col)
-        newColumns[i].push_back(bit);
-    }
-
-    std::swap(newColumns, columns);
-  }
-
-  assert(getMaxHeight() <= targetHeight);
-  dump();
-  return columnsToAddends(builder, targetHeight);
-}
-
 void CompressorTree::dump() const {
   LLVM_DEBUG({
     llvm::dbgs() << "Compressor Tree: Height = " << getMaxHeight()
                  << ", Number of FA = " << numFullAdders
-                 << ", Number of Stages = " << numStages;
-    if (usingTiming)
-      llvm::dbgs() << ", Next Stage Target = " << getNextStageTargetHeight();
-
-    llvm::dbgs() << "\n";
+                 << ", Number of Stages = " << numStages
+                 << ", Next Stage Target = " << getNextStageTargetHeight()
+                 << "\n";
     // Print column headers
     llvm::dbgs() << std::string(9, ' ');
     for (size_t j = width; j > 0; --j) {

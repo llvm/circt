@@ -148,8 +148,8 @@ hw.module @timing(in %a : i1, in %b : i1, in %c : i1, out carry : i1, out save :
   // Make sure [[AND]] is pushed to the last stage.
   // CHECK: [[AND:%.+]] = comb.and bin %a, %b : i1
   // CHECK-NEXT: [[XOR1:%.+]] = comb.xor bin [[AND]], %c : i1
-  // CHECK-NEXT: [[XOR2:%.+]] = comb.xor bin [[XOR1]], %b : i1
-  // CHECK-NEXT: hw.output [[XOR2]], %a : i1, i1
+  // CHECK-NEXT: [[XOR2:%.+]] = comb.xor bin [[XOR1]], %a : i1
+  // CHECK-NEXT: hw.output [[XOR2]], %b : i1, i1
   // TIMING: [[AND:%.+]] = comb.and bin %a, %b : i1
   // TIMING: [[XOR1:%.+]] = comb.xor bin %c, %b : i1
   // TIMING: [[XOR2:%.+]] = comb.xor bin [[XOR1]], [[AND]] : i1
