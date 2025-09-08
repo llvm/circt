@@ -193,8 +193,20 @@ SIntType::deserialize(std::span<const std::uint8_t> data) const {
 
   int64_t signedValue = static_cast<int64_t>(value);
 
+  // Return the appropriate integer type based on bit width
+  std::any result;
+  if (getWidth() <= 8) {
+    result = std::any(static_cast<int8_t>(signedValue));
+  } else if (getWidth() <= 16) {
+    result = std::any(static_cast<int16_t>(signedValue));
+  } else if (getWidth() <= 32) {
+    result = std::any(static_cast<int32_t>(signedValue));
+  } else {
+    result = std::any(signedValue);
+  }
+
   // Return remaining data as a subspan - zero copy!
-  return {std::any(signedValue), data.subspan(byteSize)};
+  return {result, data.subspan(byteSize)};
 }
 
 void UIntType::ensureValid(const std::any &obj) const {
@@ -239,8 +251,20 @@ UIntType::deserialize(std::span<const std::uint8_t> data) const {
   uint64_t value = 0;
   std::memcpy(&value, data.data(), byteSize);
 
+  // Return the appropriate integer type based on bit width
+  std::any result;
+  if (getWidth() <= 8) {
+    result = std::any(static_cast<uint8_t>(value));
+  } else if (getWidth() <= 16) {
+    result = std::any(static_cast<uint16_t>(value));
+  } else if (getWidth() <= 32) {
+    result = std::any(static_cast<uint32_t>(value));
+  } else {
+    result = std::any(value);
+  }
+
   // Return remaining data as a subspan - zero copy!
-  return {std::any(value), data.subspan(byteSize)};
+  return {result, data.subspan(byteSize)};
 }
 
 void StructType::ensureValid(const std::any &obj) const {
