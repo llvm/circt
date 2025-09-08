@@ -36,6 +36,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/Support/Debug.h"
+#include <array>
 
 #define DEBUG_TYPE "comb-to-aig"
 
@@ -119,8 +120,8 @@ static Value createMajorityFunction(OpBuilder &rewriter, Location loc, Value a,
                                     Value b, Value carry,
                                     bool useMajorityInverterOp) {
   if (useMajorityInverterOp) {
-    SmallVector<Value, 3> inputs = {a, b, carry};
-    SmallVector<bool, 3> inverts = {false, false, false};
+    std::array<Value, 3> inputs = {a, b, carry};
+    std::array<bool, 3> inverts = {false, false, false};
     return synth::mig::MajorityInverterOp::create(rewriter, loc, inputs,
                                                   inverts);
   }
@@ -319,7 +320,7 @@ struct CombOrToMIGConversion : OpConversionPattern<OrOp> {
         rewriter, op.getLoc(),
         APInt::getAllOnes(hw::getBitWidth(op.getType())));
     inputs.push_back(one);
-    SmallVector<bool, 3> inverts(inputs.size(), false);
+    std::array<bool, 3> inverts = {false, false, false};
     replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
         rewriter, op, inputs, inverts);
     return success();
