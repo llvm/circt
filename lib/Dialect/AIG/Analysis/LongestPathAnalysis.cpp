@@ -486,11 +486,6 @@ private:
   // different type signatures.
   static mlir::FunctionType getFunctionTypeForOp(Operation *op);
 
-  // Build the wrapper HW module containing the operation to analyze.
-  // Creates a module with appropriate input/output ports, clones the
-  // operation inside, and handles any necessary type conversions.
-  FailureOr<hw::HWModuleOp> createWrapperModule(Operation *op);
-
   // Cache mapping (operation_name, function_type) -> analyzed LocalVisitor
   // This avoids recomputing analysis for operations with identical signatures
   llvm::DenseMap<std::pair<mlir::OperationName, mlir::FunctionType>,
