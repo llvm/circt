@@ -456,4 +456,127 @@ TEST(ESITypesTest, BitWidthCalculations) {
       << "ArrayType of 5 uint8 elements should have bit width of 40 (8 * 5)";
 }
 
+// Test UIntType with various integer types (getUIntLikeFromAny functionality)
+TEST(ESITypesTest, UIntTypeExtendedSerialization) {
+  UIntType uint16Type("uint16", 16);
+  UIntType uint8Type("uint8", 8);
+
+  // Test uint8_t input
+  uint8_t uint8Value = 42;
+  std::any uint8Any = std::any(uint8Value);
+  EXPECT_NO_THROW(uint8Type.ensureValid(uint8Any));
+  MessageData serialized8 = uint8Type.serialize(uint8Any);
+  EXPECT_EQ(serialized8.getSize(), 1UL);
+  EXPECT_EQ(serialized8.getData()[0], 42);
+
+  // Test uint16_t input
+  uint16_t uint16Value = 0x1234;
+  std::any uint16Any = std::any(uint16Value);
+  EXPECT_NO_THROW(uint16Type.ensureValid(uint16Any));
+  MessageData serialized16 = uint16Type.serialize(uint16Any);
+  EXPECT_EQ(serialized16.getSize(), 2UL);
+  EXPECT_EQ(serialized16.getData()[0], 0x34); // little-endian
+  EXPECT_EQ(serialized16.getData()[1], 0x12);
+
+  // Test uint32_t input
+  uint32_t uint32Value = 0x5678;
+  std::any uint32Any = std::any(uint32Value);
+  EXPECT_NO_THROW(uint16Type.ensureValid(uint32Any));
+  MessageData serialized32 = uint16Type.serialize(uint32Any);
+  EXPECT_EQ(serialized32.getSize(), 2UL);
+  EXPECT_EQ(serialized32.getData()[0], 0x78); // little-endian
+  EXPECT_EQ(serialized32.getData()[1], 0x56);
+
+  // Test uint64_t input (original functionality)
+  uint64_t uint64Value = 0x9ABC;
+  std::any uint64Any = std::any(uint64Value);
+  EXPECT_NO_THROW(uint16Type.ensureValid(uint64Any));
+  MessageData serialized64 = uint16Type.serialize(uint64Any);
+  EXPECT_EQ(serialized64.getSize(), 2UL);
+  EXPECT_EQ(serialized64.getData()[0], 0xBC); // little-endian
+  EXPECT_EQ(serialized64.getData()[1], 0x9A);
+
+  // Test range validation with smaller types
+  uint16_t outOfRange16 = 0xFFFF;
+  std::any outOfRange16Any = std::any(outOfRange16);
+  EXPECT_NO_THROW(uint16Type.ensureValid(
+      outOfRange16Any)); // Should be valid for 16-bit type
+
+  uint32_t outOfRange32 = 0x10000; // Too big for 16-bit
+  std::any outOfRange32Any = std::any(outOfRange32);
+  EXPECT_THROW(uint16Type.ensureValid(outOfRange32Any), std::runtime_error);
+
+  // Test invalid type
+  std::string invalidType = "not an integer";
+  std::any invalidAny = std::any(invalidType);
+  EXPECT_THROW(uint16Type.ensureValid(invalidAny), std::runtime_error);
+}
+
+// Test SIntType with various integer types (getIntLikeFromAny functionality)
+TEST(ESITypesTest, SIntTypeExtendedSerialization) {
+  SIntType sint16Type("sint16", 16);
+  SIntType sint8Type("sint8", 8);
+
+  // Test int8_t input
+  int8_t int8Value = -42;
+  std::any int8Any = std::any(int8Value);
+  EXPECT_NO_THROW(sint8Type.ensureValid(int8Any));
+  MessageData serialized8 = sint8Type.serialize(int8Any);
+  EXPECT_EQ(serialized8.getSize(), 1UL);
+  EXPECT_EQ(serialized8.getData()[0],
+            static_cast<uint8_t>(-42)); // Two's complement
+
+  // Test int16_t input
+  int16_t int16Value = -1000;
+  std::any int16Any = std::any(int16Value);
+  EXPECT_NO_THROW(sint16Type.ensureValid(int16Any));
+  MessageData serialized16 = sint16Type.serialize(int16Any);
+  EXPECT_EQ(serialized16.getSize(), 2UL);
+  // -1000 in 16-bit two's complement: 0xFC18
+  EXPECT_EQ(serialized16.getData()[0], 0x18); // little-endian
+  EXPECT_EQ(serialized16.getData()[1], 0xFC);
+
+  // Test int32_t input (positive value)
+  int32_t int32Value = 12345;
+  std::any int32Any = std::any(int32Value);
+  EXPECT_NO_THROW(sint16Type.ensureValid(int32Any));
+  MessageData serialized32 = sint16Type.serialize(int32Any);
+  EXPECT_EQ(serialized32.getSize(), 2UL);
+  EXPECT_EQ(serialized32.getData()[0], 0x39); // 12345 = 0x3039, little-endian
+  EXPECT_EQ(serialized32.getData()[1], 0x30);
+
+  // Test int64_t input (original functionality)
+  int64_t int64Value = -5000;
+  std::any int64Any = std::any(int64Value);
+  EXPECT_NO_THROW(sint16Type.ensureValid(int64Any));
+  MessageData serialized64 = sint16Type.serialize(int64Any);
+  EXPECT_EQ(serialized64.getSize(), 2UL);
+  // -5000 in 16-bit two's complement: 0xEC78
+  EXPECT_EQ(serialized64.getData()[0], 0x78); // little-endian
+  EXPECT_EQ(serialized64.getData()[1], 0xEC);
+
+  // Test range validation with smaller types
+  int8_t validInt8 = 127;
+  std::any validInt8Any = std::any(validInt8);
+  EXPECT_NO_THROW(sint8Type.ensureValid(validInt8Any));
+
+  int16_t validInt16 = 32767;
+  std::any validInt16Any = std::any(validInt16);
+  EXPECT_NO_THROW(sint16Type.ensureValid(validInt16Any));
+
+  // Test out of range values
+  int32_t outOfRange32 = 40000; // Too big for 16-bit signed
+  std::any outOfRange32Any = std::any(outOfRange32);
+  EXPECT_THROW(sint16Type.ensureValid(outOfRange32Any), std::runtime_error);
+
+  int32_t outOfRangeNeg32 = -40000; // Too small for 16-bit signed
+  std::any outOfRangeNeg32Any = std::any(outOfRangeNeg32);
+  EXPECT_THROW(sint16Type.ensureValid(outOfRangeNeg32Any), std::runtime_error);
+
+  // Test invalid type
+  std::string invalidType = "not an integer";
+  std::any invalidAny = std::any(invalidType);
+  EXPECT_THROW(sint16Type.ensureValid(invalidAny), std::runtime_error);
+}
+
 } // namespace

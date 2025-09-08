@@ -106,33 +106,66 @@ BitsType::deserialize(std::span<const std::uint8_t> data) const {
   return {std::any(result), data.subspan(size)};
 }
 
+// Helper function to extract signed integer-like values from std::any
+static int64_t getIntLikeFromAny(const std::any &obj) {
+  const std::type_info &type = obj.type();
+
+  if (type == typeid(int64_t))
+    return std::any_cast<int64_t>(obj);
+  if (type == typeid(int32_t))
+    return static_cast<int64_t>(std::any_cast<int32_t>(obj));
+  if (type == typeid(int16_t))
+    return static_cast<int64_t>(std::any_cast<int16_t>(obj));
+  if (type == typeid(int8_t))
+    return static_cast<int64_t>(std::any_cast<int8_t>(obj));
+
+  throw std::bad_any_cast();
+}
+
+// Helper function to extract unsigned integer-like values from std::any
+static uint64_t getUIntLikeFromAny(const std::any &obj) {
+  const std::type_info &type = obj.type();
+
+  if (type == typeid(uint64_t))
+    return std::any_cast<uint64_t>(obj);
+  if (type == typeid(uint32_t))
+    return static_cast<uint64_t>(std::any_cast<uint32_t>(obj));
+  if (type == typeid(uint16_t))
+    return static_cast<uint64_t>(std::any_cast<uint16_t>(obj));
+  if (type == typeid(uint8_t))
+    return static_cast<uint64_t>(std::any_cast<uint8_t>(obj));
+
+  throw std::bad_any_cast();
+}
+
 void SIntType::ensureValid(const std::any &obj) const {
   if (getWidth() > 64)
     throw std::runtime_error("Width exceeds 64 bits");
 
+  int64_t minVal = -(1LL << (getWidth() - 1));
+  int64_t maxVal = (1LL << (getWidth() - 1)) - 1;
+  if (getWidth() == 64) {
+    // For 64-bit, we use the full range
+    minVal = INT64_MIN;
+    maxVal = INT64_MAX;
+  }
   try {
-    auto value = std::any_cast<int64_t>(obj);
-    int64_t minVal = -(1LL << (getWidth() - 1));
-    int64_t maxVal = (1LL << (getWidth() - 1)) - 1;
-    if (getWidth() == 64) {
-      // For 64-bit, we use the full range
-      minVal = INT64_MIN;
-      maxVal = INT64_MAX;
-    }
+    int64_t value = getIntLikeFromAny(obj);
     if (value < minVal || value > maxVal) {
       throw std::runtime_error(
           std::format("value {} out of range for {}-bit signed integer", value,
                       getWidth()));
     }
   } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("must be int64_t");
+    throw std::runtime_error(
+        "must be a signed integer type (int8_t, int16_t, int32_t, or int64_t)");
   }
 }
 
 MessageData SIntType::serialize(const std::any &obj) const {
   ensureValid(obj);
 
-  auto value = std::any_cast<int64_t>(obj);
+  int64_t value = getIntLikeFromAny(obj);
   size_t byteSize = (getWidth() + 7) / 8;
 
   // Use pointer casting for performance
@@ -168,24 +201,25 @@ void UIntType::ensureValid(const std::any &obj) const {
   if (getWidth() > 64)
     throw std::runtime_error("Width exceeds 64 bits");
 
+  uint64_t maxVal =
+      (getWidth() == 64) ? UINT64_MAX : ((1ULL << getWidth()) - 1);
   try {
-    auto value = std::any_cast<uint64_t>(obj);
-    uint64_t maxVal =
-        (getWidth() == 64) ? UINT64_MAX : ((1ULL << getWidth()) - 1);
+    uint64_t value = getUIntLikeFromAny(obj);
     if (value > maxVal) {
       throw std::runtime_error(
           std::format("value {} out of range for {}-bit unsigned integer",
                       value, getWidth()));
     }
   } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("must be uint64_t");
+    throw std::runtime_error("must be an unsigned integer type (uint8_t, "
+                             "uint16_t, uint32_t, or uint64_t)");
   }
 }
 
 MessageData UIntType::serialize(const std::any &obj) const {
   ensureValid(obj);
 
-  auto value = std::any_cast<uint64_t>(obj);
+  uint64_t value = getUIntLikeFromAny(obj);
   size_t byteSize = (getWidth() + 7) / 8;
 
   // Use pointer casting for performance
