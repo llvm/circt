@@ -14,6 +14,7 @@
 #include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #define DEBUG_TYPE "aig-lower-word-to-bits"
@@ -33,11 +34,11 @@ using namespace aig;
 //===----------------------------------------------------------------------===//
 
 namespace {
+template <typename OpTy>
+struct WordRewritePattern : public OpRewritePattern<OpTy> {
+  using OpRewritePattern<OpTy>::OpRewritePattern;
 
-struct WordRewritePattern : public OpRewritePattern<AndInverterOp> {
-  using OpRewritePattern<AndInverterOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(AndInverterOp op,
+  LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
     auto width = op.getType().getIntOrFloatBitWidth();
     if (width <= 1)
@@ -50,7 +51,7 @@ struct WordRewritePattern : public OpRewritePattern<AndInverterOp> {
       SmallVector<Value> operands;
       for (auto operand : op.getOperands()) {
         // Reuse bits if we can extract from `comb.concat` operands.
-        if (auto concat = operand.getDefiningOp<comb::ConcatOp>()) {
+        if (auto concat = operand.template getDefiningOp<comb::ConcatOp>()) {
           // For the simplicity, we only handle the case where all the
           // `comb.concat` operands are single-bit.
           if (concat.getNumOperands() == width &&
@@ -66,8 +67,8 @@ struct WordRewritePattern : public OpRewritePattern<AndInverterOp> {
         operands.push_back(
             comb::ExtractOp::create(rewriter, op.getLoc(), operand, i, 1));
       }
-      results.push_back(AndInverterOp::create(rewriter, op.getLoc(), operands,
-                                              op.getInvertedAttr()));
+      results.push_back(
+          OpTy::create(rewriter, op.getLoc(), operands, op.getInvertedAttr()));
     }
 
     rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, results);
@@ -90,7 +91,9 @@ struct LowerWordToBitsPass
 
 void LowerWordToBitsPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
-  patterns.add<WordRewritePattern>(&getContext());
+  patterns.add<WordRewritePattern<aig::AndInverterOp>,
+               WordRewritePattern<synth::mig::MajorityInverterOp>>(
+      &getContext());
 
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   mlir::GreedyRewriteConfig config;

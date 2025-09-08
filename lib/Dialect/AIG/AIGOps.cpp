@@ -118,3 +118,47 @@ APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
   }
   return result;
 }
+
+static Value lowerVariadicAndInverterOp(aig::AndInverterOp op,
+                                        OperandRange operands,
+                                        ArrayRef<bool> inverts,
+                                        PatternRewriter &rewriter) {
+  using namespace aig;
+  switch (operands.size()) {
+  case 0:
+    assert(0 && "cannot be called with empty operand range");
+    break;
+  case 1:
+    if (inverts[0])
+      return AndInverterOp::create(rewriter, op.getLoc(), operands[0], true);
+    else
+      return operands[0];
+  case 2:
+    return AndInverterOp::create(rewriter, op.getLoc(), operands[0],
+                                 operands[1], inverts[0], inverts[1]);
+  default:
+    auto firstHalf = operands.size() / 2;
+    auto lhs =
+        lowerVariadicAndInverterOp(op, operands.take_front(firstHalf),
+                                   inverts.take_front(firstHalf), rewriter);
+    auto rhs =
+        lowerVariadicAndInverterOp(op, operands.drop_front(firstHalf),
+                                   inverts.drop_front(firstHalf), rewriter);
+    return AndInverterOp::create(rewriter, op.getLoc(), lhs, rhs);
+  }
+
+  return Value();
+}
+
+LogicalResult circt::aig::AndInverterVariadicOpConversion::matchAndRewrite(
+    aig::AndInverterOp op, PatternRewriter &rewriter) const {
+  if (op.getInputs().size() <= 2)
+    return failure();
+
+  // TODO: This is a naive implementation that creates a balanced binary tree.
+  //       We can improve by analyzing the dataflow and creating a tree that
+  //       improves the critical path or area.
+  rewriter.replaceOp(op, lowerVariadicAndInverterOp(
+                             op, op.getOperands(), op.getInverted(), rewriter));
+  return success();
+}

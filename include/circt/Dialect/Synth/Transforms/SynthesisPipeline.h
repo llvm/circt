@@ -24,9 +24,16 @@
 namespace circt {
 namespace synth {
 
+enum TargetIR {
+  // Lower to And-Inverter Graph
+  AIG,
+  // Lower to Majority-Inverter Graph
+  MIG
+};
+
 /// Options for the aig lowering pipeline.
-struct AIGLoweringPipelineOptions
-    : public mlir::PassPipelineOptions<AIGLoweringPipelineOptions> {
+struct CombLoweringPipelineOptions
+    : public mlir::PassPipelineOptions<CombLoweringPipelineOptions> {
   PassOptions::Option<bool> disableDatapath{
       *this, "disable-datapath",
       llvm::cl::desc("Disable datapath optimization passes"),
@@ -35,6 +42,9 @@ struct AIGLoweringPipelineOptions
       *this, "timing-aware",
       llvm::cl::desc("Lower operators in a timing-aware fashion"),
       llvm::cl::init(false)};
+  PassOptions::Option<TargetIR> targetIR{
+      *this, "lowering-target", llvm::cl::desc("Target IR to lower to"),
+      llvm::cl::init(TargetIR::AIG)};
 };
 
 /// Options for the aig optimization pipeline.
@@ -61,8 +71,8 @@ struct AIGOptimizationPipelineOptions
 //===----------------------------------------------------------------------===//
 
 /// Populate the synthesis pipelines.
-void buildAIGLoweringPipeline(mlir::OpPassManager &pm,
-                              const AIGLoweringPipelineOptions &options);
+void buildCombLoweringPipeline(mlir::OpPassManager &pm,
+                               const CombLoweringPipelineOptions &options);
 void buildAIGOptimizationPipeline(
     mlir::OpPassManager &pm, const AIGOptimizationPipelineOptions &options);
 

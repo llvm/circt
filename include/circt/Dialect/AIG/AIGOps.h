@@ -22,10 +22,23 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Rewrite/PatternApplicator.h"
 
 #include "circt/Dialect/AIG/AIGDialect.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/AIG/AIG.h.inc"
+
+namespace circt {
+namespace aig {
+struct AndInverterVariadicOpConversion
+    : mlir::OpRewritePattern<circt::aig::AndInverterOp> {
+  using OpRewritePattern<circt::aig::AndInverterOp>::OpRewritePattern;
+  mlir::LogicalResult
+  matchAndRewrite(circt::aig::AndInverterOp op,
+                  mlir::PatternRewriter &rewriter) const override;
+};
+} // namespace aig
+} // namespace circt
 
 #endif // CIRCT_DIALECT_AIG_AIGOPS_H

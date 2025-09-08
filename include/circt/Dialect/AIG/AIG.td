@@ -14,6 +14,7 @@ include "mlir/IR/DialectBase.td"
 def AIG_Dialect : Dialect {
   let name = "aig";
   let cppNamespace = "::circt::aig";
+  let dependentDialects = ["::circt::synth::SynthDialect"];
   let summary = "Representation of AIGs";
 }
 
