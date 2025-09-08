@@ -490,6 +490,8 @@ LogicalResult MachineOpConverter::dispatch() {
     argVarWidths.push_back(intVal);
     argVars.push_back(variableOp->getOpResult(0));
   }
+  size_t numVars = varInitValues.size();
+
   llvm::SmallVector<Transition> transitions;
   llvm::SmallVector<mlir::Value> stateFunctions;
 
@@ -506,7 +508,7 @@ LogicalResult MachineOpConverter::dispatch() {
   insertStates(states, initialState);
 
   // time is an 32-bit bitvec
-  argVarWidths.push_back(b.getType<smt::BitVectorType>(32));
+  // argVarWidths.push_back(b.getType<smt::BitVectorType>(5));
 
   // populate state functions and transitions vector
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
@@ -553,7 +555,7 @@ LogicalResult MachineOpConverter::dispatch() {
   auto forall = b.create<smt::ForallOp>(
       loc, argVarWidths,
       [&varInitValues, &stateFunctions, &numOut, &argVars, &numArgs,
-       &outputOfStateId](
+       &outputOfStateId, &numVars](
           OpBuilder &b, Location loc,
           llvm::SmallVector<mlir::Value> forallArgs) -> mlir::Value {
         llvm::SmallVector<mlir::Value> initArgs;
@@ -568,7 +570,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
         // first we collect the initial data of variables
         for (auto [i, a] : llvm::enumerate(forallArgs)) {
-          if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
+          if (int(i) >= numOut + numArgs && int(i) < numOut + numArgs + numVars) {
               auto cast = llvm::dyn_cast<smt::BitVectorType>(a.getType());
               auto initAP = varInitValues[i - numOut - numArgs];
               assert(initAP.getBitWidth() == cast.getWidth() &&
@@ -594,7 +596,7 @@ LogicalResult MachineOpConverter::dispatch() {
           //   }
           // }
           for (auto [i, a] : llvm::enumerate(argVars)) {
-            if (int(i) >= numOut + numArgs && int(i) < forallArgs.size() - 1) {
+            if (int(i) >= numOut + numArgs && int(i) < numOut + numArgs + numVars) {
               // Variables: map to their SMT initial constants.
               avToSmt.push_back({a, initVarValues[i - numOut - numArgs]});
             } else {
@@ -625,10 +627,10 @@ LogicalResult MachineOpConverter::dispatch() {
 
         for (auto [i, a] : llvm::enumerate(forallArgs)) {
           if (int(i) >= numArgs && int(i) < numOut + numArgs &&
-              int(i) < forallArgs.size() - 1) { // outputs
+              int(i) < numOut + numArgs + numVars) { // outputs
             initArgs.push_back(outputSmtValues[i - numArgs]);
           } else if (int(i) >= numOut + numArgs &&
-                     int(i) < forallArgs.size() - 1) { // variables
+                     int(i) < numOut + numArgs + numVars) { // variables
             initArgs.push_back(initVarValues[i - numOut - numArgs]);
           } else {
             initArgs.push_back(a);
@@ -637,11 +639,13 @@ LogicalResult MachineOpConverter::dispatch() {
 
         // retrieve output region constraint at the initial state
 
-        auto initTime = b.create<smt::BVConstantOp>(loc, 0, 32);
-        auto lhs = b.create<smt::EqOp>(loc, forallArgs.back(), initTime);
-        auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
+        // auto initTime = b.create<smt::BVConstantOp>(loc, 0, 5);
+        // auto lhs = b.create<smt::EqOp>(loc, forallArgs.back(), initTime);
+        // auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
 
-        return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+        // return b.create<smt::ImpliesOp>(loc, lhs, rhs);
+        return b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
+
       });
 
   b.create<smt::AssertOp>(loc, forall);
@@ -710,11 +714,11 @@ LogicalResult MachineOpConverter::dispatch() {
         }
 
         // update time
-        auto c1 = b.create<smt::BVConstantOp>(loc, 1, 32);
-        llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
-        auto newTime = b.create<smt::BVAddOp>(
-            loc, b.getType<smt::BitVectorType>(32), timeArgs);
-        updatedSmtValues.push_back(newTime);
+        // auto c1 = b.create<smt::BVConstantOp>(loc, 1, 5);
+        // llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
+        // auto newTime = b.create<smt::BVAddOp>(
+        //     loc, b.getType<smt::BitVectorType>(5), timeArgs);
+        // updatedSmtValues.push_back(newTime);
         // new (bit-vector 1 of width 32)
 
         // push output values
@@ -732,16 +736,16 @@ LogicalResult MachineOpConverter::dispatch() {
       }
       // update time
       // mlir::IntegerAttr intAttr = b.getI32IntegerAttr(1);
-      auto c1 = b.create<smt::BVConstantOp>(loc, 1, 32);
-      llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
-      auto newTime = b.create<smt::BVAddOp>(
-          loc, b.getType<smt::BitVectorType>(32), timeArgs);
+      // auto c1 = b.create<smt::BVConstantOp>(loc, 1, 5);
+      // llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
+      // auto newTime = b.create<smt::BVAddOp>(
+      //     loc, b.getType<smt::BitVectorType>(5), timeArgs);
       // auto oAttr = b.getI32IntegerAttr(1);
       // auto c1 = b.create<smt::IntConstantOp>(loc, oAttr);
       // llvm::SmallVector<mlir::Value> timeArgs = {actionArgs.back(), c1};
       // auto newTime = b.create<smt::BVAddOp>(
       // loc, b.getType<smt::BitVectorType>(32), timeArgs);
-      updatedSmtValues.push_back(newTime);
+      // updatedSmtValues.push_back(newTime);
       // push output values
       for (auto [i, outputVal] : llvm::enumerate(outputSmtValues)) {
         updatedSmtValues[numArgs + i] = outputVal;
