@@ -54,9 +54,6 @@ public:
 
   StringRef getOutputFilename() const { return outputFilename; }
   StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
-  StringRef getChiselInterfaceOutputDirectory() const {
-    return chiselInterfaceOutDirectory;
-  }
   StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
   StringRef getOutputAnnotationFilename() const {
     return outputAnnotationFilename;
@@ -103,7 +100,6 @@ public:
   bool shouldDedup() const { return !noDedup; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
-  bool shouldExportChiselInterface() const { return exportChiselInterface; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldEtcDisableInstanceExtraction() const {
     return etcDisableInstanceExtraction;
@@ -207,16 +203,6 @@ public:
 
   FirtoolOptions &setDisableOptimization(bool value) {
     disableOptimization = value;
-    return *this;
-  }
-
-  FirtoolOptions &setExportChiselInterface(bool value) {
-    exportChiselInterface = value;
-    return *this;
-  }
-
-  FirtoolOptions &setChiselInterfaceOutDirectory(StringRef value) {
-    chiselInterfaceOutDirectory = value;
     return *this;
   }
 
@@ -417,8 +403,6 @@ private:
   BuildMode buildMode;
   bool disableLayerSink;
   bool disableOptimization;
-  bool exportChiselInterface;
-  std::string chiselInterfaceOutDirectory;
   bool vbToBV;
   bool noDedup;
   firrtl::CompanionMode companionMode;

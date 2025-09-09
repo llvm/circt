@@ -257,6 +257,10 @@ class LowerLayersPass
   void preprocessModule(CircuitNamespace &ns, InstanceGraphNode *node,
                         FModuleOp module);
 
+  /// Get the verilog name of an extmodule, which could be recorded in its
+  /// defname property.
+  StringRef getExtModuleName(FExtModuleOp extModule);
+
   /// Record the supposed bindfiles for any known layers of the ext module.
   void preprocessExtModule(CircuitNamespace &ns, InstanceGraphNode *node,
                            FExtModuleOp extModule);
@@ -1000,6 +1004,12 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
       buildBindFile(ns, node, b, sym, layer);
 }
 
+StringRef LowerLayersPass::getExtModuleName(FExtModuleOp extModule) {
+  if (auto name = extModule.getDefnameAttr())
+    return name.getValue();
+  return extModule.getName();
+}
+
 void LowerLayersPass::preprocessExtModule(CircuitNamespace &ns,
                                           InstanceGraphNode *node,
                                           FExtModuleOp extModule) {
@@ -1012,7 +1022,7 @@ void LowerLayersPass::preprocessExtModule(CircuitNamespace &ns,
   if (known.empty())
     return;
 
-  auto moduleName = extModule.getModuleName();
+  auto moduleName = getExtModuleName(extModule);
   auto &files = bindFiles[extModule];
   SmallPtrSet<Operation *, 8> seen;
 

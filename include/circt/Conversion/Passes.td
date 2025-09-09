@@ -38,40 +38,6 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
 }
 
 //===----------------------------------------------------------------------===//
-// ExportChiselInterface and ExportSplitChiselInterface
-//===----------------------------------------------------------------------===//
-
-def ExportChiselInterface : Pass<"export-chisel-interface", "firrtl::CircuitOp"> {
-  let summary = "Emit a Chisel interface to a FIRRTL circuit";
-  let description = [{
-    This pass generates a Scala Chisel interface for the top level module of
-    a FIRRTL circuit.
-  }];
-
-  let constructor = "createExportChiselInterfacePass()";
-  let dependentDialects = [
-    "circt::firrtl::FIRRTLDialect"
-  ];
-}
-
-def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::CircuitOp"> {
-  let summary = "Emit a Chisel interface to a FIRRTL circuit to a directory of files";
-  let description = [{
-    This pass generates a Scala Chisel interface for the top level module of
-    a FIRRTL circuit.
-  }];
-
-  let constructor = "createExportSplitChiselInterfacePass()";
-  let dependentDialects = [
-    "circt::firrtl::FIRRTLDialect"
-  ];
-  let options = [
-    Option<"directoryName", "dir-name", "std::string",
-            "", "Directory to emit into">
-   ];
-}
-
-//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
@@ -813,16 +779,25 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 // ConvertCombToAIG
 //===----------------------------------------------------------------------===//
 
+// FIXME: Rename to ConvertCombToSynth
 def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
   let summary = "Lower Comb ops to AIG ops.";
   let dependentDialects = [
     "circt::comb::CombDialect",
     "circt::aig::AIGDialect",
+    "circt::synth::SynthDialect"
   ];
 
   let options = [
     ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
-               "Specify additional legal ops to partially legalize Comb to AIG">,
+               "Specify additional legal ops to partially legalize Comb">,
+    Option<"targetIR", "target-ir", "circt::CombToAIGTargetIR",
+           /*default=*/"circt::CombToAIGTargetIR::AIG",
+           "Target IR kind",
+           [{::llvm::cl::values(
+             clEnumValN(circt::CombToAIGTargetIR::AIG, "aig", "Lower to AIG"),
+             clEnumValN(circt::CombToAIGTargetIR::MIG, "mig", "Lower to MIG")
+           )}]>,
     Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits", "uint32_t", "10",
            "Maximum number of unknown bits to emulate in a table lookup">
   ];
@@ -831,7 +806,7 @@ def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
 //===----------------------------------------------------------------------===//
 // ConvertAIGToComb
 //===----------------------------------------------------------------------===//
-
+// FIXME: Rename to ConvertSynthToComb
 def ConvertAIGToComb: Pass<"convert-aig-to-comb", "hw::HWModuleOp"> {
   let summary = "Lower AIG ops to Comb ops";
   let description = [{

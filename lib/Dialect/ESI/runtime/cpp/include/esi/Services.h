@@ -271,13 +271,20 @@ public:
     void connect();
     std::future<MessageData> call(const MessageData &arg);
 
+    const esi::Type *getArgType() const {
+      return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
+          ->getInner();
+    }
+
+    const esi::Type *getResultType() const {
+      return dynamic_cast<const ChannelType *>(
+                 type->findChannel("result").first)
+          ->getInner();
+    }
+
     virtual std::optional<std::string> toString() const override {
-      const esi::Type *argType =
-          dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
-              ->getInner();
-      const esi::Type *resultType =
-          dynamic_cast<const ChannelType *>(type->findChannel("result").first)
-              ->getInner();
+      const esi::Type *argType = getArgType();
+      const esi::Type *resultType = getResultType();
       return "function " + resultType->getID() + "(" + argType->getID() + ")";
     }
 
@@ -320,13 +327,20 @@ public:
     void connect(std::function<MessageData(const MessageData &)> callback,
                  bool quick = false);
 
+    const esi::Type *getArgType() const {
+      return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
+          ->getInner();
+    }
+
+    const esi::Type *getResultType() const {
+      return dynamic_cast<const ChannelType *>(
+                 type->findChannel("result").first)
+          ->getInner();
+    }
+
     virtual std::optional<std::string> toString() const override {
-      const esi::Type *argType =
-          dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
-              ->getInner();
-      const esi::Type *resultType =
-          dynamic_cast<const ChannelType *>(type->findChannel("result").first)
-              ->getInner();
+      const esi::Type *argType = getArgType();
+      const esi::Type *resultType = getResultType();
       return "callback " + resultType->getID() + "(" + argType->getID() + ")";
     }
 

@@ -112,13 +112,6 @@ circtFirtoolOptionsSetDisableOptimization(CirctFirtoolFirtoolOptions options,
                                           bool value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetExportChiselInterface(CirctFirtoolFirtoolOptions options,
-                                            bool value);
-
-MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetChiselInterfaceOutDirectory(
-    CirctFirtoolFirtoolOptions options, MlirStringRef value);
-
-MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetVbToBv(CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void

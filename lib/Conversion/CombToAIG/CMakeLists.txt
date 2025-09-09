@@ -12,6 +12,7 @@ add_circt_conversion_library(CIRCTCombToAIG
   CIRCTComb
   CIRCTAIG
   CIRCTDatapath
+  CIRCTSynth
   MLIRIR
   MLIRPass
   MLIRSupport

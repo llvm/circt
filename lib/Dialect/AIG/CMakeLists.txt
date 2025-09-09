@@ -8,6 +8,8 @@ add_circt_dialect_library(CIRCTAIG
   LINK_LIBS PUBLIC
   MLIRIR
   CIRCTHW
+  CIRCTSupport
+  CIRCTSynth
 
   DEPENDS
   MLIRAIGIncGen

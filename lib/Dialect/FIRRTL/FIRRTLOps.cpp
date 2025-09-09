@@ -973,25 +973,26 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
   };
 
   // Update the domain indices.
-  SmallVector<Attribute> newPortDomains;
-  newPortDomains.reserve(portIndices.size() - portIndices.count());
+  SmallVector<Attribute> newDomainInfo;
+  newDomainInfo.reserve(portIndices.size() - portIndices.count());
   for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
     // If this port is deleted, then do nothing.
     if (portIndices.test(i))
       continue;
     // If there is no domain info, then add an empty attribute.
     if (domainInfoAttr.empty()) {
-      newPortDomains.push_back(getEmpty());
+      newDomainInfo.push_back(getEmpty());
       continue;
     }
     auto attr = domainInfoAttr[i];
     // If this is a Domain Type (indicating domain kind) or an empty domain.
     auto domains = dyn_cast<ArrayAttr>(attr);
     if (!domains || domains.empty()) {
-      newPortDomains.push_back(attr);
+      newDomainInfo.push_back(attr);
       continue;
     }
     // This contains indexes to domain ports.  Update them.
+    SmallVector<Attribute> newDomains;
     for (auto domain : domains) {
       // If the domain port was deleted, drop the association.
       auto oldIdx = cast<IntegerAttr>(domain).getUInt();
@@ -1000,16 +1001,17 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
       // If the new index is the same, do nothing.
       auto newIdx = oldIdx - numDeleted[oldIdx];
       if (oldIdx == newIdx) {
-        newPortDomains.push_back(attr);
+        newDomainInfo.push_back(attr);
         continue;
       }
       // Update the index.
-      newPortDomains.push_back(IntegerAttr::get(
+      newDomains.push_back(IntegerAttr::get(
           IntegerType::get(context, 32, IntegerType::Unsigned), newIdx));
     }
+    newDomainInfo.push_back(ArrayAttr::get(context, newDomains));
   }
 
-  return ArrayAttr::get(context, newPortDomains);
+  return ArrayAttr::get(context, newDomainInfo);
 }
 
 /// Erases the ports that have their corresponding bit set in `portIndices`.

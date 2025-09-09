@@ -17,7 +17,6 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTDatapathToComb
   CIRCTDatapathToSMT
   CIRCTDCToHW
-  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTLToHW
   CIRCTFSMToSV
