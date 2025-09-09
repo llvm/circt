@@ -86,7 +86,6 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
     auto targetAddends = op.getNumResults();
     datapath::CompressorTree comp(width, addends, loc);
 
-    SmallVector<SmallVector<int64_t>> addendsDelays(addends.size());
     if (analysis) {
       // Update delay information with arrival times
       if (failed(comp.withInputDelays(

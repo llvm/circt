@@ -162,12 +162,12 @@ size_t CompressorTree::getMaxHeight() const {
 // https://en.wikipedia.org/wiki/Dadda_multiplier
 size_t CompressorTree::getNextStageTargetHeight() const {
   auto maxHeight = getMaxHeight();
-  size_t m_prev = 2;
+  size_t mPrev = 2;
   while (true) {
-    size_t m = static_cast<size_t>(std::floor(1.5 * m_prev));
+    size_t m = static_cast<size_t>(std::floor(1.5 * mPrev));
     if (m >= maxHeight)
-      return m_prev;
-    m_prev = m;
+      return mPrev;
+    mPrev = m;
   }
 }
 
@@ -218,7 +218,7 @@ SmallVector<Value> CompressorTree::compressToHeight(OpBuilder &builder,
 SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
                                                        size_t targetHeight) {
   while (getMaxHeight() > targetHeight) {
-    dump();
+    LLVM_DEBUG(dump(););
     // Increment the number of reduction stages for debugging/reporting
     ++numStages;
 
@@ -241,9 +241,10 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
                        << " to compress further.\n New Columns size: "
                        << newColumns[i].size()
                        << ", Current Column size: " << col.size() << "\n";
+          llvm::report_fatal_error(
+              "Expected at least two bits in compressor column");
         }
-        assert(col.size() >= 2 &&
-               "Expected at least two bits in compressor column");
+
         auto bit0 = col.pop_back_val();
         auto bit1 = col.pop_back_val();
 
@@ -284,49 +285,46 @@ SmallVector<Value> CompressorTree::compressUsingTiming(OpBuilder &builder,
       }
 
       // Pass through remaining bits
-      for (auto bit : col)
-        newColumns[i].push_back(bit);
+      newColumns[i].append(col);
     }
 
     // Compute another stage of reduction
-    columns = newColumns;
+    columns = std::move(newColumns);
   }
-  dump();
+  LLVM_DEBUG(dump(););
   return columnsToAddends(builder, targetHeight);
 }
 
 void CompressorTree::dump() const {
-  LLVM_DEBUG({
-    llvm::dbgs() << "Compressor Tree: Height = " << getMaxHeight()
-                 << ", Number of FA = " << numFullAdders
-                 << ", Number of Stages = " << numStages
-                 << ", Next Stage Target = " << getNextStageTargetHeight()
-                 << "\n";
-    // Print column headers
-    llvm::dbgs() << std::string(9, ' ');
+  llvm::dbgs() << "Compressor Tree: Height = " << getMaxHeight()
+               << ", Number of FA = " << numFullAdders
+               << ", Number of Stages = " << numStages
+               << ", Next Stage Target = " << getNextStageTargetHeight()
+               << "\n";
+  // Print column headers
+  llvm::dbgs() << std::string(9, ' ');
+  for (size_t j = width; j > 0; --j) {
+    if (j < width)
+      llvm::dbgs() << " ";
+    llvm::dbgs() << llvm::format("%02d", j - 1);
+  }
+  llvm::dbgs() << "\n"
+               << std::string(9, ' ') << std::string(width * 3, '-') << "\n";
+
+  for (size_t i = 0; i < getMaxHeight(); ++i) {
+    llvm::dbgs() << "  [" << llvm::format("%02d", i) << "]: [";
     for (size_t j = width; j > 0; --j) {
       if (j < width)
         llvm::dbgs() << " ";
-      llvm::dbgs() << llvm::format("%02d", j - 1);
+      if (i < columns[j - 1].size())
+        llvm::dbgs() << llvm::format(
+            "%02d",
+            columns[j - 1][i].delay); // Assumes CompressorBit has operator
+      else
+        llvm::dbgs() << "  ";
     }
-    llvm::dbgs() << "\n"
-                 << std::string(9, ' ') << std::string(width * 3, '-') << "\n";
-
-    for (size_t i = 0; i < getMaxHeight(); ++i) {
-      llvm::dbgs() << "  [" << llvm::format("%02d", i) << "]: [";
-      for (size_t j = width; j > 0; --j) {
-        if (j < width)
-          llvm::dbgs() << " ";
-        if (i < columns[j - 1].size())
-          llvm::dbgs() << llvm::format(
-              "%02d",
-              columns[j - 1][i].delay); // Assumes CompressorBit has operator
-        else
-          llvm::dbgs() << "  ";
-      }
-      llvm::dbgs() << "]\n";
-    }
-  });
+    llvm::dbgs() << "]\n";
+  }
 }
 
 //===----------------------------------------------------------------------===//
