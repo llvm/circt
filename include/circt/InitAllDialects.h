@@ -37,6 +37,7 @@
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OpLib/OpLibDialect.h"
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #ifdef CIRCT_INCLUDE_TESTS
@@ -61,6 +62,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     aig::AIGDialect,
     arc::ArcDialect,
     calyx::CalyxDialect,
+    oplib::OpLibDialect,
     chirrtl::CHIRRTLDialect,
     comb::CombDialect,
     datapath::DatapathDialect,
