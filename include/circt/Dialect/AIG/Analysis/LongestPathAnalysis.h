@@ -189,23 +189,26 @@ struct LongestPathAnalysisOption {
   /// When enabled, records intermediate points with delay values and comments
   /// for debugging, visualization, and understanding delay contributions.
   /// Moderate performance impact.
-  bool traceDebugPoints = false;
+  bool collectDebugInfo = false;
 
-  /// Enable incremental analysis mode for on-demand computation.
+  /// Enable lazy computation mode for on-demand analysis.
   /// Performs delay computations lazily and caches results, tracking IR
-  /// changes. Better for iterative workflows.
-  bool incremental = false;
+  /// changes. Better for iterative workflows where only specific paths
+  /// are queried. Disables parallel processing.
+  bool lazyComputation = false;
 
-  /// Optimize for maximum delay computation only.
-  /// Focuses on finding maximum delays, skipping detailed path reconstruction.
-  /// Faster when only delay bounds are needed.
-  bool onlyMaxDelay = false;
+  /// Keep only the maximum delay path per fanout point.
+  /// Focuses on finding maximum delays, discarding non-critical paths.
+  /// Significantly faster and uses less memory when only delay bounds
+  /// are needed rather than complete path enumeration.
+  bool keepOnlyMaxDelayPaths = false;
 
   /// Construct analysis options with the specified settings.
-  LongestPathAnalysisOption(bool traceDebugPoints = false,
-                            bool incremental = false, bool onlyMaxDelay = false)
-      : traceDebugPoints(traceDebugPoints), incremental(incremental),
-        onlyMaxDelay(onlyMaxDelay) {}
+  LongestPathAnalysisOption(bool collectDebugInfo = false,
+                            bool lazyComputation = false,
+                            bool keepOnlyMaxDelayPaths = false)
+      : collectDebugInfo(collectDebugInfo), lazyComputation(lazyComputation),
+        keepOnlyMaxDelayPaths(keepOnlyMaxDelayPaths) {}
 };
 
 // This analysis finds the longest paths in the dataflow graph across modules.
@@ -223,13 +226,12 @@ public:
 
   // Return all longest paths to each Fanin for the given value and bit
   // position.
-  LogicalResult getOrComputeGlobalPaths(Value value, size_t bitPos,
-                                        SmallVectorImpl<DataflowPath> &results);
+  LogicalResult computeGlobalPaths(Value value, size_t bitPos,
+                                   SmallVectorImpl<DataflowPath> &results);
 
   // Compute local paths for specified value and bit. Local paths are paths
   // that are fully contained within a module.
-  FailureOr<ArrayRef<OpenPath>> getOrComputeLocalPaths(Value value,
-                                                       size_t bitPos);
+  FailureOr<ArrayRef<OpenPath>> computeLocalPaths(Value value, size_t bitPos);
 
   // Return paths that are closed under the given module. Closed paths are
   // typically register-to-register paths. A closed path is a path that starts
@@ -303,7 +305,7 @@ public:
       : LongestPathAnalysis(moduleOp, am, option) {}
 
   // Compute maximum delay for specified value and bit.
-  FailureOr<int64_t> getOrComputeMaxDelay(Value value, size_t bitPos);
+  FailureOr<int64_t> computeMaximumDelay(Value value, size_t bitPos);
 
   // Check if operation can be safely modified without invalidating analysis.
   bool isOperationValidToMutate(Operation *op) const;

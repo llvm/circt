@@ -462,12 +462,12 @@ public:
   // This is non-null only if `module` is a ModuleOp.
   circt::igraph::InstanceGraph *instanceGraph = nullptr;
 
-  bool doTraceDebugPoints() const { return option.traceDebugPoints; }
-  bool doIncremental() const { return option.incremental; }
-  bool doKeepOnlyMaxDelayPaths() const { return option.onlyMaxDelay; }
+  bool doTraceDebugPoints() const { return option.collectDebugInfo; }
+  bool doLazyComputation() const { return option.lazyComputation; }
+  bool doKeepOnlyMaxDelayPaths() const { return option.keepOnlyMaxDelayPaths; }
 
 private:
-  bool isRunningParallel() const { return !doIncremental(); }
+  bool isRunningParallel() const { return !doLazyComputation(); }
   llvm::sys::SmartMutex<true> mutex;
   llvm::SetVector<StringAttr> running;
   LongestPathAnalysisOption option;
@@ -507,15 +507,15 @@ public:
   // Creates a wrapper module if needed, runs conversion, and returns timing
   // information as input dependencies.
   // Results are tuples of (input operand index, bit position in operand, delay)
-  LogicalResult
-  getResults(OpResult value, size_t bitPos,
-             SmallVectorImpl<std::tuple<size_t, size_t, int64_t>> &results);
+  LogicalResult analyzeOperation(
+      OpResult value, size_t bitPos,
+      SmallVectorImpl<std::tuple<size_t, size_t, int64_t>> &results);
 
 private:
   // Get or create a LocalVisitor for analyzing the given operation.
   // Uses caching based on operation name and function signature to avoid
   // recomputing analysis for identical operations.
-  FailureOr<LocalVisitor *> getOrComputeLocalVisitor(Operation *op);
+  FailureOr<LocalVisitor *> createOrGetAnalysisModule(Operation *op);
 
   // Extract the function signature (input/output types) from an operation.
   // This is used as part of the cache key to distinguish operations with
@@ -561,11 +561,11 @@ public:
 
   // Get the longest paths for the given value and bit position.
   // If the result is not cached, compute it and cache it.
-  FailureOr<ArrayRef<OpenPath>> getOrComputeResults(Value value, size_t bitPos);
+  FailureOr<ArrayRef<OpenPath>> computePaths(Value value, size_t bitPos);
 
   // Get the longest paths for the given value and bit position. This returns
   // an empty array if not pre-computed.
-  ArrayRef<OpenPath> getResults(Value value, size_t bitPos) const;
+  ArrayRef<OpenPath> getCachedPaths(Value value, size_t bitPos) const;
 
   // A map from the object to the maximum distance and history.
   using ObjectToMaxDistance =
@@ -730,13 +730,14 @@ LocalVisitor::LocalVisitor(hw::HWModuleOp module, Context *ctx)
   done = false;
 }
 
-ArrayRef<OpenPath> LocalVisitor::getResults(Value value, size_t bitPos) const {
+ArrayRef<OpenPath> LocalVisitor::getCachedPaths(Value value,
+                                                size_t bitPos) const {
   std::pair<Value, size_t> valueAndBitPos(value, bitPos);
   auto leader = ec.findLeader(valueAndBitPos);
   if (leader != ec.member_end()) {
     if (*leader != valueAndBitPos) {
       // If this is not the leader, then use the leader.
-      return getResults(leader->first, leader->second);
+      return getCachedPaths(leader->first, leader->second);
     }
   }
 
@@ -767,7 +768,7 @@ LogicalResult LocalVisitor::markRegFanOut(Value fanOut, Value start,
                                           Value enable) {
   auto bitWidth = getBitWidth(fanOut);
   auto record = [&](size_t fanOutBitPos, Value value, size_t bitPos) {
-    auto result = getOrComputeResults(value, bitPos);
+    auto result = computePaths(value, bitPos);
     if (failed(result))
       return failure();
     for (auto &path : *result) {
@@ -819,7 +820,7 @@ LogicalResult LocalVisitor::markEquivalent(Value from, size_t fromBitPos,
 
 LogicalResult LocalVisitor::addEdge(Value to, size_t bitPos, int64_t delay,
                                     SmallVectorImpl<OpenPath> &results) {
-  auto result = getOrComputeResults(to, bitPos);
+  auto result = computePaths(to, bitPos);
   if (failed(result))
     return failure();
   for (auto &path : *result) {
@@ -919,7 +920,7 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
   auto *localVisitor = ctx->getLocalVisitorMutable(moduleName);
   auto module = localVisitor->getHWModuleOp();
   auto operand = module.getBodyBlock()->getTerminator()->getOperand(resultNum);
-  auto result = localVisitor->getOrComputeResults(operand, bitPos);
+  auto result = localVisitor->computePaths(operand, bitPos);
   if (failed(result))
     return failure();
 
@@ -951,8 +952,8 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
     }
 
     // Otherwise, we need to look up the instance operand.
-    auto result = getOrComputeResults(op->getOperand(arg.getArgNumber()),
-                                      fanInPoint.bitPos);
+    auto result =
+        computePaths(op->getOperand(arg.getArgNumber()), fanInPoint.bitPos);
     if (failed(result))
       return failure();
     for (auto path : *result) {
@@ -1020,7 +1021,8 @@ LogicalResult LocalVisitor::visitDefault(OpResult value, size_t bitPos,
     llvm::dbgs() << " " << value << "[" << bitPos << "]\n";
   });
   SmallVector<std::tuple<size_t, size_t, int64_t>> oracleResults;
-  auto paths = operationAnalyzer->getResults(value, bitPos, oracleResults);
+  auto paths =
+      operationAnalyzer->analyzeOperationTiming(value, bitPos, oracleResults);
   if (failed(paths)) {
     LLVM_DEBUG({
       llvm::dbgs() << "Failed to get results for: " << value << "[" << bitPos
@@ -1056,13 +1058,13 @@ LogicalResult LocalVisitor::visit(mlir::BlockArgument arg, size_t bitPos,
   return success();
 }
 
-FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputeResults(Value value,
-                                                                size_t bitPos) {
+FailureOr<ArrayRef<OpenPath>> LocalVisitor::computePaths(Value value,
+                                                         size_t bitPos) {
   if (ec.contains({value, bitPos})) {
     auto leader = ec.findLeader({value, bitPos});
     // If this is not the leader, then use the leader.
     if (*leader != std::pair(value, bitPos)) {
-      return getOrComputeResults(leader->first, leader->second);
+      return computePaths(leader->first, leader->second);
     }
   }
 
@@ -1154,8 +1156,8 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
       // Prepend the instance path.
       assert(instancePathCache);
       auto newPath = instancePathCache->prependInstance(instance, instancePath);
-      auto computedResults = getOrComputeResults(
-          instance.getOperand(arg.getArgNumber()), argBitPos);
+      auto computedResults =
+          computePaths(instance.getOperand(arg.getArgNumber()), argBitPos);
       if (failed(computedResults))
         return failure();
 
@@ -1189,7 +1191,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
   // Pre-compute the results for the instance output ports.
   for (auto instance : instance->getResults()) {
     for (size_t i = 0, e = getBitWidth(instance); i < e; ++i) {
-      auto computedResults = getOrComputeResults(instance, i);
+      auto computedResults = computePaths(instance, i);
       if (failed(computedResults))
         return failure();
     }
@@ -1202,7 +1204,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::OutputOp output) {
     for (size_t i = 0, e = getBitWidth(operand.get()); i < e; ++i) {
       auto &recordOutput =
           fromOutputPortToFanIn[{operand.getOperandNumber(), i}];
-      auto computedResults = getOrComputeResults(operand.get(), i);
+      auto computedResults = computePaths(operand.get(), i);
       if (failed(computedResults))
         return failure();
       for (const auto &result : *computedResults) {
@@ -1216,13 +1218,13 @@ LogicalResult LocalVisitor::initializeAndRun(hw::OutputOp output) {
 
 LogicalResult LocalVisitor::initializeAndRun() {
   LLVM_DEBUG({ ctx->notifyStart(module.getModuleNameAttr()); });
-  if (ctx->doIncremental())
+  if (ctx->doLazyComputation())
     return success();
 
   // Initialize the results for the block arguments.
   for (auto blockArgument : module.getBodyBlock()->getArguments())
     for (size_t i = 0, e = getBitWidth(blockArgument); i < e; ++i)
-      (void)getOrComputeResults(blockArgument, i);
+      (void)computePaths(blockArgument, i);
 
   auto walkResult = module->walk([&](Operation *op) {
     auto result =
@@ -1250,7 +1252,7 @@ LogicalResult LocalVisitor::initializeAndRun() {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
               for (size_t i = 0, e = getBitWidth(op); i < e; ++i)
-                if (failed(getOrComputeResults(op, i)))
+                if (failed(computePaths(op, i)))
                   return failure();
               return success();
             })
@@ -1299,7 +1301,7 @@ LocalVisitor *Context::getLocalVisitorMutable(StringAttr name) const {
 // ===----------------------------------------------------------------------===//
 
 FailureOr<LocalVisitor *>
-OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
+OperationAnalyzer::createOrGetAnalysisModule(Operation *op) {
   // Check cache first.
   auto opName = op->getName();
   auto functionType = getFunctionTypeForOp(op);
@@ -1416,11 +1418,11 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
   return iterator->second.get();
 }
 
-LogicalResult OperationAnalyzer::getResults(
+LogicalResult OperationAnalyzer::analyzeOperation(
     OpResult value, size_t bitPos,
     SmallVectorImpl<std::tuple<size_t, size_t, int64_t>> &results) {
   auto *op = value.getDefiningOp();
-  auto localVisitorResult = getOrComputeLocalVisitor(op);
+  auto localVisitorResult = createOrGetAnalysisModule(op);
   if (failed(localVisitorResult))
     return failure();
 
@@ -1430,7 +1432,7 @@ LogicalResult OperationAnalyzer::getResults(
   Value operand =
       localVisitor->getHWModuleOp().getBodyBlock()->getTerminator()->getOperand(
           value.getResultNumber());
-  auto openPaths = localVisitor->getOrComputeResults(operand, bitPos);
+  auto openPaths = localVisitor->computePaths(operand, bitPos);
   if (failed(openPaths))
     return failure();
 
@@ -1464,21 +1466,24 @@ struct LongestPathAnalysis::Impl {
 
   // See LongestPathAnalysis.
   bool isAnalysisAvailable(StringAttr moduleName) const;
-  LogicalResult getOrComputeGlobalPaths(Value value, size_t bitPos,
-                                        SmallVectorImpl<DataflowPath> &results);
+  LogicalResult computeGlobalPaths(Value value, size_t bitPos,
+                                   SmallVectorImpl<DataflowPath> &results);
 
   template <bool elaborate>
-  LogicalResult getClosedPaths(StringAttr moduleName,
+  LogicalResult
+  collectClosedPaths(StringAttr moduleName,
+                     SmallVectorImpl<DataflowPath> &results) const;
+  LogicalResult
+  collectInputToInternalPaths(StringAttr moduleName,
+                              SmallVectorImpl<DataflowPath> &results) const;
+  LogicalResult
+  collectInternalToOutputPaths(StringAttr moduleName,
                                SmallVectorImpl<DataflowPath> &results) const;
-  LogicalResult getOpenPathsFromInputPortsToInternal(
-      StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
-  LogicalResult getOpenPathsFromInternalToOutputPorts(
-      StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const;
 
   llvm::ArrayRef<hw::HWModuleOp> getTopModules() const { return topModules; }
 
   // Incremental mode.
-  bool doIncremental() const { return ctx.doIncremental(); }
+  bool doIncremental() const { return ctx.doLazyComputation(); }
 
 protected:
   friend class LongestPathAnalysis;
@@ -1486,21 +1491,20 @@ protected:
   FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
 
 private:
-  LogicalResult getOrComputeGlobalPaths(const Object &originalObject,
-                                        Value value, size_t bitPos,
-                                        SmallVectorImpl<DataflowPath> &results);
+  LogicalResult computeGlobalPaths(const Object &originalObject, Value value,
+                                   size_t bitPos,
+                                   SmallVectorImpl<DataflowPath> &results);
 
   Context ctx;
   SmallVector<hw::HWModuleOp> topModules;
 };
 
-LogicalResult LongestPathAnalysis::Impl::getOrComputeGlobalPaths(
+LogicalResult LongestPathAnalysis::Impl::computeGlobalPaths(
     Value value, size_t bitPos, SmallVectorImpl<DataflowPath> &results) {
-  return getOrComputeGlobalPaths(Object({}, value, bitPos), value, bitPos,
-                                 results);
+  return computeGlobalPaths(Object({}, value, bitPos), value, bitPos, results);
 }
 
-LogicalResult LongestPathAnalysis::Impl::getOrComputeGlobalPaths(
+LogicalResult LongestPathAnalysis::Impl::computeGlobalPaths(
     const Object &originalObject, Value value, size_t bitPos,
     SmallVectorImpl<DataflowPath> &results) {
   auto parentHWModule =
@@ -1514,8 +1518,6 @@ LogicalResult LongestPathAnalysis::Impl::getOrComputeGlobalPaths(
     return success();
 
   auto *instancePathCache = localVisitor->getInstancePathCache();
-  auto *debugPointFactory = localVisitor->getDebugPointFactory();
-
   size_t oldIndex = results.size();
   auto *node =
       ctx.instanceGraph
@@ -1525,7 +1527,7 @@ LogicalResult LongestPathAnalysis::Impl::getOrComputeGlobalPaths(
     llvm::dbgs() << "Running " << parentHWModule.getModuleNameAttr() << " "
                  << value << " " << bitPos << "\n";
   });
-  auto paths = localVisitor->getOrComputeResults(value, bitPos);
+  auto paths = localVisitor->computePaths(value, bitPos);
   if (failed(paths))
     return failure();
 
@@ -1546,16 +1548,13 @@ LogicalResult LongestPathAnalysis::Impl::getOrComputeGlobalPaths(
         newObject.instancePath = instancePathCache->appendInstance(
             originalObject.instancePath, inst->getInstance());
 
-      auto result = getOrComputeGlobalPaths(
+      auto result = computeGlobalPaths(
           newObject, inst->getInstance()->getOperand(arg.getArgNumber()),
           path.fanIn.bitPos, results);
       if (failed(result))
         return result;
-      for (auto i = startIndex, e = results.size(); i < e; ++i) {
-        if (ctx.doTraceDebugPoints()) {
-        }
+      for (auto i = startIndex, e = results.size(); i < e; ++i)
         results[i].setDelay(results[i].getDelay() + path.delay);
-      }
     }
   }
 
@@ -1564,7 +1563,7 @@ LogicalResult LongestPathAnalysis::Impl::getOrComputeGlobalPaths(
 }
 
 template <bool elaborate>
-LogicalResult LongestPathAnalysis::Impl::getClosedPaths(
+LogicalResult LongestPathAnalysis::Impl::collectClosedPaths(
     StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
   auto collectClosedPaths = [&](StringAttr name,
                                 SmallVectorImpl<DataflowPath> &localResults,
@@ -1620,7 +1619,7 @@ LogicalResult LongestPathAnalysis::Impl::getClosedPaths(
   return success();
 }
 
-LogicalResult LongestPathAnalysis::Impl::getOpenPathsFromInputPortsToInternal(
+LogicalResult LongestPathAnalysis::Impl::collectInputToInternalPaths(
     StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
   auto *visitor = ctx.getLocalVisitor(moduleName);
   if (!visitor)
@@ -1640,7 +1639,7 @@ LogicalResult LongestPathAnalysis::Impl::getOpenPathsFromInputPortsToInternal(
   return success();
 }
 
-LogicalResult LongestPathAnalysis::Impl::getOpenPathsFromInternalToOutputPorts(
+LogicalResult LongestPathAnalysis::Impl::collectInternalToOutputPaths(
     StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
   auto *visitor = ctx.getLocalVisitor(moduleName);
   if (!visitor)
@@ -1784,8 +1783,7 @@ LongestPathAnalysis::Impl::getOrComputePaths(Value value, size_t bitPos) {
   if (!localVisitor)
     return mlir::emitError(value.getLoc())
            << "the local visitor for the given value does not exist";
-  auto path = localVisitor->getOrComputeResults(value, bitPos);
-  return path;
+  return localVisitor->computePaths(value, bitPos);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1800,10 +1798,12 @@ LongestPathAnalysis::LongestPathAnalysis(
     : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {
   LLVM_DEBUG({
     llvm::dbgs() << "LongestPathAnalysis created\n";
-    if (option.traceDebugPoints)
-      llvm::dbgs() << " - Tracing debug points\n";
-    if (option.incremental)
-      llvm::dbgs() << " - Incremental analysis enabled\n";
+    if (option.collectDebugInfo)
+      llvm::dbgs() << " - Collecting debug info\n";
+    if (option.lazyComputation)
+      llvm::dbgs() << " - Lazy computation enabled\n";
+    if (option.keepOnlyMaxDelayPaths)
+      llvm::dbgs() << " - Keeping only max delay paths\n";
   });
 }
 
@@ -1816,18 +1816,18 @@ LongestPathAnalysis::getClosedPaths(StringAttr moduleName,
                                     SmallVectorImpl<DataflowPath> &results,
                                     bool elaboratePaths) const {
   if (elaboratePaths)
-    return impl->getClosedPaths<true>(moduleName, results);
-  return impl->getClosedPaths<false>(moduleName, results);
+    return impl->collectClosedPaths<true>(moduleName, results);
+  return impl->collectClosedPaths<false>(moduleName, results);
 }
 
 LogicalResult LongestPathAnalysis::getOpenPathsFromInputPortsToInternal(
     StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
-  return impl->getOpenPathsFromInputPortsToInternal(moduleName, results);
+  return impl->collectInputToInternalPaths(moduleName, results);
 }
 
 LogicalResult LongestPathAnalysis::getOpenPathsFromInternalToOutputPorts(
     StringAttr moduleName, SmallVectorImpl<DataflowPath> &results) const {
-  return impl->getOpenPathsFromInternalToOutputPorts(moduleName, results);
+  return impl->collectInternalToOutputPaths(moduleName, results);
 }
 
 LogicalResult
@@ -1848,28 +1848,28 @@ ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
 }
 
 //===----------------------------------------------------------------------===//
-// InrementalLongestPathAnalysis
+// IncrementalLongestPathAnalysis
 //===----------------------------------------------------------------------===//
 
 FailureOr<ArrayRef<OpenPath>>
-LongestPathAnalysis::getOrComputeLocalPaths(Value value, size_t bitPos) {
+LongestPathAnalysis::computeLocalPaths(Value value, size_t bitPos) {
   if (!isAnalysisValid)
     return failure();
 
   return impl->getOrComputePaths(value, bitPos);
 }
 
-LogicalResult LongestPathAnalysis::getOrComputeGlobalPaths(
+LogicalResult LongestPathAnalysis::computeGlobalPaths(
     Value value, size_t bitPos, SmallVectorImpl<DataflowPath> &results) {
   if (!isAnalysisValid)
     return mlir::emitError(value.getLoc()) << "analysis has been invalidated";
 
-  return impl->getOrComputeGlobalPaths(value, bitPos, results);
+  return impl->computeGlobalPaths(value, bitPos, results);
 }
 
 FailureOr<int64_t>
-IncrementalLongestPathAnalysis::getOrComputeMaxDelay(Value value,
-                                                     size_t bitPos) {
+IncrementalLongestPathAnalysis::computeMaximumDelay(Value value,
+                                                    size_t bitPos) {
   if (!isAnalysisValid)
     return mlir::emitError(value.getLoc()) << "analysis has been invalidated";
 
@@ -1897,7 +1897,7 @@ bool IncrementalLongestPathAnalysis::isOperationValidToMutate(
   // the operation.
   return llvm::all_of(op->getResults(), [localVisitor](Value value) {
     for (int64_t i = 0, e = getBitWidth(value); i < e; ++i) {
-      auto path = localVisitor->getResults(value, i);
+      auto path = localVisitor->getCachedPaths(value, i);
       if (!path.empty())
         return false;
     }
