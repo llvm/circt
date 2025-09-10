@@ -581,7 +581,7 @@ public:
 
   // Get the longest paths for the given value and bit position.
   // If the result is not cached, compute it and cache it.
-  FailureOr<ArrayRef<OpenPath>> computePaths(Value value, size_t bitPos);
+  FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
 
   // Get the longest paths for the given value and bit position. This returns
   // an empty array if not pre-computed.
@@ -788,7 +788,7 @@ LogicalResult LocalVisitor::markRegFanOut(Value fanOut, Value start,
                                           Value enable) {
   auto bitWidth = getBitWidth(fanOut);
   auto record = [&](size_t fanOutBitPos, Value value, size_t bitPos) {
-    auto result = computePaths(value, bitPos);
+    auto result = getOrComputePaths(value, bitPos);
     if (failed(result))
       return failure();
     for (auto &path : *result) {
@@ -840,7 +840,7 @@ LogicalResult LocalVisitor::markEquivalent(Value from, size_t fromBitPos,
 
 LogicalResult LocalVisitor::addEdge(Value to, size_t bitPos, int64_t delay,
                                     SmallVectorImpl<OpenPath> &results) {
-  auto result = computePaths(to, bitPos);
+  auto result = getOrComputePaths(to, bitPos);
   if (failed(result))
     return failure();
   for (auto &path : *result) {
@@ -940,7 +940,7 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
   auto *localVisitor = ctx->getLocalVisitorMutable(moduleName);
   auto module = localVisitor->getHWModuleOp();
   auto operand = module.getBodyBlock()->getTerminator()->getOperand(resultNum);
-  auto result = localVisitor->computePaths(operand, bitPos);
+  auto result = localVisitor->getOrComputePaths(operand, bitPos);
   if (failed(result))
     return failure();
 
@@ -972,8 +972,8 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
     }
 
     // Otherwise, we need to look up the instance operand.
-    auto result =
-        computePaths(op->getOperand(arg.getArgNumber()), fanInPoint.bitPos);
+    auto result = getOrComputePaths(op->getOperand(arg.getArgNumber()),
+                                    fanInPoint.bitPos);
     if (failed(result))
       return failure();
     for (auto path : *result) {
@@ -1078,13 +1078,13 @@ LogicalResult LocalVisitor::visit(mlir::BlockArgument arg, size_t bitPos,
   return success();
 }
 
-FailureOr<ArrayRef<OpenPath>> LocalVisitor::computePaths(Value value,
-                                                         size_t bitPos) {
+FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputePaths(Value value,
+                                                              size_t bitPos) {
   if (ec.contains({value, bitPos})) {
     auto leader = ec.findLeader({value, bitPos});
     // If this is not the leader, then use the leader.
     if (*leader != std::pair(value, bitPos)) {
-      return computePaths(leader->first, leader->second);
+      return getOrComputePaths(leader->first, leader->second);
     }
   }
 
@@ -1177,7 +1177,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
       assert(instancePathCache);
       auto newPath = instancePathCache->prependInstance(instance, instancePath);
       auto computedResults =
-          computePaths(instance.getOperand(arg.getArgNumber()), argBitPos);
+          getOrComputePaths(instance.getOperand(arg.getArgNumber()), argBitPos);
       if (failed(computedResults))
         return failure();
 
@@ -1211,7 +1211,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
   // Pre-compute the results for the instance output ports.
   for (auto instance : instance->getResults()) {
     for (size_t i = 0, e = getBitWidth(instance); i < e; ++i) {
-      auto computedResults = computePaths(instance, i);
+      auto computedResults = getOrComputePaths(instance, i);
       if (failed(computedResults))
         return failure();
     }
@@ -1224,7 +1224,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::OutputOp output) {
     for (size_t i = 0, e = getBitWidth(operand.get()); i < e; ++i) {
       auto &recordOutput =
           fromOutputPortToFanIn[{operand.getOperandNumber(), i}];
-      auto computedResults = computePaths(operand.get(), i);
+      auto computedResults = getOrComputePaths(operand.get(), i);
       if (failed(computedResults))
         return failure();
       for (const auto &result : *computedResults) {
@@ -1244,7 +1244,7 @@ LogicalResult LocalVisitor::initializeAndRun() {
   // Initialize the results for the block arguments.
   for (auto blockArgument : module.getBodyBlock()->getArguments())
     for (size_t i = 0, e = getBitWidth(blockArgument); i < e; ++i)
-      (void)computePaths(blockArgument, i);
+      (void)getOrComputePaths(blockArgument, i);
 
   auto walkResult = module->walk([&](Operation *op) {
     auto result =
@@ -1272,7 +1272,7 @@ LogicalResult LocalVisitor::initializeAndRun() {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
               for (size_t i = 0, e = getBitWidth(op); i < e; ++i)
-                if (failed(computePaths(op, i)))
+                if (failed(getOrComputePaths(op, i)))
                   return failure();
               return success();
             })
@@ -1452,7 +1452,7 @@ LogicalResult OperationAnalyzer::analyzeOperation(
   Value operand =
       localVisitor->getHWModuleOp().getBodyBlock()->getTerminator()->getOperand(
           value.getResultNumber());
-  auto openPaths = localVisitor->computePaths(operand, bitPos);
+  auto openPaths = localVisitor->getOrComputePaths(operand, bitPos);
   if (failed(openPaths))
     return failure();
 
@@ -1488,6 +1488,9 @@ struct LongestPathAnalysis::Impl {
   bool isAnalysisAvailable(StringAttr moduleName) const;
   LogicalResult computeGlobalPaths(Value value, size_t bitPos,
                                    SmallVectorImpl<DataflowPath> &results);
+
+  int64_t getAverageMaxDelay(Value value);
+  int64_t getMaxDelay(Value value);
 
   template <bool elaborate>
   LogicalResult
@@ -1547,7 +1550,7 @@ LogicalResult LongestPathAnalysis::Impl::computeGlobalPaths(
     llvm::dbgs() << "Running " << parentHWModule.getModuleNameAttr() << " "
                  << value << " " << bitPos << "\n";
   });
-  auto paths = localVisitor->computePaths(value, bitPos);
+  auto paths = localVisitor->getOrComputePaths(value, bitPos);
   if (failed(paths))
     return failure();
 
@@ -1781,6 +1784,47 @@ bool LongestPathAnalysis::Impl::isAnalysisAvailable(
     StringAttr moduleName) const {
   return ctx.localVisitors.find(moduleName) != ctx.localVisitors.end();
 }
+// Return the average of the maximum delays across all bits of the given
+// value, which is useful approximation for the delay of the value. For each
+// bit position, finds all paths and takes the maximum delay. Then averages
+// these maximum delays across all bits of the value.
+int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) {
+  SmallVector<DataflowPath> results;
+  size_t bitWidth = getBitWidth(value);
+  if (bitWidth == 0)
+    return 0;
+  int64_t totalDelay = 0;
+  for (size_t i = 0; i < bitWidth; ++i) {
+    // Clear results from previous iteration.
+    results.clear();
+    auto result = computeGlobalPaths(value, i, results);
+    if (failed(result))
+      return 0;
+
+    int64_t maxDelay = getMaxDelayInPaths(ArrayRef<DataflowPath>(results));
+    totalDelay += maxDelay;
+  }
+  return llvm::divideCeil(totalDelay, bitWidth);
+}
+
+int64_t LongestPathAnalysis::Impl::getMaxDelay(Value value) {
+  SmallVector<DataflowPath> results;
+  size_t bitWidth = getBitWidth(value);
+  if (bitWidth == 0)
+    return 0;
+  int64_t maxDelay = 0;
+  for (size_t i = 0; i < bitWidth; ++i) {
+    results.clear();
+
+    auto result = computeGlobalPaths(value, i, results);
+    if (failed(result))
+      return 0;
+
+    maxDelay =
+        std::max(maxDelay, getMaxDelayInPaths(ArrayRef<DataflowPath>(results)));
+  }
+  return maxDelay;
+}
 
 FailureOr<ArrayRef<OpenPath>>
 LongestPathAnalysis::Impl::getOrComputePaths(Value value, size_t bitPos) {
@@ -1803,7 +1847,7 @@ LongestPathAnalysis::Impl::getOrComputePaths(Value value, size_t bitPos) {
   if (!localVisitor)
     return mlir::emitError(value.getLoc())
            << "the local visitor for the given value does not exist";
-  return localVisitor->computePaths(value, bitPos);
+  return localVisitor->getOrComputePaths(value, bitPos);
 }
 
 //===----------------------------------------------------------------------===//
