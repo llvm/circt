@@ -1245,3 +1245,30 @@ func.func @SimulationControl() {
 
   return
 }
+
+// CHECK-LABEL: @SeverityToPrint
+func.func @SeverityToPrint() {
+  // CHECK: [[MSG:%.*]] = sim.fmt.lit "Fatal condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.lit "Fatal: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %0 = moore.fmt.literal "Fatal condition met!"
+  moore.builtin.severity fatal %0
+
+  // CHECK: [[MSG:%.*]] = sim.fmt.lit "Error condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.lit "Error: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %1 = moore.fmt.literal "Error condition met!"
+  moore.builtin.severity error %1
+
+  // CHECK: [[MSG:%.*]] = sim.fmt.lit "Warning condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.lit "Warning: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %2 = moore.fmt.literal "Warning condition met!"
+  moore.builtin.severity warning %2
+
+  return
+}
+
