@@ -32,12 +32,12 @@ void circt::python::populateDialectAIGSubmodule(nb::module_ &m) {
       .def(
           "__init__",
           [](AIGLongestPathAnalysis *self, MlirOperation module,
-             bool traceDebugPoints, bool onlyMaxDelay, bool incremental) {
+             bool collectDebugInfo, bool keepOnlyMaxDelayPaths, bool lazyComputation) {
             new (self) AIGLongestPathAnalysis(aigLongestPathAnalysisCreate(
-                module, traceDebugPoints, onlyMaxDelay, incremental));
+                module, collectDebugInfo, keepOnlyMaxDelayPaths, lazyComputation));
           },
-          nb::arg("module"), nb::arg("trace_debug_points") = false,
-          nb::arg("only_max_delay") = false, nb::arg("incremental") = false)
+          nb::arg("module"), nb::arg("collect_debug_info") = false,
+          nb::arg("keep_only_max_delay_paths") = false, nb::arg("lazy_computation") = false)
       .def("__del__",
            [](AIGLongestPathAnalysis &self) {
              aigLongestPathAnalysisDestroy(self);

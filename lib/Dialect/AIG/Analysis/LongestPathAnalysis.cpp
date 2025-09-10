@@ -113,22 +113,22 @@ deduplicatePathsImpl(SmallVectorImpl<T> &results, size_t startIndex,
 }
 
 static void filterPaths(SmallVectorImpl<OpenPath> &results,
-                        bool keepOnlyMaxDelay, bool keepBlockArgument) {
+                        bool keepOnlyMaxDelay, bool isLocalScope) {
   if (results.empty())
     return;
 
-  OpenPath maxDelay;
-  maxDelay.delay = -1;
-  if (keepOnlyMaxDelay && !keepBlockArgument) {
-    if (keepBlockArgument) {
-      for (auto &path : results) {
-        if (path.delay > maxDelay.delay)
-          maxDelay = path;
-      }
-      results.clear();
-      if (maxDelay.delay >= 0)
-        results.push_back(maxDelay);
+  if (keepOnlyMaxDelay && isLocalScope) {
+    OpenPath maxDelay;
+    maxDelay.delay = -1;
+
+    for (auto &path : results) {
+      if (path.delay > maxDelay.delay)
+        maxDelay = path;
     }
+    results.clear();
+    if (maxDelay.delay >= 0)
+      results.push_back(maxDelay);
+    return;
   }
 
   deduplicatePathsImpl<OpenPath, Object>(
@@ -136,7 +136,10 @@ static void filterPaths(SmallVectorImpl<OpenPath> &results,
       [](const auto &path) { return path.delay; });
 
   if (keepOnlyMaxDelay) {
+    assert(!isLocalScope);
     size_t writeIndex = 0;
+    OpenPath maxDelay;
+    maxDelay.delay = -1;
     for (size_t i = 0; i < results.size(); ++i) {
       if (!isa<BlockArgument>(results[i].getFanIn().value)) {
         if (results[i].delay > maxDelay.delay)
@@ -451,20 +454,19 @@ public:
   // Lookup a local visitor for `name`.
   const LocalVisitor *getLocalVisitor(StringAttr name) const;
 
-  // Lookup a local visitor for `name`, and wait until it's done.
-  // const LocalVisitor *getAndWaitLocalVisitor(StringAttr name) const;
-
   // Lookup a mutable local visitor for `name`.
   LocalVisitor *getLocalVisitorMutable(StringAttr name) const;
 
   // A map from the module name to the local visitor.
   llvm::MapVector<StringAttr, std::unique_ptr<LocalVisitor>> localVisitors;
+
   // This is non-null only if `module` is a ModuleOp.
   circt::igraph::InstanceGraph *instanceGraph = nullptr;
 
   bool doTraceDebugPoints() const { return option.collectDebugInfo; }
   bool doLazyComputation() const { return option.lazyComputation; }
   bool doKeepOnlyMaxDelayPaths() const { return option.keepOnlyMaxDelayPaths; }
+  bool isLocalScope() const { return instanceGraph == nullptr; }
 
 private:
   bool isRunningParallel() const { return !doLazyComputation(); }
@@ -859,7 +861,7 @@ LogicalResult LocalVisitor::visit(comb::MuxOp op, size_t bitPos,
       failed(addEdge(op.getTrueValue(), bitPos, 1, results)) ||
       failed(addEdge(op.getFalseValue(), bitPos, 1, results)))
     return failure();
-  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), !ctx->instanceGraph);
+  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), ctx->isLocalScope());
   return success();
 }
 
@@ -1006,7 +1008,7 @@ LogicalResult LocalVisitor::addLogicOp(Operation *op, size_t bitPos,
   for (auto operand : op->getOperands())
     if (failed(addEdge(operand, bitPos, cost, results)))
       return failure();
-  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), !ctx->instanceGraph);
+  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), ctx->isLocalScope());
   return success();
 }
 
@@ -1077,7 +1079,7 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::computePaths(Value value,
     return {};
 
   // Unique the results.
-  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), !ctx->instanceGraph);
+  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), ctx->isLocalScope());
   LLVM_DEBUG({
     llvm::dbgs() << value << "[" << bitPos << "] " << "Found " << results.size()
                  << " paths\n";
