@@ -48,8 +48,8 @@ DEFINE_C_API_STRUCT(AIGLongestPathCollection, void);
 
 // Create a LongestPathAnalysis for the given module
 MLIR_CAPI_EXPORTED AIGLongestPathAnalysis
-aigLongestPathAnalysisCreate(MlirOperation module, bool traceDebugPoints,
-                             bool onlyMaxDelay, bool incremental);
+aigLongestPathAnalysisCreate(MlirOperation module, bool collectDebugInfo,
+                             bool keepOnlyMaxDelayPaths, bool lazyComputation);
 
 // Destroy a LongestPathAnalysis
 MLIR_CAPI_EXPORTED void

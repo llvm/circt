@@ -1022,7 +1022,7 @@ LogicalResult LocalVisitor::visitDefault(OpResult value, size_t bitPos,
   });
   SmallVector<std::tuple<size_t, size_t, int64_t>> oracleResults;
   auto paths =
-      operationAnalyzer->analyzeOperationTiming(value, bitPos, oracleResults);
+      operationAnalyzer->analyzeOperation(value, bitPos, oracleResults);
   if (failed(paths)) {
     LLVM_DEBUG({
       llvm::dbgs() << "Failed to get results for: " << value << "[" << bitPos

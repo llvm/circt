@@ -75,9 +75,9 @@ AIGLongestPathObject wrap(const DataflowPath::OutputPort *object) {
 //===----------------------------------------------------------------------===//
 
 AIGLongestPathAnalysis aigLongestPathAnalysisCreate(MlirOperation module,
-                                                    bool traceDebugPoints,
-                                                    bool onlyMaxDelay,
-                                                    bool incremental) {
+                                                    bool collectDebugInfo,
+                                                    bool keepOnlyMaxDelayPaths,
+                                                    bool lazyComputation) {
   auto *op = unwrap(module);
   auto *wrapper = new LongestPathAnalysisWrapper();
   wrapper->analysisManager =
@@ -85,7 +85,8 @@ AIGLongestPathAnalysis aigLongestPathAnalysisCreate(MlirOperation module,
   mlir::AnalysisManager am = *wrapper->analysisManager;
   wrapper->analysis = std::make_unique<LongestPathAnalysis>(
       op, am,
-      LongestPathAnalysisOption(traceDebugPoints, incremental, onlyMaxDelay));
+      LongestPathAnalysisOption(collectDebugInfo, lazyComputation,
+                                keepOnlyMaxDelayPaths));
   return wrap(wrapper);
 }
 
@@ -100,7 +101,7 @@ aigLongestPathAnalysisGetPaths(AIGLongestPathAnalysis analysis, MlirValue value,
   auto *lpa = wrapper->analysis.get();
   auto *collection = new LongestPathCollection(lpa->getContext());
   auto result =
-      lpa->getOrComputeGlobalPaths(unwrap(value), bitPos, collection->paths);
+      lpa->computeGlobalPaths(unwrap(value), bitPos, collection->paths);
   if (failed(result))
     return {nullptr};
   collection->sortInDescendingOrder();
