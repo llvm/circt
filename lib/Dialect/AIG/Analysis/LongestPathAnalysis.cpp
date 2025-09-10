@@ -112,44 +112,62 @@ deduplicatePathsImpl(SmallVectorImpl<T> &results, size_t startIndex,
   results.resize(keyToIndex.size() + startIndex);
 }
 
+// Filter and optimize OpenPaths based on analysis configuration.
 static void filterPaths(SmallVectorImpl<OpenPath> &results,
                         bool keepOnlyMaxDelay, bool isLocalScope) {
   if (results.empty())
     return;
 
+  // Fast path for local scope with max-delay filtering:
+  // Simply find and keep only the single longest delay path
   if (keepOnlyMaxDelay && isLocalScope) {
     OpenPath maxDelay;
-    maxDelay.delay = -1;
+    maxDelay.delay = -1; // Initialize to invalid delay
 
+    // Find the path with maximum delay
     for (auto &path : results) {
       if (path.delay > maxDelay.delay)
         maxDelay = path;
     }
+
+    // Replace all paths with just the maximum delay path
     results.clear();
-    if (maxDelay.delay >= 0)
+    if (maxDelay.delay >= 0) // Only add if we found a valid path
       results.push_back(maxDelay);
     return;
   }
 
+  // Remove paths with identical fanin points, keeping only the longest delay
+  // path for each unique points.
   deduplicatePathsImpl<OpenPath, Object>(
       results, 0, [](const auto &path) { return path.fanIn; },
       [](const auto &path) { return path.delay; });
 
+  // Global scope max-delay filtering:
+  // Keep all module input ports (BlockArguments) but only the single
+  // longest internal path to preserve boundary information
   if (keepOnlyMaxDelay) {
     assert(!isLocalScope);
     size_t writeIndex = 0;
     OpenPath maxDelay;
-    maxDelay.delay = -1;
+    maxDelay.delay = -1; // Initialize to invalid delay
+
     for (size_t i = 0; i < results.size(); ++i) {
-      if (!isa<BlockArgument>(results[i].getFanIn().value)) {
+      // Preserve all module input port paths (BlockArguments) since the input
+      // port might be the critical path.
+      if (isa<BlockArgument>(results[i].getFanIn().value)) {
+        // Keep all module input port pathsas could become
+        results[writeIndex++] = results[i];
+      } else {
+        // For internal paths, track only the maximum delay path
         if (results[i].delay > maxDelay.delay)
           maxDelay = results[i];
-      } else {
-        results[writeIndex++] = results[i];
       }
     }
+
+    // Resize to remove processed internal paths, then add the max delay path
     results.resize(writeIndex);
-    if (maxDelay.delay >= 0)
+    if (maxDelay.delay >= 0) // Only add if we found a valid internal path
       results.push_back(maxDelay);
   }
 }
