@@ -1664,7 +1664,7 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
 
   std::string severityString;
 
-  switch (op.getSeverity()){
+  switch (op.getSeverity()) {
   case (Severity::Fatal):
     severityString = "Fatal: ";
     break;
@@ -1680,7 +1680,7 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
 
   auto prefix = rewriter.create<sim::FormatLitOp>(op.getLoc(), severityString);
   auto message = rewriter.create<sim::FormatStringConcatOp>(
-                                                            op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
+      op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
   rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
   return success();
 }
