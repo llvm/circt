@@ -1658,6 +1658,20 @@ static LogicalResult convert(FinishBIOp op, FinishBIOp::Adaptor adaptor,
   return success();
 }
 
+// moore.builtin.severity -> sim.proc.print
+static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+
+  if (op.getSeverity() == Severity::Fatal) {
+    auto prefix = rewriter.create<sim::FormatLitOp>(op.getLoc(), "Error: ");
+    auto message = rewriter.create<sim::FormatStringConcatOp>(
+        op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
+    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
+    return success();
+  }
+  return failure();
+}
+
 // moore.builtin.finish_message
 static LogicalResult convert(FinishMessageBIOp op,
                              FinishMessageBIOp::Adaptor adaptor,
@@ -1956,6 +1970,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
   // Simulation control
   patterns.add<StopBIOp>(convert);
+  patterns.add<SeverityBIOp>(convert);
   patterns.add<FinishBIOp>(convert);
   patterns.add<FinishMessageBIOp>(convert);
 
