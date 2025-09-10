@@ -1662,14 +1662,27 @@ static LogicalResult convert(FinishBIOp op, FinishBIOp::Adaptor adaptor,
 static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
                              ConversionPatternRewriter &rewriter) {
 
-  if (op.getSeverity() == Severity::Fatal) {
-    auto prefix = rewriter.create<sim::FormatLitOp>(op.getLoc(), "Error: ");
-    auto message = rewriter.create<sim::FormatStringConcatOp>(
-        op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
-    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
-    return success();
+  std::string severityString;
+
+  switch (op.getSeverity()){
+  case (Severity::Fatal):
+    severityString = "Fatal: ";
+    break;
+  case (Severity::Error):
+    severityString = "Error: ";
+    break;
+  case (Severity::Warning):
+    severityString = "Warning: ";
+    break;
+  default:
+    return failure();
   }
-  return failure();
+
+  auto prefix = rewriter.create<sim::FormatLitOp>(op.getLoc(), severityString);
+  auto message = rewriter.create<sim::FormatStringConcatOp>(
+                                                            op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
+  rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
+  return success();
 }
 
 // moore.builtin.finish_message
