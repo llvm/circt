@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FieldRefCache.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
@@ -356,34 +357,6 @@ static ParseResult parseNameKind(OpAsmParser &parser,
 // Layer Verification Utilities
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct CompareSymbolRefAttr {
-  // True if lhs is lexicographically less than rhs.
-  bool operator()(SymbolRefAttr lhs, SymbolRefAttr rhs) const {
-    auto cmp = lhs.getRootReference().compare(rhs.getRootReference());
-    if (cmp == -1)
-      return true;
-    if (cmp == 1)
-      return false;
-    auto lhsNested = lhs.getNestedReferences();
-    auto rhsNested = rhs.getNestedReferences();
-    auto lhsNestedSize = lhsNested.size();
-    auto rhsNestedSize = rhsNested.size();
-    auto e = std::min(lhsNestedSize, rhsNestedSize);
-    for (unsigned i = 0; i < e; ++i) {
-      auto cmp = lhsNested[i].getAttr().compare(rhsNested[i].getAttr());
-      if (cmp == -1)
-        return true;
-      if (cmp == 1)
-        return false;
-    }
-    return lhsNestedSize < rhsNestedSize;
-  }
-};
-} // namespace
-
-using LayerSet = SmallSet<SymbolRefAttr, 4, CompareSymbolRefAttr>;
-
 /// Get the ambient layers active at the given op.
 static LayerSet getAmbientLayersAt(Operation *op) {
   // Crawl through the parent ops, accumulating all ambient layers at the given
@@ -470,7 +443,7 @@ static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
     if (!isLayerCompatibleWith(srcLayer, dst))
       missing.push_back(srcLayer);
 
-  llvm::sort(missing, CompareSymbolRefAttr());
+  llvm::sort(missing, LayerSetCompare());
   return missing.empty();
 }
 

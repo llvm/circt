@@ -18,6 +18,8 @@ using namespace circt;
 // Reduction Patterns
 //===----------------------------------------------------------------------===//
 
+namespace {
+
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
@@ -42,6 +44,30 @@ struct OperationPruner : public Reduction {
   std::unique_ptr<SymbolUserMap> userMap;
 };
 
+/// Remove unused symbol ops.
+struct UnusedSymbolPruner : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbolTables = std::make_unique<SymbolTableCollection>();
+    symbolUsers = std::make_unique<SymbolUserMap>(*symbolTables, op);
+  }
+
+  uint64_t match(Operation *op) override {
+    return isa<SymbolOpInterface>(op) && symbolUsers->useEmpty(op);
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    op->erase();
+    return success();
+  }
+
+  std::string getName() const override { return "unused-symbol-pruner"; }
+
+  std::unique_ptr<SymbolTableCollection> symbolTables;
+  std::unique_ptr<SymbolUserMap> symbolUsers;
+};
+
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -56,6 +82,7 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 
 void circt::populateGenericReducePatterns(MLIRContext *context,
                                           ReducePatternSet &patterns) {
+  patterns.add<UnusedSymbolPruner, 40>();
   patterns.add<PassReduction, 3>(context, createCSEPass());
   patterns.add<PassReduction, 2>(context, createSimpleCanonicalizerPass());
   patterns.add<OperationPruner, 1>();
