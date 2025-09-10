@@ -226,7 +226,8 @@ public:
   LogicalResult getOrComputeGlobalPaths(Value value, size_t bitPos,
                                         SmallVectorImpl<DataflowPath> &results);
 
-  // Compute all paths for specified value and bit.
+  // Compute local paths for specified value and bit. Local paths are paths
+  // that are fully contained within a module.
   FailureOr<ArrayRef<OpenPath>> getOrComputeLocalPaths(Value value,
                                                        size_t bitPos);
 
