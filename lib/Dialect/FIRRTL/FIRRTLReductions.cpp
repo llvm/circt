@@ -11,6 +11,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
@@ -183,21 +185,43 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
     nlaRemover.clear();
     symbols.clear();
     moduleSizes.clear();
+    nlaTable = std::make_unique<firrtl::NLATable>(op);
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    nlaRemover.remove(op);
+    nlaTable.reset();
+  }
 
   uint64_t match(firrtl::FModuleOp module) override {
+    if (!nlaTable->lookup(module).empty())
+      return 0;
     return moduleSizes.getModuleSize(module, symbols);
   }
 
   LogicalResult rewrite(firrtl::FModuleOp module) override {
+    // Hack up a list of known layers.
+    firrtl::LayerSet layers;
+    layers.insert_range(module.getLayersAttr().getAsRange<SymbolRefAttr>());
+    for (auto attr : module.getPortTypes()) {
+      auto type = cast<TypeAttr>(attr).getValue();
+      if (auto refType = firrtl::type_dyn_cast<firrtl::RefType>(type))
+        if (auto layer = refType.getLayer())
+          layers.insert(layer);
+    }
+    SmallVector<Attribute, 4> layersArray;
+    layersArray.reserve(layers.size());
+    for (auto layer : layers)
+      layersArray.push_back(layer);
+
     nlaRemover.markNLAsInOperation(module);
     OpBuilder builder(module);
     firrtl::FExtModuleOp::create(
         builder, module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getConventionAttr(), module.getPorts(), ArrayAttr(), StringRef(),
+        module.getConventionAttr(), module.getPorts(),
+        builder.getArrayAttr(layersArray), StringRef(),
         module.getAnnotationsAttr());
+
     module->erase();
     return success();
   }
@@ -206,6 +230,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+  std::unique_ptr<firrtl::NLATable> nlaTable;
   ModuleSizeCache moduleSizes;
 };
 
@@ -598,7 +623,14 @@ struct AnnotationRemover : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
   uint64_t match(Operation *op) override {
-    return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
+    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
+      if (!annos.empty())
+        return 1;
+    if (auto annos = op->getAttrOfType<ArrayAttr>("portAnnotations"))
+      if (llvm::any_of(annos.getAsRange<ArrayAttr>(),
+                       [](auto portAnnos) { return !portAnnos.empty(); }))
+        return 1;
+    return 0;
   }
   LogicalResult rewrite(Operation *op) override {
     auto emptyArray = ArrayAttr::get(op->getContext(), {});
