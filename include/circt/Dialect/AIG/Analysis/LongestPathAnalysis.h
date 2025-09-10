@@ -233,6 +233,13 @@ public:
   // that are fully contained within a module.
   FailureOr<ArrayRef<OpenPath>> computeLocalPaths(Value value, size_t bitPos);
 
+  // Return the average of the maximum delays across all bits of the given
+  FailureOr<int64_t> getAverageMaxDelay(Value value);
+
+  // Return the maximum delay to the given value and bit position. If bitPos is
+  // negative, then return the maximum delay across all bits.
+  FailureOr<int64_t> getMaxDelay(Value value, int64_t bitPos = -1);
+
   // Return paths that are closed under the given module. Closed paths are
   // typically register-to-register paths. A closed path is a path that starts
   // and ends at sequential elements (registers/flip-flops), forming a complete
@@ -304,8 +311,8 @@ public:
                                  const LongestPathAnalysisOption &option)
       : LongestPathAnalysis(moduleOp, am, option) {}
 
-  // Compute maximum delay for specified value and bit.
-  FailureOr<int64_t> computeMaximumDelay(Value value, size_t bitPos);
+  using LongestPathAnalysis::getMaxDelay;
+  using LongestPathAnalysis::getAverageMaxDelay;
 
   // Check if operation can be safely modified without invalidating analysis.
   bool isOperationValidToMutate(Operation *op) const;

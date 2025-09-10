@@ -1489,9 +1489,6 @@ struct LongestPathAnalysis::Impl {
   LogicalResult computeGlobalPaths(Value value, size_t bitPos,
                                    SmallVectorImpl<DataflowPath> &results);
 
-  int64_t getAverageMaxDelay(Value value);
-  int64_t getMaxDelay(Value value);
-
   template <bool elaborate>
   LogicalResult
   collectClosedPaths(StringAttr moduleName,
@@ -1508,10 +1505,12 @@ struct LongestPathAnalysis::Impl {
   // Incremental mode.
   bool doIncremental() const { return ctx.doLazyComputation(); }
 
+  FailureOr<int64_t> getAverageMaxDelay(Value value);
+  FailureOr<int64_t> getMaxDelay(Value value, int64_t bitPos);
+  FailureOr<ArrayRef<OpenPath>> computeLocalPaths(Value value, size_t bitPos);
+
 protected:
-  friend class LongestPathAnalysis;
   friend class IncrementalLongestPathAnalysis;
-  FailureOr<ArrayRef<OpenPath>> getOrComputePaths(Value value, size_t bitPos);
 
 private:
   LogicalResult computeGlobalPaths(const Object &originalObject, Value value,
@@ -1788,7 +1787,7 @@ bool LongestPathAnalysis::Impl::isAnalysisAvailable(
 // value, which is useful approximation for the delay of the value. For each
 // bit position, finds all paths and takes the maximum delay. Then averages
 // these maximum delays across all bits of the value.
-int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) {
+FailureOr<int64_t> LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) {
   SmallVector<DataflowPath> results;
   size_t bitWidth = getBitWidth(value);
   if (bitWidth == 0)
@@ -1799,7 +1798,7 @@ int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) {
     results.clear();
     auto result = computeGlobalPaths(value, i, results);
     if (failed(result))
-      return 0;
+      return failure();
 
     int64_t maxDelay = getMaxDelayInPaths(ArrayRef<DataflowPath>(results));
     totalDelay += maxDelay;
@@ -1807,27 +1806,35 @@ int64_t LongestPathAnalysis::Impl::getAverageMaxDelay(Value value) {
   return llvm::divideCeil(totalDelay, bitWidth);
 }
 
-int64_t LongestPathAnalysis::Impl::getMaxDelay(Value value) {
+FailureOr<int64_t> LongestPathAnalysis::Impl::getMaxDelay(Value value,
+                                                          int64_t bitPos) {
   SmallVector<DataflowPath> results;
+  auto collectAndFindMax = ([&](int64_t bitPos) -> FailureOr<int64_t> {
+    results.clear();
+    auto result = computeGlobalPaths(value, bitPos, results);
+    if (failed(result))
+      return failure();
+    return getMaxDelayInPaths(ArrayRef<DataflowPath>(results));
+  });
+  if (bitPos >= 0)
+    return collectAndFindMax(bitPos);
+
   size_t bitWidth = getBitWidth(value);
   if (bitWidth == 0)
     return 0;
+
   int64_t maxDelay = 0;
   for (size_t i = 0; i < bitWidth; ++i) {
-    results.clear();
-
-    auto result = computeGlobalPaths(value, i, results);
+    auto result = collectAndFindMax(i);
     if (failed(result))
-      return 0;
-
-    maxDelay =
-        std::max(maxDelay, getMaxDelayInPaths(ArrayRef<DataflowPath>(results)));
+      return failure();
+    maxDelay = std::max(maxDelay, *result);
   }
   return maxDelay;
 }
 
 FailureOr<ArrayRef<OpenPath>>
-LongestPathAnalysis::Impl::getOrComputePaths(Value value, size_t bitPos) {
+LongestPathAnalysis::Impl::computeLocalPaths(Value value, size_t bitPos) {
   if (!doIncremental())
     return mlir::emitError(value.getLoc())
            << "getOrComputeMaxDelay is only available in incremental mode";
@@ -1911,6 +1918,15 @@ ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
 }
 
+FailureOr<int64_t> LongestPathAnalysis::getAverageMaxDelay(Value value) {
+  return impl->getAverageMaxDelay(value);
+}
+
+FailureOr<int64_t> LongestPathAnalysis::getMaxDelay(Value value,
+                                                    int64_t bitPos) {
+  return impl->getMaxDelay(value, bitPos);
+}
+
 //===----------------------------------------------------------------------===//
 // IncrementalLongestPathAnalysis
 //===----------------------------------------------------------------------===//
@@ -1920,7 +1936,7 @@ LongestPathAnalysis::computeLocalPaths(Value value, size_t bitPos) {
   if (!isAnalysisValid)
     return failure();
 
-  return impl->getOrComputePaths(value, bitPos);
+  return impl->computeLocalPaths(value, bitPos);
 }
 
 LogicalResult LongestPathAnalysis::computeGlobalPaths(
@@ -1929,18 +1945,6 @@ LogicalResult LongestPathAnalysis::computeGlobalPaths(
     return mlir::emitError(value.getLoc()) << "analysis has been invalidated";
 
   return impl->computeGlobalPaths(value, bitPos, results);
-}
-
-FailureOr<int64_t>
-IncrementalLongestPathAnalysis::computeMaximumDelay(Value value,
-                                                    size_t bitPos) {
-  if (!isAnalysisValid)
-    return mlir::emitError(value.getLoc()) << "analysis has been invalidated";
-
-  auto result = impl->getOrComputePaths(value, bitPos);
-  if (failed(result))
-    return failure();
-  return getMaxDelayInPaths(ArrayRef<OpenPath>(*result));
 }
 
 bool IncrementalLongestPathAnalysis::isOperationValidToMutate(
