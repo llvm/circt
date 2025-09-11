@@ -227,7 +227,6 @@ void testGetPathsAndMerge(void) {
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__aig__(), ctx);
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__hw__(), ctx);
 
-  // Minimal IR: single module with two aig.and_inv ops to produce two values.
   // clang-format off
   const char *moduleStr =
       "hw.module @m(in %a : i1, in %b: i1, out x: i1) {\n"

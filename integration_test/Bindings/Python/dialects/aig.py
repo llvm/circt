@@ -103,7 +103,6 @@ with Context() as ctx, Location.unknown():
     # CHECK: top:test_aig;child:test_child;a[0] 2
     print(collection.longest_path.to_flamegraph())
 
-    # Access the second module (test_aig), then its body block, then the first operation (hw.instance), then its second result
     test_child = m.body.operations[0]
     body_block = test_child.regions[0].blocks[0]
     result0 = body_block.operations[0].results[0]

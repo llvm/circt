@@ -448,7 +448,7 @@ class LocalVisitor;
 class Context {
 public:
   Context(igraph::InstanceGraph *instanceGraph,
-          const LongestPathAnalysisOption &option)
+          const LongestPathAnalysisOptions &option)
       : instanceGraph(instanceGraph), option(option) {}
   void notifyStart(StringAttr name) {
     std::lock_guard<llvm::sys::SmartMutex<true>> lock(mutex);
@@ -490,7 +490,7 @@ private:
   bool isRunningParallel() const { return !doLazyComputation(); }
   llvm::sys::SmartMutex<true> mutex;
   llvm::SetVector<StringAttr> running;
-  LongestPathAnalysisOption option;
+  LongestPathAnalysisOptions option;
 };
 
 //===----------------------------------------------------------------------===//
@@ -516,7 +516,7 @@ public:
   // to avoid using onlyMaxDelay mode, as we require precise input
   // dependency information for accurate delay propagation
   OperationAnalyzer(Location loc)
-      : ctx(nullptr, LongestPathAnalysisOption(false, true, false)), loc(loc) {
+      : ctx(nullptr, LongestPathAnalysisOptions(false, true, false)), loc(loc) {
     mlir::OpBuilder builder(loc->getContext());
     moduleOp = builder.create<mlir::ModuleOp>(loc);
     emptyName = StringAttr::get(loc->getContext(), "");
@@ -1485,7 +1485,7 @@ LogicalResult OperationAnalyzer::initializePipeline() {
 /// public LongestPathAnalysis API.
 struct LongestPathAnalysis::Impl {
   Impl(Operation *module, mlir::AnalysisManager &am,
-       const LongestPathAnalysisOption &option);
+       const LongestPathAnalysisOptions &option);
 
   /// Initialize and run analysis for a full MLIR module (hierarchical).
   LogicalResult initializeAndRun(mlir::ModuleOp module);
@@ -1706,7 +1706,7 @@ LogicalResult LongestPathAnalysis::Impl::collectInternalToOutputPaths(
 }
 
 LongestPathAnalysis::Impl::Impl(Operation *moduleOp, mlir::AnalysisManager &am,
-                                const LongestPathAnalysisOption &option)
+                                const LongestPathAnalysisOptions &option)
     : ctx(isa<mlir::ModuleOp>(moduleOp)
               ? &am.getAnalysis<igraph::InstanceGraph>()
               : nullptr,
@@ -1882,7 +1882,7 @@ LongestPathAnalysis::~LongestPathAnalysis() { delete impl; }
 
 LongestPathAnalysis::LongestPathAnalysis(
     Operation *moduleOp, mlir::AnalysisManager &am,
-    const LongestPathAnalysisOption &option)
+    const LongestPathAnalysisOptions &option)
     : impl(new Impl(moduleOp, am, option)), ctx(moduleOp->getContext()) {
   LLVM_DEBUG({
     llvm::dbgs() << "LongestPathAnalysis created\n";

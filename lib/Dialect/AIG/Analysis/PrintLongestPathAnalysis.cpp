@@ -276,7 +276,7 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
   auto am = getAnalysisManager();
   LongestPathAnalysis analysis(
       getOperation(), am,
-      LongestPathAnalysisOption(
+      LongestPathAnalysisOptions(
           /*collectDebugInfo=*/showTopKPercent.getValue() > 0,
           /*lazyComputation=*/false,
           /*keepOnlyMaxDelayPaths=*/

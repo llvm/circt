@@ -387,7 +387,7 @@ class LongestPathAnalysis:
                     module_name: str,
                     elaborate_paths: bool = True) -> LongestPathCollection:
     """
-        Perform longest path analysis and return all timing paths in side
+        Perform longest path analysis and return all timing paths inside
         the module hierarchy.
         This method analyzes the specified module and returns a collection
         of all timing paths, sorted by delay in descending order.

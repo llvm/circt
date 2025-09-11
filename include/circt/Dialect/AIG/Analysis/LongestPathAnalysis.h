@@ -180,12 +180,12 @@ llvm::json::Value toJSON(const circt::aig::DataflowPath &path);
 /// combinations of options are suitable for different use cases.
 ///
 /// Example usage:
-///   // For timing-driven optimization with debug info
+///   // For lazily computing paths with debug info
 ///   LongestPathAnalysisOption options(true, true, false);
 ///
 ///   // For fast critical path identification only
 ///   LongestPathAnalysisOption options(false, false, true);
-struct LongestPathAnalysisOption {
+struct LongestPathAnalysisOptions {
   /// Enable collection of debug points along timing paths.
   /// When enabled, records intermediate points with delay values and comments
   /// for debugging, visualization, and understanding delay contributions.
@@ -205,9 +205,9 @@ struct LongestPathAnalysisOption {
   bool keepOnlyMaxDelayPaths = false;
 
   /// Construct analysis options with the specified settings.
-  LongestPathAnalysisOption(bool collectDebugInfo = false,
-                            bool lazyComputation = false,
-                            bool keepOnlyMaxDelayPaths = false)
+  LongestPathAnalysisOptions(bool collectDebugInfo = false,
+                             bool lazyComputation = false,
+                             bool keepOnlyMaxDelayPaths = false)
       : collectDebugInfo(collectDebugInfo), lazyComputation(lazyComputation),
         keepOnlyMaxDelayPaths(keepOnlyMaxDelayPaths) {}
 };
@@ -222,7 +222,7 @@ class LongestPathAnalysis {
 public:
   // Entry points for analysis.
   LongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am,
-                      const LongestPathAnalysisOption &option = {});
+                      const LongestPathAnalysisOptions &option = {});
   ~LongestPathAnalysis();
 
   // Return all longest paths to each Fanin for the given value and bit
@@ -310,12 +310,12 @@ public:
   IncrementalLongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am)
       : LongestPathAnalysis(
             moduleOp, am,
-            LongestPathAnalysisOption(/*collectDebugInfo=*/false,
-                                      /*lazyComputation=*/true,
-                                      /*keepOnlyMaxDelayPaths=*/true)) {}
+            LongestPathAnalysisOptions(/*collectDebugInfo=*/false,
+                                       /*lazyComputation=*/true,
+                                       /*keepOnlyMaxDelayPaths=*/true)) {}
 
   IncrementalLongestPathAnalysis(Operation *moduleOp, mlir::AnalysisManager &am,
-                                 const LongestPathAnalysisOption &option)
+                                 const LongestPathAnalysisOptions &option)
       : LongestPathAnalysis(moduleOp, am, option) {
     assert(option.lazyComputation && "Lazy computation must be enabled");
   }
