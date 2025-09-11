@@ -3143,3 +3143,23 @@ module PackedLvalue5(input logic [1023:0] x);
   logic [7:0][63:0] a, b;
   always_comb {a, b[0]} = x;
 endmodule
+
+// CHECK-LABEL: moore.module @UnarySingleBitIncrement(
+module UnarySingleBitIncrement (
+    input  logic  clk_i,
+    input  logic  rst_ni
+);
+  // CHECK: [[IQ:%.+]] = moore.variable : <l1>
+  logic i_q;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      i_q <= '0;
+    end else begin
+      // CHECK: [[PRE:%.+]] = moore.read [[IQ]] : <l1>
+      // CHECK-NEXT: [[OUT:%.+]] = moore.not [[PRE]]
+      i_q <= ++i_q;
+    end
+  end
+
+endmodule // UnarySingleBitIncrement
