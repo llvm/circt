@@ -862,7 +862,7 @@ def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
     Option<"forceBooth", "lower-partial-product-to-booth", "bool", "false",
            "Force all partial products to be lowered to Booth arrays.">,
     Option<"timingAware", "timing-aware", "bool", "false",
-           "Lower operators in a timing-aware fashion.">
+           "Use timing-aware compressor synthesis algorithm.">
   ];
 }
 

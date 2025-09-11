@@ -74,7 +74,6 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
                   mlir::PatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
-    unsigned width = inputs[0].getType().getIntOrFloatBitWidth();
 
     SmallVector<SmallVector<Value>> addends;
     for (auto input : inputs) {
@@ -82,33 +81,19 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
           extractBits(rewriter, input)); // Extract bits from each input
     }
 
-    // Wallace tree reduction
-    // TODO: Implement a more efficient compression algorithm to compete with
-    // yosys's `alumacc` lowering - a coarse grained timing model would help to
-    // sort the inputs according to arrival time.
+    // Compressor tree reduction
+    auto width = inputs[0].getType().getIntOrFloatBitWidth();
     auto targetAddends = op.getNumResults();
+    datapath::CompressorTree comp(width, addends, loc);
+
     if (analysis) {
-      // Sort the addends row based on the delay of the input.
-      for (size_t j = 0; j < addends[0].size(); ++j) {
-        SmallVector<std::pair<int64_t, Value>> delays;
-        for (auto &addend : addends) {
-          auto delay = analysis->getOrComputeMaxDelay(addend[j], 0);
-          if (failed(delay))
-            return rewriter.notifyMatchFailure(op,
-                                               "Failed to get delay for input");
-          delays.push_back(std::make_pair(*delay, addend[j]));
-        }
-        std::stable_sort(delays.begin(), delays.end(),
-                         [](const std::pair<int64_t, Value> &a,
-                            const std::pair<int64_t, Value> &b) {
-                           return a.first < b.first;
-                         });
-        for (size_t i = 0; i < addends.size(); ++i)
-          addends[i][j] = delays[i].second;
-      }
+      // Update delay information with arrival times
+      if (failed(comp.withInputDelays(
+              [&](Value v) { return analysis->getOrComputeMaxDelay(v, 0); })))
+        return failure();
     }
-    rewriter.replaceOp(op, comb::wallaceReduction(rewriter, loc, width,
-                                                  targetAddends, addends));
+
+    rewriter.replaceOp(op, comp.compressToHeight(rewriter, targetAddends));
     return success();
   }
 
@@ -137,8 +122,9 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
       return success();
     }
 
-    // Use width as a heuristic to guide partial product implementation
-    if (width > 16 || forceBooth)
+    // Use result rows as a heuristic to guide partial product
+    // implementation
+    if (op.getNumResults() > 16 || forceBooth)
       return lowerBoothArray(rewriter, a, b, op, width);
     else
       return lowerAndArray(rewriter, a, b, op, width);
@@ -164,9 +150,16 @@ private:
       auto repl =
           rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], width);
       auto ppRow = rewriter.createOrFold<comb::AndOp>(loc, repl, a);
-      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(width, i));
-      auto ppAlign = comb::ShlOp::create(rewriter, loc, ppRow, shiftBy);
-      partialProducts.push_back(ppAlign);
+      if (i == 0) {
+        partialProducts.push_back(ppRow);
+        continue;
+      }
+      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i, 0));
+      auto ppAlign =
+          comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
+      auto ppAlignTrunc = rewriter.createOrFold<comb::ExtractOp>(
+          loc, ppAlign, 0, width); // Truncate to width+i bits
+      partialProducts.push_back(ppAlignTrunc);
     }
 
     rewriter.replaceOp(op, partialProducts);
@@ -264,13 +257,12 @@ private:
           rewriter.createOrFold<comb::XorOp>(loc, magA, encNegRepl, true);
 
       // Sign-extension Optimisation:
-      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin & Kumm
-      // Handle sign-extension and padding to full width
-      // s = encNeg (sign-bit)
-      // {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
+      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin &
+      // Kumm Handle sign-extension and padding to full width s = encNeg
+      // (sign-bit) {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
       //                     + {0, 0, 0, 0,!s, '0}
-      // Applying this to every row we create an upper-triangle of 1s that can
-      // be optimised away since they will not affect the final sum.
+      // Applying this to every row we create an upper-triangle of 1s that
+      // can be optimised away since they will not affect the final sum.
       // {!s3,  0,!s2,  0,!s1,  0}
       // {  1,  1,  1,  1,  1, p1}
       // {  1,  1,  1,   p2      }
@@ -363,8 +355,9 @@ static LogicalResult applyPatternsGreedilyWithTimingInfo(
   // dependencies are processed before their users.
   mlir::GreedyRewriteConfig config;
   // Set the listener to update timing information
-  // HACK: Setting max iterations to 2 to ensure that the patterns are one-shot,
-  // making sure target operations are datapath operations are replaced.
+  // HACK: Setting max iterations to 2 to ensure that the patterns are
+  // one-shot, making sure target operations are datapath operations are
+  // replaced.
   config.setMaxIterations(2).setListener(analysis).setUseTopDownTraversal(true);
 
   // Apply the patterns greedily
@@ -394,7 +387,8 @@ void ConvertDatapathToCombPass::runOnOperation() {
     return signalPassFailure();
 
   // Verify that all Datapath operations have been successfully converted.
-  // Walk the operation and check for any remaining Datapath dialect operations.
+  // Walk the operation and check for any remaining Datapath dialect
+  // operations.
   auto result = getOperation()->walk([&](Operation *op) {
     if (llvm::isa_and_nonnull<datapath::DatapathDialect>(op->getDialect())) {
       op->emitError("Datapath operation not converted: ") << *op;
