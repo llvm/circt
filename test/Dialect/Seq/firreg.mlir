@@ -1043,3 +1043,29 @@ hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %v
   // CHECK: }
   hw.output
 }
+
+// Test for registers with "preset".
+
+// CHECK:  hw.hierpath @[[reg_path:.+]] [@PresetRegUnderIfdef::@reg]
+hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
+  // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK:   sv.always posedge %clock {
+  // CHECK:     sv.passign %reg, %value : i1
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock preset 0: i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.ifdef.procedural @MyMacro {
+  // CHECK:     %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
+  // CHECK:     sv.bpassign %0, %false : i1
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
