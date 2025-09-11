@@ -464,8 +464,9 @@ struct RvalueExprVisitor : public ExprVisitor {
   Value createIncrement(Value arg, bool isInc, bool isPost) {
     auto preValue = moore::ReadOp::create(builder, loc, arg);
     Value postValue;
-    // Catch the special case where a signed 1 bit value is increment, as
-    // positive 1 can not be expressed as a signed 1 bit value.
+    // Catch the special case where a signed 1 bit value (i1) is incremented,
+    // as +1 can not be expressed as a signed 1 bit value. For any 1-bit number
+    // negating is equivalent to incrementing.
     if (moore::isIntType(preValue.getType(), 1)) {
       postValue = moore::NotOp::create(builder, loc, preValue).getResult();
     } else {
