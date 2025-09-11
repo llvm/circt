@@ -13,8 +13,8 @@
 #ifndef CIRCT_SUPPORT_CONVERSIONPATTERNSET_H
 #define CIRCT_SUPPORT_CONVERSIONPATTERNSET_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
 
