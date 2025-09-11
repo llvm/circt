@@ -463,12 +463,19 @@ struct RvalueExprVisitor : public ExprVisitor {
   // Helper function to create pre and post increments and decrements.
   Value createIncrement(Value arg, bool isInc, bool isPost) {
     auto preValue = moore::ReadOp::create(builder, loc, arg);
-    auto one = moore::ConstantOp::create(
-        builder, loc, cast<moore::IntType>(preValue.getType()), 1);
-    auto postValue =
+    Value postValue;
+    // Catch the special case where a signed 1 bit value is increment, as positive 1 can not be expressed as a signed 1 bit value.
+    if (moore::isIntType(preValue.getType(), 1)) {
+      postValue = moore::NotOp::create(builder, loc, preValue).getResult();
+    } else {
+
+      auto one = moore::ConstantOp::create(
+                                           builder, loc, cast<moore::IntType>(preValue.getType()), 1);
+      postValue =
         isInc ? moore::AddOp::create(builder, loc, preValue, one).getResult()
-              : moore::SubOp::create(builder, loc, preValue, one).getResult();
-    moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+        : moore::SubOp::create(builder, loc, preValue, one).getResult();
+      moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+    }
     if (isPost)
       return preValue;
     return postValue;
