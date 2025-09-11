@@ -138,6 +138,9 @@ struct ImportVerilogOptions {
 
   /// A list of library files to include in the compilation.
   std::vector<std::string> libraryFiles;
+
+  /// A list of command files to process for compilation.
+  std::vector<std::string> commandFiles;
 };
 
 /// Parse files in a source manager as Verilog source code and populate the
