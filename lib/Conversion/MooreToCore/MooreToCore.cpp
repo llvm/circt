@@ -835,8 +835,10 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
           rewriter.getIntegerType(llvm::Log2_64_Ceil(arrType.getNumElements())),
           adaptor.getLowBit());
 
-      if (isa<hw::ArrayType>(
-              cast<hw::InOutType>(resultType).getElementType())) {
+      // If the result type is not the same as the array's element type, then
+      // it has to be a slice.
+      if (arrType.getElementType() !=
+          cast<hw::InOutType>(resultType).getElementType()) {
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), lowBit);
         return success();
