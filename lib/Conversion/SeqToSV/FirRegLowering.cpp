@@ -357,6 +357,8 @@ void FirRegLowering::createRandomInitialization(ImplicitLocOpBuilder &builder) {
 
 void FirRegLowering::createPresetInitialization(ImplicitLocOpBuilder &builder) {
   for (auto &svReg : presetInitRegs) {
+    OpBuilder::InsertionGuard guard(builder);
+
     auto loc = svReg.reg.getLoc();
     auto elemTy = svReg.reg.getType().getElementType();
     auto cst = getOrCreateConstant(loc, svReg.preset.getValue());
@@ -367,7 +369,13 @@ void FirRegLowering::createPresetInitialization(ImplicitLocOpBuilder &builder) {
     else
       rhs = hw::BitcastOp::create(builder, loc, elemTy, cst);
 
-    sv::BPAssignOp::create(builder, loc, svReg.reg, rhs);
+    buildRegConditions(builder, svReg.reg);
+    Value target = svReg.reg;
+    if (svReg.path)
+      target = buildXMRTo(builder, svReg.path, svReg.reg.getLoc(),
+                          svReg.reg.getType());
+
+    sv::BPAssignOp::create(builder, loc, target, rhs);
   }
 }
 
