@@ -86,7 +86,7 @@ AIGLongestPathAnalysis aigLongestPathAnalysisCreate(MlirOperation module,
   wrapper->analysis = std::make_unique<LongestPathAnalysis>(
       op, am,
       LongestPathAnalysisOptions(collectDebugInfo, lazyComputation,
-                                keepOnlyMaxDelayPaths));
+                                 keepOnlyMaxDelayPaths));
   return wrap(wrapper);
 }
 
