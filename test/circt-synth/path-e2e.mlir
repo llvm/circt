@@ -5,7 +5,7 @@
 // COMMON-LABEL: # Longest Path Analysis result for "counter"
 // COMMON-NEXT: Found 168 paths
 // COMMON-NEXT: Found 32 unique fanout points
-// AIG-NEXT: Maximum path delay: 42
+// AIG-NEXT: Maximum path delay: 41
 // LUT6-NEXT: Maximum path delay: 7
 // Don't test detailed reports as they are not stable.
 

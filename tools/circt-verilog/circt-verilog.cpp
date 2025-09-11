@@ -267,6 +267,13 @@ struct CLOptions {
           "One or more library files, which are separate compilation units "
           "where modules are not automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
+
+  cl::list<std::string> commandFiles{
+      "C",
+      cl::desc(
+          "One or more command files, which are independent compilation units "
+          "where modules are automatically instantiated."),
+      cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
 };
 } // namespace
 
@@ -430,6 +437,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
 
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
+  options.commandFiles = opts.commandFiles;
 
   // Open the output file.
   std::string errorMessage;
@@ -497,9 +505,11 @@ static LogicalResult executeWithSources(MLIRContext *context,
 }
 
 static LogicalResult execute(MLIRContext *context) {
-  // Default to reading from stdin if no files were provided.
-  if (opts.inputFilenames.empty())
+  // Default to reading from stdin if no files were provided except if
+  // commandfiles were.
+  if (opts.inputFilenames.empty() && opts.commandFiles.empty()) {
     opts.inputFilenames.push_back("-");
+  }
 
   // Auto-detect the input format if it was not explicitly specified.
   if (opts.format.getNumOccurrences() == 0) {
@@ -521,8 +531,12 @@ static LogicalResult execute(MLIRContext *context) {
       detectedFormat = format;
     }
     if (!detectedFormat) {
-      WithColor::error() << "cannot auto-detect input format; use --format\n";
-      return failure();
+      if (!opts.commandFiles.empty()) {
+        detectedFormat = Format::SV;
+      } else {
+        WithColor::error() << "cannot auto-detect input format; use --format\n";
+        return failure();
+      }
     }
     opts.format = *detectedFormat;
   }

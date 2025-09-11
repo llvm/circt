@@ -181,6 +181,11 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   auto diagClient = std::make_shared<MlirDiagnosticClient>(mlirContext);
   driver.diagEngine.addClient(diagClient);
 
+  for (const auto &value : options.commandFiles)
+    if (!driver.processCommandFiles(value, /*makeRelative=*/true,
+                                    /*separateUnit=*/true))
+      return failure();
+
   // Populate the source manager with the source files.
   // NOTE: This is a bit ugly since we're essentially copying the Verilog
   // source text in memory. At a later stage we'll want to extend slang's
