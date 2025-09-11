@@ -112,6 +112,11 @@ TEST(LongestPathTest, BasicTest) {
                            path.getFanOutAsObject().value,
                            path.getFanOutAsObject().bitPos, path.getDelay()}));
 
+    // Check other API.
+    EXPECT_EQ(longestPath.getMaxDelay(concat), 3); // max([3, 3, 0, 0]) = 3
+    EXPECT_EQ(longestPath.getAverageMaxDelay(concat),
+              2); //  avg([3, 3, 0, 0]) = ceil((3+3+0+0)/4) = 2
+
     // Check history.
     auto history = results[0].getHistory();
     SmallVector<DebugPoint> points;
@@ -162,6 +167,10 @@ TEST(LongestPathTest, BasicTest) {
           answerSet.erase({path.getFanIn().value, path.getFanIn().bitPos,
                            path.getFanOutAsObject().value,
                            path.getFanOutAsObject().bitPos, path.getDelay()}));
+
+    EXPECT_EQ(longestPath.getMaxDelay(concat), 2); // max([2, 2, 0, 0]) = 3
+    EXPECT_EQ(longestPath.getAverageMaxDelay(concat),
+              1); // avg([2, 2, 0, 0]) = 1
   }
 }
 

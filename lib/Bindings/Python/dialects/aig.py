@@ -321,7 +321,16 @@ class LongestPathCollection:
     print(f"99th percentile delay: {self.get_by_delay_ratio(0.99).delay}")
     print(f"99.9th percentile delay: {self.get_by_delay_ratio(0.999).delay}")
   
+
   def merge(self, src: "LongestPathCollection") -> "LongestPathCollection":
+    """
+        Merge another collection into this one. `self` is not valid after this
+        operation.
+        Args:
+            src: The collection to merge into this one
+        Returns:
+            This collection after merging
+    """
     self.collection.merge(src.collection)
     return LongestPathCollection(self.collection)
 

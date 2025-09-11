@@ -311,8 +311,8 @@ public:
                                  const LongestPathAnalysisOption &option)
       : LongestPathAnalysis(moduleOp, am, option) {}
 
-  using LongestPathAnalysis::getMaxDelay;
   using LongestPathAnalysis::getAverageMaxDelay;
+  using LongestPathAnalysis::getMaxDelay;
 
   // Check if operation can be safely modified without invalidating analysis.
   bool isOperationValidToMutate(Operation *op) const;

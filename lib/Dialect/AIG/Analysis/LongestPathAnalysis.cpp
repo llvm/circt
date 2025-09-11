@@ -512,6 +512,9 @@ class OperationAnalyzer {
 public:
   // Constructor creates a new analyzer with an empty module for building
   // temporary operation wrappers.
+  // The analyzer needs its own Context separate from the main analysis
+  // to avoid using onlyMaxDelay mode, as we require precise input
+  // dependency information for accurate delay propagation
   OperationAnalyzer(Location loc)
       : ctx(nullptr, LongestPathAnalysisOption(false, true, false)), loc(loc) {
     mlir::OpBuilder builder(loc->getContext());
@@ -938,6 +941,7 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
     return markFanIn(value, bitPos, results);
 
   auto *localVisitor = ctx->getLocalVisitorMutable(moduleName);
+
   auto module = localVisitor->getHWModuleOp();
   auto operand = module.getBodyBlock()->getTerminator()->getOperand(resultNum);
   auto result = localVisitor->getOrComputePaths(operand, bitPos);
@@ -1298,10 +1302,7 @@ LogicalResult LocalVisitor::initializeAndRun() {
 //===----------------------------------------------------------------------===//
 
 const LocalVisitor *Context::getLocalVisitor(StringAttr name) const {
-  auto *it = localVisitors.find(name);
-  if (it == localVisitors.end())
-    return nullptr;
-  return it->second.get();
+  return getLocalVisitorMutable(name);
 }
 
 LocalVisitor *Context::getLocalVisitorMutable(StringAttr name) const {
@@ -1502,8 +1503,8 @@ struct LongestPathAnalysis::Impl {
 
   llvm::ArrayRef<hw::HWModuleOp> getTopModules() const { return topModules; }
 
-  // Incremental mode.
-  bool doIncremental() const { return ctx.doLazyComputation(); }
+  // Lazy computation mode.
+  bool doLazyComputation() const { return ctx.doLazyComputation(); }
 
   FailureOr<int64_t> getAverageMaxDelay(Value value);
   FailureOr<int64_t> getMaxDelay(Value value, int64_t bitPos);
@@ -1835,7 +1836,7 @@ FailureOr<int64_t> LongestPathAnalysis::Impl::getMaxDelay(Value value,
 
 FailureOr<ArrayRef<OpenPath>>
 LongestPathAnalysis::Impl::computeLocalPaths(Value value, size_t bitPos) {
-  if (!doIncremental())
+  if (!doLazyComputation())
     return mlir::emitError(value.getLoc())
            << "getOrComputeMaxDelay is only available in incremental mode";
   if (ctx.instanceGraph)
@@ -1882,6 +1883,15 @@ bool LongestPathAnalysis::isAnalysisAvailable(StringAttr moduleName) const {
   return impl->isAnalysisAvailable(moduleName);
 }
 
+FailureOr<int64_t> LongestPathAnalysis::getAverageMaxDelay(Value value) {
+  return impl->getAverageMaxDelay(value);
+}
+
+FailureOr<int64_t> LongestPathAnalysis::getMaxDelay(Value value,
+                                                    int64_t bitPos) {
+  return impl->getMaxDelay(value, bitPos);
+}
+
 LogicalResult
 LongestPathAnalysis::getClosedPaths(StringAttr moduleName,
                                     SmallVectorImpl<DataflowPath> &results,
@@ -1916,15 +1926,6 @@ LongestPathAnalysis::getAllPaths(StringAttr moduleName,
 
 ArrayRef<hw::HWModuleOp> LongestPathAnalysis::getTopModules() const {
   return impl->getTopModules();
-}
-
-FailureOr<int64_t> LongestPathAnalysis::getAverageMaxDelay(Value value) {
-  return impl->getAverageMaxDelay(value);
-}
-
-FailureOr<int64_t> LongestPathAnalysis::getMaxDelay(Value value,
-                                                    int64_t bitPos) {
-  return impl->getMaxDelay(value, bitPos);
 }
 
 //===----------------------------------------------------------------------===//
