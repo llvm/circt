@@ -1011,3 +1011,35 @@ hw.module @RegUnderIfdefDupName(in %clock : !seq.clock, in %reset : i1, in %valu
   }
   hw.output
 }
+
+// Test for registers with async resets.
+
+// CHECK:  hw.hierpath @[[reg_path:.+]] [@AsyncResetRegUnderIfdef::@reg]
+hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
+  // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK:   sv.always posedge %clock, posedge %reset {
+  // CHECK:     sv.if %reset {
+  // CHECK:       sv.passign %reg, %false_0 : i1
+  // CHECK:     } else {
+  // CHECK:       sv.passign %reg, %value : i1
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock reset async %reset, %c : i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.if %reset {
+  // CHECK:     sv.ifdef.procedural @MyMacro {
+  // CHECK:       %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
+  // CHECK:       sv.bpassign %0, %false_0 : i1
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
