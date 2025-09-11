@@ -271,7 +271,7 @@ struct CLOptions {
   cl::list<std::string> commandFiles{
       "C",
       cl::desc(
-          "One or more library files, which are independent compilation units "
+          "One or more command files, which are independent compilation units "
           "where modules are automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
 };
