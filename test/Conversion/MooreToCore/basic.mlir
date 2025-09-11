@@ -338,6 +338,13 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   return
 }
 
+// CHECK-LABEL: ExtractRefArrayElement
+func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (!moore.ref<array<1 x l3>>) {
+  // CHECK: llhd.sig.array_get
+  %0 = moore.extract_ref %j from 0 : <array<1 x array<1 x l3>>> -> <array<1 x l3>>
+  return %0 : !moore.ref<array<1 x l3>>
+}
+
 // CHECK-LABEL: func @AdvancedConversion
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
