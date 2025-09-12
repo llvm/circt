@@ -3,7 +3,7 @@
 // RUN: circt-synth %s -output-longest-path=- -top counter -output-longest-path-json | FileCheck %s --check-prefix JSON
 
 // COMMON-LABEL: # Longest Path Analysis result for "counter"
-// COMMON-NEXT: Found 288 paths
+// COMMON-NEXT: Found 168 paths
 // COMMON-NEXT: Found 32 unique fanout points
 // AIG-NEXT: Maximum path delay: 41
 // LUT6-NEXT: Maximum path delay: 7

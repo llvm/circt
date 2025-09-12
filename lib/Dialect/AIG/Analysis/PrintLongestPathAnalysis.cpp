@@ -273,12 +273,15 @@ void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,
 }
 
 void PrintLongestPathAnalysisPass::runOnOperation() {
-  LongestPathAnalysis *analysis;
-  if (showTopKPercent != 0) {
-    analysis = &getAnalysis<aig::LongestPathAnalysisWithTrace>();
-  } else {
-    analysis = &getAnalysis<aig::LongestPathAnalysis>();
-  }
+  auto am = getAnalysisManager();
+  LongestPathAnalysis analysis(
+      getOperation(), am,
+      LongestPathAnalysisOptions(
+          /*collectDebugInfo=*/showTopKPercent.getValue() > 0,
+          /*lazyComputation=*/false,
+          /*keepOnlyMaxDelayPaths=*/
+          !test));
+
   igraph::InstancePathCache pathCache(
       getAnalysis<circt::igraph::InstanceGraph>());
   auto outputFileVal = outputFile.getValue();
@@ -302,8 +305,8 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
       jsonOS->arrayEnd();
   });
 
-  for (auto top : analysis->getTopModules())
-    if (failed(printAnalysisResult(*analysis, pathCache, top,
+  for (auto top : analysis.getTopModules())
+    if (failed(printAnalysisResult(analysis, pathCache, top,
                                    jsonOS ? nullptr : &os, jsonOS.get())))
       return signalPassFailure();
   file->keep();

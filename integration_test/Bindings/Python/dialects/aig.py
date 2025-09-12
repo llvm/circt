@@ -102,3 +102,24 @@ with Context() as ctx, Location.unknown():
     # CHECK: top:test_aig;c[0] 0
     # CHECK: top:test_aig;child:test_child;a[0] 2
     print(collection.longest_path.to_flamegraph())
+
+    test_child = m.body.operations[0]
+    body_block = test_child.regions[0].blocks[0]
+    result0 = body_block.operations[0].results[0]
+    result1 = body_block.operations[1].results[0]
+
+    analysis = LongestPathAnalysis(test_child,
+                                   collect_debug_info=True,
+                                   keep_only_max_delay_paths=True,
+                                   lazy_computation=True)
+    c1 = analysis.get_paths(result0, 0)
+    c2 = analysis.get_paths(result1, 0)
+    # CHECK-NEXT: len(c1) = 1
+    # CHECK-NEXT: len(c2) = 1
+    print("len(c1) =", len(c1))
+    print("len(c2) =", len(c2))
+
+    s1, s2 = len(c1), len(c2)
+    c1.merge(c2)
+    # CHECK-NEXT: merge: True
+    print("merge:", len(c1) == s1 + s2)

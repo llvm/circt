@@ -75,21 +75,37 @@ AIGLongestPathObject wrap(const DataflowPath::OutputPort *object) {
 //===----------------------------------------------------------------------===//
 
 AIGLongestPathAnalysis aigLongestPathAnalysisCreate(MlirOperation module,
-                                                    bool traceDebugPoints) {
+                                                    bool collectDebugInfo,
+                                                    bool keepOnlyMaxDelayPaths,
+                                                    bool lazyComputation) {
   auto *op = unwrap(module);
   auto *wrapper = new LongestPathAnalysisWrapper();
   wrapper->analysisManager =
       std::make_unique<mlir::ModuleAnalysisManager>(op, nullptr);
   mlir::AnalysisManager am = *wrapper->analysisManager;
-  if (traceDebugPoints)
-    wrapper->analysis = std::make_unique<LongestPathAnalysisWithTrace>(op, am);
-  else
-    wrapper->analysis = std::make_unique<LongestPathAnalysis>(op, am);
+  wrapper->analysis = std::make_unique<LongestPathAnalysis>(
+      op, am,
+      LongestPathAnalysisOptions(collectDebugInfo, lazyComputation,
+                                 keepOnlyMaxDelayPaths));
   return wrap(wrapper);
 }
 
 void aigLongestPathAnalysisDestroy(AIGLongestPathAnalysis analysis) {
   delete unwrap(analysis);
+}
+
+AIGLongestPathCollection
+aigLongestPathAnalysisGetPaths(AIGLongestPathAnalysis analysis, MlirValue value,
+                               int64_t bitPos, bool elaboratePaths) {
+  auto *wrapper = unwrap(analysis);
+  auto *lpa = wrapper->analysis.get();
+  auto *collection = new LongestPathCollection(lpa->getContext());
+  auto result =
+      lpa->computeGlobalPaths(unwrap(value), bitPos, collection->paths);
+  if (failed(result))
+    return {nullptr};
+  collection->sortInDescendingOrder();
+  return wrap(collection);
 }
 
 AIGLongestPathCollection
@@ -134,6 +150,13 @@ aigLongestPathCollectionGetDataflowPath(AIGLongestPathCollection collection,
   auto *wrapper = unwrap(collection);
   auto &path = wrapper->paths[index];
   return wrap(&path);
+}
+
+void aigLongestPathCollectionMerge(AIGLongestPathCollection dest,
+                                   AIGLongestPathCollection src) {
+  auto *destWrapper = unwrap(dest);
+  auto *srcWrapper = unwrap(src);
+  destWrapper->merge(*srcWrapper);
 }
 
 //===----------------------------------------------------------------------===//

@@ -89,7 +89,7 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
     if (analysis) {
       // Update delay information with arrival times
       if (failed(comp.withInputDelays(
-              [&](Value v) { return analysis->getOrComputeMaxDelay(v, 0); })))
+              [&](Value v) { return analysis->getMaxDelay(v, 0); })))
         return failure();
     }
 

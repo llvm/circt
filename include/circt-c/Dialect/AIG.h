@@ -48,11 +48,16 @@ DEFINE_C_API_STRUCT(AIGLongestPathCollection, void);
 
 // Create a LongestPathAnalysis for the given module
 MLIR_CAPI_EXPORTED AIGLongestPathAnalysis
-aigLongestPathAnalysisCreate(MlirOperation module, bool traceDebugPoints);
+aigLongestPathAnalysisCreate(MlirOperation module, bool collectDebugInfo,
+                             bool keepOnlyMaxDelayPaths, bool lazyComputation);
 
 // Destroy a LongestPathAnalysis
 MLIR_CAPI_EXPORTED void
 aigLongestPathAnalysisDestroy(AIGLongestPathAnalysis analysis);
+
+MLIR_CAPI_EXPORTED AIGLongestPathCollection
+aigLongestPathAnalysisGetPaths(AIGLongestPathAnalysis analysis, MlirValue value,
+                               int64_t bitPos, bool elaboratePaths);
 
 MLIR_CAPI_EXPORTED AIGLongestPathCollection aigLongestPathAnalysisGetAllPaths(
     AIGLongestPathAnalysis analysis, MlirStringRef moduleName,
@@ -78,6 +83,10 @@ aigLongestPathCollectionGetSize(AIGLongestPathCollection collection);
 MLIR_CAPI_EXPORTED AIGLongestPathDataflowPath
 aigLongestPathCollectionGetDataflowPath(AIGLongestPathCollection collection,
                                         size_t pathIndex);
+
+MLIR_CAPI_EXPORTED void
+aigLongestPathCollectionMerge(AIGLongestPathCollection dest,
+                              AIGLongestPathCollection src);
 
 //===----------------------------------------------------------------------===//
 // DataflowPath API
