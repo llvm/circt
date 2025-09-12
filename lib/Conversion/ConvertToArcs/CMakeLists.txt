@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTConvertToArcs
   LINK_LIBS PUBLIC
   CIRCTArc
   CIRCTHW
+  CIRCTLLHD
   CIRCTSeq
   CIRCTSim
   MLIRTransforms
