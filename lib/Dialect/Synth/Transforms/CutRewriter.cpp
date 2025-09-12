@@ -553,32 +553,35 @@ void CutSet::finalize(
   // See "Combinational and Sequential Mapping with Priority Cuts" by Mishchenko
   // et al., ICCAD 2007 for more details.
   // TODO: Use a priority queue instead of sorting for better performance.
-  std::stable_sort(
-      cuts.begin(), cuts.end(), [&options](const Cut &a, const Cut &b) -> bool {
-        // Trivial cuts always have the highest priority since they
-        // represent direct connections with no logic delay
-        if (a.isTrivialCut() || b.isTrivialCut())
-          return a.isTrivialCut();
 
-        const auto &aMatched = a.getMatchedPattern();
-        const auto &bMatched = b.getMatchedPattern();
+  // Partition the cuts into trivial and non-trivial cuts.
+  auto *trivialCutsEnd =
+      std::stable_partition(cuts.begin(), cuts.end(),
+                            [](const Cut &cut) { return cut.isTrivialCut(); });
 
-        // Both cuts have matched patterns.
-        if (aMatched && bMatched)
-          return compareDelayAndArea(options.strategy, aMatched->getArea(),
-                                     aMatched->getArrivalTimes(),
-                                     bMatched->getArea(),
-                                     bMatched->getArrivalTimes());
+  std::stable_sort(trivialCutsEnd, cuts.end(),
+                   [&options](const Cut &a, const Cut &b) -> bool {
+                     assert(!a.isTrivialCut() && !b.isTrivialCut() &&
+                            "Trivial cuts should have been excluded");
+                     const auto &aMatched = a.getMatchedPattern();
+                     const auto &bMatched = b.getMatchedPattern();
 
-        // Prefer cuts with matched patterns over those without
-        if (aMatched && !bMatched)
-          return true;
-        if (!aMatched && bMatched)
-          return false;
+                     // Both cuts have matched patterns.
+                     if (aMatched && bMatched)
+                       return compareDelayAndArea(
+                           options.strategy, aMatched->getArea(),
+                           aMatched->getArrivalTimes(), bMatched->getArea(),
+                           bMatched->getArrivalTimes());
 
-        // Both cuts are unmatched - prefer smaller input size
-        return a.getInputSize() < b.getInputSize();
-      });
+                     // Prefer cuts with matched patterns over those without
+                     if (aMatched && !bMatched)
+                       return true;
+                     if (!aMatched && bMatched)
+                       return false;
+
+                     // Both cuts are unmatched - prefer smaller input size
+                     return a.getInputSize() < b.getInputSize();
+                   });
 
   // Step 4: Limit the number of cuts to prevent exponential growth
   // After sorting, keep only the best cuts up to the specified limit
