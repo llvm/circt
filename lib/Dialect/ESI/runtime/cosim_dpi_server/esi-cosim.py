@@ -19,9 +19,9 @@ import sys
 import textwrap
 from typing import Dict, List
 
-from ..cosim.questa import Questa
-from ..cosim.verilator import Verilator
-from ..cosim.simulator import SourceFiles
+from esiaccel.cosim.questa import Questa
+from esiaccel.cosim.verilator import Verilator
+from esiaccel.cosim.simulator import SourceFiles
 
 
 def __main__(args):
