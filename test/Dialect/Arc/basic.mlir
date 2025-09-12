@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-diagnostics --verify-roundtrip %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: arc.define @Foo
 arc.define @Foo(%arg0: i42, %arg1: i9) -> (i42, i9) {
@@ -368,5 +368,28 @@ func.func @ReadsWrites(%arg0: !arc.state<i42>, %arg1: i42, %arg2: i1) {
   arc.state_write %arg0 = %arg1 : <i42>
   // CHECK: arc.state_write %arg0 = %arg1 if %arg2 : <i42>
   arc.state_write %arg0 = %arg1 if %arg2 : <i42>
+  return
+}
+
+func.func @Execute(%arg0: i42) {
+  // CHECK: arc.execute {
+  arc.execute {
+    arc.output
+  }
+  // CHECK: arc.execute (%arg0 : i42) {
+  arc.execute (%arg0 : i42) {
+  ^bb0(%0: i42):
+    arc.output
+  }
+  // CHECK: arc.execute -> (i42) {
+  arc.execute -> (i42) {
+    %0 = hw.constant 1337 : i42
+    arc.output %0 : i42
+  }
+  // CHECK: arc.execute (%arg0 : i42) -> (i42) {
+  arc.execute (%arg0 : i42) -> (i42) {
+  ^bb0(%0: i42):
+    arc.output %0 : i42
+  }
   return
 }
