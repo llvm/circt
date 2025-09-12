@@ -386,6 +386,19 @@ func.func @StructExtractFold2(%arg0: !moore.i17, %arg1: !moore.i42) -> (!moore.i
   return %1, %2 : !moore.i17, !moore.i42
 }
 
+// CHECK-LABEL: func.func @structExtractRefLower2Inject
+func.func @structExtractRefLower2Inject(%arg0: !moore.ref<struct<{a: i32, b: i32}>>) -> (!moore.ref<struct<{a: i32, b: i32}>>) {
+  // CHECK-NEXT: [[C42:%.+]] = moore.constant 42
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.read %arg0 : <struct<{a: i32, b: i32}>>
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.struct_inject [[TMP1]], "a", [[C42]] : struct<{a: i32, b: i32}>, i32
+  // CHECK-NEXT: moore.blocking_assign %arg0, [[TMP2]] : struct<{a: i32, b: i32}>
+  // CHECK-NEXT: return %arg0 : !moore.ref<struct<{a: i32, b: i32}>>
+  %0 = moore.constant 42 : i32
+  %1 = moore.struct_extract_ref %arg0, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+  moore.blocking_assign %1, %0 : i32
+  return %arg0 : !moore.ref<struct<{a: i32, b: i32}>>
+}
+
 // CHECK-LABEL: func.func @StructInjectFold1
 func.func @StructInjectFold1(%arg0: !moore.struct<{a: i32, b: i32}>) -> (!moore.struct<{a: i32, b: i32}>) {
   // CHECK-NEXT: [[C42:%.+]] = moore.constant 42
