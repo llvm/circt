@@ -28,6 +28,7 @@
 // CHECK-DAG: firrtl-lower-chirrtl
 // CHECK-DAG: firrtl-lower-types
 // CHECK-DAG: firrtl-module-externalizer
+// CHECK-DAG: firrtl-module-swapper
 // CHECK-DAG: firrtl-operand0-forwarder
 // CHECK-DAG: firrtl-operand1-forwarder
 // CHECK-DAG: firrtl-operand2-forwarder

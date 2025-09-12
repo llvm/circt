@@ -1123,6 +1123,149 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
   bool isOneShot() const override { return true; }
 };
 
+/// A reduction pattern that groups modules by their port signature (types and
+/// directions) and replaces instances with the smallest module in each group.
+/// This helps reduce the IR by consolidating functionally equivalent modules
+/// based on their interface.
+///
+/// The pattern works by:
+/// 1. Grouping all modules by their port signature (port types and directions)
+/// 2. For each group with multiple modules, finding the smallest module using
+///    the module size cache
+/// 3. Replacing all instances of larger modules with instances of the smallest
+///    module in the same group
+/// 4. Removing the larger modules from the circuit
+///
+/// This reduction is useful for reducing circuits where multiple modules have
+/// the same interface but different implementations, allowing the reducer to
+/// try the smallest implementation first.
+struct ModuleSwapper : public OpReduction<InstanceOp> {
+  // Per-circuit state containing all the information needed for module swapping
+  using PortSignature = SmallVector<std::pair<Type, Direction>>;
+  struct CircuitState {
+    DenseMap<PortSignature, SmallVector<FModuleLike, 4>> moduleTypeGroups;
+    DenseMap<StringAttr, FModuleLike> instanceToCanonicalModule;
+    std::unique_ptr<NLATable> nlaTable;
+  };
+
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+    moduleSizes.clear();
+    circuitStates.clear();
+
+    // Collect module type groups and NLA tables for all circuits up front
+    op.walk([&](CircuitOp circuitOp) {
+      auto &state = circuitStates[circuitOp];
+      state.nlaTable = std::make_unique<NLATable>(circuitOp);
+      buildModuleTypeGroups(circuitOp, state);
+    });
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  /// Create a vector of port type-direction pairs for the given FIRRTL module.
+  /// This ignores port names, allowing modules with the same port types and
+  /// directions but different port names to be considered equivalent for
+  /// swapping.
+  PortSignature getModulePortSignature(FModuleLike module) {
+    PortSignature signature;
+    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
+      signature.emplace_back(module.getPortType(i), module.getPortDirection(i));
+    }
+    return signature;
+  }
+
+  /// Group modules by their port signature and find the smallest in each group.
+  void buildModuleTypeGroups(CircuitOp circuitOp, CircuitState &state) {
+    // Group modules by their port signature
+    for (auto module : circuitOp.getBodyBlock()->getOps<FModuleLike>()) {
+      auto signature = getModulePortSignature(module);
+      state.moduleTypeGroups[signature].push_back(module);
+    }
+
+    // For each group, find the smallest module
+    for (auto &[signature, modules] : state.moduleTypeGroups) {
+      if (modules.size() <= 1)
+        continue;
+
+      FModuleLike smallestModule = nullptr;
+      uint64_t smallestSize = UINT64_MAX;
+
+      for (auto module : modules) {
+        uint64_t size = moduleSizes.getModuleSize(module, symbols);
+        if (size < smallestSize) {
+          smallestSize = size;
+          smallestModule = module;
+        }
+      }
+
+      // Map all modules in this group to the smallest one
+      for (auto module : modules) {
+        if (module != smallestModule) {
+          state.instanceToCanonicalModule[module.getModuleNameAttr()] =
+              smallestModule;
+        }
+      }
+    }
+  }
+
+  uint64_t match(InstanceOp instOp) override {
+    // Get the circuit this instance belongs to
+    auto circuitOp = instOp->getParentOfType<CircuitOp>();
+    assert(circuitOp);
+    const auto &state = circuitStates.at(circuitOp);
+
+    // Skip instances that participate in any NLAs
+    DenseSet<hw::HierPathOp> nlas;
+    state.nlaTable->getInstanceNLAs(instOp, nlas);
+    if (!nlas.empty())
+      return 0;
+
+    // Check if this instance can be redirected to a smaller module
+    auto moduleName = instOp.getModuleNameAttr().getAttr();
+    auto canonicalModule = state.instanceToCanonicalModule.lookup(moduleName);
+    if (!canonicalModule)
+      return 0;
+
+    // Benefit is the size difference
+    auto currentModule = cast<FModuleLike>(
+        instOp.getReferencedOperation(symbols.getNearestSymbolTable(instOp)));
+    uint64_t currentSize = moduleSizes.getModuleSize(currentModule, symbols);
+    uint64_t canonicalSize =
+        moduleSizes.getModuleSize(canonicalModule, symbols);
+    return currentSize > canonicalSize ? currentSize - canonicalSize : 1;
+  }
+
+  LogicalResult rewrite(InstanceOp instOp) override {
+    // Get the circuit this instance belongs to
+    auto circuitOp = instOp->getParentOfType<CircuitOp>();
+    assert(circuitOp);
+    const auto &state = circuitStates.at(circuitOp);
+
+    // Replace the instantiated module with the canonical module.
+    auto canonicalModule = state.instanceToCanonicalModule.at(
+        instOp.getModuleNameAttr().getAttr());
+    auto canonicalName = canonicalModule.getModuleNameAttr();
+    instOp.setModuleNameAttr(FlatSymbolRefAttr::get(canonicalName));
+
+    // Update port names to match the canonical module
+    instOp.setPortNamesAttr(canonicalModule.getPortNamesAttr());
+
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-module-swapper"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+private:
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
+  ModuleSizeCache moduleSizes;
+
+  // Per-circuit state containing all module swapping information
+  DenseMap<CircuitOp, CircuitState> circuitStates;
+};
+
 /// A reduction pattern that handles MustDedup annotations by replacing all
 /// module names in a dedup group with a single module name. This helps reduce
 /// the IR by consolidating module references that are required to be identical.
@@ -1310,6 +1453,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
+  patterns.add<ModuleSwapper, 32>();
   patterns.add<ForceDedup, 31>();
   patterns.add<PassReduction, 30>(
       getContext(),
