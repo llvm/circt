@@ -82,8 +82,9 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 
 void circt::populateGenericReducePatterns(MLIRContext *context,
                                           ReducePatternSet &patterns) {
-  patterns.add<UnusedSymbolPruner, 40>();
-  patterns.add<PassReduction, 3>(context, createCSEPass());
-  patterns.add<PassReduction, 2>(context, createSimpleCanonicalizerPass());
+  patterns.add<PassReduction, 103>(context, createSymbolDCEPass());
+  patterns.add<PassReduction, 102>(context, createCSEPass());
+  patterns.add<PassReduction, 101>(context, createSimpleCanonicalizerPass());
+  patterns.add<UnusedSymbolPruner, 100>();
   patterns.add<OperationPruner, 1>();
 }
