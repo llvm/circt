@@ -14,6 +14,7 @@
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -22,7 +23,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
@@ -598,6 +599,53 @@ struct SimEmitValueOpLowering
 
 } // namespace
 
+static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &converter) {
+  // Convert the argument types in the body blocks.
+  if (failed(rewriter.convertRegionTypes(&op.getBody(), converter)))
+    return failure();
+
+  // Split the block at the current insertion point such that we can branch into
+  // the `arc.execute` body region, and have `arc.output` branch back to the
+  // point after the `arc.execute`.
+  auto *blockBefore = rewriter.getInsertionBlock();
+  auto *blockAfter =
+      rewriter.splitBlock(blockBefore, rewriter.getInsertionPoint());
+
+  // Branch to the entry block.
+  rewriter.setInsertionPointToEnd(blockBefore);
+  mlir::cf::BranchOp::create(rewriter, op.getLoc(), &op.getBody().front(),
+                             adaptor.getInputs());
+
+  // Make all `arc.output` terminators branch to the block after the
+  // `arc.execute` op.
+  for (auto &block : op.getBody()) {
+    auto outputOp = dyn_cast<arc::OutputOp>(block.getTerminator());
+    if (!outputOp)
+      continue;
+    rewriter.setInsertionPointToEnd(&block);
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(outputOp, blockAfter,
+                                                    outputOp.getOperands());
+  }
+
+  // Inline the body region between the before and after blocks.
+  rewriter.inlineRegionBefore(op.getBody(), blockAfter);
+
+  // Add arguments to the block after the `arc.execute`, replace the op's
+  // results with the arguments, then perform block signature conversion.
+  SmallVector<Value> args;
+  args.reserve(op.getNumResults());
+  for (auto result : op.getResults())
+    args.push_back(blockAfter->addArgument(result.getType(), result.getLoc()));
+  rewriter.replaceOp(op, args);
+  auto conversion = converter.convertBlockSignature(blockAfter);
+  if (!conversion)
+    return failure();
+  rewriter.applySignatureConversion(blockAfter, *conversion, &converter);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -667,7 +715,7 @@ void LowerArcToLLVMPass::runOnOperation() {
   });
 
   // Setup the conversion patterns.
-  RewritePatternSet patterns(&getContext());
+  ConversionPatternSet patterns(&getContext(), converter);
 
   // MLIR patterns.
   populateSCFToControlFlowConversionPatterns(patterns);
@@ -708,6 +756,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     ZeroCountOpLowering
   >(converter, &getContext());
   // clang-format on
+  patterns.add<ExecuteOp>(convert);
 
   SmallVector<ModelInfo> models;
   if (failed(collectModels(getOperation(), models))) {

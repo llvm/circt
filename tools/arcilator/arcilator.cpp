@@ -641,6 +641,7 @@ int main(int argc, char **argv) {
     // Dialect passes:
     arc::registerPasses();
     registerConvertToArcsPass();
+    registerLowerArcToLLVMPass();
   }
 
   // Register any pass manager command line options.
