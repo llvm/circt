@@ -8,6 +8,7 @@
 
 #include "circt/Reduce/GenericReductions.h"
 #include "circt/Reduce/ReductionUtils.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
 
@@ -66,6 +67,26 @@ struct UnusedSymbolPruner : public Reduction {
   std::unique_ptr<SymbolUserMap> symbolUsers;
 };
 
+/// A reduction pattern that changes symbol visibility from "public" to
+/// "private".
+struct MakeSymbolsPrivate : public Reduction {
+  uint64_t match(Operation *op) override {
+    if (!op->getParentOp() || !isa<SymbolOpInterface>(op))
+      return 0;
+    return SymbolTable::getSymbolVisibility(op) !=
+           SymbolTable::Visibility::Private;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    // Change the visibility from public to private
+    SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
+    return success();
+  }
+
+  std::string getName() const override { return "make-symbols-private"; }
+  bool acceptSizeIncrease() const override { return true; }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -85,6 +106,7 @@ void circt::populateGenericReducePatterns(MLIRContext *context,
   patterns.add<PassReduction, 103>(context, createSymbolDCEPass());
   patterns.add<PassReduction, 102>(context, createCSEPass());
   patterns.add<PassReduction, 101>(context, createSimpleCanonicalizerPass());
-  patterns.add<UnusedSymbolPruner, 100>();
+  patterns.add<MakeSymbolsPrivate, 100>();
+  patterns.add<UnusedSymbolPruner, 99>();
   patterns.add<OperationPruner, 1>();
 }
