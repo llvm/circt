@@ -622,38 +622,79 @@ struct ConnectInvalidator : public Reduction {
   bool acceptSizeIncrease() const override { return true; }
 };
 
-/// A sample reduction pattern that removes FIRRTL annotations from ports and
-/// operations.
+/// A reduction pattern that removes FIRRTL annotations from ports and
+/// operations. This generates one match per annotation and port annotation,
+/// allowing selective removal of individual annotations.
 struct AnnotationRemover : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
-  uint64_t match(Operation *op) override {
-    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
-      if (!annos.empty())
-        return 1;
-    if (auto annos = op->getAttrOfType<ArrayAttr>("portAnnotations"))
-      if (llvm::any_of(annos.getAsRange<ArrayAttr>(),
-                       [](auto portAnnos) { return !portAnnos.empty(); }))
-        return 1;
-    return 0;
+
+  void matches(Operation *op,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    uint64_t matchId = 0;
+
+    // Generate matches for regular annotations
+    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations")) {
+      for (auto anno : annos) {
+        (void)anno;
+        addMatch(1, matchId++);
+      }
+    }
+
+    // Generate matches for port annotations
+    if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations")) {
+      for (auto portAnnoArray : portAnnos) {
+        if (auto portAnnoArrayAttr = dyn_cast<ArrayAttr>(portAnnoArray)) {
+          for (auto anno : portAnnoArrayAttr) {
+            (void)anno;
+            addMatch(1, matchId++);
+          }
+        }
+      }
+    }
   }
-  LogicalResult rewrite(Operation *op) override {
-    auto emptyArray = ArrayAttr::get(op->getContext(), {});
-    if (auto annos = op->getAttr("annotations")) {
-      nlaRemover.markNLAsInAnnotation(annos);
-      op->setAttr("annotations", emptyArray);
+
+  LogicalResult rewriteMatches(Operation *op,
+                               ArrayRef<uint64_t> matches) override {
+    // Convert matches to a set for fast lookup
+    llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
+
+    // Lambda to process annotations and filter out matched ones
+    uint64_t matchId = 0;
+    auto processAnnotations =
+        [&](ArrayRef<Attribute> annotations) -> ArrayAttr {
+      SmallVector<Attribute> newAnnotations;
+      for (auto anno : annotations) {
+        if (!matchesSet.contains(matchId)) {
+          newAnnotations.push_back(anno);
+        } else {
+          // Mark NLAs in the removed annotation for cleanup
+          nlaRemover.markNLAsInAnnotation(anno);
+        }
+        matchId++;
+      }
+      return ArrayAttr::get(op->getContext(), newAnnotations);
+    };
+
+    // Remove regular annotations
+    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations")) {
+      op->setAttr("annotations", processAnnotations(annos.getValue()));
     }
-    if (auto annos = op->getAttr("portAnnotations")) {
-      nlaRemover.markNLAsInAnnotation(annos);
-      auto attr = emptyArray;
-      if (isa<firrtl::InstanceOp>(op))
-        attr = ArrayAttr::get(
-            op->getContext(),
-            SmallVector<Attribute>(op->getNumResults(), emptyArray));
-      op->setAttr("portAnnotations", attr);
+
+    // Remove port annotations
+    if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations")) {
+      SmallVector<Attribute> newPortAnnos;
+      for (auto portAnnoArrayAttr : portAnnos.getAsRange<ArrayAttr>()) {
+        newPortAnnos.push_back(
+            processAnnotations(portAnnoArrayAttr.getValue()));
+      }
+      op->setAttr("portAnnotations",
+                  ArrayAttr::get(op->getContext(), newPortAnnos));
     }
+
     return success();
   }
+
   std::string getName() const override { return "annotation-remover"; }
   NLARemover nlaRemover;
 };
