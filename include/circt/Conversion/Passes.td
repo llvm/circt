@@ -624,7 +624,7 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
 // ConvertToArcs
 //===----------------------------------------------------------------------===//
 
-def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
+def ConvertToArcsPass : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
   let summary = "Outline logic between registers into state transfer arcs";
   let description = [{
     This pass outlines combinational logic between registers into state transfer
@@ -632,7 +632,6 @@ def ConvertToArcs : Pass<"convert-to-arcs", "mlir::ModuleOp"> {
     replaced with an arc invocation, where the register is now represented as a
     latency.
   }];
-  let constructor = "circt::createConvertToArcsPass()";
   let dependentDialects = ["circt::arc::ArcDialect", "circt::hw::HWDialect"];
   let options = [
     Option<"tapRegisters", "tap-registers", "bool", "true",

@@ -302,9 +302,10 @@ hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
 hw.module @OpsWithRegions(in %a: i42, in %b: i42, in %c: i42, in %d: i42, out z: i42) {
   // CHECK-DAG: [[ADD:%.+]] = arc.call [[ARC_ADD]](%a, %b)
   %0 = comb.add %a, %b : i42
-  // CHECK-DAG: [[COMB:%.+]] = llhd.combinational -> i42 {
-  // CHECK-DAG:   [[MUL:%.+]] = comb.mul [[ADD]], %c
-  // CHECK-DAG:   llhd.yield [[MUL]]
+  // CHECK-DAG: [[COMB:%.+]] = arc.execute ([[ADD]], %c : i42, i42) -> (i42) {
+  // CHECK-DAG: ^bb0(%arg0: i42, %arg1: i42):
+  // CHECK-DAG:   [[MUL:%.+]] = comb.mul %arg0, %arg1
+  // CHECK-DAG:   arc.output [[MUL]]
   %1 = llhd.combinational -> i42 {
     %3 = comb.mul %0, %c : i42
     llhd.yield %3 : i42

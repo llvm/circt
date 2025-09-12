@@ -276,7 +276,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (untilReached(UntilArcConversion))
     return;
   {
-    ConvertToArcsOptions opts;
+    ConvertToArcsPassOptions opts;
     opts.tapRegisters = observeRegisters;
     pm.addPass(createConvertToArcsPass(opts));
   }
@@ -640,7 +640,7 @@ int main(int argc, char **argv) {
 
     // Dialect passes:
     arc::registerPasses();
-    registerConvertToArcs();
+    registerConvertToArcsPass();
   }
 
   // Register any pass manager command line options.
