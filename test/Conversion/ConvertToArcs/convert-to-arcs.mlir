@@ -291,3 +291,26 @@ hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
 //   CHECK-DAG:   [[RES:%.+]]:2 = arc.call @[[ARC_NAME]]({{.*}}) :
 //   CHECK-DAG:   arc.tap [[RES]]#0 {name = "z"} : i32
 //       CHECK:   hw.output %0#1 : i32
+
+// CHECK: arc.define [[ARC_ADD:@OpsWithRegions.+]](
+// CHECK-NEXT: comb.add
+
+// CHECK: arc.define [[ARC_SUB:@OpsWithRegions.+]](
+// CHECK-NEXT: comb.sub
+
+// CHECK: hw.module @OpsWithRegions
+hw.module @OpsWithRegions(in %a: i42, in %b: i42, in %c: i42, in %d: i42, out z: i42) {
+  // CHECK-DAG: [[ADD:%.+]] = arc.call [[ARC_ADD]](%a, %b)
+  %0 = comb.add %a, %b : i42
+  // CHECK-DAG: [[COMB:%.+]] = llhd.combinational -> i42 {
+  // CHECK-DAG:   [[MUL:%.+]] = comb.mul [[ADD]], %c
+  // CHECK-DAG:   llhd.yield [[MUL]]
+  %1 = llhd.combinational -> i42 {
+    %3 = comb.mul %0, %c : i42
+    llhd.yield %3 : i42
+  }
+  // CHECK-DAG: [[SUB:%.+]] = arc.call [[ARC_SUB]]([[COMB]], %d)
+  %2 = comb.sub %1, %d : i42
+  // CHECK: hw.output [[SUB]]
+  hw.output %2 : i42
+}
