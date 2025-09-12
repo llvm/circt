@@ -5,7 +5,6 @@
 
 // DIALECT: Available Dialects:
 // DIALECT-SAME: affine
-// DIALECT-SAME: aig
 // DIALECT-SAME: arc
 // DIALECT-SAME: arith
 // DIALECT-SAME: builtin

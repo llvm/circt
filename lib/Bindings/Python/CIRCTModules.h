@@ -18,7 +18,6 @@
 namespace circt {
 namespace python {
 
-void populateDialectAIGSubmodule(nanobind::module_ &m);
 void populateDialectESISubmodule(nanobind::module_ &m);
 void populateDialectHWSubmodule(nanobind::module_ &m);
 void populateDialectMSFTSubmodule(nanobind::module_ &m);
@@ -29,6 +28,7 @@ void populateDialectRTGTestSubmodule(nanobind::module_ &m);
 #endif
 void populateDialectSeqSubmodule(nanobind::module_ &m);
 void populateDialectSVSubmodule(nanobind::module_ &m);
+void populateDialectSynthSubmodule(nanobind::module_ &m);
 void populateSupportSubmodule(nanobind::module_ &m);
 
 } // namespace python

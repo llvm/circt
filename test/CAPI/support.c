@@ -11,9 +11,9 @@
 
 #include "circt-c/Support/InstanceGraph.h"
 
-#include "circt-c/Dialect/AIG.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/Seq.h"
+#include "circt-c/Dialect/Synth.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
@@ -48,28 +48,28 @@ void testInstancePath(void) {
 
   MlirOperation moduleOp = mlirModuleGetOperation(module);
 
-  // Note: We test IgraphInstancePath functionality through the AIG longest path
-  // analysis since it provides access to InstancePath objects. While
+  // Note: We test IgraphInstancePath functionality through the Synth longest
+  // path analysis since it provides access to InstancePath objects. While
   // InstancePath objects are created in InstancePathCache, that interface is
   // not yet exposed through the C API. Using the analysis results is sufficient
   // for testing purposes without needing to expose additional InstancePathCache
   // APIs.
 
-  AIGLongestPathAnalysis analysis =
-      aigLongestPathAnalysisCreate(moduleOp, true, false, false);
+  SynthLongestPathAnalysis analysis =
+      synthLongestPathAnalysisCreate(moduleOp, true, false, false);
 
   MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
-  AIGLongestPathCollection collection =
-      aigLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
+  SynthLongestPathCollection collection =
+      synthLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
 
-  if (aigLongestPathCollectionIsNull(collection) ||
-      aigLongestPathCollectionGetSize(collection) < 1)
+  if (synthLongestPathCollectionIsNull(collection) ||
+      synthLongestPathCollectionGetSize(collection) < 1)
     return;
 
   // Get instance path of fanin object.
-  IgraphInstancePath instancePath =
-      aigLongestPathObjectGetInstancePath(aigLongestPathDataflowPathGetFanIn(
-          aigLongestPathCollectionGetDataflowPath(collection, 0)));
+  IgraphInstancePath instancePath = synthLongestPathObjectGetInstancePath(
+      synthLongestPathDataflowPathGetFanIn(
+          synthLongestPathCollectionGetDataflowPath(collection, 0)));
 
   if (instancePath.size != 2) {
     printf("Instance path size mismatch\n");
@@ -83,8 +83,8 @@ void testInstancePath(void) {
   // CHECK-NEXT: hw.instance "foo" @foo
   mlirOperationDump(foo);
 
-  aigLongestPathCollectionDestroy(collection);
-  aigLongestPathAnalysisDestroy(analysis);
+  synthLongestPathCollectionDestroy(collection);
+  synthLongestPathAnalysisDestroy(analysis);
 
   mlirModuleDestroy(module);
   mlirContextDestroy(ctx);

@@ -20,9 +20,9 @@
 
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 
-#include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/NPNClass.h"
 #include "circt/Support/UnusedOpPruner.h"

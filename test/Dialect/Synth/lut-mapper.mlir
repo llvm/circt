@@ -29,15 +29,15 @@ hw.module @add(in %a : i2, in %b : i2, out result : i2) {
   %1 = comb.extract %b from 1 : (i2) -> i1
   %2 = comb.extract %a from 0 : (i2) -> i1
   %3 = comb.extract %a from 1 : (i2) -> i1
-  %4 = aig.and_inv not %0, not %2 : i1
-  %5 = aig.and_inv %0, %2 : i1
-  %6 = aig.and_inv not %4, not %5 : i1
-  %7 = aig.and_inv not %3, not %5 : i1
-  %8 = aig.and_inv %3, %5 : i1
-  %9 = aig.and_inv not %7, not %8 : i1
-  %10 = aig.and_inv not %1, not %9 : i1
-  %11 = aig.and_inv %1, %9 : i1
-  %12 = aig.and_inv not %10, not %11 : i1
+  %4 = synth.aig.and_inv not %0, not %2 : i1
+  %5 = synth.aig.and_inv %0, %2 : i1
+  %6 = synth.aig.and_inv not %4, not %5 : i1
+  %7 = synth.aig.and_inv not %3, not %5 : i1
+  %8 = synth.aig.and_inv %3, %5 : i1
+  %9 = synth.aig.and_inv not %7, not %8 : i1
+  %10 = synth.aig.and_inv not %1, not %9 : i1
+  %11 = synth.aig.and_inv %1, %9 : i1
+  %12 = synth.aig.and_inv not %10, not %11 : i1
   %13 = comb.concat %12, %6 : i1, i1
   hw.output %13 : i2
 }

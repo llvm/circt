@@ -6,13 +6,13 @@
 //    %1 = comb.extract %input from 5678 : (i8196) -> i1
 //    %2 = comb.extract %input from 3 : (i8196) -> i1
 //    %3 = comb.extract %input from 8193 : (i8196) -> i1
-//    %and1 = aig.and_inv not %1, %0 : i1
-//    %and2 = aig.and_inv %3, not %2 : i1
+//    %and1 = synth.aig.and_inv not %1, %0 : i1
+//    %and2 = synth.aig.and_inv %3, not %2 : i1
 //    %reg = seq.compreg %clock, %and1 : i1
 //    hw.output %and1, %and2, %reg : i1, i1
 // }
 // CHECK-LABEL: @aiger_top
 // CHECK-NEXT:  %[[REG:.+]] = seq.compreg %[[VAL1:.+]], %clock : i1
-// CHECK-NEXT:  %[[VAL0:.+]] = aig.and_inv not %input_5678, %input_1234 : i1 
-// CHECK-NEXT:  %[[VAL1]] = aig.and_inv %input_8193, not %input_3 : i1
+// CHECK-NEXT:  %[[VAL0:.+]] = synth.aig.and_inv not %input_5678, %input_1234 : i1 
+// CHECK-NEXT:  %[[VAL1]] = synth.aig.and_inv %input_8193, not %input_3 : i1
 // CHECK-NEXT:  hw.output %[[VAL0]], %[[REG]] : i1, i1

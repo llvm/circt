@@ -3,12 +3,12 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
 
   LINK_LIBS PUBLIC
   CIRCTAffineToLoopSchedule
-  CIRCTAIGToComb
+  CIRCTSynthToComb
   CIRCTArcToLLVM
   CIRCTCalyxToFSM
   CIRCTCalyxToHW
   CIRCTCalyxNative
-  CIRCTCombToAIG
+  CIRCTCombToSynth
   CIRCTCombToArith
   CIRCTCombToDatapath
   CIRCTCombToLLVM

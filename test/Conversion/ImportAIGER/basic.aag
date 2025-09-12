@@ -3,7 +3,7 @@
 // Test basic AND gate
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[INPUT1:.+]] : i1, out [[OUTPUT0:.+]] : i1) {
-// CHECK-NEXT:    %[[AND:.+]] = aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[AND:.+]] = synth.aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
 // CHECK-NEXT:    hw.output %[[AND]] : i1
 // CHECK-NEXT: }
 aag 3 2 0 1 1
@@ -16,7 +16,7 @@ aag 3 2 0 1 1
 // Test invert
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[INPUT1:.+]] : i1, out [[OUTPUT0:.+]] : i1) {
-// CHECK-NEXT:    %[[AND:.+]] = aig.and_inv not %[[INPUT1]], not %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[AND:.+]] = synth.aig.and_inv not %[[INPUT1]], not %[[INPUT0]] : i1
 // CHECK-NEXT:    hw.output %[[AND]] : i1
 // CHECK-NEXT: }
 aag 3 2 0 1 1
@@ -29,8 +29,8 @@ aag 3 2 0 1 1
 // Test multiple outputs
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[INPUT1:.+]] : i1, out [[OUTPUT0:.+]] : i1, out [[OUTPUT1:.+]] : i1) {
-// CHECK-NEXT:    %[[VAL0:.+]] = aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
-// CHECK-NEXT:    %[[VAL1:.+]] = aig.and_inv %[[VAL0]], %[[INPUT1]] : i1
+// CHECK-NEXT:    %[[VAL0:.+]] = synth.aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL1:.+]] = synth.aig.and_inv %[[VAL0]], %[[INPUT1]] : i1
 // CHECK-NEXT:    hw.output %[[VAL0]], %[[VAL1]] : i1, i1
 // CHECK-NEXT:  }
 aag 4 2 0 2 2
@@ -46,7 +46,7 @@ aag 4 2 0 2 2
 // CHECK-LABEL:  hw.module @aiger_top
 // CHECK-SAME:     (in %[[INPUT0:.+]] : i1, out [[OUTPUT0:.+]] : i1, in %[[CLOCK:.+]] : !seq.clock) {
 // CHECK-NEXT:    %[[REG:.+]] = seq.compreg %[[AND:.+]], %[[CLOCK]] : i1
-// CHECK-NEXT:    %[[AND]] = aig.and_inv %[[REG]], %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[AND]] = synth.aig.and_inv %[[REG]], %[[INPUT0]] : i1
 // CHECK-NEXT:    hw.output %[[REG]] : i1
 // CHECK-NEXT:  }
 aag 3 1 1 1 1
@@ -59,7 +59,7 @@ aag 3 1 1 1 1
 // Test with comments
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[INPUT1:.+]] : i1, out [[OUTPUT0:.+]] : i1) {
-// CHECK-NEXT:    %[[VAL:.+]] = aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL:.+]] = synth.aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
 // CHECK-NEXT:    hw.output %[[VAL]] : i1
 // CHECK-NEXT:  }
 aag 3 2 0 1 1
@@ -75,7 +75,7 @@ This is a comment line
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[IN1:in1]] : i1, in %[[IN2:in2]] : i1, out out : i1, in %[[CLOCK:.+]] : !seq.clock) {
 // CHECK-NEXT:    %[[LATCH:latch]] = seq.compreg %[[AND:.+]], %[[CLOCK]] : i1
-// CHECK-NEXT:    %[[AND]] = aig.and_inv %[[IN2]], %[[IN1]] : i1
+// CHECK-NEXT:    %[[AND]] = synth.aig.and_inv %[[IN2]], %[[IN1]] : i1
 // CHECK-NEXT:    hw.output %[[AND]] : i1
 // CHECK-NEXT:  }
 aag 3 2 1 1 1
@@ -123,7 +123,7 @@ aag 1 1 0 1 0
 // Test inverter (NOT gate)
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, out [[OUTPUT0:.+]] : i1) {
-// CHECK-NEXT:    %[[VAL:.+]] = aig.and_inv not %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL:.+]] = synth.aig.and_inv not %[[INPUT0]] : i1
 // CHECK-NEXT:    hw.output %[[VAL]] : i1
 // CHECK-NEXT: }
 aag 1 1 0 1 0
@@ -134,9 +134,9 @@ aag 1 1 0 1 0
 // Test complex combinational logic (half adder)
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[X:.+]] : i1, in %[[Y:.+]] : i1, out sum : i1, out carry : i1) {
-// CHECK-NEXT:         %[[VAL0:.+]] = aig.and_inv not %[[Y]], not %[[X]] : i1
-// CHECK-NEXT:         %[[VAL1:.+]] = aig.and_inv %[[X]], %[[Y]] : i1
-// CHECK-NEXT:         %[[VAL2:.+]] = aig.and_inv not %[[VAL1]], not %[[VAL0]] : i1
+// CHECK-NEXT:         %[[VAL0:.+]] = synth.aig.and_inv not %[[Y]], not %[[X]] : i1
+// CHECK-NEXT:         %[[VAL1:.+]] = synth.aig.and_inv %[[X]], %[[Y]] : i1
+// CHECK-NEXT:         %[[VAL2:.+]] = synth.aig.and_inv not %[[VAL1]], not %[[VAL0]] : i1
 // CHECK-NEXT:         hw.output %[[VAL0]], %[[VAL1]] : i1, i1
 // CHECK-NEXT: }
 aag 7 2 0 2 3
@@ -158,9 +158,9 @@ o1 carry
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, out [[OUTPUT0:.+]] : i1, out [[OUTPUT1:.+]] : i1, in %[[CLOCK:.+]] : !seq.clock) {
 // CHECK-NEXT:         %[[Q1:q1]] = seq.compreg %[[VAL1:.+]], %[[CLOCK]] : i1
 // CHECK-NEXT:         %[[Q2:q2]] = seq.compreg %[[VAL0:.+]], %[[CLOCK]] : i1
-// CHECK-NEXT:         %[[VAL0]] = aig.and_inv %[[Q1]], %[[INPUT0]] : i1
+// CHECK-NEXT:         %[[VAL0]] = synth.aig.and_inv %[[Q1]], %[[INPUT0]] : i1
 // CHECK-NEXT:         %[[FALSE:.+]] = hw.constant false
-// CHECK-NEXT:         %[[VAL1]] = aig.and_inv not %[[Q2]], %[[FALSE]] : i1
+// CHECK-NEXT:         %[[VAL1]] = synth.aig.and_inv not %[[Q2]], %[[FALSE]] : i1
 // CHECK-NEXT:         hw.output %[[Q1]], %[[Q2]] : i1, i1
 // CHECK-NEXT: }
 aag 5 1 2 2 2
@@ -178,8 +178,8 @@ l1 q2
 // Test chain of AND gates
 // CHECK-LABEL: hw.module @aiger_top
 // CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[INPUT1:.+]] : i1, in %[[INPUT2:.+]] : i1, out [[OUTPUT0:.+]] : i1) {
-// CHECK-NEXT:         %[[VAL0:.+]] = aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
-// CHECK-NEXT:         %[[VAL1:.+]] = aig.and_inv %[[INPUT2]], %[[VAL0]] : i1
+// CHECK-NEXT:         %[[VAL0:.+]] = synth.aig.and_inv %[[INPUT1]], %[[INPUT0]] : i1
+// CHECK-NEXT:         %[[VAL1:.+]] = synth.aig.and_inv %[[INPUT2]], %[[VAL0]] : i1
 // CHECK-NEXT:         hw.output %[[VAL1]] : i1
 // CHECK-NEXT: }
 aag 5 3 0 1 2

@@ -11,10 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/AIGToComb.h"
-#include "circt/Dialect/AIG/AIGDialect.h"
-#include "circt/Dialect/AIG/AIGPasses.h"
-#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
+#include "circt/Conversion/SynthToComb.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
@@ -28,6 +25,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Synth/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
@@ -223,13 +221,13 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     if (untilReached(UntilCombLowering))
       return;
 
-    circt::synth::AIGOptimizationPipelineOptions optimizationOptions;
+    circt::synth::SynthOptimizationPipelineOptions optimizationOptions;
     optimizationOptions.abcCommands = abcCommands;
     optimizationOptions.abcPath.setValue(abcPath);
     optimizationOptions.ignoreAbcFailures.setValue(ignoreAbcFailures);
     optimizationOptions.disableWordToBits.setValue(disableWordToBits);
 
-    circt::synth::buildAIGOptimizationPipeline(pm, optimizationOptions);
+    circt::synth::buildSynthOptimizationPipeline(pm, optimizationOptions);
     if (untilReached(UntilMapping))
       return;
     if (lowerToKLUTs) {
@@ -251,18 +249,18 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
 
   // Run analysis if requested.
   if (!outputLongestPath.empty()) {
-    circt::aig::PrintLongestPathAnalysisOptions options;
+    circt::synth::PrintLongestPathAnalysisOptions options;
     options.outputFile = outputLongestPath;
     options.showTopKPercent = outputLongestPathTopKPercent;
     options.emitJSON = outputLongestPathJSON;
-    pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
+    pm.addPass(circt::synth::createPrintLongestPathAnalysis(options));
   }
 
   if (convertToComb)
     nestOrAddToHierarchicalRunner(
         pm,
         [&](OpPassManager &pm) {
-          pm.addPass(circt::createConvertAIGToComb());
+          pm.addPass(circt::createConvertSynthToComb());
           if (lowerToKLUTs)
             pm.addPass(circt::comb::createLowerComb());
           pm.addPass(createCSEPass());
@@ -334,7 +332,7 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
   if (!topName.empty()) {
     // Set a top module name for the longest path analysis.
     module.get()->setAttr(
-        circt::aig::LongestPathAnalysis::getTopModuleNameAttrName(),
+        circt::synth::LongestPathAnalysis::getTopModuleNameAttrName(),
         FlatSymbolRefAttr::get(&context, topName));
   }
 
@@ -364,7 +362,7 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
-  circt::aig::registerAIGAnalysisPrerequisitePasses();
+  circt::synth::registerSynthAnalysisPrerequisitePasses();
 
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
@@ -378,10 +376,10 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<aig::AIGDialect, comb::CombDialect, debug::DebugDialect,
-                  emit::EmitDialect, hw::HWDialect, ltl::LTLDialect,
-                  om::OMDialect, seq::SeqDialect, sim::SimDialect,
-                  synth::SynthDialect, sv::SVDialect, verif::VerifDialect>();
+  registry.insert<comb::CombDialect, debug::DebugDialect, emit::EmitDialect,
+                  hw::HWDialect, ltl::LTLDialect, om::OMDialect,
+                  seq::SeqDialect, sim::SimDialect, synth::SynthDialect,
+                  sv::SVDialect, verif::VerifDialect>();
   MLIRContext context(registry);
   if (allowUnregisteredDialects)
     context.allowUnregisteredDialects();
