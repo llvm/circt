@@ -154,6 +154,9 @@ set(ESIPythonRuntimeSources
   python/esiaccel/codegen.py
   python/esiaccel/types.py
   python/esiaccel/utils.py
+  python/esiaccel/cosim/questa.py
+  python/esiaccel/cosim/simulator.py
+  python/esiaccel/cosim/verilator.py
 )
 
 IF(MSVC)
