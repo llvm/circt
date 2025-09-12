@@ -243,3 +243,38 @@ func.func @DontCrashOnI0(%arg0: i1, %arg1: !hw.array<1xi42>) -> i42 {
   %1 = hw.array_get %arg1[%0] : !hw.array<1xi42>, i0
   return %1 : i42
 }
+
+// CHECK-LABEL: llvm.func @ExecuteEmpty
+func.func @ExecuteEmpty() {
+  // CHECK-NEXT: llvm.br [[BB:\^.+]]
+  // CHECK-NEXT: [[BB]]:
+  arc.execute {
+    // CHECK-NEXT: llvm.br [[BB:\^.+]]
+    arc.output
+  }
+  // CHECK-NEXT: [[BB]]:
+  // CHECK-NEXT: llvm.return
+  return
+}
+
+// CHECK-LABEL: llvm.func @ExecuteWithOperandsAndResults
+func.func @ExecuteWithOperandsAndResults(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage) {
+  // CHECK-NEXT: llvm.br [[BB:\^.+]](%arg0, %arg1, %arg2 : i42, !llvm.array<4 x i19>, !llvm.ptr)
+  // CHECK-NEXT: [[BB]]([[ARG0:%.+]]: i42, [[ARG1:%.+]]: !llvm.array<4 x i19>, [[ARG2:%.+]]: !llvm.ptr):
+  %4:3 = arc.execute (%arg0, %arg1, %arg2 : i42, !hw.array<4xi19>, !arc.storage) -> (i42, !hw.array<4xi19>, !arc.storage) {
+  ^bb0(%0: i42, %1: !hw.array<4xi19>, %2: !arc.storage):
+    // CHECK-NEXT: llvm.br [[BB:\^.+]]([[ARG2]] : !llvm.ptr)
+    cf.br ^bb1(%2 : !arc.storage)
+  ^bb1(%3: !arc.storage):
+    // CHECK-NEXT: [[BB]]([[ARG2:%.+]]: !llvm.ptr):
+    // CHECK-NEXT: llvm.br [[BB:\^.+]]([[ARG0]], [[ARG1]], [[ARG2]] : i42, !llvm.array<4 x i19>, !llvm.ptr)
+    arc.output %0, %1, %3 : i42, !hw.array<4xi19>, !arc.storage
+  }
+  // CHECK-NEXT: [[BB]]([[ARG0:%.+]]: i42, [[ARG1:%.+]]: !llvm.array<4 x i19>, [[ARG2:%.+]]: !llvm.ptr):
+  // CHECK-NEXT: llvm.call @Dummy([[ARG0:%.+]], [[ARG1:%.+]], [[ARG2:%.+]]) : (i42, !llvm.array<4 x i19>, !llvm.ptr) -> ()
+  call @Dummy(%4#0, %4#1, %4#2) : (i42, !hw.array<4xi19>, !arc.storage) -> ()
+  // CHECK-NEXT: llvm.return
+  return
+}
+
+func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage)
