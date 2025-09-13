@@ -590,3 +590,37 @@ hw.module @InvalidInitType(in %clock: !seq.clock, in %input: i7) {
   // expected-error @below {{failed to verify that types of initial arguments match result types}}
   %res = arc.state @Bar(%input) clock %clock initial (%cst: i8) latency 1 : (i7) -> i7
 }
+
+// -----
+
+// expected-error @below {{region with at least 1 blocks}}
+arc.execute {
+}
+
+// -----
+
+%0 = hw.constant 0 : i42
+// expected-error @below {{input type mismatch: input #0}}
+// expected-note @below {{expected type: 'i42'}}
+// expected-note @below {{actual type: 'i19'}}
+arc.execute (%0 : i42) {
+^bb0(%arg0: i19):
+  arc.output
+}
+
+// -----
+
+arc.execute -> (i42) {
+  // expected-error @below {{incorrect number of outputs: expected 1, but got 0}}
+  arc.output
+}
+
+// -----
+
+arc.execute -> (i42) {
+  %0 = hw.constant 0 : i19
+  // expected-error @below {{output type mismatch: output #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i19'}}
+  arc.output %0 : i19
+}
