@@ -23,9 +23,9 @@ hw.module @and(in %a: i2, in %b: i2, in %c: i2, in %d: i1, out and: i2) {
   // CHECK-DAG: %[[C_0:.+]] = comb.extract %c from 0 : (i2) -> i1
   // CHECK-DAG: %[[AND_INV_1:.+]] = synth.aig.and_inv %[[B_0]], %[[C_0]] : i1
   // CHECK-DAG: %[[A_1:.+]] = comb.extract %a from 1 : (i2) -> i1
-  // CHECK-DAG: %[[AND_INV_2:.+]] = synth.aig.and_inv %[[A_1]], %[[AND_INV_0]] : i1
+  // CHECK-DAG: %[[AND_INV_2:.+]] = synth.aig.and_inv %[[AND_INV_0]], %[[A_1]] : i1
   // CHECK-DAG: %[[A_0:.+]] = comb.extract %a from 0 : (i2) -> i1
-  // CHECK-DAG: %[[AND_INV_3:.+]] = synth.aig.and_inv %[[A_0]], %[[AND_INV_1]] : i1
+  // CHECK-DAG: %[[AND_INV_3:.+]] = synth.aig.and_inv %[[AND_INV_1]], %[[A_0]] : i1
   // CHECK-DAG: %[[CONCAT:.+]] = comb.concat %[[AND_INV_2]], %[[AND_INV_3]] : i1, i1
   // CHECK-NEXT: dbg.variable
   // CHECK-NEXT: hw.output %[[CONCAT]] : i2

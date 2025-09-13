@@ -12,6 +12,7 @@ add_circt_dialect_library(CIRCTSynthTransforms
   GenericLUTMapper.cpp
   LowerVariadic.cpp
   LowerWordToBits.cpp
+  StructuralHash.cpp
   SynthesisPipeline.cpp
   TechMapper.cpp
   TestPriorityCuts.cpp
