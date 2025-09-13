@@ -1340,10 +1340,87 @@ Value Context::materializeSVInt(const slang::SVInt &svint,
   return materializeConversion(type, result, astType.isSigned(), loc);
 }
 
+static unsigned
+getMaxElementBitWidth(const slang::ast::FixedSizeUnpackedArrayType &arrTy) {
+  unsigned maxWidth = 0;
+
+  // The element type of the unpacked array
+  const slang::ast::Type *elemType = arrTy.getArrayElementType();
+
+  // Case: direct integer element type
+  if (auto *intTy = elemType->as_if<slang::ast::IntegralType>()) {
+    maxWidth = intTy->getBitWidth();
+  }
+  // Case: element is a packed array of ints
+  else if (auto *packed = elemType->as_if<slang::ast::PackedArrayType>()) {
+    // Drill down until you reach the base integral type
+    const slang::ast::Type *base = &packed->elementType;
+    while (auto *nestedPacked = base->as_if<slang::ast::PackedArrayType>())
+      base = &nestedPacked->elementType;
+
+    if (auto *intTy = base->as_if<slang::ast::IntegralType>())
+      maxWidth = intTy->getBitWidth() * packed->getBitWidth();
+  } else {
+    // Not an integer element type
+    return 0;
+  }
+
+  return maxWidth;
+}
+
+Value Context::materializeFixedSizeUnpackedArrayType(
+    const slang::ConstantValue &constant,
+    const slang::ast::FixedSizeUnpackedArrayType &astType, Location loc) {
+
+  auto type = convertType(astType);
+  if (!type)
+    return {};
+
+  type.dump();
+  bool typeIsFourValued = false;
+  if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+    typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+
+  FVInt fvInt;
+  unsigned maxBitWidth = getMaxElementBitWidth(astType);
+  bool anyHasUnknown = false;
+
+  for (auto elem : constant.elements()) {
+    fvInt = convertSVIntToFVInt(elem.integer());
+    if (fvInt.hasUnknown()) {
+      anyHasUnknown = true;
+    }
+  }
+
+  auto intType = moore::IntType::get(getContext(), maxBitWidth,
+                                     anyHasUnknown || typeIsFourValued
+                                         ? moore::Domain::FourValued
+                                         : moore::Domain::TwoValued);
+  auto arrType =
+      moore::UnpackedArrayType::get(getContext(), maxBitWidth, intType);
+
+  llvm::SmallVector<mlir::Value> elemVals;
+  moore::ConstantOp constOp;
+
+  for (auto elem : constant.elements()) {
+    fvInt = convertSVIntToFVInt(elem.integer());
+    constOp = moore::ConstantOp::create(builder, loc, intType, fvInt);
+    elemVals.push_back(constOp.getResult());
+  }
+
+  auto ret = moore::ArrayCreateOp::create(builder, loc, arrType, elemVals);
+
+  return ret;
+}
+
 Value Context::materializeConstant(const slang::ConstantValue &constant,
                                    const slang::ast::Type &type, Location loc) {
+
+  if (auto *arr = type.as_if<slang::ast::FixedSizeUnpackedArrayType>())
+    return materializeFixedSizeUnpackedArrayType(constant, *arr, loc);
   if (constant.isInteger())
     return materializeSVInt(constant.integer(), type, loc);
+
   return {};
 }
 
