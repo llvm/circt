@@ -1340,34 +1340,6 @@ Value Context::materializeSVInt(const slang::SVInt &svint,
   return materializeConversion(type, result, astType.isSigned(), loc);
 }
 
-static unsigned
-getMaxElementBitWidth(const slang::ast::FixedSizeUnpackedArrayType &arrTy) {
-  unsigned maxWidth = 0;
-
-  // The element type of the unpacked array
-  const slang::ast::Type *elemType = arrTy.getArrayElementType();
-
-  // Case: direct integer element type
-  if (auto *intTy = elemType->as_if<slang::ast::IntegralType>()) {
-    maxWidth = intTy->getBitWidth();
-  }
-  // Case: element is a packed array of ints
-  else if (auto *packed = elemType->as_if<slang::ast::PackedArrayType>()) {
-    // Drill down until you reach the base integral type
-    const slang::ast::Type *base = &packed->elementType;
-    while (auto *nestedPacked = base->as_if<slang::ast::PackedArrayType>())
-      base = &nestedPacked->elementType;
-
-    if (auto *intTy = base->as_if<slang::ast::IntegralType>())
-      maxWidth = intTy->getBitWidth() * packed->getBitWidth();
-  } else {
-    // Not an integer element type
-    return 0;
-  }
-
-  return maxWidth;
-}
-
 Value Context::materializeFixedSizeUnpackedArrayType(
     const slang::ConstantValue &constant,
     const slang::ast::FixedSizeUnpackedArrayType &astType, Location loc) {
@@ -1376,41 +1348,49 @@ Value Context::materializeFixedSizeUnpackedArrayType(
   if (!type)
     return {};
 
-  type.dump();
+  // Check whether underlying type is an integer, if so, get bit width
+  unsigned bitWidth;
+  if (astType.elementType.isIntegral())
+    bitWidth = astType.elementType.getBitWidth();
+  else
+    return {};
+
   bool typeIsFourValued = false;
+
+  // Check whether the underlying type is four-valued
   if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
     typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+  else
+    return {};
 
-  FVInt fvInt;
-  unsigned maxBitWidth = getMaxElementBitWidth(astType);
-  bool anyHasUnknown = false;
+  auto domain =
+      typeIsFourValued ? moore::Domain::FourValued : moore::Domain::TwoValued;
 
-  for (auto elem : constant.elements()) {
-    fvInt = convertSVIntToFVInt(elem.integer());
-    if (fvInt.hasUnknown()) {
-      anyHasUnknown = true;
-    }
-  }
-
-  auto intType = moore::IntType::get(getContext(), maxBitWidth,
-                                     anyHasUnknown || typeIsFourValued
-                                         ? moore::Domain::FourValued
-                                         : moore::Domain::TwoValued);
+  // Construct the integer type this is an unpacked array of; if possible keep
+  // it two-valued, unless any entry is four-valued or the underlying type is
+  // four-valued
+  auto intType = moore::IntType::get(getContext(), bitWidth, domain);
+  // Construct the full array type from intType
   auto arrType = moore::UnpackedArrayType::get(
       getContext(), constant.elements().size(), intType);
 
   llvm::SmallVector<mlir::Value> elemVals;
   moore::ConstantOp constOp;
 
+  mlir::OpBuilder::InsertionGuard guard(builder);
+
+  // Add one ConstantOp for every element in the array
   for (auto elem : constant.elements()) {
-    fvInt = convertSVIntToFVInt(elem.integer());
+    FVInt fvInt = convertSVIntToFVInt(elem.integer());
     constOp = moore::ConstantOp::create(builder, loc, intType, fvInt);
     elemVals.push_back(constOp.getResult());
   }
 
-  auto ret = moore::ArrayCreateOp::create(builder, loc, arrType, elemVals);
+  // Take the result of each ConstantOp and concatenate them into an array (of
+  // constant values).
+  auto arrayOp = moore::ArrayCreateOp::create(builder, loc, arrType, elemVals);
 
-  return ret;
+  return arrayOp.getResult();
 }
 
 Value Context::materializeConstant(const slang::ConstantValue &constant,
