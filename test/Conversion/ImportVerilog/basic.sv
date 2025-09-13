@@ -3163,3 +3163,22 @@ module UnarySingleBitIncrement (
   end
 
 endmodule // UnarySingleBitIncrement
+
+// CHECK-LABEL: moore.module @UnpackedParameterArray(
+module UnpackedParameterArray #(
+    parameter int unsigned ParameterArray [2] = '{default: 0}
+) (
+    input  logic  clk_i,
+    input  logic  rst_ni
+);
+
+   function automatic int unsigned returnParameterArrayElement (int idx);
+      // CHECK: [[CONST0:%.+]] = moore.constant 0 : i32
+      // CHECK-NEXT: [[CONST1:%.+]] = moore.constant 0 : i32
+      // CHECK-NEXT: [[ARR:%.+]] = moore.array_create [[CONST0]], [[CONST1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+      // CHECK: [[RETURN:%.+]] = moore.dyn_extract [[ARR]] from {{%.+}} : uarray<2 x i32>, i32 -> i32
+      return ParameterArray[idx];
+   endfunction
+
+endmodule // UnpackedParameterArray
+

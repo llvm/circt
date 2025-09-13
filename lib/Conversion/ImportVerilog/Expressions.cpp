@@ -1396,8 +1396,8 @@ Value Context::materializeFixedSizeUnpackedArrayType(
                                      anyHasUnknown || typeIsFourValued
                                          ? moore::Domain::FourValued
                                          : moore::Domain::TwoValued);
-  auto arrType =
-      moore::UnpackedArrayType::get(getContext(), maxBitWidth, intType);
+  auto arrType = moore::UnpackedArrayType::get(
+      getContext(), constant.elements().size(), intType);
 
   llvm::SmallVector<mlir::Value> elemVals;
   moore::ConstantOp constOp;
