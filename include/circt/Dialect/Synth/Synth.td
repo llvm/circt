@@ -20,6 +20,8 @@ def Synth_Dialect : Dialect {
     including meta operations for synthesis decisions, logic representations
     like AIG and MIG, and synthesis pipeline infrastructure.
   }];
+
+  let hasConstantMaterializer = 1;
 }
 
 include "circt/Dialect/Synth/SynthOps.td"

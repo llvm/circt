@@ -49,12 +49,24 @@ def MajorityInverterOp : SynthOp<"mig.maj_inv",
                        DenseBoolArrayAttr:$inverted);
   let results = (outs AnyType:$result);
   let hasVerifier = true;
+  let hasCanonicalizeMethod = true;
+  let hasFolder = true;
 
   let assemblyFormat = [{
     custom<VariadicInvertibleOperands>($inputs, type($result), $inverted,
                                        attr-dict)
   }];
   let cppNamespace = "::circt::synth::mig";
+  let extraClassDeclaration = [{
+    // Evaluate the operation with the given input values.
+    APInt evaluate(ArrayRef<APInt> inputs);
+
+    // Check if the input is inverted.
+    bool isInverted(size_t idx) {
+      return getInverted()[idx];
+    }
+  }];
+
 }
 
 def AndInverterOp : SynthOp<"aig.and_inv", [SameOperandsAndResultType, Pure]> {
