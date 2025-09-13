@@ -53,6 +53,31 @@ public:
     add(std::move(pattern));
     return *this;
   }
+
+  /// Add a `matchAndRewrite` function as a conversion pattern to the set.
+  template <class Op>
+  ConversionPatternSet &add(LogicalResult (*implFn)(Op, typename Op::Adaptor,
+                                                    ConversionPatternRewriter &,
+                                                    const TypeConverter &)) {
+
+    struct FnPattern final : public OpConversionPattern<Op> {
+      using OpConversionPattern<Op>::OpConversionPattern;
+      LogicalResult (*implFn)(Op, typename Op::Adaptor,
+                              ConversionPatternRewriter &,
+                              const TypeConverter &);
+
+      LogicalResult
+      matchAndRewrite(Op op, typename Op::Adaptor adaptor,
+                      ConversionPatternRewriter &rewriter) const override {
+        return implFn(op, adaptor, rewriter, *this->typeConverter);
+      }
+    };
+
+    auto pattern = std::make_unique<FnPattern>(typeConverter, getContext());
+    pattern->implFn = implFn;
+    add(std::move(pattern));
+    return *this;
+  }
 };
 
 } // namespace circt
