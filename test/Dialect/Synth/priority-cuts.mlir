@@ -33,7 +33,7 @@ hw.module @trivial(in %a : i1, out result : i1) {
     // CHECK: a 1 cuts: {a}@t2d0
     // CHECK-NEXT: out0 2 cuts: {out0}@t2d0 {a}@t2d1
     // CHECK-NEXT: Cut enumeration completed successfully
-    %out0 = aig.and_inv %a, %a {sv.namehint = "out0"} : i1
+    %out0 = synth.aig.and_inv %a, %a {sv.namehint = "out0"} : i1
     hw.output %out0 : i1
 }
 
@@ -45,7 +45,7 @@ hw.module @extract(in %a : i2, out result : i1) {
     // CHECK-NEXT: Cut enumeration completed successfully
     %a0 = comb.extract %a from 0 {sv.namehint = "a0"}: (i2) -> i1
     %a1 = comb.extract %a from 1 {sv.namehint = "a1"}: (i2) -> i1
-    %out0 = aig.and_inv %a0, %a1 {sv.namehint = "out0"} : i1
+    %out0 = synth.aig.and_inv %a0, %a1 {sv.namehint = "out0"} : i1
     hw.output %out0 : i1
 }
 
@@ -84,13 +84,13 @@ hw.module @test(in %a : i4, in %b : i2, out result : i3) {
     %b0 = comb.extract %b from 0 {sv.namehint = "b0"}: (i2) -> i1
     %b1 = comb.extract %b from 1 {sv.namehint = "b1"} : (i2) -> i1
 
-    %and0 = aig.and_inv %a0, %a1 {sv.namehint = "and0"} : i1
-    %and1 = aig.and_inv %a2, not %b0 {sv.namehint = "and1"} : i1
-    %and2 = aig.and_inv %a3, %b1 {sv.namehint = "and2"} : i1
+    %and0 = synth.aig.and_inv %a0, %a1 {sv.namehint = "and0"} : i1
+    %and1 = synth.aig.and_inv %a2, not %b0 {sv.namehint = "and1"} : i1
+    %and2 = synth.aig.and_inv %a3, %b1 {sv.namehint = "and2"} : i1
 
-    %out0 = aig.and_inv %and0, %b0 {sv.namehint = "out0"} : i1
-    %out1 = aig.and_inv %and1, not %and0 {sv.namehint = "out1"} : i1
-    %out2 = aig.and_inv %and2, %b1 {sv.namehint = "out2"} : i1
+    %out0 = synth.aig.and_inv %and0, %b0 {sv.namehint = "out0"} : i1
+    %out1 = synth.aig.and_inv %and1, not %and0 {sv.namehint = "out1"} : i1
+    %out2 = synth.aig.and_inv %and2, %b1 {sv.namehint = "out2"} : i1
 
     // Concatenate results into multi-bit output
     %result_concat = comb.concat %out2, %out1, %out0 {sv.namehint = "result_concat"} : i1, i1, i1
@@ -111,7 +111,7 @@ hw.module @Issue8885(in %a : i2, in %b : i2) {
   %1 = comb.extract %b from 1 {sv.namehint = "b_1"} : (i2) -> i1
   %2 = comb.extract %a from 0 {sv.namehint = "a_0"} : (i2) -> i1
   %3 = comb.extract %a from 1 {sv.namehint = "a_1"} : (i2) -> i1
-  %4 = aig.and_inv not %0, not %2 {sv.namehint = "and0"} : i1
-  %5 = aig.and_inv %0, %2 {sv.namehint = "and1"} : i1
-  %6 = aig.and_inv not %4, not %5 {sv.namehint = "xor0"} : i1
+  %4 = synth.aig.and_inv not %0, not %2 {sv.namehint = "and0"} : i1
+  %5 = synth.aig.and_inv %0, %2 {sv.namehint = "and1"} : i1
+  %6 = synth.aig.and_inv not %4, not %5 {sv.namehint = "xor0"} : i1
 }

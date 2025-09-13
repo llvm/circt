@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ImportAIGER.h"
-#include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -38,7 +38,7 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::hw;
-using namespace circt::aig;
+using namespace circt::synth;
 using namespace circt::seq;
 using namespace circt::aiger;
 
@@ -768,7 +768,7 @@ Value AIGERParser::getLiteralValue(unsigned literal,
 
   // Apply inversion if needed
   if (inverted) {
-    // Create an inverter using aig.and_inv with single input
+    // Create an inverter using synth.aig.and_inv with single input
     SmallVector<bool> inverts = {true};
     return aig::AndInverterOp::create(builder, loc, builder.getI1Type(),
                                       ValueRange{baseValue}, inverts);
@@ -942,7 +942,7 @@ LogicalResult circt::aiger::importAIGER(llvm::SourceMgr &sourceMgr,
                                         const ImportAIGEROptions *options) {
   // Load required dialects
   context->loadDialect<hw::HWDialect>();
-  context->loadDialect<aig::AIGDialect>();
+  context->loadDialect<synth::SynthDialect>();
   context->loadDialect<seq::SeqDialect>();
 
   // Use default options if none provided

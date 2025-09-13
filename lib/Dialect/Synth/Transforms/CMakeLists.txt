@@ -7,8 +7,11 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect_library(CIRCTSynthTransforms
+  AIGERRunner.cpp
   CutRewriter.cpp
   GenericLUTMapper.cpp
+  LowerVariadic.cpp
+  LowerWordToBits.cpp
   SynthesisPipeline.cpp
   TechMapper.cpp
   TestPriorityCuts.cpp
@@ -26,10 +29,12 @@ add_circt_dialect_library(CIRCTSynthTransforms
   CIRCTHW
   CIRCTComb
   CIRCTSV
-  CIRCTAIGTransforms
-  CIRCTCombToAIG
+  CIRCTSynthAnalysis
+  CIRCTCombToSynth
   CIRCTCombToDatapath
   CIRCTDatapathToComb
+  CIRCTExportAIGER
+  CIRCTImportAIGER
   CIRCTHWTransforms
   CIRCTSupport
   CIRCTTransforms

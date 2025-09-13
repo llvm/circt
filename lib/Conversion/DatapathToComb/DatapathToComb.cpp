@@ -7,10 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/DatapathToComb.h"
-#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/Analysis/LongestPathAnalysis.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
@@ -66,7 +66,7 @@ struct DatapathCompressOpAddConversion : mlir::OpRewritePattern<CompressOp> {
 // Replace compressor by a wallace tree of full-adders
 struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
   DatapathCompressOpConversion(MLIRContext *context,
-                               aig::IncrementalLongestPathAnalysis *analysis)
+                               synth::IncrementalLongestPathAnalysis *analysis)
       : mlir::OpRewritePattern<CompressOp>(context), analysis(analysis) {}
 
   LogicalResult
@@ -98,7 +98,7 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
   }
 
 private:
-  aig::IncrementalLongestPathAnalysis *analysis = nullptr;
+  synth::IncrementalLongestPathAnalysis *analysis = nullptr;
 };
 
 struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
@@ -350,7 +350,7 @@ struct ConvertDatapathToCombPass
 
 static LogicalResult applyPatternsGreedilyWithTimingInfo(
     Operation *op, RewritePatternSet &&patterns,
-    aig::IncrementalLongestPathAnalysis *analysis) {
+    synth::IncrementalLongestPathAnalysis *analysis) {
   // TODO: Topologically sort the operations in the module to ensure that all
   // dependencies are processed before their users.
   mlir::GreedyRewriteConfig config;
@@ -372,9 +372,9 @@ void ConvertDatapathToCombPass::runOnOperation() {
 
   patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
                                                    forceBooth);
-  aig::IncrementalLongestPathAnalysis *analysis = nullptr;
+  synth::IncrementalLongestPathAnalysis *analysis = nullptr;
   if (timingAware)
-    analysis = &getAnalysis<aig::IncrementalLongestPathAnalysis>();
+    analysis = &getAnalysis<synth::IncrementalLongestPathAnalysis>();
   if (lowerCompressToAdd)
     // Lower compressors to simple add operations for downstream optimisations
     patterns.add<DatapathCompressOpAddConversion>(patterns.getContext());

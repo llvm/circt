@@ -20,7 +20,7 @@ hw.module @basic_io(in %a: i1, in %b: i1, out x: i1, out y: i1) {
 // CHECK-NEXT: 6
 // CHECK-NEXT: 6 2 4
 hw.module @and_gate(in %a: i1, in %b: i1, out result: i1) {
-  %0 = aig.and_inv %a, %b : i1
+  %0 = synth.aig.and_inv %a, %b : i1
   hw.output %0 : i1
 }
 
@@ -33,7 +33,7 @@ hw.module @and_gate(in %a: i1, in %b: i1, out result: i1) {
 // CHECK-NEXT: 6
 // CHECK-NEXT: 6 3 5
 hw.module @and_gate_inverted(in %a: i1, in %b: i1, out result: i1) {
-  %0 = aig.and_inv not %a, not %b : i1
+  %0 = synth.aig.and_inv not %a, not %b : i1
   hw.output %0 : i1
 }
 
@@ -44,7 +44,7 @@ hw.module @and_gate_inverted(in %a: i1, in %b: i1, out result: i1) {
 // CHECK-NEXT: 2
 // CHECK-NEXT: 3
 hw.module @inverter(in %a: i1, out result: i1) {
-  %0 = aig.and_inv not %a : i1
+  %0 = synth.aig.and_inv not %a : i1
   hw.output %0 : i1
 }
 
@@ -69,7 +69,7 @@ hw.module @constants(out false_out: i1, out true_out: i1) {
 // CHECK-NEXT: 4
 // CHECK-NEXT: 6 4 2
 hw.module @register(in %clk: !seq.clock, in %input: i1, out output: i1) {
-  %and_result = aig.and_inv %reg, %input : i1
+  %and_result = synth.aig.and_inv %reg, %input : i1
   %reg = seq.compreg %and_result, %clk : i1
   hw.output %reg : i1
 }
@@ -85,8 +85,8 @@ hw.module @register(in %clk: !seq.clock, in %input: i1, out output: i1) {
 // CHECK-NEXT: 8 2 4
 // CHECK-NEXT: 10 6 8
 hw.module @chain_ands(in %a: i1, in %b: i1, in %c: i1, out result: i1) {
-  %0 = aig.and_inv %a, %b : i1
-  %1 = aig.and_inv %c, %0 : i1
+  %0 = synth.aig.and_inv %a, %b : i1
+  %1 = synth.aig.and_inv %c, %0 : i1
   hw.output %1 : i1
 }
 
@@ -101,8 +101,8 @@ hw.module @chain_ands(in %a: i1, in %b: i1, in %c: i1, out result: i1) {
 // CHECK-NEXT: 6 2 4
 // CHECK-NEXT: 8 6 4
 hw.module @multiple_outputs(in %a: i1, in %b: i1, out out1: i1, out out2: i1) {
-  %0 = aig.and_inv %a, %b : i1
-  %1 = aig.and_inv %0, %b : i1
+  %0 = synth.aig.and_inv %a, %b : i1
+  %1 = synth.aig.and_inv %0, %b : i1
   hw.output %0, %1 : i1, i1
 }
 
@@ -131,7 +131,7 @@ hw.module @replicate_test(in %input: i3, out result1: i1, out result2: i1) {
 // CHECK-NEXT: 4 2 1
 hw.module @constant_propagation(in %input: i1, out always_input: i1, out always_true: i1) {
   %true = hw.constant true
-  %and_with_true = aig.and_inv %input, %true : i1
+  %and_with_true = synth.aig.and_inv %input, %true : i1
   hw.output %input, %true : i1, i1
 }
 
@@ -207,7 +207,7 @@ hw.module @complex_concat(in %a: i1, in %b: i2, out result: i4) {
 // CHECK-NEXT: 10 2 6
 // CHECK-NEXT: 12 4 8
 hw.module @multibit_and(in %a: i2, in %b: i2, out result: i2) {
-  %0 = aig.and_inv %a, %b : i2
+  %0 = synth.aig.and_inv %a, %b : i2
   hw.output %0 : i2
 }
 
@@ -224,7 +224,7 @@ hw.module @multibit_and(in %a: i2, in %b: i2, out result: i2) {
 // CHECK-NEXT: 10 2 6
 // CHECK-NEXT: 12 4 8
 hw.module @multibit_register(in %clk: !seq.clock, in %input: i2, out output: i2) {
-  %and_result = aig.and_inv %input, %reg : i2
+  %and_result = synth.aig.and_inv %input, %reg : i2
   %reg = seq.compreg %and_result, %clk : i2
   hw.output %reg : i2
 }

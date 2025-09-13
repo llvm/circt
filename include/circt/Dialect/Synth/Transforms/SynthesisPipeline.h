@@ -47,9 +47,9 @@ struct CombLoweringPipelineOptions
       llvm::cl::init(TargetIR::AIG)};
 };
 
-/// Options for the aig optimization pipeline.
-struct AIGOptimizationPipelineOptions
-    : public mlir::PassPipelineOptions<AIGOptimizationPipelineOptions> {
+/// Options for the synth optimization pipeline.
+struct SynthOptimizationPipelineOptions
+    : public mlir::PassPipelineOptions<SynthOptimizationPipelineOptions> {
   PassOptions::ListOption<std::string> abcCommands{
       *this, "abc-commands", llvm::cl::desc("ABC passes to run")};
 
@@ -73,8 +73,8 @@ struct AIGOptimizationPipelineOptions
 /// Populate the synthesis pipelines.
 void buildCombLoweringPipeline(mlir::OpPassManager &pm,
                                const CombLoweringPipelineOptions &options);
-void buildAIGOptimizationPipeline(
-    mlir::OpPassManager &pm, const AIGOptimizationPipelineOptions &options);
+void buildSynthOptimizationPipeline(
+    mlir::OpPassManager &pm, const SynthOptimizationPipelineOptions &options);
 
 /// Register the synthesis pipelines.
 void registerSynthesisPipeline();

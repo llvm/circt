@@ -58,7 +58,7 @@ tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
 tools = [
-    'arcilator', 'circt-as', 'circt-bmc', 'circt-capi-aig-test',
+    'arcilator', 'circt-as', 'circt-bmc', 'circt-capi-synth-test',
     'circt-capi-ir-test', 'circt-capi-om-test', 'circt-capi-firrtl-test',
     'circt-capi-firtool-test', 'circt-capi-rtg-test', 'circt-capi-rtgtest-test',
     'circt-capi-support-test', 'circt-dis', 'circt-lec', 'circt-reduce',
