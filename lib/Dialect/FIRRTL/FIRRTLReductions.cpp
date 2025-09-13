@@ -972,45 +972,49 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto *moduleOp =
         instOp.getReferencedOperation(symbols.getSymbolTable(tableOp));
-    if (!isa<firrtl::FModuleOp>(moduleOp))
-      return 0;
-    return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
+
+    return isa<firrtl::FModuleOp>(moduleOp);
   }
 
   LogicalResult rewrite(firrtl::InstanceOp instOp) override {
-    LLVM_DEBUG(llvm::dbgs()
-               << "Inlining instance `" << instOp.getName() << "`\n");
-    SmallVector<Value> argReplacements;
-    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
-      auto result = instOp.getResult(i);
-      auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
-                                        instOp.getPortNameStr(i));
-      auto wire =
-          firrtl::WireOp::create(builder, result.getType(), name,
-                                 firrtl::NameKindEnum::DroppableName,
-                                 instOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
-      result.replaceAllUsesWith(wire);
-      argReplacements.push_back(wire);
-    }
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
         instOp.getReferencedOperation(symbols.getSymbolTable(tableOp)));
-    for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
-      op.remove();
-      builder.insert(&op);
-      for (auto &operand : op.getOpOperands())
-        if (auto blockArg = dyn_cast<BlockArgument>(operand.get()))
-          operand.set(argReplacements[blockArg.getArgNumber()]);
+    bool isLastUse =
+        (symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1);
+    auto clonedModuleOp = isLastUse ? moduleOp : moduleOp.clone();
+
+    // Create wires to replace the instance results.
+    IRRewriter rewriter(instOp);
+    SmallVector<Value> argWires;
+    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
+      auto result = instOp.getResult(i);
+      auto name = rewriter.getStringAttr(Twine(instOp.getName()) + "_" +
+                                         instOp.getPortNameStr(i));
+      auto wire =
+          firrtl::WireOp::create(rewriter, instOp.getLoc(), result.getType(),
+                                 name, firrtl::NameKindEnum::DroppableName,
+                                 instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
+      result.replaceAllUsesWith(wire);
+      argWires.push_back(wire);
     }
+
+    // Splice in the cloned module body.
+    rewriter.inlineBlockBefore(clonedModuleOp.getBodyBlock(), instOp, argWires);
+
+    // Make sure we remove any NLAs that go through this instance, and the
+    // module if we're about the delete the module.
     nlaRemover.markNLAsInOperation(instOp);
-    instOp->erase();
-    moduleOp->erase();
+    if (isLastUse)
+      nlaRemover.markNLAsInOperation(moduleOp);
+
+    instOp.erase();
+    clonedModuleOp.erase();
     return success();
   }
 
-  std::string getName() const override { return "eager-inliner"; }
+  std::string getName() const override { return "firrtl-eager-inliner"; }
   bool acceptSizeIncrease() const override { return true; }
 
   ::detail::SymbolCache symbols;

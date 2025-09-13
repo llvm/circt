@@ -481,10 +481,16 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Write the reduced test case to the output.
   clearSummary();
-  VERBOSE(llvm::errs() << "All reduction strategies exhausted\n");
-  VERBOSE(llvm::errs() << "Final size: " << bestSize << " ("
-                       << (100 - bestSize * 100 / initialTest.getSize())
-                       << "% reduction)\n");
+  VERBOSE({
+    llvm::errs() << "All reduction strategies exhausted\n";
+    llvm::errs() << "Final size: " << bestSize << " (";
+    if (bestSize > initialTest.getSize())
+      llvm::errs() << (bestSize * 100 / initialTest.getSize() - 100)
+                   << "% increase)\n";
+    else
+      llvm::errs() << (100 - bestSize * 100 / initialTest.getSize())
+                   << "% reduction)\n";
+  });
   return writeOutput(module.get());
 }
 
