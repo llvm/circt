@@ -161,10 +161,11 @@ struct Context {
   Value materializeSVInt(const slang::SVInt &svint,
                          const slang::ast::Type &type, Location loc);
 
-  /// Helper function to materialize an unpacked array of `SVInt`s as an SSA value.
-  Value materializeFixedSizeUnpackedArrayType(const slang::ConstantValue &constant,
-                                 const slang::ast::FixedSizeUnpackedArrayType &astType,
-                                 Location loc);
+  /// Helper function to materialize an unpacked array of `SVInt`s as an SSA
+  /// value.
+  Value materializeFixedSizeUnpackedArrayType(
+      const slang::ConstantValue &constant,
+      const slang::ast::FixedSizeUnpackedArrayType &astType, Location loc);
 
   /// Helper function to materialize a `ConstantValue` as an SSA value. Returns
   /// null if the constant cannot be materialized.
