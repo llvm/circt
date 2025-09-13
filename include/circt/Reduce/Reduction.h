@@ -104,19 +104,38 @@ struct Reduction {
   }
 };
 
+/// A reduction pattern for a specific operation.
+///
+/// Only matches on operations of type `OpTy`, and calls corresponding match and
+/// rewrite functions with the operation cast to this type, for convenience.
 template <typename OpTy>
 struct OpReduction : public Reduction {
-  uint64_t match(Operation *op) override {
+  void matches(Operation *op,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     if (auto concreteOp = dyn_cast<OpTy>(op))
-      return match(concreteOp);
-    return 0;
+      matches(concreteOp, addMatch);
   }
-  LogicalResult rewrite(Operation *op) override {
-    return rewrite(cast<OpTy>(op));
+  LogicalResult rewriteMatches(Operation *op,
+                               ArrayRef<uint64_t> matches) override {
+    return rewriteMatches(cast<OpTy>(op), matches);
   }
 
   virtual uint64_t match(OpTy op) { return 1; }
-  virtual LogicalResult rewrite(OpTy op) = 0;
+  virtual void matches(OpTy op,
+                       llvm::function_ref<void(uint64_t, uint64_t)> addMatch) {
+    addMatch(match(op), 0);
+  }
+  virtual LogicalResult rewrite(OpTy op) { return failure(); }
+  virtual LogicalResult rewriteMatches(OpTy op, ArrayRef<uint64_t> matches) {
+    assert(matches.size() == 1 && matches[0] == 0);
+    return rewrite(op);
+  }
+
+private:
+  /// Hide the base class match/rewrite functions to prevent compiler warnings
+  /// about the `OpTy`-specific ones hiding the base class functions.
+  using Reduction::match;
+  using Reduction::rewrite;
 };
 
 /// A reduction pattern that applies an `mlir::Pass`.
