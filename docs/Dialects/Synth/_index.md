@@ -1,3 +1,3 @@
-# 'aig' Dialect
+# 'synth' Dialect
 
-[include "Dialects/AIG.md"]
+[include "Dialects/Synth.md"]
