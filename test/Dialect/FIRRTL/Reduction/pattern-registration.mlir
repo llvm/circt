@@ -16,7 +16,7 @@
 // CHECK-DAG: connect-source-operand-2-forwarder
 // CHECK-DAG: cse
 // CHECK-DAG: detach-subaccesses
-// CHECK-DAG: eager-inliner
+// CHECK-DAG: firrtl-eager-inliner
 // CHECK-DAG: extmodule-instance-remover
 // CHECK-DAG: firrtl-constantifier
 // CHECK-DAG: firrtl-expand-whens
