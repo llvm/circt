@@ -163,10 +163,19 @@ OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if(inputs.size()==2 && inputs[1])
    {
 	  auto value = cast<IntegerAttr>(inputs[1]).getValue();
-	  if(value.isZero()&& !(isInverted(1)))
+	  if(value.isZero())
+	   {
+		  if(isInverted(1)) return getOperand(0);
 		  return getIntAttr(value,getContext());
+	   }
 	  if(value.isAllOnes())
+	   {	
+
+		  if(isInverted(1)) 
+			  value = 0;
+			  return getIntAttr(value,getContext());
 		  return getOperand(0);
+	   }
    }
   return {};
 }
