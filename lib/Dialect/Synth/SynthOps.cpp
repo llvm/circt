@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
@@ -150,9 +151,24 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
 // AIG Operations
 //===----------------------------------------------------------------------===//
 
+static TypedAttr getIntAttr(const APInt &value, MLIRContext *context) {
+  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
+                          value);
+}
+
 OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() == 1 && !isInverted(0))
     return getOperand(0);
+
+  auto inputs  = adaptor.getInputs();
+  if(inputs.size()==2 && inputs[1])
+   {
+	  auto value = cast<IntegerAttr>(inputs[1]).getValue();
+	  if(value.isZero())
+		  return getIntAttr(value,getContext());
+	  if(value.isOne())
+		  return getOperand(0);
+   }
   return {};
 }
 
