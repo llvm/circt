@@ -88,33 +88,6 @@ def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
    ];
 }
 
-def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
-  let summary = "Extract simulation only constructs to modules and bind";
-  let description = [{
-    This pass extracts cover, assume, assert operations to a module, along with
-    any ops feeding them only, to modules which are instantiated with a bind
-    statement.
-  }];
-
-  let constructor = "circt::sv::createSVExtractTestCodePass()";
-  let dependentDialects = [
-    "circt::sv::SVDialect",
-    "circt::verif::VerifDialect"
-  ];
-  let options = [
-    Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
-           "false", "Disable extracting instances only that feed test code">,
-    Option<"disableRegisterExtraction", "disable-register-extraction", "bool",
-           "false", "Disable extracting registers only that feed test code">,
-    Option<"disableModuleInlining", "disable-module-inlining", "bool",
-           "false", "Disable inlining modules that only feed test code">
-  ];
-  let statistics = [
-    Statistic<"numOpsExtracted", "num-ops-extracted", "Number of ops extracted">,
-    Statistic<"numOpsErased", "num-ops-erased", "Number of ops erased">
-  ];
-}
-
 def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
   let summary = "Add tracing to an iverilog simulated module";
   let description = [{
