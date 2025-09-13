@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Synth/SynthOps.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
@@ -164,9 +163,9 @@ OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if(inputs.size()==2 && inputs[1])
    {
 	  auto value = cast<IntegerAttr>(inputs[1]).getValue();
-	  if(value.isZero())
+	  if(value.isZero()&& !(isInverted(1)))
 		  return getIntAttr(value,getContext());
-	  if(value.isOne())
+	  if(value.isAllOnes())
 		  return getOperand(0);
    }
   return {};
