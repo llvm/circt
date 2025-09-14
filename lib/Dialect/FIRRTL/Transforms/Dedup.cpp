@@ -1250,6 +1250,14 @@ private:
           newAnnotations.push_back(anno);
         continue;
       }
+      if (anno.isClass(blackBoxInlineAnnoClass) ||
+          anno.isClass(blackBoxPathAnnoClass)) {
+        // Remove the nonlocal field of the annotation if it has one, since this
+        // is a sticky annotation.
+        anno.removeMember("circt.nonlocal");
+        newAnnotations.push_back(anno);
+        continue;
+      }
       // If the annotation is already non-local, we add it as is.  It is already
       // added to the target map.
       if (auto nla = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {

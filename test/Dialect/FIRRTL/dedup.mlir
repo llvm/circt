@@ -841,3 +841,91 @@ firrtl.circuit "NoDedupPublic" {
   firrtl.module @DUTLike() {}
   firrtl.module @NotDUT() {}
 }
+
+// CHECK-LABEL: "BlackBoxDedup"
+// External modules with BlackBox annotations should dedup without creating unnecessary NLAs.
+firrtl.circuit "BlackBoxDedup" {
+  // CHECK: firrtl.extmodule private @ExtMod0() attributes {annotations = [
+  // CHECK-SAME: {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ExtMod.sv", text = "module ExtMod(); endmodule"}
+  // CHECK-SAME: ], defname = "ExtMod"}
+  firrtl.extmodule private @ExtMod0() attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ExtMod.sv", text = "module ExtMod(); endmodule"}
+    ],
+    defname = "ExtMod"
+  }
+  // CHECK-NOT: firrtl.extmodule private @ExtMod1
+  firrtl.extmodule private @ExtMod1() attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxInlineAnno", name = "ExtMod.sv", text = "module ExtMod(); endmodule"}
+    ],
+    defname = "ExtMod"
+  }
+  firrtl.module @BlackBoxDedup() {
+    // CHECK: firrtl.instance ext0 @ExtMod0()
+    firrtl.instance ext0 @ExtMod0()
+    // CHECK: firrtl.instance ext1 @ExtMod0()
+    firrtl.instance ext1 @ExtMod1()
+  }
+}
+
+// CHECK-LABEL: "BlackBoxPathDedup"
+// External modules with BlackBoxPathAnno should also dedup without creating unnecessary NLAs.
+firrtl.circuit "BlackBoxPathDedup" {
+  // CHECK: firrtl.extmodule private @PathMod0() attributes {annotations = [
+  // CHECK-SAME: {class = "firrtl.transforms.BlackBoxPathAnno", path = "PathMod.sv"}
+  // CHECK-SAME: ], defname = "PathMod"}
+  firrtl.extmodule private @PathMod0() attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxPathAnno", path = "PathMod.sv"}
+    ],
+    defname = "PathMod"
+  }
+  // CHECK-NOT: firrtl.extmodule private @PathMod1
+  firrtl.extmodule private @PathMod1() attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxPathAnno", path = "PathMod.sv"}
+    ],
+    defname = "PathMod"
+  }
+  firrtl.module @BlackBoxPathDedup() {
+    // CHECK: firrtl.instance path0 @PathMod0()
+    firrtl.instance path0 @PathMod0()
+    // CHECK: firrtl.instance path1 @PathMod0()
+    firrtl.instance path1 @PathMod1()
+  }
+}
+
+// CHECK-LABEL: "BlackBoxMixedAnnotations"
+// BlackBox annotations mixed with other annotations should be handled correctly.
+firrtl.circuit "BlackBoxMixedAnnotations" {
+  // CHECK: hw.hierpath private @nla_0 [@BlackBoxMixedAnnotations::@sym_0, @Mixed0]
+  // CHECK: hw.hierpath private @nla [@BlackBoxMixedAnnotations::@sym, @Mixed0]
+  // CHECK: firrtl.extmodule private @Mixed0() attributes {annotations = [
+  // CHECK-SAME: {class = "firrtl.transforms.BlackBoxInlineAnno", name = "Mixed.sv", text = "module Mixed(); endmodule"},
+  // CHECK-SAME: {circt.nonlocal = @nla, class = "SomeOtherAnno"},
+  // CHECK-SAME: {class = "firrtl.transforms.BlackBoxInlineAnno", name = "Mixed.sv", text = "module Mixed(); endmodule"},
+  // CHECK-SAME: {circt.nonlocal = @nla_0, class = "SomeOtherAnno"}
+  // CHECK-SAME: ], defname = "Mixed"}
+  firrtl.extmodule private @Mixed0() attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxInlineAnno", name = "Mixed.sv", text = "module Mixed(); endmodule"},
+      {class = "SomeOtherAnno"}
+    ],
+    defname = "Mixed"
+  }
+  // CHECK-NOT: firrtl.extmodule private @Mixed1
+  firrtl.extmodule private @Mixed1() attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxInlineAnno", name = "Mixed.sv", text = "module Mixed(); endmodule"},
+      {class = "SomeOtherAnno"}
+    ],
+    defname = "Mixed"
+  }
+  firrtl.module @BlackBoxMixedAnnotations() {
+    // CHECK: firrtl.instance mixed0 sym @sym @Mixed0()
+    firrtl.instance mixed0 @Mixed0()
+    // CHECK: firrtl.instance mixed1 sym @sym_0 @Mixed0()
+    firrtl.instance mixed1 @Mixed1()
+  }
+}
