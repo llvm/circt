@@ -315,6 +315,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
         opt.shouldEtcDisableRegisterExtraction(),
         opt.shouldEtcDisableModuleInlining()));
 
+  if (opt.shouldInlineInputOnlyModules())
+    pm.addPass(hw::createInlineInputOnlyModules());
+
   pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
   pm.addPass(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
@@ -672,6 +675,11 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable inlining modules that only feed test code"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> inlineInputOnlyModules{
+      "inline-input-only-modules",
+      llvm::cl::desc("Inline input-only modules"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround{
       "add-vivado-ram-address-conflict-synthesis-bug-workaround",
       llvm::cl::desc(
@@ -791,6 +799,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
       etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
+      inlineInputOnlyModules(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
@@ -834,6 +843,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   etcDisableInstanceExtraction = clOptions->etcDisableInstanceExtraction;
   etcDisableRegisterExtraction = clOptions->etcDisableRegisterExtraction;
   etcDisableModuleInlining = clOptions->etcDisableModuleInlining;
+  inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
   addVivadoRAMAddressConflictSynthesisBugWorkaround =
       clOptions->addVivadoRAMAddressConflictSynthesisBugWorkaround;
   ckgModuleName = clOptions->ckgModuleName;
