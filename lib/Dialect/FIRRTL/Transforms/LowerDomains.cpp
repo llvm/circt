@@ -79,84 +79,61 @@ private:
   const DenseMap<Attribute, ClassOp> &classes;
 };
 
-struct Associations {
-  ObjectOp object;
-  SmallVector<DistinctAttr> associations = SmallVector<DistinctAttr>();
-};
-
 LogicalResult LowerModule::lowerModule() {
+  auto *context = op.getContext();
   auto *body =
-      llvm::TypeSwitch<FModuleLike, Block *>(op)
+      llvm::TypeSwitch<Operation *, Block *>(op)
           .Case<FModuleOp>([](FModuleOp op) { return op.getBodyBlock(); })
           .Default([](auto op) { return nullptr; });
-  if (!body) {
-    op.emitOpError() << "is unsupported in LowerDomains";
-    return failure();
-  }
-  auto builder = OpBuilder::atBlockBegin(body);
-  DenseMap<int, Associations> objects;
+
+  // First iteration over the ports.
+  DenseMap<int, SmallVector<DistinctAttr>> associations;
   SmallVector<Attribute> newPortAnnotations;
   for (auto [index, port] : llvm::enumerate(op.getPorts())) {
     // Mark domain type ports for removal.
     auto domain = dyn_cast<FlatSymbolRefAttr>(port.domains);
     if (domain) {
-      objects[index] = {ObjectOp::create(
-          builder, port.loc, classes.lookup(domain.getAttr()), port.name)};
       eraseVector.set(index);
+      continue;
+    }
+
+    // If this port has domain associations and a body block, then add port
+    // annotation trackers.  These will be hooked up to the Object's
+    // associations later.
+    ArrayAttr domainAttr = cast<ArrayAttr>(port.domains);
+    if (!body || !domainAttr || domainAttr.empty()) {
       newPortAnnotations.push_back(port.annotations.getArrayAttr());
       continue;
     }
 
-    // If this port has domain associations, then add port annotation trackers.
-    // These will be hooked up to the Object's associations later.
-    ArrayAttr domainAttr = cast<ArrayAttr>(port.domains);
-    if (!domainAttr || domainAttr.empty())
-      continue;
-
     SmallVector<Annotation> newAnnotations;
     for (auto attr : domainAttr) {
-      auto index = cast<IntegerAttr>(attr).getUInt();
-      auto id = DistinctAttr::create(UnitAttr::get(op.getContext()));
+      auto domainIndex = cast<IntegerAttr>(attr).getUInt();
+      auto id = DistinctAttr::create(UnitAttr::get(context));
       newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
-          op.getContext(),
-          {{"class", builder.getStringAttr("circt.tracker")}, {"id", id}})));
-      objects[index].associations.push_back(id);
+          context,
+          {{"class", StringAttr::get(context, "circt.tracker")}, {"id", id}})));
+      associations[domainIndex].push_back(id);
     }
     if (!newAnnotations.empty())
       port.annotations.addAnnotations(newAnnotations);
     newPortAnnotations.push_back(port.annotations.getArrayAttr());
   }
-  op.setPortAnnotationsAttr(builder.getArrayAttr(newPortAnnotations));
 
-  // Hook up all assocaitions to the created objects.
-  for (size_t i = 0, e = op.getNumPorts(); i != e; ++i) {
-    auto itr = objects.find(i);
-    if (itr == objects.end())
-      continue;
-    auto assoc = itr->second;
-    builder.setInsertionPointAfter(assoc.object);
-    auto sub = ObjectSubfieldOp::create(builder, builder.getUnknownLoc(),
-                                        assoc.object, 0);
-    SmallVector<Value> paths;
-    for (auto id : assoc.associations) {
-      paths.push_back(PathOp::create(
-          builder, builder.getUnknownLoc(),
-          TargetKindAttr::get(op.getContext(), TargetKind::MemberReference),
-          id));
-    }
-    auto list = ListCreateOp::create(
-        builder, builder.getUnknownLoc(),
-        ListType::get(op.getContext(),
-                      cast<PropertyType>(PathType::get(op.getContext()))),
-        paths);
-    PropAssignOp::create(builder, builder.getUnknownLoc(), sub, list);
-  }
+  if (body) {
+    auto builder = OpBuilder::atBlockBegin(body);
+    DenseMap<int, ObjectOp> objects;
 
-  // Erase domain port users, domain ports, and clear the DomainInfo attr.
-  if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
+    // Create objects for each domain port and erase domain port users.
     for (auto idx = eraseVector.find_first(); idx >= 0;
          idx = eraseVector.find_next(idx)) {
-      auto arg = moduleOp.getArgument(idx);
+      auto port = cast<PortInfo>(op.getPorts()[idx]);
+      auto name = cast<FlatSymbolRefAttr>(port.domains);
+      objects[idx] = ObjectOp::create(
+          builder, port.loc, classes.lookup(name.getAttr()), port.name);
+
+      // Erase domain port users.
+      auto arg = body->getArgument(idx);
       for (auto *user : llvm::make_early_inc_range(arg.getUsers())) {
         if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
           castOp.getResult().replaceAllUsesWith(castOp.getInput());
@@ -167,9 +144,34 @@ LogicalResult LowerModule::lowerModule() {
         return failure();
       }
     }
+
+    // Hook up all assocaitions to the created objects.
+    for (size_t i = 0, e = op.getNumPorts(); i != e; ++i) {
+      auto itr = objects.find(i);
+      if (itr == objects.end())
+        continue;
+      auto object = itr->getSecond();
+      builder.setInsertionPointAfter(object);
+      auto sub =
+          ObjectSubfieldOp::create(builder, builder.getUnknownLoc(), object, 0);
+      SmallVector<Value> paths;
+      for (auto id : associations[i]) {
+        paths.push_back(PathOp::create(
+            builder, builder.getUnknownLoc(),
+            TargetKindAttr::get(context, TargetKind::MemberReference), id));
+      }
+      auto list = ListCreateOp::create(
+          builder, builder.getUnknownLoc(),
+          ListType::get(context, cast<PropertyType>(PathType::get(context))),
+          paths);
+      PropAssignOp::create(builder, builder.getUnknownLoc(), sub, list);
+    }
   }
+
+  // Erease domain ports, clear the DomainInfo attr, and setup new annotations.
   op.erasePorts(eraseVector);
-  op.setDomainInfoAttr(ArrayAttr::get(op.getContext(), {}));
+  op.setDomainInfoAttr(ArrayAttr::get(context, {}));
+  op.setPortAnnotationsAttr(ArrayAttr::get(context, newPortAnnotations));
 
   return success();
 }
