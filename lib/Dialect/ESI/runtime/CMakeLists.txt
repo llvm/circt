@@ -59,8 +59,9 @@ endif()
 # conflicts with local zlib versions, and since we don't export anything zlib
 # related in our public headers.
 message("-- pulling down zlib from git")
-set(ZLIB_USE_STATIC_LIBS ON)
-set(ZLIB_BUILD_EXAMPLES OFF)
+set(ZLIB_BUILD_SHARED OFF)
+set(ZLIB_BUILD_STATIC ON)
+set(ZLIB_BUILD_TESTING OFF)
 FetchContent_Declare(
   ZLIB
   GIT_REPOSITORY https://github.com/madler/zlib.git
