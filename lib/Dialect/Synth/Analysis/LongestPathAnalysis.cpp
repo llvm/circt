@@ -662,6 +662,8 @@ private:
   // Bit-logical ops.
   LogicalResult visit(aig::AndInverterOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
+  LogicalResult visit(mig::MajorityInverterOp op, size_t bitPos,
+                      SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(comb::AndOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(comb::XorOp op, size_t bitPos,
@@ -858,6 +860,18 @@ LogicalResult LocalVisitor::visit(aig::AndInverterOp op, size_t bitPos,
                                   SmallVectorImpl<OpenPath> &results) {
 
   return addLogicOp(op, bitPos, results);
+}
+
+LogicalResult LocalVisitor::visit(mig::MajorityInverterOp op, size_t bitPos,
+                                  SmallVectorImpl<OpenPath> &results) {
+  // Use a 3-input majority inverter as the basic unit.
+  // An n-input majority inverter requires n/2 stages of 3-input gates.
+  size_t depth = op.getInputs().size() / 2;
+  for (auto input : op.getInputs()) {
+    if (failed(addEdge(input, bitPos, depth, results)))
+      return failure();
+  }
+  return success();
 }
 
 LogicalResult LocalVisitor::visit(comb::AndOp op, size_t bitPos,
@@ -1133,26 +1147,27 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
   auto result =
       TypeSwitch<Operation *, LogicalResult>(op)
           .Case<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
-                aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::MuxOp,
-                comb::XorOp, comb::TruthTableOp, seq::FirRegOp, seq::CompRegOp,
-                hw::ConstantOp, seq::FirMemReadOp, seq::FirMemReadWriteOp,
-                hw::WireOp>([&](auto op) {
-            size_t idx = results.size();
-            auto result = visit(op, bitPos, results);
-            if (ctx->doTraceDebugPoints())
-              if (auto name =
-                      op->template getAttrOfType<StringAttr>("sv.namehint")) {
+                aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
+                comb::OrOp, comb::MuxOp, comb::XorOp, comb::TruthTableOp,
+                seq::FirRegOp, seq::CompRegOp, hw::ConstantOp,
+                seq::FirMemReadOp, seq::FirMemReadWriteOp, hw::WireOp>(
+              [&](auto op) {
+                size_t idx = results.size();
+                auto result = visit(op, bitPos, results);
+                if (ctx->doTraceDebugPoints())
+                  if (auto name = op->template getAttrOfType<StringAttr>(
+                          "sv.namehint")) {
 
-                for (auto i = idx, e = results.size(); i < e; ++i) {
-                  DebugPoint debugPoint({}, value, bitPos, results[i].delay,
-                                        "namehint");
-                  auto newHistory =
-                      debugPointFactory->add(debugPoint, results[i].history);
-                  results[i].history = newHistory;
-                }
-              }
-            return result;
-          })
+                    for (auto i = idx, e = results.size(); i < e; ++i) {
+                      DebugPoint debugPoint({}, value, bitPos, results[i].delay,
+                                            "namehint");
+                      auto newHistory = debugPointFactory->add(
+                          debugPoint, results[i].history);
+                      results[i].history = newHistory;
+                    }
+                  }
+                return result;
+              })
           .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
             return visit(op, bitPos, cast<OpResult>(value).getResultNumber(),
                          results);
