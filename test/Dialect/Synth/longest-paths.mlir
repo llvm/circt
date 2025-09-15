@@ -123,3 +123,11 @@ hw.module private @comb_others(in %a : i2, in %b : i2, out x : i1) {
   %0 = comb.icmp eq %a, %b : i2
   hw.output %0 : i1
 }
+
+// expected-remark-re @below {{fanOut=Object($root.x[0]), fanIn=Object($root.a[0], delay=1, history=[{{.+}}])}}
+// expected-remark-re @below {{fanOut=Object($root.y[0]), fanIn=Object($root.a[0], delay=2, history=[{{.+}}])}}
+hw.module private @mig(in %a : i1, out x : i1, out y : i1) {
+  %p = synth.mig.maj_inv %a, %a, %a : i1
+  %q = synth.mig.maj_inv %a, %a, %a, %a, %a : i1
+  hw.output %p, %q : i1, i1
+}
