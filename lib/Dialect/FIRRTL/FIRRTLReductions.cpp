@@ -634,24 +634,16 @@ struct AnnotationRemover : public Reduction {
     uint64_t matchId = 0;
 
     // Generate matches for regular annotations
-    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations")) {
-      for (auto anno : annos) {
-        (void)anno;
+    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
+      for (auto _ : annos)
         addMatch(1, matchId++);
-      }
-    }
 
     // Generate matches for port annotations
-    if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations")) {
-      for (auto portAnnoArray : portAnnos) {
-        if (auto portAnnoArrayAttr = dyn_cast<ArrayAttr>(portAnnoArray)) {
-          for (auto anno : portAnnoArrayAttr) {
-            (void)anno;
+    if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations"))
+      for (auto portAnnoArray : portAnnos)
+        if (auto portAnnoArrayAttr = dyn_cast<ArrayAttr>(portAnnoArray))
+          for (auto _ : portAnnoArrayAttr)
             addMatch(1, matchId++);
-          }
-        }
-      }
-    }
   }
 
   LogicalResult rewriteMatches(Operation *op,
@@ -1200,10 +1192,11 @@ struct ModuleSwapper : public OpReduction<InstanceOp> {
     circuitStates.clear();
 
     // Collect module type groups and NLA tables for all circuits up front
-    op.walk([&](CircuitOp circuitOp) {
+    op.walk<WalkOrder::PreOrder>([&](CircuitOp circuitOp) {
       auto &state = circuitStates[circuitOp];
       state.nlaTable = std::make_unique<NLATable>(circuitOp);
       buildModuleTypeGroups(circuitOp, state);
+      return WalkResult::skip();
     });
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
@@ -1214,9 +1207,9 @@ struct ModuleSwapper : public OpReduction<InstanceOp> {
   /// swapping.
   PortSignature getModulePortSignature(FModuleLike module) {
     PortSignature signature;
-    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
+    signature.reserve(module.getNumPorts());
+    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
       signature.emplace_back(module.getPortType(i), module.getPortDirection(i));
-    }
     return signature;
   }
 
@@ -1234,7 +1227,7 @@ struct ModuleSwapper : public OpReduction<InstanceOp> {
         continue;
 
       FModuleLike smallestModule = nullptr;
-      uint64_t smallestSize = UINT64_MAX;
+      uint64_t smallestSize = std::numeric_limits<uint64_t>::max();
 
       for (auto module : modules) {
         uint64_t size = moduleSizes.getModuleSize(module, symbols);
