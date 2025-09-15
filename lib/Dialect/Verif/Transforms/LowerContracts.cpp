@@ -56,8 +56,8 @@ Operation *replaceContractOp(OpBuilder &builder, RequireLike op,
   return nullptr;
 }
 
-LogicalResult cloneOp(OpBuilder &builder, Operation *opToClone,
-                      IRMapping &mapping, bool assumeContract) {
+FailureOr<Operation *> cloneOp(OpBuilder &builder, Operation *opToClone,
+                               IRMapping &mapping, bool assumeContract) {
   Operation *clonedOp;
   // Replace ensure/require ops, otherwise clone
   if (auto requireLike = dyn_cast<RequireLike>(*opToClone)) {
@@ -74,7 +74,7 @@ LogicalResult cloneOp(OpBuilder &builder, Operation *opToClone,
        llvm::zip(opToClone->getResults(), clonedOp->getResults())) {
     mapping.map(x, y);
   }
-  return llvm::success();
+  return clonedOp;
 }
 
 void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
@@ -118,6 +118,7 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
                          IRMapping &mapping) {
   DenseSet<Operation *> seen;
   SmallVector<Operation *> opsToClone;
+  SmallVector<Operation *> clonedOps;
   std::queue<Operation *> workList;
   workList.push(contractToClone);
 
@@ -154,9 +155,24 @@ LogicalResult cloneFanIn(OpBuilder &builder, Operation *contractToClone,
   // Sort ops so mapping is available for all operands when cloning an op
   computeTopologicalSorting(opsToClone);
 
+  clonedOps.reserve(opsToClone.size());
   for (auto *op : opsToClone) {
-    if (failed(cloneOp(builder, op, mapping, true)))
+    if (auto clonedOp = cloneOp(builder, op, mapping, true);
+        succeeded(clonedOp)) {
+      clonedOps.push_back(*clonedOp);
+    } else {
       return failure();
+    }
+  }
+
+  // Remap self-referencing uses of cloned results in the cloned ops
+  for (auto *clonedOp : clonedOps) {
+    for (unsigned i = 0, e = clonedOp->getNumOperands(); i < e; i++) {
+      auto operand = clonedOp->getOperand(i);
+      if (mapping.contains(operand)) {
+        clonedOp->setOperand(i, mapping.lookup(operand));
+      }
+    }
   }
   return success();
 }

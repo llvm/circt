@@ -313,3 +313,38 @@ hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
   }
   hw.output %z : i4
 }
+
+// CHECK-LABEL: verif.formal @Counter_CheckContract_0
+// CHECK-NEXT:    [[TMP0:%.+]] = hw.constant -1 : i2
+// CHECK-NEXT:    [[TMP1:%.+]] = hw.constant 1 : i2
+// CHECK-NEXT:    [[TMP2:%.+]] = hw.constant -2 : i2
+// CHECK-NEXT:    [[TMP3:%.+]] = hw.constant 0 : i2
+// CHECK-NEXT:    [[TMP4:%.+]] = verif.symbolic_value : i1
+// CHECK-NEXT:    [[TMP5:%.+]] = verif.symbolic_value : !seq.clock
+// CHECK-NEXT:    [[TMP6:%.+]] = seq.from_clock [[TMP5]]
+// CHECK-NEXT:    [[TMP7:%.+]] = comb.icmp bin eq [[REG:%.+]], [[TMP2]] : i2
+// CHECK-NEXT:    [[TMP8:%.+]] = comb.add bin [[REG]], [[TMP1]] : i2
+// CHECK-NEXT:    [[TMP9:%.+]] = comb.mux bin [[TMP7]], [[TMP3]], [[TMP8]] : i2
+// CHECK-NEXT:    [[REG]] = seq.firreg [[TMP9]] clock [[TMP5]] reset sync [[TMP4]], [[TMP3]] {firrtl.random_init_start = 0 : ui64} : i2
+// CHECK-NEXT:    [[TMP10:%.+]] = comb.icmp bin ne [[REG]], [[TMP0]] : i2
+// CHECK-NEXT:    verif.clocked_assert [[TMP10]], posedge [[TMP6]] : i1
+// CHECK-NEXT: }
+
+hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset : i1) {
+  %zero = hw.constant 0 : i2
+  %one = hw.constant 1 : i2
+  %max = hw.constant -2 : i2
+  %0 = seq.from_clock %clock
+  %reg = seq.firreg %next clock %clock reset sync %reset, %zero {firrtl.random_init_start = 0 : ui64} : i2
+  %eq = comb.icmp bin eq %reg, %max : i2
+  %added = comb.add bin %reg, %one : i2
+  %next = comb.mux bin %eq, %zero, %added : i2
+  %4 = verif.contract %reg : i2 {
+    %never = hw.constant -1 : i2
+    %ne = comb.icmp bin ne %4, %never : i2
+    %6 = verif.has_been_reset %0, sync %reset
+    %7 = ltl.clock %ne, posedge %0 : i1
+    verif.ensure %7 if %6 : !ltl.sequence
+  }
+  hw.output %4 : i2
+}
