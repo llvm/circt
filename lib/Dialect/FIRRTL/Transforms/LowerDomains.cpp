@@ -80,22 +80,54 @@ private:
 };
 
 LogicalResult LowerModule::lowerModule() {
-  auto *context = op.getContext();
+  // Much of the lowering is conditioned on whether or not his module has a
+  // body.  If it has a body, then we need to instantiate an object for each
+  // domain port and hook up all the domain ports to annotations added to each
+  // associated port.
   auto *body =
       llvm::TypeSwitch<Operation *, Block *>(op)
           .Case<FModuleOp>([](FModuleOp op) { return op.getBodyBlock(); })
           .Default([](auto op) { return nullptr; });
+  std::optional<OpBuilder> builder;
+  if (body)
+    builder = OpBuilder::atBlockBegin(body);
+
+  auto *context = op.getContext();
 
   // First iteration over the ports.
   DenseMap<int, SmallVector<DistinctAttr>> associations;
   SmallVector<Attribute> newPortAnnotations;
+  DenseMap<int, ObjectOp> objects;
   for (auto [index, port] : llvm::enumerate(op.getPorts())) {
     // Mark domain type ports for removal.
     auto domain = dyn_cast<FlatSymbolRefAttr>(port.domains);
     if (domain) {
       eraseVector.set(index);
+      // Create objects for each domain port and erase domain port users.
+      if (body) {
+        auto port = cast<PortInfo>(op.getPorts()[index]);
+        auto name = cast<FlatSymbolRefAttr>(port.domains);
+        objects[index] = ObjectOp::create(
+            *builder, port.loc, classes.lookup(name.getAttr()), port.name);
+
+        // Erase domain port users.
+        auto arg = body->getArgument(index);
+        for (auto *user : llvm::make_early_inc_range(arg.getUsers())) {
+          if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
+            castOp.getResult().replaceAllUsesWith(castOp.getInput());
+            castOp.erase();
+            continue;
+          }
+          user->emitOpError() << "cannot be lowered by LowerDomains";
+          return failure();
+        }
+      }
       continue;
     }
+
+    // If this operation has no body, then there is no need to continue.
+    if (!body)
+      continue;
 
     // If this port has domain associations and a body block, then add port
     // annotation trackers.  These will be hooked up to the Object's
@@ -109,10 +141,10 @@ LogicalResult LowerModule::lowerModule() {
     SmallVector<Annotation> newAnnotations;
     for (auto attr : domainAttr) {
       auto domainIndex = cast<IntegerAttr>(attr).getUInt();
-      auto id = DistinctAttr::create(UnitAttr::get(context));
+      auto id = DistinctAttr::create(builder->getUnitAttr());
       newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
-          context,
-          {{"class", StringAttr::get(context, "circt.tracker")}, {"id", id}})));
+          builder->getContext(),
+          {{"class", builder->getStringAttr("circt.tracker")}, {"id", id}})));
       associations[domainIndex].push_back(id);
     }
     if (!newAnnotations.empty())
@@ -121,50 +153,26 @@ LogicalResult LowerModule::lowerModule() {
   }
 
   if (body) {
-    auto builder = OpBuilder::atBlockBegin(body);
-    DenseMap<int, ObjectOp> objects;
-
-    // Create objects for each domain port and erase domain port users.
-    for (auto idx = eraseVector.find_first(); idx >= 0;
-         idx = eraseVector.find_next(idx)) {
-      auto port = cast<PortInfo>(op.getPorts()[idx]);
-      auto name = cast<FlatSymbolRefAttr>(port.domains);
-      objects[idx] = ObjectOp::create(
-          builder, port.loc, classes.lookup(name.getAttr()), port.name);
-
-      // Erase domain port users.
-      auto arg = body->getArgument(idx);
-      for (auto *user : llvm::make_early_inc_range(arg.getUsers())) {
-        if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
-          castOp.getResult().replaceAllUsesWith(castOp.getInput());
-          castOp.erase();
-          continue;
-        }
-        user->emitOpError() << "cannot be lowered by LowerDomains";
-        return failure();
-      }
-    }
-
     // Hook up all assocaitions to the created objects.
     for (size_t i = 0, e = op.getNumPorts(); i != e; ++i) {
       auto itr = objects.find(i);
       if (itr == objects.end())
         continue;
       auto object = itr->getSecond();
-      builder.setInsertionPointAfter(object);
-      auto sub =
-          ObjectSubfieldOp::create(builder, builder.getUnknownLoc(), object, 0);
+      builder->setInsertionPointAfter(object);
+      auto sub = ObjectSubfieldOp::create(*builder, builder->getUnknownLoc(),
+                                          object, 0);
       SmallVector<Value> paths;
       for (auto id : associations[i]) {
         paths.push_back(PathOp::create(
-            builder, builder.getUnknownLoc(),
+            *builder, builder->getUnknownLoc(),
             TargetKindAttr::get(context, TargetKind::MemberReference), id));
       }
       auto list = ListCreateOp::create(
-          builder, builder.getUnknownLoc(),
+          *builder, builder->getUnknownLoc(),
           ListType::get(context, cast<PropertyType>(PathType::get(context))),
           paths);
-      PropAssignOp::create(builder, builder.getUnknownLoc(), sub, list);
+      PropAssignOp::create(*builder, builder->getUnknownLoc(), sub, list);
     }
   }
 
