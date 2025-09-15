@@ -1742,6 +1742,38 @@ class Builtin<string mnemonic, list<Trait> traits = []> :
     MooreOp<"builtin." # mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
+// Pseudo-Random Generators
+//===----------------------------------------------------------------------===//
+
+// Buildable alias for exactly !moore.i32
+def MooreI32 :
+  Type<CPred<
+    "(::llvm::isa<::circt::moore::IntType>($_self) && "
+    "::llvm::cast<::circt::moore::IntType>($_self).getWidth() == 32 && "
+    "::llvm::cast<::circt::moore::IntType>($_self).getDomain() == "
+    "::circt::moore::Domain::TwoValued)"
+  >, "!moore.i32"> {
+  let builderCall =
+    "::circt::moore::IntType::getInt($_builder.getContext(), 32)";
+}
+
+def UrandomBIOp : Builtin<"urandom"> {
+  let summary = "Generate a pseudo-random unsigned integer (optionally seeded)";
+  let description = [{
+    Corresponds to the `$urandom` system function. Returns a 32-bit
+    pseudo-random integer. The seed is optional; when provided, it initializes
+    the generator. If not provided, treat it as 0 in semantics/lowering.
+
+    See IEEE 1800-2023 § 18.13 "Random number system functions and methods".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins Optional<IntType>:$seed);
+  let results = (outs MooreI32:$result);
+  let assemblyFormat = "($seed^ `:` type($seed))? attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control Builtins
 //===----------------------------------------------------------------------===//
 

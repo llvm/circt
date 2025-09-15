@@ -263,3 +263,14 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
   // CHECK:  moore.builtin.atanh [[R]] : real
   dummyB($atanh(r));
 endfunction
+
+// CHECK-LABEL: func.func private @RandomBuiltins(
+// CHECK-SAME: [[X:%.+]]: !moore.i32
+function RandomBuiltins(int x);
+   // CHECK: [[RAND0:%.+]] = moore.builtin.urandom
+   // CHECK-NEXT: call @dummyA([[RAND0]]) : (!moore.i32) -> ()
+   dummyA($urandom());
+    // CHECK: [[RAND1:%.+]] = moore.builtin.urandom [[X]]
+    // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
+   dummyA($urandom(x));
+endfunction
