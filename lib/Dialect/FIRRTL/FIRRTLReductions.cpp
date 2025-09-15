@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -28,6 +29,8 @@
 using namespace mlir;
 using namespace circt;
 using namespace firrtl;
+using llvm::MapVector;
+using llvm::SmallSetVector;
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -1478,6 +1481,175 @@ private:
   NLARemover nlaRemover;
 };
 
+/// A reduction pattern that moves `MustDedup` annotations from a module onto
+/// its child modules. This pattern iterates over all MustDedup annotations,
+/// collects all `FInstanceLike` ops in each module of the dedup group, and
+/// creates new MustDedup annotations for corresponding instances across the
+/// modules. Each set of corresponding instances becomes a separate match of the
+/// reduction. The reduction also removes the original MustDedup annotation on
+/// the parent module.
+///
+/// The pattern works by:
+/// 1. Finding all MustDeduplicateAnnotation annotations on the circuit
+/// 2. For each dedup group, collecting all FInstanceLike operations in each
+/// module
+/// 3. Grouping corresponding instances across modules by their position/name
+/// 4. Creating new MustDedup annotations for each group of corresponding
+/// instances
+/// 5. Removing the original MustDedup annotation from the circuit
+struct MustDedupChildren : public OpReduction<CircuitOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  /// Collect all MustDedup annotations and create matches for each instance
+  /// group.
+  void matches(CircuitOp circuitOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    auto annotations = AnnotationSet(circuitOp);
+    uint64_t matchId = 0;
+
+    for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
+      if (!anno.isClass(mustDedupAnnoClass))
+        continue;
+
+      auto modulesAttr = anno.getMember<ArrayAttr>("modules");
+      if (!modulesAttr || modulesAttr.size() < 2)
+        continue;
+
+      // Process each group of corresponding instances
+      processInstanceGroups(
+          circuitOp, modulesAttr,
+          [&](ArrayRef<FInstanceLike>) { addMatch(1, matchId++); });
+    }
+  }
+
+  LogicalResult rewriteMatches(CircuitOp circuitOp,
+                               ArrayRef<uint64_t> matches) override {
+    auto *context = circuitOp->getContext();
+    auto annotations = AnnotationSet(circuitOp);
+    SmallVector<Annotation> newAnnotations;
+    uint64_t matchId = 0;
+
+    for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
+      if (!anno.isClass(mustDedupAnnoClass)) {
+        newAnnotations.push_back(anno);
+        continue;
+      }
+
+      auto modulesAttr = anno.getMember<ArrayAttr>("modules");
+      if (!modulesAttr || modulesAttr.size() < 2) {
+        newAnnotations.push_back(anno);
+        continue;
+      }
+
+      // Track whether any matches were selected for this annotation
+      bool anyMatchSelected = false;
+      processInstanceGroups(
+          circuitOp, modulesAttr, [&](ArrayRef<FInstanceLike> instanceGroup) {
+            // Check if this instance group was selected
+            if (!llvm::is_contained(matches, matchId++))
+              return;
+            anyMatchSelected = true;
+
+            // Create the list of modules to put into this new annotation.
+            SmallSetVector<StringAttr, 4> moduleTargets;
+            for (auto instOp : instanceGroup) {
+              auto target = TokenAnnoTarget();
+              target.circuit = circuitOp.getName();
+              target.module = instOp.getReferencedModuleName();
+              moduleTargets.insert(target.toStringAttr(context));
+            }
+            if (moduleTargets.size() < 2)
+              return;
+
+            // Create a new MustDedup annotation for this list of modules.
+            SmallVector<NamedAttribute> newAnnoAttrs;
+            newAnnoAttrs.emplace_back(
+                StringAttr::get(context, "class"),
+                StringAttr::get(context, mustDedupAnnoClass));
+            newAnnoAttrs.emplace_back(
+                StringAttr::get(context, "modules"),
+                ArrayAttr::get(context,
+                               SmallVector<Attribute>(moduleTargets.begin(),
+                                                      moduleTargets.end())));
+
+            auto newAnnoDict = DictionaryAttr::get(context, newAnnoAttrs);
+            newAnnotations.emplace_back(newAnnoDict);
+          });
+
+      // If any matches were selected, mark the original annotation for removal
+      // since we're replacing it with new MustDedup annotations on the child
+      // modules. Otherwise keep the original annotation around.
+      if (anyMatchSelected)
+        nlaRemover.markNLAsInAnnotation(anno.getAttr());
+      else
+        newAnnotations.push_back(anno);
+    }
+
+    // Update circuit annotations
+    AnnotationSet newAnnoSet(newAnnotations, context);
+    newAnnoSet.applyToOperation(circuitOp);
+    return success();
+  }
+
+  std::string getName() const override { return "must-dedup-children"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+private:
+  /// Helper function to process groups of corresponding instances from a
+  /// MustDedup annotation. Calls the provided lambda for each group of
+  /// corresponding instances across the modules. Only calls the lambda if there
+  /// are at least 2 modules.
+  void processInstanceGroups(
+      CircuitOp circuitOp, ArrayAttr modulesAttr,
+      llvm::function_ref<void(ArrayRef<FInstanceLike>)> callback) {
+    auto &symbolTable = symbols.getSymbolTable(circuitOp);
+
+    // Extract module names and get the actual modules
+    SmallVector<FModuleLike> modules;
+    for (auto moduleRef : modulesAttr.getAsRange<StringAttr>())
+      if (auto target = tokenizePath(moduleRef))
+        if (auto mod = symbolTable.lookup<FModuleLike>(target->module))
+          modules.push_back(mod);
+
+    // Need at least 2 modules for deduplication
+    if (modules.size() < 2)
+      return;
+
+    // Collect all FInstanceLike operations from each module and group them by
+    // name. Instance names are a good key for matching instances across
+    // modules. But they may not be unique, so we need to be careful to only
+    // match up instances that are uniquely named within every module.
+    struct InstanceGroup {
+      SmallVector<FInstanceLike> instances;
+      bool nameIsUnique = true;
+    };
+    MapVector<StringAttr, InstanceGroup> instanceGroups;
+    for (auto module : modules) {
+      SmallDenseMap<StringAttr, unsigned> nameCounts;
+      module.walk([&](FInstanceLike instOp) {
+        auto name = instOp.getInstanceNameAttr();
+        auto &group = instanceGroups[name];
+        if (nameCounts[name]++ > 1)
+          group.nameIsUnique = false;
+        group.instances.push_back(instOp);
+      });
+    }
+
+    // Call the callback for each group of instances that are uniquely named and
+    // consist of at least 2 instances.
+    for (auto &[name, group] : instanceGroups)
+      if (group.nameIsUnique && group.instances.size() >= 2)
+        callback(group.instances);
+  }
+
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1493,25 +1665,26 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // trying to tweak operands of individual arithmetic ops.
   patterns.add<ModuleSwapper, 32>();
   patterns.add<ForceDedup, 31>();
-  patterns.add<PassReduction, 30>(
+  patterns.add<MustDedupChildren, 30>();
+  patterns.add<PassReduction, 29>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
       true);
-  patterns.add<PassReduction, 29>(getContext(),
+  patterns.add<PassReduction, 28>(getContext(),
                                   firrtl::createLowerCHIRRTLPass(), true, true);
-  patterns.add<PassReduction, 28>(getContext(), firrtl::createInferWidths(),
+  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferWidths(),
                                   true, true);
-  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferResets(),
+  patterns.add<PassReduction, 26>(getContext(), firrtl::createInferResets(),
                                   true, true);
-  patterns.add<FIRRTLModuleExternalizer, 26>();
-  patterns.add<InstanceStubber, 25>();
-  patterns.add<MemoryStubber, 24>();
-  patterns.add<EagerInliner, 23>();
-  patterns.add<PassReduction, 22>(getContext(),
+  patterns.add<FIRRTLModuleExternalizer, 25>();
+  patterns.add<InstanceStubber, 24>();
+  patterns.add<MemoryStubber, 23>();
+  patterns.add<EagerInliner, 22>();
+  patterns.add<PassReduction, 21>(getContext(),
                                   firrtl::createLowerFIRRTLTypes(), true, true);
-  patterns.add<PassReduction, 21>(getContext(), firrtl::createExpandWhens(),
+  patterns.add<PassReduction, 20>(getContext(), firrtl::createExpandWhens(),
                                   true, true);
-  patterns.add<PassReduction, 20>(getContext(), firrtl::createInliner());
+  patterns.add<PassReduction, 19>(getContext(), firrtl::createInliner());
   patterns.add<PassReduction, 18>(getContext(), firrtl::createIMConstProp());
   patterns.add<PassReduction, 17>(
       getContext(),
