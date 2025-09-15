@@ -1000,15 +1000,15 @@ struct RvalueExprVisitor : public ExprVisitor {
       break;
 
     default:
-      mlir::emitError(loc) << "unsupported system call `" << subroutine.name
-                           << "`";
-      return {};
+      break;
     }
 
     if (failed(result))
       return {};
     if (*result)
       return *result;
+    mlir::emitError(loc) << "unsupported system call `" << subroutine.name
+                         << "`";
     return {};
   }
 
