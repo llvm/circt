@@ -1745,18 +1745,6 @@ class Builtin<string mnemonic, list<Trait> traits = []> :
 // Pseudo-Random Generators
 //===----------------------------------------------------------------------===//
 
-// Buildable alias for exactly !moore.i32
-def MooreI32 :
-  Type<CPred<
-    "(::llvm::isa<::circt::moore::IntType>($_self) && "
-    "::llvm::cast<::circt::moore::IntType>($_self).getWidth() == 32 && "
-    "::llvm::cast<::circt::moore::IntType>($_self).getDomain() == "
-    "::circt::moore::Domain::TwoValued)"
-  >, "!moore.i32"> {
-  let builderCall =
-    "::circt::moore::IntType::getInt($_builder.getContext(), 32)";
-}
-
 def UrandomBIOp : Builtin<"urandom"> {
   let summary = "Generate a pseudo-random unsigned integer (optionally seeded)";
   let description = [{
@@ -1768,9 +1756,9 @@ def UrandomBIOp : Builtin<"urandom"> {
   }];
 
   // Optional positional attribute for the seed
-  let arguments = (ins Optional<IntType>:$seed);
-  let results = (outs MooreI32:$result);
-  let assemblyFormat = "($seed^ `:` type($seed))? attr-dict";
+  let arguments = (ins Optional<TwoValuedI32>:$seed);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "($seed^)? attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
