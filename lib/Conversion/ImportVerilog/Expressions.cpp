@@ -1590,7 +1590,6 @@ Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
 
   auto systemCallRes =
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          // Signed and unsigned system functions.
           .Case("$urandom",
                 [&]() -> Value {
                   return moore::UrandomBIOp::create(builder, loc, 0);
