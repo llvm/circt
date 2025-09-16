@@ -121,4 +121,88 @@ TEST(HWModuleOpTest, AddInputs) {
   EXPECT_EQ(ports[1].type, tyF);
 }
 
+TEST(HWModuleOpTest, SetPortAttr) {
+  MLIRContext context;
+  context.loadDialect<HWDialect>();
+  LocationAttr loc = UnknownLoc::get(&context);
+  auto module = ModuleOp::create(loc);
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, module.getBody());
+
+  SmallVector<PortInfo, 3> ports;
+  auto ty = builder.getIntegerType(1);
+
+  ports.emplace_back(PortInfo{
+      {builder.getStringAttr("foo"), ty, hw::ModulePort::Direction::Input},
+      0,
+      {}});
+
+  ports.emplace_back(PortInfo{
+      {builder.getStringAttr("bar"), ty, hw::ModulePort::Direction::Input},
+      1,
+      {}});
+
+  ports.emplace_back(PortInfo{
+      {builder.getStringAttr("baz"), ty, hw::ModulePort::Direction::Output},
+      0,
+      {}});
+
+  auto top = builder.create<HWModuleOp>(builder.getStringAttr("Top"), ports);
+
+  auto emptyDictAttr = DictionaryAttr::get(&context);
+  auto emptyArrayAttr = ArrayAttr::get(&context, ArrayRef<Attribute>());
+  EXPECT_EQ(top.getPerPortAttrsAttr(), emptyArrayAttr);
+  EXPECT_TRUE(top.getAllInputAttrs().empty());
+  EXPECT_TRUE(top.getAllOutputAttrs().empty());
+  EXPECT_EQ(top.getInputAttrs(0), emptyDictAttr);
+  EXPECT_EQ(top.getOutputAttrs(0), emptyDictAttr);
+
+  auto fooStrAttr = builder.getStringAttr("fooAttr");
+  auto bazStrAttr = builder.getStringAttr("bazAttr");
+
+  NamedAttrList namedAttrs;
+  namedAttrs.append(fooStrAttr, UnitAttr::get(&context));
+
+  top.setPortAttrs(top.getPortIdForInputId(0),
+                   namedAttrs.getDictionary(&context));
+
+  top.setPortAttr(top.getPortIdForOutputId(0), bazStrAttr,
+                  UnitAttr::get(&context));
+
+  // Check attribute constraints
+  auto adaptor = HWModuleOpAdaptor(top);
+  EXPECT_TRUE(adaptor.verify(loc).succeeded());
+
+  auto fooAttrs = top.getInputAttrs(0);
+  auto barAttrs = top.getInputAttrs(1);
+  auto bazAttrs = top.getOutputAttrs(0);
+
+  EXPECT_EQ(barAttrs, emptyDictAttr);
+
+  ASSERT_TRUE(llvm::isa<DictionaryAttr>(fooAttrs));
+  ASSERT_TRUE(llvm::isa<DictionaryAttr>(bazAttrs));
+
+  auto fooDict = llvm::cast<DictionaryAttr>(fooAttrs);
+  auto bazDict = llvm::cast<DictionaryAttr>(bazAttrs);
+
+  EXPECT_TRUE(fooDict.contains(fooStrAttr));
+  EXPECT_FALSE(fooDict.contains(bazStrAttr));
+
+  EXPECT_FALSE(bazDict.contains(fooStrAttr));
+  EXPECT_TRUE(bazDict.contains(bazStrAttr));
+
+  EXPECT_FALSE(top.getAllInputAttrs().empty());
+  EXPECT_FALSE(top.getAllOutputAttrs().empty());
+
+  top.setPortAttrs(top.getPortIdForInputId(0), emptyDictAttr);
+  EXPECT_NE(top.getPerPortAttrsAttr(), emptyArrayAttr);
+  EXPECT_TRUE(adaptor.verify(loc).succeeded());
+
+  top.setPortAttrs(top.getPortIdForOutputId(0), emptyDictAttr);
+  EXPECT_EQ(top.getPerPortAttrsAttr(), emptyArrayAttr);
+  EXPECT_TRUE(adaptor.verify(loc).succeeded());
+
+  EXPECT_TRUE(top.getAllInputAttrs().empty());
+  EXPECT_TRUE(top.getAllOutputAttrs().empty());
+}
+
 } // namespace
