@@ -9,11 +9,14 @@
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/Debug.h"
 
@@ -24,6 +27,7 @@ using namespace arc;
 using namespace hw;
 using llvm::MapVector;
 using llvm::SmallSetVector;
+using mlir::ConversionConfig;
 
 static bool isArcBreakingOp(Operation *op) {
   if (isa<TapOp>(op))
@@ -508,28 +512,94 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
 }
 
 //===----------------------------------------------------------------------===//
+// LLHD Conversion
+//===----------------------------------------------------------------------===//
+
+/// `llhd.combinational` -> `arc.execute`
+static LogicalResult convert(llhd::CombinationalOp op,
+                             llhd::CombinationalOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &converter) {
+  // Convert the result types.
+  SmallVector<Type> resultTypes;
+  if (failed(converter.convertTypes(op.getResultTypes(), resultTypes)))
+    return failure();
+
+  // Collect the SSA values defined outside but used inside the body region.
+  auto cloneIntoBody = [](Operation *op) {
+    return op->hasTrait<OpTrait::ConstantLike>();
+  };
+  auto operands =
+      mlir::makeRegionIsolatedFromAbove(rewriter, op.getBody(), cloneIntoBody);
+
+  // Create a replacement `arc.execute` op.
+  auto executeOp =
+      ExecuteOp::create(rewriter, op.getLoc(), resultTypes, operands);
+  executeOp.getBody().takeBody(op.getBody());
+  rewriter.replaceOp(op, executeOp.getResults());
+  return success();
+}
+
+/// `llhd.yield` -> `arc.output`
+static LogicalResult convert(llhd::YieldOp op, llhd::YieldOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<arc::OutputOp>(op, adaptor.getOperands());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
 namespace circt {
-#define GEN_PASS_DEF_CONVERTTOARCS
+#define GEN_PASS_DEF_CONVERTTOARCSPASS
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
 namespace {
-struct ConvertToArcsPass : public impl::ConvertToArcsBase<ConvertToArcsPass> {
-  using ConvertToArcsBase::ConvertToArcsBase;
-
-  void runOnOperation() override {
-    Converter converter;
-    converter.tapRegisters = tapRegisters;
-    if (failed(converter.run(getOperation())))
-      signalPassFailure();
-  }
+struct ConvertToArcsPass
+    : public circt::impl::ConvertToArcsPassBase<ConvertToArcsPass> {
+  using ConvertToArcsPassBase::ConvertToArcsPassBase;
+  void runOnOperation() override;
 };
 } // namespace
 
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::createConvertToArcsPass(const ConvertToArcsOptions &options) {
-  return std::make_unique<ConvertToArcsPass>(options);
+void ConvertToArcsPass::runOnOperation() {
+  // Setup the type conversion.
+  TypeConverter converter;
+
+  // Define legal types.
+  converter.addConversion([](Type type) -> std::optional<Type> {
+    if (isa<llhd::LLHDDialect>(type.getDialect()))
+      return std::nullopt;
+    return type;
+  });
+
+  // Gather the conversion patterns.
+  ConversionPatternSet patterns(&getContext(), converter);
+  patterns.add<llhd::CombinationalOp>(convert);
+  patterns.add<llhd::YieldOp>(convert);
+
+  // Setup the legal ops. (Sort alphabetically.)
+  ConversionTarget target(getContext());
+  target.addIllegalDialect<llhd::LLHDDialect>();
+  target.markUnknownOpDynamicallyLegal(
+      [](Operation *op) { return !isa<llhd::LLHDDialect>(op->getDialect()); });
+
+  // Disable pattern rollback to use the faster one-shot dialect conversion.
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+
+  // Apply the dialect conversion patterns.
+  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns),
+                                    config))) {
+    emitError(getOperation().getLoc()) << "conversion to arcs failed";
+    return signalPassFailure();
+  }
+
+  // Outline operations into arcs.
+  Converter outliner;
+  outliner.tapRegisters = tapRegisters;
+  if (failed(outliner.run(getOperation())))
+    return signalPassFailure();
 }
