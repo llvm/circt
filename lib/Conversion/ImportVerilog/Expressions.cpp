@@ -1592,7 +1592,7 @@ Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
           .Case("$urandom",
                 [&]() -> Value {
-                  return moore::UrandomBIOp::create(builder, loc, 0);
+                  return moore::UrandomBIOp::create(builder, loc, nullptr);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
