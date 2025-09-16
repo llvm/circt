@@ -154,4 +154,14 @@ def ABCRunner : ExternalSolverPass<"synth-abc-runner"> {
   ];
 }
 
+def StructuralHash : Pass<"synth-structural-hash", "hw::HWModuleOp"> {
+  let summary = "Structural hashing (CSE) for Synth operations";
+  let description = [{
+    This pass performs aggressive structural hashing-based CSE for Synth dialect
+    operations (AIG/MIG), domain-specific to AIG/MIG operations to enable operand
+    reordering based on structural properties and inversion flag consideration
+    for canonicalization.
+  }];
+}
+
 #endif // CIRCT_DIALECT_SYNTH_TRANSFORMS_PASSES_TD
