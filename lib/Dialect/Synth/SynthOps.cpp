@@ -153,6 +153,22 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
 OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() == 1 && !isInverted(0))
     return getOperand(0);
+
+  auto inputs = adaptor.getInputs();
+  if (inputs.size() == 2 && inputs[1]) {
+    auto value = cast<IntegerAttr>(inputs[1]).getValue();
+    if (isInverted(1))
+      value = ~value;
+    if (value.isZero())
+      return IntegerAttr::get(
+          IntegerType::get(getContext(), value.getBitWidth()), value);
+    if (value.isAllOnes()) {
+      if (isInverted(0))
+        return {};
+
+      return getOperand(0);
+    }
+  }
   return {};
 }
 
