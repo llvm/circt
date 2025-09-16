@@ -1762,6 +1762,25 @@ def UrandomBIOp : Builtin<"urandom"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Simulation Time Measurement Builtins
+//===----------------------------------------------------------------------===//
+
+def TimeBIOp : Builtin<"time"> {
+  let summary = "Return the current simulation time";
+  let description = [{
+    Corresponds to the `$time` system function. Returns a int-rounded 64-bit
+    integer corresponding to the elapsed simulation time scaled by the
+    simulation's timescale.
+
+    See IEEE 1800-2023 § 20.3 "Simulation time system functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let results = (outs TimeType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control Builtins
 //===----------------------------------------------------------------------===//
 
