@@ -85,6 +85,7 @@ void circt::synth::buildSynthOptimizationPipeline(
   pm.addPass(createCSEPass());
   pm.addPass(createStructuralHash());
   pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(createStructuralHash());
 
   if (!options.abcCommands.empty()) {
     synth::ABCRunnerOptions abcOptions;

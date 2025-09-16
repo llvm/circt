@@ -29,7 +29,6 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/DebugLog.h"
 #include "llvm/Support/LogicalResult.h"
-#include <cstdint>
 
 #define DEBUG_TYPE "synth-structural-hash"
 
@@ -123,6 +122,13 @@ private:
   DenseMap<StructuralHashKey, Operation *> hashTable;
 
   /// Maps inverted values to their non-inverted equivalents for propagation.
+  /// For example, if we have:
+  /// ```
+  /// %b = synth.aig.and_inv not %a
+  /// %c = synth.aig.and_inv not %b
+  /// ```
+  /// Then `inversion[%b] = %a`, and when visiting `%c`, we can query
+  /// `inversion[%b]` to directly obtain `%a`.
   DenseMap<Value, Value> inversion;
 };
 } // namespace
@@ -242,7 +248,7 @@ uint64_t StructuralHashDriver::getNumber(Value v) {
 
 llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
   auto isOperationReady = [&](Value value, Operation *op) -> bool {
-    // Topologically sort target ops within the block.
+    // Otherthan target ops, all other ops are always ready.
     return !isa<circt::synth::aig::AndInverterOp,
                 circt::synth::mig::MajorityInverterOp>(op);
   };
