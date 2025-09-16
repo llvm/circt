@@ -274,3 +274,11 @@ function RandomBuiltins(int x);
     // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
    dummyA($urandom(x));
 endfunction
+
+// CHECK-LABEL: func.func private @TimeBuiltins(
+function TimeBuiltins ();
+   // CHECK: [[TIME:%.+]] = moore.builtin.time
+   // CHECK-NEXT: [[TRUNCTIME:%.+]] = moore.trunc [[TIME]] : i64 -> i32
+   // CHECK-NEXT: call @dummyA([[TRUNCTIME]]) : (!moore.i32) -> ()
+   dummyA($time());
+endfunction

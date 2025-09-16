@@ -1594,6 +1594,9 @@ Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::UrandomBIOp::create(builder, loc, nullptr);
                 })
+          .Case(
+              "$time",
+              [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
