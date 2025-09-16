@@ -984,17 +984,29 @@ struct RvalueExprVisitor : public ExprVisitor {
     const auto &subroutine = *info.subroutine;
     auto args = expr.arguments();
 
-    if (args.size() == 1) {
-      auto value = context.convertRvalueExpression(*args[0]);
+    FailureOr<Value> result;
+    Value value;
+
+    switch (args.size()) {
+    case (0):
+      result = context.convertSystemCallArity0(subroutine, loc);
+      break;
+
+    case (1):
+      value = context.convertRvalueExpression(*args[0]);
       if (!value)
         return {};
-      auto result = context.convertSystemCallArity1(subroutine, loc, value);
-      if (failed(result))
-        return {};
-      if (*result)
-        return *result;
+      result = context.convertSystemCallArity1(subroutine, loc, value);
+      break;
+
+    default:
+      break;
     }
 
+    if (failed(result))
+      return {};
+    if (*result)
+      return *result;
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
                          << "`";
     return {};
@@ -1573,6 +1585,20 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 }
 
 FailureOr<Value>
+Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
+                                 Location loc) {
+
+  auto systemCallRes =
+      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          .Case("$urandom",
+                [&]() -> Value {
+                  return moore::UrandomBIOp::create(builder, loc, nullptr);
+                })
+          .Default([&]() -> Value { return {}; });
+  return systemCallRes();
+}
+
+FailureOr<Value>
 Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                                  Location loc, Value value) {
   auto systemCallRes =
@@ -1660,6 +1686,10 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
           .Case("$atanh",
                 [&]() -> Value {
                   return moore::AtanhBIOp::create(builder, loc, value);
+                })
+          .Case("$urandom",
+                [&]() -> Value {
+                  return moore::UrandomBIOp::create(builder, loc, value);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
