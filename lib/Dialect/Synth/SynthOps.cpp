@@ -150,11 +150,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
 // AIG Operations
 //===----------------------------------------------------------------------===//
 
-static TypedAttr getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
-                          value);
-}
-
 OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() == 1 && !isInverted(0))
     return getOperand(0);
@@ -165,7 +160,8 @@ OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
     if (isInverted(1))
       value = ~value;
     if (value.isZero())
-      return getIntAttr(value, getContext());
+      return IntegerAttr::get(
+          IntegerType::get(getContext(), value.getBitWidth()), value);
     if (value.isAllOnes()) {
       if (isInverted(0))
         return {};
