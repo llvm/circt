@@ -1762,7 +1762,7 @@ def UrandomBIOp : Builtin<"urandom"> {
 }
 
 //===----------------------------------------------------------------------===//
-// Time Formatting And Time Stamping
+// Simulation Time Measurement Builtins
 //===----------------------------------------------------------------------===//
 
 def TimeBIOp : Builtin<"time"> {
@@ -1776,10 +1776,9 @@ def TimeBIOp : Builtin<"time"> {
   }];
 
   // Optional positional attribute for the seed
-  let results = (outs TwoValuedI64:$result);
+  let results = (outs TimeType:$result);
   let assemblyFormat = "attr-dict";
 }
-
 
 //===----------------------------------------------------------------------===//
 // Simulation Control Builtins

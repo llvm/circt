@@ -278,7 +278,11 @@ endfunction
 // CHECK-LABEL: func.func private @TimeBuiltins(
 function TimeBuiltins ();
    // CHECK: [[TIME:%.+]] = moore.builtin.time
-   // CHECK-NEXT: [[TRUNCTIME:%.+]] = moore.trunc [[TIME]] : i64 -> i32
-   // CHECK-NEXT: call @dummyA([[TRUNCTIME]]) : (!moore.i32) -> ()
+   // CHECK-NEXT: [[TIMETOLOGIC:%.+]] = moore.time_to_logic [[TIME]]
    dummyA($time());
+   // CHECK: [[STIME:%.+]] = moore.builtin.time
+    dummyA($stime());
+    // CHECK: [[REALTIME:%.+]] = moore.builtin.time
+    // TODO: There is no int-to-real conversion yet; change this to dummyB once int-to-real works!
+    dummyA($realtime());
 endfunction

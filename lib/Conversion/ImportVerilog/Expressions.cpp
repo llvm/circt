@@ -1597,6 +1597,12 @@ Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
           .Case(
               "$time",
               [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
+          .Case(
+              "$stime",
+              [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
+          .Case(
+              "$realtime",
+              [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
