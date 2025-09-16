@@ -80,6 +80,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "SVPasses.md"]
 
+## Synth Dialect Passes
+
+[include "SynthPasses.md"]
+
 ## SystemC Dialect Passes
 
 [include "SystemCPasses.md"]
