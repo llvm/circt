@@ -82,6 +82,24 @@ class SourceFiles:
     return self.dpi_sv + self.user
 
 
+class SimProcess:
+
+  def __init__(self, proc: subprocess.Popen, port: int):
+    self.proc = proc
+    self.port = port
+
+  def force_stop(self):
+    """Make sure to stop the simulation no matter what."""
+    if self.proc:
+      os.killpg(os.getpgid(self.proc.pid), signal.SIGINT)
+      # Allow the simulation time to flush its outputs.
+      try:
+        self.proc.wait(timeout=1.0)
+      except subprocess.TimeoutExpired:
+        # If the simulation doesn't exit of its own free will, kill it.
+        self.proc.kill()
+
+
 class Simulator:
 
   # Some RTL simulators don't use stderr for error messages. Everything goes to
@@ -135,7 +153,7 @@ class Simulator:
     """Return the command to run the simulation."""
     assert False, "Must be implemented by subclass"
 
-  def run_proc(self, gui: bool = False) -> tuple[subprocess.Popen, int]:
+  def run_proc(self, gui: bool = False) -> SimProcess:
     """Run the simulation process. Returns the Popen object and the port which
       the simulation is listening on."""
     # Open log files
@@ -192,7 +210,7 @@ class Simulator:
       if simProc.poll() is not None:
         raise Exception("Simulation exited early")
       time.sleep(0.05)
-    return simProc, port
+    return SimProcess(proc=simProc, port=port)
 
   def run(self,
           inner_command: str,
@@ -205,30 +223,23 @@ class Simulator:
     # syntax errors in that block.
     simProc = None
     try:
-      simProc, port = self.run_proc(gui=gui)
+      simProc = self.run_proc(gui=gui)
       if server_only:
         # wait for user input to kill the server
         input(
-            f"Running in server-only mode on port {port} - Press anything to kill the server..."
+            f"Running in server-only mode on port {simProc.port} - Press anything to kill the server..."
         )
         return 0
       else:
         # Run the inner command, passing the connection info via environment vars.
         testEnv = os.environ.copy()
-        testEnv["ESI_COSIM_PORT"] = str(port)
+        testEnv["ESI_COSIM_PORT"] = str(simProc.port)
         testEnv["ESI_COSIM_HOST"] = "localhost"
         return subprocess.run(inner_command, cwd=os.getcwd(),
                               env=testEnv).returncode
     finally:
-      # Make sure to stop the simulation no matter what.
       if simProc:
-        os.killpg(os.getpgid(simProc.pid), signal.SIGINT)
-        # Allow the simulation time to flush its outputs.
-        try:
-          simProc.wait(timeout=1.0)
-        except subprocess.TimeoutExpired:
-          # If the simulation doesn't exit of its own free will, kill it.
-          simProc.kill()
+        simProc.force_stop()
 
 
 class Verilator(Simulator):
