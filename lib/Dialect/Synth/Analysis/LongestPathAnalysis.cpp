@@ -271,7 +271,8 @@ static void printObjectImpl(llvm::raw_ostream &os, const Object &object,
   os << ")";
 }
 
-template <typename T> static int64_t getMaxDelayInPaths(ArrayRef<T> paths) {
+template <typename T>
+static int64_t getMaxDelayInPaths(ArrayRef<T> paths) {
   int64_t maxDelay = 0;
   for (auto &path : paths)
     maxDelay = std::max(maxDelay, path.getDelay());
