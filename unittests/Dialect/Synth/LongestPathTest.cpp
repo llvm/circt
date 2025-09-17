@@ -107,10 +107,10 @@ TEST(LongestPathTest, BasicTest) {
 
     EXPECT_EQ(results.size(), 4u);
     for (auto path : results)
-      EXPECT_TRUE(
-          answerSet.erase({path.getFanIn().value, path.getFanIn().bitPos,
-                           path.getFanOutAsObject().value,
-                           path.getFanOutAsObject().bitPos, path.getDelay()}));
+      EXPECT_TRUE(answerSet.erase(
+          {path.getStartPoint().value, path.getStartPoint().bitPos,
+           path.getEndPointAsObject().value, path.getEndPointAsObject().bitPos,
+           path.getDelay()}));
 
     // Check other API.
     EXPECT_EQ(longestPath.getMaxDelay(concat), 3); // max([3, 3, 0, 0]) = 3
@@ -148,7 +148,7 @@ TEST(LongestPathTest, BasicTest) {
         longestPath.getClosedPaths(basicModule.getModuleNameAttr(), results);
 
     ASSERT_TRUE(succeeded(closedPath));
-    // In local analysis, instance results are treated as fanIn.
+    // In local analysis, instance results are treated as start point.
     // There are 6 closed paths:
     // {p[0] -> q[0], p[1] -> q[1], q[0] -> q[0], q[1] -> q[1], inst.r[0] ->
     // q[0], inst.r[1] -> q[1]}
@@ -163,10 +163,10 @@ TEST(LongestPathTest, BasicTest) {
 
     EXPECT_EQ(results.size(), 6u);
     for (auto path : results)
-      EXPECT_TRUE(
-          answerSet.erase({path.getFanIn().value, path.getFanIn().bitPos,
-                           path.getFanOutAsObject().value,
-                           path.getFanOutAsObject().bitPos, path.getDelay()}));
+      EXPECT_TRUE(answerSet.erase(
+          {path.getStartPoint().value, path.getStartPoint().bitPos,
+           path.getEndPointAsObject().value, path.getEndPointAsObject().bitPos,
+           path.getDelay()}));
 
     EXPECT_EQ(longestPath.getMaxDelay(concat), 2); // max([2, 2, 0, 0]) = 3
     EXPECT_EQ(longestPath.getAverageMaxDelay(concat),
@@ -210,20 +210,25 @@ TEST(LongestPathTest, ElaborationTest) {
   EXPECT_TRUE(succeeded(elaborated));
   EXPECT_EQ(elaboratedPaths.size(), 2u);
 
-  EXPECT_EQ(unelaboratedPaths[0].getFanIn().instancePath.size(), 0u);
+  EXPECT_EQ(unelaboratedPaths[0].getStartPoint().instancePath.size(), 0u);
   EXPECT_EQ(unelaboratedPaths[0].getRoot().getModuleName().compare("nest"), 0);
 
   for (auto &path : elaboratedPaths) {
-    EXPECT_EQ(path.getFanIn().instancePath.size(), 1u);
+    EXPECT_EQ(path.getStartPoint().instancePath.size(), 1u);
     EXPECT_EQ(path.getRoot().getModuleName().compare("top"), 0);
     EXPECT_TRUE(
-        path.getFanIn().instancePath.leaf().getInstanceName().starts_with(
+        path.getStartPoint().instancePath.leaf().getInstanceName().starts_with(
             "inst"));
   }
 
-  EXPECT_NE(
-      elaboratedPaths[0].getFanIn().instancePath.leaf().getInstanceNameAttr(),
-      elaboratedPaths[1].getFanIn().instancePath.leaf().getInstanceNameAttr());
+  EXPECT_NE(elaboratedPaths[0]
+                .getStartPoint()
+                .instancePath.leaf()
+                .getInstanceNameAttr(),
+            elaboratedPaths[1]
+                .getStartPoint()
+                .instancePath.leaf()
+                .getInstanceNameAttr());
 }
 
 TEST(LongestPathTest, Incremental) {
