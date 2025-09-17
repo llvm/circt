@@ -95,10 +95,10 @@ struct DebugPoint {
 struct OpenPath {
   OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
            int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
-      : fanIn(path, value, bitPos), delay(delay), history(history) {}
+      : startPoint(path, value, bitPos), delay(delay), history(history) {}
   OpenPath() = default;
 
-  const Object &getFanIn() const { return fanIn; }
+  const Object &getStartPoint() const { return startPoint; }
   int64_t getDelay() const { return delay; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const { return history; }
 
@@ -108,7 +108,7 @@ struct OpenPath {
                llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
                circt::igraph::InstancePath path);
 
-  Object fanIn;
+  Object startPoint;
   int64_t delay;
   // History of debug points represented by linked lists.
   // The head of the list is the farthest point from the fanIn.
@@ -124,24 +124,25 @@ public:
   // This flexibility allows representing both closed paths
   // (register-to-register) and open paths (register-to-output) in a unified way
   using OutputPort = std::tuple<hw::HWModuleOp, size_t, size_t>;
-  using FanOutType = std::variant<Object, OutputPort>;
+  using EndPointType = std::variant<Object, OutputPort>;
 
   // Constructor for paths with Object fanout (internal circuit nodes)
-  DataflowPath(Object fanOut, OpenPath fanIn, hw::HWModuleOp root)
-      : fanOut(fanOut), path(fanIn), root(root) {}
+  // Constructor for paths with Object endPoint (internal circuit nodes)
+  DataflowPath(Object endPoint, OpenPath startPoint, hw::HWModuleOp root)
+      : endPoint(endPoint), path(startPoint), root(root) {}
 
   // Constructor for paths with port fanout (module output ports)
-  DataflowPath(OutputPort fanOut, OpenPath fanIn, hw::HWModuleOp root)
-      : fanOut(fanOut), path(fanIn), root(root) {}
+  DataflowPath(OutputPort endPoint, OpenPath startPoint, hw::HWModuleOp root)
+      : endPoint(endPoint), path(startPoint), root(root) {}
 
   DataflowPath() = default;
 
   int64_t getDelay() const { return path.delay; }
-  const Object &getFanIn() const { return path.fanIn; }
-  const FanOutType &getFanOut() const { return fanOut; }
-  const Object &getFanOutAsObject() const { return std::get<Object>(fanOut); }
-  const OutputPort &getFanOutAsPort() const {
-    return std::get<OutputPort>(fanOut);
+  const Object &getStartPoint() const { return path.startPoint; }
+  const EndPointType &getEndPoint() const { return endPoint; }
+  const Object &getEndPointAsObject() const { return std::get<Object>(endPoint); }
+  const OutputPort &getEndPointAsPort() const {
+    return std::get<OutputPort>(endPoint);
   }
   hw::HWModuleOp getRoot() const { return root; }
   const llvm::ImmutableList<DebugPoint> &getHistory() const {
@@ -150,12 +151,13 @@ public:
   const OpenPath &getPath() const { return path; }
 
   // Get source location for the fanout point (for diagnostics)
-  Location getFanOutLoc();
+  // Get source location for the EndPoint (for diagnostics)
+  Location getEndPointLoc();
 
   void setDelay(int64_t delay) { path.delay = delay; }
 
   void print(llvm::raw_ostream &os);
-  void printFanOut(llvm::raw_ostream &os);
+  void printEndPoint(llvm::raw_ostream &os);
 
   // Path elaboration for hierarchical analysis
   // Prepends instance path information to create full hierarchical paths
@@ -165,7 +167,8 @@ public:
                circt::igraph::InstancePath path);
 
 private:
-  FanOutType fanOut;   // Either Object or (port_index, bit_index)
+  //FanOutType fanOut;   // Either Object or (port_index, bit_index)
+  EndPointType endPoint;   // Either Object or (port_index, bit_index)
   OpenPath path;       // The actual timing path with history
   hw::HWModuleOp root; // Root module for this path
 };
@@ -345,7 +348,8 @@ public:
   void sortInDescendingOrder();
 
   // Sort and drop all paths except the longest path per fanout point.
-  void sortAndDropNonCriticalPathsPerFanOut();
+  //void sortAndDropNonCriticalPathsPerFanOut();
+  void sortAndDropNonCriticalPathsPerEndPoint();
 
   // Merge another collection into this one.
   void merge(const LongestPathCollection &other);
