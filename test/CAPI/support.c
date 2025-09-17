@@ -66,9 +66,9 @@ void testInstancePath(void) {
       synthLongestPathCollectionGetSize(collection) < 1)
     return;
 
-  // Get instance path of fanin object.
+  // Get instance path of startPoint object.
   IgraphInstancePath instancePath = synthLongestPathObjectGetInstancePath(
-      synthLongestPathDataflowPathGetFanIn(
+      synthLongestPathDataflowPathGetStartPoint(
           synthLongestPathCollectionGetDataflowPath(collection, 0)));
 
   if (instancePath.size != 2) {

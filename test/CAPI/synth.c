@@ -86,32 +86,32 @@ void testLongestPathAnalysis(void) {
       printf("Path delay: %lld\n", (long long)delay);
       // CHECK: Path delay: 1
 
-      SynthLongestPathObject fanIn = synthLongestPathDataflowPathGetFanIn(path);
-      SynthLongestPathObject fanOut =
-          synthLongestPathDataflowPathGetFanOut(path);
+      SynthLongestPathObject startPoint = synthLongestPathDataflowPathGetStartPoint(path);
+      SynthLongestPathObject endPoint =
+          synthLongestPathDataflowPathGetEndPoint(path);
 
       // Test Object API
-      MlirStringRef fanInName = synthLongestPathObjectName(fanIn);
-      MlirStringRef fanOutName = synthLongestPathObjectName(fanOut);
-      size_t fanInBitPos = synthLongestPathObjectBitPos(fanIn);
-      size_t fanOutBitPos = synthLongestPathObjectBitPos(fanOut);
+      MlirStringRef startPointName = synthLongestPathObjectName(startPoint);
+      MlirStringRef endPointName = synthLongestPathObjectName(endPoint);
+      size_t startPointBitPos = synthLongestPathObjectBitPos(startPoint);
+      size_t endPointBitPos = synthLongestPathObjectBitPos(endPoint);
 
-      printf("FanIn: %.*s[%zu]\n", (int)fanInName.length, fanInName.data,
-             fanInBitPos);
-      printf("FanOut: %.*s[%zu]\n", (int)fanOutName.length, fanOutName.data,
-             fanOutBitPos);
-      // CHECK: FanIn: p[[[BIT:[0-9]]]]
-      // CHECK: FanOut: p[[[BIT]]]
+      printf("StartPoint: %.*s[%zu]\n", (int)startPointName.length, startPointName.data,
+             startPointBitPos);
+      printf("EndPoint: %.*s[%zu]\n", (int)endPointName.length, endPointName.data,
+             endPointBitPos);
+      // CHECK: StartPoint: p[[[BIT:[0-9]]]]
+      // CHECK: EndPoint: p[[[BIT]]]
 
       // Test instance path
-      IgraphInstancePath fanInPath =
-          synthLongestPathObjectGetInstancePath(fanIn);
-      IgraphInstancePath fanOutPath =
-          synthLongestPathObjectGetInstancePath(fanOut);
-      printf("FanIn instance path size: %zu\n", fanInPath.size);
-      printf("FanOut instance path size: %zu\n", fanOutPath.size);
-      // CHECK: FanIn instance path size: 1
-      // CHECK: FanOut instance path size: 1
+      IgraphInstancePath startPointPath =
+          synthLongestPathObjectGetInstancePath(startPoint);
+      IgraphInstancePath endPointPath =
+          synthLongestPathObjectGetInstancePath(endPoint);
+      printf("StartPoint instance path size: %zu\n", startPointPath.size);
+      printf("EndPoint instance path size: %zu\n", endPointPath.size);
+      // CHECK: StartPoint instance path size: 1
+      // CHECK: EndPoint instance path size: 1
 
       // Test History API
       SynthLongestPathHistory history =
