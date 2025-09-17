@@ -126,7 +126,7 @@ struct PartialProductOpConversion : OpConversionPattern<PartialProductOp> {
 
 // Lower to an SMT assertion that summing the results is equivalent to the
 // product of the sum of the pos_partial_product inputs
-// c:<N> = pos_partial_product(a, b) ->
+// c:<N> = pos_partial_product(a, b, c) ->
 // assert(c#0 + ... + c#<N-1> == (a + b) * c)
 struct PosPartialProductOpConversion
     : OpConversionPattern<PosPartialProductOp> {

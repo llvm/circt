@@ -248,10 +248,6 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
     // Need the +1 for the carry-out
     size_t maxNonZeroBits = std::max(*op0NonZeroBits, *op1NonZeroBits);
 
-    // If all bits non-zero we will not reduce the number of results
-    if (maxNonZeroBits == op.getNumResults())
-      return failure();
-
     auto newPP = datapath::PartialProductOp::create(
         rewriter, op.getLoc(), op.getOperands(), maxNonZeroBits);
 
@@ -326,14 +322,14 @@ struct ReduceNumPosPartialProducts
     auto operands = op.getOperands();
     unsigned inputWidth = operands[0].getType().getIntOrFloatBitWidth();
 
-    auto addend0 = calculateNonZeroBits(operands[0], op.getNumResults());
-    auto addend1 = calculateNonZeroBits(operands[1], op.getNumResults());
+    auto addend0NonZero = calculateNonZeroBits(operands[0], op.getNumResults());
+    auto addend1NonZero = calculateNonZeroBits(operands[1], op.getNumResults());
 
-    if (failed(addend0) || failed(addend1))
+    if (failed(addend0NonZero) || failed(addend1NonZero))
       return failure();
 
     // Need the +1 for the carry-out
-    size_t maxNonZeroBits = std::max(*addend0, *addend1) + 1;
+    size_t maxNonZeroBits = std::max(*addend0NonZero, *addend1NonZero) + 1;
 
     if (maxNonZeroBits >= op.getNumResults())
       return failure();

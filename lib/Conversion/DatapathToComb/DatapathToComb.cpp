@@ -370,7 +370,8 @@ private:
                                      unsigned width) {
 
     Location loc = op.getLoc();
-    // Keep a as a bitvector - multiply by each digit of b
+    // Encode (a+b) by implementing a half-adder - then note the following fact
+    // carry[i] & save[i] == false
     auto carry = rewriter.createOrFold<comb::AndOp>(loc, a, b);
     auto save = rewriter.createOrFold<comb::XorOp>(loc, a, b);
 
@@ -394,10 +395,11 @@ private:
     Value twoCWider = rewriter.create<comb::ConcatOp>(loc, ValueRange{c, zero});
     Value twoC = rewriter.create<comb::ExtractOp>(loc, twoCWider, 0, rowWidth);
 
+    // AND Array Construction:
+    // pp[i] = ( (carry[i] * (c<<1)) | (save[i] * c) ) << i
     SmallVector<Value> partialProducts;
     partialProducts.reserve(width);
-    // AND Array Construction:
-    // partialProducts[i] = ({carry[i],..., carry[i]} & a) << i
+
     assert(op.getNumResults() <= width &&
            "Cannot return more results than the operator width");
 
