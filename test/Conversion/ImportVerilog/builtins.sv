@@ -285,4 +285,4 @@ function TimeBuiltins();
   // CHECK: [[REALTIME:%.+]] = moore.builtin.time
   // TODO: There is no int-to-real conversion yet; change this to dummyB once int-to-real works!
   dummyA($realtime());
-endfunction  // TimeBuiltins
+endfunction

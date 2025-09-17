@@ -1734,7 +1734,6 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   }];
 }
 
-
 def FormatTimeOp : MooreOp<"fmt.time", [Pure]> {
   let summary = "Format a time value";
   let description = [{
@@ -1755,7 +1754,6 @@ def FormatTimeOp : MooreOp<"fmt.time", [Pure]> {
       attr-dict
   }];
 }
-
 
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
