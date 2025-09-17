@@ -79,3 +79,11 @@ hw.module @partial_product_do_nothing(in %a : i3, in %b : i4, out sum : i4) {
   %3 = comb.add bin %2#0, %2#1 : i4
   hw.output %3 : i4
 }
+
+// CHECK-LABEL: @pos_partial_product
+hw.module @pos_partial_product(in %a : i4, in %b : i4, in %c, out pp0 : i4, out pp1 : i4, out pp2 : i4, out pp3 : i4) {
+  // CHECK-NEXT: datapath.pos_partial_product %a, %b, %c : (i4, i4, i4) -> (i4, i4, i4, i4)
+  %0 = comb.add %a, %b : i4
+  %1:3 = datapath.partial_product %0, %b : (i4, i4) -> (i4, i4, i4, i4)
+  hw.output %0#0, %0#1, %0#2, %0#3 : i4, i4, i4, i4
+}

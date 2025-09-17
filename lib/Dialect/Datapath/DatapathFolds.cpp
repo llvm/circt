@@ -20,6 +20,26 @@ using namespace datapath;
 using namespace matchers;
 
 //===----------------------------------------------------------------------===//
+// Utility Functions
+//===----------------------------------------------------------------------===//
+static FailureOr<size_t> calculateNonZeroBits(Value operand,
+                                              size_t numResults) {
+  // If the extracted bits are all known, then return the result.
+  auto knownBits = comb::computeKnownBits(operand);
+  if (knownBits.isUnknown())
+    return failure(); // Skip if we don't know anything about the bits
+
+  size_t nonZeroBits = operand.getType().getIntOrFloatBitWidth() -
+                       knownBits.Zero.countLeadingOnes();
+
+  // If all bits non-zero we will not reduce the number of results
+  if (nonZeroBits == numResults)
+    return failure();
+
+  return nonZeroBits;
+}
+
+//===----------------------------------------------------------------------===//
 // Compress Operation
 //===----------------------------------------------------------------------===//
 // Check that all compressor results are included in this list of operands
@@ -294,4 +314,52 @@ void PartialProductOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
 
   results.add<ReduceNumPartialProducts, PosPartialProducts>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// Pos Partial Product Operation
+//===----------------------------------------------------------------------===//
+struct ReduceNumPosPartialProducts
+    : public OpRewritePattern<PosPartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // pos_pp(concat(0,a), concat(0,b), c) -> reduced number of results
+  LogicalResult matchAndRewrite(PosPartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+    auto operands = op.getOperands();
+    unsigned inputWidth = operands[0].getType().getIntOrFloatBitWidth();
+
+    auto addend0 = calculateNonZeroBits(operands[0], op.getNumResults());
+    auto addend1 = calculateNonZeroBits(operands[1], op.getNumResults());
+
+    if (failed(addend0) || failed(addend1))
+      return failure();
+
+    // Need the +1 for the carry-out
+    size_t maxNonZeroBits = std::max(*addend0, *addend1) + 1;
+
+    if (maxNonZeroBits >= op.getNumResults())
+      return failure();
+
+    auto newPP = datapath::PosPartialProductOp::create(
+        rewriter, op.getLoc(), op.getOperands(), maxNonZeroBits);
+
+    auto zero = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       APInt::getZero(inputWidth));
+
+    // Collect newPP results and pad with zeros if needed
+    SmallVector<Value> newResults(newPP.getResults().begin(),
+                                  newPP.getResults().end());
+
+    newResults.append(op.getNumResults() - newResults.size(), zero);
+
+    rewriter.replaceOp(op, newResults);
+    return success();
+  }
+};
+
+void PosPartialProductOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+
+  results.add<ReduceNumPosPartialProducts>(context);
 }

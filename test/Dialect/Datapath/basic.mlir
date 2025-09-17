@@ -13,3 +13,10 @@ hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, o
   %0:3 = datapath.partial_product %a, %b : (i3, i3) -> (i3, i3, i3)
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
+
+// CHECK-LABEL: @pos_partial_product
+hw.module @pos_partial_product(in %a : i3, in %b : i3, in %c, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
+  // CHECK-NEXT: datapath.pos_partial_product %a, %b, %c : (i3, i3, i3) -> (i3, i3, i3)
+  %0:3 = datapath.pos_partial_product %a, %b, %c : (i3, i3, i3) -> (i3, i3, i3)
+  hw.output %0#0, %0#1, %0#2 : i3, i3, i3
+}

@@ -157,3 +157,47 @@ hw.module @timing(in %a : i1, in %b : i1, in %c : i1, out carry : i1, out save :
   %0:2 = datapath.compress %a, %b, %c, %and : i1 [4 -> 2]
   hw.output %0#0, %0#1 : i1, i1
 }
+
+// CHECK-LABEL: @pos_partial_product
+hw.module @pos_partial_product(in %a : i3, in %b : i3, in %c : i3, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %c0_i0 = hw.constant 0 : i0
+  // CHECK-NEXT: %false = hw.constant false
+  // Apply half-adder
+  // CHECK-NEXT: [[AND:%.+]] = comb.and %a, %b : i3
+  // CHECK-NEXT: [[XOR:%.+]] = comb.xor %a, %b : i3
+  // CHECK-NEXT: [[CARRY_0:%.+]] = comb.extract [[AND]] from 0 : (i3) -> i1
+  // CHECK-NEXT: [[CARRY_1:%.+]] = comb.extract [[AND]] from 1 : (i3) -> i1
+  // CHECK-NEXT: [[CARRY_2:%.+]] = comb.extract [[AND]] from 2 : (i3) -> i1
+  // CHECK-NEXT: [[SAVE_0:%.+]] = comb.extract [[XOR]] from 0 : (i3) -> i1
+  // CHECK-NEXT: [[SAVE_1:%.+]] = comb.extract [[XOR]] from 1 : (i3) -> i1
+  // CHECK-NEXT: [[SAVE_2:%.+]] = comb.extract [[XOR]] from 2 : (i3) -> i1
+  // CHECK-NEXT: [[TWOCEXT:%.+]] = comb.concat %c, %false : i3, i1
+  // CHECK-NEXT: [[TWOC:%.+]] = comb.extract [[TWOCEXT]] from 0 : (i4) -> i3
+  // pp-row 0
+  // CHECK-NEXT: [[SEL_SAVE_0:%.+]] = comb.replicate [[SAVE_0]] : (i1) -> i3
+  // CHECK-NEXT: [[SEL_CARRY_0:%.+]] = comb.replicate [[CARRY_0]] : (i1) -> i3
+  // CHECK-NEXT: [[AND12:%.+]] = comb.and [[SEL_SAVE_0]], %c : i3
+  // CHECK-NEXT: [[AND13:%.+]] = comb.and [[SEL_CARRY_0]], [[TWOC]] : i3
+  // CHECK-NEXT: [[OR14:%.+]] = comb.or [[AND12]], [[AND13]] : i3
+  // CHECK-NEXT: [[PP0:%.+]] = comb.concat [[OR14]], %c0_i0 : i3, i0
+  // pp-row 1
+  // CHECK-NEXT: [[SEL_SAVE_1:%.+]] = comb.replicate [[SAVE_1]] : (i1) -> i3
+  // CHECK-NEXT: [[SEL_CARRY_1:%.+]] = comb.replicate [[CARRY_1]] : (i1) -> i3
+  // CHECK-NEXT: [[AND18:%.+]] = comb.and [[SEL_SAVE_1]], %c : i3
+  // CHECK-NEXT: [[AND19:%.+]] = comb.and [[SEL_CARRY_1]], [[TWOC]] : i3
+  // CHECK-NEXT: [[OR20:%.+]] = comb.or [[AND18]], [[AND19]] : i3
+  // CHECK-NEXT: [[CONCAT21:%.+]] = comb.concat [[OR20]], %false : i3, i1
+  // CHECK-NEXT: [[PP1:%.+]] = comb.extract [[CONCAT21]] from 0 : (i4) -> i3
+  // pp-row 2
+  // CHECK-NEXT: [[SEL_SAVE_2:%.+]] = comb.replicate [[SAVE_2]] : (i1) -> i3
+  // CHECK-NEXT: [[SEL_CARRY_2:%.+]] = comb.replicate [[CARRY_2]] : (i1) -> i3
+  // CHECK-NEXT: [[AND25:%.+]] = comb.and [[SEL_SAVE_2]], %c : i3
+  // CHECK-NEXT: [[AND26:%.+]] = comb.and [[SEL_CARRY_2]], [[TWOC]] : i3
+  // CHECK-NEXT: [[OR27:%.+]] = comb.or [[AND25]], [[AND26]] : i3
+  // CHECK-NEXT: [[CONCAT28:%.+]] = comb.concat [[OR27]], %c0_i2 : i3, i2
+  // CHECK-NEXT: [[PP2:%.+]] = comb.extract [[CONCAT28]] from 0 : (i5) -> i3
+  // CHECK: hw.output [[PP0]], [[PP1]], [[PP2]] : i3, i3, i3
+  %0:3 = datapath.pos_partial_product %a, %b, %c : (i3, i3, i3) -> (i3, i3, i3)
+  hw.output %0#0, %0#1, %0#2 : i3, i3, i3
+}

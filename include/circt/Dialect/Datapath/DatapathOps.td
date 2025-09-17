@@ -114,7 +114,7 @@ def PosPartialProductOp : DatapathOp<"pos_partial_product",
     
     Example using `datapath` dialect:
     ```mlir
-    %0:4 = datapath.sop_partial_product %a, %b, %c : (i3, i3, i3) 
+    %0:3 = datapath.pos_partial_product %a, %b, %c : (i3, i3, i3) 
                                                   -> (i3, i3, i3)
     ```
   }];
@@ -125,7 +125,8 @@ def PosPartialProductOp : DatapathOp<"pos_partial_product",
   let assemblyFormat = [{
     $addend0  `,` $addend1 `,` $multiplicand attr-dict `:` functional-type(operands, results)
   }];
-
+  let hasCanonicalizer = true;
+  
   let builders = [
     OpBuilder<(ins "ValueRange":$lhs, "int32_t":$targetRows), [{
       auto inputType = lhs.front().getType();

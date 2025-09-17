@@ -186,6 +186,8 @@ private:
         a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
       }
     }
+
+    // TODO - replace with a concatenation to aid longest path analysis
     auto oneRowWidth =
         hw::ConstantOp::create(rewriter, loc, APInt(rowWidth, 1));
     // Booth encoding will select each row from {-2a, -1a, 0, 1a, 2a}
@@ -358,7 +360,7 @@ struct DatapathPosPartialProductOpConversion
       return success();
     }
 
-    // Use width as a heuristic to guide partial product implementation
+    // TODO: Implement Booth lowering
     return lowerAndArray(rewriter, a, b, c, op, width);
   }
 
@@ -375,10 +377,22 @@ private:
     SmallVector<Value> carryBits = extractBits(rewriter, carry);
     SmallVector<Value> saveBits = extractBits(rewriter, save);
 
+    // Reduce c width based on leading zeros
+    auto rowWidth = width;
+    auto knownBitsC = comb::computeKnownBits(c);
+    if (!knownBitsC.Zero.isZero()) {
+      if (knownBitsC.Zero.countLeadingOnes() > 1) {
+        // Retain one leading zero to represent 2*{1'b0, c} = {c, 1'b0}
+        // {'0, c} -> {1'b0, c}
+        rowWidth -= knownBitsC.Zero.countLeadingOnes() - 1;
+        c = rewriter.createOrFold<comb::ExtractOp>(loc, c, 0, rowWidth);
+      }
+    }
+
     // Compute 2*c for use in array construction
     Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
     Value twoCWider = rewriter.create<comb::ConcatOp>(loc, ValueRange{c, zero});
-    Value twoC = rewriter.create<comb::ExtractOp>(loc, twoCWider, 0, width);
+    Value twoC = rewriter.create<comb::ExtractOp>(loc, twoCWider, 0, rowWidth);
 
     SmallVector<Value> partialProducts;
     partialProducts.reserve(width);
@@ -389,17 +403,36 @@ private:
 
     for (unsigned i = 0; i < op.getNumResults(); ++i) {
       auto replSave =
-          rewriter.createOrFold<comb::ReplicateOp>(loc, saveBits[i], width);
+          rewriter.createOrFold<comb::ReplicateOp>(loc, saveBits[i], rowWidth);
       auto replCarry =
-          rewriter.createOrFold<comb::ReplicateOp>(loc, carryBits[i], width);
+          rewriter.createOrFold<comb::ReplicateOp>(loc, carryBits[i], rowWidth);
 
       auto ppRowSave = rewriter.createOrFold<comb::AndOp>(loc, replSave, c);
       auto ppRowCarry =
           rewriter.createOrFold<comb::AndOp>(loc, replCarry, twoC);
       auto ppRow =
           rewriter.createOrFold<comb::OrOp>(loc, ppRowSave, ppRowCarry);
-      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(width, i));
-      auto ppAlign = comb::ShlOp::create(rewriter, loc, ppRow, shiftBy);
+      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i, 0));
+      auto ppAlign =
+          comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
+
+      // May need to truncate shifted value
+      if (rowWidth + i > width) {
+        auto ppAlignTrunc =
+            rewriter.createOrFold<comb::ExtractOp>(loc, ppAlign, 0, width);
+        partialProducts.push_back(ppAlignTrunc);
+        continue;
+      }
+      // May need to zero pad to approriate width
+      if (rowWidth + i < width) {
+        auto padding = width - rowWidth - i;
+        Value zeroPad =
+            hw::ConstantOp::create(rewriter, loc, APInt(padding, 0));
+        partialProducts.push_back(rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{zeroPad, ppAlign})); // Pad to full width
+        continue;
+      }
+
       partialProducts.push_back(ppAlign);
     }
 
@@ -445,8 +478,9 @@ static LogicalResult applyPatternsGreedilyWithTimingInfo(
 void ConvertDatapathToCombPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
 
-  patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
-                                                   forceBooth);
+  patterns.add<DatapathPartialProductOpConversion,
+               DatapathPosPartialProductOpConversion>(patterns.getContext(),
+                                                      forceBooth);
   synth::IncrementalLongestPathAnalysis *analysis = nullptr;
   if (timingAware)
     analysis = &getAnalysis<synth::IncrementalLongestPathAnalysis>();
