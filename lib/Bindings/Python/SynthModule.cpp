@@ -99,13 +99,13 @@ void circt::python::populateDialectSynthSubmodule(nb::module_ &m) {
                    [](SynthLongestPathDataflowPath &self) {
                      return synthLongestPathDataflowPathGetDelay(self);
                    })
-      .def_prop_ro("fan_in",
+      .def_prop_ro("start_point",
                    [](SynthLongestPathDataflowPath &self) {
-                     return synthLongestPathDataflowPathGetFanIn(self);
+                     return synthLongestPathDataflowPathGetStartPoint(self);
                    })
-      .def_prop_ro("fan_out",
+      .def_prop_ro("end_point",
                    [](SynthLongestPathDataflowPath &self) {
-                     return synthLongestPathDataflowPathGetFanOut(self);
+                     return synthLongestPathDataflowPathGetEndPoint(self);
                    })
       .def_prop_ro("history",
                    [](SynthLongestPathDataflowPath &self) {
