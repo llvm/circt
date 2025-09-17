@@ -264,6 +264,7 @@ class Verilator(Simulator):
         "-Wno-TIMESCALEMOD",
         "-Wno-fatal",
         "-sv",
+        "--output-split",
         "--build",
         "--exe",
         "--assert",
