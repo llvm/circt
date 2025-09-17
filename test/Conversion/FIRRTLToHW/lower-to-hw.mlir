@@ -20,7 +20,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME:             static int global_id [string];
   // CHECK-SAME:             static function int get(string name);
   // CHECK-SAME:               if (global_id.exists(name) == 32'h0)
-  // CHECK-SAME:                 global_id[name] = $fopen(name);
+  // CHECK-SAME:                 global_id[name] = $fopen(name, \22w\22);
   // CHECK-SAME:               return global_id[name];
   // CHECK-SAME:             endfunction
   // CHECK-SAME:           endclass

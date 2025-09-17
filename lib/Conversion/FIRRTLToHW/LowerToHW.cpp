@@ -909,7 +909,7 @@ package __circt_lib_logging;
     static int global_id [string];
     static function int get(string name);
       if (global_id.exists(name) == 32'h0) begin
-        global_id[name] = $fopen(name);
+        global_id[name] = $fopen(name, "w");
         if (global_id[name] == 32'h0)
           $error("Failed to open file %s", name);
       end
