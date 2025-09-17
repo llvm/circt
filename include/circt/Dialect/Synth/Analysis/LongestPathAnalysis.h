@@ -90,7 +90,7 @@ struct DebugPoint {
   StringRef comment;
 };
 
-// An OpenPath represents a path from a fan-in with an associated
+// An OpenPath represents a path from a startPoint with an associated
 // delay and history of debug points.
 struct OpenPath {
   OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
@@ -111,27 +111,26 @@ struct OpenPath {
   Object startPoint;
   int64_t delay;
   // History of debug points represented by linked lists.
-  // The head of the list is the farthest point from the fanIn.
+  // The head of the list is the farthest point from the startPoint.
   llvm::ImmutableList<DebugPoint> history;
 };
 
-// A DataflowPath represents a complete timing path from a fanout to a fanin
+// A DataflowPath represents a complete timing path from a endPoint to a startPoint
 // with associated delay information. This is the primary result type for
-// longest path analysis, containing both endpoints and path history.
+// longest path analysis, containing both endPoints and path history.
 class DataflowPath {
 public:
-  // FanOut can be either an internal circuit object or a module output port
+  // EndPoint can be either an internal circuit object or a module output port
   // This flexibility allows representing both closed paths
   // (register-to-register) and open paths (register-to-output) in a unified way
   using OutputPort = std::tuple<hw::HWModuleOp, size_t, size_t>;
   using EndPointType = std::variant<Object, OutputPort>;
 
-  // Constructor for paths with Object fanout (internal circuit nodes)
   // Constructor for paths with Object endPoint (internal circuit nodes)
   DataflowPath(Object endPoint, OpenPath startPoint, hw::HWModuleOp root)
       : endPoint(endPoint), path(startPoint), root(root) {}
 
-  // Constructor for paths with port fanout (module output ports)
+  // Constructor for paths with port endPoint (module output ports)
   DataflowPath(OutputPort endPoint, OpenPath startPoint, hw::HWModuleOp root)
       : endPoint(endPoint), path(startPoint), root(root) {}
 
@@ -150,7 +149,6 @@ public:
   }
   const OpenPath &getPath() const { return path; }
 
-  // Get source location for the fanout point (for diagnostics)
   // Get source location for the EndPoint (for diagnostics)
   Location getEndPointLoc();
 
@@ -167,7 +165,6 @@ public:
                circt::igraph::InstancePath path);
 
 private:
-  //FanOutType fanOut;   // Either Object or (port_index, bit_index)
   EndPointType endPoint;   // Either Object or (port_index, bit_index)
   OpenPath path;       // The actual timing path with history
   hw::HWModuleOp root; // Root module for this path
@@ -201,7 +198,7 @@ struct LongestPathAnalysisOptions {
   /// are queried. Disables parallel processing.
   bool lazyComputation = false;
 
-  /// Keep only the maximum delay path per fanout point.
+  /// Keep only the maximum delay path per endPoint.
   /// Focuses on finding maximum delays, discarding non-critical paths.
   /// Significantly faster and uses less memory when only delay bounds
   /// are needed rather than complete path enumeration.
@@ -228,7 +225,7 @@ public:
                       const LongestPathAnalysisOptions &option = {});
   ~LongestPathAnalysis();
 
-  // Return all longest paths to each Fanin for the given value and bit
+  // Return all longest paths to each StartPoint for the given value and bit
   // position.
   LogicalResult computeGlobalPaths(Value value, size_t bitPos,
                                    SmallVectorImpl<DataflowPath> &results);
@@ -251,7 +248,7 @@ public:
   // typically register-to-register paths. A closed path is a path that starts
   // and ends at sequential elements (registers/flip-flops), forming a complete
   // timing path through combinational logic. The path may cross module
-  // boundaries but both endpoints are sequential elements, not ports.
+  // boundaries but both endPoints are sequential elements, not ports.
   LogicalResult getClosedPaths(StringAttr moduleName,
                                SmallVectorImpl<DataflowPath> &results,
                                bool elaboratePaths = false) const;
@@ -347,8 +344,8 @@ public:
   // Sort the paths by delay in descending order.
   void sortInDescendingOrder();
 
-  // Sort and drop all paths except the longest path per fanout point.
-  //void sortAndDropNonCriticalPathsPerFanOut();
+  // Sort and drop all paths except the longest path per endPoint.
+  //void sortAndDropNonCriticalPathsPerEndPoint();
   void sortAndDropNonCriticalPathsPerEndPoint();
 
   // Merge another collection into this one.

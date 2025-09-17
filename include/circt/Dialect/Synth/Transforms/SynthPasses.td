@@ -94,7 +94,7 @@ def PrintLongestPathAnalysis
     This pass performs longest path analysis on AIG circuits and outputs detailed
     timing information including:
     - Delay distribution statistics showing timing levels and path counts
-    - Critical path details for the top N fanout points
+    - Critical path details for the top N endPoints
     - Path history with intermediate debug points for detailed analysis
 
     The analysis considers each AIG and-inverter operation to have unit delay and
