@@ -1763,8 +1763,27 @@ class Builtin<string mnemonic, list<Trait> traits = []> :
     MooreOp<"builtin." # mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
-// Pseudo-Random Generators
+// True-Random and Pseudo-Random Generators
 //===----------------------------------------------------------------------===//
+
+def RandomBIOp : Builtin<"random"> {
+  let summary = "Generate a true random signed integer (optionally seeded)";
+  let description = [{
+    Corresponds to the `$random` system function. Returns a 32-bit
+    true random integer. The seed is optional; when provided, it initializes
+    the generator. If not provided, treat it as 0 in semantics/lowering.
+
+    `$random` is largely considered to be deprecated since it leads to
+    non-reproducible simulation results. Consider using `$urandom` instead.
+
+    See IEEE 1800-2023 § 20.14 "Probablistic distribution functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins Optional<TwoValuedI32>:$seed);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "($seed^)? attr-dict";
+}
 
 def UrandomBIOp : Builtin<"urandom"> {
   let summary = "Generate a pseudo-random unsigned integer (optionally seeded)";

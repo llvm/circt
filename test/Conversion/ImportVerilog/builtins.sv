@@ -267,12 +267,18 @@ endfunction
 // CHECK-LABEL: func.func private @RandomBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 function RandomBuiltins(int x);
-   // CHECK: [[RAND0:%.+]] = moore.builtin.urandom
-   // CHECK-NEXT: call @dummyA([[RAND0]]) : (!moore.i32) -> ()
-   dummyA($urandom());
-    // CHECK: [[RAND1:%.+]] = moore.builtin.urandom [[X]]
-    // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
-   dummyA($urandom(x));
+  // CHECK: [[URAND0:%.+]] = moore.builtin.urandom
+  // CHECK-NEXT: call @dummyA([[URAND0]]) : (!moore.i32) -> ()
+  dummyA($urandom());
+  // CHECK: [[URAND1:%.+]] = moore.builtin.urandom [[X]]
+  // CHECK-NEXT: call @dummyA([[URAND1]]) : (!moore.i32) -> ()
+  dummyA($urandom(x));
+  // CHECK: [[RAND0:%.+]] = moore.builtin.random
+  // CHECK-NEXT: call @dummyA([[RAND0]]) : (!moore.i32) -> ()
+  dummyA($random());
+  // CHECK: [[RAND1:%.+]] = moore.builtin.random [[X]]
+  // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
+  dummyA($random(x));
 endfunction
 
 // CHECK-LABEL: func.func private @TimeBuiltins(
