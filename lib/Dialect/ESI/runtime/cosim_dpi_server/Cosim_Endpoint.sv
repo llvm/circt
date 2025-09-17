@@ -139,7 +139,7 @@ module Cosim_Endpoint_FromHost
   logic DataOut_a_valid;
   // Packed representation of the byte buffer to feed the skid input.
   logic [FROM_HOST_SIZE_BITS-1:0] DataOut_a;
-  // Ready/valid wires between this module and the pipeline primitive.
+  // Ready/valid wires between this module and the skid buffer.
   wire DataOut_a_ready;
   wire DataOut_x_valid;
   wire [FROM_HOST_SIZE_BITS-1:0] DataOut_x;
@@ -152,7 +152,7 @@ module Cosim_Endpoint_FromHost
         DataOut_a_valid <= 1'b0;
 
       // Only attempt to fetch data from the host when the skid buffer can
-      // accept it can accept it (DataOut_a_ready).
+      // accept it (DataOut_a_ready).
       if (!DataOut_a_valid && DataOut_a_ready) begin
         int data_limit;
         int rc;
