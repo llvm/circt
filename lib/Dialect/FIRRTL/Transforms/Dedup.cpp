@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Threading.h"
@@ -29,8 +30,11 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
+
+#define DEBUG_TYPE "firrtl-dedup"
 
 namespace circt {
 namespace firrtl {
@@ -69,22 +73,6 @@ static bool canRemoveModule(mlir::SymbolOpInterface symbol) {
 //===----------------------------------------------------------------------===//
 // Hashing
 //===----------------------------------------------------------------------===//
-
-llvm::raw_ostream &printHex(llvm::raw_ostream &stream,
-                            ArrayRef<uint8_t> bytes) {
-  // Print the hash on a single line.
-  return stream << format_bytes(bytes, std::nullopt, 32) << "\n";
-}
-
-llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
-  return printHex(stream, data.result());
-}
-
-llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
-  ArrayRef<uint8_t> bytes(reinterpret_cast<const uint8_t *>(data.c_str()),
-                          data.length());
-  return printHex(stream, bytes);
-}
 
 // This struct contains information to determine module module uniqueness. A
 // first element is a structural hash of the module, and the second element is
@@ -1673,6 +1661,11 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
     Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;
+    LLVM_DEBUG({
+      llvm::dbgs() << "\n";
+      debugHeader(Twine("Dedup circuit \"") + circuit.getName() + "\"")
+          << "\n\n";
+    });
 
     // Modules annotated with this should not be considered for deduplication.
     auto noDedupClass = StringAttr::get(context, noDedupAnnoClass);
@@ -1695,6 +1688,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
         llvm::map_range(llvm::post_order(&instanceGraph), [](auto *node) {
           return cast<FModuleLike>(*node->getModule());
         }));
+    LLVM_DEBUG(llvm::dbgs() << "Found " << modules.size() << " modules\n");
 
     SmallVector<std::optional<ModuleInfo>> moduleInfos(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
@@ -1726,6 +1720,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     }
 
     // Calculate module information parallelly.
+    LLVM_DEBUG(llvm::dbgs() << "Computing module information\n");
     auto result = mlir::failableParallelForEach(
         context, llvm::seq(modules.size()), [&](unsigned idx) {
           auto module = modules[idx];
@@ -1744,9 +1739,25 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
           return success();
         });
 
+    // Dump out the module hashes for debugging.
+    LLVM_DEBUG({
+      auto &os = llvm::dbgs();
+      for (auto [module, info] : llvm::zip(modules, moduleInfos)) {
+        os << "- Hash ";
+        if (info) {
+          os << llvm::format_bytes(info->structuralHash, std::nullopt, 32, 32);
+        } else {
+          os << "--------------------------------";
+          os << "--------------------------------";
+        }
+        os << " for " << module.getModuleNameAttr() << "\n";
+      }
+    });
+
     if (result.failed())
       return signalPassFailure();
 
+    LLVM_DEBUG(llvm::dbgs() << "Update modules\n");
     for (auto [i, module] : llvm::enumerate(modules)) {
       auto moduleName = module.getModuleNameAttr();
       auto &maybeModuleInfo = moduleInfos[i];
@@ -1766,7 +1777,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       for (auto &referredModule : moduleInfo.referredModuleNames)
         referredModule = dedupMap[referredModule];
 
-      // Check if there a module with the same hash.
+      // Check if there is a module with the same hash.
       auto it = moduleInfoToModule.find(moduleInfo);
       if (it != moduleInfoToModule.end()) {
         auto original = cast<FModuleLike>(it->second);
@@ -1791,6 +1802,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
         }
 
         // Record the group ID of the other module.
+        LLVM_DEBUG(llvm::dbgs() << "- Replace " << moduleName << " with "
+                                << originalName << "\n");
         dedupMap[moduleName] = originalName;
         deduper.dedup(original, module);
         ++erasedModules;
@@ -1833,6 +1846,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       return it->second;
     };
 
+    LLVM_DEBUG(llvm::dbgs() << "Update annotations\n");
     AnnotationSet::removeAnnotations(circuit, [&](Annotation annotation) {
       if (!annotation.isClass(mustDedupAnnoClass))
         return false;
