@@ -1734,6 +1734,27 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   }];
 }
 
+def FormatTimeOp : MooreOp<"fmt.time", [Pure]> {
+  let summary = "Format a time value";
+  let description = [{
+  Format a time value as a string according to the format specified by the most recent
+  invocation of `$timeformat`.
+
+  See IEEE 1800-2023 § 21.2.1.1 "Format specifications" and
+  IEEE 1800-2023 § 20.4.3 "$timeformat".
+  }];
+  let arguments = (ins
+  TimeType:$value,
+  OptionalAttr<I32Attr>:$width
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+      $value
+      (`,` `width` $width^)?
+      attr-dict
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//

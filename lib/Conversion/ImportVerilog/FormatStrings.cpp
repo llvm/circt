@@ -135,6 +135,9 @@ struct FormatStringParser {
     case 'f':
       return emitReal(arg, options, RealFormat::Float);
 
+    case 't':
+      return emitTime(arg, options);
+
     case 's':
       // Simplified handling for literals.
       if (auto *lit = arg.as_if<slang::ast::StringLiteral>()) {
@@ -203,6 +206,36 @@ struct FormatStringParser {
 
     fragments.push_back(
         moore::FormatRealOp::create(builder, loc, value, format));
+
+    return success();
+  }
+
+  // Format an integer with the %t specifier according to IEEE 1800-2023
+  // § 20.4.3 "$timeformat"
+  LogicalResult emitTime(const slang::ast::Expression &arg,
+                         const FormatOptions &options) {
+
+    // Only handle `TimeType` values.
+    auto value = context.convertRvalueExpression(
+        arg, moore::TimeType::get(context.getContext()));
+    if (!value)
+      return failure();
+
+    mlir::IntegerAttr width = nullptr;
+    if (options.width) {
+      mlir::Type i32Ty =
+          mlir::IntegerType::get(context.getContext(), /*width=*/32);
+      width = mlir::IntegerAttr::get(i32Ty, options.width.value());
+    }
+
+    // Delegate actual formatting to `moore.fmt.time`, annotate width if
+    // provided
+    if (width) {
+      fragments.push_back(
+          moore::FormatTimeOp::create(builder, loc, value, width));
+    } else {
+      fragments.push_back(moore::FormatTimeOp::create(builder, loc, value));
+    }
 
     return success();
   }
