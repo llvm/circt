@@ -172,7 +172,8 @@ class DataflowPath:
     prefix = f"top:{self.root}"
 
     # Build hierarchy strings for start and end points
-    start_point_hierarchy = self._build_hierarchy_string(self.start_point, prefix)
+    start_point_hierarchy = self._build_hierarchy_string(
+        self.start_point, prefix)
     end_point_hierarchy = self._build_hierarchy_string(self.end_point, prefix)
 
     # Track current position and delay for incremental output
