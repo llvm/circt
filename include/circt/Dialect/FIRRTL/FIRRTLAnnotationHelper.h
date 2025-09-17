@@ -48,6 +48,13 @@ struct TokenAnnoTarget {
     toVector(out);
     return std::string(out);
   }
+
+  /// Convert the annotation path to a StringAttr.
+  StringAttr toStringAttr(MLIRContext *context) const {
+    SmallString<32> out;
+    toVector(out);
+    return StringAttr::get(context, out);
+  }
 };
 
 // The potentially non-local resolved annotation.
@@ -141,9 +148,9 @@ struct AnnoTargetCache {
   AnnoTargetCache() = delete;
   AnnoTargetCache(const AnnoTargetCache &other) = default;
   AnnoTargetCache(AnnoTargetCache &&other)
-      : targets(std::move(other.targets)){};
+      : targets(std::move(other.targets)) {}
 
-  AnnoTargetCache(FModuleLike mod) { gatherTargets(mod); };
+  AnnoTargetCache(FModuleLike mod) { gatherTargets(mod); }
 
   /// Lookup the target for 'name', empty if not found.
   /// (check for validity using operator bool()).
@@ -359,7 +366,7 @@ struct ApplyState {
   IntegerAttr newID() {
     return IntegerAttr::get(IntegerType::get(circuit.getContext(), 64),
                             annotationID++);
-  };
+  }
 
 private:
   hw::InnerSymbolNamespaceCollection namespaces;
