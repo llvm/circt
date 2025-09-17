@@ -121,6 +121,13 @@ module Cosim_Endpoint_FromHost
   /// *******************
   /// Data out management.
   ///
+  /// It has been observed that some simulators (verilator) does not handle
+  /// combinational driving from DPI well (resulting in non-determinism wrt.
+  /// some of the combinational outputs being dropped/replicated). Questa does
+  /// not show this behavior.
+  /// A mitigation is to add a skid buffer to decouple the DPI interface
+  /// from the output interface.
+  /// *******************
 
   localparam int FROM_HOST_SIZE_BYTES = int'((FROM_HOST_SIZE_BITS+7)/8);
   // The number of bits over a byte.
@@ -129,13 +136,44 @@ module Cosim_Endpoint_FromHost
   localparam int FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS
       = FROM_HOST_SIZE_BYTES_FLOOR * 8;
 
+  // Skid buffer internal signals
   byte unsigned DataOutBuffer[FROM_HOST_SIZE_BYTES-1:0];
+  logic internal_valid;
+  logic [FROM_HOST_SIZE_BITS-1:0] internal_data;
+  
+  // Skid buffer registers
+  logic skid_valid;
+  logic [FROM_HOST_SIZE_BITS-1:0] skid_data;
+  
+  // Internal ready signal for DPI interface
+  logic internal_ready;
+  
+  // Skid buffer logic
+  assign internal_ready = !skid_valid || DataOutReady;
+  assign DataOutValid = internal_valid || skid_valid;
+  assign DataOut = skid_valid ? skid_data : internal_data;
+
   always @(posedge clk) begin
     if (~rst) begin
-      if (DataOutValid && DataOutReady) // A transfer occurred.
-        DataOutValid <= 1'b0;
+      // Skid buffer management
+      if (internal_valid && internal_ready) begin
+        if (!DataOutReady && !skid_valid) begin
+          // Store data in skid buffer when downstream not ready
+          skid_valid <= 1'b1;
+          skid_data <= internal_data;
+        end
+      end
+      
+      if (DataOutReady && skid_valid) begin
+        // Clear skid buffer when downstream accepts data
+        skid_valid <= 1'b0;
+      end
+      
+      // DPI interface logic
+      if (internal_valid && internal_ready) // A transfer occurred.
+        internal_valid <= 1'b0;
 
-      if (!DataOutValid || DataOutReady) begin
+      if (!internal_valid || internal_ready) begin
         int data_limit;
         int rc;
 
@@ -149,7 +187,7 @@ module Cosim_Endpoint_FromHost
             ENDPOINT_ID, FROM_HOST_SIZE_BYTES, data_limit, rc);
         end else if (rc == 0) begin
           if (data_limit == FROM_HOST_SIZE_BYTES)
-            DataOutValid <= 1'b1;
+            internal_valid <= 1'b1;
           else if (data_limit == 0)
             begin end // No message.
           else
@@ -159,18 +197,19 @@ module Cosim_Endpoint_FromHost
         end
       end
     end else begin
-      DataOutValid <= 1'b0;
+      internal_valid <= 1'b0;
+      skid_valid <= 1'b0;
     end
   end
 
-  // Assign packed output bit array from unpacked byte array.
+  // Assign packed output bit array from unpacked byte array to internal signal
   genvar iOut;
   generate
     for (iOut=0; iOut<FROM_HOST_SIZE_BYTES_FLOOR; iOut++)
-      assign DataOut[((iOut+1)*8)-1:iOut*8] = DataOutBuffer[iOut];
+      assign internal_data[((iOut+1)*8)-1:iOut*8] = DataOutBuffer[iOut];
     if (FROM_HOST_SIZE_BITS_DIFF != 0)
       // If the type is not a multiple of 8, we've got to copy the extra bits.
-      assign DataOut[(FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS +
+      assign internal_data[(FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS +
                       FROM_HOST_SIZE_BITS_DIFF - 1) :
                         FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS]
              = DataOutBuffer[FROM_HOST_SIZE_BYTES - 1]
