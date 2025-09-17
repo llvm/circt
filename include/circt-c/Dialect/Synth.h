@@ -99,9 +99,11 @@ MLIR_CAPI_EXPORTED int64_t
 synthLongestPathDataflowPathGetDelay(SynthLongestPathDataflowPath dataflowPath);
 
 MLIR_CAPI_EXPORTED SynthLongestPathObject
-synthLongestPathDataflowPathGetStartPoint(SynthLongestPathDataflowPath dataflowPath);
+synthLongestPathDataflowPathGetStartPoint(
+    SynthLongestPathDataflowPath dataflowPath);
 
-MLIR_CAPI_EXPORTED SynthLongestPathObject synthLongestPathDataflowPathGetEndPoint(
+MLIR_CAPI_EXPORTED SynthLongestPathObject
+synthLongestPathDataflowPathGetEndPoint(
     SynthLongestPathDataflowPath dataflowPath);
 
 MLIR_CAPI_EXPORTED SynthLongestPathHistory

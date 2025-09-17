@@ -86,7 +86,8 @@ void testLongestPathAnalysis(void) {
       printf("Path delay: %lld\n", (long long)delay);
       // CHECK: Path delay: 1
 
-      SynthLongestPathObject startPoint = synthLongestPathDataflowPathGetStartPoint(path);
+      SynthLongestPathObject startPoint =
+          synthLongestPathDataflowPathGetStartPoint(path);
       SynthLongestPathObject endPoint =
           synthLongestPathDataflowPathGetEndPoint(path);
 
@@ -96,10 +97,10 @@ void testLongestPathAnalysis(void) {
       size_t startPointBitPos = synthLongestPathObjectBitPos(startPoint);
       size_t endPointBitPos = synthLongestPathObjectBitPos(endPoint);
 
-      printf("StartPoint: %.*s[%zu]\n", (int)startPointName.length, startPointName.data,
-             startPointBitPos);
-      printf("EndPoint: %.*s[%zu]\n", (int)endPointName.length, endPointName.data,
-             endPointBitPos);
+      printf("StartPoint: %.*s[%zu]\n", (int)startPointName.length,
+             startPointName.data, startPointBitPos);
+      printf("EndPoint: %.*s[%zu]\n", (int)endPointName.length,
+             endPointName.data, endPointBitPos);
       // CHECK: StartPoint: p[[[BIT:[0-9]]]]
       // CHECK: EndPoint: p[[[BIT]]]
 

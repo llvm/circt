@@ -245,8 +245,8 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
 }
 
 /// Print detailed history of a timing path showing intermediate debug points.
-/// This traces the path from endPoint to startPoint, showing each logic stage and
-/// the delay contribution of each stage. This is crucial for understanding
+/// This traces the path from endPoint to startPoint, showing each logic stage
+/// and the delay contribution of each stage. This is crucial for understanding
 /// where delay is being accumulated along the critical path and identifying
 /// optimization opportunities.
 void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,

@@ -271,8 +271,7 @@ static void printObjectImpl(llvm::raw_ostream &os, const Object &object,
   os << ")";
 }
 
-template <typename T>
-static int64_t getMaxDelayInPaths(ArrayRef<T> paths) {
+template <typename T> static int64_t getMaxDelayInPaths(ArrayRef<T> paths) {
   int64_t maxDelay = 0;
   for (auto &path : paths)
     maxDelay = std::max(maxDelay, path.getDelay());
@@ -600,8 +599,12 @@ public:
   bool isTopLevel() const { return topLevel; }
   hw::HWModuleOp getHWModuleOp() const { return module; }
 
-  const auto &getFromInputPortToEndPoint() const { return fromInputPortToEndPoint; }
-  const auto &getFromOutputPortToStartPoint() const { return fromOutputPortToStartPoint; }
+  const auto &getFromInputPortToEndPoint() const {
+    return fromInputPortToEndPoint;
+  }
+  const auto &getFromOutputPortToStartPoint() const {
+    return fromOutputPortToStartPoint;
+  }
   const auto &getEndPointResults() const { return endPointResults; }
 
   circt::igraph::InstancePathCache *getInstancePathCache() const {
@@ -711,9 +714,9 @@ private:
   LogicalResult addEdge(Value to, size_t toBitPos, int64_t delay,
                         SmallVectorImpl<OpenPath> &results);
   LogicalResult markStartPoint(Value value, size_t bitPos,
-                          SmallVectorImpl<OpenPath> &results);
+                               SmallVectorImpl<OpenPath> &results);
   LogicalResult markRegEndPoint(Value endPoint, Value start, Value reset = {},
-                              Value resetValue = {}, Value enable = {});
+                                Value resetValue = {}, Value enable = {});
 
   // The module we are visiting.
   hw::HWModuleOp module;
@@ -789,8 +792,8 @@ void LocalVisitor::waitUntilDone() const {
 }
 
 LogicalResult LocalVisitor::markRegEndPoint(Value endPoint, Value start,
-                                          Value reset, Value resetValue,
-                                          Value enable) {
+                                            Value reset, Value resetValue,
+                                            Value enable) {
   auto bitWidth = getBitWidth(endPoint);
   auto record = [&](size_t endPointBitPos, Value value, size_t bitPos) {
     auto result = getOrComputePaths(value, bitPos);
@@ -799,8 +802,9 @@ LogicalResult LocalVisitor::markRegEndPoint(Value endPoint, Value start,
     for (auto &path : *result) {
       if (auto blockArg = dyn_cast<BlockArgument>(path.startPoint.value)) {
         // Not closed.
-        putUnclosedResult({{}, endPoint, endPointBitPos}, path.delay, path.history,
-                          fromInputPortToEndPoint[{blockArg, path.startPoint.bitPos}]);
+        putUnclosedResult(
+            {{}, endPoint, endPointBitPos}, path.delay, path.history,
+            fromInputPortToEndPoint[{blockArg, path.startPoint.bitPos}]);
       } else {
         // If the startPoint is not a port, record to the results.
         endPointResults[{{}, endPoint, endPointBitPos}].push_back(path);
@@ -924,7 +928,7 @@ LogicalResult LocalVisitor::visit(comb::ReplicateOp op, size_t bitPos,
 }
 
 LogicalResult LocalVisitor::markStartPoint(Value value, size_t bitPos,
-                                      SmallVectorImpl<OpenPath> &results) {
+                                           SmallVectorImpl<OpenPath> &results) {
   results.emplace_back(circt::igraph::InstancePath(), value, bitPos);
   return success();
 }
@@ -984,8 +988,8 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
             DebugPoint({}, value, bitPos, delay, "output port"), newHistory);
       }
 
-      results.emplace_back(newPath, startPointPoint.value, startPointPoint.bitPos, delay,
-                           newHistory);
+      results.emplace_back(newPath, startPointPoint.value,
+                           startPointPoint.bitPos, delay, newHistory);
       continue;
     }
 
@@ -1213,7 +1217,8 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
                               : debugPointFactory->getEmptyList();
         if (auto newPort = dyn_cast<BlockArgument>(result.startPoint.value)) {
           putUnclosedResult(
-              {newPath, endPoint, endPointBitPos}, result.delay + delay, newHistory,
+              {newPath, endPoint, endPointBitPos}, result.delay + delay,
+              newHistory,
               fromInputPortToEndPoint[{newPort, result.startPoint.bitPos}]);
         } else {
           endPointResults[{newPath, endPoint, endPointBitPos}].emplace_back(
@@ -1270,21 +1275,21 @@ LogicalResult LocalVisitor::initializeAndRun() {
         mlir::TypeSwitch<Operation *, LogicalResult>(op)
             .Case<seq::FirRegOp>([&](seq::FirRegOp op) {
               return markRegEndPoint(op, op.getNext(), op.getReset(),
-                                   op.getResetValue());
+                                     op.getResetValue());
             })
             .Case<seq::CompRegOp>([&](auto op) {
               return markRegEndPoint(op, op.getInput(), op.getReset(),
-                                   op.getResetValue());
+                                     op.getResetValue());
             })
             .Case<seq::FirMemWriteOp>([&](auto op) {
               // TODO: Add address.
               return markRegEndPoint(op.getMemory(), op.getData(), {}, {},
-                                   op.getEnable());
+                                     op.getEnable());
             })
             .Case<seq::FirMemReadWriteOp>([&](seq::FirMemReadWriteOp op) {
               // TODO: Add address.
               return markRegEndPoint(op.getMemory(), op.getWriteData(), {}, {},
-                                   op.getEnable());
+                                     op.getEnable());
             })
             .Case<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
                   comb::MuxOp>([&](auto op) {

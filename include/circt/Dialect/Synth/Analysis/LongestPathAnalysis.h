@@ -115,9 +115,9 @@ struct OpenPath {
   llvm::ImmutableList<DebugPoint> history;
 };
 
-// A DataflowPath represents a complete timing path from a endPoint to a startPoint
-// with associated delay information. This is the primary result type for
-// longest path analysis, containing both endPoints and path history.
+// A DataflowPath represents a complete timing path from a endPoint to a
+// startPoint with associated delay information. This is the primary result type
+// for longest path analysis, containing both endPoints and path history.
 class DataflowPath {
 public:
   // EndPoint can be either an internal circuit object or a module output port
@@ -139,7 +139,9 @@ public:
   int64_t getDelay() const { return path.delay; }
   const Object &getStartPoint() const { return path.startPoint; }
   const EndPointType &getEndPoint() const { return endPoint; }
-  const Object &getEndPointAsObject() const { return std::get<Object>(endPoint); }
+  const Object &getEndPointAsObject() const {
+    return std::get<Object>(endPoint);
+  }
   const OutputPort &getEndPointAsPort() const {
     return std::get<OutputPort>(endPoint);
   }
@@ -165,9 +167,9 @@ public:
                circt::igraph::InstancePath path);
 
 private:
-  EndPointType endPoint;   // Either Object or (port_index, bit_index)
-  OpenPath path;       // The actual timing path with history
-  hw::HWModuleOp root; // Root module for this path
+  EndPointType endPoint; // Either Object or (port_index, bit_index)
+  OpenPath path;         // The actual timing path with history
+  hw::HWModuleOp root;   // Root module for this path
 };
 
 // JSON serialization for DataflowPath
@@ -336,7 +338,7 @@ public:
 // for computing statistics and CAPI.
 class LongestPathCollection {
 public:
-  LongestPathCollection(MLIRContext *ctx) : ctx(ctx){};
+  LongestPathCollection(MLIRContext *ctx) : ctx(ctx) {};
   const DataflowPath &getPath(unsigned index) const { return paths[index]; }
   MLIRContext *getContext() const { return ctx; }
   llvm::SmallVector<DataflowPath, 64> paths;
@@ -345,7 +347,7 @@ public:
   void sortInDescendingOrder();
 
   // Sort and drop all paths except the longest path per endPoint.
-  //void sortAndDropNonCriticalPathsPerEndPoint();
+  // void sortAndDropNonCriticalPathsPerEndPoint();
   void sortAndDropNonCriticalPathsPerEndPoint();
 
   // Merge another collection into this one.
@@ -372,8 +374,7 @@ inline void registerSynthAnalysisPrerequisitePasses() {
 
 namespace llvm {
 // Provide DenseMapInfo for Object.
-template <>
-struct DenseMapInfo<circt::synth::Object> {
+template <> struct DenseMapInfo<circt::synth::Object> {
   using Info = llvm::DenseMapInfo<
       std::tuple<circt::igraph::InstancePath, mlir::Value, size_t>>;
   using Object = circt::synth::Object;
