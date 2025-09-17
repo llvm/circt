@@ -306,71 +306,70 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     SmallVector<FModuleOp> publicModules;
 
     // Traverse the modules in post order.
+    auto result = instanceGraph.walkPostOrder([&](auto &node) -> LogicalResult {
+      auto module = dyn_cast<FModuleOp>(*node.getModule());
+      if (!module)
+        return success();
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Traversing module:" << module.getModuleNameAttr() << "\n");
 
-    DenseSet<InstanceGraphNode *> visited;
-    for (auto *root : instanceGraph) {
-      for (auto *node : llvm::post_order_ext(root, visited)) {
-        auto module = dyn_cast<FModuleOp>(*node->getModule());
-        if (!module)
-          continue;
-        LLVM_DEBUG(llvm::dbgs() << "Traversing module:"
-                                << module.getModuleNameAttr() << "\n");
+      moduleStates.insert({module, ModuleState(module)});
 
-        moduleStates.insert({module, ModuleState(module)});
+      if (module.isPublic())
+        publicModules.push_back(module);
 
-        if (module.isPublic())
-          publicModules.push_back(module);
+      auto result = module.walk([&](Operation *op) {
+        if (transferFunc(op).failed())
+          return WalkResult::interrupt();
+        return WalkResult::advance();
+      });
 
-        auto result = module.walk([&](Operation *op) {
-          if (transferFunc(op).failed())
-            return WalkResult::interrupt();
-          return WalkResult::advance();
-        });
+      if (result.wasInterrupted())
+        return failure();
 
-        if (result.wasInterrupted())
-          return signalPassFailure();
+      // Since we walk operations pre-order and not along dataflow edges,
+      // ref.sub may not be resolvable when we encounter them (they're not
+      // just unification). This can happen when refs go through an output
+      // port or input instance result and back into the design. Handle these
+      // by walking them, resolving what we can, until all are handled or
+      // nothing can be resolved.
+      while (!indexingOps.empty()) {
+        // Grab the set of unresolved ref.sub's.
+        decltype(indexingOps) worklist;
+        worklist.swap(indexingOps);
 
-        // Since we walk operations pre-order and not along dataflow edges,
-        // ref.sub may not be resolvable when we encounter them (they're not
-        // just unification). This can happen when refs go through an output
-        // port or input instance result and back into the design. Handle these
-        // by walking them, resolving what we can, until all are handled or
-        // nothing can be resolved.
-        while (!indexingOps.empty()) {
-          // Grab the set of unresolved ref.sub's.
-          decltype(indexingOps) worklist;
-          worklist.swap(indexingOps);
-
-          for (auto op : worklist) {
-            auto inputEntry =
-                getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
-            // If we can't resolve, add back and move on.
-            if (!inputEntry)
-              indexingOps.push_back(op);
-            else
-              addReachingSendsEntry(op.getResult(), op.getOperation(),
-                                    inputEntry);
-          }
-          // If nothing was resolved, give up.
-          if (worklist.size() == indexingOps.size()) {
-            auto op = worklist.front();
-            getRemoteRefSend(op.getInput());
-            op.emitError(
-                  "indexing through probe of unknown origin (input probe?)")
-                .attachNote(op.getInput().getLoc())
-                .append("indexing through this reference");
-            return signalPassFailure();
-          }
+        for (auto op : worklist) {
+          auto inputEntry =
+              getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
+          // If we can't resolve, add back and move on.
+          if (!inputEntry)
+            indexingOps.push_back(op);
+          else
+            addReachingSendsEntry(op.getResult(), op.getOperation(),
+                                  inputEntry);
         }
-
-        // Record all the RefType ports to be removed later.
-        size_t numPorts = module.getNumPorts();
-        for (size_t portNum = 0; portNum < numPorts; ++portNum)
-          if (isa<RefType>(module.getPortType(portNum))) {
-            setPortToRemove(module, portNum, numPorts);
-          }
+        // If nothing was resolved, give up.
+        if (worklist.size() == indexingOps.size()) {
+          auto op = worklist.front();
+          getRemoteRefSend(op.getInput());
+          op.emitError(
+                "indexing through probe of unknown origin (input probe?)")
+              .attachNote(op.getInput().getLoc())
+              .append("indexing through this reference");
+          return failure();
+        }
       }
-    }
+
+      // Record all the RefType ports to be removed later.
+      size_t numPorts = module.getNumPorts();
+      for (size_t portNum = 0; portNum < numPorts; ++portNum)
+        if (isa<RefType>(module.getPortType(portNum)))
+          setPortToRemove(module, portNum, numPorts);
+
+      return success();
+    });
+    if (failed(result))
+      return signalPassFailure();
 
     LLVM_DEBUG({
       for (const auto &I :

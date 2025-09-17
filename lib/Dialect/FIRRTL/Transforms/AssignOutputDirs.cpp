@@ -100,53 +100,50 @@ void AssignOutputDirsPass::runOnOperation() {
   bool changed = false;
 
   LLVM_DEBUG(llvm::dbgs() << "Updating modules:\n");
-  DenseSet<InstanceGraphNode *> visited;
-  for (auto *root : getAnalysis<InstanceGraph>()) {
-    for (auto *node : llvm::inverse_post_order_ext(root, visited)) {
-      FModuleLike moduleLike =
-          dyn_cast<FModuleLike>(node->getModule().getOperation());
-      if (!moduleLike || !isa<FModuleOp, FExtModuleOp>(moduleLike))
-        continue;
-      if (moduleLike->getAttrOfType<hw::OutputFileAttr>("output_file") ||
-          moduleLike.isPublic())
-        continue;
+  getAnalysis<InstanceGraph>().walkInversePostOrder([&](auto &node) {
+    FModuleLike moduleLike =
+        dyn_cast<FModuleLike>(node.getModule().getOperation());
+    if (!moduleLike || !isa<FModuleOp, FExtModuleOp>(moduleLike))
+      return;
+    if (moduleLike->getAttrOfType<hw::OutputFileAttr>("output_file") ||
+        moduleLike.isPublic())
+      return;
 
-      // Get the output directory of the first parent, and then fold the current
-      // output directory with the LCA of all other discovered output
-      // directories.
-      SmallString<64> moduleOutputDir;
-      auto i = node->usesBegin();
-      auto e = node->usesEnd();
-      for (; i != e; ++i) {
-        auto parent = (*i)->getParent()->getModule();
-        auto file = getOutputFile(parent);
-        if (file) {
-          moduleOutputDir = file.getDirectory();
-          makeAbsolute(outputDir, moduleOutputDir);
-        } else {
-          moduleOutputDir = outputDir;
-        }
-        ++i;
-        break;
+    // Get the output directory of the first parent, and then fold the current
+    // output directory with the LCA of all other discovered output
+    // directories.
+    SmallString<64> moduleOutputDir;
+    auto i = node.usesBegin();
+    auto e = node.usesEnd();
+    for (; i != e; ++i) {
+      auto parent = (*i)->getParent()->getModule();
+      auto file = getOutputFile(parent);
+      if (file) {
+        moduleOutputDir = file.getDirectory();
+        makeAbsolute(outputDir, moduleOutputDir);
+      } else {
+        moduleOutputDir = outputDir;
       }
-      for (; i != e; ++i) {
-        auto parent = (*i)->getParent()->getModule();
-        makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
-      }
-
-      tryMakeRelative(outputDir, moduleOutputDir);
-      if (!moduleOutputDir.empty()) {
-        auto f =
-            hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);
-        moduleLike->setAttr("output_file", f);
-        changed = true;
-        LLVM_DEBUG({
-          llvm::dbgs() << "  - name: " << moduleLike.getName() << "\n"
-                       << "    directory: " << f.getFilename() << "\n";
-        });
-      }
+      ++i;
+      break;
     }
-  }
+    for (; i != e; ++i) {
+      auto parent = (*i)->getParent()->getModule();
+      makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
+    }
+
+    tryMakeRelative(outputDir, moduleOutputDir);
+    if (!moduleOutputDir.empty()) {
+      auto f =
+          hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);
+      moduleLike->setAttr("output_file", f);
+      changed = true;
+      LLVM_DEBUG({
+        llvm::dbgs() << "  - name: " << moduleLike.getName() << "\n"
+                     << "    directory: " << f.getFilename() << "\n";
+      });
+    }
+  });
 
   if (!changed)
     markAllAnalysesPreserved();

@@ -108,65 +108,61 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
   // Visit modules in reverse post-order (visit parents before children) to
   // merge parent attributes and per-instance attributes into children.
-  DenseSet<InstanceGraphNode *> visited;
-  for (auto *root : iGraph) {
-    for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
-      visited.insert(modIt);
-      auto moduleOp = modIt->getModule();
-      ModuleAttributes &attributes = moduleAttributes[moduleOp];
+  iGraph.walkInversePostOrder([&](auto &modIt) {
+    auto moduleOp = modIt.getModule();
+    ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
-      AnnotationSet annotations(moduleOp);
-      auto isDut = annotations.hasAnnotation(dutAnnoClass);
-      auto isGCCompanion = annotations.hasAnnotation(companionAnnoClass);
+    AnnotationSet annotations(moduleOp);
+    auto isDut = annotations.hasAnnotation(dutAnnoClass);
+    auto isGCCompanion = annotations.hasAnnotation(companionAnnoClass);
 
-      if (isDut) {
-        attributes.underDut.markConstant(true);
-        attributes.inDesign.markConstant(true);
-        attributes.inEffectiveDesign.markConstant(true);
+    if (isDut) {
+      attributes.underDut.markConstant(true);
+      attributes.inDesign.markConstant(true);
+      attributes.inEffectiveDesign.markConstant(true);
+    }
+
+    if (isGCCompanion) {
+      attributes.inDesign.mergeIn(false);
+      attributes.inEffectiveDesign.mergeIn(false);
+      attributes.underLayer.mergeIn(true);
+    }
+
+    // Merge in values based on the instantiations of this module.
+    for (auto *useIt : modIt.uses()) {
+      auto parentOp = useIt->getParent()->getModule();
+      auto parentAttrs = moduleAttributes.find(parentOp)->getSecond();
+
+      // Update underDut.
+      if (!isDut)
+        attributes.underDut.mergeIn(parentAttrs.underDut);
+
+      // Update underLayer.
+      bool underLayer = false;
+      if (auto instanceOp = useIt->template getInstance<InstanceOp>()) {
+        if (instanceOp.getLowerToBind() || instanceOp.getDoNotPrint() ||
+            instanceOp->template getParentOfType<LayerBlockOp>() ||
+            instanceOp->template getParentOfType<sv::IfDefOp>())
+          underLayer = true;
       }
 
-      if (isGCCompanion) {
+      if (!isGCCompanion) {
+        if (underLayer)
+          attributes.underLayer.mergeIn(true);
+        else
+          attributes.underLayer.mergeIn(parentAttrs.underLayer);
+      }
+
+      // Update inDesign and inEffectiveDesign.
+      if (underLayer) {
         attributes.inDesign.mergeIn(false);
         attributes.inEffectiveDesign.mergeIn(false);
-        attributes.underLayer.mergeIn(true);
-      }
-
-      // Merge in values based on the instantiations of this module.
-      for (auto *useIt : modIt->uses()) {
-        auto parentOp = useIt->getParent()->getModule();
-        auto parentAttrs = moduleAttributes.find(parentOp)->getSecond();
-
-        // Update underDut.
-        if (!isDut)
-          attributes.underDut.mergeIn(parentAttrs.underDut);
-
-        // Update underLayer.
-        bool underLayer = false;
-        if (auto instanceOp = useIt->getInstance<InstanceOp>()) {
-          if (instanceOp.getLowerToBind() || instanceOp.getDoNotPrint() ||
-              instanceOp->getParentOfType<LayerBlockOp>() ||
-              instanceOp->getParentOfType<sv::IfDefOp>())
-            underLayer = true;
-        }
-
-        if (!isGCCompanion) {
-          if (underLayer)
-            attributes.underLayer.mergeIn(true);
-          else
-            attributes.underLayer.mergeIn(parentAttrs.underLayer);
-        }
-
-        // Update inDesign and inEffectiveDesign.
-        if (underLayer) {
-          attributes.inDesign.mergeIn(false);
-          attributes.inEffectiveDesign.mergeIn(false);
-        } else if (!isDut && !isGCCompanion) {
-          attributes.inDesign.mergeIn(parentAttrs.inDesign);
-          attributes.inEffectiveDesign.mergeIn(parentAttrs.inEffectiveDesign);
-        }
+      } else if (!isDut && !isGCCompanion) {
+        attributes.inDesign.mergeIn(parentAttrs.inDesign);
+        attributes.inEffectiveDesign.mergeIn(parentAttrs.inEffectiveDesign);
       }
     }
-  }
+  });
 
   LLVM_DEBUG({
     mlir::OpPrintingFlags flags;
@@ -184,26 +180,22 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     llvm::dbgs() << "\n" << llvm::indent(4) << "effectiveDut: ";
     circuitAttributes.effectiveDut->print(llvm::dbgs(), flags);
     llvm::dbgs() << "\n" << llvm::indent(2) << "module attributes:\n";
-    visited.clear();
-    for (auto *root : iGraph) {
-      for (auto *modIt : llvm::inverse_post_order_ext(root, visited)) {
-        visited.insert(modIt);
-        auto moduleOp = modIt->getModule();
-        auto attributes = moduleAttributes[moduleOp];
-        llvm::dbgs().indent(4)
-            << "- module: " << moduleOp.getModuleName() << "\n"
-            << llvm::indent(6)
-            << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
-            << llvm::indent(6) << "isEffectiveDue: "
-            << (isEffectiveDut(moduleOp) ? "true" : "false") << "\n"
-            << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
-            << llvm::indent(6) << "underLayer: " << attributes.underLayer
-            << "\n"
-            << llvm::indent(6) << "inDesign: " << attributes.inDesign << "\n"
-            << llvm::indent(6)
-            << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n";
-      }
-    }
+    iGraph.walkInversePostOrder([&](auto &modIt) {
+      auto moduleOp = modIt.getModule();
+      auto attributes = moduleAttributes[moduleOp];
+      llvm::dbgs().indent(4)
+          << "- module: " << moduleOp.getModuleName() << "\n"
+          << llvm::indent(6)
+          << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
+          << llvm::indent(6)
+          << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
+          << "\n"
+          << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
+          << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"
+          << llvm::indent(6) << "inDesign: " << attributes.inDesign << "\n"
+          << llvm::indent(6)
+          << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n";
+    });
   });
 }
 

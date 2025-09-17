@@ -109,13 +109,10 @@ public:
   static LogicalResult run(InstanceGraph &instanceGraph,
                            InstanceInfo &instanceInfo) {
     CheckLayers checkLayers(instanceGraph, instanceInfo);
-    DenseSet<InstanceGraphNode *> visited;
-    for (auto *root : instanceGraph) {
-      for (auto *node : llvm::post_order_ext(root, visited)) {
-        if (auto moduleOp = dyn_cast<FModuleOp>(node->getModule<Operation *>()))
-          checkLayers.run(moduleOp);
-      }
-    }
+    instanceGraph.walkPostOrder([&](auto &node) {
+      if (auto moduleOp = dyn_cast<FModuleOp>(*node.getModule()))
+        checkLayers.run(moduleOp);
+    });
     return failure(checkLayers.error);
   }
 
