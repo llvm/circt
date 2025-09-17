@@ -25,7 +25,7 @@ namespace circt {
 ///
 /// This is commonly used for generating a header in debug information.  The
 /// format is modeled after LLVM/MLIR/CIRCT source file headers.
-llvm::raw_ostream &debugHeader(llvm::StringRef str, int width = 80);
+llvm::raw_ostream &debugHeader(const llvm::Twine &str, unsigned width = 80);
 
 /// Write a boilerplate header for a pass to the debug stream.  This generates
 /// output like the following if the pass's name is "FooPass":
@@ -34,13 +34,13 @@ llvm::raw_ostream &debugHeader(llvm::StringRef str, int width = 80);
 ///
 /// This is commonly used to generate a header in debug when a pass starts
 /// running.
-llvm::raw_ostream &debugPassHeader(const mlir::Pass *pass, int width = 80);
+llvm::raw_ostream &debugPassHeader(const mlir::Pass *pass, unsigned width = 80);
 
 /// Write a boilerplate footer to the debug stream to indicate that a pass has
 /// ended.  This produces text like the following:
 ///
 ///    ===-----------------------------------===
-llvm::raw_ostream &debugFooter(int width = 80);
+llvm::raw_ostream &debugFooter(unsigned width = 80);
 
 } // namespace circt
 
