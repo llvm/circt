@@ -239,21 +239,18 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
 
     // TODO: implement a constant multiplication for the PartialProductOp
 
-    size_t maxNonZeroBits = 0;
-    for (Value operand : operands) {
-      // If the extracted bits are all known, then return the result.
-      auto knownBits = comb::computeKnownBits(operand);
-      if (knownBits.isUnknown())
-        return failure(); // Skip if we don't know anything about the bits
+    auto op0NonZeroBits = calculateNonZeroBits(operands[0], op.getNumResults());
+    auto op1NonZeroBits = calculateNonZeroBits(operands[1], op.getNumResults());
 
-      size_t nonZeroBits = inputWidth - knownBits.Zero.countLeadingOnes();
+    if (failed(op0NonZeroBits) || failed(op1NonZeroBits))
+      return failure();
 
-      // If all bits non-zero we will not reduce the number of results
-      if (nonZeroBits == op.getNumResults())
-        return failure();
+    // Need the +1 for the carry-out
+    size_t maxNonZeroBits = std::max(*op0NonZeroBits, *op1NonZeroBits);
 
-      maxNonZeroBits = std::max(maxNonZeroBits, nonZeroBits);
-    }
+    // If all bits non-zero we will not reduce the number of results
+    if (maxNonZeroBits == op.getNumResults())
+      return failure();
 
     auto newPP = datapath::PartialProductOp::create(
         rewriter, op.getLoc(), op.getOperands(), maxNonZeroBits);
