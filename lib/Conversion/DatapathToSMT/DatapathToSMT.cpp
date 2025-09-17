@@ -123,6 +123,58 @@ struct PartialProductOpConversion : OpConversionPattern<PartialProductOp> {
     return success();
   }
 };
+
+// Lower to an SMT assertion that summing the results is equivalent to the
+// product of the sum of the pos_partial_product inputs
+// c:<N> = pos_partial_product(a, b) ->
+// assert(c#0 + ... + c#<N-1> == (a + b) * c)
+struct PosPartialProductOpConversion
+    : OpConversionPattern<PosPartialProductOp> {
+  using OpConversionPattern<PosPartialProductOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(PosPartialProductOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    ValueRange operands = adaptor.getOperands();
+    ValueRange results = op.getResults();
+
+    // (a+b)
+    auto addResult =
+        smt::BVAddOp::create(rewriter, op.getLoc(), operands[0], operands[1]);
+    // (a+b)*c
+    auto mulResult =
+        smt::BVMulOp::create(rewriter, op.getLoc(), addResult, operands[2]);
+
+    // Create free variables
+    SmallVector<Value, 2> newResults;
+    newResults.reserve(results.size());
+    for (Value result : results) {
+      auto declareFunOp = smt::DeclareFunOp::create(
+          rewriter, op.getLoc(), typeConverter->convertType(result.getType()));
+      newResults.push_back(declareFunOp.getResult());
+    }
+
+    // Sum the free variables
+    Value resultRunner = newResults.front();
+    for (auto freeVar : llvm::drop_begin(newResults, 1))
+      resultRunner =
+          smt::BVAddOp::create(rewriter, op.getLoc(), resultRunner, freeVar);
+
+    // Assert product of operands == sum results (free variables)
+    auto premise =
+        smt::EqOp::create(rewriter, op.getLoc(), mulResult, resultRunner);
+    // Encode via an assertion (could be relaxed to an assumption).
+    smt::AssertOp::create(rewriter, op.getLoc(), premise);
+
+    if (newResults.size() != results.size())
+      return rewriter.notifyMatchFailure(op, "expected same number of results");
+
+    rewriter.replaceOp(op, newResults);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -138,8 +190,8 @@ struct ConvertDatapathToSMTPass
 
 void circt::populateDatapathToSMTConversionPatterns(
     TypeConverter &converter, RewritePatternSet &patterns) {
-  patterns.add<CompressOpConversion, PartialProductOpConversion>(
-      converter, patterns.getContext());
+  patterns.add<CompressOpConversion, PartialProductOpConversion,
+               PosPartialProductOpConversion>(converter, patterns.getContext());
 }
 
 void ConvertDatapathToSMTPass::runOnOperation() {
