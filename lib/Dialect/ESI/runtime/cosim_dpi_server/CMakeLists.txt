@@ -54,7 +54,7 @@ set(cosim_collateral
 
 install(FILES
   ${cosim_collateral}
-  DESTINATION esiaccel/cosim
+  DESTINATION cosim
   COMPONENT ESIRuntime
 )
 
