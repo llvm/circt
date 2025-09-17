@@ -245,6 +245,8 @@ class StructType(ESIType):
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     fields_count = 0
     if not isinstance(obj, dict):
+      if not hasattr(obj, "__dict__"):
+        return (False, "must be a dict or have __dict__ attribute")
       obj = obj.__dict__
 
     for (fname, ftype) in self.fields:
@@ -260,14 +262,20 @@ class StructType(ESIType):
 
   def serialize(self, obj) -> bytearray:
     ret = bytearray()
-    for (fname, ftype) in reversed(self.fields):
+    if not isinstance(obj, dict):
+      obj = obj.__dict__
+    ordered_fields = reversed(
+        self.fields) if self.cpp_type.reverse else self.fields
+    for (fname, ftype) in ordered_fields:
       fval = obj[fname]
       ret.extend(ftype.serialize(fval))
     return ret
 
   def deserialize(self, data: bytearray) -> Tuple[Dict[str, Any], bytearray]:
     ret = {}
-    for (fname, ftype) in reversed(self.fields):
+    ordered_fields = reversed(
+        self.fields) if self.cpp_type.reverse else self.fields
+    for (fname, ftype) in ordered_fields:
       (fval, data) = ftype.deserialize(data)
       ret[fname] = fval
     return (ret, data)

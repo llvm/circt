@@ -630,6 +630,15 @@ LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// ExecuteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ExecuteOp::verifyRegions() {
+  return verifyTypeListEquivalence(*this, getInputs().getTypes(),
+                                   getBody().getArgumentTypes(), "input");
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES

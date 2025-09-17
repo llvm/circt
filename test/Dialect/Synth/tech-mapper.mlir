@@ -2,25 +2,25 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(synth-tech-mapper{strategy=timing test=true max-cuts-per-root=8})' %s | FileCheck %s --check-prefixes CHECK,TIMING
 
 hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
-    %0 = aig.and_inv %a, %b : i1
+    %0 = synth.aig.and_inv %a, %b : i1
     hw.output %0 : i1
 }
 
 hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
-    %0 = aig.and_inv not %a, %b : i1
+    %0 = synth.aig.and_inv not %a, %b : i1
     hw.output %0 : i1
 }
 
 hw.module @and_inv_nn(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
-    %0 = aig.and_inv not %a, not %b : i1
+    %0 = synth.aig.and_inv not %a, not %b : i1
     hw.output %0 : i1
 }
 
 // Delay is shorter than @and_inv + @and_inv_n_n. Area is (significantly) larger than @and_inv_n + @and_inv_n_n.
 // Check that we use @and_inv_3 if strategy = timing, and @and_inv_n + @and_inv_n_n if strategy = area.
 hw.module @and_inv_3(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {hw.techlib.info = {area = 10.0 : f64, delay = [[1], [1], [1]]}} {
-    %0 = aig.and_inv %a, %b : i1
-    %1 = aig.and_inv not %0, %c : i1
+    %0 = synth.aig.and_inv %a, %b : i1
+    %1 = synth.aig.and_inv not %0, %c : i1
     hw.output %1 : i1
 }
 
@@ -31,15 +31,15 @@ hw.module @test_strategy(in %a : i1, in %b : i1, in %c : i1, out result : i1) {
     // AREA-NEXT: hw.output %[[area_1]] : i1
     // TIMING-NEXT: %[[timing:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_3(a: %a: i1, b: %b: i1, c: %c: i1) -> (result: i1) {test.arrival_times = [1]}
     // TIMING-NEXT: hw.output %[[timing]] : i1
-    %0 = aig.and_inv %a, %b : i1
-    %1 = aig.and_inv %c, not %0 : i1
+    %0 = synth.aig.and_inv %a, %b : i1
+    %1 = synth.aig.and_inv %c, not %0 : i1
     hw.output %1 : i1
 }
 
 hw.module @permutation(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out result: i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1], [1], [1]]}} {
-    %0 = aig.and_inv %a, not %b : i1
-    %1 = aig.and_inv %c, not %d : i1
-    %2 = aig.and_inv %0, not %1 : i1
+    %0 = synth.aig.and_inv %a, not %b : i1
+    %1 = synth.aig.and_inv %c, not %d : i1
+    %2 = synth.aig.and_inv %0, not %1 : i1
     hw.output %2 : i1
 }
 
@@ -47,29 +47,29 @@ hw.module @permutation(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out result: i
 hw.module @permutation_test(in %p: i1, in %q: i1, in %r: i1, in %s: i1, out result: i1) {
     // {a -> s, b -> p, c -> q, d -> r}
     // CHECK-NEXT: hw.instance "{{.+}}" @permutation(a: %s: i1, b: %p: i1, c: %q: i1, d: %r: i1) -> (result: i1) {test.arrival_times = [1]}
-    %0 = aig.and_inv %s, not %p : i1
-    %1 = aig.and_inv %q, not %r : i1
-    %2 = aig.and_inv %0, not %1 : i1
+    %0 = synth.aig.and_inv %s, not %p : i1
+    %1 = synth.aig.and_inv %q, not %r : i1
+    %2 = synth.aig.and_inv %0, not %1 : i1
     hw.output %2 : i1
 }
 
 hw.module @and_inv_5(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e: i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [2], [2], [2], [1]]}} {
-    %0 = aig.and_inv not %a, %b, not %c, %d, not %e : i1
+    %0 = synth.aig.and_inv not %a, %b, not %c, %d, not %e : i1
     hw.output %0 : i1
 }
 
 // Make sure truth value is computed correctly for @and_inv_5.
 // CHECK-LABEL: @and_inv_5_test
 hw.module @and_inv_5_test(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e: i1, out o1 : i1, out o2 : i1) {
-    %0 = aig.and_inv not %a, %b : i1
-    %1 = aig.and_inv not %c, %d : i1
-    %2 = aig.and_inv %0, %1 : i1
-    %3 = aig.and_inv %2, not %e : i1
+    %0 = synth.aig.and_inv not %a, %b : i1
+    %1 = synth.aig.and_inv not %c, %d : i1
+    %2 = synth.aig.and_inv %0, %1 : i1
+    %3 = synth.aig.and_inv %2, not %e : i1
     // CHECK-NEXT: %[[result_0:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_5(a: %a: i1, b: %b: i1, c: %c: i1, d: %d: i1, e: %e: i1)
-    %4 = aig.and_inv not %a, not %d : i1
-    %5 = aig.and_inv not %b, %e : i1
-    %6 = aig.and_inv %5, %c : i1
-    %7 = aig.and_inv %6, %4 : i1
+    %4 = synth.aig.and_inv not %a, not %d : i1
+    %5 = synth.aig.and_inv not %b, %e : i1
+    %6 = synth.aig.and_inv %5, %c : i1
+    %7 = synth.aig.and_inv %6, %4 : i1
     // CHECK-NEXT: %[[result_1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_5(a: %b: i1, b: %e: i1, c: %a: i1, d: %c: i1, e: %d: i1)
     
     hw.output %3, %7 : i1, i1
@@ -77,8 +77,8 @@ hw.module @and_inv_5_test(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e:
 }
 
 hw.module @area_flow(in %a : i1, in %b : i1, in %c: i1, out result : i1) attributes {hw.techlib.info = {area = 1.5 : f64, delay = [[10], [10], [10], [10], [10]]}} {
-    %0 = aig.and_inv not %a, not %b : i1
-    %1 = aig.and_inv not %c, %0 : i1
+    %0 = synth.aig.and_inv not %a, not %b : i1
+    %1 = synth.aig.and_inv not %c, %0 : i1
     hw.output %1 : i1
 }
 
@@ -92,8 +92,8 @@ hw.module @area_flow_test(in %a : i1, in %b : i1, in %c: i1, out result : i1) {
     // FIXME: If area-flow is implemented, this should be mapped to @area_flow with area strategy.
     // CHECK:       hw.instance {{.*}} @and_inv_nn(
     // CHECK-NEXT:  hw.instance {{.*}} @and_inv_n(
-    %0 = aig.and_inv not %a, not %b : i1
-    %1 = aig.and_inv not %c, %0 : i1
+    %0 = synth.aig.and_inv not %a, not %b : i1
+    %1 = synth.aig.and_inv not %c, %0 : i1
     hw.output %1 : i1
 }
 
@@ -103,7 +103,7 @@ hw.module @primary_inputs_test(in %a : i1, in %b : i1, out result : i1) {
     // Simple direct mapping - should use @and_inv
     // CHECK-NEXT: %[[primary:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %a: i1, b: %b: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK-NEXT: hw.output %[[primary]] : i1
-    %0 = aig.and_inv %a, %b : i1
+    %0 = synth.aig.and_inv %a, %b : i1
     hw.output %0 : i1
 }
 
@@ -114,9 +114,9 @@ hw.module @timing_chain_test(in %a : i1, in %b : i1, in %c : i1, in %d : i1, out
     // CHECK: hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %a: i1, b: %b: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK: hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %c: i1, b: %d: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK: hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %{{.+}}: i1, b: %{{.+}}: i1) -> (result: i1) {test.arrival_times = [2]}
-    %0 = aig.and_inv %a, %b : i1
-    %1 = aig.and_inv %c, %d : i1
-    %2 = aig.and_inv %0, %1 : i1
+    %0 = synth.aig.and_inv %a, %b : i1
+    %1 = synth.aig.and_inv %c, %d : i1
+    %2 = synth.aig.and_inv %0, %1 : i1
     hw.output %2 : i1
 }
 
@@ -133,14 +133,14 @@ hw.module @extract_concat_test(in %data : i4, in %ctrl : i2, out result : i3) {
     %ctrl1 = comb.extract %ctrl from 1 : (i2) -> i1
     
     // Apply some logic using AIG operations
-    %and0 = aig.and_inv %bit0, %bit1 : i1
-    %and1 = aig.and_inv %bit2, not %ctrl0 : i1
-    %and2 = aig.and_inv %bit3, %ctrl1 : i1
+    %and0 = synth.aig.and_inv %bit0, %bit1 : i1
+    %and1 = synth.aig.and_inv %bit2, not %ctrl0 : i1
+    %and2 = synth.aig.and_inv %bit3, %ctrl1 : i1
     
     // Further logic operations
-    %out0 = aig.and_inv %and0, %ctrl0 : i1
-    %out1 = aig.and_inv %and1, not %and0 : i1
-    %out2 = aig.and_inv %and2, %ctrl1 : i1
+    %out0 = synth.aig.and_inv %and0, %ctrl0 : i1
+    %out1 = synth.aig.and_inv %and1, not %and0 : i1
+    %out2 = synth.aig.and_inv %and2, %ctrl1 : i1
     
     // Concatenate results into multi-bit output
     %result_concat = comb.concat %out2, %out1, %out0 : i1, i1, i1

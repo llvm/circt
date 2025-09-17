@@ -14,7 +14,6 @@ set(LLVM_OPTIONAL_SOURCES
 )
 
 set(PYTHON_BINDINGS_SOURCES
-  AIGModule.cpp
   CIRCTModule.cpp
   ESIModule.cpp
   HWModule.cpp
@@ -24,13 +23,13 @@ set(PYTHON_BINDINGS_SOURCES
   SeqModule.cpp
   SupportModule.cpp
   SVModule.cpp
+  SynthModule.cpp
   # Headers must be included explicitly so they are installed.
   CIRCTModules.h
   NanobindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
-  CIRCTCAPIAIG
   CIRCTCAPIArc
   CIRCTCAPIComb
   CIRCTCAPIConversion
@@ -125,10 +124,10 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
-  TD_FILE dialects/AIGOps.td
+  TD_FILE dialects/SynthOps.td
   SOURCES
-    dialects/aig.py
-  DIALECT_NAME aig)
+    dialects/synth.py
+  DIALECT_NAME synth)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects

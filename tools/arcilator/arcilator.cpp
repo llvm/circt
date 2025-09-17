@@ -14,6 +14,7 @@
 #include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Conversion/SeqToSV.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcInterfaces.h"
@@ -639,6 +640,7 @@ int main(int argc, char **argv) {
 
     // Dialect passes:
     arc::registerPasses();
+    registerConvertToArcs();
   }
 
   // Register any pass manager command line options.

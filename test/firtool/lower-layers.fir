@@ -316,3 +316,20 @@ circuit Foo:
 
 ; CHECK: FILE "B{{[/\]}}layers-Foo-B.sv"
 ; CHECK: `include "layers-Bar-B.sv"
+
+; // -----
+
+; Check that bindfile for Top should include layers-Bar-A, not layers-Foo-A,
+; respecting the defname of an extmodule.
+
+FIRRTL version 5.1.0
+circuit Top:
+  layer A, bind:
+
+  extmodule Foo knownlayer A:
+    defname = Bar
+
+  public module Top:
+    inst foo of Foo
+
+; CHECK: `include "layers-Bar-A.sv"

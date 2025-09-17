@@ -1,11 +1,13 @@
 // RUN: circt-synth %s -output-longest-path=- -top counter | FileCheck %s --check-prefixes COMMON,AIG
+// RUN: circt-synth %s -output-longest-path=- -top counter --target-ir mig | FileCheck %s --check-prefixes COMMON,MIG
 // RUN: circt-synth %s -output-longest-path=- -top counter -lower-to-k-lut 6 | FileCheck %s --check-prefixes COMMON,LUT6
 // RUN: circt-synth %s -output-longest-path=- -top counter -output-longest-path-json | FileCheck %s --check-prefix JSON
 
 // COMMON-LABEL: # Longest Path Analysis result for "counter"
-// COMMON-NEXT: Found 288 paths
+// COMMON-NEXT: Found 168 paths
 // COMMON-NEXT: Found 32 unique fanout points
-// AIG-NEXT: Maximum path delay: 42
+// AIG-NEXT: Maximum path delay: 41
+// MIG-NEXT: Maximum path delay: 41
 // LUT6-NEXT: Maximum path delay: 7
 // Don't test detailed reports as they are not stable.
 

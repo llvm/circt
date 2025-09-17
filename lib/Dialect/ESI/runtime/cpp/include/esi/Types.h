@@ -16,10 +16,16 @@
 #ifndef ESI_TYPES_H
 #define ESI_TYPES_H
 
+#include <algorithm>
+#include <any>
 #include <cstdint>
 #include <map>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "esi/Common.h"
 
 namespace esi {
 
@@ -32,6 +38,37 @@ public:
 
   ID getID() const { return id; }
   virtual std::ptrdiff_t getBitWidth() const { return -1; }
+
+  /// Serialize an object to MessageData. The object should be passed as a
+  /// std::any to provide type erasure. Returns a MessageData containing the
+  /// serialized representation.
+  virtual MessageData serialize(const std::any &obj) const {
+    throw std::runtime_error("Serialization not implemented for type " + id);
+  }
+
+  /// Deserialize from a span of bytes to an object. Returns the deserialized
+  /// object as a std::any and a span to the remaining bytes.
+  virtual std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const {
+    throw std::runtime_error("Deserialization not implemented for type " + id);
+  }
+
+  /// Ensure that a std::any object is valid for this type. Throws
+  /// std::runtime_error if the object is not valid.
+  virtual void ensureValid(const std::any &obj) const {
+    throw std::runtime_error("Validation not implemented for type " + id);
+  }
+
+  // Check if a std::any object is valid for this type. Returns an optional
+  // error message if the object is not valid, else, std::nullopt.
+  std::optional<std::string> isValid(const std::any &obj) const {
+    try {
+      ensureValid(obj);
+      return std::nullopt;
+    } catch (const std::runtime_error &e) {
+      return e.what();
+    }
+  }
 
 protected:
   ID id;
@@ -54,12 +91,7 @@ public:
   const ChannelVector &getChannels() const { return channels; }
   std::ptrdiff_t getBitWidth() const override { return -1; };
 
-  std::pair<const Type *, Direction> findChannel(std::string name) const {
-    for (auto [channelName, dir, type] : channels)
-      if (channelName == name)
-        return std::make_pair(type, dir);
-    throw std::runtime_error("Channel '" + name + "' not found in bundle");
-  }
+  std::pair<const Type *, Direction> findChannel(std::string name) const;
 
 protected:
   ChannelVector channels;
@@ -73,6 +105,11 @@ public:
   const Type *getInner() const { return inner; }
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
 
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
+
 private:
   const Type *inner;
 };
@@ -83,6 +120,11 @@ public:
   VoidType(const ID &id) : Type(id) {}
   // 'void' is 1 bit by convention.
   std::ptrdiff_t getBitWidth() const override { return 1; };
+
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
 };
 
 /// The "any" type is a special type which can be used to represent any type, as
@@ -112,6 +154,11 @@ private:
 class BitsType : public BitVectorType {
 public:
   using BitVectorType::BitVectorType;
+
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
 };
 
 /// Integers are bit vectors which may be signed or unsigned and are interpreted
@@ -125,12 +172,22 @@ public:
 class SIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
+
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
 };
 
 /// Unsigned integer.
 class UIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
+
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
 };
 
 /// Structs are an ordered collection of fields, each with a name and a type.
@@ -138,8 +195,8 @@ class StructType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;
 
-  StructType(const ID &id, const FieldVector &fields)
-      : Type(id), fields(fields) {}
+  StructType(const ID &id, const FieldVector &fields, bool reverse = true)
+      : Type(id), fields(fields), reverse(reverse) {}
 
   const FieldVector &getFields() const { return fields; }
   std::ptrdiff_t getBitWidth() const override {
@@ -153,8 +210,21 @@ public:
     return size;
   }
 
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
+
+  // Returns whether this struct type should be reversed when
+  // serializing/deserializing.
+  // By default, a truthy value here makes StructType's compatible with system
+  // verilog, which has reversed struct field ordering, wrt. C/software struct
+  // ordering.
+  bool isReverse() const { return reverse; }
+
 private:
   FieldVector fields;
+  bool reverse;
 };
 
 /// Arrays have a compile time specified (static) size and an element type.
@@ -171,6 +241,11 @@ public:
       return -1;
     return elementSize * size;
   }
+
+  void ensureValid(const std::any &obj) const override;
+  MessageData serialize(const std::any &obj) const override;
+  std::pair<std::any, std::span<const uint8_t>>
+  deserialize(std::span<const uint8_t> data) const override;
 
 private:
   const Type *elementType;

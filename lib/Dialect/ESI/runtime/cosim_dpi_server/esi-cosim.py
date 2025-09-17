@@ -82,6 +82,24 @@ class SourceFiles:
     return self.dpi_sv + self.user
 
 
+class SimProcess:
+
+  def __init__(self, proc: subprocess.Popen, port: int):
+    self.proc = proc
+    self.port = port
+
+  def force_stop(self):
+    """Make sure to stop the simulation no matter what."""
+    if self.proc:
+      os.killpg(os.getpgid(self.proc.pid), signal.SIGINT)
+      # Allow the simulation time to flush its outputs.
+      try:
+        self.proc.wait(timeout=1.0)
+      except subprocess.TimeoutExpired:
+        # If the simulation doesn't exit of its own free will, kill it.
+        self.proc.kill()
+
+
 class Simulator:
 
   # Some RTL simulators don't use stderr for error messages. Everything goes to
@@ -135,6 +153,65 @@ class Simulator:
     """Return the command to run the simulation."""
     assert False, "Must be implemented by subclass"
 
+  def run_proc(self, gui: bool = False) -> SimProcess:
+    """Run the simulation process. Returns the Popen object and the port which
+      the simulation is listening on."""
+    # Open log files
+    self.run_dir.mkdir(parents=True, exist_ok=True)
+    simStdout = open(self.run_dir / "sim_stdout.log", "w")
+    simStderr = open(self.run_dir / "sim_stderr.log", "w")
+
+    # Erase the config file if it exists. We don't want to read
+    # an old config.
+    portFileName = self.run_dir / "cosim.cfg"
+    if os.path.exists(portFileName):
+      os.remove(portFileName)
+
+    # Run the simulation.
+    simEnv = Simulator.get_env()
+    if self.debug:
+      simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+      if "DEBUG_PERIOD" not in simEnv:
+        # Slow the simulation down to one tick per millisecond.
+        simEnv["DEBUG_PERIOD"] = "1"
+    rcmd = self.run_command(gui)
+    simProc = subprocess.Popen(self.run_command(gui),
+                               stdout=simStdout,
+                               stderr=simStderr,
+                               env=simEnv,
+                               cwd=self.run_dir,
+                               preexec_fn=os.setsid)
+    simStderr.close()
+    simStdout.close()
+
+    # Get the port which the simulation RPC selected.
+    checkCount = 0
+    while (not os.path.exists(portFileName)) and \
+            simProc.poll() is None:
+      time.sleep(0.1)
+      checkCount += 1
+      if checkCount > 500 and not gui:
+        raise Exception(f"Cosim never wrote cfg file: {portFileName}")
+    port = -1
+    while port < 0:
+      portFile = open(portFileName, "r")
+      for line in portFile.readlines():
+        m = re.match("port: (\\d+)", line)
+        if m is not None:
+          port = int(m.group(1))
+      portFile.close()
+
+    # Wait for the simulation to start accepting RPC connections.
+    checkCount = 0
+    while not is_port_open(port):
+      checkCount += 1
+      if checkCount > 200:
+        raise Exception(f"Cosim RPC port ({port}) never opened")
+      if simProc.poll() is not None:
+        raise Exception("Simulation exited early")
+      time.sleep(0.05)
+    return SimProcess(proc=simProc, port=port)
+
   def run(self,
           inner_command: str,
           gui: bool = False,
@@ -146,83 +223,23 @@ class Simulator:
     # syntax errors in that block.
     simProc = None
     try:
-      # Open log files
-      self.run_dir.mkdir(parents=True, exist_ok=True)
-      simStdout = open(self.run_dir / "sim_stdout.log", "w")
-      simStderr = open(self.run_dir / "sim_stderr.log", "w")
-
-      # Erase the config file if it exists. We don't want to read
-      # an old config.
-      portFileName = self.run_dir / "cosim.cfg"
-      if os.path.exists(portFileName):
-        os.remove(portFileName)
-
-      # Run the simulation.
-      simEnv = Simulator.get_env()
-      if self.debug:
-        simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
-        if "DEBUG_PERIOD" not in simEnv:
-          # Slow the simulation down to one tick per millisecond.
-          simEnv["DEBUG_PERIOD"] = "1"
-      simProc = subprocess.Popen(self.run_command(gui),
-                                 stdout=simStdout,
-                                 stderr=simStderr,
-                                 env=simEnv,
-                                 cwd=self.run_dir,
-                                 preexec_fn=os.setsid)
-      simStderr.close()
-      simStdout.close()
-
-      # Get the port which the simulation RPC selected.
-      checkCount = 0
-      while (not os.path.exists(portFileName)) and \
-              simProc.poll() is None:
-        time.sleep(0.1)
-        checkCount += 1
-        if checkCount > 200 and not gui:
-          raise Exception(f"Cosim never wrote cfg file: {portFileName}")
-      port = -1
-      while port < 0:
-        portFile = open(portFileName, "r")
-        for line in portFile.readlines():
-          m = re.match("port: (\\d+)", line)
-          if m is not None:
-            port = int(m.group(1))
-        portFile.close()
-
-      # Wait for the simulation to start accepting RPC connections.
-      checkCount = 0
-      while not is_port_open(port):
-        checkCount += 1
-        if checkCount > 200:
-          raise Exception(f"Cosim RPC port ({port}) never opened")
-        if simProc.poll() is not None:
-          raise Exception("Simulation exited early")
-        time.sleep(0.05)
-
+      simProc = self.run_proc(gui=gui)
       if server_only:
         # wait for user input to kill the server
         input(
-            f"Running in server-only mode on port {port} - Press anything to kill the server..."
+            f"Running in server-only mode on port {simProc.port} - Press anything to kill the server..."
         )
         return 0
       else:
         # Run the inner command, passing the connection info via environment vars.
         testEnv = os.environ.copy()
-        testEnv["ESI_COSIM_PORT"] = str(port)
+        testEnv["ESI_COSIM_PORT"] = str(simProc.port)
         testEnv["ESI_COSIM_HOST"] = "localhost"
         return subprocess.run(inner_command, cwd=os.getcwd(),
                               env=testEnv).returncode
     finally:
-      # Make sure to stop the simulation no matter what.
       if simProc:
-        os.killpg(os.getpgid(simProc.pid), signal.SIGINT)
-        # Allow the simulation time to flush its outputs.
-        try:
-          simProc.wait(timeout=1.0)
-        except subprocess.TimeoutExpired:
-          # If the simulation doesn't exit of its own free will, kill it.
-          simProc.kill()
+        simProc.force_stop()
 
 
 class Verilator(Simulator):

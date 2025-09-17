@@ -58,6 +58,8 @@ struct OutputOpLowering : public OpConversionPattern<arc::OutputOp> {
   LogicalResult
   matchAndRewrite(arc::OutputOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    if (!isa<arc::DefineOp, func::FuncOp>(op->getParentOp()))
+      return failure();
     rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOutputs());
     return success();
   }
@@ -101,7 +103,9 @@ static void populateLegality(ConversionTarget &target) {
 
   target.addIllegalOp<arc::CallOp>();
   target.addIllegalOp<arc::DefineOp>();
-  target.addIllegalOp<arc::OutputOp>();
+  target.addDynamicallyLegalOp<arc::OutputOp>([](auto op) {
+    return !isa<arc::DefineOp, func::FuncOp>(op->getParentOp());
+  });
   target.addIllegalOp<arc::StateOp>();
 }
 

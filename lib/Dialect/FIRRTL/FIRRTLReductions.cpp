@@ -7,10 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
@@ -23,6 +27,7 @@
 
 using namespace mlir;
 using namespace circt;
+using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -177,27 +182,51 @@ struct NLARemover {
 // Reduction patterns
 //===----------------------------------------------------------------------===//
 
+namespace {
+
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
 struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     nlaRemover.clear();
     symbols.clear();
     moduleSizes.clear();
+    nlaTable = std::make_unique<firrtl::NLATable>(op);
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    nlaRemover.remove(op);
+    nlaTable.reset();
+  }
 
   uint64_t match(firrtl::FModuleOp module) override {
+    if (!nlaTable->lookup(module).empty())
+      return 0;
     return moduleSizes.getModuleSize(module, symbols);
   }
 
   LogicalResult rewrite(firrtl::FModuleOp module) override {
+    // Hack up a list of known layers.
+    firrtl::LayerSet layers;
+    layers.insert_range(module.getLayersAttr().getAsRange<SymbolRefAttr>());
+    for (auto attr : module.getPortTypes()) {
+      auto type = cast<TypeAttr>(attr).getValue();
+      if (auto refType = firrtl::type_dyn_cast<firrtl::RefType>(type))
+        if (auto layer = refType.getLayer())
+          layers.insert(layer);
+    }
+    SmallVector<Attribute, 4> layersArray;
+    layersArray.reserve(layers.size());
+    for (auto layer : layers)
+      layersArray.push_back(layer);
+
     nlaRemover.markNLAsInOperation(module);
     OpBuilder builder(module);
     firrtl::FExtModuleOp::create(
         builder, module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        module.getConventionAttr(), module.getPorts(), ArrayAttr(), StringRef(),
+        module.getConventionAttr(), module.getPorts(),
+        builder.getArrayAttr(layersArray), StringRef(),
         module.getAnnotationsAttr());
+
     module->erase();
     return success();
   }
@@ -206,6 +235,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+  std::unique_ptr<firrtl::NLATable> nlaTable;
   ModuleSizeCache moduleSizes;
 };
 
@@ -592,31 +622,71 @@ struct ConnectInvalidator : public Reduction {
   bool acceptSizeIncrease() const override { return true; }
 };
 
-/// A sample reduction pattern that removes FIRRTL annotations from ports and
-/// operations.
+/// A reduction pattern that removes FIRRTL annotations from ports and
+/// operations. This generates one match per annotation and port annotation,
+/// allowing selective removal of individual annotations.
 struct AnnotationRemover : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
-  uint64_t match(Operation *op) override {
-    return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
+
+  void matches(Operation *op,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    uint64_t matchId = 0;
+
+    // Generate matches for regular annotations
+    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
+      for (auto _ : annos)
+        addMatch(1, matchId++);
+
+    // Generate matches for port annotations
+    if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations"))
+      for (auto portAnnoArray : portAnnos)
+        if (auto portAnnoArrayAttr = dyn_cast<ArrayAttr>(portAnnoArray))
+          for (auto _ : portAnnoArrayAttr)
+            addMatch(1, matchId++);
   }
-  LogicalResult rewrite(Operation *op) override {
-    auto emptyArray = ArrayAttr::get(op->getContext(), {});
-    if (auto annos = op->getAttr("annotations")) {
-      nlaRemover.markNLAsInAnnotation(annos);
-      op->setAttr("annotations", emptyArray);
+
+  LogicalResult rewriteMatches(Operation *op,
+                               ArrayRef<uint64_t> matches) override {
+    // Convert matches to a set for fast lookup
+    llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
+
+    // Lambda to process annotations and filter out matched ones
+    uint64_t matchId = 0;
+    auto processAnnotations =
+        [&](ArrayRef<Attribute> annotations) -> ArrayAttr {
+      SmallVector<Attribute> newAnnotations;
+      for (auto anno : annotations) {
+        if (!matchesSet.contains(matchId)) {
+          newAnnotations.push_back(anno);
+        } else {
+          // Mark NLAs in the removed annotation for cleanup
+          nlaRemover.markNLAsInAnnotation(anno);
+        }
+        matchId++;
+      }
+      return ArrayAttr::get(op->getContext(), newAnnotations);
+    };
+
+    // Remove regular annotations
+    if (auto annos = op->getAttrOfType<ArrayAttr>("annotations")) {
+      op->setAttr("annotations", processAnnotations(annos.getValue()));
     }
-    if (auto annos = op->getAttr("portAnnotations")) {
-      nlaRemover.markNLAsInAnnotation(annos);
-      auto attr = emptyArray;
-      if (isa<firrtl::InstanceOp>(op))
-        attr = ArrayAttr::get(
-            op->getContext(),
-            SmallVector<Attribute>(op->getNumResults(), emptyArray));
-      op->setAttr("portAnnotations", attr);
+
+    // Remove port annotations
+    if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations")) {
+      SmallVector<Attribute> newPortAnnos;
+      for (auto portAnnoArrayAttr : portAnnos.getAsRange<ArrayAttr>()) {
+        newPortAnnos.push_back(
+            processAnnotations(portAnnoArrayAttr.getValue()));
+      }
+      op->setAttr("portAnnotations",
+                  ArrayAttr::get(op->getContext(), newPortAnnos));
     }
+
     return success();
   }
+
   std::string getName() const override { return "annotation-remover"; }
   NLARemover nlaRemover;
 };
@@ -894,45 +964,49 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto *moduleOp =
         instOp.getReferencedOperation(symbols.getSymbolTable(tableOp));
-    if (!isa<firrtl::FModuleOp>(moduleOp))
-      return 0;
-    return symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1;
+
+    return isa<firrtl::FModuleOp>(moduleOp);
   }
 
   LogicalResult rewrite(firrtl::InstanceOp instOp) override {
-    LLVM_DEBUG(llvm::dbgs()
-               << "Inlining instance `" << instOp.getName() << "`\n");
-    SmallVector<Value> argReplacements;
-    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
-      auto result = instOp.getResult(i);
-      auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
-                                        instOp.getPortNameStr(i));
-      auto wire =
-          firrtl::WireOp::create(builder, result.getType(), name,
-                                 firrtl::NameKindEnum::DroppableName,
-                                 instOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
-      result.replaceAllUsesWith(wire);
-      argReplacements.push_back(wire);
-    }
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = cast<firrtl::FModuleOp>(
         instOp.getReferencedOperation(symbols.getSymbolTable(tableOp)));
-    for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
-      op.remove();
-      builder.insert(&op);
-      for (auto &operand : op.getOpOperands())
-        if (auto blockArg = dyn_cast<BlockArgument>(operand.get()))
-          operand.set(argReplacements[blockArg.getArgNumber()]);
+    bool isLastUse =
+        (symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1);
+    auto clonedModuleOp = isLastUse ? moduleOp : moduleOp.clone();
+
+    // Create wires to replace the instance results.
+    IRRewriter rewriter(instOp);
+    SmallVector<Value> argWires;
+    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
+      auto result = instOp.getResult(i);
+      auto name = rewriter.getStringAttr(Twine(instOp.getName()) + "_" +
+                                         instOp.getPortNameStr(i));
+      auto wire =
+          firrtl::WireOp::create(rewriter, instOp.getLoc(), result.getType(),
+                                 name, firrtl::NameKindEnum::DroppableName,
+                                 instOp.getPortAnnotation(i), StringAttr{})
+              .getResult();
+      result.replaceAllUsesWith(wire);
+      argWires.push_back(wire);
     }
+
+    // Splice in the cloned module body.
+    rewriter.inlineBlockBefore(clonedModuleOp.getBodyBlock(), instOp, argWires);
+
+    // Make sure we remove any NLAs that go through this instance, and the
+    // module if we're about the delete the module.
     nlaRemover.markNLAsInOperation(instOp);
-    instOp->erase();
-    moduleOp->erase();
+    if (isLastUse)
+      nlaRemover.markNLAsInOperation(moduleOp);
+
+    instOp.erase();
+    clonedModuleOp.erase();
     return success();
   }
 
-  std::string getName() const override { return "eager-inliner"; }
+  std::string getName() const override { return "firrtl-eager-inliner"; }
   bool acceptSizeIncrease() const override { return true; }
 
   ::detail::SymbolCache symbols;
@@ -1086,6 +1160,326 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
   bool isOneShot() const override { return true; }
 };
 
+/// A reduction pattern that groups modules by their port signature (types and
+/// directions) and replaces instances with the smallest module in each group.
+/// This helps reduce the IR by consolidating functionally equivalent modules
+/// based on their interface.
+///
+/// The pattern works by:
+/// 1. Grouping all modules by their port signature (port types and directions)
+/// 2. For each group with multiple modules, finding the smallest module using
+///    the module size cache
+/// 3. Replacing all instances of larger modules with instances of the smallest
+///    module in the same group
+/// 4. Removing the larger modules from the circuit
+///
+/// This reduction is useful for reducing circuits where multiple modules have
+/// the same interface but different implementations, allowing the reducer to
+/// try the smallest implementation first.
+struct ModuleSwapper : public OpReduction<InstanceOp> {
+  // Per-circuit state containing all the information needed for module swapping
+  using PortSignature = SmallVector<std::pair<Type, Direction>>;
+  struct CircuitState {
+    DenseMap<PortSignature, SmallVector<FModuleLike, 4>> moduleTypeGroups;
+    DenseMap<StringAttr, FModuleLike> instanceToCanonicalModule;
+    std::unique_ptr<NLATable> nlaTable;
+  };
+
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+    moduleSizes.clear();
+    circuitStates.clear();
+
+    // Collect module type groups and NLA tables for all circuits up front
+    op.walk<WalkOrder::PreOrder>([&](CircuitOp circuitOp) {
+      auto &state = circuitStates[circuitOp];
+      state.nlaTable = std::make_unique<NLATable>(circuitOp);
+      buildModuleTypeGroups(circuitOp, state);
+      return WalkResult::skip();
+    });
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  /// Create a vector of port type-direction pairs for the given FIRRTL module.
+  /// This ignores port names, allowing modules with the same port types and
+  /// directions but different port names to be considered equivalent for
+  /// swapping.
+  PortSignature getModulePortSignature(FModuleLike module) {
+    PortSignature signature;
+    signature.reserve(module.getNumPorts());
+    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+      signature.emplace_back(module.getPortType(i), module.getPortDirection(i));
+    return signature;
+  }
+
+  /// Group modules by their port signature and find the smallest in each group.
+  void buildModuleTypeGroups(CircuitOp circuitOp, CircuitState &state) {
+    // Group modules by their port signature
+    for (auto module : circuitOp.getBodyBlock()->getOps<FModuleLike>()) {
+      auto signature = getModulePortSignature(module);
+      state.moduleTypeGroups[signature].push_back(module);
+    }
+
+    // For each group, find the smallest module
+    for (auto &[signature, modules] : state.moduleTypeGroups) {
+      if (modules.size() <= 1)
+        continue;
+
+      FModuleLike smallestModule = nullptr;
+      uint64_t smallestSize = std::numeric_limits<uint64_t>::max();
+
+      for (auto module : modules) {
+        uint64_t size = moduleSizes.getModuleSize(module, symbols);
+        if (size < smallestSize) {
+          smallestSize = size;
+          smallestModule = module;
+        }
+      }
+
+      // Map all modules in this group to the smallest one
+      for (auto module : modules) {
+        if (module != smallestModule) {
+          state.instanceToCanonicalModule[module.getModuleNameAttr()] =
+              smallestModule;
+        }
+      }
+    }
+  }
+
+  uint64_t match(InstanceOp instOp) override {
+    // Get the circuit this instance belongs to
+    auto circuitOp = instOp->getParentOfType<CircuitOp>();
+    assert(circuitOp);
+    const auto &state = circuitStates.at(circuitOp);
+
+    // Skip instances that participate in any NLAs
+    DenseSet<hw::HierPathOp> nlas;
+    state.nlaTable->getInstanceNLAs(instOp, nlas);
+    if (!nlas.empty())
+      return 0;
+
+    // Check if this instance can be redirected to a smaller module
+    auto moduleName = instOp.getModuleNameAttr().getAttr();
+    auto canonicalModule = state.instanceToCanonicalModule.lookup(moduleName);
+    if (!canonicalModule)
+      return 0;
+
+    // Benefit is the size difference
+    auto currentModule = cast<FModuleLike>(
+        instOp.getReferencedOperation(symbols.getNearestSymbolTable(instOp)));
+    uint64_t currentSize = moduleSizes.getModuleSize(currentModule, symbols);
+    uint64_t canonicalSize =
+        moduleSizes.getModuleSize(canonicalModule, symbols);
+    return currentSize > canonicalSize ? currentSize - canonicalSize : 1;
+  }
+
+  LogicalResult rewrite(InstanceOp instOp) override {
+    // Get the circuit this instance belongs to
+    auto circuitOp = instOp->getParentOfType<CircuitOp>();
+    assert(circuitOp);
+    const auto &state = circuitStates.at(circuitOp);
+
+    // Replace the instantiated module with the canonical module.
+    auto canonicalModule = state.instanceToCanonicalModule.at(
+        instOp.getModuleNameAttr().getAttr());
+    auto canonicalName = canonicalModule.getModuleNameAttr();
+    instOp.setModuleNameAttr(FlatSymbolRefAttr::get(canonicalName));
+
+    // Update port names to match the canonical module
+    instOp.setPortNamesAttr(canonicalModule.getPortNamesAttr());
+
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-module-swapper"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+private:
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
+  ModuleSizeCache moduleSizes;
+
+  // Per-circuit state containing all module swapping information
+  DenseMap<CircuitOp, CircuitState> circuitStates;
+};
+
+/// A reduction pattern that handles MustDedup annotations by replacing all
+/// module names in a dedup group with a single module name. This helps reduce
+/// the IR by consolidating module references that are required to be identical.
+///
+/// The pattern works by:
+/// 1. Finding all MustDeduplicateAnnotation annotations on the circuit
+/// 2. For each dedup group, using the first module as the canonical name
+/// 3. Replacing all instance references to other modules in the group with
+///    references to the canonical module
+/// 4. Removing the non-canonical modules from the circuit
+/// 5. Removing the processed MustDedup annotation
+///
+/// This reduction is particularly useful for reducing large circuits where
+/// multiple modules are known to be identical but haven't been deduplicated
+/// yet.
+struct ForceDedup : public OpReduction<CircuitOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  /// Collect all MustDedup annotations and create matches for each dedup group.
+  void matches(CircuitOp circuitOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    auto annotations = AnnotationSet(circuitOp);
+    for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
+      if (!anno.isClass(mustDedupAnnoClass))
+        continue;
+
+      auto modulesAttr = anno.getMember<ArrayAttr>("modules");
+      if (!modulesAttr)
+        continue;
+
+      // Each dedup group gets its own match with benefit proportional to group
+      // size.
+      uint64_t benefit = modulesAttr.size();
+      addMatch(benefit, annoIdx);
+    }
+  }
+
+  LogicalResult rewriteMatches(CircuitOp circuitOp,
+                               ArrayRef<uint64_t> matches) override {
+    auto *context = circuitOp->getContext();
+    NLATable nlaTable(circuitOp);
+    hw::InnerSymbolTableCollection innerSymTables;
+    auto annotations = AnnotationSet(circuitOp);
+    SmallVector<Annotation> newAnnotations;
+
+    for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
+      // Check if this annotation was selected.
+      if (!llvm::is_contained(matches, annoIdx)) {
+        newAnnotations.push_back(anno);
+        continue;
+      }
+      auto modulesAttr = anno.getMember<ArrayAttr>("modules");
+      assert(anno.isClass(mustDedupAnnoClass) && modulesAttr &&
+             modulesAttr.size() >= 2);
+
+      // Extract module names from the dedup group.
+      SmallVector<StringAttr> moduleNames;
+      for (auto moduleRef : modulesAttr.getAsRange<StringAttr>()) {
+        // Parse "~CircuitName|ModuleName" format.
+        auto refStr = moduleRef.getValue();
+        auto pipePos = refStr.find('|');
+        if (pipePos != StringRef::npos && pipePos + 1 < refStr.size()) {
+          auto moduleName = refStr.substr(pipePos + 1);
+          moduleNames.push_back(StringAttr::get(context, moduleName));
+        }
+      }
+
+      // Simply drop the annotation if there's only one module.
+      if (moduleNames.size() < 2)
+        continue;
+
+      // Replace all instances and references to other modules with the
+      // first module.
+      replaceModuleReferences(circuitOp, moduleNames, nlaTable, innerSymTables);
+      nlaRemover.markNLAsInAnnotation(anno.getAttr());
+    }
+    if (newAnnotations.size() == annotations.size())
+      return failure();
+
+    // Update circuit annotations.
+    AnnotationSet newAnnoSet(newAnnotations, context);
+    newAnnoSet.applyToOperation(circuitOp);
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-force-dedup"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+private:
+  /// Replace all references to modules in the dedup group with the canonical
+  /// module name
+  void replaceModuleReferences(CircuitOp circuitOp,
+                               ArrayRef<StringAttr> moduleNames,
+                               NLATable &nlaTable,
+                               hw::InnerSymbolTableCollection &innerSymTables) {
+    auto *tableOp = SymbolTable::getNearestSymbolTable(circuitOp);
+    auto &symbolTable = symbols.getSymbolTable(tableOp);
+    auto *context = circuitOp->getContext();
+    auto innerRefs = hw::InnerRefNamespace{symbolTable, innerSymTables};
+
+    // Collect the modules.
+    FModuleLike canonicalModule;
+    SmallVector<FModuleLike> modulesToReplace;
+    for (auto name : moduleNames) {
+      if (auto mod = symbolTable.lookup<FModuleLike>(name)) {
+        if (!canonicalModule)
+          canonicalModule = mod;
+        else
+          modulesToReplace.push_back(mod);
+      }
+    }
+    if (modulesToReplace.empty())
+      return;
+
+    // Replace all instance references.
+    auto canonicalName = canonicalModule.getModuleNameAttr();
+    auto canonicalRef = FlatSymbolRefAttr::get(canonicalName);
+    circuitOp.walk([&](InstanceOp instOp) {
+      auto moduleName = instOp.getModuleNameAttr().getAttr();
+      if (llvm::is_contained(moduleNames, moduleName) &&
+          moduleName != canonicalName) {
+        instOp.setModuleNameAttr(canonicalRef);
+        instOp.setPortNamesAttr(canonicalModule.getPortNamesAttr());
+      }
+    });
+
+    // Update NLAs to reference the canonical module instead of modules being
+    // removed using NLATable for better performance.
+    for (auto oldMod : modulesToReplace) {
+      SmallVector<hw::HierPathOp> nlaOps(
+          nlaTable.lookup(oldMod.getModuleNameAttr()));
+      for (auto nlaOp : nlaOps) {
+        nlaTable.erase(nlaOp);
+        StringAttr oldModName = oldMod.getModuleNameAttr();
+        StringAttr newModName = canonicalName;
+        SmallVector<Attribute, 4> newPath;
+        for (auto nameRef : nlaOp.getNamepath()) {
+          if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
+            if (ref.getModule() == oldModName) {
+              auto oldInst = innerRefs.lookupOp<FInstanceLike>(ref);
+              ref = hw::InnerRefAttr::get(newModName, ref.getName());
+              auto newInst = innerRefs.lookupOp<FInstanceLike>(ref);
+              if (oldInst && newInst) {
+                oldModName = oldInst.getReferencedModuleNameAttr();
+                newModName = newInst.getReferencedModuleNameAttr();
+              }
+            }
+            newPath.push_back(ref);
+          } else if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == oldModName) {
+            newPath.push_back(FlatSymbolRefAttr::get(newModName));
+          } else {
+            newPath.push_back(nameRef);
+          }
+        }
+        nlaOp.setNamepathAttr(ArrayAttr::get(context, newPath));
+        nlaTable.addNLA(nlaOp);
+      }
+    }
+
+    // Mark NLAs in modules to be removed.
+    for (auto module : modulesToReplace) {
+      nlaRemover.markNLAsInOperation(module);
+      module->erase();
+    }
+  }
+
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
+};
+
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -1097,6 +1491,8 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
+  patterns.add<ModuleSwapper, 32>();
+  patterns.add<ForceDedup, 31>();
   patterns.add<PassReduction, 30>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,

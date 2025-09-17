@@ -8,11 +8,11 @@ add_circt_translation_library(CIRCTImportAIGER
   Support
 
   LINK_LIBS PUBLIC
-  CIRCTAIG
   CIRCTHW
   CIRCTComb
   CIRCTSeq
   CIRCTSupport
+  CIRCTSynth
   MLIRIR
   MLIRSupport
   MLIRTranslateLib

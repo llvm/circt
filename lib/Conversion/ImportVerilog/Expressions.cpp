@@ -463,12 +463,21 @@ struct RvalueExprVisitor : public ExprVisitor {
   // Helper function to create pre and post increments and decrements.
   Value createIncrement(Value arg, bool isInc, bool isPost) {
     auto preValue = moore::ReadOp::create(builder, loc, arg);
-    auto one = moore::ConstantOp::create(
-        builder, loc, cast<moore::IntType>(preValue.getType()), 1);
-    auto postValue =
-        isInc ? moore::AddOp::create(builder, loc, preValue, one).getResult()
-              : moore::SubOp::create(builder, loc, preValue, one).getResult();
-    moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+    Value postValue;
+    // Catch the special case where a signed 1 bit value (i1) is incremented,
+    // as +1 can not be expressed as a signed 1 bit value. For any 1-bit number
+    // negating is equivalent to incrementing.
+    if (moore::isIntType(preValue.getType(), 1)) {
+      postValue = moore::NotOp::create(builder, loc, preValue).getResult();
+    } else {
+
+      auto one = moore::ConstantOp::create(
+          builder, loc, cast<moore::IntType>(preValue.getType()), 1);
+      postValue =
+          isInc ? moore::AddOp::create(builder, loc, preValue, one).getResult()
+                : moore::SubOp::create(builder, loc, preValue, one).getResult();
+      moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+    }
     if (isPost)
       return preValue;
     return postValue;
@@ -975,17 +984,29 @@ struct RvalueExprVisitor : public ExprVisitor {
     const auto &subroutine = *info.subroutine;
     auto args = expr.arguments();
 
-    if (args.size() == 1) {
-      auto value = context.convertRvalueExpression(*args[0]);
+    FailureOr<Value> result;
+    Value value;
+
+    switch (args.size()) {
+    case (0):
+      result = context.convertSystemCallArity0(subroutine, loc);
+      break;
+
+    case (1):
+      value = context.convertRvalueExpression(*args[0]);
       if (!value)
         return {};
-      auto result = context.convertSystemCallArity1(subroutine, loc, value);
-      if (failed(result))
-        return {};
-      if (*result)
-        return *result;
+      result = context.convertSystemCallArity1(subroutine, loc, value);
+      break;
+
+    default:
+      break;
     }
 
+    if (failed(result))
+      return {};
+    if (*result)
+      return *result;
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
                          << "`";
     return {};
@@ -1331,10 +1352,67 @@ Value Context::materializeSVInt(const slang::SVInt &svint,
   return materializeConversion(type, result, astType.isSigned(), loc);
 }
 
+Value Context::materializeFixedSizeUnpackedArrayType(
+    const slang::ConstantValue &constant,
+    const slang::ast::FixedSizeUnpackedArrayType &astType, Location loc) {
+
+  auto type = convertType(astType);
+  if (!type)
+    return {};
+
+  // Check whether underlying type is an integer, if so, get bit width
+  unsigned bitWidth;
+  if (astType.elementType.isIntegral())
+    bitWidth = astType.elementType.getBitWidth();
+  else
+    return {};
+
+  bool typeIsFourValued = false;
+
+  // Check whether the underlying type is four-valued
+  if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+    typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+  else
+    return {};
+
+  auto domain =
+      typeIsFourValued ? moore::Domain::FourValued : moore::Domain::TwoValued;
+
+  // Construct the integer type this is an unpacked array of; if possible keep
+  // it two-valued, unless any entry is four-valued or the underlying type is
+  // four-valued
+  auto intType = moore::IntType::get(getContext(), bitWidth, domain);
+  // Construct the full array type from intType
+  auto arrType = moore::UnpackedArrayType::get(
+      getContext(), constant.elements().size(), intType);
+
+  llvm::SmallVector<mlir::Value> elemVals;
+  moore::ConstantOp constOp;
+
+  mlir::OpBuilder::InsertionGuard guard(builder);
+
+  // Add one ConstantOp for every element in the array
+  for (auto elem : constant.elements()) {
+    FVInt fvInt = convertSVIntToFVInt(elem.integer());
+    constOp = moore::ConstantOp::create(builder, loc, intType, fvInt);
+    elemVals.push_back(constOp.getResult());
+  }
+
+  // Take the result of each ConstantOp and concatenate them into an array (of
+  // constant values).
+  auto arrayOp = moore::ArrayCreateOp::create(builder, loc, arrType, elemVals);
+
+  return arrayOp.getResult();
+}
+
 Value Context::materializeConstant(const slang::ConstantValue &constant,
                                    const slang::ast::Type &type, Location loc) {
+
+  if (auto *arr = type.as_if<slang::ast::FixedSizeUnpackedArrayType>())
+    return materializeFixedSizeUnpackedArrayType(constant, *arr, loc);
   if (constant.isInteger())
     return materializeSVInt(constant.integer(), type, loc);
+
   return {};
 }
 
@@ -1507,6 +1585,20 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 }
 
 FailureOr<Value>
+Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
+                                 Location loc) {
+
+  auto systemCallRes =
+      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          .Case("$urandom",
+                [&]() -> Value {
+                  return moore::UrandomBIOp::create(builder, loc, nullptr);
+                })
+          .Default([&]() -> Value { return {}; });
+  return systemCallRes();
+}
+
+FailureOr<Value>
 Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                                  Location loc, Value value) {
   auto systemCallRes =
@@ -1594,6 +1686,10 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
           .Case("$atanh",
                 [&]() -> Value {
                   return moore::AtanhBIOp::create(builder, loc, value);
+                })
+          .Case("$urandom",
+                [&]() -> Value {
+                  return moore::UrandomBIOp::create(builder, loc, value);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

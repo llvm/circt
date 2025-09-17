@@ -11,10 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/AIGToComb.h"
-#include "circt/Dialect/AIG/AIGDialect.h"
-#include "circt/Dialect/AIG/AIGPasses.h"
-#include "circt/Dialect/AIG/Analysis/LongestPathAnalysis.h"
+#include "circt/Conversion/SynthToComb.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
@@ -28,6 +25,8 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Synth/Analysis/LongestPathAnalysis.h"
+#include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -94,10 +93,10 @@ static cl::opt<bool>
                               cl::desc("Allow unknown dialects in the input"),
                               cl::init(false), cl::cat(mainCategory));
 
-enum Until { UntilAIGLowering, UntilMapping, UntilEnd };
+enum Until { UntilCombLowering, UntilMapping, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
-    clEnumValN(UntilAIGLowering, "aig-lowering", "Lowering of AIG"),
+    clEnumValN(UntilCombLowering, "comb-lowering", "Lowering Comb to AIG/MIG"),
     clEnumValN(UntilMapping, "mapping", "Run technology/lut mapping"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 
@@ -177,6 +176,12 @@ static cl::opt<int>
                  cl::desc("Lower to generic a truth table op with K inputs"),
                  cl::init(0), cl::cat(mainCategory));
 
+static cl::opt<TargetIR>
+    targetIR("target-ir", cl::desc("Target IR to lower to"),
+             cl::values(clEnumValN(TargetIR::AIG, "aig", "AIG operation"),
+                        clEnumValN(TargetIR::MIG, "mig", "MIG operation")),
+             cl::init(TargetIR::AIG), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -200,11 +205,6 @@ nestOrAddToHierarchicalRunner(OpPassManager &pm,
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
-template <typename... AllowedOpTy>
-static void partiallyLegalizeCombToAIG(SmallVectorImpl<std::string> &ops) {
-  (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
-}
-
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
   // ExtractTestCode is used to move verification code from design to
@@ -213,20 +213,21 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
       /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
       /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
-    circt::synth::AIGLoweringPipelineOptions loweringOptions;
+    circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
     loweringOptions.timingAware = !disableTimingAware;
-    circt::synth::buildAIGLoweringPipeline(pm, loweringOptions);
-    if (untilReached(UntilAIGLowering))
+    loweringOptions.targetIR = targetIR;
+    circt::synth::buildCombLoweringPipeline(pm, loweringOptions);
+    if (untilReached(UntilCombLowering))
       return;
 
-    circt::synth::AIGOptimizationPipelineOptions optimizationOptions;
+    circt::synth::SynthOptimizationPipelineOptions optimizationOptions;
     optimizationOptions.abcCommands = abcCommands;
     optimizationOptions.abcPath.setValue(abcPath);
     optimizationOptions.ignoreAbcFailures.setValue(ignoreAbcFailures);
     optimizationOptions.disableWordToBits.setValue(disableWordToBits);
 
-    circt::synth::buildAIGOptimizationPipeline(pm, optimizationOptions);
+    circt::synth::buildSynthOptimizationPipeline(pm, optimizationOptions);
     if (untilReached(UntilMapping))
       return;
     if (lowerToKLUTs) {
@@ -248,18 +249,18 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
 
   // Run analysis if requested.
   if (!outputLongestPath.empty()) {
-    circt::aig::PrintLongestPathAnalysisOptions options;
+    circt::synth::PrintLongestPathAnalysisOptions options;
     options.outputFile = outputLongestPath;
     options.showTopKPercent = outputLongestPathTopKPercent;
     options.emitJSON = outputLongestPathJSON;
-    pm.addPass(circt::aig::createPrintLongestPathAnalysis(options));
+    pm.addPass(circt::synth::createPrintLongestPathAnalysis(options));
   }
 
   if (convertToComb)
     nestOrAddToHierarchicalRunner(
         pm,
         [&](OpPassManager &pm) {
-          pm.addPass(circt::createConvertAIGToComb());
+          pm.addPass(circt::createConvertSynthToComb());
           if (lowerToKLUTs)
             pm.addPass(circt::comb::createLowerComb());
           pm.addPass(createCSEPass());
@@ -331,7 +332,7 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
   if (!topName.empty()) {
     // Set a top module name for the longest path analysis.
     module.get()->setAttr(
-        circt::aig::LongestPathAnalysis::getTopModuleNameAttrName(),
+        circt::synth::LongestPathAnalysis::getTopModuleNameAttrName(),
         FlatSymbolRefAttr::get(&context, topName));
   }
 
@@ -361,7 +362,7 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
-  circt::aig::registerAIGAnalysisPrerequisitePasses();
+  circt::synth::registerSynthAnalysisPrerequisitePasses();
 
   cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
@@ -375,9 +376,9 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<aig::AIGDialect, comb::CombDialect, debug::DebugDialect,
-                  emit::EmitDialect, hw::HWDialect, ltl::LTLDialect,
-                  om::OMDialect, seq::SeqDialect, sim::SimDialect,
+  registry.insert<comb::CombDialect, debug::DebugDialect, emit::EmitDialect,
+                  hw::HWDialect, ltl::LTLDialect, om::OMDialect,
+                  seq::SeqDialect, sim::SimDialect, synth::SynthDialect,
                   sv::SVDialect, verif::VerifDialect>();
   MLIRContext context(registry);
   if (allowUnregisteredDialects)

@@ -59,16 +59,20 @@ endif()
 # conflicts with local zlib versions, and since we don't export anything zlib
 # related in our public headers.
 message("-- pulling down zlib from git")
-set(ZLIB_USE_STATIC_LIBS ON)
-set(ZLIB_BUILD_EXAMPLES OFF)
+set(ZLIB_BUILD_SHARED OFF)
+set(ZLIB_BUILD_STATIC ON)
+set(ZLIB_BUILD_TESTING OFF)
 FetchContent_Declare(
   ZLIB
   GIT_REPOSITORY https://github.com/madler/zlib.git
-  GIT_TAG        v1.3.1
+  # Note @mortbopet: The latest zlib release (v1.3.1) is fairly old (Jan 22. 2024)
+  # and is missing some key changes/fixes for building w/ a static library.
+  # For now, fixed by tagging to head of their development branch.
+  # Change once a new release is made that includes these fixes.
+  GIT_TAG        5a82f71ed1dfc0bec044d9702463dbdf84ea3b71
 )
 FetchContent_MakeAvailable(ZLIB)
 set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
-set(ZLIB_LIBRARY zlibstatic)
 if(UNIX)
   target_compile_options(zlibstatic
     PRIVATE
@@ -123,6 +127,7 @@ set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Types.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
@@ -180,7 +185,7 @@ if (DEFINED ZLIB_INCLUDE_DIR)
 endif()
 
 target_link_libraries(ESICppRuntime PRIVATE
-  ${ZLIB_LIBRARY}
+  ZLIB::ZLIBSTATIC
   nlohmann_json::nlohmann_json
 )
 target_link_libraries(ESICppRuntime PRIVATE

@@ -3,7 +3,7 @@
 // Test unsupported variadic AND gates (should be lowered first)
 hw.module @variadic_and_error(in %a: i1, in %b: i1, in %c: i1, out result: i1) {
   // expected-error @below {{variadic AND gates not supported, run aig-lower-variadic pass first}}
-  %0 = aig.and_inv %a, %b, %c : i1
+  %0 = synth.aig.and_inv %a, %b, %c : i1
   hw.output %0 : i1
 }
 
@@ -32,8 +32,8 @@ hw.module @unknown_operation_error(in %a: i1, in %b: i1, out result: i1) {
 // Test graph that is not possible to topo-sort
 // expected-error @below {{failed to sort operations topologically}}
 hw.module @unsorted_latches_error(in %input1: i1, in %input2: i1, out output: i1) {
-  %0 = aig.and_inv %input1, %1 : i1
-  %1 = aig.and_inv %input1, %2 : i1
-  %2 = aig.and_inv %input1, %0 : i1
+  %0 = synth.aig.and_inv %input1, %1 : i1
+  %1 = synth.aig.and_inv %input1, %2 : i1
+  %2 = synth.aig.and_inv %input1, %0 : i1
   hw.output %2 : i1
 }

@@ -15,7 +15,7 @@
 // NO_SYMBOLS-NOT: l0
 // NO_SYMBOLS-NOT: o0
 hw.module @symbol_test(in %input_a: i1, in %input_b: i1, in %input_c: i2, in %clk: !seq.clock, out output_result: i1) {
-  %and_result = aig.and_inv %input_b, %input_a : i1
+  %and_result = synth.aig.and_inv %input_b, %input_a : i1
   %my_register = seq.compreg %and_result, %clk : i1
   hw.output %my_register : i1
 }

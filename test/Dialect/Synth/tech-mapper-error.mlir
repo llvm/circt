@@ -6,7 +6,7 @@ hw.module @do_nothing(in %a : i1, out result : i1) attributes {hw.techlib.info =
 
 hw.module @test(in %a : i1, in %b : i1, out result : i1) {
     // expected-error-re@+1 {{No matching cut found for value: {{.*}}}}
-    %0 = aig.and_inv %a, %b : i1
+    %0 = synth.aig.and_inv %a, %b : i1
     hw.output %0 : i1
 }
 
@@ -19,7 +19,7 @@ hw.module @do_nothing(in %a : i1, out result : i1) attributes {hw.techlib.info =
 // Test for too many operands in AIG operation
 hw.module @test(in %a : i1, in %b : i1, out result : i1) {
     // expected-error-re@+1 {{Cut enumeration supports at most 2 operands, found: 3}}
-    %0 = aig.and_inv %a, %b, %a : i1
+    %0 = synth.aig.and_inv %a, %b, %a : i1
     hw.output %0 : i1
 }
 
@@ -73,6 +73,6 @@ hw.module @too_many_input_bits(in %a0 : i1, in %a1 : i1, in %a2 : i1, in %a3 : i
   delay = [[1], [1], [1], [1], [1], [1], [1], [1], [1], [1],
            [1], [1], [1], [1], [1], [1], [1]]
   }} {
-  %0 = aig.and_inv %a0, %a1 : i1
+  %0 = synth.aig.and_inv %a0, %a1 : i1
   hw.output %0: i1
 }

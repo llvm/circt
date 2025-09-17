@@ -9,7 +9,6 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-add_subdirectory(AIG)
 add_subdirectory(Arc)
 add_subdirectory(Calyx)
 add_subdirectory(Comb)

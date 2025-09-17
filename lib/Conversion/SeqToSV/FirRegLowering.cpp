@@ -23,6 +23,13 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
 
+static Value buildXMRTo(OpBuilder &builder, HierPathOp path, Location loc,
+                        Type type) {
+  auto name = path.getSymNameAttr();
+  auto ref = mlir::FlatSymbolRefAttr::get(name);
+  return sv::XMRRefOp::create(builder, loc, type, ref);
+}
+
 /// Immediately before the terminator, if present. Otherwise, the block's end.
 static Block::iterator getBlockEnd(Block *block) {
   if (block->mightHaveTerminator())
@@ -350,6 +357,8 @@ void FirRegLowering::createRandomInitialization(ImplicitLocOpBuilder &builder) {
 
 void FirRegLowering::createPresetInitialization(ImplicitLocOpBuilder &builder) {
   for (auto &svReg : presetInitRegs) {
+    OpBuilder::InsertionGuard guard(builder);
+
     auto loc = svReg.reg.getLoc();
     auto elemTy = svReg.reg.getType().getElementType();
     auto cst = getOrCreateConstant(loc, svReg.preset.getValue());
@@ -360,7 +369,13 @@ void FirRegLowering::createPresetInitialization(ImplicitLocOpBuilder &builder) {
     else
       rhs = hw::BitcastOp::create(builder, loc, elemTy, cst);
 
-    sv::BPAssignOp::create(builder, loc, svReg.reg, rhs);
+    buildRegConditions(builder, svReg.reg);
+    Value target = svReg.reg;
+    if (svReg.path)
+      target = buildXMRTo(builder, svReg.path, svReg.reg.getLoc(),
+                          svReg.reg.getType());
+
+    sv::BPAssignOp::create(builder, loc, target, rhs);
   }
 }
 
@@ -370,13 +385,22 @@ void FirRegLowering::createPresetInitialization(ImplicitLocOpBuilder &builder) {
 void FirRegLowering::createAsyncResetInitialization(
     ImplicitLocOpBuilder &builder) {
   for (auto &reset : asyncResets) {
+    OpBuilder::InsertionGuard guard(builder);
+
     //  if (reset) begin
     //    ..
     //  end
-    sv::IfOp::create(builder, reset.first, [&] {
-      for (auto &reg : reset.second)
-        sv::BPAssignOp::create(builder, reg.reg.getLoc(), reg.reg,
+    sv::IfOp::create(builder, reset.first, [&]() {
+      for (auto &reg : reset.second) {
+        OpBuilder::InsertionGuard guard(builder);
+        buildRegConditions(builder, reg.reg);
+        Value target = reg.reg;
+        if (reg.path)
+          target = buildXMRTo(builder, reg.path, reg.reg.getLoc(),
+                              reg.reg.getType());
+        sv::BPAssignOp::create(builder, reg.reg.getLoc(), target,
                                reg.asyncResetValue);
+      }
     });
   }
 }
@@ -796,13 +820,6 @@ void FirRegLowering::buildRegConditions(OpBuilder &b, sv::RegOp reg) {
     }
     llvm_unreachable("unknown reg condition type");
   }
-}
-
-static Value buildXMRTo(OpBuilder &builder, HierPathOp path, Location loc,
-                        Type type) {
-  auto name = path.getSymNameAttr();
-  auto ref = mlir::FlatSymbolRefAttr::get(name);
-  return sv::XMRRefOp::create(builder, loc, type, ref);
 }
 
 void FirRegLowering::initialize(OpBuilder &builder, RegLowerInfo reg,

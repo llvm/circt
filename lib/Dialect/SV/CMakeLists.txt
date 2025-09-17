@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTSV
   CIRCTHW
   CIRCTLTL
   CIRCTSupport
+  MLIRCallInterfaces
   MLIRIR
 )
 

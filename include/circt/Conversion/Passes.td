@@ -38,40 +38,6 @@ def AffineToLoopSchedule : Pass<"convert-affine-to-loopschedule", "mlir::func::F
 }
 
 //===----------------------------------------------------------------------===//
-// ExportChiselInterface and ExportSplitChiselInterface
-//===----------------------------------------------------------------------===//
-
-def ExportChiselInterface : Pass<"export-chisel-interface", "firrtl::CircuitOp"> {
-  let summary = "Emit a Chisel interface to a FIRRTL circuit";
-  let description = [{
-    This pass generates a Scala Chisel interface for the top level module of
-    a FIRRTL circuit.
-  }];
-
-  let constructor = "createExportChiselInterfacePass()";
-  let dependentDialects = [
-    "circt::firrtl::FIRRTLDialect"
-  ];
-}
-
-def ExportSplitChiselInterface : Pass<"export-split-chisel-interface", "firrtl::CircuitOp"> {
-  let summary = "Emit a Chisel interface to a FIRRTL circuit to a directory of files";
-  let description = [{
-    This pass generates a Scala Chisel interface for the top level module of
-    a FIRRTL circuit.
-  }];
-
-  let constructor = "createExportSplitChiselInterfacePass()";
-  let dependentDialects = [
-    "circt::firrtl::FIRRTLDialect"
-  ];
-  let options = [
-    Option<"directoryName", "dir-name", "std::string",
-            "", "Directory to emit into">
-   ];
-}
-
-//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
@@ -810,32 +776,35 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// ConvertCombToAIG
+// ConvertCombToSynth
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToAIG: Pass<"convert-comb-to-aig",  "hw::HWModuleOp"> {
-  let summary = "Lower Comb ops to AIG ops.";
-  let dependentDialects = [
-    "circt::comb::CombDialect",
-    "circt::aig::AIGDialect",
-  ];
+def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
+  let summary = "Lower Comb ops to Synth ops.";
+  let dependentDialects = ["circt::comb::CombDialect",
+                           "circt::synth::SynthDialect"];
 
-  let options = [
-    ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
-               "Specify additional legal ops to partially legalize Comb to AIG">,
-    Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits", "uint32_t", "10",
-           "Maximum number of unknown bits to emulate in a table lookup">
-  ];
+  let options =
+      [ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
+                  "Specify additional legal ops to partially legalize Comb">,
+       Option<"targetIR", "target-ir", "circt::CombToSynthTargetIR",
+              /*default=*/"circt::CombToSynthTargetIR::AIG", "Target IR kind",
+              [{::llvm::cl::values(
+             clEnumValN(circt::CombToSynthTargetIR::AIG, "aig", "Lower to AIG"),
+             clEnumValN(circt::CombToSynthTargetIR::MIG, "mig", "Lower to MIG")
+           )}]>,
+       Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits",
+              "uint32_t", "10",
+              "Maximum number of unknown bits to emulate in a table lookup">];
 }
 
 //===----------------------------------------------------------------------===//
-// ConvertAIGToComb
+// ConvertSynthToComb
 //===----------------------------------------------------------------------===//
-
-def ConvertAIGToComb: Pass<"convert-aig-to-comb", "hw::HWModuleOp"> {
-  let summary = "Lower AIG ops to Comb ops";
+def ConvertSynthToComb: Pass<"convert-synth-to-comb", "hw::HWModuleOp"> {
+  let summary = "Lower Synth ops to Comb ops";
   let description = [{
-    This pass converts AIG operations to Comb operations. This is mostly
+    This pass converts Synth operations to Comb operations. This is mostly
     used for verifying post-synthesis results.
   }];
   let dependentDialects = [
@@ -887,7 +856,7 @@ def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
     Option<"forceBooth", "lower-partial-product-to-booth", "bool", "false",
            "Force all partial products to be lowered to Booth arrays.">,
     Option<"timingAware", "timing-aware", "bool", "false",
-           "Lower operators in a timing-aware fashion.">
+           "Use timing-aware compressor synthesis algorithm.">
   ];
 }
 

@@ -14,6 +14,7 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "convert-to-arcs"
@@ -22,13 +23,17 @@ using namespace circt;
 using namespace arc;
 using namespace hw;
 using llvm::MapVector;
+using llvm::SmallSetVector;
 
 static bool isArcBreakingOp(Operation *op) {
+  if (isa<TapOp>(op))
+    return false;
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
              ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,
              sim::DPICallOp>(op) ||
-         op->getNumResults() > 1;
+         op->getNumResults() > 1 || op->getNumRegions() > 0 ||
+         !mlir::isMemoryEffectFree(op);
 }
 
 static LogicalResult convertInitialValue(seq::CompRegOp reg,
@@ -102,8 +107,6 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   for (Operation &op : *module.getBodyBlock()) {
     if (isa<seq::InitialOp>(&op))
       continue;
-    if (op.getNumRegions() > 0)
-      return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
       continue;
     arcBreakerIndices[&op] = arcBreakers.size();
@@ -132,7 +135,15 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
 }
 
 LogicalResult Converter::analyzeFanIn() {
-  SmallVector<std::tuple<Operation *, unsigned>> worklist;
+  SmallVector<std::tuple<Operation *, SmallVector<Value, 2>>> worklist;
+  SetVector<Value> seenOperands;
+  auto addToWorklist = [&](Operation *op) {
+    seenOperands.clear();
+    for (auto operand : op->getOperands())
+      seenOperands.insert(operand);
+    mlir::getUsedValuesDefinedAbove(op->getRegions(), seenOperands);
+    worklist.emplace_back(op, seenOperands.getArrayRef());
+  };
 
   // Seed the worklist and fanin masks with the arc breaking operations.
   faninMasks.clear();
@@ -140,7 +151,7 @@ LogicalResult Converter::analyzeFanIn() {
     unsigned index = arcBreakerIndices.lookup(op);
     auto mask = APInt::getOneBitSet(arcBreakers.size(), index);
     faninMasks[op] = mask;
-    worklist.push_back({op, 0});
+    addToWorklist(op);
   }
 
   // Establish a post-order among the operations.
@@ -148,8 +159,8 @@ LogicalResult Converter::analyzeFanIn() {
   DenseSet<Operation *> finished;
   postOrder.clear();
   while (!worklist.empty()) {
-    auto &[op, operandIdx] = worklist.back();
-    if (operandIdx == op->getNumOperands()) {
+    auto &[op, operands] = worklist.back();
+    if (operands.empty()) {
       if (!isArcBreakingOp(op) && !isa<hw::OutputOp>(op))
         postOrder.push_back(op);
       finished.insert(op);
@@ -157,7 +168,7 @@ LogicalResult Converter::analyzeFanIn() {
       worklist.pop_back();
       continue;
     }
-    auto operand = op->getOperand(operandIdx++); // advance to next operand
+    auto operand = operands.pop_back_val(); // advance to next operand
     auto *definingOp = operand.getDefiningOp();
     if (!definingOp || isArcBreakingOp(definingOp) ||
         finished.contains(definingOp))
@@ -166,7 +177,7 @@ LogicalResult Converter::analyzeFanIn() {
       definingOp->emitError("combinational loop detected");
       return failure();
     }
-    worklist.push_back({definingOp, 0});
+    addToWorklist(definingOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "- Sorted " << postOrder.size() << " ops\n");
 
@@ -177,6 +188,8 @@ LogicalResult Converter::analyzeFanIn() {
   for (auto *op : llvm::reverse(postOrder)) {
     auto mask = APInt::getZero(arcBreakers.size());
     for (auto *user : op->getUsers()) {
+      while (user->getParentOp() != op->getParentOp())
+        user = user->getParentOp();
       auto it = faninMasks.find(user);
       if (it != faninMasks.end())
         mask |= it->second;
