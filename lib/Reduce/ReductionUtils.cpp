@@ -1,4 +1,4 @@
-//===- ReductionUtils.cpp - Reduction pattern utilities -------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,6 +12,7 @@
 #include "llvm/ADT/SmallSet.h"
 
 using namespace circt;
+using namespace circt::reduce;
 
 void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallVector<Operation *> worklist;
@@ -28,4 +29,27 @@ void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
     reduction.notifyOpErased(op);
     op->erase();
   }
+}
+
+//===----------------------------------------------------------------------===//
+// InnerSymbolUses
+//===----------------------------------------------------------------------===//
+
+InnerSymbolUses::InnerSymbolUses(Operation *root) {
+  root->walk([&](Operation *op) {
+    for (auto namedAttr : op->getAttrs()) {
+      namedAttr.getValue().walk([&](Attribute attr) {
+        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr))
+          uses.insert({innerRef.getModule(), innerRef.getName()});
+      });
+    }
+  });
+}
+
+bool InnerSymbolUses::hasUses(hw::InnerRefAttr inner) const {
+  return uses.contains({inner.getModule(), inner.getName()});
+}
+
+bool InnerSymbolUses::hasUses(StringAttr mod, StringAttr sym) const {
+  return uses.contains({mod, sym});
 }

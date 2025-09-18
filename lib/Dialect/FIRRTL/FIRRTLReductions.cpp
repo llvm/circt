@@ -942,22 +942,37 @@ struct DetachSubaccesses : public Reduction {
   llvm::DenseSet<Operation *> opsToErase;
 };
 
-/// This reduction removes symbols on node ops. Name preservation creates a lot
-/// of nodes ops with symbols to keep name information but it also prevents
+/// This reduction removes inner symbols on ops. Name preservation creates a lot
+/// of node ops with symbols to keep name information but it also prevents
 /// normal canonicalizations.
-struct NodeSymbolRemover : public OpReduction<firrtl::NodeOp> {
-
-  uint64_t match(firrtl::NodeOp nodeOp) override {
-    return nodeOp.getInnerSym() &&
-           !nodeOp.getInnerSym()->getSymName().getValue().empty();
+struct NodeSymbolRemover : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    innerSymUses = reduce::InnerSymbolUses(op);
   }
 
-  LogicalResult rewrite(firrtl::NodeOp nodeOp) override {
-    nodeOp.removeInnerSymAttr();
+  uint64_t match(Operation *op) override {
+    // Only match ops with an inner symbol.
+    auto sym = op->getAttrOfType<hw::InnerSymAttr>("inner_sym");
+    if (!sym || sym.empty())
+      return 0;
+
+    // Ignore ops whose inner symbol participates in an NLA.
+    if (auto mod = op->getParentOfType<FModuleLike>())
+      if (innerSymUses.hasUses(mod.getModuleNameAttr(), sym.getSymName()))
+        return 0;
+
+    return 1;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    op->removeAttr("inner_sym");
     return success();
   }
 
   std::string getName() const override { return "node-symbol-remover"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+  reduce::InnerSymbolUses innerSymUses;
 };
 
 /// A sample reduction pattern that eagerly inlines instances.
