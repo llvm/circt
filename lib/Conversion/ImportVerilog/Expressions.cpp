@@ -1024,55 +1024,158 @@ struct RvalueExprVisitor : public ExprVisitor {
         builder, loc, builder.getF64FloatAttr(expr.getValue()));
   }
 
+  /// Helper function to convert RValues at creation of a new Struct, Array or
+  /// Int.
+  FailureOr<SmallVector<Value>>
+  convertElements(const slang::ast::AssignmentPatternExpressionBase &expr,
+                  std::variant<Type, ArrayRef<Type>> expectedTypes,
+                  unsigned replCount) {
+    const auto &elts = expr.elements();
+    const size_t elementCount = elts.size();
+
+    // Inspect the variant.
+    const bool hasBroadcast =
+        std::holds_alternative<Type>(expectedTypes) &&
+        static_cast<bool>(std::get<Type>(expectedTypes)); // non-null Type
+
+    const bool hasPerElem =
+        std::holds_alternative<ArrayRef<Type>>(expectedTypes) &&
+        !std::get<ArrayRef<Type>>(expectedTypes).empty();
+
+    // If per-element types are provided, enforce arity.
+    if (hasPerElem) {
+      auto types = std::get<ArrayRef<Type>>(expectedTypes);
+      if (types.size() != elementCount) {
+        mlir::emitError(loc)
+            << "assignment pattern arity mismatch: expected " << types.size()
+            << " elements, got " << elementCount;
+        return failure();
+      }
+    }
+
+    SmallVector<Value> converted;
+    converted.reserve(elementCount * std::max(1u, replCount));
+
+    // Convert each element heuristically, no type is expected
+    if (!hasBroadcast && !hasPerElem) {
+      // No expected type info.
+      for (const auto *elementExpr : elts) {
+        Value v = context.convertRvalueExpression(*elementExpr);
+        if (!v)
+          return failure();
+        converted.push_back(v);
+      }
+    } else if (hasBroadcast) {
+      // Same expected type for all elements.
+      Type want = std::get<Type>(expectedTypes);
+      for (const auto *elementExpr : elts) {
+        Value v = want ? context.convertRvalueExpression(*elementExpr, want)
+                       : context.convertRvalueExpression(*elementExpr);
+        if (!v)
+          return failure();
+        converted.push_back(v);
+      }
+    } else { // hasPerElem, individual type is expected for each element
+      auto types = std::get<ArrayRef<Type>>(expectedTypes);
+      for (size_t i = 0; i < elementCount; ++i) {
+        Type want = types[i];
+        const auto *elementExpr = elts[i];
+        Value v = want ? context.convertRvalueExpression(*elementExpr, want)
+                       : context.convertRvalueExpression(*elementExpr);
+        if (!v)
+          return failure();
+        converted.push_back(v);
+      }
+    }
+
+    for (unsigned i = 1; i < replCount; ++i)
+      converted.append(converted.begin(), converted.begin() + elementCount);
+
+    return converted;
+  }
+
   /// Handle assignment patterns.
   Value visitAssignmentPattern(
       const slang::ast::AssignmentPatternExpressionBase &expr,
       unsigned replCount = 1) {
     auto type = context.convertType(*expr.type);
-
-    // Convert the individual elements first.
-    auto elementCount = expr.elements().size();
-    SmallVector<Value> elements;
-    elements.reserve(replCount * elementCount);
-    for (auto elementExpr : expr.elements()) {
-      auto value = context.convertRvalueExpression(*elementExpr);
-      if (!value)
-        return {};
-      elements.push_back(value);
-    }
-    for (unsigned replIdx = 1; replIdx < replCount; ++replIdx)
-      for (unsigned elementIdx = 0; elementIdx < elementCount; ++elementIdx)
-        elements.push_back(elements[elementIdx]);
+    const auto &elts = expr.elements();
 
     // Handle integers.
     if (auto intType = dyn_cast<moore::IntType>(type)) {
-      assert(intType.getWidth() == elements.size());
-      std::reverse(elements.begin(), elements.end());
-      return moore::ConcatOp::create(builder, loc, intType, elements);
+      auto elements = convertElements(expr, {}, replCount);
+
+      if (failed(elements))
+        return {};
+
+      assert(intType.getWidth() == elements->size());
+      std::reverse(elements->begin(), elements->end());
+      return moore::ConcatOp::create(builder, loc, intType, *elements);
     }
 
     // Handle packed structs.
     if (auto structType = dyn_cast<moore::StructType>(type)) {
-      assert(structType.getMembers().size() == elements.size());
-      return moore::StructCreateOp::create(builder, loc, structType, elements);
+      SmallVector<Type> expectedTy;
+      expectedTy.reserve(structType.getMembers().size());
+      for (auto member : structType.getMembers())
+        expectedTy.push_back(member.type);
+
+      FailureOr<SmallVector<Value>> elements;
+      if (expectedTy.size() == elts.size())
+        elements = convertElements(expr, expectedTy, replCount);
+      else
+        elements = convertElements(expr, {}, replCount);
+
+      if (failed(elements))
+        return {};
+
+      assert(structType.getMembers().size() == elements->size());
+      return moore::StructCreateOp::create(builder, loc, structType, *elements);
     }
 
     // Handle unpacked structs.
     if (auto structType = dyn_cast<moore::UnpackedStructType>(type)) {
-      assert(structType.getMembers().size() == elements.size());
-      return moore::StructCreateOp::create(builder, loc, structType, elements);
+      SmallVector<Type> expectedTy;
+      expectedTy.reserve(structType.getMembers().size());
+      for (auto member : structType.getMembers())
+        expectedTy.push_back(member.type);
+
+      FailureOr<SmallVector<Value>> elements;
+      if (expectedTy.size() == elts.size())
+        elements = convertElements(expr, expectedTy, replCount);
+      else
+        elements = convertElements(expr, {}, replCount);
+
+      if (failed(elements))
+        return {};
+
+      assert(structType.getMembers().size() == elements->size());
+
+      return moore::StructCreateOp::create(builder, loc, structType, *elements);
     }
 
     // Handle packed arrays.
     if (auto arrayType = dyn_cast<moore::ArrayType>(type)) {
-      assert(arrayType.getSize() == elements.size());
-      return moore::ArrayCreateOp::create(builder, loc, arrayType, elements);
+      auto elements =
+          convertElements(expr, arrayType.getElementType(), replCount);
+
+      if (failed(elements))
+        return {};
+
+      assert(arrayType.getSize() == elements->size());
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
 
     // Handle unpacked arrays.
     if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(type)) {
-      assert(arrayType.getSize() == elements.size());
-      return moore::ArrayCreateOp::create(builder, loc, arrayType, elements);
+      auto elements =
+          convertElements(expr, arrayType.getElementType(), replCount);
+
+      if (failed(elements))
+        return {};
+
+      assert(arrayType.getSize() == elements->size());
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
 
     mlir::emitError(loc) << "unsupported assignment pattern with type " << type;
