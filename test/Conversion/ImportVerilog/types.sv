@@ -118,7 +118,7 @@ module RealType;
   real d0;
   // CHECK-NEXT: %d1 = moore.variable : <time>
   realtime d1;
-  // CHECK-NEXT: %d2 = moore.variable : <real>
+  // CHECK-NEXT: %d2 = moore.variable : <shortreal>
   shortreal d2;
 endmodule
 

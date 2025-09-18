@@ -58,6 +58,8 @@ bool isIntType(Type type, unsigned width);
 bool isIntType(Type type, Domain domain);
 /// Check if a type is an `IntType` type of the given width and domain.
 bool isIntType(Type type, unsigned width, Domain domain);
+/// Check if a type is a `RealType` type of the given width.
+bool isRealType(Type type, unsigned width);
 
 //===----------------------------------------------------------------------===//
 // Unpacked Type

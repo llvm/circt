@@ -7,6 +7,7 @@
 
 function void dummyA(int x); endfunction
 function void dummyB(real x); endfunction
+function void dummyC(shortreal x); endfunction
 
 // IEEE 1800-2017 § 20.2 "Simulation control system tasks"
 // CHECK-LABEL: func.func private @SimulationControlBuiltins(
@@ -220,48 +221,50 @@ endfunction
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 // CHECK-SAME: [[Y:%.+]]: !moore.l42
 // CHECK-SAME: [[R:%.+]]: !moore.real
-function void MathBuiltins(int x, logic [41:0] y, real r);
+// CHECK-SAME: [[Q:%.+]]: !moore.shortreal
+function void MathBuiltins(int x, logic [41:0] y, real r, shortreal q);
   // CHECK: moore.builtin.clog2 [[X]] : i32
   dummyA($clog2(x));
   // CHECK: moore.builtin.clog2 [[Y]] : l42
   dummyA($clog2(y));
 
-  // CHECK:  moore.builtin.ln [[R]] : real
+  // CHECK:  moore.builtin.ln [[R]] : !moore.real
   dummyB($ln(r));
-  // CHECK:  moore.builtin.log10 [[R]] : real
+  // CHECK:  moore.builtin.log10 [[R]] : !moore.real
   dummyB($log10(r));
-  // CHECK:  moore.builtin.exp [[R]] : real
+  // CHECK:  moore.builtin.exp [[R]] : !moore.real
   dummyB($exp(r));
-  // CHECK:  moore.builtin.sqrt [[R]] : real
+  // CHECK:  moore.builtin.sqrt [[R]] : !moore.real
   dummyB($sqrt(r));
-  // CHECK:  moore.builtin.floor [[R]] : real
+  // CHECK:  moore.builtin.floor [[R]] : !moore.real
   dummyB($floor(r));
-  // CHECK:  moore.builtin.ceil [[R]] : real
+  // CHECK:  moore.builtin.ceil [[R]] : !moore.real
   dummyB($ceil(r));
-  // CHECK:  moore.builtin.sin [[R]] : real
+  // CHECK:  moore.builtin.sin [[R]] : !moore.real
   dummyB($sin(r));
-  // CHECK:  moore.builtin.cos [[R]] : real
+  // CHECK:  moore.builtin.cos [[R]] : !moore.real
   dummyB($cos(r));
-  // CHECK:  moore.builtin.tan [[R]] : real
+  // CHECK:  moore.builtin.tan [[R]] : !moore.real
   dummyB($tan(r));
-  // CHECK:  moore.builtin.asin [[R]] : real
+  // CHECK:  moore.builtin.asin [[R]] : !moore.real
   dummyB($asin(r));
-  // CHECK:  moore.builtin.acos [[R]] : real
+  // CHECK:  moore.builtin.acos [[R]] : !moore.real
   dummyB($acos(r));
-  // CHECK:  moore.builtin.atan [[R]] : real
+  // CHECK:  moore.builtin.atan [[R]] : !moore.real
   dummyB($atan(r));
-  // CHECK:  moore.builtin.sinh [[R]] : real
+  // CHECK:  moore.builtin.sinh [[R]] : !moore.real
   dummyB($sinh(r));
-  // CHECK:  moore.builtin.cosh [[R]] : real
+  // CHECK:  moore.builtin.cosh [[R]] : !moore.real
   dummyB($cosh(r));
-  // CHECK:  moore.builtin.tanh [[R]] : real
+  // CHECK:  moore.builtin.tanh [[R]] : !moore.real
   dummyB($tanh(r));
-  // CHECK:  moore.builtin.asinh [[R]] : real
+  // CHECK:  moore.builtin.asinh [[R]] : !moore.real
   dummyB($asinh(r));
-  // CHECK:  moore.builtin.acosh [[R]] : real
+  // CHECK:  moore.builtin.acosh [[R]] : !moore.real
   dummyB($acosh(r));
-  // CHECK:  moore.builtin.atanh [[R]] : real
+  // CHECK:  moore.builtin.atanh [[R]] : !moore.real
   dummyB($atanh(r));
+
 endfunction
 
 // CHECK-LABEL: func.func private @RandomBuiltins(
@@ -291,4 +294,21 @@ function TimeBuiltins();
   // CHECK: [[REALTIME:%.+]] = moore.builtin.time
   // TODO: There is no int-to-real conversion yet; change this to dummyB once int-to-real works!
   dummyA($realtime());
+endfunction
+
+// CHECK-LABEL: func.func private @ConversionBuiltins(
+// CHECK-SAME: [[SINT:%.+]]: !moore.i32
+// CHECK-SAME: [[LINT:%.+]]: !moore.i64
+// CHECK-SAME: [[SR:%.+]]: !moore.shortreal
+// CHECK-SAME: [[R:%.+]]: !moore.real
+function void ConversionBuiltins(int shortint_in, longint longint_in,
+                                 shortreal shortreal_in, real real_in);
+  // CHECK: [[B2SR:%.+]] = moore.builtin.bitstoshortreal [[SINT]] : i32
+  dummyC($bitstoshortreal(shortint_in));
+  // CHECK: [[B2R:%.+]] = moore.builtin.bitstoreal [[LINT]] : i64
+  dummyB($bitstoreal(longint_in));
+  // CHECK: [[R2B:%.+]] = moore.builtin.realtobits [[R]]
+  dummyA($realtobits(real_in));
+  // CHECK: [[SR2B:%.+]] = moore.builtin.shortrealtobits [[SR]]
+  dummyA($shortrealtobits(shortreal_in));
 endfunction

@@ -1708,6 +1708,24 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::RandomBIOp::create(builder, loc, value);
                 })
+          .Case("$realtobits",
+                [&]() -> Value {
+                  return moore::RealtobitsBIOp::create(builder, loc, value);
+                })
+          .Case("$bitstoreal",
+                [&]() -> Value {
+                  return moore::BitstorealBIOp::create(builder, loc, value);
+                })
+          .Case("$shortrealtobits",
+                [&]() -> Value {
+                  return moore::ShortrealtobitsBIOp::create(builder, loc,
+                                                            value);
+                })
+          .Case("$bitstoshortreal",
+                [&]() -> Value {
+                  return moore::BitstoshortrealBIOp::create(builder, loc,
+                                                            value);
+                })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
