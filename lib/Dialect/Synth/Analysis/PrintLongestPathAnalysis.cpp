@@ -82,8 +82,8 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
   // Emit diagnostics if testing is enabled (for regression testing)
   if (test) {
     for (auto &result : collection.paths) {
-      auto fanOutLoc = result.getFanOutLoc();
-      auto diag = mlir::emitRemark(fanOutLoc);
+      auto endPointLoc = result.getEndPointLoc();
+      auto diag = mlir::emitRemark(endPointLoc);
       SmallString<128> buf;
       llvm::raw_svector_ostream os(buf);
       result.print(os);
@@ -92,20 +92,20 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
   }
 
   size_t oldPathCount = collection.paths.size();
-  collection.sortAndDropNonCriticalPathsPerFanOut();
-  auto &longestPathForEachFanOut = collection.paths;
+  collection.sortAndDropNonCriticalPathsPerEndPoint();
+  auto &longestPathForEachEndPoint = collection.paths;
 
   // Print analysis header
   if (os) {
     *os << "# Longest Path Analysis result for " << top.getModuleNameAttr()
         << "\n"
         << "Found " << oldPathCount << " paths\n"
-        << "Found " << longestPathForEachFanOut.size()
-        << " unique fanout points\n"
+        << "Found " << longestPathForEachEndPoint.size()
+        << " unique end points \n"
         << "Maximum path delay: "
-        << (longestPathForEachFanOut.empty()
+        << (longestPathForEachEndPoint.empty()
                 ? 0
-                : longestPathForEachFanOut.front().getDelay())
+                : longestPathForEachEndPoint.front().getDelay())
         << "\n";
 
     *os << "## Showing Levels\n";
@@ -123,11 +123,11 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
   });
 
   // Print timing distribution statistics (histogram of delay levels)
-  printTimingLevelStatistics(longestPathForEachFanOut, os, jsonOS);
+  printTimingLevelStatistics(longestPathForEachEndPoint, os, jsonOS);
 
   // Print detailed information for top K critical paths if requested
   if (showTopKPercent.getValue() > 0)
-    printTopKPathDetails(longestPathForEachFanOut, top, os, jsonOS);
+    printTopKPathDetails(longestPathForEachEndPoint, top, os, jsonOS);
 
   return success();
 }
@@ -192,7 +192,7 @@ void PrintLongestPathAnalysisPass::printTimingLevelStatistics(
 
 /// Print detailed information for the top K critical paths.
 /// This shows the most critical timing paths in the design, providing detailed
-/// information about each path including fanout/fanin points and path history.
+/// information about each path including end/start points and path history.
 void PrintLongestPathAnalysisPass::printTopKPathDetails(
     SmallVectorImpl<DataflowPath> &allTimingPaths, hw::HWModuleOp top,
     llvm::raw_ostream *os, llvm::json::OStream *jsonOS) {
@@ -202,7 +202,7 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
 
   if (os)
     *os << "## Top " << topKCount << " (out of " << allTimingPaths.size()
-        << ") fan-out points\n\n";
+        << ") end points\n\n";
 
   if (jsonOS) {
     jsonOS->attributeBegin("top_paths");
@@ -229,14 +229,14 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
     *os << "==============================================\n"
         << "#" << i + 1 << ": Distance=" << path.getDelay() << "\n";
 
-    // Print fanout point (where the critical path starts)
-    *os << "FanOut=";
-    path.printFanOut(*os);
+    // Print end point (where the critical path starts)
+    *os << "EndPoint=";
+    path.printEndPoint(*os);
 
-    // Print fanin point (where the critical path ends)
+    // Print start point (where the critical path ends)
     *os << "\n"
-        << "FanIn=";
-    path.getFanIn().print(*os);
+        << "StartPoint=";
+    path.getStartPoint().print(*os);
     *os << "\n";
 
     // Print detailed path history showing intermediate logic stages
@@ -245,8 +245,8 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
 }
 
 /// Print detailed history of a timing path showing intermediate debug points.
-/// This traces the path from fanout to fanin, showing each logic stage and
-/// the delay contribution of each stage. This is crucial for understanding
+/// This traces the path from end point to start point, showing each logic stage
+/// and the delay contribution of each stage. This is crucial for understanding
 /// where delay is being accumulated along the critical path and identifying
 /// optimization opportunities.
 void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,
@@ -254,9 +254,9 @@ void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,
   int64_t remainingDelay = timingPath.getDelay();
 
   if (!timingPath.getHistory().isEmpty()) {
-    os << "== History Start (closer to fanout) ==\n";
+    os << "== History Start (closer to end point) ==\n";
 
-    // Walk through debug points in order from fanout to fanin
+    // Walk through debug points in order from end point to start point
     for (auto &debugPoint : timingPath.getHistory()) {
       // Calculate delay contribution of this logic stage
       int64_t stepDelay = remainingDelay - debugPoint.delay;
@@ -268,7 +268,7 @@ void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,
       os << "\n";
     }
 
-    os << "== History End (closer to fanin) ==\n";
+    os << "== History End (closer to start point) ==\n";
   }
 }
 

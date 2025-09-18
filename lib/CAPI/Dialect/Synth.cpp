@@ -176,19 +176,19 @@ synthLongestPathDataflowPathGetDelay(SynthLongestPathDataflowPath path) {
 }
 
 SynthLongestPathObject
-synthLongestPathDataflowPathGetFanIn(SynthLongestPathDataflowPath path) {
+synthLongestPathDataflowPathGetStartPoint(SynthLongestPathDataflowPath path) {
   auto *wrapper = unwrap(path);
-  auto &fanIn = wrapper->getFanIn();
-  return wrap(const_cast<Object *>(&fanIn));
+  auto &startPoint = wrapper->getStartPoint();
+  return wrap(const_cast<Object *>(&startPoint));
 }
 
 SynthLongestPathObject
-synthLongestPathDataflowPathGetFanOut(SynthLongestPathDataflowPath path) {
+synthLongestPathDataflowPathGetEndPoint(SynthLongestPathDataflowPath path) {
   auto *wrapper = unwrap(path);
-  if (auto *object = std::get_if<Object>(&wrapper->getFanOut())) {
+  if (auto *object = std::get_if<Object>(&wrapper->getEndPoint())) {
     return wrap(object);
   }
-  auto *ptr = std::get_if<DataflowPath::OutputPort>(&wrapper->getFanOut());
+  auto *ptr = std::get_if<DataflowPath::OutputPort>(&wrapper->getEndPoint());
   return wrap(ptr);
 }
 

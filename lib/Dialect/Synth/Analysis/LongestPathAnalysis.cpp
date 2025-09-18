@@ -136,10 +136,10 @@ static void filterPaths(SmallVectorImpl<OpenPath> &results,
     return;
   }
 
-  // Remove paths with identical fanin points, keeping only the longest delay
+  // Remove paths with identical start point, keeping only the longest delay
   // path for each unique points.
   deduplicatePathsImpl<OpenPath, Object>(
-      results, 0, [](const auto &path) { return path.fanIn; },
+      results, 0, [](const auto &path) { return path.startPoint; },
       [](const auto &path) { return path.delay; });
 
   // Global scope max-delay filtering:
@@ -154,7 +154,7 @@ static void filterPaths(SmallVectorImpl<OpenPath> &results,
     for (size_t i = 0; i < results.size(); ++i) {
       // Preserve all module input port paths (BlockArguments) since the input
       // port might be the critical path.
-      if (isa<BlockArgument>(results[i].getFanIn().value)) {
+      if (isa<BlockArgument>(results[i].getStartPoint().value)) {
         // Keep all module input port paths, as inputs themselves may be
         // critical
         results[writeIndex++] = results[i];
@@ -175,10 +175,10 @@ static void filterPaths(SmallVectorImpl<OpenPath> &results,
 static void filterPaths(SmallVectorImpl<DataflowPath> &results,
                         size_t startIndex = 0) {
   deduplicatePathsImpl<DataflowPath,
-                       std::pair<DataflowPath::FanOutType, Object>>(
+                       std::pair<DataflowPath::EndPointType, Object>>(
       results, startIndex,
       [](const DataflowPath &path) {
-        return std::pair(path.getFanOut(), path.getFanIn());
+        return std::pair(path.getEndPoint(), path.getStartPoint());
       },
       [](const DataflowPath &path) { return path.getDelay(); });
 }
@@ -287,7 +287,7 @@ using namespace aig;
 //===----------------------------------------------------------------------===//
 
 void OpenPath::print(llvm::raw_ostream &os) const {
-  printObjectImpl(os, fanIn, delay, history);
+  printObjectImpl(os, startPoint, delay, history);
 }
 
 void DebugPoint::print(llvm::raw_ostream &os) const {
@@ -298,12 +298,12 @@ void Object::print(llvm::raw_ostream &os) const { printObjectImpl(os, *this); }
 
 StringAttr Object::getName() const { return getNameImpl(value); }
 
-void DataflowPath::printFanOut(llvm::raw_ostream &os) {
-  if (auto *object = std::get_if<Object>(&fanOut)) {
+void DataflowPath::printEndPoint(llvm::raw_ostream &os) {
+  if (auto *object = std::get_if<Object>(&endPoint)) {
     object->print(os);
   } else {
     auto &[module, resultNumber, bitPos] =
-        *std::get_if<DataflowPath::OutputPort>(&fanOut);
+        *std::get_if<DataflowPath::OutputPort>(&endPoint);
     auto outputPortName = root.getOutputName(resultNumber);
     os << "Object($root." << outputPortName << "[" << bitPos << "])";
   }
@@ -311,10 +311,10 @@ void DataflowPath::printFanOut(llvm::raw_ostream &os) {
 
 void DataflowPath::print(llvm::raw_ostream &os) {
   os << "root=" << root.getModuleName() << ", ";
-  os << "fanOut=";
-  printFanOut(os);
+  os << "endPoint=";
+  printEndPoint(os);
   os << ", ";
-  os << "fanIn=";
+  os << "startPoint=";
   path.print(os);
 }
 
@@ -332,7 +332,7 @@ OpenPath &OpenPath::prependPaths(
     circt::igraph::InstancePathCache &cache,
     llvm::ImmutableListFactory<DebugPoint> *debugPointFactory,
     circt::igraph::InstancePath path) {
-  fanIn.prependPaths(cache, path);
+  startPoint.prependPaths(cache, path);
   if (debugPointFactory)
     this->history = mapList(debugPointFactory, this->history,
                             [&](DebugPoint p) -> DebugPoint {
@@ -357,21 +357,21 @@ DataflowPath &DataflowPath::prependPaths(
     this->root = root;
   }
 
-  // If the fanout is an object, prepend the path.
-  if (auto *object = std::get_if<Object>(&fanOut))
+  // If the end point is an object, prepend the path.
+  if (auto *object = std::get_if<Object>(&endPoint))
     object->prependPaths(cache, path);
 
   return *this;
 }
 
-Location DataflowPath::getFanOutLoc() {
-  // If the fanout is an object, return the location of the object.
-  if (auto *object = std::get_if<Object>(&fanOut))
+Location DataflowPath::getEndPointLoc() {
+  // If the end point is an object, return the location of the object.
+  if (auto *object = std::get_if<Object>(&endPoint))
     return object->value.getLoc();
 
   // Return output port location.
   auto &[module, resultNumber, bitPos] =
-      *std::get_if<DataflowPath::OutputPort>(&fanOut);
+      *std::get_if<DataflowPath::OutputPort>(&endPoint);
   return module.getOutputLoc(resultNumber);
 }
 
@@ -398,7 +398,7 @@ static llvm::json::Value toJSON(const circt::synth::Object &object) {
   };
 }
 
-static llvm::json::Value toJSON(const DataflowPath::FanOutType &path,
+static llvm::json::Value toJSON(const DataflowPath::EndPointType &path,
                                 hw::HWModuleOp root) {
   using namespace llvm::json;
   if (auto *object = std::get_if<circt::synth::Object>(&path))
@@ -425,14 +425,14 @@ static llvm::json::Value toJSON(const OpenPath &path) {
   llvm::json::Array history;
   for (auto &point : path.history)
     history.push_back(toJSON(point));
-  return llvm::json::Object{{"fan_in", toJSON(path.fanIn)},
+  return llvm::json::Object{{"start_point", toJSON(path.startPoint)},
                             {"delay", path.delay},
                             {"history", std::move(history)}};
 }
 
 llvm::json::Value circt::synth::toJSON(const DataflowPath &path) {
   return llvm::json::Object{
-      {"fan_out", ::toJSON(path.getFanOut(), path.getRoot())},
+      {"end_point", ::toJSON(path.getEndPoint(), path.getRoot())},
       {"path", ::toJSON(path.getPath())},
       {"root", path.getRoot().getModuleName()},
   };
@@ -600,9 +600,13 @@ public:
   bool isTopLevel() const { return topLevel; }
   hw::HWModuleOp getHWModuleOp() const { return module; }
 
-  const auto &getFromInputPortToFanOut() const { return fromInputPortToFanOut; }
-  const auto &getFromOutputPortToFanIn() const { return fromOutputPortToFanIn; }
-  const auto &getFanOutResults() const { return fanOutResults; }
+  const auto &getFromInputPortToEndPoint() const {
+    return fromInputPortToEndPoint;
+  }
+  const auto &getFromOutputPortToStartPoint() const {
+    return fromOutputPortToStartPoint;
+  }
+  const auto &getEndPointResults() const { return endPointResults; }
 
   circt::igraph::InstancePathCache *getInstancePathCache() const {
     return instancePathCache.get();
@@ -617,13 +621,13 @@ private:
                          llvm::ImmutableList<DebugPoint> history,
                          ObjectToMaxDistance &objectToMaxDistance);
 
-  // A map from the input port to the farthest fanOut.
+  // A map from the input port to the farthest end point.
   llvm::MapVector<std::pair<BlockArgument, size_t>, ObjectToMaxDistance>
-      fromInputPortToFanOut;
+      fromInputPortToEndPoint;
 
-  // A map from the output port to the farthest fanIn.
+  // A map from the output port to the farthest start point.
   llvm::MapVector<std::tuple<size_t, size_t>, ObjectToMaxDistance>
-      fromOutputPortToFanIn;
+      fromOutputPortToStartPoint;
 
   LogicalResult initializeAndRun(hw::InstanceOp instance);
   LogicalResult initializeAndRun(hw::OutputOp output);
@@ -683,25 +687,25 @@ private:
     return success();
   }
 
-  // Registers are fanIn.
+  // Registers are start point.
   LogicalResult visit(seq::FirRegOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results) {
-    return markFanIn(op, bitPos, results);
+    return markStartPoint(op, bitPos, results);
   }
 
   LogicalResult visit(seq::CompRegOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results) {
-    return markFanIn(op, bitPos, results);
+    return markStartPoint(op, bitPos, results);
   }
 
   LogicalResult visit(seq::FirMemReadOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results) {
-    return markFanIn(op, bitPos, results);
+    return markStartPoint(op, bitPos, results);
   }
 
   LogicalResult visit(seq::FirMemReadWriteOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results) {
-    return markFanIn(op, bitPos, results);
+    return markStartPoint(op, bitPos, results);
   }
 
   LogicalResult visitDefault(OpResult result, size_t bitPos,
@@ -710,10 +714,10 @@ private:
   // Helper functions.
   LogicalResult addEdge(Value to, size_t toBitPos, int64_t delay,
                         SmallVectorImpl<OpenPath> &results);
-  LogicalResult markFanIn(Value value, size_t bitPos,
-                          SmallVectorImpl<OpenPath> &results);
-  LogicalResult markRegFanOut(Value fanOut, Value start, Value reset = {},
-                              Value resetValue = {}, Value enable = {});
+  LogicalResult markStartPoint(Value value, size_t bitPos,
+                               SmallVectorImpl<OpenPath> &results);
+  LogicalResult markRegEndPoint(Value endPoint, Value start, Value reset = {},
+                                Value resetValue = {}, Value enable = {});
 
   // The module we are visiting.
   hw::HWModuleOp module;
@@ -728,7 +732,7 @@ private:
   DenseMap<std::pair<Value, size_t>, SmallVector<OpenPath>> cachedResults;
 
   // A map from the object to the longest paths.
-  DenseMap<Object, SmallVector<OpenPath>> fanOutResults;
+  DenseMap<Object, SmallVector<OpenPath>> endPointResults;
 
   // The operation analyzer for comb/hw operations remaining in the circuit.
   std::unique_ptr<OperationAnalyzer> operationAnalyzer;
@@ -788,22 +792,23 @@ void LocalVisitor::waitUntilDone() const {
   cv.wait(lock, [this] { return done.load(); });
 }
 
-LogicalResult LocalVisitor::markRegFanOut(Value fanOut, Value start,
-                                          Value reset, Value resetValue,
-                                          Value enable) {
-  auto bitWidth = getBitWidth(fanOut);
-  auto record = [&](size_t fanOutBitPos, Value value, size_t bitPos) {
+LogicalResult LocalVisitor::markRegEndPoint(Value endPoint, Value start,
+                                            Value reset, Value resetValue,
+                                            Value enable) {
+  auto bitWidth = getBitWidth(endPoint);
+  auto record = [&](size_t endPointBitPos, Value value, size_t bitPos) {
     auto result = getOrComputePaths(value, bitPos);
     if (failed(result))
       return failure();
     for (auto &path : *result) {
-      if (auto blockArg = dyn_cast<BlockArgument>(path.fanIn.value)) {
+      if (auto blockArg = dyn_cast<BlockArgument>(path.startPoint.value)) {
         // Not closed.
-        putUnclosedResult({{}, fanOut, fanOutBitPos}, path.delay, path.history,
-                          fromInputPortToFanOut[{blockArg, path.fanIn.bitPos}]);
+        putUnclosedResult(
+            {{}, endPoint, endPointBitPos}, path.delay, path.history,
+            fromInputPortToEndPoint[{blockArg, path.startPoint.bitPos}]);
       } else {
-        // If the fanIn is not a port, record to the results.
-        fanOutResults[{{}, fanOut, fanOutBitPos}].push_back(path);
+        // If the start point is not a port, record to the results.
+        endPointResults[{{}, endPoint, endPointBitPos}].push_back(path);
       }
     }
     return success();
@@ -923,8 +928,8 @@ LogicalResult LocalVisitor::visit(comb::ReplicateOp op, size_t bitPos,
                         bitPos % getBitWidth(op.getInput()), results);
 }
 
-LogicalResult LocalVisitor::markFanIn(Value value, size_t bitPos,
-                                      SmallVectorImpl<OpenPath> &results) {
+LogicalResult LocalVisitor::markStartPoint(Value value, size_t bitPos,
+                                           SmallVectorImpl<OpenPath> &results) {
   results.emplace_back(circt::igraph::InstancePath(), value, bitPos);
   return success();
 }
@@ -941,18 +946,18 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
   auto value = op->getResult(resultNum);
 
   // If an instance graph is not available, we treat instance results as a
-  // fanIn.
+  // start point.
   if (!ctx->instanceGraph)
-    return markFanIn(value, bitPos, results);
+    return markStartPoint(value, bitPos, results);
 
   // If an instance graph is available, then we can look up the module.
   auto *node = ctx->instanceGraph->lookup(moduleName);
   assert(node && "module not found");
 
   // Otherwise, if the module is not a HWModuleOp, then we should treat it as a
-  // fanIn.
+  // start point.
   if (!isa<hw::HWModuleOp>(node->getModule()))
-    return markFanIn(value, bitPos, results);
+    return markStartPoint(value, bitPos, results);
 
   auto *localVisitor = ctx->getLocalVisitorMutable(moduleName);
 
@@ -966,10 +971,10 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
     auto delay = path.delay;
     auto history = path.history;
     auto newPath =
-        instancePathCache->prependInstance(op, path.fanIn.instancePath);
-    auto fanInPoint = path.fanIn;
-    // If the fanIn is not a block argument, record it directly.
-    auto arg = dyn_cast<BlockArgument>(fanInPoint.value);
+        instancePathCache->prependInstance(op, path.startPoint.instancePath);
+    auto startPointPoint = path.startPoint;
+    // If the start point is not a block argument, record it directly.
+    auto arg = dyn_cast<BlockArgument>(startPointPoint.value);
     if (!arg) {
       // Update the history to have correct instance path.
       auto newHistory = debugPointFactory->getEmptyList();
@@ -984,14 +989,14 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
             DebugPoint({}, value, bitPos, delay, "output port"), newHistory);
       }
 
-      results.emplace_back(newPath, fanInPoint.value, fanInPoint.bitPos, delay,
-                           newHistory);
+      results.emplace_back(newPath, startPointPoint.value,
+                           startPointPoint.bitPos, delay, newHistory);
       continue;
     }
 
     // Otherwise, we need to look up the instance operand.
     auto result = getOrComputePaths(op->getOperand(arg.getArgNumber()),
-                                    fanInPoint.bitPos);
+                                    startPointPoint.bitPos);
     if (failed(result))
       return failure();
     for (auto path : *result) {
@@ -1069,13 +1074,13 @@ LogicalResult LocalVisitor::visitDefault(OpResult value, size_t bitPos,
     return success();
   }
   auto *op = value.getDefiningOp();
-  for (auto [inputPortIndex, fanInBitPos, delay] : oracleResults) {
+  for (auto [inputPortIndex, startPointBitPos, delay] : oracleResults) {
     LLVM_DEBUG({
       llvm::dbgs() << "Adding edge: " << value << "[" << bitPos << "] -> "
-                   << op->getOperand(inputPortIndex) << "[" << fanInBitPos
+                   << op->getOperand(inputPortIndex) << "[" << startPointBitPos
                    << "] with delay " << delay << "\n";
     });
-    if (failed(addEdge(op->getOperand(inputPortIndex), fanInBitPos, delay,
+    if (failed(addEdge(op->getOperand(inputPortIndex), startPointBitPos, delay,
                        results)))
       return failure();
   }
@@ -1185,12 +1190,12 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
   if (!childVisitor)
     return success();
 
-  // Connect dataflow from instance input ports to fanout in the child.
+  // Connect dataflow from instance input ports to end point in the child.
   for (const auto &[object, openPaths] :
-       childVisitor->getFromInputPortToFanOut()) {
+       childVisitor->getFromInputPortToEndPoint()) {
     auto [arg, argBitPos] = object;
     for (auto [point, delayAndHistory] : openPaths) {
-      auto [instancePath, fanOut, fanOutBitPos] = point;
+      auto [instancePath, endPoint, endPointBitPos] = point;
       auto [delay, history] = delayAndHistory;
       // Prepend the instance path.
       assert(instancePathCache);
@@ -1211,13 +1216,14 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
                                           return p;
                                         })
                               : debugPointFactory->getEmptyList();
-        if (auto newPort = dyn_cast<BlockArgument>(result.fanIn.value)) {
+        if (auto newPort = dyn_cast<BlockArgument>(result.startPoint.value)) {
           putUnclosedResult(
-              {newPath, fanOut, fanOutBitPos}, result.delay + delay, newHistory,
-              fromInputPortToFanOut[{newPort, result.fanIn.bitPos}]);
+              {newPath, endPoint, endPointBitPos}, result.delay + delay,
+              newHistory,
+              fromInputPortToEndPoint[{newPort, result.startPoint.bitPos}]);
         } else {
-          fanOutResults[{newPath, fanOut, fanOutBitPos}].emplace_back(
-              newPath, result.fanIn.value, result.fanIn.bitPos,
+          endPointResults[{newPath, endPoint, endPointBitPos}].emplace_back(
+              newPath, result.startPoint.value, result.startPoint.bitPos,
               result.delay + delay,
               ctx->doTraceDebugPoints() ? concatList(debugPointFactory.get(),
                                                      newHistory, result.history)
@@ -1242,12 +1248,12 @@ LogicalResult LocalVisitor::initializeAndRun(hw::OutputOp output) {
   for (OpOperand &operand : output->getOpOperands()) {
     for (size_t i = 0, e = getBitWidth(operand.get()); i < e; ++i) {
       auto &recordOutput =
-          fromOutputPortToFanIn[{operand.getOperandNumber(), i}];
+          fromOutputPortToStartPoint[{operand.getOperandNumber(), i}];
       auto computedResults = getOrComputePaths(operand.get(), i);
       if (failed(computedResults))
         return failure();
       for (const auto &result : *computedResults) {
-        putUnclosedResult(result.fanIn, result.delay, result.history,
+        putUnclosedResult(result.startPoint, result.delay, result.history,
                           recordOutput);
       }
     }
@@ -1269,22 +1275,22 @@ LogicalResult LocalVisitor::initializeAndRun() {
     auto result =
         mlir::TypeSwitch<Operation *, LogicalResult>(op)
             .Case<seq::FirRegOp>([&](seq::FirRegOp op) {
-              return markRegFanOut(op, op.getNext(), op.getReset(),
-                                   op.getResetValue());
+              return markRegEndPoint(op, op.getNext(), op.getReset(),
+                                     op.getResetValue());
             })
             .Case<seq::CompRegOp>([&](auto op) {
-              return markRegFanOut(op, op.getInput(), op.getReset(),
-                                   op.getResetValue());
+              return markRegEndPoint(op, op.getInput(), op.getReset(),
+                                     op.getResetValue());
             })
             .Case<seq::FirMemWriteOp>([&](auto op) {
               // TODO: Add address.
-              return markRegFanOut(op.getMemory(), op.getData(), {}, {},
-                                   op.getEnable());
+              return markRegEndPoint(op.getMemory(), op.getData(), {}, {},
+                                     op.getEnable());
             })
             .Case<seq::FirMemReadWriteOp>([&](seq::FirMemReadWriteOp op) {
               // TODO: Add address.
-              return markRegFanOut(op.getMemory(), op.getWriteData(), {}, {},
-                                   op.getEnable());
+              return markRegEndPoint(op.getMemory(), op.getWriteData(), {}, {},
+                                     op.getEnable());
             })
             .Case<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
                   comb::MuxOp>([&](auto op) {
@@ -1473,12 +1479,12 @@ LogicalResult OperationAnalyzer::analyzeOperation(
 
   results.reserve(openPaths->size() + results.size());
   for (auto &path : *openPaths) {
-    // Fan-in is always a block argument since there is no other value that
-    // could be a fan-in.
-    BlockArgument blockArg = cast<BlockArgument>(path.fanIn.value);
+    // end point is always a block argument since there is no other value that
+    // could be a start point.
+    BlockArgument blockArg = cast<BlockArgument>(path.startPoint.value);
     auto inputPortIndex = blockArg.getArgNumber();
     results.push_back(
-        std::make_tuple(inputPortIndex, path.fanIn.bitPos, path.delay));
+        std::make_tuple(inputPortIndex, path.startPoint.bitPos, path.delay));
   }
 
   return success();
@@ -1595,7 +1601,7 @@ LogicalResult LongestPathAnalysis::Impl::computeGlobalPaths(
     return failure();
 
   for (auto &path : *paths) {
-    auto arg = dyn_cast<BlockArgument>(path.fanIn.value);
+    auto arg = dyn_cast<BlockArgument>(path.startPoint.value);
     if (!arg || localVisitor->isTopLevel()) {
       // If the value is not a block argument, then we are done.
       results.push_back({originalObject, path, parentHWModule});
@@ -1613,7 +1619,7 @@ LogicalResult LongestPathAnalysis::Impl::computeGlobalPaths(
 
       auto result = computeGlobalPaths(
           newObject, inst->getInstance()->getOperand(arg.getArgNumber()),
-          path.fanIn.bitPos, results);
+          path.startPoint.bitPos, results);
       if (failed(result))
         return result;
       for (auto i = startIndex, e = results.size(); i < e; ++i)
@@ -1634,7 +1640,7 @@ LogicalResult LongestPathAnalysis::Impl::collectClosedPaths(
     if (!isAnalysisAvailable(name))
       return;
     auto *visitor = ctx.getLocalVisitorMutable(name);
-    for (auto &[point, state] : visitor->getFanOutResults()) {
+    for (auto &[point, state] : visitor->getEndPointResults()) {
       for (const auto &dataFlow : state) {
         if constexpr (elaborate) {
           // If elaborate, we need to prepend the path to the root.
@@ -1685,7 +1691,7 @@ LogicalResult LongestPathAnalysis::Impl::collectInputToInternalPaths(
   if (!visitor)
     return failure();
 
-  for (auto &[key, value] : visitor->getFromInputPortToFanOut()) {
+  for (auto &[key, value] : visitor->getFromInputPortToEndPoint()) {
     auto [arg, argBitPos] = key;
     for (auto [point, delayAndHistory] : value) {
       auto [path, start, startBitPos] = point;
@@ -1705,7 +1711,7 @@ LogicalResult LongestPathAnalysis::Impl::collectInternalToOutputPaths(
   if (!visitor)
     return failure();
 
-  for (auto &[key, value] : visitor->getFromOutputPortToFanIn()) {
+  for (auto &[key, value] : visitor->getFromOutputPortToStartPoint()) {
     auto [resultNum, bitPos] = key;
     for (auto [point, delayAndHistory] : value) {
       auto [path, start, startBitPos] = point;
@@ -2036,14 +2042,14 @@ void LongestPathCollection::sortInDescendingOrder() {
   });
 }
 
-void LongestPathCollection::sortAndDropNonCriticalPathsPerFanOut() {
+void LongestPathCollection::sortAndDropNonCriticalPathsPerEndPoint() {
   sortInDescendingOrder();
-  // Deduplicate paths by fanout point, keeping only the worst-case delay per
-  // fanOut. This gives us the critical delay for each fanout point in the
+  // Deduplicate paths by end-point, keeping only the worst-case delay per
+  // end-point. This gives us the critical delay for each end-point in the
   // design
-  llvm::DenseSet<DataflowPath::FanOutType> seen;
+  llvm::DenseSet<DataflowPath::EndPointType> seen;
   for (size_t i = 0; i < paths.size(); ++i) {
-    if (seen.insert(paths[i].getFanOut()).second)
+    if (seen.insert(paths[i].getEndPoint()).second)
       paths[seen.size() - 1] = std::move(paths[i]);
   }
   paths.resize(seen.size());

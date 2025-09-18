@@ -123,7 +123,7 @@ with Context() as ctx, Location.unknown():
     for p in collection[:2]:
       # CHECK-NEXT: delay 2 : out2[{{[0-9]+}}]
       # CHECK-NEXT: delay 2 : out2[{{[0-9]+}}]
-      print("delay", p.delay, ":", p.fan_out)
+      print("delay", p.delay, ":", p.end_point)
 
     # CHECK-NEXT: minus index slice: True
     print("minus index slice:", len(collection[:-2]) == len(collection) - 2)

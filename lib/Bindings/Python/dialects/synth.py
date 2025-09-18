@@ -116,12 +116,12 @@ class DebugPoint:
 @dataclass
 class DataflowPath:
   """
-    Represents a complete dataflow path from fan-out to fan-in.
+    Represents a complete dataflow path from end point to start point.
     A dataflow path captures the complete timing path through a circuit,
-    from an output point (fan-out) back to an input point (fan-in), including
+    from an output point (end-point) back to an input point (start-point), including
     all intermediate debug points and the total delay.
     Attributes:
-        fan_out: The output signal/object where this path ends
+        end_point: The output signal/object where this path ends
         path: The OpenPath containing the detailed path information
         root: The root module name for this analysis
     """
@@ -134,14 +134,14 @@ class DataflowPath:
     return self._path.delay
 
   @property
-  def fan_in(self) -> Object:
+  def start_point(self) -> Object:
     """Get the input signal/object where this path begins."""
-    return Object(self._path.fan_in)
+    return Object(self._path.start_point)
 
   @property
-  def fan_out(self) -> Object:
+  def end_point(self) -> Object:
     """Get the output signal/object where this path ends."""
-    return Object(self._path.fan_out)
+    return Object(self._path.end_point)
 
   @property
   def history(self) -> List[DebugPoint]:
@@ -172,11 +172,12 @@ class DataflowPath:
     prefix = f"top:{self.root}"
 
     # Build hierarchy strings for start and end points
-    fan_in_hierarchy = self._build_hierarchy_string(self.fan_in, prefix)
-    fan_out_hierarchy = self._build_hierarchy_string(self.fan_out, prefix)
+    start_point_hierarchy = self._build_hierarchy_string(
+        self.start_point, prefix)
+    end_point_hierarchy = self._build_hierarchy_string(self.end_point, prefix)
 
     # Track current position and delay for incremental output
-    current_hierarchy = fan_in_hierarchy
+    current_hierarchy = start_point_hierarchy
     current_delay = 0
 
     # Process debug history points in reverse order (from input to output)
@@ -192,10 +193,10 @@ class DataflowPath:
         current_hierarchy = history_hierarchy
         current_delay = debug_point.delay
 
-    # Add final segment to fan-out if there's remaining delay
+    # Add final segment to end-point if there's remaining delay
     if current_delay != self.delay:
       final_delay = self.delay - current_delay
-      trace.append(f"{fan_out_hierarchy} {final_delay}")
+      trace.append(f"{end_point_hierarchy} {final_delay}")
 
     return "\n".join(trace)
 
