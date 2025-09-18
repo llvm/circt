@@ -54,7 +54,7 @@ TEST(TypesTest, Reals) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  auto t0 = RealType::get(&context);
+  auto t0 = RealType::get(&context, RealWidth::f64);
   ASSERT_EQ(t0.getDomain(), Domain::TwoValued);
   ASSERT_EQ(t0.getBitSize(), 64u);
 }

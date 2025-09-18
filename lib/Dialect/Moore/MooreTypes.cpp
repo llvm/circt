@@ -39,6 +39,13 @@ bool moore::isIntType(Type type, unsigned width, Domain domain) {
   return false;
 }
 
+bool moore::isRealType(Type type, unsigned width) {
+  if (auto realType = dyn_cast<RealType>(type))
+    if (realType.getWidth() == RealWidth::f32)
+      return width == 32;
+  return width == 64;
+}
+
 static LogicalResult parseMembers(AsmParser &parser,
                                   SmallVector<StructLikeMember> &members);
 static void printMembers(AsmPrinter &printer,
@@ -69,7 +76,8 @@ Domain UnpackedType::getDomain() const {
 std::optional<unsigned> UnpackedType::getBitSize() const {
   return TypeSwitch<UnpackedType, std::optional<unsigned>>(*this)
       .Case<PackedType>([](auto type) { return type.getBitSize(); })
-      .Case<RealType>([](auto type) { return 64; })
+      .Case<RealType>(
+          [](auto type) { return type.getWidth() == RealWidth::f32 ? 32 : 64; })
       .Case<UnpackedArrayType>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getElementType().getBitSize())
           return (*size) * type.getSize();
@@ -388,6 +396,16 @@ static ParseResult parseMooreType(AsmParser &parser, Type &type) {
     return success();
   }
 
+  if (mnemonic == "f32") {
+    type = moore::RealType::get(parser.getContext(), /*width=*/RealWidth::f32);
+    return success();
+  }
+
+  if (mnemonic == "f64") {
+    type = moore::RealType::get(parser.getContext(), /*width=*/RealWidth::f64);
+    return success();
+  }
+
   parser.emitError(loc) << "unknown type `" << mnemonic
                         << "` in dialect `moore`";
   return failure();
@@ -399,6 +417,14 @@ static void printMooreType(Type type, AsmPrinter &printer) {
   if (auto intType = dyn_cast<IntType>(type)) {
     printer << (intType.getDomain() == Domain::TwoValued ? "i" : "l");
     printer << intType.getWidth();
+    return;
+  }
+  if (auto rt = dyn_cast<moore::RealType>(type)) {
+    if (rt.getWidth() == RealWidth::f32) {
+      printer << "f32";
+      return;
+    }
+    printer << "f64";
     return;
   }
 

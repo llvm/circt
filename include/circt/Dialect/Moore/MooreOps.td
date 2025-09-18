@@ -548,7 +548,7 @@ def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
   let arguments = (ins F64Attr:$value);
-  let results = (outs RealType:$result);
+  let results = (outs RealF64:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
@@ -1763,6 +1763,75 @@ class Builtin<string mnemonic, list<Trait> traits = []> :
     MooreOp<"builtin." # mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
+// Conversion Builtins
+//===----------------------------------------------------------------------===//
+
+def RealtobitsBIOp : Builtin<"realtobits"> {
+  let summary = "Convert a real-valued number to its logic vector representation";
+  let description = [{
+    Corresponds to the `$realtobits` system function. Returns a 64-bit
+    logic vector corresponding to the bit representation of the real number.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins RealF64:$value);
+  let results = (outs TwoValuedI64:$result);
+  let assemblyFormat = "$value attr-dict";
+}
+
+def BitstorealBIOp : Builtin<"bitstoreal"> {
+  let summary = "Convert a logic vector representation to its real-valued number";
+  let description = [{
+    Corresponds to the `$bitstoreal` system function. Returns a real number
+    corresponding to the real number representation of the logic vector.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins TwoValuedI64:$value);
+  let results = (outs RealF64:$result);
+  let assemblyFormat = "$value attr-dict`:` type($value)";
+}
+
+
+def ShortrealtobitsBIOp : Builtin<"shortrealtobits"> {
+  let summary = "Convert a real-valued number to its logic vector representation";
+  let description = [{
+    Corresponds to the `$shortrealtobits` system function. Returns a 64-bit
+    logic vector corresponding to the bit representation of the real number.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins RealF32:$value);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$value attr-dict";
+}
+
+def BitstoshortrealBIOp : Builtin<"bitstoshortreal"> {
+  let summary = "Convert a logic vector representation to its real-valued number";
+  let description = [{
+    Corresponds to the `$bitstoshortreal` system function. Returns a real number
+    corresponding to the real number representation of the logic vector.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins TwoValuedI32:$value);
+  let results = (outs RealF32:$result);
+  let assemblyFormat = "$value attr-dict `:` type($value)";
+}
+
+//===----------------------------------------------------------------------===//
 // True-Random and Pseudo-Random Generators
 //===----------------------------------------------------------------------===//
 
@@ -1935,8 +2004,8 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
 
     See IEEE 1800-2017 § 20.8.2 "Real math functions".
    }];
-  let arguments = (ins RealType:$value);
-  let results = (outs RealType:$result);
+  let arguments = (ins RealF64:$value);
+  let results = (outs RealF64:$result);
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
