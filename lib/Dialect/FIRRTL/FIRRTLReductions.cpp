@@ -17,6 +17,8 @@
 #include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -130,14 +132,18 @@ struct NLARemover {
   void remove(mlir::ModuleOp module) {
     unsigned numRemoved = 0;
     (void)numRemoved;
+    SymbolTableCollection symbolTables;
     for (Operation &rootOp : *module.getBody()) {
       if (!isa<firrtl::CircuitOp>(&rootOp))
         continue;
-      SymbolTable symbolTable(&rootOp);
+      SymbolUserMap symbolUserMap(symbolTables, &rootOp);
+      auto &symbolTable = symbolTables.getSymbolTable(&rootOp);
       for (auto sym : nlasToRemove) {
         if (auto *op = symbolTable.lookup(sym)) {
-          ++numRemoved;
-          op->erase();
+          if (symbolUserMap.useEmpty(op)) {
+            ++numRemoved;
+            op->erase();
+          }
         }
       }
     }
@@ -573,7 +579,11 @@ struct FIRRTLOperandForwarder : public Reduction {
 /// zero of their type.
 struct FIRRTLConstantifier : public Reduction {
   uint64_t match(Operation *op) override {
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return 0;
     if (op->getNumResults() != 1 || op->getNumOperands() == 0)
+      return 0;
+    if (op->hasAttr("inner_sym"))
       return 0;
     if (isFlowSensitiveOp(op))
       return 0;
@@ -638,14 +648,14 @@ struct AnnotationRemover : public Reduction {
 
     // Generate matches for regular annotations
     if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
-      for (auto _ : annos)
+      for (unsigned i = 0; i < annos.size(); ++i)
         addMatch(1, matchId++);
 
     // Generate matches for port annotations
     if (auto portAnnos = op->getAttrOfType<ArrayAttr>("portAnnotations"))
       for (auto portAnnoArray : portAnnos)
         if (auto portAnnoArrayAttr = dyn_cast<ArrayAttr>(portAnnoArray))
-          for (auto _ : portAnnoArrayAttr)
+          for (unsigned i = 0; i < portAnnoArrayAttr.size(); ++i)
             addMatch(1, matchId++);
   }
 
@@ -956,24 +966,47 @@ struct NodeSymbolRemover : public OpReduction<firrtl::NodeOp> {
 };
 
 /// A sample reduction pattern that eagerly inlines instances.
-struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
+struct EagerInliner : public OpReduction<InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
+    nlaTable = std::make_unique<NLATable>(op);
+    innerSymTables = std::make_unique<hw::InnerSymbolTableCollection>();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    nlaRemover.remove(op);
+    nlaTable.reset();
+    innerSymTables.reset();
+  }
 
-  uint64_t match(firrtl::InstanceOp instOp) override {
+  uint64_t match(InstanceOp instOp) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto *moduleOp =
         instOp.getReferencedOperation(symbols.getSymbolTable(tableOp));
 
-    return isa<firrtl::FModuleOp>(moduleOp);
+    // Only inline FModuleOp instances
+    if (!isa<FModuleOp>(moduleOp))
+      return 0;
+
+    // Skip instances that participate in any NLAs
+    DenseSet<hw::HierPathOp> nlas;
+    nlaTable->getInstanceNLAs(instOp, nlas);
+    if (!nlas.empty())
+      return 0;
+
+    // Check for inner symbol collisions between the referenced module and the
+    // instance's parent module
+    auto referencedModule = cast<FModuleOp>(moduleOp);
+    auto parentModule = instOp->getParentOfType<FModuleOp>();
+    if (hasInnerSymbolCollisions(referencedModule, parentModule))
+      return 0;
+
+    return 1;
   }
 
-  LogicalResult rewrite(firrtl::InstanceOp instOp) override {
+  LogicalResult rewrite(InstanceOp instOp) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(instOp);
-    auto moduleOp = cast<firrtl::FModuleOp>(
+    auto moduleOp = cast<FModuleOp>(
         instOp.getReferencedOperation(symbols.getSymbolTable(tableOp)));
     bool isLastUse =
         (symbols.getSymbolUserMap(tableOp).getUsers(moduleOp).size() == 1);
@@ -986,11 +1019,10 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
       auto result = instOp.getResult(i);
       auto name = rewriter.getStringAttr(Twine(instOp.getName()) + "_" +
                                          instOp.getPortNameStr(i));
-      auto wire =
-          firrtl::WireOp::create(rewriter, instOp.getLoc(), result.getType(),
-                                 name, firrtl::NameKindEnum::DroppableName,
+      auto wire = WireOp::create(rewriter, instOp.getLoc(), result.getType(),
+                                 name, NameKindEnum::DroppableName,
                                  instOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
+                      .getResult();
       result.replaceAllUsesWith(wire);
       argWires.push_back(wire);
     }
@@ -1009,11 +1041,39 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
     return success();
   }
 
+  /// Check if inlining the referenced module into the parent module would cause
+  /// inner symbol collisions.
+  bool hasInnerSymbolCollisions(FModuleOp referencedModule,
+                                FModuleOp parentModule) {
+    // Get the inner symbol tables for both modules
+    auto &targetTable = innerSymTables->getInnerSymbolTable(referencedModule);
+    auto &parentTable = innerSymTables->getInnerSymbolTable(parentModule);
+
+    // Check if any inner symbol name in the target module already exists
+    // in the parent module. Return failure() if a collision is found to stop
+    // the walk early.
+    LogicalResult walkResult = targetTable.walkSymbols(
+        [&](StringAttr name,
+            const hw::InnerSymTarget &target) -> LogicalResult {
+          // Check if this symbol name exists in the parent module
+          if (parentTable.lookup(name)) {
+            // Collision found, return failure to stop the walk
+            return failure();
+          }
+          return success();
+        });
+
+    // If the walk failed, it means we found a collision
+    return failed(walkResult);
+  }
+
   std::string getName() const override { return "firrtl-eager-inliner"; }
   bool acceptSizeIncrease() const override { return true; }
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+  std::unique_ptr<NLATable> nlaTable;
+  std::unique_ptr<hw::InnerSymbolTableCollection> innerSymTables;
 };
 
 /// Psuedo-reduction that sanitizes the names of things inside modules.  This is
@@ -1663,6 +1723,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
+  patterns.add<AnnotationRemover, 33>();
   patterns.add<ModuleSwapper, 32>();
   patterns.add<ForceDedup, 31>();
   patterns.add<MustDedupChildren, 30>();
@@ -1697,7 +1758,6 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<FIRRTLOperandForwarder<1>, 10>();
   patterns.add<FIRRTLOperandForwarder<2>, 9>();
   patterns.add<DetachSubaccesses, 7>();
-  patterns.add<AnnotationRemover, 6>();
   patterns.add<RootPortPruner, 5>();
   patterns.add<ExtmoduleInstanceRemover, 4>();
   patterns.add<ConnectSourceOperandForwarder<0>, 3>();
