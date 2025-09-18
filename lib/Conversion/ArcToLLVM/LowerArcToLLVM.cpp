@@ -128,26 +128,6 @@ struct StateReadOpLowering : public OpConversionPattern<arc::StateReadOp> {
   }
 };
 
-struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::StateWriteOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    if (adaptor.getCondition()) {
-      rewriter.replaceOpWithNewOp<scf::IfOp>(
-          op, adaptor.getCondition(), [&](auto &builder, auto loc) {
-            LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
-                                  adaptor.getState());
-            scf::YieldOp::create(builder, loc);
-          });
-    } else {
-      rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
-                                                 adaptor.getState());
-    }
-    return success();
-  }
-};
-
 struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -325,6 +305,615 @@ struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
 
 } // namespace
 
+namespace {
+
+// Non-model specific types and symbols.
+struct GlobalTraceHelpers {
+
+  /*
+  struct ArcTraceModelInfo {
+    uint64_t numTraceTaps;
+    char* modelName;
+    char* signalNames;
+    uint64_t* tapNameOffsets;
+    uint64_t* typeDescriptors;
+    uint64_t* stateOffsets;
+  };
+  */
+  LLVM::LLVMStructType modelInfoStructType;
+  static constexpr int modelInfoStructNumTraceTapsField = 0;
+  static constexpr int modelInfoStructModelNameField = 1;
+  static constexpr int modelInfoStructSignalNamesField = 2;
+  static constexpr int modelInfoStructTapNameOffsetsField = 3;
+  static constexpr int modelInfoStructTypeDescriptors = 4;
+  static constexpr int modelInfoStructStateOffsets = 5;
+
+  /*
+    struct ArcTracerState {
+      void* buffer;
+      uint64_t size;
+      uint64_t capacity;
+      uint64_t runSteps;
+      void* user;
+    };
+  */
+  LLVM::LLVMStructType tracerStateStructType;
+  static constexpr int tracerStateStructBufferField = 0;
+  static constexpr int tracerStateStructSizeField = 1;
+  static constexpr int tracerStateStructCapacityField = 2;
+  static constexpr int tracerStateStructRunStepsField = 3;
+  static constexpr int tracerStateStructUserField = 4;
+
+  static constexpr int tracerStateSize = 5 * 8;
+
+  /*
+    struct ArcTraceLibrary {
+      void* (*initModel)(ArcTraceModelInfo* modelInfo);
+      void  (*step)(void* state);
+      void* (*swapBuffer)(void* oldBuffer, uint64_t bufferSize, void* user);
+      void  (*closeModel)(void* state)
+    };
+  */
+  LLVM::LLVMStructType libraryStructType;
+  static constexpr int libraryStructInitModelField = 0;
+  static constexpr int libraryStructStepField = 1;
+  static constexpr int libraryStructSwapBufferField = 2;
+  static constexpr int libraryStructCloseModelField = 3;
+
+  LLVM::LLVMFunctionType initModelFnTy;
+  LLVM::LLVMFunctionType stepFnTy;
+  LLVM::LLVMFunctionType swapBufferFnType;
+  LLVM::LLVMFunctionType closeModelFnTy;
+
+  DictionaryAttr noFreeNoCapParamAttr;
+  DictionaryAttr noAliasAttr;
+
+  explicit GlobalTraceHelpers(MLIRContext *context) {
+    auto i64Ty = IntegerType::get(context, 64);
+    auto ptrTy = LLVM::LLVMPointerType::get(context);
+    auto voidTy = LLVM::LLVMVoidType::get(context);
+
+    modelInfoStructType = LLVM::LLVMStructType::getLiteral(
+        context, {i64Ty, ptrTy, ptrTy, ptrTy, ptrTy, ptrTy});
+
+    tracerStateStructType = LLVM::LLVMStructType::getLiteral(
+        context, {ptrTy, i64Ty, i64Ty, i64Ty, ptrTy});
+
+    libraryStructType =
+        LLVM::LLVMStructType::getLiteral(context, {ptrTy, ptrTy, ptrTy, ptrTy});
+
+    initModelFnTy = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy});
+    stepFnTy = LLVM::LLVMFunctionType::get(voidTy, {ptrTy});
+    swapBufferFnType = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy});
+    closeModelFnTy = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy});
+
+    NamedAttrList fields;
+    fields.append(LLVM::LLVMDialect::getNoAliasAttrName(),
+                  UnitAttr::get(context));
+    noAliasAttr = fields.getDictionary(context);
+
+    fields.clear();
+    fields.append(LLVM::LLVMDialect::getNoCaptureAttrName(),
+                  UnitAttr::get(context));
+    fields.append(LLVM::LLVMDialect::getNoFreeAttrName(),
+                  UnitAttr::get(context));
+
+    noFreeNoCapParamAttr = fields.getDictionary(context);
+  }
+
+  LLVM::LLVMFuncOp registerLibraryFn;
+  LLVM::GlobalOp libraryStruct;
+  llvm::SmallDenseMap<unsigned, LLVM::LLVMFuncOp> bufferAppendFns;
+
+  static unsigned getCapacityForBitWidth(unsigned bitwidth) {
+    assert(bitwidth != 0);
+    return (bitwidth % 64 == 0) ? bitwidth / 64 : bitwidth / 64 + 1;
+  }
+
+  LogicalResult buildAppendFunctions(ImplicitLocOpBuilder builder,
+                                     ArrayRef<ModelOp> traceableModels) {
+
+    auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+    auto i64Ty = builder.getI64Type();
+    for (auto model : traceableModels) {
+      for (auto tap : model.getTraceTapsAttr()) {
+        auto tapAttr = cast<TraceTapAttr>(tap);
+        auto tapType = dyn_cast<IntegerType>(tapAttr.getSigType().getValue());
+        if (!tapType) {
+          model.emitError()
+              << "Trace Tap of non-integer type "
+              << tapAttr.getSigType().getValue() << " unsupported.";
+          return failure();
+        }
+        auto numWords = getCapacityForBitWidth(tapType.getIntOrFloatBitWidth());
+        if (bufferAppendFns.contains(numWords))
+          continue;
+        OpBuilder::InsertionGuard g(builder);
+        auto fnName = builder.getStringAttr("_arc_trace_tap_append_i" +
+                                            Twine(numWords * 64));
+        auto extType = builder.getIntegerType(numWords * 64);
+        // void _arc_trace_tap_append_ix(uint8_t* state, uint64_t tapId, ix
+        // newValue)
+        auto fnType = LLVM::LLVMFunctionType::get(
+            LLVM::LLVMVoidType::get(builder.getContext()),
+            {ptrTy, i64Ty, extType});
+        auto appendFn = LLVM::LLVMFuncOp::create(builder, fnName, fnType,
+                                                 LLVM::Linkage::Private);
+        bufferAppendFns.insert({numWords, appendFn});
+
+        auto *hasTracerCheckBlock = appendFn.addEntryBlock(builder);
+        auto *capcaityCheckBlock = &appendFn.getRegion().emplaceBlock();
+        auto *swapBufferBlock = &appendFn.getRegion().emplaceBlock();
+        auto *bufferStoreBlock = &appendFn.getRegion().emplaceBlock();
+        bufferStoreBlock->addArgument(ptrTy, builder.getLoc());
+        bufferStoreBlock->addArgument(i64Ty, builder.getLoc());
+        auto *exitBlock = &appendFn.getRegion().emplaceBlock();
+
+        // Check if we actually have a trace buffer
+        builder.setInsertionPointToStart(hasTracerCheckBlock);
+        auto traceStatePtr = hasTracerCheckBlock->getArgument(0);
+        auto bufferPtrPtr = LLVM::GEPOp::create(
+            builder, ptrTy, tracerStateStructType, traceStatePtr,
+            {LLVM::GEPArg(0),
+             LLVM::GEPArg(GlobalTraceHelpers::tracerStateStructBufferField)});
+        auto bufferPtrVal = LLVM::LoadOp::create(builder, ptrTy, bufferPtrPtr);
+        auto nullPtrVal = LLVM::ZeroOp::create(builder, ptrTy);
+        auto bufferIsNull = LLVM::ICmpOp::create(
+            builder, LLVM::ICmpPredicate::eq, bufferPtrVal, nullPtrVal);
+        LLVM::CondBrOp::create(builder, bufferIsNull, exitBlock, {},
+                               capcaityCheckBlock, {});
+
+        // We've got one. Check if we are running out of space.
+        builder.setInsertionPointToStart(capcaityCheckBlock);
+        auto sizePtr = LLVM::GEPOp::create(
+            builder, ptrTy, tracerStateStructType, traceStatePtr,
+            {LLVM::GEPArg(0),
+             LLVM::GEPArg(GlobalTraceHelpers::tracerStateStructSizeField)});
+        auto capacityPtr = LLVM::GEPOp::create(
+            builder, ptrTy, tracerStateStructType, traceStatePtr,
+            {LLVM::GEPArg(0),
+             LLVM::GEPArg(GlobalTraceHelpers::tracerStateStructCapacityField)});
+        auto sizeVal = LLVM::LoadOp::create(builder, i64Ty, sizePtr);
+        auto capacityVal = LLVM::LoadOp::create(builder, i64Ty, capacityPtr);
+
+        auto requiredCapacity = numWords + 1;
+        auto resizeCst = LLVM::ConstantOp::create(
+            builder, builder.getI64IntegerAttr(requiredCapacity));
+        auto newSizeVal = LLVM::AddOp::create(builder, sizeVal, resizeCst);
+        auto storeOffset = LLVM::GEPOp::create(
+            builder, ptrTy, i64Ty, bufferPtrVal, {LLVM::GEPArg(sizeVal)});
+        auto needsSwap = LLVM::ICmpOp::create(builder, LLVM::ICmpPredicate::ugt,
+                                              newSizeVal, capacityVal);
+        LLVM::CondBrOp::create(builder, needsSwap, swapBufferBlock, {},
+                               bufferStoreBlock, {storeOffset, newSizeVal},
+                               std::pair<int32_t, int32_t>(
+                                   0, std::numeric_limits<int32_t>::max()));
+
+        // Too bad, we need a new buffer. Call the library.
+        builder.setInsertionPointToStart(swapBufferBlock);
+        auto userPtrPtr = LLVM::GEPOp::create(
+            builder, ptrTy, tracerStateStructType, traceStatePtr,
+            {LLVM::GEPArg(0),
+             LLVM::GEPArg(GlobalTraceHelpers::tracerStateStructUserField)});
+        auto userPtrVal = LLVM::LoadOp::create(builder, ptrTy, userPtrPtr);
+        auto libraryStuctPtr =
+            LLVM::AddressOfOp::create(builder, libraryStruct);
+        auto swapBufferFnPtr = LLVM::GEPOp::create(
+            builder, ptrTy, libraryStructType, libraryStuctPtr,
+            {LLVM::GEPArg(0),
+             LLVM::GEPArg(GlobalTraceHelpers::libraryStructSwapBufferField)});
+        auto swapCall = LLVM::CallOp::create(
+            builder, swapBufferFnType,
+            {swapBufferFnPtr, bufferPtrVal, sizeVal, userPtrVal});
+        swapCall.setResAttrsAttr(builder.getArrayAttr({noAliasAttr}));
+        LLVM::StoreOp::create(builder, swapCall.getResult(), bufferPtrPtr);
+        LLVM::BrOp::create(builder, {swapCall.getResult(), resizeCst},
+                           bufferStoreBlock);
+
+        // Store the tap index and new value in the buffer and update the size.
+        builder.setInsertionPointToStart(bufferStoreBlock);
+        auto dataStorePtr = LLVM::GEPOp::create(
+            builder, ptrTy, i64Ty, bufferStoreBlock->getArgument(0),
+            {LLVM::GEPArg(1)});
+        LLVM::StoreOp::create(builder, hasTracerCheckBlock->getArgument(1),
+                              bufferStoreBlock->getArgument(0));
+        LLVM::StoreOp::create(builder, hasTracerCheckBlock->getArgument(2),
+                              dataStorePtr);
+        LLVM::StoreOp::create(builder, bufferStoreBlock->getArgument(1),
+                              sizePtr);
+        LLVM::BrOp::create(builder, exitBlock);
+
+        // And we're done
+        builder.setInsertionPointToStart(exitBlock);
+        LLVM::ReturnOp::create(builder, Value{});
+      }
+    }
+    return success();
+  }
+
+  void buildModuleGlobals(ImplicitLocOpBuilder builder,
+                          unsigned numTraceableModels) {
+    auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+    libraryStruct =
+        LLVM::GlobalOp::create(builder, libraryStructType,
+                               /*isConstant*/ false, LLVM::Linkage::Internal,
+                               "_arc_trace_library", Attribute{});
+    {
+      OpBuilder::InsertionGuard g(builder);
+      Region &initRegion = libraryStruct.getInitializerRegion();
+      Block *initBlock = builder.createBlock(&initRegion);
+      builder.setInsertionPointToStart(initBlock);
+      auto undefStruct = LLVM::UndefOp::create(builder, libraryStructType);
+      Value currentStruct = undefStruct;
+      auto nullPtr = LLVM::ZeroOp::create(builder, ptrTy);
+      for (int64_t i = 0; i < libraryStructCloseModelField + 1; ++i)
+        currentStruct =
+            LLVM::InsertValueOp::create(builder, currentStruct, nullPtr, {i});
+      LLVM::ReturnOp::create(builder, currentStruct);
+    }
+    auto fnTy = LLVM::LLVMFunctionType::get(builder.getI32Type(), {ptrTy});
+    auto fnName = builder.getStringAttr(Twine("_mlir_ciface_") +
+                                        globalRegisterTraceLibrarySymName);
+    registerLibraryFn = LLVM::LLVMFuncOp::create(builder, fnName, fnTy,
+                                                 LLVM::Linkage::External);
+    {
+      OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointToStart(
+          registerLibraryFn.addEntryBlock(builder));
+      auto globAddr = LLVM::AddressOfOp::create(builder, libraryStruct);
+      auto load = LLVM::LoadOp::create(builder, libraryStructType,
+                                       builder.getBlock()->getArgument(0));
+      LLVM::StoreOp::create(builder, load.getResult(), globAddr);
+      auto numModelsCst = LLVM::ConstantOp::create(
+          builder, builder.getI32IntegerAttr(numTraceableModels));
+      LLVM::ReturnOp::create(builder, numModelsCst);
+    }
+  }
+};
+
+// Model specific tracing logic
+struct ModelTraceHelpers {
+public:
+  ModelTraceHelpers(GlobalTraceHelpers &globals, ModelOp modelOp)
+      : modelName(modelOp.getNameAttr()), traceTaps(modelOp.getTraceTapsAttr()),
+        modLoc(modelOp.getLoc()), globals(globals) {}
+
+  // Call the library's `step` function. This should be done _before_ every
+  // model evaluation.
+  Operation *buildStepCall(Value baseState, Location loc,
+                           ConversionPatternRewriter &rewriter) {
+    auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto tracerLibAddr =
+        LLVM::AddressOfOp::create(rewriter, loc, globals.libraryStruct);
+
+    auto stepFnPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrTy, globals.libraryStructType, tracerLibAddr,
+        {LLVM::GEPArg(0),
+         LLVM::GEPArg(GlobalTraceHelpers::libraryStructStepField)});
+    auto stepFnVal = LLVM::LoadOp::create(rewriter, loc, ptrTy, stepFnPtr);
+    auto nullPtr = LLVM::ZeroOp::create(rewriter, loc, ptrTy);
+    auto fnNotNull = LLVM::ICmpOp::create(
+        rewriter, loc, LLVM::ICmpPredicate::ne, stepFnVal, nullPtr);
+
+    auto scfIf = scf::IfOp::create(
+        rewriter, loc, fnNotNull, [&](OpBuilder &builder, Location loc) {
+          auto traceStatePtr = LLVM::GEPOp::create(
+              rewriter, loc, ptrTy, rewriter.getI8Type(), baseState,
+              {LLVM::GEPArg(-1 * static_cast<int32_t>(
+                                     GlobalTraceHelpers::tracerStateSize))});
+          auto callOp = LLVM::CallOp::create(builder, loc, globals.stepFnTy,
+                                             {stepFnVal, traceStatePtr});
+          callOp.setArgAttrsAttr(
+              rewriter.getArrayAttr({globals.noFreeNoCapParamAttr}));
+          scf::YieldOp::create(builder, loc);
+        });
+    return scfIf;
+  }
+
+  void lowerTappedStateWrite(arc::StateWriteOp op,
+                             arc::StateWriteOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+
+    assert(op.getTraceTapModelAttr() == modelName);
+    assert(op.getTraceTapIndex().has_value());
+    assert(isa<IntegerType>(adaptor.getValue().getType()) && "Unsupported");
+
+    auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+    uint64_t baseOffset =
+        cast<TraceTapAttr>(traceTaps[op.getTraceTapIndex()->getZExtValue()])
+            .getStateOffset() +
+        GlobalTraceHelpers::tracerStateSize;
+    assert(baseOffset <= std::numeric_limits<int32_t>::max());
+
+    // Check if the state value has changed. If not, bail.
+    auto oldVal =
+        LLVM::LoadOp::create(rewriter, op.getLoc(),
+                             adaptor.getValue().getType(), adaptor.getState());
+    auto hasChanged =
+        LLVM::ICmpOp::create(rewriter, op.getLoc(), LLVM::ICmpPredicate::ne,
+                             adaptor.getValue(), oldVal);
+    scf::IfOp::create(
+        rewriter, op.getLoc(), hasChanged,
+        [&](OpBuilder builder, Location loc) {
+          // Call the function to append the trace buffer.
+          auto typeBits = cast<IntegerType>(adaptor.getValue().getType())
+                              .getIntOrFloatBitWidth();
+          auto numWords = GlobalTraceHelpers::getCapacityForBitWidth(
+              cast<IntegerType>(adaptor.getValue().getType())
+                  .getIntOrFloatBitWidth());
+          auto appendFn = globals.bufferAppendFns.at(numWords);
+
+          auto traceStatePtr = LLVM::GEPOp::create(
+              builder, loc, ptrTy, rewriter.getI8Type(), adaptor.getState(),
+              {LLVM::GEPArg(-1 * static_cast<int32_t>(baseOffset))});
+
+          auto tapIdxCst = LLVM::ConstantOp::create(
+              builder, loc,
+              rewriter.getI64IntegerAttr(
+                  op.getTraceTapIndexAttr().getValue().getZExtValue()));
+
+          auto storeVal = adaptor.getValue();
+          if (typeBits != numWords * 64)
+            storeVal = LLVM::ZExtOp::create(
+                           rewriter, op.getLoc(),
+                           rewriter.getIntegerType(numWords * 64), storeVal)
+                           .getResult();
+          LLVM::CallOp::create(builder, loc, appendFn,
+                               {traceStatePtr, tapIdxCst, storeVal});
+          scf::YieldOp::create(builder, loc);
+        });
+    // Store the value to the state
+    LLVM::StoreOp::create(rewriter, op.getLoc(), adaptor.getValue(),
+                          adaptor.getState());
+  }
+
+  GlobalTraceHelpers &getGlobals() const { return globals; }
+
+  // Create all the model specific constants the tracing library needs.
+  void buildStaticModuleStructs(OpBuilder &argBuilder) {
+    ImplicitLocOpBuilder builder(modLoc, argBuilder);
+    buildSignalNamesArrays(builder);
+    buildTypeDescriptorsArray(builder);
+    buildValueOffsetsArray(builder);
+
+    StringAttr modelNameSym =
+        builder.getStringAttr("_arc_model_trace_name_" + Twine(modelName));
+    StringAttr modelTraceInfoStructSymName =
+        builder.getStringAttr("_arc_model_trace_info_" + Twine(modelName));
+
+    SmallVector<char, 16> nameBuffer;
+    nameBuffer.append(modelName.begin(), modelName.end());
+    nameBuffer.push_back('\0');
+
+    auto charArrayType =
+        LLVM::LLVMArrayType::get(builder.getI8Type(), nameBuffer.size());
+    auto modNameStr = LLVM::GlobalOp::create(
+        builder, charArrayType,
+        /*isConstant=*/true, LLVM::Linkage::Internal,
+        /*name=*/modelNameSym, builder.getStringAttr(nameBuffer),
+        /*alignment=*/0);
+
+    traceInfoStruct =
+        LLVM::GlobalOp::create(builder, globals.modelInfoStructType,
+                               /*isConstant=*/true, LLVM::Linkage::Internal,
+                               modelTraceInfoStructSymName, Attribute{});
+
+    /*
+      struct ArcTraceModelInfo {
+        uint64_t numTraceTaps;
+        char *modelName;
+        char *signalNames;
+        uint64_t *tapNameOffsets;
+        uint64_t *typeDescriptors;
+        uint64_t *stateOffsets;
+      };
+    */
+
+    // Create the initializer region
+    Region &initRegion = traceInfoStruct.getInitializerRegion();
+    Block *initBlock = builder.createBlock(&initRegion);
+    builder.setInsertionPointToStart(initBlock);
+
+    auto undefStruct =
+        LLVM::UndefOp::create(builder, globals.modelInfoStructType);
+    Value currentStruct = undefStruct;
+
+    // Field 0: numTraceTaps
+    auto numSigsCst = LLVM::ConstantOp::create(
+        builder, builder.getI64IntegerAttr(traceTaps.size()));
+    currentStruct = LLVM::InsertValueOp::create(
+        builder, currentStruct, numSigsCst,
+        ArrayRef<int64_t>{
+            GlobalTraceHelpers::modelInfoStructNumTraceTapsField});
+    // Field 1: modelName
+    auto namePtr = LLVM::AddressOfOp::create(builder, modNameStr);
+    currentStruct = LLVM::InsertValueOp::create(
+        builder, currentStruct, namePtr,
+        ArrayRef<int64_t>{GlobalTraceHelpers::modelInfoStructModelNameField});
+    // Field 2: signalNames
+    auto sigNamesPtr = LLVM::AddressOfOp::create(builder, signalNamesArray);
+    currentStruct = LLVM::InsertValueOp::create(
+        builder, currentStruct, sigNamesPtr,
+        ArrayRef<int64_t>{GlobalTraceHelpers::modelInfoStructSignalNamesField});
+
+    // Field 3: tapNameOffsets
+    auto nameOffsetsPtr =
+        LLVM::AddressOfOp::create(builder, signalNameOffsetsArray);
+    currentStruct = LLVM::InsertValueOp::create(
+        builder, currentStruct, nameOffsetsPtr,
+        ArrayRef<int64_t>{
+            GlobalTraceHelpers::modelInfoStructTapNameOffsetsField});
+
+    // Field 4: typeDescriptors
+    auto typeDescsPtr =
+        LLVM::AddressOfOp::create(builder, typeDescriptorsArray);
+    currentStruct = LLVM::InsertValueOp::create(
+        builder, currentStruct, typeDescsPtr,
+        ArrayRef<int64_t>{GlobalTraceHelpers::modelInfoStructTypeDescriptors});
+
+    // Field 5: stateOffsets
+    auto offsetsPtr = LLVM::AddressOfOp::create(builder, valueOffsetsArray);
+    currentStruct = LLVM::InsertValueOp::create(
+        builder, currentStruct, offsetsPtr,
+        ArrayRef<int64_t>{GlobalTraceHelpers::modelInfoStructStateOffsets});
+
+    LLVM::ReturnOp::create(builder, currentStruct);
+  }
+
+  LLVM::GlobalOp traceInfoStruct;
+
+private:
+  // Create the list of names/aliases and their respective offsets.
+  void buildSignalNamesArrays(ImplicitLocOpBuilder &builder) {
+    SmallVector<char> sigNames;
+    SmallVector<int64_t> sigNameOffsets;
+
+    auto sigNamesSym =
+        builder.getStringAttr("_arc_tracer_signal_names_" + Twine(modelName));
+    auto sigNameOffsetsSym = builder.getStringAttr(
+        "_arc_tracer_signal_name_offsets_" + Twine(modelName));
+
+    sigNames.reserve(traceTaps.size() * 32);
+    sigNameOffsets.reserve(traceTaps.size());
+    for (auto tap : traceTaps) {
+      for (auto name : cast<TraceTapAttr>(tap).getNames()) {
+        auto nameStrAttr = cast<StringAttr>(name);
+        sigNames.append(nameStrAttr.begin(), nameStrAttr.end());
+        sigNames.push_back('\0');
+      }
+      sigNameOffsets.push_back(sigNames.size());
+    }
+
+    auto charArrayType =
+        LLVM::LLVMArrayType::get(builder.getI8Type(), sigNames.size());
+    signalNamesArray = LLVM::GlobalOp::create(
+        builder, charArrayType,
+        /*isConstant=*/true, LLVM::Linkage::Internal,
+        /*name=*/sigNamesSym, builder.getStringAttr(sigNames),
+        /*alignment=*/0);
+
+    auto arrayTy =
+        LLVM::LLVMArrayType::get(builder.getI64Type(), sigNameOffsets.size());
+    auto tensorType = RankedTensorType::get(
+        {static_cast<int64_t>(sigNameOffsets.size())}, builder.getI64Type());
+    auto denseAttr = DenseIntElementsAttr::get(tensorType, sigNameOffsets);
+
+    signalNameOffsetsArray =
+        LLVM::GlobalOp::create(builder, arrayTy,
+                               /*isConstant=*/true, LLVM::Linkage::Internal,
+                               /*name=*/sigNameOffsetsSym, denseAttr,
+                               /*alignment=*/0);
+  }
+
+  // Create the array of per-tap type descriptors
+  void buildTypeDescriptorsArray(ImplicitLocOpBuilder &builder) {
+    auto typeDescriptorsSym = builder.getStringAttr(
+        "_arc_tracer_type_descriptors_" + Twine(modelName));
+    SmallVector<int32_t> rawTypeDescs;
+    rawTypeDescs.reserve(traceTaps.size());
+    for (auto tap : traceTaps) {
+      auto tapAttr = cast<TraceTapAttr>(tap);
+      assert(isa<IntegerType>(tapAttr.getSigType().getValue()) &&
+             "Unsupported");
+      rawTypeDescs.push_back(static_cast<int32_t>(
+          tapAttr.getSigType().getValue().getIntOrFloatBitWidth()));
+    }
+
+    auto arrayTy =
+        LLVM::LLVMArrayType::get(builder.getI32Type(), rawTypeDescs.size());
+    auto tensorType = RankedTensorType::get(
+        {static_cast<int64_t>(rawTypeDescs.size())}, builder.getI32Type());
+    auto denseAttr = DenseIntElementsAttr::get(tensorType, rawTypeDescs);
+
+    typeDescriptorsArray =
+        LLVM::GlobalOp::create(builder, arrayTy,
+                               /*isConstant=*/true, LLVM::Linkage::Internal,
+                               /*name=*/typeDescriptorsSym, denseAttr,
+                               /*alignment=*/0);
+  }
+
+  // Create the array of per-tap value offsets in the simulation state.
+  // We need them to be able to do a full dump of all taps.
+  void buildValueOffsetsArray(ImplicitLocOpBuilder &builder) {
+    auto valueOffsetsSym =
+        builder.getStringAttr("_arc_tracer_value_offsets_" + Twine(modelName));
+    SmallVector<uint64_t> offsets;
+    offsets.reserve(traceTaps.size());
+    for (auto tap : traceTaps)
+      offsets.push_back(cast<TraceTapAttr>(tap).getStateOffset());
+    auto arrayTy =
+        LLVM::LLVMArrayType::get(builder.getI64Type(), offsets.size());
+    auto tensorType = RankedTensorType::get(
+        {static_cast<int64_t>(offsets.size())}, builder.getI64Type());
+    auto denseAttr = DenseIntElementsAttr::get(tensorType, offsets);
+    valueOffsetsArray =
+        LLVM::GlobalOp::create(builder, arrayTy,
+                               /*isConstant=*/true, LLVM::Linkage::Internal,
+                               /*name=*/valueOffsetsSym, denseAttr,
+                               /*alignment=*/0);
+  }
+
+  StringAttr modelName;
+  ArrayAttr  traceTaps;
+  Location modLoc;
+  GlobalTraceHelpers &globals;
+
+  LLVM::GlobalOp signalNamesArray;
+  LLVM::GlobalOp signalNameOffsetsArray;
+  LLVM::GlobalOp typeDescriptorsArray;
+  LLVM::GlobalOp valueOffsetsArray;
+};
+
+
+struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  StateWriteOpLowering(
+      const TypeConverter &typeConverter, MLIRContext *context,
+      llvm::SmallDenseMap<StringRef, ModelTraceHelpers> &tracerMap)
+      : OpConversionPattern<arc::StateWriteOp>(typeConverter, context),
+        tracerMap(tracerMap) {}
+
+  LogicalResult
+  matchAndRewrite(arc::StateWriteOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    bool hasTracer = op.getTraceTapModel().has_value();
+
+    // If the state write is tapped, the logic gets a _bit_ more complicated.
+    auto lowerTapped = [&](){
+      auto traceIt = tracerMap.find(op.getTraceTapModelAttr());
+      assert(traceIt != tracerMap.end());
+      traceIt->second.lowerTappedStateWrite(op, adaptor, rewriter);
+    };
+
+    if (adaptor.getCondition()) {
+      scf::IfOp::create(rewriter, op.getLoc(), adaptor.getCondition(), [&](auto &builder, auto loc) {
+            if (!hasTracer)
+              LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
+                                    adaptor.getState());
+            else
+              lowerTapped();
+            scf::YieldOp::create(builder, loc);
+          });
+      rewriter.eraseOp(op);
+    } else {
+      if (!hasTracer) {
+        rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
+                                                  adaptor.getState());
+      } else {
+        lowerTapped();
+        rewriter.eraseOp(op);
+      }
+    }
+    return success();
+  }
+
+  llvm::SmallDenseMap<StringRef, ModelTraceHelpers> &tracerMap;
+};
+
+}
+
+
 //===----------------------------------------------------------------------===//
 // Simulation Orchestration Lowering Patterns
 //===----------------------------------------------------------------------===//
@@ -341,9 +930,9 @@ struct ModelInfoMap {
 template <typename OpTy>
 struct ModelAwarePattern : public OpConversionPattern<OpTy> {
   ModelAwarePattern(const TypeConverter &typeConverter, MLIRContext *context,
-                    llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo)
+                    llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo, llvm::SmallDenseMap<StringRef, ModelTraceHelpers>& tracerMap)
       : OpConversionPattern<OpTy>(typeConverter, context),
-        modelInfo(modelInfo) {}
+        modelInfo(modelInfo), tracerMap(tracerMap) {}
 
 protected:
   Value createPtrToPortState(ConversionPatternRewriter &rewriter, Location loc,
@@ -355,6 +944,7 @@ protected:
   }
 
   llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo;
+  llvm::SmallDenseMap<StringRef, ModelTraceHelpers> &tracerMap;
 };
 
 /// Lowers SimInstantiateOp to a malloc and memset call. This pattern will
@@ -366,11 +956,15 @@ struct SimInstantiateOpLowering
   LogicalResult
   matchAndRewrite(arc::SimInstantiateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto modelIt = modelInfo.find(
-        cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
+    auto modelName = cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
             .getModel()
-            .getValue());
+            .getValue();
+
+    auto modelIt = modelInfo.find(modelName);
+    auto tracer = tracerMap.find(modelName);
+    bool hasTracer = tracer != tracerMap.end();
     ModelInfoMap &model = modelIt->second;
+
 
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
     if (!moduleOp)
@@ -392,37 +986,107 @@ struct SimInstantiateOpLowering
     if (failed(freeFunc))
       return freeFunc;
 
+    size_t numStateBytes = model.numStateBytes;
+    // If we implement tracing, we need to allocate extra space for
+    // the dynamic trace info.
+    if (hasTracer)
+      numStateBytes += GlobalTraceHelpers::tracerStateSize;
+
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
     Location loc = op.getLoc();
-    Value numStateBytes = LLVM::ConstantOp::create(
-        rewriter, loc, convertedIndex, model.numStateBytes);
+    Value numStateBytesCst = LLVM::ConstantOp::create(
+        rewriter, loc, convertedIndex, numStateBytes);
     Value allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
-                                           ValueRange{numStateBytes})
+                                           ValueRange{numStateBytesCst})
                           .getResult();
+
     Value zero =
         LLVM::ConstantOp::create(rewriter, loc, rewriter.getI8Type(), 0);
-    LLVM::MemsetOp::create(rewriter, loc, allocated, zero, numStateBytes,
+    LLVM::MemsetOp::create(rewriter, loc, allocated, zero, numStateBytesCst,
                            false);
+
+    Value simState = allocated;
+    if (hasTracer) {
+      // Move the 'actual' state pointer beyond the tracer state
+      simState = LLVM::GEPOp::create(
+          rewriter, loc, ptrTy, rewriter.getI8Type(), allocated,
+          LLVM::GEPArg(GlobalTraceHelpers::tracerStateSize));
+      // Call the tracer libraries `initModel` function, if we've got one.
+      auto tracerLibAddr = LLVM::AddressOfOp::create(
+          rewriter, loc, tracer->second.getGlobals().libraryStruct);
+      auto initFnPtr = LLVM::GEPOp::create(
+          rewriter, loc, ptrTy, tracer->second.getGlobals().libraryStructType,
+          tracerLibAddr,
+          {LLVM::GEPArg(0),
+           LLVM::GEPArg(GlobalTraceHelpers::libraryStructInitModelField)});
+      auto initFnVal = LLVM::LoadOp::create(rewriter, loc, ptrTy, initFnPtr);
+      auto nullPtr = LLVM::ZeroOp::create(rewriter, loc, ptrTy);
+      auto fnNotNull = LLVM::ICmpOp::create(
+          rewriter, loc, LLVM::ICmpPredicate::ne, initFnVal, nullPtr);
+      scf::IfOp::create(
+          rewriter, loc, fnNotNull, [&](OpBuilder &builder, Location loc) {
+            auto modelInfoAddr = LLVM::AddressOfOp::create(
+                builder, loc, tracer->second.traceInfoStruct);
+            auto libInitCall = LLVM::CallOp::create(
+                builder, loc, tracer->second.getGlobals().initModelFnTy,
+                {initFnVal, modelInfoAddr});
+            auto userPtrPtr = LLVM::GEPOp::create(
+                builder, loc, ptrTy,
+                tracer->second.getGlobals().tracerStateStructType, allocated,
+                {LLVM::GEPArg(0),
+                 LLVM::GEPArg(GlobalTraceHelpers::tracerStateStructUserField)});
+            LLVM::StoreOp::create(builder, loc, libInitCall.getResult(),
+                                  userPtrPtr.getResult());
+            scf::YieldOp::create(builder, loc);
+          });
+    }
 
     // Call the model's 'initial' function if present.
     if (model.initialFnSymbol) {
+      if (hasTracer)
+        tracer->second.buildStepCall(simState, op.getLoc(), rewriter);
+
       auto initialFnType = LLVM::LLVMFunctionType::get(
-          LLVM::LLVMVoidType::get(op.getContext()),
-          {LLVM::LLVMPointerType::get(op.getContext())});
+          LLVM::LLVMVoidType::get(op.getContext()), {ptrTy});
       LLVM::CallOp::create(rewriter, loc, initialFnType, model.initialFnSymbol,
-                           ValueRange{allocated});
+                           ValueRange{simState});
     }
 
     // Execute the body.
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
-                               {allocated});
+                               {simState});
 
     // Call the model's 'final' function if present.
     if (model.finalFnSymbol) {
+      if (hasTracer)
+        tracer->second.buildStepCall(simState, op.getLoc(), rewriter);
       auto finalFnType = LLVM::LLVMFunctionType::get(
           LLVM::LLVMVoidType::get(op.getContext()),
           {LLVM::LLVMPointerType::get(op.getContext())});
       LLVM::CallOp::create(rewriter, loc, finalFnType, model.finalFnSymbol,
-                           ValueRange{allocated});
+                           ValueRange{simState});
+    }
+
+    if (hasTracer) {
+      // Call the tracer libraries `closeModel` function, if we've got one.
+      auto tracerLibAddr = LLVM::AddressOfOp::create(
+          rewriter, loc, tracer->second.getGlobals().libraryStruct);
+      auto closeFnPtr = LLVM::GEPOp::create(
+          rewriter, loc, ptrTy, tracer->second.getGlobals().libraryStructType,
+          tracerLibAddr,
+          {LLVM::GEPArg(0),
+           LLVM::GEPArg(GlobalTraceHelpers::libraryStructCloseModelField)});
+      auto closeFnVal = LLVM::LoadOp::create(rewriter, loc, ptrTy, closeFnPtr);
+      auto nullPtr = LLVM::ZeroOp::create(rewriter, loc, ptrTy);
+      auto fnNotNull = LLVM::ICmpOp::create(
+          rewriter, loc, LLVM::ICmpPredicate::ne, closeFnVal, nullPtr);
+      scf::IfOp::create(
+          rewriter, loc, fnNotNull, [&](OpBuilder &builder, Location loc) {
+            LLVM::CallOp::create(builder, loc,
+                                 tracer->second.getGlobals().initModelFnTy,
+                                 {closeFnVal, allocated});
+            scf::YieldOp::create(builder, loc);
+          });
     }
 
     LLVM::CallOp::create(rewriter, loc, freeFunc.value(),
@@ -501,9 +1165,15 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
   LogicalResult
   matchAndRewrite(arc::SimStepOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    StringRef modelName = cast<SimModelInstanceType>(op.getInstance().getType())
-                              .getModel()
-                              .getValue();
+    auto modelName = cast<SimModelInstanceType>(op.getInstance().getType())
+                         .getModel()
+                         .getValue();
+
+    auto tracer = tracerMap.find(modelName);
+
+    if (tracer != tracerMap.end())
+      tracer->second.buildStepCall(adaptor.getInstance(), op.getLoc(),
+                                   rewriter);
 
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
@@ -651,6 +1321,7 @@ static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 struct LowerArcToLLVMPass
     : public circt::impl::LowerArcToLLVMBase<LowerArcToLLVMPass> {
   void runOnOperation() override;
@@ -679,6 +1350,40 @@ void LowerArcToLLVMPass::runOnOperation() {
         result.replaceAllUsesWith(zero);
       }
     });
+  }
+
+  auto globalTraceHelpers = GlobalTraceHelpers(&getContext());
+  llvm::SmallDenseMap<StringRef, ModelTraceHelpers> modelTraceHelpers;
+  // Find models with trace taps
+  SmallVector<ModelOp> traceableModels;
+  for (auto modelOp : getOperation().getBody()->getOps<arc::ModelOp>()) {
+    if (modelOp.getTraceTapsAttr() && !modelOp.getTraceTapsAttr().empty())
+      traceableModels.push_back(modelOp);
+  }
+
+  {
+    // Create the trace library registration, even if there are
+    // no traceable models.
+    ImplicitLocOpBuilder globalBuilder(getOperation().getLoc(), getOperation());
+    globalBuilder.setInsertionPointToStart(getOperation().getBody());
+    globalTraceHelpers.buildModuleGlobals(globalBuilder,
+                                          traceableModels.size());
+    globalBuilder.setInsertionPointToStart(getOperation().getBody());
+    if (failed(globalTraceHelpers.buildAppendFunctions(globalBuilder,
+                                                       traceableModels))) {
+      signalPassFailure();
+      return;
+    }
+  }
+
+  // Build all the model specific tracing fluff.
+  for (auto modelOp : traceableModels) {
+    OpBuilder builder(getOperation());
+    builder.setInsertionPointToStart(getOperation().getBody());
+    builder.setInsertionPointToStart(getOperation().getBody());
+    ModelTraceHelpers modelTrace(globalTraceHelpers, modelOp);
+    modelTrace.buildStaticModuleStructs(builder);
+    modelTraceHelpers.insert({modelOp.getNameAttr(), std::move(modelTrace)});
   }
 
   // Collect the symbols in the root op such that the HW-to-LLVM lowering can
@@ -751,10 +1456,12 @@ void LowerArcToLLVMPass::runOnOperation() {
     SeqConstClockLowering,
     SimEmitValueOpLowering,
     StateReadOpLowering,
-    StateWriteOpLowering,
     StorageGetOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
+
+  patterns.add<StateWriteOpLowering>(
+      converter, &getContext(), modelTraceHelpers);
   // clang-format on
   patterns.add<ExecuteOp>(convert);
 
@@ -777,7 +1484,7 @@ void LowerArcToLLVMPass::runOnOperation() {
 
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
                SimGetPortOpLowering, SimStepOpLowering>(
-      converter, &getContext(), modelMap);
+      converter, &getContext(), modelMap, modelTraceHelpers);
 
   // Apply the conversion.
   ConversionConfig config;

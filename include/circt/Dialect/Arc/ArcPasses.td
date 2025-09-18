@@ -26,8 +26,10 @@ def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
 
 def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
   let summary = "Allocate and layout the global simulation state";
-  let constructor = "circt::arc::createAllocateStatePass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let options = [Option<"insertTraceTaps", "trace-taps", "bool", "false",
+                        "Insert TraceTap attributes for tracing">,
+  ];
 }
 
 def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
@@ -40,6 +42,10 @@ def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
     Statistic<"numArcArgsRemoved", "num-arc-args-removed",
       "Number of arguments removed from DefineOps">,
   ];
+}
+
+def CombineTaps : Pass<"arc-combine-taps", "mlir::ModuleOp"> {
+  let summary = "Combine taps observing the same value";
 }
 
 def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
@@ -209,7 +215,7 @@ def LowerVectorizations : Pass<"arc-lower-vectorizations", "mlir::ModuleOp"> {
     This pass lowers `arc.vectorize` operations. By default, the operation will
     be fully lowered (i.e., the op disappears in the IR). Alternatively, it can
     be partially lowered.
-    
+
     The "mode" pass option allows to only lower the boundary, only the body, or
     only inline the body given that both the boundary and the body are already
     lowered.

@@ -27,7 +27,6 @@ namespace arc {
 
 std::unique_ptr<mlir::Pass>
 createAddTapsPass(const AddTapsOptions &options = {});
-std::unique_ptr<mlir::Pass> createAllocateStatePass();
 std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createFindInitialVectorsPass();

@@ -1,4 +1,6 @@
 // RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --observe-wires --observe-registers --observe-ports --trace-taps --run --jit-entry=main --jit-vcd | FileCheck %s
+// RUN: arcilator %s --observe-wires --observe-registers --observe-ports --trace-taps --run --jit-entry=main --jit-vcd && cat shiftreg.vcd | FileCheck %s --match-full-lines --check-prefix VCD
 // REQUIRES: arcilator-jit
 
 // CHECK-LABEL: output = ca
@@ -20,7 +22,7 @@ module {
     hw.output %srC : i8
   }
 
-  func.func @main() {
+  func.func public @main() {
     %ff = arith.constant 0xFF : i8
     %false = arith.constant 0 : i1
     %true = arith.constant 1 : i1
@@ -68,3 +70,64 @@ module {
     return
   }
 }
+
+// VCD:      $date
+// VCD-NEXT:     October 21, 2015
+// VCD-NEXT: $end
+// VCD-NEXT: $version
+// VCD-NEXT:     Some cryptic JIT MLIR magic
+// VCD-NEXT: $end
+// VCD-NEXT: $timescale 1ns $end
+// VCD-NEXT: $scope module shiftreg $end
+// VCD-NEXT:  $var wire 1 ! clock $end
+// VCD-NEXT:  $var wire 8 $ din $end
+// VCD-NEXT:  $var wire 8 ' dout $end
+// VCD-NEXT:  $var wire 1 # en $end
+// VCD-NEXT:  $var wire 1 " reset $end
+// VCD-NEXT:  $var wire 8 ( srA $end
+// VCD-NEXT:  $var wire 8 & srB $end
+// VCD-NEXT:  $var wire 8 % srC $end
+// VCD-NEXT: $upscope $end
+// VCD-NEXT: $enddefinitions $end
+// VCD-NEXT: #0
+// VCD-NEXT: 0!
+// VCD-NEXT: 0"
+// VCD-NEXT: 0#
+// VCD-NEXT: b00000000 $
+// VCD-NEXT: b00000000 %
+// VCD-NEXT: b00000000 &
+// VCD-NEXT: b00000000 '
+// VCD-NEXT: b00000000 (
+// VCD-NEXT: #1
+// VCD-NEXT: b11111110 (
+// VCD-NEXT: b11001010 %
+// VCD-NEXT: #2
+// VCD-NEXT: b11001010 '
+// VCD-NEXT: #3
+// VCD-NEXT: 1!
+// VCD-NEXT: b11111111 $
+// VCD-NEXT: #4
+// VCD-NEXT: 0!
+// VCD-NEXT: #5
+// VCD-NEXT: 1!
+// VCD-NEXT: 1#
+// VCD-NEXT: b00000000 %
+// VCD-NEXT: b00000000 '
+// VCD-NEXT: b11111111 (
+// VCD-NEXT: b11111110 &
+// VCD-NEXT: #6
+// VCD-NEXT: 0!
+// VCD-NEXT: #7
+// VCD-NEXT: 1!
+// VCD-NEXT: b11111110 %
+// VCD-NEXT: b11111110 '
+// VCD-NEXT: b11111111 &
+// VCD-NEXT: #8
+// VCD-NEXT: 0!
+// VCD-NEXT: #9
+// VCD-NEXT: 1!
+// VCD-NEXT: b11111111 %
+// VCD-NEXT: b11111111 '
+// VCD-NEXT: #10
+// VCD-NEXT: 0!
+// VCD-NEXT: #11
