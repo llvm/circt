@@ -264,8 +264,11 @@ class Verilator(Simulator):
         "-Wno-TIMESCALEMOD",
         "-Wno-fatal",
         "-sv",
-        "--build",
         "--exe",
+        "--build",
+        "-j",
+        "0",
+        "--output-split",
         "--assert",
         str(Verilator.DefaultDriver),
     ]
