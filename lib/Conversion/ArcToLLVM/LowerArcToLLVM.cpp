@@ -854,7 +854,7 @@ private:
   }
 
   StringAttr modelName;
-  ArrayAttr  traceTaps;
+  ArrayAttr traceTaps;
   Location modLoc;
   GlobalTraceHelpers &globals;
 
@@ -863,7 +863,6 @@ private:
   LLVM::GlobalOp typeDescriptorsArray;
   LLVM::GlobalOp valueOffsetsArray;
 };
-
 
 struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -880,26 +879,28 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
     bool hasTracer = op.getTraceTapModel().has_value();
 
     // If the state write is tapped, the logic gets a _bit_ more complicated.
-    auto lowerTapped = [&](){
+    auto lowerTapped = [&]() {
       auto traceIt = tracerMap.find(op.getTraceTapModelAttr());
       assert(traceIt != tracerMap.end());
       traceIt->second.lowerTappedStateWrite(op, adaptor, rewriter);
     };
 
     if (adaptor.getCondition()) {
-      scf::IfOp::create(rewriter, op.getLoc(), adaptor.getCondition(), [&](auto &builder, auto loc) {
-            if (!hasTracer)
-              LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
-                                    adaptor.getState());
-            else
-              lowerTapped();
-            scf::YieldOp::create(builder, loc);
-          });
+      scf::IfOp::create(rewriter, op.getLoc(), adaptor.getCondition(),
+                        [&](auto &builder, auto loc) {
+                          if (!hasTracer)
+                            LLVM::StoreOp::create(builder, loc,
+                                                  adaptor.getValue(),
+                                                  adaptor.getState());
+                          else
+                            lowerTapped();
+                          scf::YieldOp::create(builder, loc);
+                        });
       rewriter.eraseOp(op);
     } else {
       if (!hasTracer) {
         rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
-                                                  adaptor.getState());
+                                                   adaptor.getState());
       } else {
         lowerTapped();
         rewriter.eraseOp(op);
@@ -911,8 +912,7 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   llvm::SmallDenseMap<StringRef, ModelTraceHelpers> &tracerMap;
 };
 
-}
-
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Simulation Orchestration Lowering Patterns
@@ -929,10 +929,12 @@ struct ModelInfoMap {
 
 template <typename OpTy>
 struct ModelAwarePattern : public OpConversionPattern<OpTy> {
-  ModelAwarePattern(const TypeConverter &typeConverter, MLIRContext *context,
-                    llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo, llvm::SmallDenseMap<StringRef, ModelTraceHelpers>& tracerMap)
-      : OpConversionPattern<OpTy>(typeConverter, context),
-        modelInfo(modelInfo), tracerMap(tracerMap) {}
+  ModelAwarePattern(
+      const TypeConverter &typeConverter, MLIRContext *context,
+      llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo,
+      llvm::SmallDenseMap<StringRef, ModelTraceHelpers> &tracerMap)
+      : OpConversionPattern<OpTy>(typeConverter, context), modelInfo(modelInfo),
+        tracerMap(tracerMap) {}
 
 protected:
   Value createPtrToPortState(ConversionPatternRewriter &rewriter, Location loc,
@@ -956,7 +958,8 @@ struct SimInstantiateOpLowering
   LogicalResult
   matchAndRewrite(arc::SimInstantiateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto modelName = cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
+    auto modelName =
+        cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
             .getModel()
             .getValue();
 
@@ -964,7 +967,6 @@ struct SimInstantiateOpLowering
     auto tracer = tracerMap.find(modelName);
     bool hasTracer = tracer != tracerMap.end();
     ModelInfoMap &model = modelIt->second;
-
 
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
     if (!moduleOp)
@@ -994,8 +996,8 @@ struct SimInstantiateOpLowering
 
     auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
     Location loc = op.getLoc();
-    Value numStateBytesCst = LLVM::ConstantOp::create(
-        rewriter, loc, convertedIndex, numStateBytes);
+    Value numStateBytesCst =
+        LLVM::ConstantOp::create(rewriter, loc, convertedIndex, numStateBytes);
     Value allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
                                            ValueRange{numStateBytesCst})
                           .getResult();
