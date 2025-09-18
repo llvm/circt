@@ -60,7 +60,6 @@ enum class RealWidth {
   f64 = 64
 };
 
-
 /// Check if a type is an `IntType` type of the given width.
 bool isIntType(Type type, unsigned width);
 /// Check if a type is an `IntType` type of the given domain.
