@@ -19,7 +19,7 @@ void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   worklist.push_back(initialOp);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val();
-    if (!op->use_empty())
+    if (!op->use_empty() || op->hasAttr("inner_sym"))
       continue;
     for (auto arg : op->getOperands())
       if (auto *argOp = arg.getDefiningOp())

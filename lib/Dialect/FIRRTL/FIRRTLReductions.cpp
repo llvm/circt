@@ -776,14 +776,6 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
 
 /// A sample reduction pattern that pushes connected values through wires.
 struct ConnectForwarder : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
-  void afterReduction(mlir::ModuleOp op) override {
-    for (auto *op : opsToErase)
-      op->dropAllReferences();
-    for (auto *op : opsToErase)
-      op->erase();
-  }
-
   uint64_t match(Operation *op) override {
     if (!isa<firrtl::FConnectLike>(op))
       return 0;
@@ -796,7 +788,8 @@ struct ConnectForwarder : public Reduction {
 
     // Ensure that the destination is something we should be able to forward
     // through.
-    if (!isa_and_nonnull<firrtl::WireOp>(destOp))
+    if (!isa_and_nonnull<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(
+            destOp))
       return 0;
 
     // Ensure that the destination is connected to only once, and all uses of
@@ -817,16 +810,18 @@ struct ConnectForwarder : public Reduction {
   }
 
   LogicalResult rewrite(Operation *op) override {
-    auto dest = op->getOperand(0);
-    dest.replaceAllUsesWith(op->getOperand(1));
-    opsToErase.insert(dest.getDefiningOp());
-    opsToErase.insert(op);
+    auto dst = op->getOperand(0);
+    auto src = op->getOperand(1);
+    dst.replaceAllUsesWith(src);
+    op->erase();
+    if (auto *dstOp = dst.getDefiningOp())
+      reduce::pruneUnusedOps(dstOp, *this);
+    if (auto *srcOp = src.getDefiningOp())
+      reduce::pruneUnusedOps(srcOp, *this);
     return success();
   }
 
   std::string getName() const override { return "connect-forwarder"; }
-
-  llvm::DenseSet<Operation *> opsToErase;
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
