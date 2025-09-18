@@ -37,10 +37,10 @@
 // JSON-SAME{LITERAL}:    [{"level":1,"count":1,"percentage":50},
 // JSON-SAME{LITERAL}:     {"level":2,"count":1,"percentage":100}]
 // JSON-SAME{LITERAL}:    "top_paths":[
-// JSON-SAME{LITERAL}:     {"end_point":{"bit_pos":0,"instance_path":[],"name":"y"},
-// JSON-SAME{LITERAL}:      "path":{"delay":2,"history":[{"comment":"output port","delay":2,"object":{"bit_pos":0,"instance_path":[],"name":"c2.x"}},
-// JSON-SAME{LITERAL}:      "start_point":{"bit_pos":0,"instance_path":[],"name":"a"},
-// JSON-SAME{LITERAL}:      "root":"parent"},
+// JSON-SAME{LITERAL}:     {"end_point":{"bit_pos":0,"instance_path":[],"name":"y"}
+// JSON-SAME{LITERAL}:      "path":{"delay":2,"history":[{"comment":"output port","delay":2,"object":{"bit_pos":0,"instance_path":[],"name":"c2.x"}}
+// JSON-SAME{LITERAL}:      "start_point":{"bit_pos":0,"instance_path":[],"name":"a"}
+// JSON-SAME{LITERAL}:      "root":"parent"}
 // Make sure the second path is reported.
 // JSON-SAME{LITERAL}:     {"end_point":{"bit_pos":0,"instance_path":[],"name":"x"},
 
