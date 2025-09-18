@@ -386,6 +386,12 @@ def ConvertFSMToSMTSafety : Pass<"convert-fsm-to-smt-safety", "mlir::ModuleOp"> 
       "mlir::smt::SMTDialect",
       "circt::verif::VerifDialect"
   ];
+  let options = [
+    Option<"withTime", "with-time", "bool", "false",
+           "whether to include a time paramter in the relation">,
+    Option<"bitVecOrInt", "bit-vec-or-int", "std::string", "\"bitVec\"",
+           "whether to represent values using int or bitvec.">,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
