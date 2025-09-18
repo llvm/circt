@@ -181,12 +181,20 @@ public:
   /// A successful walk with no failures returns success.
   static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
 
+  /// Invoke the callback for all symbols in this table.
+  LogicalResult walkSymbols(InnerSymCallbackFn callback) const {
+    for (auto [name, target] : symbolTable)
+      if (failed(callback(name, target)))
+        return failure();
+    return success();
+  }
+
 private:
   using TableTy = DenseMap<StringAttr, InnerSymTarget>;
   /// Construct an inner symbol table for the given operation,
   /// with pre-populated table contents.
   explicit InnerSymbolTable(Operation *op, TableTy &&table)
-      : innerSymTblOp(op), symbolTable(table){};
+      : innerSymTblOp(op), symbolTable(table) {}
 
   /// This is the operation this table is constructed for, which must have the
   /// InnerSymbolTable trait.
