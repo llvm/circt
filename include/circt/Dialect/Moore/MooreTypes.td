@@ -509,14 +509,14 @@ def TwoValuedI32 : MooreType<CPred<[{
 }
 
 // A 32-bit real value.
-def VerilogShortreal : MooreType<CPred<[{
+def RealF32 : MooreType<CPred<[{
     moore::isRealType($_self, 32)
   }]>, "32-bit real type, aka. shortreal", "moore::RealType"> {
   let builderCall = "RealType::getShortReal($_builder.getContext())";
 }
 
 // A 64-bit real value.
-def VerilogReal : MooreType<CPred<[{
+def RealF64 : MooreType<CPred<[{
     moore::isRealType($_self, 64)
   }]>, "64-bit real type, aka. real", "moore::RealType"> {
   let builderCall = "RealType::getReal($_builder.getContext())";

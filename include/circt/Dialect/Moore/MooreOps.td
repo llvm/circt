@@ -548,7 +548,7 @@ def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
   let arguments = (ins F64Attr:$value);
-  let results = (outs VerilogReal:$result);
+  let results = (outs RealF64:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
@@ -1777,7 +1777,7 @@ def RealtobitsBIOp : Builtin<"realtobits"> {
   }];
 
   // Optional positional attribute for the seed
-  let arguments = (ins VerilogReal:$value);
+  let arguments = (ins RealF64:$value);
   let results = (outs TwoValuedI64:$result);
   let assemblyFormat = "$value attr-dict";
 }
@@ -1794,7 +1794,7 @@ def BitstorealBIOp : Builtin<"bitstoreal"> {
 
   // Optional positional attribute for the seed
   let arguments = (ins TwoValuedI64:$value);
-  let results = (outs VerilogReal:$result);
+  let results = (outs RealF64:$result);
   let assemblyFormat = "$value attr-dict`:` type($value)";
 }
 
@@ -1810,7 +1810,7 @@ def ShortrealtobitsBIOp : Builtin<"shortrealtobits"> {
   }];
 
   // Optional positional attribute for the seed
-  let arguments = (ins VerilogShortreal:$value);
+  let arguments = (ins RealF32:$value);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = "$value attr-dict";
 }
@@ -1827,7 +1827,7 @@ def BitstoshortrealBIOp : Builtin<"bitstoshortreal"> {
 
   // Optional positional attribute for the seed
   let arguments = (ins TwoValuedI32:$value);
-  let results = (outs VerilogShortreal:$result);
+  let results = (outs RealF32:$result);
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
@@ -2004,8 +2004,8 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
 
     See IEEE 1800-2017 § 20.8.2 "Real math functions".
    }];
-  let arguments = (ins VerilogReal:$value);
-  let results = (outs VerilogReal:$result);
+  let arguments = (ins RealF64:$value);
+  let results = (outs RealF64:$result);
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
