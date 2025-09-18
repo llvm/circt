@@ -41,8 +41,9 @@ bool moore::isIntType(Type type, unsigned width, Domain domain) {
 
 bool moore::isRealType(Type type, unsigned width) {
   if (auto realType = dyn_cast<RealType>(type))
-    return realType.getWidth() == width;
-  return false;
+    if (realType.getWidth() == RealWidth::f32)
+      return width == 32;
+  return width == 64;
 }
 
 static LogicalResult parseMembers(AsmParser &parser,
@@ -75,7 +76,8 @@ Domain UnpackedType::getDomain() const {
 std::optional<unsigned> UnpackedType::getBitSize() const {
   return TypeSwitch<UnpackedType, std::optional<unsigned>>(*this)
       .Case<PackedType>([](auto type) { return type.getBitSize(); })
-      .Case<RealType>([](auto type) { return type.getWidth(); })
+      .Case<RealType>(
+          [](auto type) { return type.getWidth() == RealWidth::f32 ? 32 : 64; })
       .Case<UnpackedArrayType>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getElementType().getBitSize())
           return (*size) * type.getSize();
@@ -115,35 +117,6 @@ Type UnpackedType::parse(mlir::AsmParser &parser) {
 
 void UnpackedType::print(mlir::AsmPrinter &printer) const {
   printMooreType(*this, printer);
-}
-
-//===----------------------------------------------------------------------===//
-// Real Type
-//===----------------------------------------------------------------------===//
-
-void RealType::print(mlir::AsmPrinter &p) const {
-  // Print bare `real` when default (64), otherwise `real<32>`
-  if (getWidth() == 64)
-    return;
-  p << "<" << getWidth() << ">";
-}
-
-Type RealType::parse(AsmParser &p) {
-  // Default to 64 if no angle bracket group is present.
-  unsigned width = 64;
-
-  // If next token is '<', parse the explicit width.
-  if (succeeded(p.parseOptionalLess())) {
-    if (p.parseInteger(width) || p.parseGreater())
-      return Type(); // signal failure, diagnostic already emitted
-  }
-
-  if (width == 32 || width == 64)
-    return RealType::get(p.getContext(), width);
-  p.emitError(p.getCurrentLocation())
-      << "RealType parser error: expected 64 or 32 bit width, but got "
-      << width;
-  return Type();
 }
 
 //===----------------------------------------------------------------------===//
@@ -423,9 +396,13 @@ static ParseResult parseMooreType(AsmParser &parser, Type &type) {
     return success();
   }
 
-  // Syntactic Sugar: !moore.shortreal => !moore.real<32>
-  if (mnemonic == "shortreal") {
-    type = moore::RealType::get(parser.getContext(), /*width=*/32);
+  if (mnemonic == "f32") {
+    type = moore::RealType::get(parser.getContext(), /*width=*/RealWidth::f32);
+    return success();
+  }
+
+  if (mnemonic == "f64") {
+    type = moore::RealType::get(parser.getContext(), /*width=*/RealWidth::f64);
     return success();
   }
 
@@ -442,13 +419,13 @@ static void printMooreType(Type type, AsmPrinter &printer) {
     printer << intType.getWidth();
     return;
   }
-
-  // Handle `moore.shortreal` as syntactic sugar for `moore.real<32>`
   if (auto rt = dyn_cast<moore::RealType>(type)) {
-    if (rt.getWidth() == 32) {
-      printer << "shortreal";
-      return; // don't call generated printer for this case
+    if (rt.getWidth() == RealWidth::f32) {
+      printer << "f32";
+      return;
     }
+    printer << "f64";
+    return;
   }
 
   // Otherwise fall back to the generated printer.

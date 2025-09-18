@@ -197,7 +197,7 @@ struct FormatStringParser {
     // Ensures that the given value is moore.real
     // i.e. $display("%f", 4) -> 4.000000, but 4 is not necessarily of real type
     auto value = context.convertRvalueExpression(
-        arg, moore::RealType::get(context.getContext()));
+        arg, moore::RealType::get(context.getContext(), moore::RealWidth::f64));
 
     if (!value)
       return failure();

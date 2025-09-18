@@ -57,8 +57,12 @@ MlirType mooreIntTypeGetLogic(MlirContext ctx, unsigned width) {
 }
 
 /// Create a real type.
-MlirType mooreRealTypeGet(MlirContext ctx) {
-  return wrap(RealType::get(unwrap(ctx)));
+MlirType mooreRealTypeGet(MlirContext ctx, unsigned width) {
+  if (width == 32)
+    return wrap(RealType::get(unwrap(ctx), RealWidth::f32));
+  if (width == 64)
+    return wrap(RealType::get(unwrap(ctx), RealWidth::f32));
+  return {};
 }
 
 MlirType mooreOpenArrayTypeGet(MlirType elementType) {

@@ -138,38 +138,26 @@ def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
 //===----------------------------------------------------------------------===//
 
 def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
-  let mnemonic = "real";
+  let typeName = "moore.real";
   let summary = "a SystemVerilog real type";
-  // Default to 64 so old sites keep working.
-  let parameters = (ins
-    DefaultValuedParameter<"unsigned", "64">:$width
-  );
-  let hasCustomAssemblyFormat = 1;
+  let parameters = (ins "RealWidth":$width);
   let description = [{
-    This type represents the SystemVerilog real type. Since the Moore dialect
-    does not fully handle real-valued expressions properly yet, we coalesce the
-    `shortreal`, `real`, and `realtime` types in the SystemVerilgo standard to
+    This type represents the SystemVerilog real type. We coalesce the
+    `f32`, `f64`, and `realtime` types in the SystemVerilog standard to
     this common `!moore.real` type. The standard specifies these types to be of
-    at least 32, 64, and 64 bits, respectively. The `!moore.real` type is 64
-    bits wide.
+    at least 32, 64, and 64 bits, respectively.
 
     | Verilog     | Moore Dialect      |
     |-------------|--------------------|
-    | `shortreal` | `!moore.shortreal` |
-    | `real`      | `!moore.real`      |
+    | `shortreal` | `!moore.f32`       |
+    | `real`      | `!moore.f64`       |
     | `realtime`  | `!moore.time`      |
   }];
   let extraClassDeclaration = [{
     // Convenience helpers
-    static RealType getShortReal(MLIRContext *ctx) { return get(ctx, 32); }
-    static RealType getReal     (MLIRContext *ctx) { return get(ctx, 64); }
+    static RealType getShortReal(MLIRContext *ctx) { return get(ctx, RealWidth::f32); }
+    static RealType getReal     (MLIRContext *ctx) { return get(ctx, RealWidth::f64); }
   }];
-  let builders = [
-  // Legacy zero-arg get(ctx) that defaults to 64-bit.
-  TypeBuilder<(ins), [{
-    return $_get($_ctxt, /*width=*/64);
-  }]>
-];
 }
 
 

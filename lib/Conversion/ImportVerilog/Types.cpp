@@ -39,8 +39,8 @@ struct TypeVisitor {
     if (type.floatKind == slang::ast::FloatingType::Kind::RealTime)
       return moore::TimeType::get(context.getContext());
     if (type.floatKind == slang::ast::FloatingType::Kind::Real)
-      return moore::RealType::get(context.getContext(), 64);
-    return moore::RealType::get(context.getContext(), 32);
+      return moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+    return moore::RealType::get(context.getContext(), moore::RealWidth::f32);
   }
 
   Type visit(const slang::ast::PredefinedIntegerType &type) {

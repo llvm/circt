@@ -114,11 +114,11 @@ endmodule
 
 // CHECK-LABEL: moore.module @RealType
 module RealType;
-  // CHECK-NEXT: %d0 = moore.variable : <real>
+  // CHECK-NEXT: %d0 = moore.variable : <f64>
   real d0;
   // CHECK-NEXT: %d1 = moore.variable : <time>
   realtime d1;
-  // CHECK-NEXT: %d2 = moore.variable : <shortreal>
+  // CHECK-NEXT: %d2 = moore.variable : <f32>
   shortreal d2;
 endmodule
 

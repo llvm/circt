@@ -52,6 +52,15 @@ enum class Domain {
   FourValued,
 };
 
+/// The type of floating point / real number behind a RealType
+enum class RealWidth {
+  /// A standard 32-Bit floating point number ("float")
+  f32,
+  /// A 64-bit double-precision floation point number ("double")
+  f64
+};
+
+
 /// Check if a type is an `IntType` type of the given width.
 bool isIntType(Type type, unsigned width);
 /// Check if a type is an `IntType` type of the given domain.

@@ -742,8 +742,8 @@ module Expressions;
       int a, b;
     } c, d;
   } union1;
-  // CHECK: %r1 = moore.variable : <real>
-  // CHECK: %r2 = moore.variable : <real>
+  // CHECK: %r1 = moore.variable : <f64>
+  // CHECK: %r2 = moore.variable : <f64>
   real r1,r2;
   // CHECK: %arrayInt = moore.variable : <array<2 x i32>>
   bit [1:0][31:0] arrayInt;
@@ -1363,12 +1363,12 @@ module Expressions;
     c = x ? a : b;
 
     // CHECK: [[X_COND:%.+]] = moore.read %x
-    // CHECK: moore.conditional [[X_COND]] : i1 -> real {
+    // CHECK: moore.conditional [[X_COND]] : i1 -> f64 {
     // CHECK:   [[R1_READ:%.+]] = moore.read %r1
-    // CHECK:   moore.yield [[R1_READ]] : real
+    // CHECK:   moore.yield [[R1_READ]] : f64
     // CHECK: } {
     // CHECK:   [[R2_READ:%.+]] = moore.read %r2
-    // CHECK:   moore.yield [[R2_READ]] : real
+    // CHECK:   moore.yield [[R2_READ]] : f64
     // CHECK: }
     r1 = x ? r1 : r2;
 
