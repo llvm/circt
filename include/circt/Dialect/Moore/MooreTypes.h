@@ -55,9 +55,9 @@ enum class Domain {
 /// The type of floating point / real number behind a RealType
 enum class RealWidth {
   /// A standard 32-Bit floating point number ("float")
-  f32,
+  f32 = 32,
   /// A 64-bit double-precision floation point number ("double")
-  f64
+  f64 = 64
 };
 
 
