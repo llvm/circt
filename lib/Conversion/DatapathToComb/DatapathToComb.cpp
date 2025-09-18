@@ -349,9 +349,9 @@ struct DatapathPosPartialProductOpConversion
   LogicalResult matchAndRewrite(PosPartialProductOp op,
                                 PatternRewriter &rewriter) const override {
 
-    Value a = op.getOperand(0);
-    Value b = op.getOperand(1);
-    Value c = op.getOperand(2);
+    Value a = op.getAddend0();
+    Value b = op.getAddend1();
+    Value c = op.getMultiplicand();
     unsigned width = a.getType().getIntOrFloatBitWidth();
 
     // Skip a zero width value.
@@ -414,9 +414,12 @@ private:
           rewriter.createOrFold<comb::AndOp>(loc, replCarry, twoC);
       auto ppRow =
           rewriter.createOrFold<comb::OrOp>(loc, ppRowSave, ppRowCarry);
-      auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i, 0));
-      auto ppAlign =
-          comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
+      auto ppAlign = ppRow;
+      if (i > 0) {
+        auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i, 0));
+        ppAlign =
+            comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
+      }
 
       // May need to truncate shifted value
       if (rowWidth + i > width) {

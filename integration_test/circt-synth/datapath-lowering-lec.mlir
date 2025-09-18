@@ -43,6 +43,27 @@ hw.module @partial_product_sext(in %a : i3, in %b : i3, out sum : i6) {
   hw.output %7 : i6
 }
 
+// RUN: circt-lec %t.mlir %s -c1=pos_partial_product_4 -c2=pos_partial_product_4 --shared-libs=%libz3 | FileCheck %s --check-prefix=POS4
+// POS4: c1 == c2
+hw.module @pos_partial_product_4(in %a : i4, in %b : i4, in %c : i4, out sum : i4) {
+  %0:4 = datapath.pos_partial_product %a, %b, %c : (i4, i4, i4) -> (i4, i4, i4, i4)
+  %1 = comb.add bin %0#0, %0#1, %0#2, %0#3 : i4
+  hw.output %1 : i4
+}
+
+// RUN: circt-lec %t.mlir %s -c1=pos_partial_product_zext -c2=pos_partial_product_zext --shared-libs=%libz3 | FileCheck %s --check-prefix=POS_ZEXT
+// POS_ZEXT: c1 == c2
+hw.module @pos_partial_product_zext(in %a : i4, in %b : i3, in %c : i4, out sum : i8) {
+  %c0_i4 = hw.constant 0 : i4
+  %c0_i5 = hw.constant 0 : i5
+  %0 = comb.concat %c0_i4, %a : i4, i4
+  %1 = comb.concat %c0_i5, %b : i5, i3
+  %2 = comb.concat %c0_i4, %c : i4, i4
+  %3:8 = datapath.pos_partial_product %0, %1, %2 : (i8, i8, i8) -> (i8, i8, i8, i8, i8, i8, i8, i8)
+  %4 = comb.add %3#0, %3#1, %3#2, %3#3, %3#4, %3#5, %3#6, %3#7 : i8 
+  hw.output %4 : i8
+}
+
 // RUN: circt-lec %t.mlir %s -c1=compress_3 -c2=compress_3 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMP3
 // COMP3: c1 == c2
 hw.module @compress_3(in %a : i4, in %b : i4, in %c : i4, out sum : i4) {

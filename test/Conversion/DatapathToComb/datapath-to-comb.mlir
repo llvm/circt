@@ -161,7 +161,6 @@ hw.module @timing(in %a : i1, in %b : i1, in %c : i1, out carry : i1, out save :
 // CHECK-LABEL: @pos_partial_product
 hw.module @pos_partial_product(in %a : i3, in %b : i3, in %c : i3, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
   // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
-  // CHECK-NEXT: %c0_i0 = hw.constant 0 : i0
   // CHECK-NEXT: %false = hw.constant false
   // Apply half-adder
   // CHECK-NEXT: [[AND:%.+]] = comb.and %a, %b : i3
@@ -179,8 +178,7 @@ hw.module @pos_partial_product(in %a : i3, in %b : i3, in %c : i3, out pp0 : i3,
   // CHECK-NEXT: [[SEL_CARRY_0:%.+]] = comb.replicate [[CARRY_0]] : (i1) -> i3
   // CHECK-NEXT: [[AND12:%.+]] = comb.and [[SEL_SAVE_0]], %c : i3
   // CHECK-NEXT: [[AND13:%.+]] = comb.and [[SEL_CARRY_0]], [[TWOC]] : i3
-  // CHECK-NEXT: [[OR14:%.+]] = comb.or [[AND12]], [[AND13]] : i3
-  // CHECK-NEXT: [[PP0:%.+]] = comb.concat [[OR14]], %c0_i0 : i3, i0
+  // CHECK-NEXT: [[PP0:%.+]] = comb.or [[AND12]], [[AND13]] : i3
   // pp-row 1
   // CHECK-NEXT: [[SEL_SAVE_1:%.+]] = comb.replicate [[SAVE_1]] : (i1) -> i3
   // CHECK-NEXT: [[SEL_CARRY_1:%.+]] = comb.replicate [[CARRY_1]] : (i1) -> i3

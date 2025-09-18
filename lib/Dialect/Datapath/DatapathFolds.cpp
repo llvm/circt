@@ -276,20 +276,12 @@ struct PosPartialProducts : public OpRewritePattern<PartialProductOp> {
     assert(op.getNumOperands() == 2);
 
     // Detect if any input is an AddOp
-    auto lhsIsAdder = false;
-    if (op.getOperand(0).getDefiningOp())
-      lhsIsAdder = llvm::isa<comb::AddOp>(op.getOperand(0).getDefiningOp());
-    auto rhsIsAdder = false;
-    if (op.getOperand(1).getDefiningOp())
-      rhsIsAdder = llvm::isa<comb::AddOp>(op.getOperand(1).getDefiningOp());
-
-    // Support a single adder input
-    if ((lhsIsAdder & rhsIsAdder) | !(lhsIsAdder | rhsIsAdder))
+    auto lhsAdder = op.getOperand(0).getDefiningOp<comb::AddOp>();
+    auto rhsAdder = op.getOperand(1).getDefiningOp<comb::AddOp>();
+    if ((lhsAdder && rhsAdder) | !(lhsAdder || rhsAdder))
       return failure();
-
-    auto addInput = lhsIsAdder ? op.getOperand(0).getDefiningOp()
-                               : op.getOperand(1).getDefiningOp();
-    auto otherInput = lhsIsAdder ? op.getOperand(1) : op.getOperand(0);
+    auto addInput = lhsAdder ? lhsAdder : rhsAdder;
+    auto otherInput = lhsAdder ? op.getOperand(1) : op.getOperand(0);
 
     if (addInput->getNumOperands() != 2)
       return failure();
@@ -319,11 +311,11 @@ struct ReduceNumPosPartialProducts
   // pos_pp(concat(0,a), concat(0,b), c) -> reduced number of results
   LogicalResult matchAndRewrite(PosPartialProductOp op,
                                 PatternRewriter &rewriter) const override {
-    auto operands = op.getOperands();
-    unsigned inputWidth = operands[0].getType().getIntOrFloatBitWidth();
-
-    auto addend0NonZero = calculateNonZeroBits(operands[0], op.getNumResults());
-    auto addend1NonZero = calculateNonZeroBits(operands[1], op.getNumResults());
+    unsigned inputWidth = op.getAddend0().getType().getIntOrFloatBitWidth();
+    auto addend0NonZero =
+        calculateNonZeroBits(op.getAddend0(), op.getNumResults());
+    auto addend1NonZero =
+        calculateNonZeroBits(op.getAddend1(), op.getNumResults());
 
     if (failed(addend0NonZero) || failed(addend1NonZero))
       return failure();
