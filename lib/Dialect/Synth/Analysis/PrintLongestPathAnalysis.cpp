@@ -101,7 +101,7 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
         << "\n"
         << "Found " << oldPathCount << " paths\n"
         << "Found " << longestPathForEachEndPoint.size()
-        << " unique endPoints \n"
+        << " unique end points \n"
         << "Maximum path delay: "
         << (longestPathForEachEndPoint.empty()
                 ? 0
@@ -202,7 +202,7 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
 
   if (os)
     *os << "## Top " << topKCount << " (out of " << allTimingPaths.size()
-        << ") endPoints\n\n";
+        << ") end points\n\n";
 
   if (jsonOS) {
     jsonOS->attributeBegin("top_paths");
@@ -229,11 +229,11 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
     *os << "==============================================\n"
         << "#" << i + 1 << ": Distance=" << path.getDelay() << "\n";
 
-    // Print endPoint (where the critical path starts)
+    // Print end point (where the critical path starts)
     *os << "EndPoint=";
     path.printEndPoint(*os);
 
-    // Print startPoint (where the critical path ends)
+    // Print start point (where the critical path ends)
     *os << "\n"
         << "StartPoint=";
     path.getStartPoint().print(*os);
@@ -245,7 +245,7 @@ void PrintLongestPathAnalysisPass::printTopKPathDetails(
 }
 
 /// Print detailed history of a timing path showing intermediate debug points.
-/// This traces the path from endPoint to startPoint, showing each logic stage
+/// This traces the path from end point to start point, showing each logic stage
 /// and the delay contribution of each stage. This is crucial for understanding
 /// where delay is being accumulated along the critical path and identifying
 /// optimization opportunities.
@@ -254,9 +254,9 @@ void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,
   int64_t remainingDelay = timingPath.getDelay();
 
   if (!timingPath.getHistory().isEmpty()) {
-    os << "== History Start (closer to endPoint) ==\n";
+    os << "== History Start (closer to end point) ==\n";
 
-    // Walk through debug points in order from endPoint to startPoint
+    // Walk through debug points in order from end point to start point
     for (auto &debugPoint : timingPath.getHistory()) {
       // Calculate delay contribution of this logic stage
       int64_t stepDelay = remainingDelay - debugPoint.delay;
@@ -268,7 +268,7 @@ void PrintLongestPathAnalysisPass::printPathHistory(const OpenPath &timingPath,
       os << "\n";
     }
 
-    os << "== History End (closer to startPoint) ==\n";
+    os << "== History End (closer to start point) ==\n";
   }
 }
 

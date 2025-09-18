@@ -84,7 +84,7 @@ hw.module @area_flow(in %a : i1, in %b : i1, in %c: i1, out result : i1) attribu
 
 // This is a test that needs area-flow to get an optimal result.
 // Area-flow is an optimization technique that considers the area impact
-// of a gate choice on its endPoint, not just the gate itself.
+// of a gate choice on its end point, not just the gate itself.
 // It produces sub-optimal mappings since currently area-flow is not implemented.
 // See "Heuristics for Area Minimization in LUT-Based FPGA Technology Mapping" for more details. 
 // CHECK-LABEL: @area_flow_test

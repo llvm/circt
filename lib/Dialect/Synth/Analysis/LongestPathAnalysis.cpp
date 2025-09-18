@@ -357,7 +357,7 @@ DataflowPath &DataflowPath::prependPaths(
     this->root = root;
   }
 
-  // If the endPoint is an object, prepend the path.
+  // If the end point is an object, prepend the path.
   if (auto *object = std::get_if<Object>(&endPoint))
     object->prependPaths(cache, path);
 
@@ -365,7 +365,7 @@ DataflowPath &DataflowPath::prependPaths(
 }
 
 Location DataflowPath::getEndPointLoc() {
-  // If the endPoint is an object, return the location of the object.
+  // If the end point is an object, return the location of the object.
   if (auto *object = std::get_if<Object>(&endPoint))
     return object->value.getLoc();
 
@@ -621,11 +621,11 @@ private:
                          llvm::ImmutableList<DebugPoint> history,
                          ObjectToMaxDistance &objectToMaxDistance);
 
-  // A map from the input port to the farthest endPoint.
+  // A map from the input port to the farthest end point.
   llvm::MapVector<std::pair<BlockArgument, size_t>, ObjectToMaxDistance>
       fromInputPortToEndPoint;
 
-  // A map from the output port to the farthest startPoint.
+  // A map from the output port to the farthest start point.
   llvm::MapVector<std::tuple<size_t, size_t>, ObjectToMaxDistance>
       fromOutputPortToStartPoint;
 
@@ -687,7 +687,7 @@ private:
     return success();
   }
 
-  // Registers are startPoint.
+  // Registers are start point.
   LogicalResult visit(seq::FirRegOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results) {
     return markStartPoint(op, bitPos, results);
@@ -807,7 +807,7 @@ LogicalResult LocalVisitor::markRegEndPoint(Value endPoint, Value start,
             {{}, endPoint, endPointBitPos}, path.delay, path.history,
             fromInputPortToEndPoint[{blockArg, path.startPoint.bitPos}]);
       } else {
-        // If the startPoint is not a port, record to the results.
+        // If the start point is not a port, record to the results.
         endPointResults[{{}, endPoint, endPointBitPos}].push_back(path);
       }
     }
@@ -946,7 +946,7 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
   auto value = op->getResult(resultNum);
 
   // If an instance graph is not available, we treat instance results as a
-  // startPoint.
+  // start point.
   if (!ctx->instanceGraph)
     return markStartPoint(value, bitPos, results);
 
@@ -955,7 +955,7 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
   assert(node && "module not found");
 
   // Otherwise, if the module is not a HWModuleOp, then we should treat it as a
-  // startPoint.
+  // start point.
   if (!isa<hw::HWModuleOp>(node->getModule()))
     return markStartPoint(value, bitPos, results);
 
@@ -973,7 +973,7 @@ LogicalResult LocalVisitor::visit(hw::InstanceOp op, size_t bitPos,
     auto newPath =
         instancePathCache->prependInstance(op, path.startPoint.instancePath);
     auto startPointPoint = path.startPoint;
-    // If the startPoint is not a block argument, record it directly.
+    // If the start point is not a block argument, record it directly.
     auto arg = dyn_cast<BlockArgument>(startPointPoint.value);
     if (!arg) {
       // Update the history to have correct instance path.
@@ -1190,7 +1190,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
   if (!childVisitor)
     return success();
 
-  // Connect dataflow from instance input ports to endpoint in the child.
+  // Connect dataflow from instance input ports to end point in the child.
   for (const auto &[object, openPaths] :
        childVisitor->getFromInputPortToEndPoint()) {
     auto [arg, argBitPos] = object;
@@ -1479,8 +1479,8 @@ LogicalResult OperationAnalyzer::analyzeOperation(
 
   results.reserve(openPaths->size() + results.size());
   for (auto &path : *openPaths) {
-    // End-Point is always a block argument since there is no other value that
-    // could be a Start-Point.
+    // end point is always a block argument since there is no other value that
+    // could be a start point.
     BlockArgument blockArg = cast<BlockArgument>(path.startPoint.value);
     auto inputPortIndex = blockArg.getArgNumber();
     results.push_back(

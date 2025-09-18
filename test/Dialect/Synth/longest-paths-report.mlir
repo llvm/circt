@@ -3,17 +3,17 @@
 
 // CHECK:      # Longest Path Analysis result for "parent"
 // CHECK-NEXT: Found 4 paths
-// CHECK-NEXT: Found 2 unique endPoints
+// CHECK-NEXT: Found 2 unique end points
 // CHECK-NEXT: Maximum path delay: 2
 // CHECK-NEXT: ## Showing Levels
 // CHECK-NEXT: Level = 1         . Count = 1         . 50.00     %
 // CHECK-NEXT: Level = 2         . Count = 1         . 100.00    %
-// CHECK-NEXT: ## Top 2 (out of 2) endPoints
+// CHECK-NEXT: ## Top 2 (out of 2) end points
 // CHECK:      ==============================================
 // CHECK-NEXT: #1: Distance=2
 // CHECK-NEXT: EndPoint=Object($root.y[0])
 // CHECK-NEXT: StartPoint=Object($root.a[0])
-// CHECK-NEXT: == History Start (closer to endPoint) ==
+// CHECK-NEXT: == History Start (closer to end point) ==
 // CHECK-NEXT: <--- (logic delay 0) ---
 // CHECK-NEXT: Object($root.c2.x[0], delay=2, comment="output port")
 // CHECK-NEXT: <--- (logic delay 0) ---
@@ -28,7 +28,7 @@
 // CHECK-NEXT: Object($root/c1:child.a[0], delay=0, comment="input port")
 // CHECK-NEXT: <--- (logic delay 0) ---
 // CHECK-NEXT: Object($root.a[0], delay=0, comment="input port")
-// CHECK-NEXT: == History End (closer to startPoint) ==
+// CHECK-NEXT: == History End (closer to start point) ==
 // CHECK-NEXT: ==============================================
 // Make sure the second path is reported.
 // CHECK-NEXT: #2: Distance=1

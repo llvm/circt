@@ -90,7 +90,7 @@ struct DebugPoint {
   StringRef comment;
 };
 
-// An OpenPath represents a path from a startPoint with an associated
+// An OpenPath represents a path from a start point with an associated
 // delay and history of debug points.
 struct OpenPath {
   OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
@@ -111,26 +111,26 @@ struct OpenPath {
   Object startPoint;
   int64_t delay;
   // History of debug points represented by linked lists.
-  // The head of the list is the farthest point from the startPoint.
+  // The head of the list is the farthest point from the start point.
   llvm::ImmutableList<DebugPoint> history;
 };
 
-// A DataflowPath represents a complete timing path from a endPoint to a
-// startPoint with associated delay information. This is the primary result type
-// for longest path analysis, containing both endPoints and path history.
+// A DataflowPath represents a complete timing path from a end point to a
+// start point with associated delay information. This is the primary result
+// type for longest path analysis, containing both end points and path history.
 class DataflowPath {
 public:
-  // EndPoint can be either an internal circuit object or a module output port
+  // end point can be either an internal circuit object or a module output port
   // This flexibility allows representing both closed paths
   // (register-to-register) and open paths (register-to-output) in a unified way
   using OutputPort = std::tuple<hw::HWModuleOp, size_t, size_t>;
   using EndPointType = std::variant<Object, OutputPort>;
 
-  // Constructor for paths with Object endPoint (internal circuit nodes)
+  // Constructor for paths with Object end point (internal circuit nodes)
   DataflowPath(Object endPoint, OpenPath startPoint, hw::HWModuleOp root)
       : endPoint(endPoint), path(startPoint), root(root) {}
 
-  // Constructor for paths with port endPoint (module output ports)
+  // Constructor for paths with port end point (module output ports)
   DataflowPath(OutputPort endPoint, OpenPath startPoint, hw::HWModuleOp root)
       : endPoint(endPoint), path(startPoint), root(root) {}
 
@@ -151,7 +151,7 @@ public:
   }
   const OpenPath &getPath() const { return path; }
 
-  // Get source location for the EndPoint (for diagnostics)
+  // Get source location for the end point (for diagnostics)
   Location getEndPointLoc();
 
   void setDelay(int64_t delay) { path.delay = delay; }
@@ -200,7 +200,7 @@ struct LongestPathAnalysisOptions {
   /// are queried. Disables parallel processing.
   bool lazyComputation = false;
 
-  /// Keep only the maximum delay path per endPoint.
+  /// Keep only the maximum delay path per end point.
   /// Focuses on finding maximum delays, discarding non-critical paths.
   /// Significantly faster and uses less memory when only delay bounds
   /// are needed rather than complete path enumeration.
@@ -227,7 +227,7 @@ public:
                       const LongestPathAnalysisOptions &option = {});
   ~LongestPathAnalysis();
 
-  // Return all longest paths to each StartPoint for the given value and bit
+  // Return all longest paths to each start point for the given value and bit
   // position.
   LogicalResult computeGlobalPaths(Value value, size_t bitPos,
                                    SmallVectorImpl<DataflowPath> &results);
@@ -250,7 +250,7 @@ public:
   // typically register-to-register paths. A closed path is a path that starts
   // and ends at sequential elements (registers/flip-flops), forming a complete
   // timing path through combinational logic. The path may cross module
-  // boundaries but both endPoints are sequential elements, not ports.
+  // boundaries but both end points are sequential elements, not ports.
   LogicalResult getClosedPaths(StringAttr moduleName,
                                SmallVectorImpl<DataflowPath> &results,
                                bool elaboratePaths = false) const;
@@ -346,8 +346,7 @@ public:
   // Sort the paths by delay in descending order.
   void sortInDescendingOrder();
 
-  // Sort and drop all paths except the longest path per endPoint.
-  // void sortAndDropNonCriticalPathsPerEndPoint();
+  // Sort and drop all paths except the longest path per end point.
   void sortAndDropNonCriticalPathsPerEndPoint();
 
   // Merge another collection into this one.
