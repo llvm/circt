@@ -635,7 +635,6 @@ public:
     scf::IfOp::create(
         rewriter, op.getLoc(), hasChanged,
         [&](OpBuilder builder, Location loc) {
-          // Call the function to append the trace buffer.
           auto typeBits = cast<IntegerType>(adaptor.getValue().getType())
                               .getIntOrFloatBitWidth();
           auto numWords = GlobalTraceHelpers::getCapacityForBitWidth(
@@ -652,6 +651,11 @@ public:
               rewriter.getI64IntegerAttr(
                   op.getTraceTapIndexAttr().getValue().getZExtValue()));
 
+          // Store the value to the simulation state
+          LLVM::StoreOp::create(rewriter, op.getLoc(), adaptor.getValue(),
+                                adaptor.getState());
+
+          // Call the function to append the trace buffer.
           auto storeVal = adaptor.getValue();
           if (typeBits != numWords * 64)
             storeVal = LLVM::ZExtOp::create(
@@ -662,9 +666,6 @@ public:
                                {traceStatePtr, tapIdxCst, storeVal});
           scf::YieldOp::create(builder, loc);
         });
-    // Store the value to the state
-    LLVM::StoreOp::create(rewriter, op.getLoc(), adaptor.getValue(),
-                          adaptor.getState());
   }
 
   GlobalTraceHelpers &getGlobals() const { return globals; }
