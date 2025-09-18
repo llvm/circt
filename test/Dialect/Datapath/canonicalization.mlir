@@ -79,3 +79,39 @@ hw.module @partial_product_do_nothing(in %a : i3, in %b : i4, out sum : i4) {
   %3 = comb.add bin %2#0, %2#1 : i4
   hw.output %3 : i4
 }
+
+// CHECK-LABEL: @pos_partial_product
+hw.module @pos_partial_product(in %a : i4, in %b : i4, in %c : i4, out pp0 : i4, out pp1 : i4, out pp2 : i4, out pp3 : i4) {
+  // CHECK-NEXT: datapath.pos_partial_product %a, %b, %c : (i4, i4, i4) -> (i4, i4, i4, i4)
+  %0 = comb.add %a, %b : i4
+  %1:4 = datapath.partial_product %0, %c : (i4, i4) -> (i4, i4, i4, i4)
+  hw.output %1#0, %1#1, %1#2, %1#3 : i4, i4, i4, i4
+}
+
+// CHECK-LABEL: @pos_partial_product_reduce
+hw.module @pos_partial_product_reduce(in %a : i4, in %b : i3, in %c : i4, out pp0 : i8, out pp1 : i8, out pp2 : i8, out pp3 : i8, out pp4 : i8) {
+  // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
+  // CHECK-NEXT: %c0_i5 = hw.constant 0 : i5
+  // CHECK-NEXT: %[[AEXT:.+]] = comb.concat %c0_i4, %a : i4, i4
+  // CHECK-NEXT: %[[BEXT:.+]] = comb.concat %c0_i5, %b : i5, i3
+  // CHECK-NEXT: %[[CEXT:.+]] = comb.concat %c0_i4, %c : i4, i4
+  // CHECK-NEXT: datapath.pos_partial_product %[[AEXT]], %[[BEXT]], %[[CEXT]] : (i8, i8, i8) -> (i8, i8, i8, i8, i8)
+  %c0_i4 = hw.constant 0 : i4
+  %c0_i5 = hw.constant 0 : i5
+  %0 = comb.concat %c0_i4, %a : i4, i4
+  %1 = comb.concat %c0_i5, %b : i5, i3
+  %2 = comb.concat %c0_i4, %c : i4, i4
+  %3:8 = datapath.pos_partial_product %0, %1, %2 : (i8, i8, i8) -> (i8, i8, i8, i8, i8, i8, i8, i8)
+  hw.output %3#0, %3#1, %3#2, %3#3, %3#4 : i8, i8, i8, i8, i8
+}
+
+// CHECK-LABEL: @pos_partial_product_do_nothing
+hw.module @pos_partial_product_do_nothing(in %a : i4, in %b : i4, in %c : i4, out pp0 : i4, out pp1 : i4, out pp2 : i4, out pp3 : i4) {
+  // CHECK-NEXT: %[[ADD0:.+]] = comb.add %a, %b : i4
+  // CHECK-NEXT: %[[ADD1:.+]] = comb.add %a, %c : i4
+  // CHECK-NEXT: datapath.partial_product %[[ADD0]], %[[ADD1]] : (i4, i4) -> (i4, i4, i4, i4)
+  %0 = comb.add %a, %b : i4
+  %1 = comb.add %a, %c : i4
+  %2:4 = datapath.partial_product %0, %1 : (i4, i4) -> (i4, i4, i4, i4)
+  hw.output %2#0, %2#1, %2#2, %2#3 : i4, i4, i4, i4
+}

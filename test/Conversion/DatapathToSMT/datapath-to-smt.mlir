@@ -38,3 +38,25 @@ hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, o
   %0:3 = datapath.partial_product %a, %b : (i3, i3) -> (i3, i3, i3)
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
+
+// CHECK-LABEL: @pos_partial_product
+hw.module @pos_partial_product(in %a : i3, in %b : i3, in %c : i3, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
+  //CHECK-NEXT: %[[C:.+]] = builtin.unrealized_conversion_cast %c : i3 to !smt.bv<3>
+  //CHECK-NEXT: %[[B:.+]] = builtin.unrealized_conversion_cast %b : i3 to !smt.bv<3>
+  //CHECK-NEXT: %[[A:.+]] = builtin.unrealized_conversion_cast %a : i3 to !smt.bv<3>
+  //CHECK-NEXT: %[[ADD:.+]] = smt.bv.add %[[A]], %[[B]] : !smt.bv<3>
+  //CHECK-NEXT: %[[MUL:.+]] = smt.bv.mul %[[ADD]], %[[C]] : !smt.bv<3>
+  //CHECK-NEXT: %[[PP0:.+]] = smt.declare_fun : !smt.bv<3>
+  //CHECK-NEXT: %[[PP0_BV:.+]] = builtin.unrealized_conversion_cast %[[PP0]] : !smt.bv<3> to i3
+  //CHECK-NEXT: %[[PP1:.+]] = smt.declare_fun : !smt.bv<3>
+  //CHECK-NEXT: %[[PP1_BV:.+]] = builtin.unrealized_conversion_cast %[[PP1]] : !smt.bv<3> to i3
+  //CHECK-NEXT: %[[PP2:.+]] = smt.declare_fun : !smt.bv<3>
+  //CHECK-NEXT: %[[PP2_BV:.+]] = builtin.unrealized_conversion_cast %[[PP2]] : !smt.bv<3> to i3
+  //CHECK-NEXT: %[[ADD01:.+]] = smt.bv.add %[[PP0]], %[[PP1]] : !smt.bv<3>
+  //CHECK-NEXT: %[[ADD012:.+]] = smt.bv.add %[[ADD01]], %[[PP2]] : !smt.bv<3>
+  //CHECK-NEXT: %[[P:.+]] = smt.eq %[[MUL]], %[[ADD012]] : !smt.bv<3>
+  //CHECK-NEXT: smt.assert %[[P]]
+  //CHECK-NEXT: hw.output %[[PP0_BV]], %[[PP1_BV]], %[[PP2_BV]] : i3, i3, i3
+  %0:3 = datapath.pos_partial_product %a, %b, %c : (i3, i3, i3) -> (i3, i3, i3)
+  hw.output %0#0, %0#1, %0#2 : i3, i3, i3
+}

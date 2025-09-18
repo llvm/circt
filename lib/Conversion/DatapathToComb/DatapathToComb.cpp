@@ -186,6 +186,8 @@ private:
         a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
       }
     }
+
+    // TODO - replace with a concatenation to aid longest path analysis
     auto oneRowWidth =
         hw::ConstantOp::create(rewriter, loc, APInt(rowWidth, 1));
     // Booth encoding will select each row from {-2a, -1a, 0, 1a, 2a}
@@ -333,6 +335,117 @@ private:
     return success();
   }
 };
+
+struct DatapathPosPartialProductOpConversion
+    : OpRewritePattern<PosPartialProductOp> {
+  using OpRewritePattern<PosPartialProductOp>::OpRewritePattern;
+
+  DatapathPosPartialProductOpConversion(MLIRContext *context, bool forceBooth)
+      : OpRewritePattern<PosPartialProductOp>(context),
+        forceBooth(forceBooth){};
+
+  const bool forceBooth;
+
+  LogicalResult matchAndRewrite(PosPartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+
+    Value a = op.getAddend0();
+    Value b = op.getAddend1();
+    Value c = op.getMultiplicand();
+    unsigned width = a.getType().getIntOrFloatBitWidth();
+
+    // Skip a zero width value.
+    if (width == 0) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.getType(0), 0);
+      return success();
+    }
+
+    // TODO: Implement Booth lowering
+    return lowerAndArray(rewriter, a, b, c, op, width);
+  }
+
+private:
+  static LogicalResult lowerAndArray(PatternRewriter &rewriter, Value a,
+                                     Value b, Value c, PosPartialProductOp op,
+                                     unsigned width) {
+
+    Location loc = op.getLoc();
+    // Encode (a+b) by implementing a half-adder - then note the following fact
+    // carry[i] & save[i] == false
+    auto carry = rewriter.createOrFold<comb::AndOp>(loc, a, b);
+    auto save = rewriter.createOrFold<comb::XorOp>(loc, a, b);
+
+    SmallVector<Value> carryBits = extractBits(rewriter, carry);
+    SmallVector<Value> saveBits = extractBits(rewriter, save);
+
+    // Reduce c width based on leading zeros
+    auto rowWidth = width;
+    auto knownBitsC = comb::computeKnownBits(c);
+    if (!knownBitsC.Zero.isZero()) {
+      if (knownBitsC.Zero.countLeadingOnes() > 1) {
+        // Retain one leading zero to represent 2*{1'b0, c} = {c, 1'b0}
+        // {'0, c} -> {1'b0, c}
+        rowWidth -= knownBitsC.Zero.countLeadingOnes() - 1;
+        c = rewriter.createOrFold<comb::ExtractOp>(loc, c, 0, rowWidth);
+      }
+    }
+
+    // Compute 2*c for use in array construction
+    Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+    Value twoCWider = rewriter.create<comb::ConcatOp>(loc, ValueRange{c, zero});
+    Value twoC = rewriter.create<comb::ExtractOp>(loc, twoCWider, 0, rowWidth);
+
+    // AND Array Construction:
+    // pp[i] = ( (carry[i] * (c<<1)) | (save[i] * c) ) << i
+    SmallVector<Value> partialProducts;
+    partialProducts.reserve(width);
+
+    assert(op.getNumResults() <= width &&
+           "Cannot return more results than the operator width");
+
+    for (unsigned i = 0; i < op.getNumResults(); ++i) {
+      auto replSave =
+          rewriter.createOrFold<comb::ReplicateOp>(loc, saveBits[i], rowWidth);
+      auto replCarry =
+          rewriter.createOrFold<comb::ReplicateOp>(loc, carryBits[i], rowWidth);
+
+      auto ppRowSave = rewriter.createOrFold<comb::AndOp>(loc, replSave, c);
+      auto ppRowCarry =
+          rewriter.createOrFold<comb::AndOp>(loc, replCarry, twoC);
+      auto ppRow =
+          rewriter.createOrFold<comb::OrOp>(loc, ppRowSave, ppRowCarry);
+      auto ppAlign = ppRow;
+      if (i > 0) {
+        auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i, 0));
+        ppAlign =
+            comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
+      }
+
+      // May need to truncate shifted value
+      if (rowWidth + i > width) {
+        auto ppAlignTrunc =
+            rewriter.createOrFold<comb::ExtractOp>(loc, ppAlign, 0, width);
+        partialProducts.push_back(ppAlignTrunc);
+        continue;
+      }
+      // May need to zero pad to approriate width
+      if (rowWidth + i < width) {
+        auto padding = width - rowWidth - i;
+        Value zeroPad =
+            hw::ConstantOp::create(rewriter, loc, APInt(padding, 0));
+        partialProducts.push_back(rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{zeroPad, ppAlign})); // Pad to full width
+        continue;
+      }
+
+      partialProducts.push_back(ppAlign);
+    }
+
+    rewriter.replaceOp(op, partialProducts);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -370,8 +483,9 @@ static LogicalResult applyPatternsGreedilyWithTimingInfo(
 void ConvertDatapathToCombPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
 
-  patterns.add<DatapathPartialProductOpConversion>(patterns.getContext(),
-                                                   forceBooth);
+  patterns.add<DatapathPartialProductOpConversion,
+               DatapathPosPartialProductOpConversion>(patterns.getContext(),
+                                                      forceBooth);
   synth::IncrementalLongestPathAnalysis *analysis = nullptr;
   if (timingAware)
     analysis = &getAnalysis<synth::IncrementalLongestPathAnalysis>();
