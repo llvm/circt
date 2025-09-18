@@ -84,10 +84,7 @@ struct VcdTraceLibrary {
     library.step = &VcdTraceLibrary::stepCb;
   }
 
-  ~VcdTraceLibrary() {
-    for (auto *instance : liveInstances)
-      delete instance;
-  }
+  ~VcdTraceLibrary() { assert(liveInstances.empty()); }
 
   void *initModel(const ArcTraceModelInfo *modelInfo) {
     auto *newTracer = new VcdModelTracer();
@@ -95,6 +92,7 @@ struct VcdTraceLibrary {
       liveInstances.insert(newTracer);
       return static_cast<void *>(newTracer);
     }
+    delete newTracer;
     return nullptr;
   }
 
@@ -105,6 +103,7 @@ struct VcdTraceLibrary {
     assert(liveInstances.count(tracer) != 0);
     tracer->close(state);
     liveInstances.erase(tracer);
+    delete tracer;
   }
 
   void *swapBuffer(void *oldBuffer, uint64_t oldBufferSize, void *user) {
