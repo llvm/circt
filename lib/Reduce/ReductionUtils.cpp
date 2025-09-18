@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Reduce/ReductionUtils.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Reduce/Reduction.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/SmallSet.h"
@@ -39,15 +40,37 @@ InnerSymbolUses::InnerSymbolUses(Operation *root) {
   root->walk([&](Operation *op) {
     for (auto namedAttr : op->getAttrs()) {
       namedAttr.getValue().walk([&](Attribute attr) {
-        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr))
+        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr)) {
           uses.insert({innerRef.getModule(), innerRef.getName()});
+          moduleUses.insert(innerRef.getModule());
+        }
       });
     }
   });
 }
 
+bool InnerSymbolUses::hasUses(Operation *op) const {
+  if (auto mod = SymbolTable::getSymbolName(op))
+    return hasUses(mod);
+
+  if (auto sym = hw::InnerSymbolTable::getInnerSymbol(op)) {
+    StringAttr mod;
+    auto *parent = op->getParentOp();
+    while (parent && !(mod = SymbolTable::getSymbolName(parent)))
+      parent = parent->getParentOp();
+    if (mod)
+      return hasUses(mod, sym);
+  }
+
+  return false;
+}
+
 bool InnerSymbolUses::hasUses(hw::InnerRefAttr inner) const {
   return uses.contains({inner.getModule(), inner.getName()});
+}
+
+bool InnerSymbolUses::hasUses(StringAttr mod) const {
+  return moduleUses.contains(mod);
 }
 
 bool InnerSymbolUses::hasUses(StringAttr mod, StringAttr sym) const {

@@ -194,31 +194,28 @@ struct NLARemover {
 namespace {
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
-struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
+struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     nlaRemover.clear();
     symbols.clear();
     moduleSizes.clear();
-    nlaTable = std::make_unique<firrtl::NLATable>(op);
+    innerSymUses = reduce::InnerSymbolUses(op);
   }
-  void afterReduction(mlir::ModuleOp op) override {
-    nlaRemover.remove(op);
-    nlaTable.reset();
-  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
-  uint64_t match(firrtl::FModuleOp module) override {
-    if (!nlaTable->lookup(module).empty())
+  uint64_t match(FModuleOp module) override {
+    if (innerSymUses.hasUses(module))
       return 0;
     return moduleSizes.getModuleSize(module, symbols);
   }
 
-  LogicalResult rewrite(firrtl::FModuleOp module) override {
+  LogicalResult rewrite(FModuleOp module) override {
     // Hack up a list of known layers.
-    firrtl::LayerSet layers;
+    LayerSet layers;
     layers.insert_range(module.getLayersAttr().getAsRange<SymbolRefAttr>());
     for (auto attr : module.getPortTypes()) {
       auto type = cast<TypeAttr>(attr).getValue();
-      if (auto refType = firrtl::type_dyn_cast<firrtl::RefType>(type))
+      if (auto refType = type_dyn_cast<RefType>(type))
         if (auto layer = refType.getLayer())
           layers.insert(layer);
     }
@@ -229,13 +226,14 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 
     nlaRemover.markNLAsInOperation(module);
     OpBuilder builder(module);
-    firrtl::FExtModuleOp::create(
+    auto extmodule = FExtModuleOp::create(
         builder, module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
         module.getConventionAttr(), module.getPorts(),
         builder.getArrayAttr(layersArray), StringRef(),
         module.getAnnotationsAttr());
-
+    SymbolTable::setSymbolVisibility(extmodule,
+                                     SymbolTable::getSymbolVisibility(module));
     module->erase();
     return success();
   }
@@ -244,7 +242,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
-  std::unique_ptr<firrtl::NLATable> nlaTable;
+  reduce::InnerSymbolUses innerSymUses;
   ModuleSizeCache moduleSizes;
 };
 
