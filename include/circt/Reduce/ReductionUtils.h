@@ -34,11 +34,22 @@ struct InnerSymbolUses {
   InnerSymbolUses &operator=(const InnerSymbolUses &) = default;
   InnerSymbolUses &operator=(InnerSymbolUses &&) = default;
 
+  /// Check whether an op is involved in an `InnerRefAttr`. Considers both the
+  /// `sym_name` and the `inner_sym` attributes on the given op.
+  bool hasUses(Operation *op) const;
+  /// Check if the given `InnerRefAttr` is used.
   bool hasUses(hw::InnerRefAttr inner) const;
+  /// Check if the given module name is involved in an `InnerRefAttr`.
+  bool hasUses(StringAttr mod) const;
+  /// Check if the given module and inner symbol name is involved in an
+  /// `InnerRefAttr`.
   bool hasUses(StringAttr mod, StringAttr sym) const;
 
 private:
+  /// Module and inner symbol name pairs used in `InnerRefAttr`s.
   DenseSet<std::pair<StringAttr, StringAttr>> uses;
+  /// Module names used in `InnerRefAttr`s.
+  DenseSet<StringAttr> moduleUses;
 };
 
 } // namespace reduce
