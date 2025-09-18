@@ -3196,3 +3196,20 @@ function void TimeFormat();
   // CHECK-NEXT: moore.builtin.display [[CONCAT3]]
   $display("%4t", $time());
 endfunction
+
+// CHECK-LABEL: func.func private @StructCreateConversion(
+// CHECK-SAME: [[ARRAY:%.+]]: !moore.array<8 x l8>
+// CHECK-SAME: [[IMM:%.+]]: !moore.l64
+function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immediate);
+
+   typedef struct packed {
+      logic [63:0] structField;
+   } testStruct;
+
+    // CHECK: [[TS:%.+]] = moore.struct_create [[IMM]] : !moore.l64 -> struct<{structField: l64}>
+   testStruct ts = '{structField: immediate};
+    // CHECK: [[CAST:%.+]] = moore.packed_to_sbv [[ARRAY]] : array<8 x l8>
+    // CHECK-NEXT: [[TS2:%.+]] = moore.struct_create [[CAST]] : !moore.l64 -> struct<{structField: l64}>
+   testStruct ts2 = '{structField: array};
+
+endfunction
