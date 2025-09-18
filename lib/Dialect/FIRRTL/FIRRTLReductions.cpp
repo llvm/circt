@@ -611,18 +611,20 @@ struct FIRRTLConstantifier : public Reduction {
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
   uint64_t match(Operation *op) override {
-    if (!isa<firrtl::ConnectOp, firrtl::MatchingConnectOp>(op))
+    if (!isa<FConnectLike>(op))
       return 0;
-    auto type = dyn_cast<firrtl::FIRRTLBaseType>(op->getOperand(1).getType());
-    return type && type.isPassive() &&
-           !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
+    if (auto *srcOp = op->getOperand(1).getDefiningOp())
+      if (srcOp->hasTrait<OpTrait::ConstantLike>() ||
+          isa<InvalidValueOp>(srcOp))
+        return 0;
+    auto type = dyn_cast<FIRRTLBaseType>(op->getOperand(1).getType());
+    return type && type.isPassive();
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     auto rhs = op->getOperand(1);
     OpBuilder builder(op);
-    auto invOp =
-        firrtl::InvalidValueOp::create(builder, rhs.getLoc(), rhs.getType());
+    auto invOp = InvalidValueOp::create(builder, rhs.getLoc(), rhs.getType());
     auto *rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
     if (rhsOp)
