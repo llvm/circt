@@ -34,22 +34,35 @@ struct InnerSymbolUses {
   InnerSymbolUses &operator=(const InnerSymbolUses &) = default;
   InnerSymbolUses &operator=(InnerSymbolUses &&) = default;
 
-  /// Check whether an op is involved in an `InnerRefAttr`. Considers both the
+  /// Check whether an op is targeted by an inner ref. Considers both the
   /// `sym_name` and the `inner_sym` attributes on the given op.
-  bool hasUses(Operation *op) const;
-  /// Check if the given `InnerRefAttr` is used.
-  bool hasUses(hw::InnerRefAttr inner) const;
-  /// Check if the given module name is involved in an `InnerRefAttr`.
-  bool hasUses(StringAttr mod) const;
-  /// Check if the given module and inner symbol name is involved in an
-  /// `InnerRefAttr`.
-  bool hasUses(StringAttr mod, StringAttr sym) const;
+  bool hasInnerRef(Operation *op) const;
+  /// Check if the given inner ref is used.
+  bool hasInnerRef(hw::InnerRefAttr innerRef) const;
+  /// Check if the given symbol name is targeted by an inner ref.
+  bool hasInnerRef(StringAttr symbol) const;
+  /// Check if the given symbol and inner symbol name pair is targeted by an
+  /// inner ref.
+  bool hasInnerRef(StringAttr symbol, StringAttr innerSym) const;
+
+  /// Check whether the given symbol is targeted by a symbol ref.
+  bool hasSymbolRef(Operation *op) const;
+  /// Check whether the given symbol name is targeted by a symbol ref.
+  bool hasSymbolRef(StringAttr symbol) const;
+
+  /// Check whether the given symbol is targeted by a symbol ref or inner ref.
+  bool hasRef(Operation *op) const;
+  /// Check whether the given symbol name is targeted by a symbol ref or inner
+  /// ref.
+  bool hasRef(StringAttr symbol) const;
 
 private:
-  /// Module and inner symbol name pairs used in `InnerRefAttr`s.
-  DenseSet<std::pair<StringAttr, StringAttr>> uses;
-  /// Module names used in `InnerRefAttr`s.
-  DenseSet<StringAttr> moduleUses;
+  /// Symbol and inner symbol name pairs used in inner refs.
+  DenseSet<std::pair<StringAttr, StringAttr>> innerRefs;
+  /// Symbol names used in inner refs.
+  DenseSet<StringAttr> innerRefModules;
+  /// Symbol names used in symbol or inner refs.
+  DenseSet<StringAttr> symbolRefs;
 };
 
 } // namespace reduce

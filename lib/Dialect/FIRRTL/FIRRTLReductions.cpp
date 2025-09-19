@@ -204,7 +204,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   uint64_t match(FModuleOp module) override {
-    if (innerSymUses.hasUses(module))
+    if (innerSymUses.hasInnerRef(module))
       return 0;
     return moduleSizes.getModuleSize(module, symbols);
   }
@@ -956,11 +956,9 @@ struct NodeSymbolRemover : public Reduction {
     if (!sym || sym.empty())
       return 0;
 
-    // Ignore ops whose inner symbol participates in an NLA.
-    if (auto mod = op->getParentOfType<FModuleLike>())
-      if (innerSymUses.hasUses(mod.getModuleNameAttr(), sym.getSymName()))
-        return 0;
-
+    // Only match ops that have no references to their inner symbol.
+    if (innerSymUses.hasInnerRef(op))
+      return 0;
     return 1;
   }
 

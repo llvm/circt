@@ -36,43 +36,73 @@ void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
 // InnerSymbolUses
 //===----------------------------------------------------------------------===//
 
+static StringAttr getSymbolName(Operation *op) {
+  return op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+}
+
 InnerSymbolUses::InnerSymbolUses(Operation *root) {
   root->walk([&](Operation *op) {
-    for (auto namedAttr : op->getAttrs()) {
-      namedAttr.getValue().walk([&](Attribute attr) {
-        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr)) {
-          uses.insert({innerRef.getModule(), innerRef.getName()});
-          moduleUses.insert(innerRef.getModule());
-        }
-      });
-    }
+    auto collect = [&](Attribute attr) {
+      if (auto symbolRef = dyn_cast<FlatSymbolRefAttr>(attr))
+        symbolRefs.insert(symbolRef.getAttr());
+
+      if (auto innerRef = dyn_cast<hw::InnerRefAttr>(attr)) {
+        innerRefs.insert({innerRef.getModule(), innerRef.getName()});
+        innerRefModules.insert(innerRef.getModule());
+      }
+    };
+    for (auto namedAttr : op->getAttrs())
+      namedAttr.getValue().walk(collect);
+    for (auto result : op->getResults())
+      result.getType().walk(collect);
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        for (auto arg : block.getArguments())
+          arg.getType().walk(collect);
   });
 }
 
-bool InnerSymbolUses::hasUses(Operation *op) const {
-  if (auto mod = SymbolTable::getSymbolName(op))
-    return hasUses(mod);
+bool InnerSymbolUses::hasInnerRef(Operation *op) const {
+  if (auto symbol = getSymbolName(op))
+    return hasInnerRef(symbol);
 
-  if (auto sym = hw::InnerSymbolTable::getInnerSymbol(op)) {
-    StringAttr mod;
+  if (auto innerSym = hw::InnerSymbolTable::getInnerSymbol(op)) {
+    StringAttr symbol;
     auto *parent = op->getParentOp();
-    while (parent && !(mod = SymbolTable::getSymbolName(parent)))
+    while (parent && !(symbol = getSymbolName(parent)))
       parent = parent->getParentOp();
-    if (mod)
-      return hasUses(mod, sym);
+    if (symbol)
+      return hasInnerRef(symbol, innerSym);
   }
 
   return false;
 }
 
-bool InnerSymbolUses::hasUses(hw::InnerRefAttr inner) const {
-  return uses.contains({inner.getModule(), inner.getName()});
+bool InnerSymbolUses::hasInnerRef(hw::InnerRefAttr innerRef) const {
+  return innerRefs.contains({innerRef.getModule(), innerRef.getName()});
 }
 
-bool InnerSymbolUses::hasUses(StringAttr mod) const {
-  return moduleUses.contains(mod);
+bool InnerSymbolUses::hasInnerRef(StringAttr symbol) const {
+  return innerRefModules.contains(symbol);
 }
 
-bool InnerSymbolUses::hasUses(StringAttr mod, StringAttr sym) const {
-  return uses.contains({mod, sym});
+bool InnerSymbolUses::hasInnerRef(StringAttr symbol,
+                                  StringAttr innerSym) const {
+  return innerRefs.contains({symbol, innerSym});
+}
+
+bool InnerSymbolUses::hasSymbolRef(Operation *op) const {
+  return symbolRefs.contains(getSymbolName(op));
+}
+
+bool InnerSymbolUses::hasSymbolRef(StringAttr symbol) const {
+  return symbolRefs.contains(symbol);
+}
+
+bool InnerSymbolUses::hasRef(Operation *op) const {
+  return hasInnerRef(op) || hasSymbolRef(op);
+}
+
+bool InnerSymbolUses::hasRef(StringAttr symbol) const {
+  return hasInnerRef(symbol) || hasSymbolRef(symbol);
 }
