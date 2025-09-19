@@ -331,7 +331,7 @@ void VcdModelTracer::close(ArcTracerState *state) {
   if (outFile.is_open())
     outFile.close();
   if (state->buffer != nullptr) {
-    delete static_cast<uint64_t *>(state->buffer);
+    delete[] static_cast<uint64_t *>(state->buffer);
     state->buffer = nullptr;
     state->capacity = 0;
   }
