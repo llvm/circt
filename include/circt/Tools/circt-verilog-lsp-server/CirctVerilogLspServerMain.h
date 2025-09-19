@@ -15,6 +15,7 @@
 #define CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_CIRCTVERILOGLSPSERVERMAIN_H
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/LSP/Transport.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -43,7 +44,7 @@ struct VerilogServerOptions {
 /// Implementation for tools like `circt-verilog-lsp-server`.
 llvm::LogicalResult
 CirctVerilogLspServerMain(const VerilogServerOptions &options,
-                          mlir::lsp::JSONTransport &transport);
+                          llvm::lsp::JSONTransport &transport);
 
 } // namespace lsp
 } // namespace circt
