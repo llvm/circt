@@ -249,9 +249,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
       // the pure module verifier.
       auto existingPort = inputPortNames.find(port.getNameAttr());
       if (existingPort != inputPortNames.end()) {
-        rewriter.replaceAllUsesWith(port.getResult(),
-                                    existingPort->getSecond().getResult());
-        rewriter.eraseOp(port);
+        rewriter.replaceOp(port, existingPort->getSecond().getResult());
         continue;
       }
       // Normal port construction.
@@ -293,8 +291,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
     rewriter.modifyOpInPlace(hwMod, [&]() {
       newArg = body->addArgument(input.getResult().getType(), input.getLoc());
     });
-    rewriter.replaceAllUsesWith(input.getResult(), newArg);
-    rewriter.eraseOp(input);
+    rewriter.replaceOp(input, newArg);
   }
 
   // Assemble the output values.
