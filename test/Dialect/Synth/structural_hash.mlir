@@ -29,9 +29,9 @@ hw.module @test_structural_hash(in %a: i2, in %b: i2, in %c: i2, out out1: i2,
   hw.output %0, %1, %2, %3, %4, %5, %9 : i2, i2, i2, i2, i2, i2, i2
 }
 
-// CHECK: hw.module @topo_sort
 hw.module.extern @cycle(in %b: i2, out out1: i2)
-hw.module @topo_sort( in %a: i2, in %b: i2, out out1: i2, out out2: i2, out out3: i2) {
+// CHECK-LABEL: hw.module @topo_sort
+hw.module @topo_sort(in %a: i2, in %b: i2, out out1: i2, out out2: i2, out out3: i2) {
   // CHECK:      %[[VAL0:.+]] = hw.instance "cycle" @cycle(b: %b: i2) -> (out1: i2)
   // CHECK-NEXT: %[[AND_INV0:.+]] = synth.aig.and_inv not %a, %[[VAL0]]
   // CHECK-NEXT: %[[AND_INV1:.+]] = synth.aig.and_inv %[[VAL0]], not %[[AND_INV0]]
@@ -41,4 +41,10 @@ hw.module @topo_sort( in %a: i2, in %b: i2, out out1: i2, out out2: i2, out out3
   %0 = synth.aig.and_inv %c, not %a : i2
   %c = hw.instance "cycle" @cycle(b: %b: i2) -> (out1: i2)
   hw.output %0, %1, %2 : i2, i2, i2
+}
+
+// CHECK-LABEL: hw.module @port_removal
+hw.module @port_removal(in %a: i2) {
+  // CHECK-NEXT: hw.output
+  %0 = synth.aig.and_inv not %a : i2
 }

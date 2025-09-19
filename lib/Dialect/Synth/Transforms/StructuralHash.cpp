@@ -18,12 +18,12 @@
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/Naming.h"
-#include "circt/Support/UnusedOpPruner.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/PointerIntPair.h"
@@ -115,9 +115,6 @@ private:
   DenseMap<Value, uint64_t> valueNumber;
   uint64_t constantCounter = 0;
 
-  /// Pruner for managing unused operations that may be erased later.
-  circt::UnusedOpPruner pruner;
-
   /// Hash table mapping structural keys to canonical operations for CSE.
   DenseMap<StructuralHashKey, Operation *> hashTable;
 
@@ -164,7 +161,6 @@ void StructuralHashDriver::visitUnaryOp(Operation *op, bool inverted) {
   } else {
     // Not found, insert into the map
     inversion[op->getResult(0)] = operand;
-    pruner.eraseLaterIfUnused(op);
   }
 }
 
@@ -272,7 +268,9 @@ llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
         .Default([&](Operation *op) {});
   }
 
-  pruner.eraseNow();
+  // Run DCE to remove dangling ops.
+  mlir::PatternRewriter rewriter(moduleOp.getContext());
+  (void)mlir::runRegionDCE(rewriter, moduleOp->getRegions());
   return mlir::success();
 }
 
