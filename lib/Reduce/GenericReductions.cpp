@@ -24,16 +24,19 @@ namespace {
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
-  void beforeReduction(mlir::ModuleOp module) override {
-    userMap = std::make_unique<SymbolUserMap>(table, module);
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbolUses = reduce::InnerSymbolUses(op);
   }
   uint64_t match(Operation *op) override {
     if (op->hasTrait<OpTrait::IsTerminator>())
-      return false;
-
-    return !isa<ModuleOp>(op) &&
-           (op->getNumResults() == 0 || op->use_empty()) &&
-           userMap->useEmpty(op);
+      return 0;
+    if (isa<ModuleOp>(op))
+      return 0;
+    if (op->getNumResults() > 0 && !op->use_empty())
+      return 0;
+    if (symbolUses.hasRef(op))
+      return 0;
+    return 1;
   }
   LogicalResult rewrite(Operation *op) override {
     reduce::pruneUnusedOps(op, *this);
@@ -41,19 +44,20 @@ struct OperationPruner : public Reduction {
   }
   std::string getName() const override { return "operation-pruner"; }
 
-  SymbolTableCollection table;
-  std::unique_ptr<SymbolUserMap> userMap;
+  reduce::InnerSymbolUses symbolUses;
 };
 
 /// Remove unused symbol ops.
 struct UnusedSymbolPruner : public Reduction {
   void beforeReduction(mlir::ModuleOp op) override {
-    symbolTables = std::make_unique<SymbolTableCollection>();
-    symbolUsers = std::make_unique<SymbolUserMap>(*symbolTables, op);
+    symbolUses = reduce::InnerSymbolUses(op);
   }
 
   uint64_t match(Operation *op) override {
-    return isa<SymbolOpInterface>(op) && symbolUsers->useEmpty(op);
+    if (op->hasAttr(SymbolTable::getSymbolAttrName()))
+      if (!symbolUses.hasRef(op))
+        return 1;
+    return 0;
   }
 
   LogicalResult rewrite(Operation *op) override {
@@ -63,8 +67,7 @@ struct UnusedSymbolPruner : public Reduction {
 
   std::string getName() const override { return "unused-symbol-pruner"; }
 
-  std::unique_ptr<SymbolTableCollection> symbolTables;
-  std::unique_ptr<SymbolUserMap> symbolUsers;
+  reduce::InnerSymbolUses symbolUses;
 };
 
 /// A reduction pattern that changes symbol visibility from "public" to
