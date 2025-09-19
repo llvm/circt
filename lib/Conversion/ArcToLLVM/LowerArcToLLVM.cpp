@@ -405,6 +405,8 @@ struct GlobalTraceHelpers {
   LLVM::GlobalOp libraryStruct;
   llvm::SmallDenseMap<unsigned, LLVM::LLVMFuncOp> bufferAppendFns;
 
+  const bool noInlineAppendFns = true;
+
   static unsigned getCapacityForBitWidth(unsigned bitwidth) {
     assert(bitwidth != 0);
     return (bitwidth % 64 == 0) ? bitwidth / 64 : bitwidth / 64 + 1;
@@ -440,6 +442,7 @@ struct GlobalTraceHelpers {
         auto appendFn = LLVM::LLVMFuncOp::create(builder, fnName, fnType,
                                                  LLVM::Linkage::Private);
         bufferAppendFns.insert({numWords, appendFn});
+        appendFn.setNoInline(noInlineAppendFns);
 
         auto *hasTracerCheckBlock = appendFn.addEntryBlock(builder);
         auto *capcaityCheckBlock = &appendFn.getRegion().emplaceBlock();
