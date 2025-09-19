@@ -71,8 +71,7 @@ public:
 
     // Replace the kanagawa.sblock return values with the values that were
     // defined (returned from) within the sblock body, and erase the return op.
-    for (auto [res, val] : llvm::zip(op.getResults(), ret.getRetValues()))
-      rewriter.replaceAllUsesWith(res, val);
+    rewriter.replaceOp(op, ret.getRetValues());
 
     if (hasAttributes) {
       // Close the inline block
@@ -81,7 +80,6 @@ public:
     }
 
     rewriter.eraseOp(ret);
-    rewriter.eraseOp(op);
     return success();
   }
 };
