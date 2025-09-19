@@ -10,6 +10,7 @@ set(LIBS
   ${mlir_dialect_libs}
 
   CIRCTArcReductions
+  CIRCTEmitReductions
   CIRCTHWReductions
   CIRCTFIRRTLReductions
   CIRCTReduceLib

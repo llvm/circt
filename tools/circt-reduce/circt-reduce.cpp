@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Arc/ArcReductions.h"
+#include "circt/Dialect/Emit/EmitReductions.h"
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWReductions.h"
@@ -518,6 +519,7 @@ int main(int argc, char **argv) {
   registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
                   LLVM::LLVMDialect>();
   arc::registerReducePatternDialectInterface(registry);
+  emit::registerReducePatternDialectInterface(registry);
   firrtl::registerReducePatternDialectInterface(registry);
   hw::registerReducePatternDialectInterface(registry);
 
