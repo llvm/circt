@@ -9,7 +9,9 @@
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/syntax/AllSyntax.h"
 #include "llvm/ADT/ScopeExit.h"
+#include <slang/ast/SFormat.h>
 
 using namespace mlir;
 using namespace circt;
@@ -138,8 +140,11 @@ struct StmtVisitor {
         mlir::emitWarning(loc, "unreachable code");
         break;
       }
-      if (failed(context.convertStatement(*stmt)))
+      if (failed(context.convertStatement(*stmt))) {
+        context.dbgs(stmt->syntax->sourceRange().start())
+            << "Failed to convert statement " << stmt->syntax->toString();
         return failure();
+      }
     }
     return success();
   }
@@ -157,17 +162,26 @@ struct StmtVisitor {
               std::get_if<slang::ast::CallExpression::SystemCallInfo>(
                   &call->subroutine)) {
         auto handled = visitSystemCall(stmt, *call, *info);
-        if (failed(handled))
+        if (failed(handled)) {
+          context.dbgs(stmt.sourceRange.start())
+              << "Failed to convert system call " << stmt.syntax->toString();
           return failure();
+        }
         if (handled == true)
           return success();
       }
+      context.dbgs(stmt.sourceRange.start())
+          << "Assuming statement " << stmt.syntax->toString()
+          << " is not a system task";
     }
 
     auto value = context.convertRvalueExpression(stmt.expr);
-    if (!value)
+    if (!value) {
+      context.dbgs(stmt.sourceRange.start())
+          << "Failed to convert expression statement as RValue "
+          << stmt.expr.syntax->toString();
       return failure();
-
+    }
     // Expressions like calls to void functions return a dummy value that has no
     // uses. If the returned value is trivially dead, remove it.
     if (auto *defOp = value.getDefiningOp())

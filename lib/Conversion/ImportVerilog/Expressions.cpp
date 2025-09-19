@@ -994,8 +994,10 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     case (1):
       value = context.convertRvalueExpression(*args[0]);
-      if (!value)
+      if (!value){
+        dbgs(loc) << "Failed to convert RValue Expression of call " << subroutine.name;
         return {};
+      }
       result = context.convertSystemCallArity1(subroutine, loc, value);
       break;
 

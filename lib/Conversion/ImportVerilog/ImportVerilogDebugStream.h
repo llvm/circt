@@ -21,11 +21,11 @@
 
 // If includer defined DEBUG_TYPE, use that; else fall back to our default.
 #ifndef IMPORTVERILOG_DEBUG_TYPE
-  #ifdef DEBUG_TYPE
-    #define IMPORTVERILOG_DEBUG_TYPE DEBUG_TYPE
-  #else
-    #define IMPORTVERILOG_DEBUG_TYPE "import-verilog"
-  #endif
+#ifdef DEBUG_TYPE
+#define IMPORTVERILOG_DEBUG_TYPE DEBUG_TYPE
+#else
+#define IMPORTVERILOG_DEBUG_TYPE "import-verilog"
+#endif
 #endif
 
 struct ImportVerilogDebugStream {
@@ -40,7 +40,7 @@ struct ImportVerilogDebugStream {
 
   inline ~ImportVerilogDebugStream() {
     DEBUG_WITH_TYPE(IMPORTVERILOG_DEBUG_TYPE, {
-      if(compLoc)
+      if (compLoc)
         llvm::dbgs() << compLoc->file_name() << ":" << compLoc->line() << " ("
                      << compLoc->function_name() << ") ";
       if (srcLoc) {
@@ -86,8 +86,8 @@ operator<<(ImportVerilogDebugStream &&s,
 }
 
 /// Helper function to set up a debug stream with reasonable defaults
-ImportVerilogDebugStream dbgs(
-                              std::optional<mlir::Location> sourceLocation = {},
-    std::optional<std::source_location> cl = std::source_location::current());
+ImportVerilogDebugStream
+dbgs(std::optional<mlir::Location> sourceLocation = {},
+     std::optional<std::source_location> cl = std::source_location::current());
 
 #endif // IMPORT_VERILOG_DEBUG_H

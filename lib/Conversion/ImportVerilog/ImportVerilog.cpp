@@ -23,7 +23,6 @@
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
 #include "slang/util/VersionInfo.h"
-#include "ImportVerilogDebugStream.h"
 
 using namespace mlir;
 using namespace circt;
@@ -263,8 +262,10 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   auto compilation = driver.createCompilation();
   for (auto &diag : compilation->getAllDiagnostics())
     driver.diagEngine.issue(diag);
-  if (!parseSuccess || driver.diagEngine.getNumErrors() > 0)
+  if (!parseSuccess || driver.diagEngine.getNumErrors() > 0) {
+    dbgs() << "Failed to parse and elaborate inputs!";
     return failure();
+  }
   compileTimer.stop();
 
   // If we were only supposed to lint the input, return here. This leaves the
@@ -279,8 +280,10 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
                     debug::DebugDialect>();
   auto conversionTimer = ts.nest("Verilog to dialect mapping");
   Context context(options, *compilation, module, driver.sourceManager);
-  if (failed(context.convertCompilation()))
+  if (failed(context.convertCompilation())) {
+    dbgs() << "Failed to convert Slang compilation!";
     return failure();
+  }
   conversionTimer.stop();
 
   // Run the verifier on the constructed module to ensure it is clean.
