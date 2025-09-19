@@ -10,6 +10,7 @@
 #ifndef CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 #define CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 
+#include "ImportVerilogDebugStream.h"
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -93,6 +94,12 @@ struct Context {
   Location convertLocation(slang::SourceLocation loc);
   /// Convert a slang `SourceRange` into an MLIR `Location`.
   Location convertLocation(slang::SourceRange range);
+
+  /// A convenient debug stream wrapper which attaches information about input source location and compiler source location; also accepts slang::SourceLocation and tries to unwrap it.
+  ImportVerilogDebugStream dbgs(
+      std::optional<std::variant<mlir::Location, slang::SourceLocation>>
+      sourceLocation = {},
+      std::optional<std::source_location> cl = std::source_location::current());
 
   /// Convert a slang type into an MLIR type. Returns null on failure. Uses the
   /// provided location for error reporting, or tries to guess one from the

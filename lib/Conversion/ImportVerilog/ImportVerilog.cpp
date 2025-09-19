@@ -23,6 +23,7 @@
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
 #include "slang/util/VersionInfo.h"
+#include "ImportVerilogDebugStream.h"
 
 using namespace mlir;
 using namespace circt;
