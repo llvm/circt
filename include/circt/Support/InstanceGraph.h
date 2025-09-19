@@ -1,4 +1,4 @@
-//===- InstanceGraph.h - Instance graph -------------------------*- C++ -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -47,6 +47,10 @@ struct AddressIterator
 };
 } // namespace detail
 
+//===----------------------------------------------------------------------===//
+// Instance Node
+//===----------------------------------------------------------------------===//
+
 class InstanceGraphNode;
 
 /// This is an edge in the InstanceGraph. This tracks a specific instantiation
@@ -93,6 +97,10 @@ private:
   InstanceRecord *nextUse = nullptr;
   InstanceRecord *prevUse = nullptr;
 };
+
+//===----------------------------------------------------------------------===//
+// Module Node
+//===----------------------------------------------------------------------===//
 
 /// This is a Node in the InstanceGraph.  Each node represents a Module in a
 /// Circuit.  Both external modules and regular modules can be represented by
@@ -182,6 +190,10 @@ private:
   // Provide access to the constructor.
   friend class InstanceGraph;
 };
+
+//===----------------------------------------------------------------------===//
+// Instance Graph
+//===----------------------------------------------------------------------===//
 
 /// This graph tracks modules and where they are instantiated. This is intended
 /// to be used as a cached analysis on circuits.  This class can be used
@@ -295,11 +307,13 @@ protected:
   llvm::SmallVector<InstanceGraphNode *> inferredTopLevelNodes;
 };
 
+//===----------------------------------------------------------------------===//
+// Instance Paths
+//===----------------------------------------------------------------------===//
+
 struct InstancePathCache;
 
-/**
- * An instance path composed of a series of instances.
- */
+/// An instance path composed of a series of instances.
 class InstancePath final {
 public:
   InstancePath() = default;
@@ -391,7 +405,11 @@ private:
 } // namespace igraph
 } // namespace circt
 
-// Graph traits for modules.
+//===----------------------------------------------------------------------===//
+// Graph Traits
+//===----------------------------------------------------------------------===//
+
+/// Graph traits for modules.
 template <>
 struct llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
   using NodeType = circt::igraph::InstanceGraphNode;
@@ -414,7 +432,7 @@ struct llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
   }
 };
 
-// Provide graph traits for iterating the modules in inverse order.
+/// Graph traits for iterating modules in inverse order.
 template <>
 struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
   using NodeType = circt::igraph::InstanceGraphNode;
@@ -439,7 +457,7 @@ struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
   }
 };
 
-// Graph traits for the common instance graph.
+/// Graph traits for the instance graph.
 template <>
 struct llvm::GraphTraits<circt::igraph::InstanceGraph *>
     : public llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
@@ -481,7 +499,11 @@ struct llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>
   }
 };
 
-// DenseMap traits for InstancePath.
+//===----------------------------------------------------------------------===//
+// Dense Map Traits
+//===----------------------------------------------------------------------===//
+
+/// DenseMap traits for InstancePath.
 template <>
 struct llvm::DenseMapInfo<circt::igraph::InstancePath> {
   using ArrayRefInfo =
