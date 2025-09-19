@@ -12,6 +12,11 @@
 #include <vector>
 
 // #define ARC_JIT_TRACE_DEBUG_PRINT
+// #define ARC_JIT_VCD_TIMING
+
+#ifdef ARC_JIT_VCD_TIMING
+#include <chrono>
+#endif
 
 namespace arcilator {
 namespace vcd {
@@ -35,6 +40,84 @@ public:
 private:
   std::array<char, 8> raw;
 };
+
+#ifdef ARC_JIT_VCD_TIMING
+
+struct VCDTracerTiming {
+  struct TimeStamp {
+    TimeStamp() { valid = false; }
+    TimeStamp(const std::chrono::steady_clock::time_point &tp) : tp(tp) {
+      valid = true;
+    }
+    std::chrono::steady_clock::time_point tp;
+    bool valid;
+  };
+
+  using Duration = std::chrono::nanoseconds;
+
+  static TimeStamp getNow() {
+    return TimeStamp(std::chrono::high_resolution_clock::now());
+  }
+
+  static auto diffNs(const TimeStamp &start, const TimeStamp &end) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(end.tp -
+                                                                start.tp)
+        .count();
+  }
+
+  TimeStamp modelCreation;
+  TimeStamp modelDeletion;
+
+  TimeStamp vcdInitStart;
+  TimeStamp vcdInitEnd;
+  TimeStamp prevStepStart;
+  Duration totalSimTime;
+  TimeStamp prevVcdProcessStart;
+  Duration totalVcdTime;
+
+  int64_t step = -1;
+  uint64_t evenChanges;
+  uint64_t oddChanges;
+  std::array<TimeStamp, 8> startStepStamps;
+  std::array<TimeStamp, 8> endStepStamps;
+
+  void dump();
+
+  void stepStart() {
+    auto now = getNow();
+    ++step;
+    if (step >= 0 && step < static_cast<int64_t>(startStepStamps.size()))
+      startStepStamps[step] = now;
+    prevStepStart = now;
+  }
+
+  void stepEnd() {
+    auto now = getNow();
+    if (step >= 0 && step < static_cast<int64_t>(endStepStamps.size()))
+      endStepStamps[step] = now;
+    if (prevStepStart.valid) {
+      totalSimTime += (now.tp - prevStepStart.tp);
+    }
+  }
+
+  void vcdProcessStart() { prevVcdProcessStart = getNow(); }
+
+  void vcdProcessEnd() {
+    assert(prevStepStart.valid);
+    auto diff = getNow().tp - prevVcdProcessStart.tp;
+    totalVcdTime += diff;
+  }
+
+  void signalsChanged(uint64_t numChanges) {
+    if (step < 6)
+      return;
+    if (step % 2)
+      evenChanges += numChanges;
+    else
+      oddChanges += numChanges;
+  }
+};
+#endif
 
 struct VCDSignalTableEntry {
   VCDSignalTableEntry(uint64_t num, uint64_t stateOffset,
@@ -68,6 +151,10 @@ struct VcdModelTracer {
   std::vector<VCDSignalTableEntry> signalTable;
   std::ofstream outFile;
   int64_t timestep;
+
+#ifdef ARC_JIT_VCD_TIMING
+  VCDTracerTiming timing;
+#endif
 };
 
 struct VcdTraceLibrary {
@@ -287,6 +374,9 @@ void VCDSignalTableEntry::dumpSignalFromState(std::basic_ostream<char> &os,
 
 bool VcdModelTracer::init(const ArcTraceModelInfo *modelInfo) {
   assert(modelInfo->numTraceTaps > 0);
+#ifdef ARC_JIT_VCD_TIMING
+  timing.modelCreation = VCDTracerTiming::getNow();
+#endif
   timestep = 0;
   std::string filename(modelInfo->modelName);
   filename += ".vcd";
@@ -297,12 +387,20 @@ bool VcdModelTracer::init(const ArcTraceModelInfo *modelInfo) {
     return false;
   }
 
+#ifdef ARC_JIT_VCD_TIMING
+  timing.vcdInitStart = VCDTracerTiming::getNow();
+#endif
+
   initSignalTable(modelInfo);
   writeVCDHeader(outFile);
   outFile << "$scope module " << modelInfo->modelName << " $end\n";
   createHierarchy(modelInfo);
   outFile << "$upscope $end\n";
   outFile << "$enddefinitions $end\n";
+
+#ifdef ARC_JIT_VCD_TIMING
+  timing.vcdInitEnd = VCDTracerTiming::getNow();
+#endif
 
   return true;
 }
@@ -316,6 +414,9 @@ void *VcdModelTracer::swapBuffer(void *oldBuffer, uint64_t oldBufferSize) {
 }
 
 void VcdModelTracer::close(ArcTracerState *state) {
+#ifdef ARC_JIT_VCD_TIMING
+  timing.stepEnd();
+#endif
 
   if (outFile.is_open()) {
     // Dump the last step
@@ -330,6 +431,12 @@ void VcdModelTracer::close(ArcTracerState *state) {
 
   if (outFile.is_open())
     outFile.close();
+
+#ifdef ARC_JIT_VCD_TIMING
+  timing.modelDeletion = VCDTracerTiming::getNow();
+  timing.dump();
+#endif
+
   if (state->buffer != nullptr) {
     delete[] static_cast<uint64_t *>(state->buffer);
     state->buffer = nullptr;
@@ -340,20 +447,35 @@ void VcdModelTracer::close(ArcTracerState *state) {
 void VcdModelTracer::processBuffer(const uint64_t *traceBuffer,
                                    uint64_t bufferSize) {
   assert(bufferSize > 1);
+#ifdef ARC_JIT_VCD_TIMING
+  timing.vcdProcessStart();
+#endif
   uint64_t offset = 0;
+  uint64_t numChanges = 0;
   while (offset < bufferSize) {
     auto idx = traceBuffer[offset];
     ++offset;
     const void *voidPtr = static_cast<const void *>(traceBuffer + offset);
+    ++numChanges;
     auto stride = signalTable[idx].dumpSignalFromTraceBuffer(
         outFile, static_cast<const uint8_t *>(voidPtr));
     offset += stride;
     assert(offset <= bufferSize);
   }
   assert(offset == bufferSize);
+#ifdef ARC_JIT_VCD_TIMING
+  timing.vcdProcessEnd();
+  timing.signalsChanged(numChanges);
+#else
+  (void)numChanges;
+#endif
 }
 
 void VcdModelTracer::step(ArcTracerState *state) {
+#ifdef ARC_JIT_VCD_TIMING
+  timing.stepEnd();
+#endif
+
   if (state->buffer == nullptr) {
     state->buffer = new uint64_t[1024 * 64];
     state->capacity = 1024 * 64;
@@ -370,5 +492,59 @@ void VcdModelTracer::step(ArcTracerState *state) {
     processBuffer(static_cast<uint64_t *>(state->buffer), state->size);
     state->size = 0;
   }
+#ifdef ARC_JIT_VCD_TIMING
+  timing.stepStart();
+#endif
   ++timestep;
 }
+
+#ifdef ARC_JIT_VCD_TIMING
+void VCDTracerTiming::dump() {
+  std::cerr << "\n --- VCDTracerTiming Dump --- \n";
+  if (!modelCreation.valid || step < 0) {
+    std::cerr << "(Empty)\n";
+    return;
+  }
+
+  std::cerr << "Total Simulation Steps\t\t" << std::setw(16) << (step + 1)
+            << "\n";
+  if (step > 7) {
+    auto numEvenSteps = static_cast<double>((step - 5) / 2);
+    auto numOddSteps = static_cast<double>((step - 6) / 2);
+    std::cerr << "Average Even Changes\t\t" << std::setw(16)
+              << (evenChanges / numEvenSteps) << "\n";
+    std::cerr << "Average Odd  Changes\t\t" << std::setw(16)
+              << (oddChanges / numOddSteps) << "\n";
+  }
+  std::cerr << "Total lifetime\t\t\t" << std::setw(16)
+            << diffNs(modelCreation, modelDeletion) << " ns\n";
+
+  if (vcdInitEnd.valid) {
+    assert(vcdInitStart.valid);
+    std::cerr << "VCD Tracer Init time\t\t" << std::setw(16)
+              << diffNs(vcdInitStart, vcdInitEnd) << " ns\n";
+  }
+
+  std::cerr << "Buffer processing time\t\t" << std::setw(16)
+            << totalVcdTime.count() << " ns\n";
+  std::cerr << "Total Sim time\t\t\t" << std::setw(16) << totalSimTime.count()
+            << " ns\n";
+
+  auto averageTotal = totalSimTime;
+  for (unsigned i = 0; i < startStepStamps.size(); ++i) {
+    if (!endStepStamps[i].valid)
+      break;
+    assert(startStepStamps[i].valid);
+    averageTotal -= (endStepStamps[i].tp - startStepStamps[i].tp);
+    std::cerr << "Simulation Step " << std::setw(2) << i << "\t\t"
+              << std::setw(16) << diffNs(startStepStamps[i], endStepStamps[i])
+              << " ns\n";
+  }
+  if (step >= static_cast<int64_t>(startStepStamps.size())) {
+    auto avg = averageTotal.count() / (step + 1 - startStepStamps.size());
+    std::cerr << "Remaining Average\t\t" << std::setw(16) << avg << " ns\n";
+  }
+
+  std::cerr << "\n";
+}
+#endif
