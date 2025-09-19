@@ -1645,6 +1645,17 @@ def FormatLiteralOp : MooreOp<"fmt.literal", [Pure]> {
   let assemblyFormat = "$literal attr-dict";
 }
 
+def FormatStringToStringOp : MooreOp<"fstring_to_string", [Pure]> {
+  let summary = "A dynamic string created through formatting";
+  let description = [{
+    Creates a dynamic string from a format string.
+    Translates into a no-op.
+  }];
+  let arguments = (ins FormatStringType:$fmtstring);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$fmtstring attr-dict";
+}
+
 def FormatConcatOp : MooreOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate string fragments";
   let description = [{
@@ -1752,6 +1763,30 @@ def FormatTimeOp : MooreOp<"fmt.time", [Pure]> {
       $value
       (`,` `width` $width^)?
       attr-dict
+  }];
+}
+
+def FormatStringOp : MooreOp<"fmt.string", [Pure]> {
+  let summary = "A dynamic string fragment";
+  let description = [{
+    Creates a dynamic string fragment to be used as a format string. The
+    string is printed as is, without any further escaping or processing of its
+    characters.
+
+    Use fmt.literal over this operator for any constant strings / literals.
+  }];
+  let arguments = (ins
+    StringType:$string,
+    OptionalAttr<I32Attr>:$width,
+    OptionalAttr<IntAlignAttr>:$alignment,
+    OptionalAttr<IntPaddingAttr>:$padding);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+    $string
+    (`,` `width` $width^)?
+    (`,` `alignment` $alignment^)?
+    (`,` `padding` $padding^)?
+    attr-dict
   }];
 }
 

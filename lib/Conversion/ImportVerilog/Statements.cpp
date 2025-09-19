@@ -162,6 +162,45 @@ struct StmtVisitor {
         if (handled == true)
           return success();
       }
+
+      // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
+      // string" the first argument of $sformat is its output; the other
+      // arguments work like a FormatString.
+      // In Moore we only support writing to a location if it is a reference;
+      // However, Section 21.3.3 explains that the output of $sformat is
+      // assigned as if it were cast from a string literal (Section 5.9),
+      // so this implementation casts the string to the target value.
+      if (!call->getSubroutineName().compare("$sformat")) {
+
+        // Format the second and all later arguments as a string
+        auto fmtValue =
+            context.convertFormatString(call->arguments().subspan(1), loc,
+                                        moore::IntFormat::Decimal, false);
+
+        if (failed(fmtValue))
+          return failure();
+
+        // Convert the FormatString to a StringType
+        auto strValue = moore::FormatStringToStringOp::create(builder, loc,
+                                                              fmtValue.value());
+
+        // Use the first argument as the output location
+        auto *targetExpr = call->arguments().front();
+        if (auto *sym = targetExpr->getSymbolReference()
+                            ? targetExpr->getSymbolReference()
+                                  ->as_if<slang::ast::ValueSymbol>()
+                            : nullptr) {
+          if (auto reference = context.valueSymbols.lookup(sym);
+              reference && isa<moore::RefType>(reference.getType())) {
+            auto targetTy = context.convertType(*sym->getDeclaredType());
+            auto convertedValue = builder.createOrFold<moore::ConversionOp>(
+                loc, targetTy, strValue);
+            moore::BlockingAssignOp::create(builder, loc, reference,
+                                            convertedValue);
+            return success();
+          }
+        }
+      }
     }
 
     auto value = context.convertRvalueExpression(stmt.expr);

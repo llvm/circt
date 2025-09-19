@@ -139,16 +139,7 @@ struct FormatStringParser {
       return emitTime(arg, options);
 
     case 's':
-      // Simplified handling for literals.
-      if (auto *lit = arg.as_if<slang::ast::StringLiteral>()) {
-        if (options.width)
-          return mlir::emitError(loc)
-                 << "string format specifier with width not supported";
-        emitLiteral(lit->getValue());
-        return success();
-      }
-      return mlir::emitError(argLoc)
-             << "expression cannot be formatted as string";
+      return emitString(arg, options);
 
     default:
       return mlir::emitError(loc)
@@ -238,6 +229,29 @@ struct FormatStringParser {
     }
 
     return success();
+  }
+
+  LogicalResult emitString(const slang::ast::Expression &arg,
+                           const FormatOptions &options) {
+    if (options.width)
+      return mlir::emitError(loc)
+             << "string format specifier with width not supported";
+
+    // Simplified handling for literals.
+    if (auto *lit = arg.as_if<slang::ast::StringLiteral>()) {
+      emitLiteral(lit->getValue());
+      return success();
+    }
+
+    // Handle expressions
+    if (auto value = context.convertRvalueExpression(
+            arg, builder.getType<moore::FormatStringType>())) {
+      fragments.push_back(value);
+      return success();
+    }
+
+    return mlir::emitError(context.convertLocation(arg.sourceRange))
+           << "expression cannot be formatted as string";
   }
 
   /// Emit an expression argument with the appropriate default formatting.

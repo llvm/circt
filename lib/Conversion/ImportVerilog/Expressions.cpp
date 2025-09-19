@@ -987,6 +987,21 @@ struct RvalueExprVisitor : public ExprVisitor {
     FailureOr<Value> result;
     Value value;
 
+    // $sformatf() and $sformat look like system tasks, but we handle string
+    // formatting differently from expression evaluation, so handle them
+    // separately.
+    // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
+    // string" $sformatf works just like the any string formatting but returns
+    // a StringType.
+    if (!subroutine.name.compare("$sformatf")) {
+      // Create the FormatString
+      auto fmtValue = context.convertFormatString(
+          expr.arguments(), loc, moore::IntFormat::Decimal, false);
+      if (failed(fmtValue))
+        return {};
+      return fmtValue.value();
+    }
+
     switch (args.size()) {
     case (0):
       result = context.convertSystemCallArity0(subroutine, loc);
@@ -1679,6 +1694,18 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 
     assert(value.getType() == type);
     return value;
+  }
+
+  // Convert from FormatStringType to StringType
+  if (isa<moore::StringType>(type) &&
+      isa<moore::FormatStringType>(value.getType())) {
+    return builder.createOrFold<moore::FormatStringToStringOp>(loc, value);
+  }
+
+  // Convert from StringType to FormatStringType
+  if (isa<moore::FormatStringType>(type) &&
+      isa<moore::StringType>(value.getType())) {
+    return builder.createOrFold<moore::FormatStringOp>(loc, value);
   }
 
   // TODO: Handle other conversions with dedicated ops.
