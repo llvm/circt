@@ -224,9 +224,25 @@ private:
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
+  void update(ClassType type) {
+    update(type.getTypeID());
+    // Don't hash the class name directly, since it may be replaced during
+    // dedup. Record the class name instead and lazily combine their hashes
+    // using the same mechanism as instances and modules.
+    referredModuleNames.push_back(type.getNameAttr().getAttr());
+    for (auto &element : type.getElements()) {
+      update(element.name.getAsOpaquePointer());
+      update(element.type);
+      update(static_cast<unsigned>(element.direction));
+    }
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
     if (auto bundle = type_dyn_cast<BundleType>(type))
       return update(bundle);
+    if (auto klass = type_dyn_cast<ClassType>(type))
+      return update(klass);
     update(type.getAsOpaquePointer());
   }
 
