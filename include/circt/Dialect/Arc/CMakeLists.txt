@@ -14,6 +14,11 @@ mlir_tablegen(ArcEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(CIRCTArcEnumsIncGen)
 add_dependencies(circt-headers CIRCTArcEnumsIncGen)
 
+mlir_tablegen(ArcAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=arc)
+mlir_tablegen(ArcAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=arc)
+add_public_tablegen_target(CIRCTArcAttributesIncGen)
+add_dependencies(circt-headers CIRCTArcAttributesIncGen)
+
 set(LLVM_TARGET_DEFINITIONS ArcInterfaces.td)
 mlir_tablegen(ArcInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(ArcInterfaces.cpp.inc -gen-op-interface-defs)

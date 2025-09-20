@@ -10,6 +10,8 @@
 #define CIRCT_CONVERSION_ARCTOLLVM_H
 
 #include "circt/Support/LLVM.h"
+#include "llvm/ADT/StringRef.h"
+
 #include <memory>
 
 namespace circt {
@@ -17,6 +19,11 @@ namespace circt {
 #include "circt/Conversion/Passes.h.inc"
 
 std::unique_ptr<OperationPass<ModuleOp>> createLowerArcToLLVMPass();
+
+namespace arc {
+constexpr StringLiteral
+    globalRegisterTraceLibrarySymName("_arc_register_trace_library");
+}
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_ARCTOLLVM_H

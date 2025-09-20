@@ -74,6 +74,10 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#ifdef ARCILATOR_ENABLE_JIT
+#include "vcd/arcilator-jit-vcd.h"
+#endif
+
 #include <optional>
 
 using namespace mlir;
@@ -118,6 +122,11 @@ static llvm::cl::opt<bool>
     observeMemories("observe-memories",
                     llvm::cl::desc("Make all memory contents observable"),
                     llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<bool>
+    traceTaps("trace-taps",
+              llvm::cl::desc("Insert tracing callbacks for tapped states"),
+              llvm::cl::init(false), llvm::cl::cat(mainCategory));
 
 static llvm::cl::opt<std::string> stateFile("state-file",
                                             llvm::cl::desc("State file"),
@@ -225,6 +234,11 @@ static llvm::cl::opt<std::string>
                                  "simulation to run when output is set to run"),
                   llvm::cl::init("entry"), llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<bool>
+    jitVcd("jit-vcd",
+           llvm::cl::desc("Enable the VCD tracing backend for JIT runs"),
+           llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
 static llvm::cl::list<std::string> sharedLibs{
     "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
     llvm::cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
@@ -301,6 +315,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createCombineTaps());
   if (shouldMakeLUTs)
     pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());
@@ -340,7 +355,11 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (untilReached(UntilStateAlloc))
     return;
   pm.addPass(arc::createLowerArcsToFuncsPass());
-  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
+  {
+    AllocateStateOptions opts;
+    opts.insertTraceTaps = traceTaps;
+    pm.nest<arc::ModelOp>().addPass(arc::createAllocateState(opts));
+  }
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   if (splitFuncsThreshold.getNumOccurrences()) {
@@ -468,6 +487,31 @@ static LogicalResult processBuffer(
                          << info.message() << "\n";
           });
       return failure();
+    }
+
+    if (jitVcd) {
+      int32_t regResult = -1;
+      auto *traceLib = arcilator::vcd::getVcdTraceLibrary();
+      auto regError =
+          (*executionEngine)
+              ->invoke(arc::globalRegisterTraceLibrarySymName, traceLib,
+                       mlir::ExecutionEngine::result(regResult));
+      if (regError) {
+        llvm::errs() << "ERROR: Unable access find trace library registration: "
+                     << regError << "\n";
+        return failure();
+      }
+      if (regResult < 0) {
+        llvm::errs() << "ERROR: Failed to register VCD Trace Backend ("
+                     << regResult << ")\n";
+        return failure();
+      } else if (regResult == 0) {
+        llvm::errs() << "WARN: No traceable model found in module.";
+        if (!traceTaps)
+          llvm::errs()
+              << " To produce a trace output, compile with '--trace-taps'.\n";
+        llvm::errs() << "\n";
+      }
     }
 
     auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);

@@ -32,15 +32,26 @@ using llvm::SmallMapVector;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 struct AllocateStatePass
     : public arc::impl::AllocateStateBase<AllocateStatePass> {
+
+  using AllocateStateBase::AllocateStateBase;
+
   void runOnOperation() override;
   void allocateBlock(Block *block);
   void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
+
+  void tapNamedState(AllocStateOp allocOp, mlir::Type valueType,
+                     IntegerAttr offset);
+
+  SmallVector<Attribute> traceTaps;
 };
 } // namespace
 
 void AllocateStatePass::runOnOperation() {
+  traceTaps.clear();
+
   ModelOp modelOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Allocating state in `" << modelOp.getName()
                           << "`\n");
@@ -48,6 +59,39 @@ void AllocateStatePass::runOnOperation() {
   // Walk the blocks from innermost to outermost and group all state allocations
   // in that block in one larger allocation.
   modelOp.walk([&](Block *block) { allocateBlock(block); });
+
+  if (!traceTaps.empty())
+    modelOp.setTraceTapsAttr(ArrayAttr::get(modelOp.getContext(), traceTaps));
+}
+
+void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
+                                      mlir::Type valueType,
+                                      IntegerAttr offset) {
+  TraceTapAttr tapAttr;
+  if (auto namesAttr = allocOp->getAttrOfType<ArrayAttr>("names")) {
+    if (!namesAttr.empty()) {
+      auto typeAttr = TypeAttr::get(valueType);
+      tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
+                                  offset.getValue().getZExtValue(), namesAttr);
+    }
+  } else if (auto nameAttr = allocOp->getAttrOfType<StringAttr>("name")) {
+    auto typeAttr = TypeAttr::get(valueType);
+    auto arrayAttr = ArrayAttr::get(nameAttr.getContext(), {nameAttr});
+    tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
+                                offset.getValue().getZExtValue(), arrayAttr);
+  }
+  if (!tapAttr)
+    return;
+
+  auto indexAttr =
+      IntegerAttr::get(IndexType::get(allocOp.getContext()), traceTaps.size());
+  traceTaps.push_back(tapAttr);
+  for (auto user : allocOp.getResult().getUsers()) {
+    if (auto writeUser = dyn_cast<StateWriteOp>(user)) {
+      writeUser.setTraceTapIndexAttr(indexAttr);
+      writeUser.setTraceTapModelAttr(getOperation().getNameAttr());
+    }
+  }
 }
 
 void AllocateStatePass::allocateBlock(Block *block) {
@@ -93,6 +137,10 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
       op->setAttr("offset", offset);
       gettersToCreate.emplace_back(result, storage, offset);
+      if (insertTraceTaps)
+        if (auto allocStateOp = dyn_cast<AllocStateOp>(op))
+          tapNamedState(allocStateOp,
+                        cast<StateType>(result.getType()).getType(), offset);
       continue;
     }
 
@@ -162,8 +210,4 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   } else {
     storage.setType(StorageType::get(&getContext(), currentByte));
   }
-}
-
-std::unique_ptr<Pass> arc::createAllocateStatePass() {
-  return std::make_unique<AllocateStatePass>();
 }
