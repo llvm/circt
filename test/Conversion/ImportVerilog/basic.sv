@@ -3213,3 +3213,35 @@ function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immed
    testStruct ts2 = '{structField: array};
 
 endfunction
+
+// CHECK-LABEL: func.func private @ConcatSformatf(
+// CHECK-SAME: [[STR1:%[^,]+]]: !moore.string
+// CHECK-SAME: [[STR2:%[^,]+]]: !moore.string
+// CHECK-SAME: [[STR3:%[^,]+]]: !moore.ref<string>
+function automatic void ConcatSformatf(string testStr, string otherString, ref string outputString);
+   // CHECK: [[LV:%.+]] = moore.variable : <l64>
+   logic [63:0] logicVector;
+   // CHECK: [[FMTSTR1:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR2:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMTSTR1]], [[SPC]], [[FMTSTR2]])
+   // CHECK-NEXT: [[STROUT:%.+]] = moore.fstring_to_string [[CONCAT]]
+    string test = $sformatf("%s %s", testStr, otherString);
+
+   // CHECK: [[FMTSTR3:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC2:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR4:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMTSTR3]], [[SPC2]], [[FMTSTR4]])
+   // CHECK-NEXT: [[STROUT2:%.+]] = moore.fstring_to_string [[CONCAT2]]
+   // CHECK-NEXT: moore.blocking_assign [[STR3]], [[STROUT2]] : string
+   $sformat(outputString, "%s %s", testStr, otherString);
+
+   // CHECK: [[FMTSTR5:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC3:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR6:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMTSTR5]], [[SPC3]], [[FMTSTR6]])
+   // CHECK-NEXT: [[STROUT3:%.+]] = moore.fstring_to_string [[CONCAT3]]
+   // CHECK-NEXT: [[CONV:%.+]] = moore.conversion [[STROUT3]] : !moore.string -> !moore.l64
+   // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
+   $sformat(logicVector, "%s %s", testStr, otherString);
+endfunction
