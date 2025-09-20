@@ -71,10 +71,8 @@ def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
 
 class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
-  let arguments = (ins LTLAnyPropertyType:$property,
-                      ClockEdgeAttr:$edge, I1:$clock,
-                      Optional<I1>:$enable,
-                      OptionalAttr<StrAttr>:$label);
+  let arguments = (ins LTLAnyPropertyType:$property, ClockEdgeAttr:$edge,
+      ClockType:$clock, Optional<I1>:$enable, OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
     $property (`if` $enable^)? `,` $edge $clock 
     (`label` $label^)? attr-dict `:` type($property)
@@ -162,7 +160,7 @@ def HasBeenResetOp : VerifOp<"has_been_reset", [Pure]> {
     startup or power-cycling and the start of reset. `verif.has_been_reset` is
     guaranteed to produce a 0 value in that period, as well as during the reset.
   }];
-  let arguments = (ins I1:$clock, I1:$reset, BoolAttr:$async);
+  let arguments = (ins ClockType:$clock, I1:$reset, BoolAttr:$async);
   let results = (outs I1:$result);
   let assemblyFormat = [{
     $clock `,` custom<KeywordBool>($async, "\"async\"", "\"sync\"")
