@@ -991,7 +991,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // formatting differently from expression evaluation, so handle them
     // separately.
     // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-    // string" $sformatf works just like the any string formatting but returns
+    // string" $sformatf works just like the string formatting but returns
     // a StringType.
     if (!subroutine.name.compare("$sformatf")) {
       // Create the FormatString
