@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_ARC_ARCOPS_TD
 #define CIRCT_DIALECT_ARC_ARCOPS_TD
 
+include "circt/Dialect/Arc/ArcAttributes.td"
 include "circt/Dialect/Arc/ArcDialect.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
 include "circt/Dialect/Arc/ArcTypes.td"
@@ -589,13 +590,11 @@ def StateWriteOp : ArcOp<"state_write", [
   StateAndValueTypesMatch<"state", "value">,
 ]> {
   let summary = "Update a state's value";
-  let arguments = (ins
-    StateType:$state,
-    AnyType:$value,
-    Optional<I1>:$condition
-  );
+  let arguments = (ins StateType:$state, AnyType:$value,
+      Optional<I1>:$condition, OptionalAttr<StrAttr>:$traceTapModel,
+      OptionalAttr<IndexAttr>:$traceTapIndex);
   let assemblyFormat = [{
-    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+    $state `=` $value (`if` $condition^)?  (`tap` $traceTapModel`[`$traceTapIndex^`]` )? attr-dict `:` type($state)
   }];
 }
 
@@ -707,8 +706,8 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
 //===----------------------------------------------------------------------===//
 
 def TapOp : ArcOp<"tap"> {
-  let summary = "A tracker op to observe a value under a given name";
-  let arguments = (ins AnyType:$value, StrAttr:$name);
+  let summary = "A tracker op to observe a value under one or more given names";
+  let arguments = (ins AnyType:$value, StrArrayAttr:$names);
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
 }
 
@@ -721,10 +720,10 @@ def ModelOp : ArcOp<"model", [
     A model with stratified clocks. The `io` optional attribute
     specifies the I/O of the module associated to this model.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<ModuleType>:$io,
-                       OptionalAttr<FlatSymbolRefAttr>:$initialFn,
-                       OptionalAttr<FlatSymbolRefAttr>:$finalFn);
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<ModuleType>:$io,
+      OptionalAttr<FlatSymbolRefAttr>:$initialFn,
+      OptionalAttr<FlatSymbolRefAttr>:$finalFn,
+      OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{

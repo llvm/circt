@@ -1,7 +1,7 @@
 if(ARCILATOR_JIT_ENABLED)
   add_compile_definitions(ARCILATOR_ENABLE_JIT)
   set(ARCILATOR_JIT_LLVM_COMPONENTS native)
-  set(ARCILATOR_JIT_DEPS MLIRExecutionEngine)
+  set(ARCILATOR_JIT_DEPS MLIRExecutionEngine CIRCTArcJitVcd)
 endif()
 
 set(LLVM_LINK_COMPONENTS Support ${ARCILATOR_JIT_LLVM_COMPONENTS})
@@ -56,3 +56,5 @@ configure_file(arcilator-runtime.h
   ${CIRCT_TOOLS_DIR}/arcilator-runtime.h)
 add_custom_target(arcilator-runtime-header SOURCES
   ${CIRCT_TOOLS_DIR}/arcilator-runtime.h)
+
+add_subdirectory(vcd)
