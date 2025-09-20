@@ -625,4 +625,26 @@ public:
 } // namespace firrtl
 } // namespace circt
 
+//===--------------------------------------------------------------------===//
+// Subelement Visitors
+//===--------------------------------------------------------------------===//
+
+/// Allow walking and replacing the subelements of a ClassElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<circt::firrtl::ClassElement> {
+  using ClassElement = circt::firrtl::ClassElement;
+
+  static void walk(ClassElement param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static ClassElement replace(ClassElement param,
+                              AttrSubElementReplacements &attrRepls,
+                              TypeSubElementReplacements &typeRepls) {
+    return ClassElement(cast<StringAttr>(attrRepls.take_front(1)[0]),
+                        typeRepls.take_front(1)[0], param.direction);
+  }
+};
+
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H

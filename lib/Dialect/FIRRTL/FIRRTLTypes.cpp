@@ -2615,12 +2615,12 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) const {
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::ClassTypeStorage : mlir::TypeStorage {
-  using KeyTy = std::pair<FlatSymbolRefAttr, ArrayRef<ClassElement>>;
+  using KeyTy = std::tuple<FlatSymbolRefAttr, ArrayRef<ClassElement>>;
 
   static ClassTypeStorage *construct(TypeStorageAllocator &allocator,
                                      KeyTy key) {
-    auto name = key.first;
-    auto elements = allocator.copyInto(key.second);
+    auto name = std::get<0>(key);
+    auto elements = allocator.copyInto(std::get<1>(key));
 
     // build the field ID table
     SmallVector<uint64_t, 4> ids;
@@ -2644,9 +2644,9 @@ struct circt::firrtl::detail::ClassTypeStorage : mlir::TypeStorage {
       : name(name), elements(elements), fieldIDs(fieldIDs),
         maxFieldID(maxFieldID) {}
 
-  bool operator==(const KeyTy &key) const {
-    return name == key.first && elements == key.second;
-  }
+  bool operator==(const KeyTy &key) const { return getAsKey() == key; }
+
+  KeyTy getAsKey() const { return KeyTy(name, elements); }
 
   FlatSymbolRefAttr name;
   ArrayRef<ClassElement> elements;
