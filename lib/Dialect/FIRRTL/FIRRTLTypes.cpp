@@ -1326,7 +1326,7 @@ int32_t IntType::getWidthOrSentinel() const {
 struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
   WidthTypeStorage(int32_t width, bool isConst)
       : FIRRTLBaseTypeStorage(isConst), width(width) {}
-  using KeyTy = std::pair<int32_t, char>;
+  using KeyTy = std::tuple<int32_t, char>;
 
   bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
@@ -1335,7 +1335,7 @@ struct circt::firrtl::detail::WidthTypeStorage : detail::FIRRTLBaseTypeStorage {
   static WidthTypeStorage *construct(TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
     return new (allocator.allocate<WidthTypeStorage>())
-        WidthTypeStorage(key.first, key.second);
+        WidthTypeStorage(std::get<0>(key), std::get<1>(key));
   }
 
   int32_t width;
@@ -1406,13 +1406,12 @@ UIntType UIntType::getConstType(bool isConst) const {
 
 struct circt::firrtl::detail::BundleTypeStorage
     : detail::FIRRTLBaseTypeStorage {
-  using KeyTy = std::pair<ArrayRef<BundleType::BundleElement>, char>;
+  using KeyTy = std::tuple<ArrayRef<BundleType::BundleElement>, char>;
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false} {
+        elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1438,15 +1437,13 @@ struct circt::firrtl::detail::BundleTypeStorage
   KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(
-        llvm::hash_combine_range(key.first.begin(), key.first.end()),
-        key.second);
+    return llvm::hash_value(key);
   }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                       KeyTy key) {
-    return new (allocator.allocate<BundleTypeStorage>())
-        BundleTypeStorage(key.first, static_cast<bool>(key.second));
+    return new (allocator.allocate<BundleTypeStorage>()) BundleTypeStorage(
+        std::get<0>(key), static_cast<bool>(std::get<1>(key)));
   }
 
   SmallVector<BundleType::BundleElement, 4> elements;
@@ -1676,13 +1673,12 @@ LogicalResult BundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
-  using KeyTy = std::pair<ArrayRef<OpenBundleType::BundleElement>, char>;
+  using KeyTy = std::tuple<ArrayRef<OpenBundleType::BundleElement>, char>;
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false},
+      : elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false},
         isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
@@ -1708,9 +1704,7 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
   bool operator==(const KeyTy &key) const { return key == getAsKey(); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(
-        llvm::hash_combine_range(key.first.begin(), key.first.end()),
-        key.second);
+    return llvm::hash_value(key);
   }
 
   KeyTy getAsKey() const { return KeyTy(elements, isConst); }
@@ -1718,7 +1712,8 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
   static OpenBundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                           KeyTy key) {
     return new (allocator.allocate<OpenBundleTypeStorage>())
-        OpenBundleTypeStorage(key.first, static_cast<bool>(key.second));
+        OpenBundleTypeStorage(std::get<0>(key),
+                              static_cast<bool>(std::get<1>(key)));
   }
 
   SmallVector<OpenBundleType::BundleElement, 4> elements;
@@ -2163,7 +2158,7 @@ OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
-  using KeyTy = std::pair<ArrayRef<FEnumType::EnumElement>, char>;
+  using KeyTy = std::tuple<ArrayRef<FEnumType::EnumElement>, char>;
 
   FEnumTypeStorage(ArrayRef<FEnumType::EnumElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
@@ -2187,15 +2182,13 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
   KeyTy getAsKey() const { return KeyTy(elements, isConst); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(
-        llvm::hash_combine_range(key.first.begin(), key.first.end()),
-        key.second);
+    return llvm::hash_value(key);
   }
 
   static FEnumTypeStorage *construct(TypeStorageAllocator &allocator,
                                      KeyTy key) {
     return new (allocator.allocate<FEnumTypeStorage>())
-        FEnumTypeStorage(key.first, static_cast<bool>(key.second));
+        FEnumTypeStorage(std::get<0>(key), static_cast<bool>(std::get<1>(key)));
   }
 
   SmallVector<FEnumType::EnumElement, 4> elements;
@@ -2413,7 +2406,7 @@ struct circt::firrtl::detail::BaseTypeAliasStorage
   KeyTy getAsKey() const { return KeyTy(name, innerType); }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(key);
+    return llvm::hash_value(key);
   }
 
   static BaseTypeAliasStorage *construct(TypeStorageAllocator &allocator,
@@ -2615,12 +2608,12 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) const {
 //===----------------------------------------------------------------------===//
 
 struct circt::firrtl::detail::ClassTypeStorage : mlir::TypeStorage {
-  using KeyTy = std::pair<FlatSymbolRefAttr, ArrayRef<ClassElement>>;
+  using KeyTy = std::tuple<FlatSymbolRefAttr, ArrayRef<ClassElement>>;
 
   static ClassTypeStorage *construct(TypeStorageAllocator &allocator,
                                      KeyTy key) {
-    auto name = key.first;
-    auto elements = allocator.copyInto(key.second);
+    auto name = std::get<0>(key);
+    auto elements = allocator.copyInto(std::get<1>(key));
 
     // build the field ID table
     SmallVector<uint64_t, 4> ids;
@@ -2644,9 +2637,9 @@ struct circt::firrtl::detail::ClassTypeStorage : mlir::TypeStorage {
       : name(name), elements(elements), fieldIDs(fieldIDs),
         maxFieldID(maxFieldID) {}
 
-  bool operator==(const KeyTy &key) const {
-    return name == key.first && elements == key.second;
-  }
+  bool operator==(const KeyTy &key) const { return getAsKey() == key; }
+
+  KeyTy getAsKey() const { return KeyTy(name, elements); }
 
   FlatSymbolRefAttr name;
   ArrayRef<ClassElement> elements;
