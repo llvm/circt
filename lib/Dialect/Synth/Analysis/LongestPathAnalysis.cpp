@@ -1665,16 +1665,13 @@ LogicalResult LongestPathAnalysis::Impl::collectClosedPaths(
     // Accumulate all closed results under the given module.
     auto *node = ctx.instanceGraph->lookup(moduleName);
     llvm::MapVector<StringAttr, SmallVector<DataflowPath>> resultsMap;
-    for (auto *child : llvm::post_order(node)) {
-      auto name = child->getModule().getModuleNameAttr();
-      resultsMap[name] = {};
-    }
+    // Prepare the results map for parallel processing.
+    for (auto *child : llvm::post_order(node))
+      resultsMap[child->getModule().getModuleNameAttr()] = {};
 
-    mlir::parallelForEach(node->getModule().getContext(), resultsMap,
-                          [&](auto &it) {
-                            collectClosedPaths(it.first, it.second, node);
-                            return success();
-                          });
+    mlir::parallelForEach(
+        node->getModule().getContext(), resultsMap,
+        [&](auto &it) { collectClosedPaths(it.first, it.second, node); });
 
     for (auto &[name, localResults] : resultsMap)
       results.append(localResults.begin(), localResults.end());
