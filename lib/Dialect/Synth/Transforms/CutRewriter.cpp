@@ -122,30 +122,15 @@ static bool compareDelayAndArea(OptimizationStrategy strategy, double newArea,
 LogicalResult
 circt::synth::topologicallySortLogicNetwork(mlir::Operation *topOp) {
 
-  // Sort the operations topologically
-  auto walkResult = topOp->walk([&](Region *region) {
-    auto regionKindOp =
-        dyn_cast<mlir::RegionKindInterface>(region->getParentOp());
-    if (!regionKindOp ||
-        regionKindOp.hasSSADominance(region->getRegionNumber()))
-      return WalkResult::advance();
+  auto isOperationReady = [](Value value, Operation *op) -> bool {
+    // Topologically sort simulatable ops and purely
+    // dataflow ops. Other operations can be scheduled.
+    return !(isSupportedLogicOp(op) ||
+             isa<comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp>(op));
+  };
 
-    auto isOperationReady = [&](Value value, Operation *op) -> bool {
-      // Topologically sort simulatable ops and purely
-      // dataflow ops. Other operations can be scheduled.
-      return !(isSupportedLogicOp(op) ||
-               isa<comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp>(op));
-    };
-
-    // Graph region.
-    for (auto &block : *region) {
-      if (!mlir::sortTopologically(&block, isOperationReady))
-        return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
-
-  if (walkResult.wasInterrupted())
+  auto result = topologicallySortGraphRegionBlocks(topOp, isOperationReady);
+  if (failed(result))
     return mlir::emitError(topOp->getLoc(),
                            "failed to sort operations topologically");
   return success();
