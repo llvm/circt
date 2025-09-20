@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/DOTGraphTraits.h"
@@ -266,6 +267,22 @@ public:
   iterator begin() { return nodes.begin(); }
   iterator end() { return nodes.end(); }
 
+  /// Perform a post-order walk across the modules. Guaranteed to visit all
+  /// modules. Child modules are visited before their parent modules. If `Fn`
+  /// returns a `LogicalResult`, the walk can be interrupted by returning
+  /// `failure()` from the callback, in which case the overall walk will return
+  /// `failure()`.
+  template <typename Fn>
+  decltype(auto) walkPostOrder(Fn &&fn);
+
+  /// Perform an inverse-post-order walk across the modules. Guaranteed to visit
+  /// all modules. Child modules are visited before their parent modules. If
+  /// `Fn` returns a `LogicalResult`, the walk can be interrupted by returning
+  /// `failure()` from the callback, in which case the overall walk will return
+  /// `failure()`.
+  template <typename Fn>
+  decltype(auto) walkInversePostOrder(Fn &&fn);
+
   //===-------------------------------------------------------------------------
   // Methods to keep an InstanceGraph up to date.
   //
@@ -458,6 +475,16 @@ struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
 };
 
 /// Graph traits for the instance graph.
+///
+/// **Deprecated:** This uses `getTopLevelNode()` as the root node of the graph,
+/// which does not contain all modules in the instance graph. Instead, the
+/// behaviour is dependent on concrete subclasses of the instance graph. The HW
+/// and FIRRTL dialects define this to be variants of "the top module" and "all
+/// public modules", which is usually not what you want in a pass. You are more
+/// likely to want to visit _all_ modules in the IR in post order (children
+/// before parents), not just a subset of the modules depending on whether
+/// things are transitively instantiated. Use `walkPostOrder` or
+/// `walkInversePostOrder` on `InstanceGraph` instead.
 template <>
 struct llvm::GraphTraits<circt::igraph::InstanceGraph *>
     : public llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
@@ -498,6 +525,57 @@ struct llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>
     return ("label=" + instanceOp.getInstanceName()).str();
   }
 };
+
+//===----------------------------------------------------------------------===//
+// Graph Iterators
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace igraph {
+
+// These are defined out-of-line here since they need the graph traits to have
+// been defined.
+
+template <typename Fn>
+decltype(auto) InstanceGraph::walkPostOrder(Fn &&fn) {
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto &root : nodes) {
+    for (auto *node : llvm::post_order_ext(&root, visited)) {
+      if constexpr (fallible) {
+        if (failed(fn(*node)))
+          return failure();
+      } else {
+        fn(*node);
+      }
+    }
+  }
+  if constexpr (fallible)
+    return success();
+}
+
+template <typename Fn>
+decltype(auto) InstanceGraph::walkInversePostOrder(Fn &&fn) {
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto &root : nodes) {
+    for (auto *node : llvm::inverse_post_order_ext(&root, visited)) {
+      if constexpr (fallible) {
+        if (failed(fn(*node)))
+          return failure();
+      } else {
+        fn(*node);
+      }
+    }
+  }
+  if constexpr (fallible)
+    return success();
+}
+
+} // namespace igraph
+} // namespace circt
 
 //===----------------------------------------------------------------------===//
 // Dense Map Traits

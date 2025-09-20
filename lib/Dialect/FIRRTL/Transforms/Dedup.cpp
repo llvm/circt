@@ -1684,10 +1684,11 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     // We must iterate the modules from the bottom up so that we can properly
     // deduplicate the modules. We copy the list of modules into a vector first
     // to avoid iterator invalidation while we mutate the instance graph.
-    SmallVector<FModuleLike, 0> modules(
-        llvm::map_range(llvm::post_order(&instanceGraph), [](auto *node) {
-          return cast<FModuleLike>(*node->getModule());
-        }));
+    SmallVector<FModuleLike, 0> modules;
+    instanceGraph.walkPostOrder([&](auto &node) {
+      if (auto mod = dyn_cast<FModuleLike>(*node.getModule()))
+        modules.push_back(mod);
+    });
     LLVM_DEBUG(llvm::dbgs() << "Found " << modules.size() << " modules\n");
 
     SmallVector<std::optional<ModuleInfo>> moduleInfos(modules.size());

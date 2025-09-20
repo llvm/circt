@@ -88,13 +88,8 @@ namespace {
 class EffectInfo {
 public:
   EffectInfo(CircuitOp circuit, InstanceGraph &instanceGraph) {
-    DenseSet<InstanceGraphNode *> visited;
-    for (auto *root : instanceGraph) {
-      for (auto *node : llvm::post_order_ext(root, visited)) {
-        auto *op = node->getModule().getOperation();
-        update(op);
-      }
-    }
+    instanceGraph.walkPostOrder(
+        [&](auto &node) { update(node.getModule().getOperation()); });
   }
 
   /// True if the given operation is NOT moveable due to some effect.

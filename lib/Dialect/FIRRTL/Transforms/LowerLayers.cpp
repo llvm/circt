@@ -1062,10 +1062,7 @@ void LowerLayersPass::preprocessModuleLike(CircuitNamespace &ns,
 /// Create the bind file skeleton for each layer, for each module.
 void LowerLayersPass::preprocessModules(CircuitNamespace &ns,
                                         InstanceGraph &ig) {
-  DenseSet<InstanceGraphNode *> visited;
-  for (auto *root : ig)
-    for (auto *node : llvm::post_order_ext(root, visited))
-      preprocessModuleLike(ns, node);
+  ig.walkPostOrder([&](auto &node) { preprocessModuleLike(ns, &node); });
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level
