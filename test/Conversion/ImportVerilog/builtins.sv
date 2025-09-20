@@ -310,4 +310,14 @@ function void ConversionBuiltins(int shortint_in, longint longint_in,
   dummyA($realtobits(real_in));
   // CHECK: [[SR2B:%.+]] = moore.builtin.shortrealtobits [[SR]]
   dummyA($shortrealtobits(shortreal_in));
+
+// CHECK-LABEL: func.func private @SeverityBuiltinEdgeCase(
+// CHECK-SAME: [[STR:%.+]]: !moore.string
+function void SeverityBuiltinEdgeCase(string testStr);
+  // CHECK: [[FMTSTR:%.+]] = moore.fmt.string [[STR]]
+  // CHECK-NEXT: [[FMTLIT:%.+]] = moore.fmt.literal " 23"
+  // CHECK-NEXT: [[FMTCONCAT:%.+]] = moore.fmt.concat ([[FMTSTR]], [[FMTLIT]])
+  // CHECK-NEXT: moore.builtin.severity fatal [[FMTCONCAT]]
+  // CHECK: moore.unreachable
+  $fatal(1, $sformatf("%s 23", testStr));
 endfunction
