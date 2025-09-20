@@ -186,7 +186,7 @@ struct StmtVisitor {
         // The Slang AST produces a `AssignmentExpression` for the first
         // argument; the RHS of this expression is invalid though
         // (`EmptyArgument`), so we only use the LHS of the
-        // `AssignmentExpression` and plus in the formatted string for the RHS.
+        // `AssignmentExpression` and plug in the formatted string for the RHS.
         if (auto assignExpr =
                 lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
           auto lhs = context.convertLvalueExpression(assignExpr->left());
