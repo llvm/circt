@@ -7,7 +7,7 @@ firrtl.circuit "Simple" {
   // CHECK: firrtl.module @Simple
   firrtl.module @Simple() {
     // Don't touch existing constants.
-    // CHECK-NEXT: firrtl.constant 1337
+    // CHECK-NEXT: firrtl.constant 0
     %c1337_ui42 = firrtl.constant 1337 : !firrtl.uint<42>
 
     // Turn basic operations into constants.
@@ -21,5 +21,38 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: dbg.variable "not", [[TMP]]
     %not = firrtl.not %c1337_ui42 {inner_sym = @foo} : (!firrtl.uint<42>) -> !firrtl.uint<42>
     dbg.variable "not", %not : !firrtl.uint<42>
+  }
+
+  // CHECK: firrtl.class @Properties
+  firrtl.class @Properties() {
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.string ""
+    // CHECK-NEXT: dbg.variable "str", [[TMP]]
+    %str = firrtl.string "foo"
+    dbg.variable "str", %str : !firrtl.string
+
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.integer 0
+    // CHECK-NEXT: dbg.variable "int", [[TMP]]
+    %int = firrtl.integer 42
+    dbg.variable "int", %int : !firrtl.integer
+
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.bool false
+    // CHECK-NEXT: dbg.variable "bool", [[TMP]]
+    %bool = firrtl.bool true
+    dbg.variable "bool", %bool : !firrtl.bool
+
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.double 0.0
+    // CHECK-NEXT: dbg.variable "double", [[TMP]]
+    %double = firrtl.double 3.141
+    dbg.variable "double", %double : !firrtl.double
+
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.list.create :
+    // CHECK-NEXT: dbg.variable "list", [[TMP]]
+    %list = firrtl.list.create %int, %int : !firrtl.list<integer>
+    dbg.variable "list", %list : !firrtl.list<integer>
+
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.unresolved_path ""
+    // CHECK-NEXT: dbg.variable "path", [[TMP]]
+    %path = firrtl.unresolved_path "foo"
+    dbg.variable "path", %path : !firrtl.path
   }
 }

@@ -22,6 +22,7 @@
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Matchers.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
@@ -521,9 +522,8 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
 /// Check whether an operation interacts with flows in any way, which can make
 /// replacement and operand forwarding harder in some cases.
 static bool isFlowSensitiveOp(Operation *op) {
-  return isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp,
-             firrtl::InstanceOp, firrtl::SubfieldOp, firrtl::SubindexOp,
-             firrtl::SubaccessOp>(op);
+  return isa<WireOp, RegOp, RegResetOp, InstanceOp, SubfieldOp, SubindexOp,
+             SubaccessOp, ObjectSubfieldOp>(op);
 }
 
 /// A sample reduction pattern that replaces all uses of an operation with one
@@ -575,34 +575,112 @@ struct FIRRTLOperandForwarder : public Reduction {
 
 /// A sample reduction pattern that replaces FIRRTL operations with a constant
 /// zero of their type.
-struct FIRRTLConstantifier : public Reduction {
+struct Constantifier : public Reduction {
   uint64_t match(Operation *op) override {
-    if (op->hasTrait<OpTrait::ConstantLike>())
-      return 0;
-    if (op->getNumResults() != 1 || op->getNumOperands() == 0)
+    if (op->hasTrait<OpTrait::ConstantLike>()) {
+      Attribute attr;
+      if (!matchPattern(op, m_Constant(&attr)))
+        return 0;
+      if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+        if (intAttr.getValue().isZero())
+          return 0;
+      if (auto strAttr = dyn_cast<StringAttr>(attr))
+        if (strAttr.empty())
+          return 0;
+      if (auto floatAttr = dyn_cast<FloatAttr>(attr))
+        if (floatAttr.getValue().isZero())
+          return 0;
+    }
+    if (auto listOp = dyn_cast<ListCreateOp>(op))
+      if (listOp.getElements().empty())
+        return 0;
+    if (auto pathOp = dyn_cast<UnresolvedPathOp>(op))
+      if (pathOp.getTarget().empty())
+        return 0;
+    if (op->getNumResults() != 1)
       return 0;
     if (op->hasAttr("inner_sym"))
       return 0;
     if (isFlowSensitiveOp(op))
       return 0;
-    auto type = dyn_cast<firrtl::FIRRTLBaseType>(op->getResult(0).getType());
-    return isa_and_nonnull<firrtl::UIntType, firrtl::SIntType>(type);
+    return isa<UIntType, SIntType, StringType, FIntegerType, BoolType,
+               DoubleType, ListType, PathType>(op->getResult(0).getType());
   }
+
   LogicalResult rewrite(Operation *op) override {
-    assert(match(op));
     OpBuilder builder(op);
-    auto type = cast<firrtl::FIRRTLBaseType>(op->getResult(0).getType());
-    auto width = type.getBitWidthOrSentinel();
-    if (width == -1)
-      width = 64;
-    auto newOp =
-        firrtl::ConstantOp::create(builder, op->getLoc(), type,
-                                   APSInt(width, isa<firrtl::UIntType>(type)));
-    op->replaceAllUsesWith(newOp);
-    reduce::pruneUnusedOps(op, *this);
-    return success();
+    auto type = op->getResult(0).getType();
+
+    // Handle UInt/SInt types.
+    if (isa<UIntType, SIntType>(type)) {
+      auto width = cast<FIRRTLBaseType>(type).getBitWidthOrSentinel();
+      if (width == -1)
+        width = 64;
+      auto newOp = ConstantOp::create(builder, op->getLoc(), type,
+                                      APSInt(width, isa<UIntType>(type)));
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    // Handle property string types.
+    if (isa<StringType>(type)) {
+      auto attr = builder.getStringAttr("");
+      auto newOp = StringConstantOp::create(builder, op->getLoc(), attr);
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    // Handle property integer types.
+    if (isa<FIntegerType>(type)) {
+      auto attr = builder.getIntegerAttr(builder.getI64Type(), 0);
+      auto newOp = FIntegerConstantOp::create(builder, op->getLoc(), attr);
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    // Handle property boolean types.
+    if (isa<BoolType>(type)) {
+      auto attr = builder.getBoolAttr(false);
+      auto newOp = BoolConstantOp::create(builder, op->getLoc(), attr);
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    // Handle property double types.
+    if (isa<DoubleType>(type)) {
+      auto attr = builder.getFloatAttr(builder.getF64Type(), 0.0);
+      auto newOp = DoubleConstantOp::create(builder, op->getLoc(), attr);
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    // Handle property list types.
+    if (isa<ListType>(type)) {
+      auto newOp =
+          ListCreateOp::create(builder, op->getLoc(), type, ValueRange{});
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    // Handle property path types.
+    if (isa<PathType>(type)) {
+      auto newOp = UnresolvedPathOp::create(builder, op->getLoc(), "");
+      op->replaceAllUsesWith(newOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
+    return failure();
   }
+
   std::string getName() const override { return "firrtl-constantifier"; }
+  bool acceptSizeIncrease() const override { return true; }
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
@@ -1761,7 +1839,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<NodeSymbolRemover, 15>();
   patterns.add<ConnectForwarder, 14>();
   patterns.add<ConnectInvalidator, 13>();
-  patterns.add<FIRRTLConstantifier, 12>();
+  patterns.add<Constantifier, 12>();
   patterns.add<FIRRTLOperandForwarder<0>, 11>();
   patterns.add<FIRRTLOperandForwarder<1>, 10>();
   patterns.add<FIRRTLOperandForwarder<2>, 9>();
