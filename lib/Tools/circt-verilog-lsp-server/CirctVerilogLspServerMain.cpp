@@ -9,14 +9,11 @@
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 #include "LSPServer.h"
 #include "VerilogServerImpl/VerilogServer.h"
-#include "mlir/Tools/lsp-server-support/Transport.h"
-
-using namespace mlir;
-using namespace mlir::lsp;
+#include "llvm/Support/LSP/Transport.h"
 
 llvm::LogicalResult circt::lsp::CirctVerilogLspServerMain(
     const circt::lsp::VerilogServerOptions &options,
-    mlir::lsp::JSONTransport &transport) {
+    llvm::lsp::JSONTransport &transport) {
   circt::lsp::VerilogServer server(options);
   return circt::lsp::runVerilogLSPServer(server, transport);
 }

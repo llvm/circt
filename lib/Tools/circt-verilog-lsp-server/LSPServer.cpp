@@ -8,14 +8,14 @@
 
 #include "LSPServer.h"
 #include "VerilogServerImpl/VerilogServer.h"
-#include "mlir/Tools/lsp-server-support/Protocol.h"
-#include "mlir/Tools/lsp-server-support/Transport.h"
+#include "llvm/Support/LSP/Protocol.h"
+#include "llvm/Support/LSP/Transport.h"
 #include <optional>
 
 #define DEBUG_TYPE "circt-verilog-lsp-server"
 
-using namespace mlir;
-using namespace mlir::lsp;
+using namespace llvm;
+using namespace llvm::lsp;
 
 //===----------------------------------------------------------------------===//
 // LSPServer
@@ -31,7 +31,7 @@ struct LSPServer {
   //===--------------------------------------------------------------------===//
 
   void onInitialize(const InitializeParams &params,
-                    Callback<llvm::json::Value> reply);
+                    Callback<json::Value> reply);
   void onInitialized(const InitializedParams &params);
   void onShutdown(const NoParams &params, Callback<std::nullptr_t> reply);
 
@@ -65,19 +65,19 @@ struct LSPServer {
 //===----------------------------------------------------------------------===//
 
 void LSPServer::onInitialize(const InitializeParams &params,
-                             Callback<llvm::json::Value> reply) {
+                             Callback<json::Value> reply) {
   // Send a response with the capabilities of this server.
-  llvm::json::Object serverCaps{
+  json::Object serverCaps{
       {"textDocumentSync",
-       llvm::json::Object{
+       json::Object{
            {"openClose", true},
            {"change", (int)TextDocumentSyncKind::Incremental},
            {"save", true},
        }}};
 
-  llvm::json::Object result{
-      {{"serverInfo", llvm::json::Object{{"name", "circt-verilog-lsp-server"},
-                                         {"version", "0.0.1"}}},
+  json::Object result{
+      {{"serverInfo", json::Object{{"name", "circt-verilog-lsp-server"},
+                                   {"version", "0.0.1"}}},
        {"capabilities", std::move(serverCaps)}}};
   reply(std::move(result));
 }
@@ -153,9 +153,9 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
           "textDocument/publishDiagnostics");
 
   // Run the main loop of the transport.
-  if (llvm::Error error = transport.run(messageHandler)) {
+  if (Error error = transport.run(messageHandler)) {
     Logger::error("Transport error: {0}", error);
-    llvm::consumeError(std::move(error));
+    consumeError(std::move(error));
     return failure();
   }
 

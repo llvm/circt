@@ -96,9 +96,10 @@ public:
   }
 
   std::optional<int64_t> getBound() override {
-    return constantTripCount(getOperation().getLowerBound(),
-                             getOperation().getUpperBound(),
-                             getOperation().getStep());
+    auto scfForOp = mlir::cast<scf::ForOp>(getOperation());
+    if (std::optional<APInt> bound = scfForOp.getStaticTripCount())
+      return bound->getZExtValue();
+    return std::nullopt;
   }
 };
 

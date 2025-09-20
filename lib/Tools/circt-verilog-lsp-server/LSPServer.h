@@ -9,6 +9,8 @@
 #ifndef LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_LSPSERVER_H
 #define LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_LSPSERVER_H
 
+#include "llvm/Support/LSP/Transport.h"
+
 #include <memory>
 
 namespace llvm {
@@ -27,7 +29,7 @@ class VerilogServer;
 /// Run the main loop of the LSP server using the given Verilog server and
 /// transport.
 llvm::LogicalResult runVerilogLSPServer(VerilogServer &server,
-                                        mlir::lsp::JSONTransport &transport);
+                                        llvm::lsp::JSONTransport &transport);
 
 } // namespace lsp
 } // namespace circt

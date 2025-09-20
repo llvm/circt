@@ -17,8 +17,6 @@
 
 #include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
-#include "mlir/Tools/lsp-server-support/Logging.h"
-#include "mlir/Tools/lsp-server-support/Protocol.h"
 #include "slang/ast/Compilation.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/diagnostics/Diagnostics.h"
@@ -28,6 +26,8 @@
 #include "slang/text/SourceManager.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/LSP/Logging.h"
+#include "llvm/Support/LSP/Protocol.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
@@ -35,26 +35,27 @@
 #include <memory>
 #include <optional>
 
+using namespace llvm::lsp;
+
 using namespace mlir;
-using namespace mlir::lsp;
 
 using namespace circt::lsp;
 using namespace circt;
 
-static mlir::lsp::DiagnosticSeverity
+static llvm::lsp::DiagnosticSeverity
 getSeverity(slang::DiagnosticSeverity severity) {
   switch (severity) {
   case slang::DiagnosticSeverity::Fatal:
   case slang::DiagnosticSeverity::Error:
-    return mlir::lsp::DiagnosticSeverity::Error;
+    return llvm::lsp::DiagnosticSeverity::Error;
   case slang::DiagnosticSeverity::Warning:
-    return mlir::lsp::DiagnosticSeverity::Warning;
+    return llvm::lsp::DiagnosticSeverity::Warning;
   case slang::DiagnosticSeverity::Ignored:
   case slang::DiagnosticSeverity::Note:
-    return mlir::lsp::DiagnosticSeverity::Information;
+    return llvm::lsp::DiagnosticSeverity::Information;
   }
   llvm_unreachable("all slang diagnostic severities should be handled");
-  return mlir::lsp::DiagnosticSeverity::Error;
+  return llvm::lsp::DiagnosticSeverity::Error;
 }
 namespace {
 
@@ -74,12 +75,12 @@ struct VerilogServerContext {
 class LSPDiagnosticClient;
 struct VerilogDocument {
   VerilogDocument(VerilogServerContext &globalContext,
-                  const mlir::lsp::URIForFile &uri, StringRef contents,
-                  std::vector<mlir::lsp::Diagnostic> &diagnostics);
+                  const llvm::lsp::URIForFile &uri, StringRef contents,
+                  std::vector<llvm::lsp::Diagnostic> &diagnostics);
   VerilogDocument(const VerilogDocument &) = delete;
   VerilogDocument &operator=(const VerilogDocument &) = delete;
 
-  const mlir::lsp::URIForFile &getURI() const { return uri; }
+  const llvm::lsp::URIForFile &getURI() const { return uri; }
 
   llvm::SourceMgr &getSourceMgr() { return sourceMgr; }
   llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() {
@@ -91,7 +92,7 @@ struct VerilogDocument {
   }
 
   // Return LSP location from slang location.
-  mlir::lsp::Location getLspLocation(slang::SourceLocation loc) const;
+  llvm::lsp::Location getLspLocation(slang::SourceLocation loc) const;
 
 private:
   // A map from slang buffer ID to the corresponding buffer ID in the LLVM
@@ -108,7 +109,7 @@ private:
   llvm::SourceMgr sourceMgr;
 
   // The URI of the document.
-  mlir::lsp::URIForFile uri;
+  llvm::lsp::URIForFile uri;
 };
 
 } // namespace
@@ -122,11 +123,11 @@ namespace {
 /// client that will map slang diagnostics to LSP diagnostics.
 class LSPDiagnosticClient : public slang::DiagnosticClient {
   const VerilogDocument &document;
-  std::vector<mlir::lsp::Diagnostic> &diags;
+  std::vector<llvm::lsp::Diagnostic> &diags;
 
 public:
   LSPDiagnosticClient(const VerilogDocument &document,
-                      std::vector<mlir::lsp::Diagnostic> &diags)
+                      std::vector<llvm::lsp::Diagnostic> &diags)
       : document(document), diags(diags) {}
 
   void report(const slang::ReportedDiagnostic &slangDiag) override;
@@ -150,8 +151,8 @@ void LSPDiagnosticClient::report(const slang::ReportedDiagnostic &slangDiag) {
 //===----------------------------------------------------------------------===//
 
 VerilogDocument::VerilogDocument(
-    VerilogServerContext &context, const mlir::lsp::URIForFile &uri,
-    StringRef contents, std::vector<mlir::lsp::Diagnostic> &diagnostics)
+    VerilogServerContext &context, const llvm::lsp::URIForFile &uri,
+    StringRef contents, std::vector<llvm::lsp::Diagnostic> &diagnostics)
     : uri(uri) {
   unsigned int bufferId;
   if (auto memBufferOwn =
@@ -211,7 +212,7 @@ VerilogDocument::VerilogDocument(
     driver.diagEngine.issue(diag);
 }
 
-mlir::lsp::Location
+llvm::lsp::Location
 VerilogDocument::getLspLocation(slang::SourceLocation loc) const {
   if (loc && loc.buffer() != slang::SourceLocation::NoLocation.buffer()) {
     const auto &slangSourceManager = getSlangSourceManager();
@@ -220,18 +221,18 @@ VerilogDocument::getLspLocation(slang::SourceLocation loc) const {
     auto it = bufferIDMap.find(loc.buffer().getId());
     // Check if the current buffer is the main file.
     if (it != bufferIDMap.end() && it->second == sourceMgr.getMainFileID())
-      return mlir::lsp::Location(uri, mlir::lsp::Range(Position(line, column)));
+      return llvm::lsp::Location(uri, llvm::lsp::Range(Position(line, column)));
 
     // Otherwise, construct URI from slang source manager.
     auto fileName = slangSourceManager.getFileName(loc);
-    auto loc = mlir::lsp::URIForFile::fromFile(fileName);
+    auto loc = llvm::lsp::URIForFile::fromFile(fileName);
     if (auto e = loc.takeError())
-      return mlir::lsp::Location();
-    return mlir::lsp::Location(loc.get(),
-                               mlir::lsp::Range(Position(line, column)));
+      return llvm::lsp::Location();
+    return llvm::lsp::Location(loc.get(),
+                               llvm::lsp::Range(Position(line, column)));
   }
 
-  return mlir::lsp::Location();
+  return llvm::lsp::Location();
 }
 
 //===----------------------------------------------------------------------===//
@@ -244,9 +245,9 @@ namespace {
 class VerilogTextFile {
 public:
   VerilogTextFile(VerilogServerContext &globalContext,
-                  const mlir::lsp::URIForFile &uri, StringRef fileContents,
+                  const llvm::lsp::URIForFile &uri, StringRef fileContents,
                   int64_t version,
-                  std::vector<mlir::lsp::Diagnostic> &diagnostics);
+                  std::vector<llvm::lsp::Diagnostic> &diagnostics);
 
   /// Return the current version of this text file.
   int64_t getVersion() const { return version; }
@@ -254,14 +255,14 @@ public:
   /// Update the file to the new version using the provided set of content
   /// changes. Returns failure if the update was unsuccessful.
   LogicalResult
-  update(const mlir::lsp::URIForFile &uri, int64_t newVersion,
-         ArrayRef<mlir::lsp::TextDocumentContentChangeEvent> changes,
-         std::vector<mlir::lsp::Diagnostic> &diagnostics);
+  update(const llvm::lsp::URIForFile &uri, int64_t newVersion,
+         ArrayRef<llvm::lsp::TextDocumentContentChangeEvent> changes,
+         std::vector<llvm::lsp::Diagnostic> &diagnostics);
 
 private:
   /// Initialize the text file from the given file contents.
-  void initialize(const mlir::lsp::URIForFile &uri, int64_t newVersion,
-                  std::vector<mlir::lsp::Diagnostic> &diagnostics);
+  void initialize(const llvm::lsp::URIForFile &uri, int64_t newVersion,
+                  std::vector<llvm::lsp::Diagnostic> &diagnostics);
 
   VerilogServerContext &context;
 
@@ -278,18 +279,18 @@ private:
 } // namespace
 
 VerilogTextFile::VerilogTextFile(
-    VerilogServerContext &context, const mlir::lsp::URIForFile &uri,
+    VerilogServerContext &context, const llvm::lsp::URIForFile &uri,
     StringRef fileContents, int64_t version,
-    std::vector<mlir::lsp::Diagnostic> &diagnostics)
+    std::vector<llvm::lsp::Diagnostic> &diagnostics)
     : context(context), contents(fileContents.str()) {
   initialize(uri, version, diagnostics);
 }
 
 LogicalResult VerilogTextFile::update(
-    const mlir::lsp::URIForFile &uri, int64_t newVersion,
-    ArrayRef<mlir::lsp::TextDocumentContentChangeEvent> changes,
-    std::vector<mlir::lsp::Diagnostic> &diagnostics) {
-  if (failed(mlir::lsp::TextDocumentContentChangeEvent::applyTo(changes,
+    const llvm::lsp::URIForFile &uri, int64_t newVersion,
+    ArrayRef<llvm::lsp::TextDocumentContentChangeEvent> changes,
+    std::vector<llvm::lsp::Diagnostic> &diagnostics) {
+  if (failed(llvm::lsp::TextDocumentContentChangeEvent::applyTo(changes,
                                                                 contents))) {
     circt::lsp::Logger::error(Twine("Failed to update contents of ") +
                               uri.file());
@@ -302,8 +303,8 @@ LogicalResult VerilogTextFile::update(
 }
 
 void VerilogTextFile::initialize(
-    const mlir::lsp::URIForFile &uri, int64_t newVersion,
-    std::vector<mlir::lsp::Diagnostic> &diagnostics) {
+    const llvm::lsp::URIForFile &uri, int64_t newVersion,
+    std::vector<llvm::lsp::Diagnostic> &diagnostics) {
   version = newVersion;
   document =
       std::make_unique<VerilogDocument>(context, uri, contents, diagnostics);
@@ -332,15 +333,15 @@ circt::lsp::VerilogServer::~VerilogServer() = default;
 
 void circt::lsp::VerilogServer::addDocument(
     const URIForFile &uri, StringRef contents, int64_t version,
-    std::vector<mlir::lsp::Diagnostic> &diagnostics) {
+    std::vector<llvm::lsp::Diagnostic> &diagnostics) {
   impl->files[uri.file()] = std::make_unique<VerilogTextFile>(
       impl->context, uri, contents, version, diagnostics);
 }
 
 void circt::lsp::VerilogServer::updateDocument(
     const URIForFile &uri,
-    ArrayRef<mlir::lsp::TextDocumentContentChangeEvent> changes,
-    int64_t version, std::vector<mlir::lsp::Diagnostic> &diagnostics) {
+    ArrayRef<llvm::lsp::TextDocumentContentChangeEvent> changes,
+    int64_t version, std::vector<llvm::lsp::Diagnostic> &diagnostics) {
   // Check that we actually have a document for this uri.
   auto it = impl->files.find(uri.file());
   if (it == impl->files.end())

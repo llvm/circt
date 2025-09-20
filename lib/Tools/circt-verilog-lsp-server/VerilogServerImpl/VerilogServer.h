@@ -14,8 +14,9 @@
 #ifndef LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_VERILOGSERVER_H_
 #define LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_VERILOGSERVER_H_
 
-#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/LSP/Protocol.h"
+
 #include <memory>
 #include <optional>
 #include <vector>
@@ -32,9 +33,9 @@ namespace circt {
 namespace lsp {
 struct VerilogServerOptions;
 using TextDocumentContentChangeEvent =
-    mlir::lsp::TextDocumentContentChangeEvent;
-using URIForFile = mlir::lsp::URIForFile;
-using Diagnostic = mlir::lsp::Diagnostic;
+    llvm::lsp::TextDocumentContentChangeEvent;
+using URIForFile = llvm::lsp::URIForFile;
+using Diagnostic = llvm::lsp::Diagnostic;
 
 /// This class implements all of the Verilog related functionality necessary for
 /// a language server. This class allows for keeping the Verilog specific logic

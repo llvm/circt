@@ -12,14 +12,13 @@
 
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 
-#include "mlir/Tools/lsp-server-support/Logging.h"
-#include "mlir/Tools/lsp-server-support/Transport.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LSP/Logging.h"
+#include "llvm/Support/LSP/Transport.h"
 #include "llvm/Support/Program.h"
 
-using namespace mlir;
-using namespace mlir::lsp;
+using namespace llvm::lsp;
 
 int main(int argc, char **argv) {
   //===--------------------------------------------------------------------===//
@@ -37,16 +36,16 @@ int main(int argc, char **argv) {
       llvm::cl::init(Logger::Level::Info),
   };
 
-  llvm::cl::opt<mlir::lsp::JSONStreamStyle> inputStyle{
+  llvm::cl::opt<llvm::lsp::JSONStreamStyle> inputStyle{
       "input-style",
       llvm::cl::desc("Input JSON stream encoding"),
-      llvm::cl::values(clEnumValN(mlir::lsp::JSONStreamStyle::Standard,
+      llvm::cl::values(clEnumValN(llvm::lsp::JSONStreamStyle::Standard,
                                   "standard", "usual LSP protocol"),
-                       clEnumValN(mlir::lsp::JSONStreamStyle::Delimited,
+                       clEnumValN(llvm::lsp::JSONStreamStyle::Delimited,
                                   "delimited",
                                   "messages delimited by `// -----` lines, "
                                   "with // comment support")),
-      llvm::cl::init(mlir::lsp::JSONStreamStyle::Standard),
+      llvm::cl::init(llvm::lsp::JSONStreamStyle::Standard),
       llvm::cl::Hidden,
   };
 
@@ -82,17 +81,17 @@ int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv, "Verilog LSP Language Server");
 
   if (litTest) {
-    inputStyle = mlir::lsp::JSONStreamStyle::Delimited;
-    logLevel = mlir::lsp::Logger::Level::Debug;
+    inputStyle = llvm::lsp::JSONStreamStyle::Delimited;
+    logLevel = llvm::lsp::Logger::Level::Debug;
     prettyPrint = true;
   }
 
   // Configure the logger.
-  mlir::lsp::Logger::setLogLevel(logLevel);
+  llvm::lsp::Logger::setLogLevel(logLevel);
 
   // Configure the transport used for communication.
   (void)llvm::sys::ChangeStdinToBinary();
-  mlir::lsp::JSONTransport transport(stdin, llvm::outs(), inputStyle,
+  llvm::lsp::JSONTransport transport(stdin, llvm::outs(), inputStyle,
                                      prettyPrint);
 
   // Configure the servers and start the main language server.
