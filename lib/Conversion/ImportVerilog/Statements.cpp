@@ -172,33 +172,34 @@ struct StmtVisitor {
       // so this implementation casts the string to the target value.
       if (!call->getSubroutineName().compare("$sformat")) {
 
+        // Use the first argument as the output location
+        auto *lhsExpr = call->arguments().front();
         // Format the second and all later arguments as a string
         auto fmtValue =
             context.convertFormatString(call->arguments().subspan(1), loc,
                                         moore::IntFormat::Decimal, false);
-
         if (failed(fmtValue))
           return failure();
-
         // Convert the FormatString to a StringType
         auto strValue = moore::FormatStringToStringOp::create(builder, loc,
                                                               fmtValue.value());
+        // The Slang AST produces a `AssignmentExpression` for the first
+        // argument; the RHS of this expression is invalid though
+        // (`EmptyArgument`), so we only use the LHS of the
+        // `AssignmentExpression` and plus in the formatted string for the RHS.
+        if (auto assignExpr =
+                lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
+          auto lhs = context.convertLvalueExpression(assignExpr->left());
+          if (!lhs)
+            return failure();
 
-        // Use the first argument as the output location
-        auto *targetExpr = call->arguments().front();
-        if (auto *sym = targetExpr->getSymbolReference()
-                            ? targetExpr->getSymbolReference()
-                                  ->as_if<slang::ast::ValueSymbol>()
-                            : nullptr) {
-          if (auto reference = context.valueSymbols.lookup(sym);
-              reference && isa<moore::RefType>(reference.getType())) {
-            auto targetTy = context.convertType(*sym->getDeclaredType());
-            auto convertedValue = builder.createOrFold<moore::ConversionOp>(
-                loc, targetTy, strValue);
-            moore::BlockingAssignOp::create(builder, loc, reference,
-                                            convertedValue);
-            return success();
-          }
+          auto convertedValue = context.materializeConversion(
+              cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
+              false, loc);
+          moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
+          return success();
+        } else {
+          return failure();
         }
       }
     }
