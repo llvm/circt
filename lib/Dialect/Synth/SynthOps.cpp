@@ -10,12 +10,14 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
 using namespace circt;
@@ -300,4 +302,26 @@ LogicalResult circt::synth::AndInverterVariadicOpConversion::matchAndRewrite(
   rewriter.replaceOp(op, lowerVariadicAndInverterOp(
                              op, op.getOperands(), op.getInverted(), rewriter));
   return success();
+}
+
+LogicalResult circt::synth::topologicallySortGraphRegionBlocks(
+    mlir::Operation *op,
+    llvm::function_ref<bool(mlir::Value, mlir::Operation *)> isOperandReady) {
+  // Sort the operations topologically
+  auto walkResult = op->walk([&](Region *region) {
+    auto regionKindOp =
+        dyn_cast<mlir::RegionKindInterface>(region->getParentOp());
+    if (!regionKindOp ||
+        regionKindOp.hasSSADominance(region->getRegionNumber()))
+      return WalkResult::advance();
+
+    // Graph region.
+    for (auto &block : *region) {
+      if (!mlir::sortTopologically(&block, isOperandReady))
+        return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+
+  return success(!walkResult.wasInterrupted());
 }

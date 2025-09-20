@@ -38,6 +38,15 @@ struct AndInverterVariadicOpConversion
                   mlir::PatternRewriter &rewriter) const override;
 };
 
+/// This function performs a topological sort on the operations within each
+/// block of graph regions in the given operation. It uses MLIR's topological
+/// sort utility as a wrapper, ensuring that operations are ordered such that
+/// all operands are defined before their uses. The `isOperandReady` callback
+/// allows customization of when an operand is considered ready for sorting.
+LogicalResult topologicallySortGraphRegionBlocks(
+    mlir::Operation *op,
+    llvm::function_ref<bool(mlir::Value, mlir::Operation *)> isOperandReady);
+
 } // namespace synth
 } // namespace circt
 
