@@ -311,3 +311,35 @@ function void ConversionBuiltins(int shortint_in, longint longint_in,
   // CHECK: [[SR2B:%.+]] = moore.builtin.shortrealtobits [[SR]]
   dummyA($shortrealtobits(shortreal_in));
 endfunction
+
+// CHECK-LABEL: func.func private @SeverityBuiltinEdgeCase(
+// CHECK-SAME: [[STR:%.+]]: !moore.string
+function void SeverityBuiltinEdgeCase(string testStr);
+  // CHECK: [[CONST:%.+]] = moore.constant 1234 : i32
+  // CHECK-NEXT: [[INTVAR:%.+]] = moore.variable [[CONST]] : <i32>
+  int val = 1234;
+  // CHECK-NEXT: [[INTVAL1:%.+]] = moore.read [[INTVAR]] : <i32>
+  // CHECK-NEXT: [[FMTINT1:%.+]] = moore.fmt.int binary [[INTVAL1]], width 32, align right, pad zero : i32
+  // CHECK-NEXT: [[LINE1:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT1:%.+]] = moore.fmt.concat ([[FMTINT1]], [[LINE1]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT1]]
+  $displayb(val);
+  // CHECK-NEXT: [[INTVAL2:%.+]] = moore.read [[INTVAR]] : <i32>
+  // CHECK-NEXT: [[FMTINT2:%.+]] = moore.fmt.int octal [[INTVAL2]], width 11, align right, pad zero : i32
+  // CHECK-NEXT: [[LINE2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMTINT2]], [[LINE2]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT2]]
+  $displayo(val);
+  // CHECK-NEXT: [[INTVAL3:%.+]] = moore.read [[INTVAR]] : <i32>
+  // CHECK-NEXT: [[FMTINT3:%.+]] = moore.fmt.int hex_lower [[INTVAL3]], width 8, align right, pad zero : i32
+  // CHECK-NEXT: [[LINE3:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMTINT3]], [[LINE3]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT3]]
+  $displayh(val);
+  // CHECK: [[FMTSTR:%.+]] = moore.fmt.string [[STR]]
+  // CHECK-NEXT: [[FMTLIT:%.+]] = moore.fmt.literal " 23"
+  // CHECK-NEXT: [[FMTCONCAT:%.+]] = moore.fmt.concat ([[FMTSTR]], [[FMTLIT]])
+  // CHECK-NEXT: moore.builtin.severity fatal [[FMTCONCAT]]
+  // CHECK: moore.unreachable
+  $fatal(1, $sformatf("%s 23", testStr));
+endfunction
