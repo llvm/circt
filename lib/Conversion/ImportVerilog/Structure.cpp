@@ -669,23 +669,30 @@ LogicalResult Context::convertCompilation() {
   for (auto *unit : root.compilationUnits) {
     for (const auto &member : unit->members()) {
       auto loc = convertLocation(member.location);
-      if (failed(member.visit(RootVisitor(*this, loc))))
+      if (failed(member.visit(RootVisitor(*this, loc)))) {
+        dbgs(loc) << "Failed to convert top-level object " << member.name;
         return failure();
+      }
     }
   }
 
   // Prime the root definition worklist by adding all the top-level modules.
   SmallVector<const slang::ast::InstanceSymbol *> topInstances;
   for (auto *inst : root.topInstances)
-    if (!convertModuleHeader(&inst->body))
+    if (!convertModuleHeader(&inst->body)) {
+      dbgs(inst->location) << ": Failed to convert module header of module "
+                           << inst->name;
       return failure();
-
+    }
   // Convert all the root module definitions.
   while (!moduleWorklist.empty()) {
     auto *module = moduleWorklist.front();
     moduleWorklist.pop();
-    if (failed(convertModuleBody(module)))
+    if (failed(convertModuleBody(module))) {
+      dbgs(module->location)
+          << ": Failed to convert module body of module " << module->name;
       return failure();
+    }
   }
 
   return success();
@@ -1057,8 +1064,10 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // First get or create the function declaration.
   auto *lowering = declareFunction(subroutine);
-  if (!lowering)
+  if (!lowering) {
+    dbgs(subroutine.location) << "Failed to lower function " << subroutine.name;
     return failure();
+  }
   ValueSymbolScope scope(valueSymbols);
 
   // Create a function body block and populate it with block arguments.
@@ -1101,9 +1110,11 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     valueSymbols.insert(subroutine.returnValVar, returnVar);
   }
 
-  if (failed(convertStatement(subroutine.getBody())))
+  if (failed(convertStatement(subroutine.getBody()))) {
+    dbgs(subroutine.location)
+        << "Failed to convert body of function " << subroutine.name;
     return failure();
-
+  }
   // If there was no explicit return statement provided by the user, insert a
   // default one.
   if (builder.getBlock()) {

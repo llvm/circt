@@ -184,8 +184,10 @@ LogicalResult Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
   if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
     for (auto &member : instBodySymbol->members()) {
       auto loc = convertLocation(member.location);
-      if (failed(member.visit(InstBodyVisitor(*this, loc))))
+      if (failed(member.visit(InstBodyVisitor(*this, loc)))) {
+        dbgs(member.location) << ": Failed to convert symbol " << member.name;
         return failure();
+      }
     }
   return success();
 }
