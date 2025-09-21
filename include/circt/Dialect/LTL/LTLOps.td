@@ -106,7 +106,7 @@ def DelayOp : LTLOp<"delay", [Pure]> {
 
 def PastOp : LTLOp<"past", [Pure]> {
   let arguments = (ins
-    LTLAnySequenceType:$input,
+    I1:$input,
     I64Attr:$delay);
   let results = (outs LTLSequenceType:$result);
   let assemblyFormat = [{
