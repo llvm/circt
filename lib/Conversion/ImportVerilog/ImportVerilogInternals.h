@@ -123,6 +123,11 @@ struct Context {
   Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
                                    Location loc);
 
+  // Convert an assertion expression AST node to MLIR ops.
+  Value convertAssertionCallExpression(
+      const slang::ast::CallExpression &expr,
+      const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
+
   // Traverse the whole AST to collect hierarchical names.
   LogicalResult
   collectHierarchicalValues(const slang::ast::Expression &expr,
@@ -190,6 +195,12 @@ struct Context {
   FailureOr<Value>
   convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                           Location loc, Value value);
+
+  /// Convert system function calls within properties and assertion with a
+  /// single argument.
+  FailureOr<Value> convertAssertionSystemCallArity1(
+      const slang::ast::SystemSubroutine &subroutine, Location loc,
+      Value value);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
