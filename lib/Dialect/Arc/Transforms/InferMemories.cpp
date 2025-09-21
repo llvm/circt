@@ -141,7 +141,7 @@ void InferMemoriesPass::runOnOperation() {
 
     auto tap = [&](Value value, const Twine &name) {
       auto prefixedName = builder.getStringAttr(tapPrefix + "_" + name);
-      arc::TapOp::create(builder, value, prefixedName);
+      arc::TapOp::create(builder, value, builder.getArrayAttr({prefixedName}));
     };
 
     // Handle read ports.

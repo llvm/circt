@@ -707,8 +707,8 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
 //===----------------------------------------------------------------------===//
 
 def TapOp : ArcOp<"tap"> {
-  let summary = "A tracker op to observe a value under a given name";
-  let arguments = (ins AnyType:$value, StrAttr:$name);
+  let summary = "A tracker op to observe a value under one or more given names";
+  let arguments = (ins AnyType:$value, StrArrayAttr:$names);
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
 }
 
