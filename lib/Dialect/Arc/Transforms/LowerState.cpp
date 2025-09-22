@@ -794,7 +794,7 @@ LogicalResult OpLowering::lower(TapOp op) {
     auto alloc = AllocStateOp::create(module.allocBuilder, op.getLoc(),
                                       StateType::get(value.getType()),
                                       module.storageArg, true);
-    alloc->setAttr("name", op.getNameAttr());
+    alloc->setAttr("names", op.getNamesAttr());
     state = alloc;
   }
   StateWriteOp::create(module.builder, op.getLoc(), state, value, Value{});

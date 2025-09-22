@@ -437,7 +437,7 @@ hw.module @Taps() {
   // CHECK: [[TMP:%.+]] = func.call @RandomI42()
   // CHECK: arc.state_write [[STORAGE]] = [[TMP]]
   %0 = func.call @RandomI42() : () -> i42
-  arc.tap %0 {name = "myTap"} : i42
+  arc.tap %0 {names = ["myTap"]} : i42
 }
 
 // CHECK-LABEL: arc.model @StateInitializerUsesOtherState

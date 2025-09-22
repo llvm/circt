@@ -55,8 +55,19 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
     if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
       continue;
 
+    SmallVector<StringAttr> names;
+
     auto opName = op->getAttrOfType<StringAttr>("name");
-    if (!opName || opName.getValue().empty())
+    if (opName && !opName.getValue().empty())
+      names.push_back(opName);
+
+    if (auto nameAttrs = op->getAttrOfType<ArrayAttr>("names"))
+      for (auto attr : nameAttrs)
+        if (auto nameAttr = dyn_cast<StringAttr>(attr))
+          if (!nameAttr.empty())
+            names.push_back(nameAttr);
+
+    if (names.empty())
       continue;
 
     auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
@@ -64,9 +75,9 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
       return op->emitOpError(
           "without allocated offset; run state allocation first");
 
+    StateInfo stateInfo;
     if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
       auto result = op->getResult(0);
-      auto &stateInfo = states.emplace_back();
       stateInfo.type = StateInfo::Register;
       if (isa<RootInputOp>(op))
         stateInfo.type = StateInfo::Input;
@@ -76,9 +87,12 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
         if (alloc.getTap())
           stateInfo.type = StateInfo::Wire;
       }
-      stateInfo.name = opName.getValue();
       stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
       stateInfo.numBits = cast<StateType>(result.getType()).getBitWidth();
+      for (auto name : names) {
+        stateInfo.name = name.getValue();
+        states.push_back(stateInfo);
+      }
       continue;
     }
 
@@ -89,13 +103,15 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
             "without allocated stride; run state allocation first");
       auto memType = memOp.getType();
       auto intType = memType.getWordType();
-      auto &stateInfo = states.emplace_back();
       stateInfo.type = StateInfo::Memory;
-      stateInfo.name = opName.getValue();
       stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
       stateInfo.numBits = intType.getWidth();
       stateInfo.memoryStride = stride.getValue().getZExtValue();
       stateInfo.memoryDepth = memType.getNumWords();
+      for (auto name : names) {
+        stateInfo.name = name.getValue();
+        states.push_back(stateInfo);
+      }
       continue;
     }
   }
