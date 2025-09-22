@@ -84,6 +84,14 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
 def LowerWordToBits : Pass<"synth-lower-word-to-bits", "hw::HWModuleOp"> {
   let summary = "Lower multi-bit AndInverter to single-bit ones";
   let dependentDialects = ["comb::CombDialect"];
+  let statistics = [
+    Statistic<"numLoweredBits", "num-lowered-bits",
+              "Number of total bits lowered including constant">,
+    Statistic<"numLoweredConstants", "num-lowered-constants",
+              "Number of total constant bits lowered">,
+    Statistic<"numLoweredOps", "num-lowered-ops",
+              "Number of total operations lowered">,
+  ];
 }
 
 def PrintLongestPathAnalysis
