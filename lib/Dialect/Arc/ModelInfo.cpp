@@ -56,13 +56,16 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
       continue;
 
     SmallVector<StringAttr> names;
+
     auto opName = op->getAttrOfType<StringAttr>("name");
-    if (opName && !opName.getValue().empty()) {
+    if (opName && !opName.getValue().empty())
       names.push_back(opName);
-    } else if (auto nameAttrs = op->getAttrOfType<ArrayAttr>("names")) {
+
+    if (auto nameAttrs = op->getAttrOfType<ArrayAttr>("names"))
       for (auto attr : nameAttrs)
-        names.push_back(cast<StringAttr>(attr));
-    }
+        if (auto nameAttr = dyn_cast<StringAttr>(attr))
+          if (!nameAttr.empty())
+            names.push_back(nameAttr);
 
     if (names.empty())
       continue;
