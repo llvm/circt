@@ -4,6 +4,9 @@
 
 // CHECK-LABEL: firrtl.circuit "Simple"
 firrtl.circuit "Simple" {
+  // CHECK: firrtl.class @Dummy() {
+  // CHECK-NEXT: }
+
   // CHECK: firrtl.module @Simple
   firrtl.module @Simple() {
     // Don't touch existing constants.
@@ -54,5 +57,38 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: dbg.variable "path", [[TMP]]
     %path = firrtl.unresolved_path "foo"
     dbg.variable "path", %path : !firrtl.path
+
+    // CHECK-NEXT: [[TMP1:%.+]] = firrtl.object @Dummy
+    // CHECK-NEXT: [[TMP2:%.+]] = firrtl.object.anyref_cast [[TMP1]]
+    // CHECK-NEXT: dbg.variable "anyref", [[TMP2]]
+    %obj = firrtl.object @NonDummyClass()
+    %anyref = firrtl.object.anyref_cast %obj : !firrtl.class<@NonDummyClass()>
+    dbg.variable "anyref", %anyref : !firrtl.anyref
   }
+
+  firrtl.class @NonDummyClass() {
+    firrtl.string "hello"
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "AnyrefWithExistingDummy"
+firrtl.circuit "AnyrefWithExistingDummy" {
+  // CHECK-NOT: firrtl.class @Dummy
+
+  // CHECK: firrtl.class @SomeClass
+  firrtl.class @SomeClass() {
+    // CHECK-NEXT: [[TMP1:%.+]] = firrtl.object @ExistingDummy
+    // CHECK-NEXT: [[TMP2:%.+]] = firrtl.object.anyref_cast [[TMP1]]
+    // CHECK-NEXT: dbg.variable "anyref", [[TMP2]]
+    %obj = firrtl.object @NonDummyClass()
+    %anyref = firrtl.object.anyref_cast %obj : !firrtl.class<@NonDummyClass()>
+    dbg.variable "anyref", %anyref : !firrtl.anyref
+  }
+
+  firrtl.class @ExistingDummy() {}
+
+  firrtl.class @NonDummyClass() {
+    firrtl.string "hello"
+  }
+  firrtl.extmodule @AnyrefWithExistingDummy()
 }

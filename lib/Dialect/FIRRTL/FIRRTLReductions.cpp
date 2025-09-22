@@ -577,6 +577,22 @@ struct FIRRTLOperandForwarder : public Reduction {
 /// A sample reduction pattern that replaces FIRRTL operations with a constant
 /// zero of their type.
 struct Constantifier : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+
+    // Find valid dummy classes that we can use for anyref casts.
+    anyrefCastDummy.clear();
+    op.walk<WalkOrder::PreOrder>([&](CircuitOp circuitOp) {
+      for (auto classOp : circuitOp.getOps<ClassOp>()) {
+        if (classOp.getArguments().empty() && classOp.getBodyBlock()->empty()) {
+          anyrefCastDummy.insert({circuitOp, classOp});
+          anyrefCastDummyNames[circuitOp].insert(classOp.getNameAttr());
+        }
+      }
+      return WalkResult::skip();
+    });
+  }
+
   uint64_t match(Operation *op) override {
     if (op->hasTrait<OpTrait::ConstantLike>()) {
       Attribute attr;
@@ -598,6 +614,16 @@ struct Constantifier : public Reduction {
     if (auto pathOp = dyn_cast<UnresolvedPathOp>(op))
       if (pathOp.getTarget().empty())
         return 0;
+
+    // Don't replace anyref casts that already target a dummy class.
+    if (auto anyrefCastOp = dyn_cast<ObjectAnyRefCastOp>(op)) {
+      auto circuitOp = anyrefCastOp->getParentOfType<CircuitOp>();
+      auto className =
+          anyrefCastOp.getInput().getType().getNameAttr().getAttr();
+      if (anyrefCastDummyNames[circuitOp].contains(className))
+        return 0;
+    }
+
     if (op->getNumResults() != 1)
       return 0;
     if (op->hasAttr("inner_sym"))
@@ -605,7 +631,8 @@ struct Constantifier : public Reduction {
     if (isFlowSensitiveOp(op))
       return 0;
     return isa<UIntType, SIntType, StringType, FIntegerType, BoolType,
-               DoubleType, ListType, PathType>(op->getResult(0).getType());
+               DoubleType, ListType, PathType, AnyRefType>(
+        op->getResult(0).getType());
   }
 
   LogicalResult rewrite(Operation *op) override {
@@ -677,11 +704,35 @@ struct Constantifier : public Reduction {
       return success();
     }
 
+    // Handle anyref types.
+    if (isa<AnyRefType>(type)) {
+      auto circuitOp = op->getParentOfType<CircuitOp>();
+      auto &dummy = anyrefCastDummy[circuitOp];
+      if (!dummy) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(circuitOp.getBodyBlock());
+        auto &symbolTable = symbols.getNearestSymbolTable(op);
+        dummy = ClassOp::create(builder, op->getLoc(), "Dummy", {}, {});
+        symbolTable.insert(dummy);
+        anyrefCastDummyNames[circuitOp].insert(dummy.getNameAttr());
+      }
+      auto objectOp = ObjectOp::create(builder, op->getLoc(), dummy, "dummy");
+      auto anyrefOp =
+          ObjectAnyRefCastOp::create(builder, op->getLoc(), objectOp);
+      op->replaceAllUsesWith(anyrefOp);
+      reduce::pruneUnusedOps(op, *this);
+      return success();
+    }
+
     return failure();
   }
 
   std::string getName() const override { return "firrtl-constantifier"; }
   bool acceptSizeIncrease() const override { return true; }
+
+  ::detail::SymbolCache symbols;
+  SmallDenseMap<CircuitOp, ClassOp, 2> anyrefCastDummy;
+  SmallDenseMap<CircuitOp, DenseSet<StringAttr>, 2> anyrefCastDummyNames;
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
