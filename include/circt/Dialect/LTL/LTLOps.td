@@ -104,6 +104,21 @@ def DelayOp : LTLOp<"delay", [Pure]> {
   }];
 }
 
+def PastOp : LTLOp<"past", [Pure]> {
+  let arguments = (ins
+    I1:$input,
+    I64Attr:$delay);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $delay attr-dict `:` type($input)
+  }];
+
+  let summary = "Observe the sequence $delay cycles earlier.";
+  let description = [{
+      Semantically works like `ltl.delay %seq, -$delay, 0`
+  }];
+}
+
 def ConcatOp : LTLOp<"concat", [Pure]> {
   let arguments = (ins Variadic<LTLAnySequenceType>:$inputs);
   let results = (outs LTLSequenceType:$result);

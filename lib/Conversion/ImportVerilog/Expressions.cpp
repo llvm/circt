@@ -982,6 +982,18 @@ struct RvalueExprVisitor : public ExprVisitor {
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::CallExpression::SystemCallInfo &info) {
     const auto &subroutine = *info.subroutine;
+
+    // $rose, $fell, $stable, $changed, and $past are only valid in
+    // the context of properties and assertions. Those are treated in the
+    // LTLDialect; treat them there instead.
+    bool isAssertionCall =
+        llvm::StringSwitch<bool>(subroutine.name)
+            .Cases("$rose", "$fell", "$stable", "$past", true)
+            .Default(false);
+
+    if (isAssertionCall)
+      return context.convertAssertionCallExpression(expr, info, loc);
+
     auto args = expr.arguments();
 
     FailureOr<Value> result;
