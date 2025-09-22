@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/APSInt.h"
@@ -1051,6 +1052,32 @@ struct NodeSymbolRemover : public Reduction {
   reduce::InnerSymbolUses innerSymUses;
 };
 
+/// Check if inlining the referenced operation into the parent operation would
+/// cause inner symbol collisions.
+static bool
+hasInnerSymbolCollision(Operation *referencedOp, Operation *parentOp,
+                        hw::InnerSymbolTableCollection &innerSymTables) {
+  // Get the inner symbol tables for both operations
+  auto &targetTable = innerSymTables.getInnerSymbolTable(referencedOp);
+  auto &parentTable = innerSymTables.getInnerSymbolTable(parentOp);
+
+  // Check if any inner symbol name in the target operation already exists
+  // in the parent operation. Return failure() if a collision is found to stop
+  // the walk early.
+  LogicalResult walkResult = targetTable.walkSymbols(
+      [&](StringAttr name, const hw::InnerSymTarget &target) -> LogicalResult {
+        // Check if this symbol name exists in the parent operation
+        if (parentTable.lookup(name)) {
+          // Collision found, return failure to stop the walk
+          return failure();
+        }
+        return success();
+      });
+
+  // If the walk failed, it means we found a collision
+  return failed(walkResult);
+}
+
 /// A sample reduction pattern that eagerly inlines instances.
 struct EagerInliner : public OpReduction<InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
@@ -1082,9 +1109,8 @@ struct EagerInliner : public OpReduction<InstanceOp> {
 
     // Check for inner symbol collisions between the referenced module and the
     // instance's parent module
-    auto referencedModule = cast<FModuleOp>(moduleOp);
-    auto parentModule = instOp->getParentOfType<FModuleOp>();
-    if (hasInnerSymbolCollisions(referencedModule, parentModule))
+    auto parentOp = instOp->getParentOfType<FModuleLike>();
+    if (hasInnerSymbolCollision(moduleOp, parentOp, *innerSymTables))
       return 0;
 
     return 1;
@@ -1127,38 +1153,142 @@ struct EagerInliner : public OpReduction<InstanceOp> {
     return success();
   }
 
-  /// Check if inlining the referenced module into the parent module would cause
-  /// inner symbol collisions.
-  bool hasInnerSymbolCollisions(FModuleOp referencedModule,
-                                FModuleOp parentModule) {
-    // Get the inner symbol tables for both modules
-    auto &targetTable = innerSymTables->getInnerSymbolTable(referencedModule);
-    auto &parentTable = innerSymTables->getInnerSymbolTable(parentModule);
-
-    // Check if any inner symbol name in the target module already exists
-    // in the parent module. Return failure() if a collision is found to stop
-    // the walk early.
-    LogicalResult walkResult = targetTable.walkSymbols(
-        [&](StringAttr name,
-            const hw::InnerSymTarget &target) -> LogicalResult {
-          // Check if this symbol name exists in the parent module
-          if (parentTable.lookup(name)) {
-            // Collision found, return failure to stop the walk
-            return failure();
-          }
-          return success();
-        });
-
-    // If the walk failed, it means we found a collision
-    return failed(walkResult);
-  }
-
   std::string getName() const override { return "firrtl-eager-inliner"; }
   bool acceptSizeIncrease() const override { return true; }
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
   std::unique_ptr<NLATable> nlaTable;
+  std::unique_ptr<hw::InnerSymbolTableCollection> innerSymTables;
+};
+
+/// A reduction pattern that eagerly inlines `ObjectOp`s.
+struct ObjectInliner : public OpReduction<ObjectOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    blocksToSort.clear();
+    symbols.clear();
+    nlaRemover.clear();
+    innerSymTables = std::make_unique<hw::InnerSymbolTableCollection>();
+  }
+  void afterReduction(mlir::ModuleOp op) override {
+    for (auto *block : blocksToSort)
+      mlir::sortTopologically(block);
+    blocksToSort.clear();
+    nlaRemover.remove(op);
+    innerSymTables.reset();
+  }
+
+  uint64_t match(ObjectOp objOp) override {
+    auto *tableOp = SymbolTable::getNearestSymbolTable(objOp);
+    auto *classOp =
+        objOp.getReferencedOperation(symbols.getSymbolTable(tableOp));
+
+    // Only inline `ClassOp`s.
+    if (!isa<ClassOp>(classOp))
+      return 0;
+
+    // Check for inner symbol collisions between the referenced class and the
+    // object's parent module.
+    auto parentOp = objOp->getParentOfType<FModuleLike>();
+    if (hasInnerSymbolCollision(classOp, parentOp, *innerSymTables))
+      return 0;
+
+    // Verify all uses are ObjectSubfieldOp.
+    for (auto *user : objOp.getResult().getUsers())
+      if (!isa<ObjectSubfieldOp>(user))
+        return 0;
+
+    return 1;
+  }
+
+  LogicalResult rewrite(ObjectOp objOp) override {
+    auto *tableOp = SymbolTable::getNearestSymbolTable(objOp);
+    auto classOp = cast<ClassOp>(
+        objOp.getReferencedOperation(symbols.getSymbolTable(tableOp)));
+    auto clonedClassOp = classOp.clone();
+
+    // Create wires to replace the ObjectSubfieldOp results.
+    IRRewriter rewriter(objOp);
+    SmallVector<Value> portWires;
+    auto classType = objOp.getType();
+
+    // Create a wire for each port in the class
+    for (unsigned i = 0, e = classType.getNumElements(); i != e; ++i) {
+      auto element = classType.getElement(i);
+      auto name = rewriter.getStringAttr(Twine(objOp.getName()) + "_" +
+                                         element.name.getValue());
+      auto wire = WireOp::create(rewriter, objOp.getLoc(), element.type, name,
+                                 NameKindEnum::DroppableName,
+                                 rewriter.getArrayAttr({}), StringAttr{})
+                      .getResult();
+      portWires.push_back(wire);
+    }
+
+    // Replace all ObjectSubfieldOp uses with corresponding wires
+    SmallVector<ObjectSubfieldOp> subfieldOps;
+    for (auto *user : objOp.getResult().getUsers()) {
+      auto subfieldOp = cast<ObjectSubfieldOp>(user);
+      subfieldOps.push_back(subfieldOp);
+      auto index = subfieldOp.getIndex();
+      subfieldOp.getResult().replaceAllUsesWith(portWires[index]);
+    }
+
+    // Splice in the cloned class body.
+    rewriter.inlineBlockBefore(clonedClassOp.getBodyBlock(), objOp, portWires);
+
+    // After inlining the class body, we need to eliminate `WireOps` since
+    // `ClassOps` cannot contain wires. For each port wire, find its single
+    // connect, remove it, and replace all uses of the wire with the assigned
+    // value.
+    SmallVector<FConnectLike> connectsToErase;
+    for (auto portWire : portWires) {
+      // Find a single value to replace the wire with, and collect all connects
+      // to the wire such that we can erase them later.
+      Value value;
+      for (auto *user : portWire.getUsers()) {
+        if (auto connect = dyn_cast<FConnectLike>(user)) {
+          if (connect.getDest() == portWire) {
+            value = connect.getSrc();
+            connectsToErase.push_back(connect);
+          }
+        }
+      }
+
+      // Be very conservative about deleting these wires. Other reductions may
+      // leave class ports unconnected, which means that there isn't always a
+      // clean replacement available here. Better to just leave the wires in the
+      // IR and let the verifier fail later.
+      if (value)
+        portWire.replaceAllUsesWith(value);
+      for (auto connect : connectsToErase)
+        connect.erase();
+      if (portWire.use_empty())
+        portWire.getDefiningOp()->erase();
+      connectsToErase.clear();
+    }
+
+    // Make sure we remove any NLAs that go through this object.
+    nlaRemover.markNLAsInOperation(objOp);
+
+    // Since the above forwarding of SSA values through wires can create
+    // dominance issues, mark the region containing the object to be sorted
+    // topologically.
+    blocksToSort.insert(objOp->getBlock());
+
+    // Erase the object and cloned class.
+    for (auto subfieldOp : subfieldOps)
+      subfieldOp.erase();
+    objOp.erase();
+    clonedClassOp.erase();
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-object-inliner"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+  SetVector<Block *> blocksToSort;
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
   std::unique_ptr<hw::InnerSymbolTableCollection> innerSymTables;
 };
 
@@ -1827,6 +1957,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<InstanceStubber, 24>();
   patterns.add<MemoryStubber, 23>();
   patterns.add<EagerInliner, 22>();
+  patterns.add<ObjectInliner, 22>();
   patterns.add<PassReduction, 21>(getContext(),
                                   firrtl::createLowerFIRRTLTypes(), true, true);
   patterns.add<PassReduction, 20>(getContext(), firrtl::createExpandWhens(),
