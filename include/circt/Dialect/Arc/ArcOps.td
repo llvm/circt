@@ -710,6 +710,11 @@ def TapOp : ArcOp<"tap"> {
   let summary = "A tracker op to observe a value under one or more given names";
   let arguments = (ins AnyType:$value, StrArrayAttr:$names);
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+  let builders = [OpBuilder<(ins "mlir::Value":$val, "mlir::StringRef":$name),
+                            [{
+      build($_builder, $_state, val,
+       $_builder.getArrayAttr({$_builder.getStringAttr(name)}));
+    }]>];
 }
 
 def ModelOp : ArcOp<"model", [

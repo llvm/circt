@@ -95,8 +95,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
       return;
     if (isa<seq::ClockType>(value.getType()))
       value = builder.createOrFold<seq::FromClockOp>(loc, value);
-    arc::TapOp::create(builder, loc, value,
-                       builder.getArrayAttr({builder.getStringAttr(name)}));
+    arc::TapOp::create(builder, loc, value, name);
   }
 };
 } // namespace
