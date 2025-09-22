@@ -13,6 +13,8 @@
 #include <memory>
 #include <optional>
 
+#include "circt/Dialect/HW/HWOps.h"
+
 namespace mlir {
 class Pass;
 } // namespace mlir

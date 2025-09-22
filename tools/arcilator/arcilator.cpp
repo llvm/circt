@@ -301,7 +301,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
-  pm.addPass(arc::createMergeTaps());
+  pm.addNestedPass<hw::HWModuleOp>(arc::createMergeTaps());
   if (shouldMakeLUTs)
     pm.addPass(arc::createMakeTablesPass());
   pm.addPass(createCSEPass());

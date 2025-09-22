@@ -28,21 +28,17 @@ namespace {
 struct MergeTapsPass : public arc::impl::MergeTapsBase<MergeTapsPass> {
   using MergeTapsBase::MergeTapsBase;
 
-  void mergeTaps(HWModuleOp hwMod);
+  void mergeTaps();
 
-  void runOnOperation() override {
-    mlir::parallelForEach(getOperation().getContext(),
-                          getOperation().getBody()->getOps<hw::HWModuleOp>(),
-                          [this](HWModuleOp hwMod) { mergeTaps(hwMod); });
-  }
+  void runOnOperation() override { mergeTaps(); }
 };
 } // namespace
 
-void MergeTapsPass::mergeTaps(HWModuleOp hwMod) {
+void MergeTapsPass::mergeTaps() {
   // Collect Tap ops with the same SSA operand and merge them
   // into a single TapOp. Erases TapOps while traversing the
   // module body, but will never erase the op currently visited.
-  for (auto tapOp : hwMod.getBodyBlock()->getOps<arc::TapOp>()) {
+  for (auto tapOp : getOperation().getBodyBlock()->getOps<arc::TapOp>()) {
     SmallVector<TapOp> aliasTaps;
     for (auto user : tapOp.getOperand().getUsers()) {
       if (user == tapOp)

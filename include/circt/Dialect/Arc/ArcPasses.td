@@ -311,7 +311,7 @@ def MergeIfsPass : Pass<"arc-merge-ifs"> {
   ];
 }
 
-def MergeTaps : Pass<"arc-merge-taps", "mlir::ModuleOp"> {
+def MergeTaps : Pass<"arc-merge-taps", "hw::HWModuleOp"> {
   let summary = "Merge TapOps observing the same value in the same Block.";
   let dependentDialects = ["arc::ArcDialect"];
 }
