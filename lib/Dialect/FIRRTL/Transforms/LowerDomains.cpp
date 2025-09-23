@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/InstanceGraphInterface.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
@@ -75,7 +76,7 @@ struct DomainInfo {
   /// The associations to other ports for this domain.  This is in terms of
   /// distinct attributes that have already been established in the annotations
   /// for the associated ports.
-  SmallVector<DistinctAttr, 4> associations = SmallVector<DistinctAttr>();
+  SmallVector<DistinctAttr> associations = SmallVector<DistinctAttr>();
 };
 
 class LowerModule {
@@ -114,23 +115,25 @@ LogicalResult LowerModule::lowerModule() {
   auto *context = op.getContext();
 
   // Information about a domain.  This is built up during the first iteration
-  // over the ports.
-  DenseMap<int, DomainInfo> domainInfo;
+  // over the ports.  This needs to preserve insertion order.
+  llvm::MapVector<int, DomainInfo> domainInfo;
 
-  // The indices need to track the post-deleted index.  Track indices of ports
-  // at different points while ports are being mutated.  The `index` tracks the
-  // original port index, `postDeletionIndex` tracks the port index after
-  // deletion but before insertion, and `postDeletion` index trakcs the port
-  // order after insertion.
+  // Track different "views" of the port indices.  These two variables track the
+  // index of the ports after domains are deleted and after class type ports
+  // have been inserted.  This is necessary due to the pass needing to track
+  // information about where to insert a port (the postDeletionIndex) or which
+  // port to hook up something to (the postInsertionIndex).  These are not
+  // updated if there is no body.
   unsigned postDeletionIndex = 0;
   unsigned postInsertionIndex = 0;
 
-  // The ports that should be inserted, _after deletion_.  These use the
-  // `postDeletionIndex`.
+  // The ports that should be inserted, _after deletion_.  These are indexed
+  // with the postDeletionIndex.
   SmallVector<std::pair<unsigned, PortInfo>> newPorts;
 
-  // The new port annotations, _after_ all insertions and deletions.
-  SmallVector<Attribute> newPortAnnotations;
+  // The new port annotations.  These will be set after all deletions and
+  // insertions.
+  SmallVector<Attribute> portAnnotations;
 
   // Iterate over the ports, staging domain ports for removal and recording the
   // associations of non-domain ports.
@@ -178,10 +181,13 @@ LogicalResult LowerModule::lowerModule() {
                     context, FlatSymbolRefAttr::get(classIn.getNameAttr()), {}),
                 Direction::In)},
            {postDeletionIndex,
-            PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
+            PortInfo(builder->getStringAttr(Twine(port.name) + "_out"),
                      object.getType(), Direction::Out)}});
-      newPortAnnotations.append(
+      portAnnotations.append(
           {builder->getArrayAttr({}), builder->getArrayAttr({})});
+
+      // Don't increment the postDeletionIndex since we deleted one port.
+      // Increment the postInsertionIndex by 2 since we added two ports.
       postInsertionIndex += 2;
       continue;
     }
@@ -190,15 +196,15 @@ LogicalResult LowerModule::lowerModule() {
     if (!body)
       continue;
 
+    // This port will not be deleted, so increment both indices.
     ++postDeletionIndex;
     ++postInsertionIndex;
 
-    // If this port has domain associations and a body block, then add port
-    // annotation trackers.  These will be hooked up to the Object's
-    // associations later.
+    // If this port has domain associations, then add port annotation trackers.
+    // These will be hooked up to the Object's associations later.
     ArrayAttr domainAttr = cast<ArrayAttr>(port.domains);
-    if (!body || !domainAttr || domainAttr.empty()) {
-      newPortAnnotations.push_back(port.annotations.getArrayAttr());
+    if (!domainAttr || domainAttr.empty()) {
+      portAnnotations.push_back(port.annotations.getArrayAttr());
       continue;
     }
 
@@ -213,23 +219,28 @@ LogicalResult LowerModule::lowerModule() {
     }
     if (!newAnnotations.empty())
       port.annotations.addAnnotations(newAnnotations);
-    newPortAnnotations.push_back(port.annotations.getArrayAttr());
+    portAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
-  SmallVector<std::tuple<unsigned, Value, unsigned, Value>> propAssigns;
+  // Erease domain ports and clear domain association information.
+  op.erasePorts(eraseVector);
+  op.setDomainInfoAttr(ArrayAttr::get(context, {}));
+
+  // Insert new property ports and hook these up to the object that was
+  // instantiated earlier.
   if (body) {
-    // Hook up all assocaitions to the created objects.
-    for (size_t i = 0, e = op.getNumPorts(); i != e; ++i) {
-      auto itr = domainInfo.find(i);
-      if (itr == domainInfo.end())
-        continue;
-      auto [object, inputPort, outputPort, associations] = itr->getSecond();
+    op.insertPorts(newPorts);
+    for (auto const &[_, info] : domainInfo) {
+      auto [object, inputPort, outputPort, associations] = info;
       builder->setInsertionPointAfter(object);
+      // Assign input domain info.
       auto subDomainInfoIn = ObjectSubfieldOp::create(
           *builder, builder->getUnknownLoc(), object, 0);
-      propAssigns.push_back({inputPort, subDomainInfoIn, outputPort, object});
+      PropAssignOp::create(*builder, builder->getUnknownLoc(), subDomainInfoIn,
+                           body->getArgument(inputPort));
       auto subAssociations = ObjectSubfieldOp::create(
           *builder, builder->getUnknownLoc(), object, 2);
+      // Assign associations.
       SmallVector<Value> paths;
       for (auto id : associations) {
         paths.push_back(PathOp::create(
@@ -242,22 +253,14 @@ LogicalResult LowerModule::lowerModule() {
           paths);
       PropAssignOp::create(*builder, builder->getUnknownLoc(), subAssociations,
                            list);
+      // Connect the object to the output port.
+      PropAssignOp::create(*builder, builder->getUnknownLoc(),
+                           body->getArgument(outputPort), object);
     }
   }
 
-  // Erease domain ports, clear the DomainInfo attr, and setup new annotations.
-  op.erasePorts(eraseVector);
-  if (body) {
-    op.insertPorts(newPorts);
-    for (auto [a, b, c, d] : propAssigns) {
-      PropAssignOp::create(*builder, builder->getUnknownLoc(), b,
-                           body->getArgument(a));
-      PropAssignOp::create(*builder, builder->getUnknownLoc(),
-                           body->getArgument(c), d);
-    }
-  }
-  op.setDomainInfoAttr(ArrayAttr::get(context, {}));
-  op.setPortAnnotationsAttr(ArrayAttr::get(context, newPortAnnotations));
+  // Set new port annotations now that all deletions and insertions are done.
+  op.setPortAnnotationsAttr(ArrayAttr::get(context, portAnnotations));
 
   return success();
 }
