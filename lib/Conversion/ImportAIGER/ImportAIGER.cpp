@@ -255,9 +255,6 @@ private:
     return emitError(lexer.getCurrentLoc(), message);
   }
 
-  /// Expect and consume a specific token kind
-  ParseResult expectToken(AIGERTokenKind kind, const Twine &message);
-
   /// Parse a number token into result
   ParseResult parseNumber(unsigned &result, SMLoc *loc = nullptr);
 
@@ -380,14 +377,6 @@ ParseResult AIGERParser::parse() {
     return failure();
   // Create the final module
   return createModule();
-}
-
-ParseResult AIGERParser::expectToken(AIGERTokenKind kind,
-                                     const Twine &message) {
-  AIGERToken token = lexer.nextToken();
-  if (token.kind != kind)
-    return emitError(message);
-  return success();
 }
 
 ParseResult AIGERParser::parseNumber(unsigned &result, SMLoc *loc) {
