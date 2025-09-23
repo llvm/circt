@@ -1,4 +1,4 @@
-//===- LowerClasses.cpp - Lower to OM classes and objects -----------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -1343,7 +1343,9 @@ static LogicalResult updateObjectInClass(
 
   // Replace uses of the FIRRTL Object with the OM Object. The later dialect
   // conversion will take care of converting the types.
-  firrtlObject.replaceAllUsesWith(object.getResult());
+  auto cast = UnrealizedConversionCastOp::create(
+      builder, object.getLoc(), firrtlObject.getType(), object.getResult());
+  firrtlObject.replaceAllUsesWith(cast.getResult(0));
 
   // Erase the original Object, now that we're done with it.
   opsToErase.push_back(firrtlObject);
@@ -1580,7 +1582,11 @@ void LowerClassesPass::createAllRtlPorts(
                    builder);
 }
 
-// Pattern rewriters for dialect conversion.
+//===----------------------------------------------------------------------===//
+// Conversion Patterns
+//===----------------------------------------------------------------------===//
+
+namespace {
 
 struct FIntegerConstantOpConversion
     : public OpConversionPattern<FIntegerConstantOp> {
@@ -1837,6 +1843,8 @@ struct WireOpConversion : public OpConversionPattern<WireOp> {
 
     // Find the assignment to the wire.
     PropAssignOp propAssign = getPropertyAssignment(wireValue);
+    if (!propAssign)
+      return failure();
 
     // Use the source of the assignment instead of the wire.
     rewriter.replaceOp(wireOp, propAssign.getSrc());
@@ -1994,7 +2002,29 @@ struct ObjectFieldOpConversion : public OpConversionPattern<ObjectFieldOp> {
   }
 };
 
-// Helpers for dialect conversion setup.
+/// Replace OM-to-FIRRTL casts with the OM value.
+struct UnrealizedConversionCastOpConversion
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+      return failure();
+    auto type = typeConverter->convertType(op.getResult(0));
+    if (!type || type != adaptor.getOperands()[0].getType())
+      return failure();
+    rewriter.replaceOp(op, adaptor.getOperands()[0]);
+    return success();
+  }
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Conversion Setup
+//===----------------------------------------------------------------------===//
 
 static void populateConversionTarget(ConversionTarget &target) {
   // FIRRTL dialect operations inside ClassOps or not using only OM types must
@@ -2156,6 +2186,8 @@ static void populateRewritePatterns(
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
+  patterns.add<UnrealizedConversionCastOpConversion>(converter,
+                                                     patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
