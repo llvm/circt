@@ -278,7 +278,7 @@ struct PosPartialProducts : public OpRewritePattern<PartialProductOp> {
     // Detect if any input is an AddOp
     auto lhsAdder = op.getOperand(0).getDefiningOp<comb::AddOp>();
     auto rhsAdder = op.getOperand(1).getDefiningOp<comb::AddOp>();
-    if ((lhsAdder && rhsAdder) | !(lhsAdder || rhsAdder))
+    if ((lhsAdder && rhsAdder) || !(lhsAdder || rhsAdder))
       return failure();
     auto addInput = lhsAdder ? lhsAdder : rhsAdder;
     auto otherInput = lhsAdder ? op.getOperand(1) : op.getOperand(0);
