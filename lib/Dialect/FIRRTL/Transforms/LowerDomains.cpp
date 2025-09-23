@@ -36,29 +36,6 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-class Constants {
-
-public:
-  Constants(MLIRContext *context) : context(context) {}
-
-  ArrayRef<PortInfo> getDomainPorts();
-
-private:
-  MLIRContext *context;
-  SmallVector<PortInfo, 1> domainPorts;
-};
-
-ArrayRef<PortInfo> Constants::getDomainPorts() {
-  if (domainPorts.empty())
-    domainPorts.append(
-        {{/*name=*/
-          StringAttr::get(context, "associations"),
-          /*type=*/
-          ListType::get(context, cast<PropertyType>(PathType::get(context))),
-          /*dir=*/Direction::In}});
-  return domainPorts;
-}
-
 /// Track information about a domain.
 struct DomainInfo {
   /// The instantiated class inside a module which contains domain information.
@@ -69,7 +46,7 @@ struct DomainInfo {
   /// user must provide.
   size_t inputPort;
 
-  /// The index of the created output porot for this domain, which includes
+  /// The index of the created output port for this domain, which includes
   /// association information.
   size_t outputPort;
 
@@ -280,15 +257,13 @@ class LowerCircuit {
 
 public:
   LowerCircuit(CircuitOp circuit, InstanceGraph &instanceGraph)
-      : circuit(circuit), constants(circuit.getContext()),
-        instanceGraph(instanceGraph) {}
+      : circuit(circuit), instanceGraph(instanceGraph) {}
 
   LogicalResult lowerDomain(DomainOp);
   LogicalResult lowerCircuit();
 
 private:
   CircuitOp circuit;
-  Constants constants;
   InstanceGraph &instanceGraph;
   DenseMap<Attribute, std::pair<ClassOp, ClassOp>> classes;
 };
@@ -299,31 +274,23 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   auto name = op.getNameAttr();
   // TODO: Update this once DomainOps have properties.
   auto classIn = ClassOp::create(builder, name, {});
-  SmallVector<PortInfo, 1> domainPorts;
-  domainPorts.append(
-      {{/*name=*/StringAttr::get(context, "domainInfo_in"),
-        /*type=*/
-        ClassType::get(context, FlatSymbolRefAttr::get(classIn.getNameAttr()),
-                       {}),
-        /*dir=*/Direction::In},
-       {/*name=*/StringAttr::get(context, "domainInfo_out"),
-        /*type=*/
-        ClassType::get(context, FlatSymbolRefAttr::get(classIn.getNameAttr()),
-                       {}),
-        /*dir=*/Direction::Out},
-       {/*name=*/
-        StringAttr::get(context, "associations_in"),
-        /*type=*/
-        ListType::get(context, cast<PropertyType>(PathType::get(context))),
-        /*dir=*/Direction::In},
-       {/*name=*/
-        StringAttr::get(context, "associations_out"),
-        /*type=*/
-        ListType::get(context, cast<PropertyType>(PathType::get(context))),
-        /*dir=*/Direction::Out}});
-  auto classOut = ClassOp::create(
-      builder, StringAttr::get(context, Twine(name) + "_out"), domainPorts);
-  OpBuilder::InsertionGuard guard(builder);
+  auto classInType = ClassType::get(context, FlatSymbolRefAttr::get(name), {});
+  auto pathListType =
+      ListType::get(context, cast<PropertyType>(PathType::get(context)));
+  auto classOut =
+      ClassOp::create(builder, StringAttr::get(context, Twine(name) + "_out"),
+                      {{/*name=*/StringAttr::get(context, "domainInfo_in"),
+                        /*type=*/classInType,
+                        /*dir=*/Direction::In},
+                       {/*name=*/StringAttr::get(context, "domainInfo_out"),
+                        /*type=*/classInType,
+                        /*dir=*/Direction::Out},
+                       {/*name=*/StringAttr::get(context, "associations_in"),
+                        /*type=*/pathListType,
+                        /*dir=*/Direction::In},
+                       {/*name=*/StringAttr::get(context, "associations_out"),
+                        /*type=*/pathListType,
+                        /*dir=*/Direction::Out}});
   builder.setInsertionPointToStart(classOut.getBodyBlock());
   PropAssignOp::create(builder, classOut.getArgument(1),
                        classOut.getArgument(0));
@@ -343,19 +310,17 @@ LogicalResult LowerCircuit::lowerCircuit() {
   }
 
   LLVM_DEBUG(llvm::dbgs() << "Processing modules:\n");
-  DenseSet<InstanceGraphNode *> visited;
-  for (auto *root : instanceGraph) {
-    for (auto *node : llvm::post_order_ext(root, visited)) {
-      auto moduleOp = dyn_cast<FModuleLike>(node->getModule<Operation *>());
-      if (!moduleOp)
-        continue;
-      LLVM_DEBUG(llvm::dbgs() << "  - " << moduleOp.getName() << "\n");
-      LowerModule lowerModule(moduleOp, classes);
-      if (failed(lowerModule.lowerModule()))
-        return failure();
-      lowerModule.lowerInstances(instanceGraph);
-    }
-  }
+  return instanceGraph.walkPostOrder([&](InstanceGraphNode &node) {
+    auto moduleOp = dyn_cast<FModuleLike>(node.getModule<Operation *>());
+    if (!moduleOp)
+      return success();
+    LLVM_DEBUG(llvm::dbgs() << "  - " << moduleOp.getName() << "\n");
+    LowerModule lowerModule(moduleOp, classes);
+    if (failed(lowerModule.lowerModule()))
+      return failure();
+    lowerModule.lowerInstances(instanceGraph);
+    return success();
+  });
 
   return success();
 }
