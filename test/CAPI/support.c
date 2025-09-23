@@ -55,10 +55,10 @@ void testInstancePath(void) {
   // for testing purposes without needing to expose additional InstancePathCache
   // APIs.
 
-  SynthLongestPathAnalysis analysis =
-      synthLongestPathAnalysisCreate(moduleOp, true, false, false);
-
   MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
+  SynthLongestPathAnalysis analysis =
+      synthLongestPathAnalysisCreate(moduleOp, true, false, false, moduleName);
+
   SynthLongestPathCollection collection =
       synthLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
 

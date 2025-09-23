@@ -141,7 +141,7 @@ with Context() as ctx, Location.unknown():
     analysis = LongestPathAnalysis(test_child,
                                    collect_debug_info=True,
                                    keep_only_max_delay_paths=True,
-                                   lazy_computation=True)
+                                   lazy_computation=True, top_module_name="test_child")
     c1 = analysis.get_paths(result0, 0)
     c2 = analysis.get_paths(result1, 0)
     # CHECK-NEXT: len(c1) = 1

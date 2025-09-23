@@ -33,14 +33,15 @@ void circt::python::populateDialectSynthSubmodule(nb::module_ &m) {
           "__init__",
           [](SynthLongestPathAnalysis *self, MlirOperation module,
              bool collectDebugInfo, bool keepOnlyMaxDelayPaths,
-             bool lazyComputation) {
+             bool lazyComputation, const std::string &topModuleName) {
             new (self) SynthLongestPathAnalysis(synthLongestPathAnalysisCreate(
                 module, collectDebugInfo, keepOnlyMaxDelayPaths,
-                lazyComputation));
+                lazyComputation,
+                mlirStringRefCreateFromCString(topModuleName.c_str())));
           },
           nb::arg("module"), nb::arg("collect_debug_info") = false,
           nb::arg("keep_only_max_delay_paths") = false,
-          nb::arg("lazy_computation") = false)
+          nb::arg("lazy_computation") = false, nb::arg("top_module_name") = "")
       .def("__del__",
            [](SynthLongestPathAnalysis &self) {
              synthLongestPathAnalysisDestroy(self);

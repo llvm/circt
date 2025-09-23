@@ -116,7 +116,10 @@ def PrintLongestPathAnalysis
                  Option<"showTopKPercent", "show-top-k-percent", "int", "5",
                         "The size of the longest paths to show.">,
                  Option<"emitJSON", "emit-json", "bool", "false",
-                        "Output analysis results in JSON format">];
+                        "Output analysis results in JSON format">,
+                 Option<"topModuleName", "top-module-name", "std::string", "",
+                        "Name of the top module to analyze (empty for automatic "
+                        "inference from instance graph)">];
 }
 
 class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {

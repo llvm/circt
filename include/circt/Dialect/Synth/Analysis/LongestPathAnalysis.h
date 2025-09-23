@@ -206,12 +206,18 @@ struct LongestPathAnalysisOptions {
   /// are needed rather than complete path enumeration.
   bool keepOnlyMaxDelayPaths = false;
 
+  /// Name of the top module for the analysis.
+  /// If empty, the top module is inferred from the instance graph.
+  StringAttr topModuleName = {};
+
   /// Construct analysis options with the specified settings.
   LongestPathAnalysisOptions(bool collectDebugInfo = false,
                              bool lazyComputation = false,
-                             bool keepOnlyMaxDelayPaths = false)
+                             bool keepOnlyMaxDelayPaths = false,
+                             StringAttr topModuleName = {})
       : collectDebugInfo(collectDebugInfo), lazyComputation(lazyComputation),
-        keepOnlyMaxDelayPaths(keepOnlyMaxDelayPaths) {}
+        keepOnlyMaxDelayPaths(keepOnlyMaxDelayPaths),
+        topModuleName(topModuleName) {}
 };
 
 // This analysis finds the longest paths in the dataflow graph across modules.
@@ -281,16 +287,6 @@ public:
 
   // Return the top nodes that were used for the analysis.
   llvm::ArrayRef<hw::HWModuleOp> getTopModules() const;
-
-  // This is the name of the attribute that can be attached to the module
-  // to specify the top module for the analysis. This is optional, if not
-  // specified, the analysis will infer the top module from the instance graph.
-  // However it's recommended to specify it, as the entire module tends to
-  // contain testbench or verification modules, which may have expensive paths
-  // that are not of interest.
-  static StringRef getTopModuleNameAttrName() {
-    return "synth.longest-path-analysis-top";
-  }
 
   MLIRContext *getContext() const { return ctx; }
 

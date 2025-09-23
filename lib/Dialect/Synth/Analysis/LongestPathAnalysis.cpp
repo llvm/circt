@@ -485,6 +485,7 @@ public:
   bool doLazyComputation() const { return option.lazyComputation; }
   bool doKeepOnlyMaxDelayPaths() const { return option.keepOnlyMaxDelayPaths; }
   bool isLocalScope() const { return instanceGraph == nullptr; }
+  StringAttr getTopModuleName() const { return option.topModuleName; }
 
 private:
   bool isRunningParallel() const { return !doLazyComputation(); }
@@ -1752,14 +1753,12 @@ LongestPathAnalysis::Impl::initializeAndRun(hw::HWModuleOp module) {
 
 LogicalResult
 LongestPathAnalysis::Impl::initializeAndRun(mlir::ModuleOp module) {
-  auto topNameAttr =
-      module->getAttrOfType<FlatSymbolRefAttr>(getTopModuleNameAttrName());
-
+  auto topNameAttr = ctx.getTopModuleName();
   topModules.clear();
   llvm::SetVector<Operation *> visited;
   auto *instanceGraph = ctx.instanceGraph;
-  if (topNameAttr) {
-    auto *topNode = instanceGraph->lookup(topNameAttr.getAttr());
+  if (topNameAttr && topNameAttr.getValue() != "") {
+    auto *topNode = instanceGraph->lookupOrNull(topNameAttr);
     if (!topNode || !topNode->getModule() ||
         !isa<hw::HWModuleOp>(topNode->getModule())) {
       module.emitError() << "top module not found in instance graph "

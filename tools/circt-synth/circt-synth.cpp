@@ -329,13 +329,6 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
             "circt-synth"));
   populateCIRCTSynthPipeline(pm);
 
-  if (!topName.empty()) {
-    // Set a top module name for the longest path analysis.
-    module.get()->setAttr(
-        circt::synth::LongestPathAnalysis::getTopModuleNameAttrName(),
-        FlatSymbolRefAttr::get(&context, topName));
-  }
-
   if (failed(pm.run(module.get())))
     return failure();
 

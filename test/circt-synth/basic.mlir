@@ -6,7 +6,6 @@
 // RUN: circt-synth %s --top and --disable-word-to-bits | FileCheck %s --check-prefix=DISABLE_WORD
 // RUN: circt-synth %s --target-ir mig | FileCheck %s --check-prefix=MIG
 
-// TOP-LABEL: module attributes {"synth.longest-path-analysis-top" = @and}
 // AIG-LABEL: @and(
 // CHECK-LABEL: @and(
 // COMB-LABEL: @and(
