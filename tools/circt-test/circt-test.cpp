@@ -25,6 +25,7 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/JSON.h"
+#include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -118,6 +119,8 @@ struct Options {
       cl::desc("Split the input file into pieces and process each "
                "chunk independently"),
       cl::init(false), cl::Hidden, cl::cat(cat)};
+
+  LoweringOptionsOption loweringOptions{cat};
 };
 Options opts;
 
@@ -424,6 +427,11 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   auto module = parseSourceFile<ModuleOp>(srcMgr, context);
   if (!module)
     return failure();
+
+  // Load the emitter options from the command line. Command line options if
+  // specified will override any module options.
+  if (opts.loweringOptions.toString() != LoweringOptions().toString())
+    opts.loweringOptions.setAsAttribute(module.get());
 
   // Preprocess the input.
   {
