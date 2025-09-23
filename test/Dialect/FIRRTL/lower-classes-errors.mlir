@@ -82,3 +82,12 @@ firrtl.circuit "NotInstance" {
     %0 = firrtl.path instance distinct[0]<>
   }
 }
+
+// -----
+
+firrtl.circuit "DontCrashOnUnassignedWire" {
+  firrtl.module @DontCrashOnUnassignedWire() {
+    // expected-error @below {{failed to legalize operation}}
+    %wire = firrtl.wire : !firrtl.integer
+  }
+}

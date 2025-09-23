@@ -587,3 +587,27 @@ firrtl.circuit "DuplicateButEqualTrackers" {
     firrtl.path reference distinct[0]<>
   }
 }
+
+// The following used to crash due to a missing `unrealized_conversion_cast`
+// between the `!om.class.type<@Bar>` value directly replacing the
+// `!firrtl.class<@Bar()>` result of `firrtl.object`.
+// CHECK-LABEL: firrtl.circuit "MissingConversionCastRegression"
+firrtl.circuit "MissingConversionCastRegression" {
+  // CHECK: firrtl.module @MissingConversionCastRegression() {
+  // CHECK-NEXT: }
+
+  // CHECK: om.class @MissingConversionCastRegression_Class
+  firrtl.module @MissingConversionCastRegression(out %z: !firrtl.class<@Bar()>) {
+    // CHECK-NEXT: [[TMP:%.+]] = om.object @Bar
+    %obj = firrtl.object @Bar()
+    // CHECK-NOT: firrtl.wire
+    // CHECK-NOT: firrtl.propassign
+    %wire = firrtl.wire : !firrtl.class<@Bar()>
+    firrtl.propassign %z, %wire : !firrtl.class<@Bar()>
+    firrtl.propassign %wire, %obj : !firrtl.class<@Bar()>
+    // CHECK-NEXT: om.class.fields [[TMP]]
+  }
+
+  firrtl.class private @Bar() {
+  }
+}
