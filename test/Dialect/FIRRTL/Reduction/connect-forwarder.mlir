@@ -1,6 +1,6 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg /usr/bin/env --test-arg true --keep-best=0 --include connect-forwarder | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg true --keep-best=0 --include connect-forwarder | FileCheck %s
 
 firrtl.circuit "DontRemoveSyms" {
   // CHECK-LABEL: firrtl.module @DontRemoveSyms
