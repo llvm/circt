@@ -50,7 +50,7 @@ struct LoweringOptionsOption
                 "disallowPortDeclSharing, printDebugInfo, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
                 "emitWireInPort, emitBindComments, omitVersionComment, "
-                "caseInsensitiveKeywords"),
+                "caseInsensitiveKeywords, disallowClockedAssertions"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 
