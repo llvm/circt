@@ -61,6 +61,11 @@ int main(int argc, char **argv) {
   llvm::cl::alias libDirsLong{"libdir", llvm::cl::desc("Alias for -y"),
                               llvm::cl::aliasopt(libDirs), llvm::cl::NotHidden};
 
+  llvm::cl::list<std::string> sourceLocationIncludeDirs(
+      "source-location-include-dir",
+      llvm::cl::desc("Root directory of file source locations"),
+      llvm::cl::value_desc("directory"), llvm::cl::Prefix);
+
   //===--------------------------------------------------------------------===//
   // Testing
   //===--------------------------------------------------------------------===//
@@ -95,6 +100,6 @@ int main(int argc, char **argv) {
                                      prettyPrint);
 
   // Configure the servers and start the main language server.
-  circt::lsp::VerilogServerOptions options(libDirs);
+  circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs);
   return failed(circt::lsp::CirctVerilogLspServerMain(options, transport));
 }
