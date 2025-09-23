@@ -113,7 +113,6 @@ struct FormatStringParser {
     assert(!arguments.empty() && "Slang guarantees correct arg count");
     const auto &arg = *arguments[0];
     arguments = arguments.drop_front();
-    auto argLoc = context.convertLocation(arg.sourceRange);
 
     // Handle the different formatting options.
     // See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
