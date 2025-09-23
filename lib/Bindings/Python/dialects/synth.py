@@ -352,7 +352,8 @@ class LongestPathAnalysis:
                module,
                collect_debug_info: bool = True,
                keep_only_max_delay_paths: bool = False,
-               lazy_computation: bool = False):
+               lazy_computation: bool = False,
+               top_module_name: str = ""):
     """
         Initialize the longest path analysis for a given module.
         Args:
@@ -365,7 +366,7 @@ class LongestPathAnalysis:
         """
     self.analysis = synth._LongestPathAnalysis(module, collect_debug_info,
                                                keep_only_max_delay_paths,
-                                               lazy_computation)
+                                               lazy_computation, top_module_name)
 
   def get_paths(self,
                 value,
