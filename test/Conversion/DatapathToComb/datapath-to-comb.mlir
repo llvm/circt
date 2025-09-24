@@ -56,6 +56,42 @@ hw.module @partial_product(in %a : i3, in %b : i3, out pp0 : i3, out pp1 : i3, o
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
 
+// CHECK-LABEL: @partial_product_square
+hw.module @partial_product_square(in %a : i3, out pp0 : i3, out pp1 : i3, out pp2 : i3) {
+  // CHECK-NEXT: %c0_i3 = hw.constant 0 : i3
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %[[A0:.+]] = comb.extract %a from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[A1:.+]] = comb.extract %a from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[A01:.+]] = comb.and %[[A0]], %[[A1]] : i1
+  // CHECK-NEXT: %[[PP0:.+]] = comb.concat %[[A01]], %false, %[[A0]] : i1, i1, i1
+  // CHECK-NEXT: %[[PP1:.+]] = comb.concat %[[A1]], %c0_i2 : i1, i2
+  %0:3 = datapath.partial_product %a, %a : (i3, i3) -> (i3, i3, i3)
+  hw.output %0#0, %0#1, %0#2 : i3, i3, i3
+}
+
+// CHECK-LABEL: @partial_product_square_zext
+hw.module @partial_product_square_zext(in %a : i3, out pp0 : i6, out pp1 : i6, out pp2 : i6) {
+  // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %c0_i3 = hw.constant 0 : i3
+  // CHECK-NEXT: %[[AEXT:.+]] = comb.concat %c0_i3, %a : i3, i3
+  // CHECK-NEXT: %[[A0:.+]] = comb.extract %[[AEXT]] from 0 : (i6) -> i1
+  // CHECK-NEXT: %[[A1:.+]] = comb.extract %[[AEXT]] from 1 : (i6) -> i1
+  // CHECK-NEXT: %[[A2:.+]] = comb.extract %[[AEXT]] from 2 : (i6) -> i1
+  // CHECK-NEXT: %[[A01:.+]] = comb.and %[[A0]], %[[A1]] : i1
+  // CHECK-NEXT: %[[A02:.+]] = comb.and %[[A0]], %[[A2]] : i1
+  // CHECK-NEXT: %[[PP0:.+]] = comb.concat %false, %false, %[[A02]], %[[A01]], %false, %[[A0]] : i1, i1, i1, i1, i1, i1
+  // CHECK-NEXT: %[[A12:.+]] = comb.and %[[A1]], %[[A2]] : i1
+  // CHECK-NEXT: %[[PP1:.+]] = comb.concat %false, %[[A12]], %false, %[[A1]], %c0_i2 : i1, i1, i1, i1, i2
+  // CHECK-NEXT: %[[PP2:.+]] = comb.concat %false, %[[A2]], %c0_i4 : i1, i1, i4
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.concat %c0_i3, %a : i3, i3
+  %1:3 = datapath.partial_product %0, %0 : (i6, i6) -> (i6, i6, i6)
+  hw.output %1#0, %1#1, %1#2 : i6, i6, i6
+}
+
 // CHECK-LABEL: @partial_product_booth
 // FORCE-BOOTH-LABEL: @partial_product_booth
 // Constants

@@ -174,26 +174,48 @@ private:
                                         PartialProductOp op, unsigned width) {
 
     Location loc = op.getLoc();
-    // Keep a as a bitvector - multiply by each digit of b
     SmallVector<Value> aBits = extractBits(rewriter, a);
 
     SmallVector<Value> partialProducts;
     partialProducts.reserve(width);
-    // AND Array Construction:
-    // partialProducts[i] = ({b[i],..., b[i]} & a) << i
+    // AND Array Construction - reducing to upper triangle:
+    // partialProducts[i] = ({a[i],..., a[i]} & a) << i
+    // optimised to: {a[i] & a[n-1], ..., a[i] & a[i+1], 0, a[i], 0, ..., 0}
     assert(op.getNumResults() <= width &&
            "Cannot return more results than the operator width");
     auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
     for (unsigned i = 0; i < op.getNumResults(); ++i) {
       SmallVector<Value> row;
       row.reserve(width);
+
+      if (2 * i >= width) {
+        // Pad the remaining rows with zeros
+        auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+        partialProducts.push_back(zeroWidth);
+        continue;
+      }
+
       if (i > 0) {
         auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(2 * i, 0));
         row.push_back(shiftBy);
       }
       row.push_back(aBits[i]);
-      row.push_back(zeroFalse);
+
+      // Track width of constructed row
+      unsigned rowWidth = 2 * i + 1;
+      if (rowWidth < width) {
+        row.push_back(zeroFalse);
+        ++rowWidth;
+      }
+
       for (unsigned j = i + 1; j < width; ++j) {
+        // Stop when we reach the required width
+        if (rowWidth == width)
+          break;
+
+        // Otherwise pad with zeros or partial product bits
+        ++rowWidth;
+        // Number of results indicates number of non-zero bits in input
         if (j >= op.getNumResults()) {
           row.push_back(zeroFalse);
           continue;
@@ -205,9 +227,7 @@ private:
       }
       std::reverse(row.begin(), row.end());
       auto ppRow = comb::ConcatOp::create(rewriter, loc, row);
-      auto ppAlignTrunc = rewriter.createOrFold<comb::ExtractOp>(
-          loc, ppRow, 0, width); // Truncate to width+i bits
-      partialProducts.push_back(ppAlignTrunc);
+      partialProducts.push_back(ppRow);
     }
 
     rewriter.replaceOp(op, partialProducts);
