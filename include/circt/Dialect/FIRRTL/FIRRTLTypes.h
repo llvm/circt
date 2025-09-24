@@ -625,4 +625,87 @@ public:
 } // namespace firrtl
 } // namespace circt
 
+//===--------------------------------------------------------------------===//
+// Subelement Visitors
+//===--------------------------------------------------------------------===//
+
+/// Allow walking and replacing the subelements of a ClassElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<circt::firrtl::ClassElement> {
+  using ClassElement = circt::firrtl::ClassElement;
+
+  static void walk(ClassElement param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static ClassElement replace(ClassElement param,
+                              AttrSubElementReplacements &attrRepls,
+                              TypeSubElementReplacements &typeRepls) {
+    return ClassElement(cast<StringAttr>(attrRepls.take_front(1)[0]),
+                        typeRepls.take_front(1)[0], param.direction);
+  }
+};
+
+/// Allow walking and replacing the subelements of a BundleElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<
+    circt::firrtl::BundleType::BundleElement> {
+  using BundleElement = circt::firrtl::BundleType::BundleElement;
+
+  static void walk(const BundleElement &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static BundleElement replace(const BundleElement &param,
+                               AttrSubElementReplacements &attrRepls,
+                               TypeSubElementReplacements &typeRepls) {
+    return BundleElement(
+        cast<StringAttr>(attrRepls.take_front(1)[0]), param.isFlip,
+        cast<circt::firrtl::FIRRTLBaseType>(typeRepls.take_front(1)[0]));
+  }
+};
+
+/// Allow walking and replacing the subelements of an OpenBundleElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<
+    circt::firrtl::OpenBundleType::BundleElement> {
+  using BundleElement = circt::firrtl::OpenBundleType::BundleElement;
+
+  static void walk(const BundleElement &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static BundleElement replace(const BundleElement &param,
+                               AttrSubElementReplacements &attrRepls,
+                               TypeSubElementReplacements &typeRepls) {
+    return BundleElement(
+        cast<StringAttr>(attrRepls.take_front(1)[0]), param.isFlip,
+        cast<circt::firrtl::FIRRTLType>(typeRepls.take_front(1)[0]));
+  }
+};
+
+/// Allow walking and replacing the subelements of an EnumElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<circt::firrtl::FEnumType::EnumElement> {
+  using EnumElement = circt::firrtl::FEnumType::EnumElement;
+
+  static void walk(const EnumElement &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.value);
+    walker.walk(param.type);
+  }
+  static EnumElement replace(const EnumElement &param,
+                             AttrSubElementReplacements &attrRepls,
+                             TypeSubElementReplacements &typeRepls) {
+    auto attrs = attrRepls.take_front(2);
+    return EnumElement(
+        cast<StringAttr>(attrs[0]), cast<IntegerAttr>(attrs[1]),
+        cast<circt::firrtl::FIRRTLBaseType>(typeRepls.take_front(1)[0]));
+  }
+};
+
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H
