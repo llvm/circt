@@ -9,7 +9,8 @@ import socket
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Callable, IO
+import threading
 
 _thisdir = Path(__file__).parent
 CosimCollateralDir = _thisdir
@@ -93,10 +94,65 @@ class Simulator:
   # broken behavior by overriding this.
   UsesStderr = True
 
-  def __init__(self, sources: SourceFiles, run_dir: Path, debug: bool):
+  def __init__(self,
+               sources: SourceFiles,
+               run_dir: Path,
+               debug: bool,
+               run_stdout_callback: Optional[Callable[[str], None]] = None,
+               run_stderr_callback: Optional[Callable[[str], None]] = None,
+               compile_stdout_callback: Optional[Callable[[str], None]] = None,
+               compile_stderr_callback: Optional[Callable[[str], None]] = None,
+               make_default_logs: bool = True):
+    """Simulator base class.
+
+    Optional sinks can be provided for capturing output. If not provided,
+    the simulator will write to log files in `run_dir`.
+
+    Args:
+      sources: SourceFiles describing RTL/DPI inputs.
+      run_dir: Directory where build/run artifacts are placed.
+      debug: Enable cosim debug mode.
+      run_stdout_callback: Line-based callback for runtime stdout.
+      run_stderr_callback: Line-based callback for runtime stderr.
+      compile_stdout_callback: Line-based callback for compile stdout.
+      compile_stderr_callback: Line-based callback for compile stderr.
+      make_default_logs: If True and corresponding callback is not supplied,
+        create log file and emit via internally-created callback.
+    """
     self.sources = sources
     self.run_dir = run_dir
     self.debug = debug
+
+    # Install callbacks (possibly wrapping default file log writers).
+    self._run_stdout_cb = run_stdout_callback
+    self._run_stderr_cb = run_stderr_callback
+    self._compile_stdout_cb = compile_stdout_callback
+    self._compile_stderr_cb = compile_stderr_callback
+
+    self._default_files: List[IO[str]] = []
+
+    def _ensure_default_log(cb_attr: str, log_attr: str, filename: str):
+      """Create a default log file and callback if the callback is unset."""
+      if getattr(self, cb_attr) is not None:
+        # User provided a callback, don't override it.
+        return
+      p = self.run_dir / filename
+      p.parent.mkdir(parents=True, exist_ok=True)
+      logf = p.open("w+")
+      self._default_files.append(logf)
+      setattr(self, log_attr, logf)
+      # Install simple line-wise writer+flush callback.
+      setattr(self,
+              cb_attr,
+              lambda line, _lf=logf: (_lf.write(line + "\n"), _lf.flush()))
+
+    if make_default_logs:
+      _ensure_default_log('_compile_stdout_cb', '_compile_stdout_log',
+                          'compile_stdout.log')
+      _ensure_default_log('_compile_stderr_cb', '_compile_stderr_log',
+                          'compile_stderr.log')
+      _ensure_default_log('_run_stdout_cb', '_run_stdout_log', 'sim_stdout.log')
+      _ensure_default_log('_run_stderr_cb', '_run_stderr_log', 'sim_stderr.log')
 
   @staticmethod
   def get_env() -> Dict[str, str]:
@@ -116,23 +172,28 @@ class Simulator:
   def compile(self) -> int:
     cmds = self.compile_commands()
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    with (self.run_dir / "compile_stdout.log").open("w") as stdout, (
-        self.run_dir / "compile_stderr.log").open("w") as stderr:
-      for cmd in cmds:
-        stderr.write(" ".join(cmd) + "\n")
-        cp = subprocess.run(cmd,
-                            env=Simulator.get_env(),
-                            capture_output=True,
-                            text=True)
-        stdout.write(cp.stdout)
-        stderr.write(cp.stderr)
-        if cp.returncode != 0:
-          print("====== Compilation failure:")
-          if self.UsesStderr:
-            print(cp.stderr)
-          else:
-            print(cp.stdout)
-          return cp.returncode
+    for cmd in cmds:
+      ret = self._start_process_with_callbacks(
+          cmd,
+          env=Simulator.get_env(),
+          cwd=None,
+          stdout_cb=self._compile_stdout_cb,
+          stderr_cb=self._compile_stderr_cb,
+          wait=True)
+      if isinstance(ret, int) and ret != 0:
+        print("====== Compilation failure")
+
+        # If we have the default file loggers, print the compilation logs to
+        # console. Else, assume that the user has already captured them.
+        if self.UsesStderr:
+          if hasattr(self, "_compile_stderr_log"):
+            self._compile_stderr_log.seek(0)
+            print(self._compile_stderr_log.read())
+        elif hasattr(self, "_compile_stdout_log"):
+          self._compile_stdout_log.seek(0)
+          print(self._compile_stdout_log.read())
+
+        return ret
     return 0
 
   def run_command(self, gui: bool) -> List[str]:
@@ -141,11 +202,12 @@ class Simulator:
 
   def run_proc(self, gui: bool = False) -> SimProcess:
     """Run the simulation process. Returns the Popen object and the port which
-      the simulation is listening on."""
-    # Open log files
+      the simulation is listening on.
+
+    If user-provided stdout/stderr sinks were supplied in the constructor,
+    they are used. Otherwise, log files are created in `run_dir`.
+    """
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    simStdout = open(self.run_dir / "sim_stdout.log", "w")
-    simStderr = open(self.run_dir / "sim_stderr.log", "w")
 
     # Erase the config file if it exists. We don't want to read
     # an old config.
@@ -161,14 +223,13 @@ class Simulator:
         # Slow the simulation down to one tick per millisecond.
         simEnv["DEBUG_PERIOD"] = "1"
     rcmd = self.run_command(gui)
-    simProc = subprocess.Popen(self.run_command(gui),
-                               stdout=simStdout,
-                               stderr=simStderr,
-                               env=simEnv,
-                               cwd=self.run_dir,
-                               preexec_fn=os.setsid)
-    simStderr.close()
-    simStdout.close()
+    rcmd = self.run_command(gui)
+    simProc = self._start_process_with_callbacks(rcmd,
+                                                 env=simEnv,
+                                                 cwd=self.run_dir,
+                                                 stdout_cb=self._run_stdout_cb,
+                                                 stderr_cb=self._run_stderr_cb,
+                                                 wait=False)
 
     # Get the port which the simulation RPC selected.
     checkCount = 0
@@ -197,6 +258,54 @@ class Simulator:
         raise Exception("Simulation exited early")
       time.sleep(0.05)
     return SimProcess(proc=simProc, port=port)
+
+  def _start_process_with_callbacks(self, cmd: List[str],
+                                    env: Optional[Dict[str, str]],
+                                    cwd: Optional[Path],
+                                    stdout_cb: Optional[Callable[[str], None]],
+                                    stderr_cb: Optional[Callable[[str], None]],
+                                    wait: bool) -> subprocess.Popen | int:
+    """Start a subprocess and stream its stdout/stderr to callbacks.
+
+    If wait is True, blocks until process completes and returns its exit code.
+    If wait is False, returns the Popen object (threads keep streaming).
+    """
+    proc = subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            env=env,
+                            cwd=cwd,
+                            text=True,
+                            preexec_fn=os.setsid)
+
+    def _reader(pipe, cb):
+      if pipe is None:
+        return
+      for raw in pipe:
+        if raw.endswith('\n'):
+          raw = raw[:-1]
+        if cb:
+          try:
+            cb(raw)
+          except Exception:
+            # Swallow callback exceptions to avoid killing streaming threads.
+            pass
+
+    threads = [
+        threading.Thread(target=_reader,
+                         args=(proc.stdout, stdout_cb),
+                         daemon=True),
+        threading.Thread(target=_reader,
+                         args=(proc.stderr, stderr_cb),
+                         daemon=True),
+    ]
+    for t in threads:
+      t.start()
+    if wait:
+      for t in threads:
+        t.join()
+      return proc.wait()
+    return proc
 
   def run(self,
           inner_command: str,

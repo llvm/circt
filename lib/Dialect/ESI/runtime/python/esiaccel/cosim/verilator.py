@@ -14,14 +14,10 @@ class Verilator(Simulator):
 
   DefaultDriver = CosimCollateralDir / "driver.cpp"
 
-  def __init__(self, sources: SourceFiles, run_dir: Path, debug: bool):
-    super().__init__(sources, run_dir, debug)
-
+  def compile_commands(self) -> List[List[str]]:
     self.verilator = "verilator"
     if "VERILATOR_PATH" in os.environ:
       self.verilator = os.environ["VERILATOR_PATH"]
-
-  def compile_commands(self) -> List[List[str]]:
     cmd: List[str] = [
         self.verilator,
         "--cc",
@@ -36,6 +32,7 @@ class Verilator(Simulator):
         "-j",
         "0",
         "--output-split",
+        "--autoflush",
         "--assert",
         str(Verilator.DefaultDriver),
     ]
