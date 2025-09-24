@@ -48,6 +48,7 @@ private:
   bool processUsers(Operation &op, Value value, ArrayRef<Value> mapping);
   std::optional<std::pair<uint64_t, unsigned>>
   tryExtractIndexAndBitWidth(Value value);
+  bool tryLoweringClockedAssertLike(Operation &op);
 
   /// This is the current hw.module being processed.
   hw::HWModuleOp thisHWModule;
@@ -352,6 +353,34 @@ HWLegalizeModulesPass::tryExtractIndexAndBitWidth(Value value) {
   return std::nullopt;
 }
 
+namespace {
+template <typename Op>
+bool tryLoweringClockedAssertLike(Op &op) {
+  auto event = op.getEvent();
+  if (!event.has_value())
+    return false;
+
+  OpBuilder builder(op);
+
+  sv::AlwaysOp::create(builder, op->getLoc(), *event, op.getClock(), [&] {
+    Op::create(builder, op.getLoc(), op.getProperty(), op.getDisable(),
+               op.getLabelAttr());
+  });
+  return true;
+}
+} // namespace
+
+bool HWLegalizeModulesPass::tryLoweringClockedAssertLike(Operation &op) {
+  return TypeSwitch<Operation *, bool>(&op)
+      .Case<sv::AssertPropertyOp>(
+          ::tryLoweringClockedAssertLike<sv::AssertPropertyOp>)
+      .Case<sv::AssumePropertyOp>(
+          ::tryLoweringClockedAssertLike<sv::AssumePropertyOp>)
+      .Case<sv::CoverPropertyOp>(
+          ::tryLoweringClockedAssertLike<sv::CoverPropertyOp>)
+      .Default([&](auto op) { return false; });
+}
+
 void HWLegalizeModulesPass::processPostOrder(Block &body) {
   if (body.empty())
     return;
@@ -390,6 +419,14 @@ void HWLegalizeModulesPass::processPostOrder(Block &body) {
           op.emitError("unsupported packed array expression");
           signalPassFailure();
         }
+      }
+    }
+
+    if (options.disallowClockedAssertions) {
+      if (tryLoweringClockedAssertLike(op)) {
+        op.erase();
+        anythingChanged = true;
+        continue;
       }
     }
   }
