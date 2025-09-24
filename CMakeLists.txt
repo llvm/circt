@@ -604,12 +604,13 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
         get_target_property(dep_target ${dep_alias} ALIASED_TARGET)
         message(STATUS "Installing slang dependency ${dep_target}")
         set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS ${dep_target})
-        install(TARGETS ${dep_target} EXPORT CIRCTTargets)
 
         # Disable the installation of headers coming from third-party libraries.
         # We won't use those APIs directly. Just make them static libraries for
         # the sake of running slang normally.
         set_target_properties(${dep_target} PROPERTIES PUBLIC_HEADER "")
+
+        install(TARGETS ${dep_target} EXPORT CIRCTTargets)
       endif()
     endforeach()
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
