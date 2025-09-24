@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/InstanceGraphInterface.h"
+#include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
@@ -253,7 +254,9 @@ LogicalResult LowerModule::lowerModule() {
 LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*op));
   for (auto *use : llvm::make_early_inc_range(node->uses())) {
-    auto instanceOp = cast<InstanceOp>(*use->getInstance());
+    auto instanceOp = dyn_cast<InstanceOp>(*use->getInstance());
+    if (!instanceOp)
+      continue;
     LLVM_DEBUG(llvm::dbgs()
                << "      - " << instanceOp.getInstanceName() << "\n");
 
@@ -307,11 +310,22 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   auto *context = op.getContext();
   auto name = op.getNameAttr();
-  // TODO: Update this once DomainOps have properties.
-  auto classIn = ClassOp::create(builder, name, {});
+
+  // Create the new input class.  This is what the user will need to specify to
+  // evaluate OM. Clone the body of the domain into the class.
+  auto classIn = ClassOp::create(builder, name, op.getPorts());
+  builder.setInsertionPointToStart(classIn.getBodyBlock());
+  mlir::IRMapping mapper;
+  for (auto [dom, cls] : llvm::zip(op.getArguments(), classIn.getArguments()))
+    mapper.map(dom, cls);
+  for (Operation &op : op.getBody().getOps())
+    builder.clone(op, mapper);
+
+  // Create the new output class.  This is what will be returned to the user.
   auto classInType = classIn.getInstanceType();
   auto pathListType =
       ListType::get(context, cast<PropertyType>(PathType::get(context)));
+  builder.setInsertionPointAfter(classIn);
   auto classOut =
       ClassOp::create(builder, StringAttr::get(context, Twine(name) + "_out"),
                       {{/*name=*/StringAttr::get(context, "domainInfo_in"),
@@ -326,12 +340,18 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
                        {/*name=*/StringAttr::get(context, "associations_out"),
                         /*type=*/pathListType,
                         /*dir=*/Direction::Out}});
+
+  // Add propassigns into the output class.
   builder.setInsertionPointToStart(classOut.getBodyBlock());
   PropAssignOp::create(builder, classOut.getArgument(1),
                        classOut.getArgument(0));
   PropAssignOp::create(builder, classOut.getArgument(3),
                        classOut.getArgument(2));
+
+  // Update the class map and instance graph while erasing the old domain op.
   classes.insert({name, {classIn, classOut}});
+  instanceGraph.erase(instanceGraph.lookup(op));
+  instanceGraph.addModule(classIn);
   op.erase();
   return success();
 }
