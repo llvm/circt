@@ -44,6 +44,7 @@ namespace {
 
 using InstanceIterator = InstanceGraphNode::UseIterator;
 using InstanceRange = llvm::iterator_range<InstanceIterator>;
+using PortInsertions = SmallVector<std::pair<unsigned, PortInfo>>;
 
 /// From a domain info attribute, get the domain-type of a domain value at
 /// index i.
@@ -289,6 +290,12 @@ LogicalResult unify(Term *lhs, Term *rhs) {
   return failure();
 }
 
+void solve(Term *lhs, Term *rhs) {
+  auto result = unify(lhs, rhs);
+  (void)result;
+  assert(result.succeeded());
+}
+
 class InferModuleDomains {
 public:
   /// Run infer-domains on a module.
@@ -313,6 +320,19 @@ private:
   LogicalResult processOp(Operation *);
   LogicalResult processOp(InstanceOp);
   LogicalResult processOp(UnsafeDomainCastOp);
+
+  LogicalResult updateModule(FModuleOp);
+
+  /// After generalizing the module, all domains should be solved. Reflect the
+  /// solved domain associations into the port domain info attribute.
+  LogicalResult updatePortDomainAssociations(FModuleOp);
+
+  /// Add domain ports for any uninferred domains associated to hardware.
+  /// Returns the inserted ports, which will be used later to generalize the
+  /// instances of this module.
+  PortInsertions generalizeModule(FModuleOp);
+
+  void generalizeInstance(InstanceOp, const PortInsertions &);
 
   /// Unify the associated domain rows of two terms.
   LogicalResult unifyAssociations(Value, Value);
@@ -390,7 +410,7 @@ LogicalResult InferModuleDomains::operator()(FModuleOp module) {
     llvm::errs() << "  " << association.second << "\n";
   }
 
-  if (failed(updatePorts(module)))
+  if (failed(updateModule(module)))
     return failure();
 
   return llvm::success(ok);
@@ -528,12 +548,162 @@ LogicalResult InferModuleDomains::processOp(UnsafeDomainCastOp op) {
   return success();
 }
 
+LogicalResult InferModuleDomains::updateModule(FModuleOp op) {
+  auto insertions = generalizeModule(op);
+
+  if (failed(updatePortDomainAssociations(op)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult
+InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
+  // At this point, all domain variables mentioned in ports have been
+  // solved by generalizing the module (adding input domain ports). Now, we have
+  // to form the new port domain information for the module by examining the
+  // solutions to the associated domains of each port.
+  auto *context = module.getContext();
+  auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
+  auto oldDomainInfo = module.getDomainInfoAttr();
+  auto numPorts = module.getNumPorts();
+  SmallVector<Attribute> domainInfo(numPorts);
+
+  for (size_t i = 0; i < numPorts; ++i) {
+    auto port = module.getArgument(i);
+    auto type = port.getType();
+
+    // By default, copy the old domain info over.
+    domainInfo[i] = oldDomainInfo[i];
+
+    // If the port is an output domain, we may need to drive the output with
+    // a value. If we don't know what value to drive to the port, error.
+    if (isa<DomainType>(type)) {
+      if (module.getPortDirection(i) == Direction::Out) {
+        bool driven = false;
+        for (auto *user : port.getUsers()) {
+          if (auto connect = dyn_cast<FConnectLike>(user)) {
+            if (connect.getDest() == port) {
+              driven = true;
+              break;
+            }
+          }
+        }
+
+        if (!driven) {
+          auto *term = getTermForDomain(port);
+          term = find(term);
+          if (auto *val = dyn_cast<ValueTerm>(term)) {
+            auto loc = port.getLoc();
+            auto type = getDomainPortTypeName(oldDomainInfo, i);
+            auto value = val->value;
+            DomainDefineOp::create(builder, loc, port, value, type);
+          } else {
+            return module.emitError() << "unable to infer output domain value";
+          }
+        }
+      }
+      continue;
+    }
+
+    if (isa<FIRRTLBaseType>(type)) {
+      SmallVector<Attribute> associations(circuitInfo.getNumDomains());
+      auto *row = getDomainAssociationAsRow(port);
+      for (auto [typeID, term] : llvm::enumerate(row->elements)) {
+        auto *domain = find(term);
+        auto *val = dyn_cast<ValueTerm>(domain);
+        if (!val)
+          return module.emitError() << "unable to infer domain for port";
+        auto arg = cast<BlockArgument>(val->value);
+        auto idx = arg.getArgNumber();
+        associations[typeID] = IntegerAttr::get(
+            IntegerType::get(context, 32, IntegerType::Unsigned), idx);
+      }
+      domainInfo[i] = ArrayAttr::get(context, associations);
+      continue;
+    }
+  }
+
+  auto domainInfoAttr = ArrayAttr::get(module.getContext(), domainInfo);
+  module.setDomainInfoAttr(domainInfoAttr);
+  return success();
+}
+
+PortInsertions InferModuleDomains::generalizeModule(FModuleOp module) {
+  // If the port is hardware, we have to check the associated row of
+  // domains. If any associated domain is a variable, we solve the variable
+  // by generalizing the module with an additional input domain port. If any
+  // associated domain is defined internally to the module, we have to add
+  // an output domain port, to allow the domain to escape.
+  SmallVector<std::pair<unsigned, PortInfo>> insertions;
+  DenseMap<VariableTerm *, unsigned> solutions;
+  size_t inserted = 0;
+  auto numPorts = module.getNumPorts();
+  for (size_t i = 0; i < numPorts; ++i) {
+    auto port = module.getArgument(i);
+    auto type = port.getType();
+
+    if (!isa<FIRRTLBaseType>(type))
+      continue;
+
+    auto *row = getDomainAssociationAsRow(port);
+    for (auto [typeID, term] : llvm::enumerate(row->elements)) {
+      auto *domain = find(term);
+      auto *var = dyn_cast<VariableTerm>(domain);
+
+      if (!var)
+        continue;
+
+      if (solutions.contains(var))
+        continue;
+
+      // insert a new port for the variable.
+      auto domainDecl = circuitInfo.getDomain(typeID);
+      auto domainName = domainDecl.getNameAttr();
+
+      auto portInsertionPoint = i;
+      auto portName = domainName;
+      auto portType = DomainType::get(module.getContext());
+      auto portDirection = Direction::In;
+      auto portSym = StringAttr();
+      auto portLoc = port.getLoc();
+      auto portAnnos = std::nullopt;
+      auto portDomainInfo = FlatSymbolRefAttr::get(domainName);
+      PortInfo portInfo(portName, portType, portDirection, portSym, portLoc,
+                        portAnnos, portDomainInfo);
+      insertions.push_back({portInsertionPoint, portInfo});
+
+      // Record the pending solution.
+      auto solutionPortIndex = inserted + portInsertionPoint;
+      solutions[var] = solutionPortIndex;
+      ++inserted;
+    }
+  }
+
+  // Put the ports in place.
+  module.insertPorts(insertions);
+
+  llvm::errs() << "generalization complete\n";
+  llvm::errs() << module << "\n";
+
+  // Solve the variables.
+  for (auto [var, portIndex] : solutions) {
+    auto *solution = allocate<ValueTerm>(module.getArgument(portIndex));
+    solve(var, solution);
+  }
+
+  return insertions;
+}
+
 LogicalResult InferModuleDomains::unifyAssociations(Value lhs, Value rhs) {
   llvm::errs() << "  unify associations of:\n";
   llvm::errs() << "    lhs=" << lhs << "\n";
   llvm::errs() << "    rhs=" << rhs << "\n";
 
   if (!lhs || !rhs)
+    return success();
+
+  if (lhs == rhs)
     return success();
 
   auto *lhsTerm = getOptDomainAssociation(lhs);
@@ -627,7 +797,8 @@ void InferModuleDomains::setDomainAssociation(Value value, Term *term) {
   assert(term);
   term = find(term);
   associationTable.insert({value, term});
-  llvm::errs() << "  set domain association: " << value << " -> " << term << "\n";
+  llvm::errs() << "  set domain association: " << value << " -> " << term
+               << "\n";
 }
 
 RowTerm *InferModuleDomains::allocateRow() {
@@ -703,7 +874,8 @@ InferDomainsPass::processModule(const CircuitDomainInfo &circuitInfo,
   //   if (isa<DomainType>(port.type)) {
   //     newDomainInfo.push_back(port.domains
   //                                 ? port.domains
-  //                                 : ArrayAttr::get(module.getContext(), {}));
+  //                                 : ArrayAttr::get(module.getContext(),
+  //                                 {}));
   //     continue;
   //   }
 
@@ -723,8 +895,8 @@ InferDomainsPass::processModule(const CircuitDomainInfo &circuitInfo,
   //     if (auto blockArg = dyn_cast<BlockArgument>(ir)) {
   //       // This is a reference to a domain port
   //       domainIndices.push_back(IntegerAttr::get(
-  //           IntegerType::get(module.getContext(), 32, IntegerType::Unsigned),
-  //           blockArg.getArgNumber()));
+  //           IntegerType::get(module.getContext(), 32,
+  //           IntegerType::Unsigned), blockArg.getArgNumber()));
   //     }
   //   }
 
