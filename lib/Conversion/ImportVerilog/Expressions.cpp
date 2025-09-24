@@ -1027,6 +1027,8 @@ struct RvalueExprVisitor : public ExprVisitor {
       break;
 
     default:
+      mlir::emitError(loc)
+          << "system call with more than 1 argument is not supported";
       break;
     }
 
