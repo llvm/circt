@@ -60,8 +60,8 @@ void testLongestPathAnalysis(void) {
 
   // Test with debug points enabled
   {
-    SynthLongestPathAnalysis analysis =
-        synthLongestPathAnalysisCreate(moduleOp, true, false, false);
+    SynthLongestPathAnalysis analysis = synthLongestPathAnalysisCreate(
+        moduleOp, true, false, false, mlirStringRefCreateFromCString("top"));
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     SynthLongestPathCollection collection1 =
@@ -158,8 +158,8 @@ void testLongestPathAnalysis(void) {
 
   // Test without debug points
   {
-    SynthLongestPathAnalysis analysis =
-        synthLongestPathAnalysisCreate(moduleOp, false, false, false);
+    SynthLongestPathAnalysis analysis = synthLongestPathAnalysisCreate(
+        moduleOp, false, false, false, mlirStringRefCreateFromCString("top"));
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     SynthLongestPathCollection collection =
@@ -207,8 +207,8 @@ void testErrorHandling(void) {
 
   MlirOperation moduleOp = mlirModuleGetOperation(module);
 
-  SynthLongestPathAnalysis analysis =
-      synthLongestPathAnalysisCreate(moduleOp, true, false, false);
+  SynthLongestPathAnalysis analysis = synthLongestPathAnalysisCreate(
+      moduleOp, true, false, false, mlirStringRefCreateFromCString("test"));
 
   MlirStringRef invalidModuleName = mlirStringRefCreateFromCString("unknown");
   SynthLongestPathCollection invalidCollection =
@@ -245,10 +245,10 @@ void testGetPathsAndMerge(void) {
 
   // Create analysis (enable only-max-delay to keep collections small and
   // stable).
-  SynthLongestPathAnalysis analysis =
-      synthLongestPathAnalysisCreate(moduleOp, /*collectDebugInfo=*/false,
-                                     /*keepOnlyMaxDelayPaths=*/true,
-                                     /*lazyComputation=*/false);
+  SynthLongestPathAnalysis analysis = synthLongestPathAnalysisCreate(
+      moduleOp, /*collectDebugInfo=*/false,
+      /*keepOnlyMaxDelayPaths=*/true,
+      /*lazyComputation=*/false, mlirStringRefCreateFromCString("m"));
 
   // Navigate to @m body and grab the two synth.aig.and_inv results.
   MlirRegion topRegion0 = mlirOperationGetRegion(moduleOp, 0);

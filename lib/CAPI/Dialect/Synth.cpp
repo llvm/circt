@@ -80,17 +80,19 @@ SynthLongestPathObject wrap(const DataflowPath::OutputPort *object) {
 
 SynthLongestPathAnalysis
 synthLongestPathAnalysisCreate(MlirOperation module, bool collectDebugInfo,
-                               bool keepOnlyMaxDelayPaths,
-                               bool lazyComputation) {
+                               bool keepOnlyMaxDelayPaths, bool lazyComputation,
+                               MlirStringRef topModuleName) {
   auto *op = unwrap(module);
   auto *wrapper = new LongestPathAnalysisWrapper();
   wrapper->analysisManager =
       std::make_unique<mlir::ModuleAnalysisManager>(op, nullptr);
   mlir::AnalysisManager am = *wrapper->analysisManager;
+  auto topModuleNameAttr =
+      StringAttr::get(op->getContext(), unwrap(topModuleName));
   wrapper->analysis = std::make_unique<LongestPathAnalysis>(
       op, am,
       LongestPathAnalysisOptions(collectDebugInfo, lazyComputation,
-                                 keepOnlyMaxDelayPaths));
+                                 keepOnlyMaxDelayPaths, topModuleNameAttr));
   return wrap(wrapper);
 }
 

@@ -51,7 +51,7 @@ DEFINE_C_API_STRUCT(SynthLongestPathCollection, void);
 // Create a LongestPathAnalysis for the given module
 MLIR_CAPI_EXPORTED SynthLongestPathAnalysis synthLongestPathAnalysisCreate(
     MlirOperation module, bool collectDebugInfo, bool keepOnlyMaxDelayPaths,
-    bool lazyComputation);
+    bool lazyComputation, MlirStringRef topModuleName);
 
 // Destroy a LongestPathAnalysis
 MLIR_CAPI_EXPORTED void

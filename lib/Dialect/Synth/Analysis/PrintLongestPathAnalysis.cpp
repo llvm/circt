@@ -280,7 +280,7 @@ void PrintLongestPathAnalysisPass::runOnOperation() {
           /*collectDebugInfo=*/showTopKPercent.getValue() > 0,
           /*lazyComputation=*/false,
           /*keepOnlyMaxDelayPaths=*/
-          !test));
+          !test, StringAttr::get(&getContext(), topModuleName.getValue())));
 
   igraph::InstancePathCache pathCache(
       getAnalysis<circt::igraph::InstanceGraph>());
