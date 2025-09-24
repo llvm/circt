@@ -327,15 +327,22 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def ClassOp : FIRRTLModuleLike<"class", [
-  SingleBlock, NoTerminator,
-  DeclareOpInterfaceMethods<FModuleLike, [
-    // Class Ops do not support port annotations or enabled layers.
-    // Override these methods to return an empty array attr.
-    "getPortAnnotationsAttr",
-    "getLayersAttr"]>,
-  DeclareOpInterfaceMethods<ClassLike>,
-  DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>]> {
+class ClassLikeOp<string mnemonic, list<Trait> traits = []> :
+  FIRRTLModuleLike<mnemonic, traits # [
+    SingleBlock,
+    NoTerminator,
+    DeclareOpInterfaceMethods<FModuleLike, [
+      // ClassLikeOps do not support port annotations or enabled layers.
+      // Override these methods to return an empty array attr.
+      "getPortAnnotationsAttr",
+      "getLayersAttr"
+    ]>,
+    DeclareOpInterfaceMethods<ClassLike>,
+    DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>
+  ]> {
+}
+
+def ClassOp : ClassLikeOp<"class"> {
   let summary = "FIRRTL Class";
   let description = [{
     The "firrtl.class" operation defines a class of property-only objects,
@@ -602,23 +609,54 @@ def SimulationOp : FIRRTLOp<"simulation", [
   }];
 }
 
-def DomainOp : FIRRTLOp<"domain", [
-  DeclareOpInterfaceMethods<Symbol>,
-  HasParent<"firrtl::CircuitOp">,
-  NoTerminator,
-  SingleBlock
-]> {
+def DomainOp : ClassLikeOp<"domain"> {
   let summary = "Define a domain type";
   let description = [{
     A `firrtl.domain` operation defines a type of domain that exists in this
     circuit.  E.g., this can be used to declare a `ClockDomain` type when
     modeling clocks in FIRRTL Dialect.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (
+    ins SymbolNameAttr:$sym_name,
+        DenseBoolArrayAttr:$portDirections,
+        ArrayRefAttr:$portNames,
+        ArrayRefAttr:$portTypes,
+        ArrayRefAttr:$portSymbols,
+        ArrayRefAttr:$portLocations,
+        DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
+  );
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $body
+  let hasCustomAssemblyFormat = 1;
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$name,
+      "ArrayRef<PortInfo>":$ports)>,
+    ];
+
+  let extraModuleClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBodyBlock()->getArguments();
+    }
+
+    // Return the block argument for the port with the specified index.
+    BlockArgument getArgument(size_t portNumber);
+
+    OpBuilder getBodyBuilder() {
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
+      return OpBuilder::atBlockEnd(&bodyBlock);
+    }
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
   }];
 }
 

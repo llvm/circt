@@ -45,6 +45,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/InstanceGraphInterface.h"
+#include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -493,11 +495,22 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   auto *context = op.getContext();
   auto name = op.getNameAttr();
-  // TODO: Update this once DomainOps have properties.
-  auto classIn = ClassOp::create(builder, name, {});
+
+  // Create the new input class.  This is what the user will need to specify to
+  // evaluate OM. Clone the body of the domain into the class.
+  auto classIn = ClassOp::create(builder, name, op.getPorts());
+  builder.setInsertionPointToStart(classIn.getBodyBlock());
+  mlir::IRMapping mapper;
+  for (auto [dom, cls] : llvm::zip(op.getArguments(), classIn.getArguments()))
+    mapper.map(dom, cls);
+  for (Operation &op : op.getBody().getOps())
+    builder.clone(op, mapper);
+
+  // Create the new output class.  This is what will be returned to the user.
   auto classInType = classIn.getInstanceType();
   auto pathListType =
       ListType::get(context, cast<PropertyType>(PathType::get(context)));
+  builder.setInsertionPointAfter(classIn);
   auto classOut =
       ClassOp::create(builder, StringAttr::get(context, Twine(name) + "_out"),
                       {{/*name=*/constants.getDomainInfoIn(),
@@ -512,12 +525,17 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
                        {/*name=*/constants.getAssociationsOut(),
                         /*type=*/pathListType,
                         /*dir=*/Direction::Out}});
+
+  // Add propassigns into the output class.
   builder.setInsertionPointToStart(classOut.getBodyBlock());
   PropAssignOp::create(builder, classOut.getArgument(1),
                        classOut.getArgument(0));
   PropAssignOp::create(builder, classOut.getArgument(3),
                        classOut.getArgument(2));
+
+  // Update the class map and instance graph while erasing the old domain op.
   classes.insert({name, {classIn, classOut}});
+  instanceGraph.erase(instanceGraph.lookup(op));
   instanceGraph.addModule(classIn);
   instanceGraph.addModule(classOut);
   op.erase();

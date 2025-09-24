@@ -5745,18 +5745,31 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_domain);
 
   StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
   if (parseId(name, "domain name") ||
       parseToken(FIRToken::colon, "expected ':' after domain definition") ||
-      info.parseOptionalInfo())
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
 
-  auto builder = circuit.getBodyBuilder();
-  DomainOp::create(builder, info.getLoc(), name)
-      ->getRegion(0)
-      .push_back(new Block());
+  if (name == circuit.getName())
+    return mlir::emitError(info.getLoc(),
+                           "domain cannot be the top of a circuit");
 
-  return success();
+  for (auto &portInfo : portList)
+    if (!isa<PropertyType>(portInfo.type))
+      return mlir::emitError(portInfo.loc,
+                             "ports on domains must be properties");
+
+  auto builder = circuit.getBodyBuilder();
+  auto domainOp = DomainOp::create(builder, info.getLoc(), name, portList);
+  domainOp.setPublic();
+  deferredModules.emplace_back(DeferredModuleToParse{
+      domainOp, portLocs, getLexer().getCursor(), indent});
+  // domainOp->getRegion(0).push_back(new Block());
+
+  return skipToModuleEnd(indent);
 }
 
 /// extclass ::= 'extclass' id ':' info? INDENT portlist DEDENT
