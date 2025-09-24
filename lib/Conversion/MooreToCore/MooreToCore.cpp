@@ -1586,7 +1586,7 @@ struct FormatLiteralOpConversion : public OpConversionPattern<FormatLiteralOp> {
   LogicalResult
   matchAndRewrite(FormatLiteralOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::FormatLitOp>(op, adaptor.getLiteral());
+    rewriter.replaceOpWithNewOp<sim::FormatLiteralOp>(op, adaptor.getLiteral());
     return success();
   }
 };
@@ -1680,7 +1680,8 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
     return failure();
   }
 
-  auto prefix = rewriter.create<sim::FormatLitOp>(op.getLoc(), severityString);
+  auto prefix =
+      rewriter.create<sim::FormatLiteralOp>(op.getLoc(), severityString);
   auto message = rewriter.create<sim::FormatStringConcatOp>(
       op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
   rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);

@@ -109,7 +109,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
       fragmentList.push_back(fmtOp);
       // For non-literal fragments, the value to be formatted has to become an
       // argument.
-      if (!llvm::isa<FormatLitOp>(fmtOp)) {
+      if (!llvm::isa<FormatLiteralOp>(fmtOp)) {
         auto fmtVal = getFormattedValue(fmtOp);
         assert(!!fmtVal && "Unexpected foramtting fragment op.");
         arguments.insert(fmtVal);
