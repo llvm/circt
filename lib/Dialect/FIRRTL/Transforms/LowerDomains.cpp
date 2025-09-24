@@ -19,7 +19,6 @@
 #include "circt/Support/Debug.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
@@ -152,11 +151,7 @@ LogicalResult LowerModule::lowerModule() {
       // encode this information and the associations.
       newPorts.append(
           {{postDeletionIndex,
-            PortInfo(
-                port.name,
-                ClassType::get(
-                    context, FlatSymbolRefAttr::get(classIn.getNameAttr()), {}),
-                Direction::In)},
+            PortInfo(port.name, classIn.getInstanceType(), Direction::In)},
            {postDeletionIndex,
             PortInfo(builder->getStringAttr(Twine(port.name) + "_out"),
                      object.getType(), Direction::Out)}});
@@ -274,7 +269,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   auto name = op.getNameAttr();
   // TODO: Update this once DomainOps have properties.
   auto classIn = ClassOp::create(builder, name, {});
-  auto classInType = ClassType::get(context, FlatSymbolRefAttr::get(name), {});
+  auto classInType = classIn.getInstanceType();
   auto pathListType =
       ListType::get(context, cast<PropertyType>(PathType::get(context)));
   auto classOut =
