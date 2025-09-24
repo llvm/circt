@@ -16,7 +16,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %associations_out: !firrtl.list<path>
   // CHECK-NEXT:    firrtl.propassign %domainInfo_out, %domainInfo_in
   // CHECK-NEXT:    firrtl.propassign %associations_out, %associations_in
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.module @Foo(
   // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
@@ -39,7 +39,7 @@ firrtl.circuit "Foo" {
 
 // Check the behavior of the lowering of an instance.
 firrtl.circuit "Foo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.module @Bar(
   // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
@@ -72,7 +72,7 @@ firrtl.circuit "Foo" {
 
 // Check the behavior of external modules.
 firrtl.circuit "Foo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.extmodule @Bar(
   // CHECK-SAME:    in A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out A_out: !firrtl.class<@ClockDomain_out(
