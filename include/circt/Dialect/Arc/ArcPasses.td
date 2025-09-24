@@ -92,6 +92,14 @@ def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
   ];
 }
 
+def ImplRuntimePass : Pass<"arc-impl-runtime", "mlir::ModuleOp"> {
+  let summary = "Lower various ops to Arc-specific runtime implementations";
+  let dependentDialects = [
+    "mlir::LLVM::LLVMDialect",
+    "mlir::func::FuncDialect",
+  ];
+}
+
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let constructor = "circt::arc::createInferMemoriesPass()";

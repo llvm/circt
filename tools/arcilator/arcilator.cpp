@@ -347,6 +347,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (splitFuncsThreshold.getNumOccurrences()) {
     pm.addPass(arc::createSplitFuncs({splitFuncsThreshold}));
   }
+  pm.addPass(arc::createImplRuntimePass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 }

@@ -31,25 +31,35 @@ public:
   using RewritePatternSet::add;
 
   /// Add a `matchAndRewrite` function as a conversion pattern to the set.
-  template <class Op>
-  ConversionPatternSet &
-  add(LogicalResult (*implFn)(Op, typename Op::Adaptor,
-                              ConversionPatternRewriter &)) {
+  template <class Op, typename... Args>
+  ConversionPatternSet &add(LogicalResult (*implFn)(Op, typename Op::Adaptor,
+                                                    ConversionPatternRewriter &,
+                                                    Args...),
+                            Args &&...args) {
 
     struct FnPattern final : public OpConversionPattern<Op> {
-      using OpConversionPattern<Op>::OpConversionPattern;
-      LogicalResult (*implFn)(Op, typename Op::Adaptor,
-                              ConversionPatternRewriter &);
+      typedef LogicalResult Fn(Op, typename Op::Adaptor,
+                               ConversionPatternRewriter &, Args...);
+      Fn *implFn;
+      std::tuple<Args...> args;
+      FnPattern(const TypeConverter &converter, MLIRContext *context,
+                Fn *implFn, std::tuple<Args...> &&args)
+          : OpConversionPattern<Op>(converter, context), implFn(implFn),
+            args(args) {}
 
       LogicalResult
       matchAndRewrite(Op op, typename Op::Adaptor adaptor,
                       ConversionPatternRewriter &rewriter) const override {
-        return implFn(op, adaptor, rewriter);
+        return std::apply(
+            [&](Args &&...args) {
+              return implFn(op, adaptor, rewriter, args...);
+            },
+            args);
       }
     };
 
-    auto pattern = std::make_unique<FnPattern>(typeConverter, getContext());
-    pattern->implFn = implFn;
+    auto pattern = std::make_unique<FnPattern>(
+        typeConverter, getContext(), implFn, std::forward_as_tuple(args...));
     add(std::move(pattern));
     return *this;
   }
