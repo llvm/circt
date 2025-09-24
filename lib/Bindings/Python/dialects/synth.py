@@ -366,7 +366,8 @@ class LongestPathAnalysis:
         """
     self.analysis = synth._LongestPathAnalysis(module, collect_debug_info,
                                                keep_only_max_delay_paths,
-                                               lazy_computation, top_module_name)
+                                               lazy_computation,
+                                               top_module_name)
 
   def get_paths(self,
                 value,
