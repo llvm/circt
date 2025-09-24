@@ -4343,6 +4343,34 @@ LogicalResult DomainDefineOp::verify() {
   return success();
 }
 
+LogicalResult DomainDefineOp::verify() {
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  for (auto *user : getDest().getUsers()) {
+    auto connection = dyn_cast<FConnectLike>(user);
+    if (!connection || connection == *this || connection.getDest() != getDest())
+      continue;
+    return emitError("destination domains cannot be reused by multiple "
+                     "operations, it can only capture a unique dataflow");
+  }
+
+  return success();
+}
+
+LogicalResult DomainDefineOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // if (failed(verifyPortSymbolUses(*this, symbolTable)))
+  //   return failure();
+
+  // auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  // for (auto layer : getLayers()) {
+  //   if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
+  //     return emitOpError() << "enables undefined layer '" << layer << "'";
+  // }
+
+  return success();
+}
+
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   getElseRegion().push_back(new Block());
