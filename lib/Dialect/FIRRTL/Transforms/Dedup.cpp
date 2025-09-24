@@ -84,6 +84,10 @@ struct ModuleInfo {
   std::array<uint8_t, 32> structuralHash;
   // Module names referred by instance op in the module.
   std::vector<StringAttr> referredModuleNames;
+  // The operations that contain references to symbols that may be changed by
+  // dedup. These need a fixup pass after dedup. This is just an optimization
+  // and does not factor into the hash or the equality between `ModuleInfo`s.
+  std::vector<Operation *> symbolSensitiveOps;
 };
 
 static bool operator==(const ModuleInfo &lhs, const ModuleInfo &rhs) {
@@ -130,7 +134,8 @@ struct StructuralHasher {
   ModuleInfo getModuleInfo(FModuleLike module) {
     populateInnerSymIDTable(module);
     update(&(*module));
-    return {sha.final(), std::move(referredModuleNames)};
+    return {sha.final(), std::move(referredModuleNames),
+            std::move(symbolSensitiveOps)};
   }
 
 private:
@@ -229,6 +234,7 @@ private:
     // Don't hash the class name directly, since it may be replaced during
     // dedup. Record the class name instead and lazily combine their hashes
     // using the same mechanism as instances and modules.
+    hasSeenSymbol = true;
     referredModuleNames.push_back(type.getNameAttr().getAttr());
     for (auto &element : type.getElements()) {
       update(element.name.getAsOpaquePointer());
@@ -251,6 +257,7 @@ private:
     // replaced by dedup. Record the class names and lazily combine their hashes
     // using the same mechanism as instances and modules.
     if (auto objectOp = dyn_cast<ObjectOp>(result.getOwner())) {
+      hasSeenSymbol = true;
       referredModuleNames.push_back(objectOp.getType().getNameAttr().getAttr());
       return;
     }
@@ -264,6 +271,11 @@ private:
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
+
+      // Check whether this attribute contains a nested symbol, just to make
+      // sure we revisit this op after dedup and update any symbols.
+      value.walk([&](FlatSymbolRefAttr) { hasSeenSymbol = true; });
+
       // Skip names and annotations, except in certain cases.
       // Names of ports are load bearing for classes, so we do hash those.
       bool isClassPortNames =
@@ -349,11 +361,17 @@ private:
 
     // This happens after the numbering above, as it uses blockarg numbering
     // for inner symbols.
+    hasSeenSymbol = false;
     update(op, op->getAttrDictionary());
 
     // Record any op results (types).
     for (auto result : op->getResults())
       update(result);
+
+    // If any of the operands, attributes, or results depended on symbols,
+    // remember this op for later adjustment.
+    if (hasSeenSymbol)
+      symbolSensitiveOps.push_back(op);
 
     // Incorporate the hash of uses we have already built.
     update(finalizeID(op));
@@ -380,6 +398,53 @@ private:
 
   // The index of the current op. Increment after handling each op.
   size_t position = 0;
+
+  // The operations that contain references to symbols that may be changed by
+  // dedup. These need a fixup pass after dedup.
+  bool hasSeenSymbol = false;
+  std::vector<Operation *> symbolSensitiveOps;
+};
+
+/// A reference to a `ModuleInfo` that compares and hashes like it. This is used
+/// to keep the potentially heavy module infos in a vector, and then populate
+/// maps with references to them.
+struct ModuleInfoRef {
+  ModuleInfoRef(ModuleInfo *info) : info(info) {}
+  ModuleInfo *info;
+};
+
+/// Allow `ModuleInfoRef` to be used as dense map keys. Hashes and compares the
+/// `ModuleInfo` the ref points to.
+template <>
+struct llvm::DenseMapInfo<ModuleInfoRef> {
+  static inline ModuleInfoRef getEmptyKey() {
+    return DenseMapInfo<ModuleInfo *>::getEmptyKey();
+  }
+
+  static inline ModuleInfoRef getTombstoneKey() {
+    return DenseMapInfo<ModuleInfo *>::getTombstoneKey();
+  }
+
+  static unsigned getHashValue(const ModuleInfoRef &ref) {
+    // We assume SHA256 is already a good hash and just truncate down to the
+    // number of bytes we need for DenseMap.
+    unsigned hash;
+    std::memcpy(&hash, ref.info->structuralHash.data(), sizeof(unsigned));
+
+    // Combine module names.
+    return llvm::hash_combine(
+        hash, llvm::hash_combine_range(ref.info->referredModuleNames.begin(),
+                                       ref.info->referredModuleNames.end()));
+  }
+
+  static bool isEqual(const ModuleInfoRef &lhs, const ModuleInfoRef &rhs) {
+    auto *empty = getEmptyKey().info;
+    auto *tombstone = getTombstoneKey().info;
+    if (lhs.info == empty || rhs.info == empty || lhs.info == tombstone ||
+        rhs.info == tombstone)
+      return lhs.info == rhs.info;
+    return *lhs.info == *rhs.info;
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -1482,76 +1547,10 @@ private:
 // Fixup
 //===----------------------------------------------------------------------===//
 
-/// This fixes up ClassLikes with ClassType ports, when the classes have
-/// deduped. For each ClassType port, if the object reference being assigned is
-/// a different type, update the port type. Returns true if the ClassOp was
-/// updated and the associated ObjectOps should be updated.
-bool fixupClassOp(ClassOp classOp) {
-  // New port type attributes, if necessary.
-  SmallVector<Attribute> newPortTypes;
-  bool anyDifferences = false;
-
-  // Check each port.
-  for (size_t i = 0, e = classOp.getNumPorts(); i < e; ++i) {
-    // Check if this port is a ClassType. If not, save the original type
-    // attribute in case we need to update port types.
-    auto portClassType = dyn_cast<ClassType>(classOp.getPortType(i));
-    if (!portClassType) {
-      newPortTypes.push_back(classOp.getPortTypeAttr(i));
-      continue;
-    }
-
-    // Check if this port is assigned a reference of a different ClassType.
-    Type newPortClassType;
-    BlockArgument portArg = classOp.getArgument(i);
-    for (auto &use : portArg.getUses()) {
-      if (auto propassign = dyn_cast<PropAssignOp>(use.getOwner())) {
-        Type sourceType = propassign.getSrc().getType();
-        if (propassign.getDest() == use.get() && sourceType != portClassType) {
-          // Double check that all references are the same new type.
-          if (newPortClassType) {
-            assert(newPortClassType == sourceType &&
-                   "expected all references to be of the same type");
-            continue;
-          }
-
-          newPortClassType = sourceType;
-        }
-      }
-    }
-
-    // If there was no difference, save the original type attribute in case we
-    // need to update port types and move along.
-    if (!newPortClassType) {
-      newPortTypes.push_back(classOp.getPortTypeAttr(i));
-      continue;
-    }
-
-    // The port type changed, so update the block argument, save the new port
-    // type attribute, and indicate there was a difference.
-    classOp.getArgument(i).setType(newPortClassType);
-    newPortTypes.push_back(TypeAttr::get(newPortClassType));
-    anyDifferences = true;
-  }
-
-  // If necessary, update port types.
-  if (anyDifferences)
-    classOp.setPortTypes(newPortTypes);
-
-  return anyDifferences;
-}
-
-/// This fixes up ObjectOps when the signature of their ClassOp changes. This
-/// amounts to updating the ObjectOp result type to match the newly updated
-/// ClassOp type.
-void fixupObjectOp(ObjectOp objectOp, ClassType newClassType) {
-  objectOp.getResult().setType(newClassType);
-}
-
 /// This fixes up connects when the field names of a bundle type changes.  It
 /// finds all fields which were previously bulk connected and legalizes it
 /// into a connect for each field.
-void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
+static void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   // If the types already match we can emit a connect.
   auto dstType = dst.getType();
   auto srcType = src.getType();
@@ -1574,93 +1573,100 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   }
 }
 
-/// This is the root method to fixup module references when a module changes.
-/// It matches all the results of "to" module with the results of the "from"
-/// module.
-void fixupAllModules(InstanceGraph &instanceGraph) {
-  for (auto *node : instanceGraph) {
-    auto module = cast<FModuleLike>(*node->getModule());
-
-    // Handle class declarations here.
-    bool shouldFixupObjects = false;
-    auto classOp = dyn_cast<ClassOp>(module.getOperation());
-    if (classOp)
-      shouldFixupObjects = fixupClassOp(classOp);
-
-    for (auto *instRec : node->uses()) {
-      // Handle object instantiations here.
-      if (classOp) {
-        if (shouldFixupObjects) {
-          fixupObjectOp(instRec->getInstance<ObjectOp>(),
-                        classOp.getInstanceType());
-        }
+/// Adjust the symbol references in an op. Thsi includes updating its attributes
+/// and types.
+static void
+fixupSymbolSensitiveOp(Operation *op, InstanceGraph &instanceGraph,
+                       const DenseMap<Attribute, StringAttr> &dedupMap) {
+  // If this is an instance op, dedup may have subtly changed the port types.
+  // For example, structurally different bundles may still dedup. In this case
+  // we now have an instance op that produces result values of the old type, but
+  // the port info on the instantiated module already represents the new type.
+  // Fix this up by going through an intermediate wire.
+  if (auto instOp = dyn_cast<InstanceOp>(op)) {
+    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp->getContext());
+    builder.setInsertionPointAfter(instOp);
+    auto module = instanceGraph.lookup(instOp.getModuleNameAttr().getAttr())
+                      ->getModule<FModuleLike>();
+    for (auto [index, result] : llvm::enumerate(instOp.getResults())) {
+      auto newType = module.getPortType(index);
+      auto oldType = result.getType();
+      // If the type has not changed, we don't have to fix up anything.
+      if (newType == oldType)
         continue;
-      }
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Updating instance port \"" << instOp.getInstanceName()
+                 << "." << instOp.getPortName(index).getValue() << "\" from "
+                 << oldType << " to " << newType << "\n");
 
-      auto inst = instRec->getInstance<InstanceOp>();
-      // Only handle module instantiations here.
-      if (!inst)
-        continue;
-      ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
-      builder.setInsertionPointAfter(inst);
-      for (size_t i = 0, e = getNumPorts(module); i < e; ++i) {
-        auto result = inst.getResult(i);
-        auto newType = module.getPortType(i);
-        auto oldType = result.getType();
-        // If the type has not changed, we don't have to fix up anything.
-        if (newType == oldType)
-          continue;
-        // If the type changed we transform it back to the old type with an
-        // intermediate wire.
-        auto wire =
-            WireOp::create(builder, oldType, inst.getPortName(i)).getResult();
-        result.replaceAllUsesWith(wire);
-        result.setType(newType);
-        if (inst.getPortDirection(i) == Direction::Out)
-          fixupConnect(builder, wire, result);
-        else
-          fixupConnect(builder, result, wire);
-      }
+      // If the type changed we transform it back to the old type with an
+      // intermediate wire.
+      auto wire = WireOp::create(builder, oldType, instOp.getPortName(index))
+                      .getResult();
+      result.replaceAllUsesWith(wire);
+      result.setType(newType);
+      if (instOp.getPortDirection(index) == Direction::Out)
+        fixupConnect(builder, wire, result);
+      else
+        fixupConnect(builder, result, wire);
     }
   }
+
+  // Use an attribute/type replacer to look for references to old symbols that
+  // need to be replaced with new symbols.
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement([&](FlatSymbolRefAttr symRef) {
+    auto oldName = symRef.getAttr();
+    auto newName = dedupMap.lookup(oldName);
+    if (newName && newName != oldName) {
+      auto newSymRef = FlatSymbolRefAttr::get(newName);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Updating " << symRef << " to " << newSymRef << " in "
+                 << op->getName() << " at " << op->getLoc() << "\n");
+      return newSymRef;
+    }
+    return symRef;
+  });
+
+  // Update attributes.
+  op->setAttrs(cast<DictionaryAttr>(replacer.replace(op->getAttrDictionary())));
+
+  // Update the argument types.
+  for (auto &region : op->getRegions())
+    for (auto &block : region)
+      for (auto arg : block.getArguments())
+        arg.setType(replacer.replace(arg.getType()));
+
+  // Update result types.
+  for (auto result : op->getResults())
+    result.setType(replacer.replace(result.getType()));
 }
 
-namespace llvm {
-/// A DenseMapInfo implementation for `ModuleInfo` that is a pair of
-/// llvm::SHA256 hashes, which are represented as std::array<uint8_t, 32>, and
-/// an array of string attributes. This allows us to create a DenseMap with
-/// `ModuleInfo` as keys.
-template <>
-struct DenseMapInfo<ModuleInfo> {
-  static inline ModuleInfo getEmptyKey() {
-    std::array<uint8_t, 32> key;
-    std::fill(key.begin(), key.end(), ~0);
-    return {key, {}};
-  }
+/// Adjust the symbol references in ops marked as sensitive to them. This
+/// includes updating their attributes and types.
+static void fixupSymbolSensitiveOps(
+    InstanceGraph &instanceGraph,
+    const DenseMap<Operation *, ModuleInfoRef> &moduleToModuleInfo,
+    const DenseMap<Attribute, StringAttr> &dedupMap) {
+  for (auto *node : instanceGraph) {
+    // Look up the module info for this module, which contains the list of ops
+    // that need to be updated.
+    auto module = node->getModule<FModuleLike>();
+    auto it = moduleToModuleInfo.find(module);
+    if (it == moduleToModuleInfo.end())
+      continue;
 
-  static inline ModuleInfo getTombstoneKey() {
-    std::array<uint8_t, 32> key;
-    std::fill(key.begin(), key.end(), ~0 - 1);
-    return {key, {}};
+    // Update each symbol-sensitive op individually.
+    auto &ops = it->second.info->symbolSensitiveOps;
+    if (ops.empty())
+      continue;
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Updating " << ops.size() << " symbol-sensitive ops in "
+               << module.getNameAttr() << "\n");
+    for (auto *op : ops)
+      fixupSymbolSensitiveOp(op, instanceGraph, dedupMap);
   }
-
-  static unsigned getHashValue(const ModuleInfo &val) {
-    // We assume SHA256 is already a good hash and just truncate down to the
-    // number of bytes we need for DenseMap.
-    unsigned hash;
-    std::memcpy(&hash, val.structuralHash.data(), sizeof(unsigned));
-
-    // Combine module names.
-    return llvm::hash_combine(
-        hash, llvm::hash_combine_range(val.referredModuleNames.begin(),
-                                       val.referredModuleNames.end()));
-  }
-
-  static bool isEqual(const ModuleInfo &lhs, const ModuleInfo &rhs) {
-    return lhs == rhs;
-  }
-};
-} // namespace llvm
+}
 
 //===----------------------------------------------------------------------===//
 // DedupPass
@@ -1690,7 +1696,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     auto dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
 
     // A map of all the module moduleInfo that we have calculated so far.
-    llvm::DenseMap<ModuleInfo, Operation *> moduleInfoToModule;
+    DenseMap<ModuleInfoRef, Operation *> moduleInfoToModule;
+    DenseMap<Operation *, ModuleInfoRef> moduleToModuleInfo;
 
     // We track the name of the module that each module is deduped into, so that
     // we can make sure all modules which are marked "must dedup" with each
@@ -1789,13 +1796,14 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       }
 
       auto &moduleInfo = maybeModuleInfo.value();
+      moduleToModuleInfo.try_emplace(module, &moduleInfo);
 
       // Replace module names referred in the module with new names.
       for (auto &referredModule : moduleInfo.referredModuleNames)
         referredModule = dedupMap[referredModule];
 
       // Check if there is a module with the same hash.
-      auto it = moduleInfoToModule.find(moduleInfo);
+      auto it = moduleInfoToModule.find(&moduleInfo);
       if (it != moduleInfoToModule.end()) {
         auto original = cast<FModuleLike>(it->second);
         auto originalName = original.getModuleNameAttr();
@@ -1832,7 +1840,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
       // Add the module to a new dedup group.
       dedupMap[moduleName] = moduleName;
       // Record the module info.
-      moduleInfoToModule[std::move(moduleInfo)] = module;
+      moduleInfoToModule[&moduleInfo] = module;
     }
 
     // This part verifies that all modules marked by "MustDedup" have been
@@ -1907,10 +1915,9 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     for (auto module : circuit.getOps<FModuleLike>())
       module->removeDiscardableAttr(dedupGroupAttrName);
 
-    // Walk all the modules and fixup the instance operation to return the
-    // correct type. We delay this fixup until the end because doing it early
-    // can block the deduplication of the parent modules.
-    fixupAllModules(instanceGraph);
+    // Fixup all operations that we've found to be sensitive to symbol names.
+    // This includes module and class instances, wires, connects, etc.
+    fixupSymbolSensitiveOps(instanceGraph, moduleToModuleInfo, dedupMap);
 
     markAnalysesPreserved<NLATable>();
     if (!anythingChanged)
