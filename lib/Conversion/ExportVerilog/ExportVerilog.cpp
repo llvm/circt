@@ -5406,6 +5406,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   });
   emitLocationInfoAndNewLine(ops);
 
+  size_t caseValueIndex = 0;
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &caseInfo : op.getCases()) {
       startStatement();
@@ -5424,6 +5425,9 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
           .Case<CaseEnumPattern>([&](auto enumPattern) {
             ps << PPExtString(emitter.fieldNameResolver.getEnumFieldName(
                 cast<hw::EnumFieldAttr>(enumPattern->attr())));
+          })
+          .Case<CaseExprPattern>([&](auto) {
+            emitExpression(op.getCaseValues()[caseValueIndex++], ops);
           })
           .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
           .Default([&](auto) { assert(false && "unhandled case pattern"); });
