@@ -480,7 +480,18 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       return success();
     }
 
-    if (width < 8)
+    // Check if the architecture is specified by an attribute.
+    StringRef arch;
+    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch")) {
+      arch = strAttr.getValue();
+    }
+
+    if (arch == "SKLANSKEY" || arch == "KOGGE-STONE" || arch == "BRENT-KUNG") {
+      lowerParallelPrefixAdder(op, inputs, rewriter);
+      return success();
+    }
+
+    if (arch == "RIPPLE-CARRY" || width < 8)
       lowerRippleCarryAdder(op, inputs, rewriter);
     else
       lowerParallelPrefixAdder(op, inputs, rewriter);
@@ -566,12 +577,28 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     // Create copies of p and g for the prefix computation
     SmallVector<Value> pPrefix = p;
     SmallVector<Value> gPrefix = g;
-    if (width <= 32)
+
+    // Check if the architecture is specified by an attribute.
+    StringRef arch;
+    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch")) {
+      arch = strAttr.getValue();
+    }
+
+    if (arch == "SKLANSKEY") {
+      // Call Sklansky implementation
       lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    else if (width <= 64)
+    } else if (arch == "KOGGE-STONE") {
       lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    else
+    } else if (arch == "BRENT-KUNG") {
       lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    } else {
+      // Default to Sklanskey for small bitwidths and kogge-stone for reduced
+      // wiring congestion at larger bitwidths.
+      if (width <= 32)
+        lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      else
+        lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    }
 
     // Generate result sum bits
     // NOTE: The result is stored in reverse order.
