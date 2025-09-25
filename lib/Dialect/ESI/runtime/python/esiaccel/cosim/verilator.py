@@ -4,7 +4,7 @@
 
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Callable
 
 from .simulator import CosimCollateralDir, Simulator, SourceFiles
 
@@ -14,10 +14,28 @@ class Verilator(Simulator):
 
   DefaultDriver = CosimCollateralDir / "driver.cpp"
 
-  def compile_commands(self) -> List[List[str]]:
+  def __init__(self,
+               sources: SourceFiles,
+               run_dir: Path,
+               debug: bool,
+               run_stdout_callback: Optional[Callable[[str], None]] = None,
+               run_stderr_callback: Optional[Callable[[str], None]] = None,
+               compile_stdout_callback: Optional[Callable[[str], None]] = None,
+               compile_stderr_callback: Optional[Callable[[str], None]] = None,
+               make_default_logs: bool = True):
+    super().__init__(sources=sources,
+                     run_dir=run_dir,
+                     debug=debug,
+                     run_stdout_callback=run_stdout_callback,
+                     run_stderr_callback=run_stderr_callback,
+                     compile_stdout_callback=compile_stdout_callback,
+                     compile_stderr_callback=compile_stderr_callback,
+                     make_default_logs=make_default_logs)
     self.verilator = "verilator"
     if "VERILATOR_PATH" in os.environ:
       self.verilator = os.environ["VERILATOR_PATH"]
+
+  def compile_commands(self) -> List[List[str]]:
     cmd: List[str] = [
         self.verilator,
         "--cc",
