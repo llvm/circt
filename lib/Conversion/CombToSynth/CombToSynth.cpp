@@ -482,9 +482,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
     // Check if the architecture is specified by an attribute.
     StringRef arch;
-    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch")) {
+    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch"))
       arch = strAttr.getValue();
-    }
 
     if (arch == "SKLANSKEY" || arch == "KOGGE-STONE" || arch == "BRENT-KUNG") {
       lowerParallelPrefixAdder(op, inputs, rewriter);
@@ -580,9 +579,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
     // Check if the architecture is specified by an attribute.
     StringRef arch;
-    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch")) {
+    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch"))
       arch = strAttr.getValue();
-    }
 
     if (arch == "SKLANSKEY") {
       // Call Sklansky implementation
