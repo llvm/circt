@@ -26,6 +26,7 @@
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/diagnostics/Diagnostics.h"
 #include "slang/driver/Driver.h"
+#include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
@@ -554,6 +555,33 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
   void visit(const slang::ast::VariableSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
+    visitDefault(expr);
+  }
+
+  void visit(const slang::ast::ExplicitImportSymbol &expr) {
+    auto *def = expr.package();
+    if (!def)
+      return;
+
+    if (auto *syn = expr.getSyntax()) {
+      if (auto *item = syn->as_if<slang::syntax::PackageImportItemSyntax>()) {
+        insertSymbol(def, item->package.location(), false);
+      }
+    }
+    visitDefault(expr);
+  }
+
+  void visit(const slang::ast::WildcardImportSymbol &expr) {
+    auto *def = expr.getPackage();
+    if (!def)
+      return;
+
+    if (auto *syn = expr.getSyntax()) {
+      if (auto *item = syn->as_if<slang::syntax::PackageImportItemSyntax>()) {
+        insertSymbol(def, item->package.location(), false);
+      }
+    }
+
     visitDefault(expr);
   }
 
