@@ -39,6 +39,13 @@ class SourceFiles:
     # Name of the top module.
     self.top = top
 
+  def add_file(self, file: Path):
+    """Add a single RTL file to the source list."""
+    if file.is_file():
+      self.user.append(file)
+    else:
+      raise FileNotFoundError(f"File {file} does not exist")
+
   def add_dir(self, dir: Path):
     """Add all the RTL files in a directory to the source list."""
     for file in sorted(dir.iterdir()):
