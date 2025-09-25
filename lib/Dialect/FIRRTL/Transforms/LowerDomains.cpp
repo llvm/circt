@@ -68,11 +68,21 @@ public:
 
   // Lower all instances of the associated module.  This relies on state built
   // up during `lowerModule`.
-  void lowerInstances(InstanceGraph &);
+  LogicalResult lowerInstances(InstanceGraph &);
 
 private:
   FModuleLike &op;
+
+  // The list
   BitVector eraseVector;
+
+  // The ports that should be inserted, _after deletion_.  These are indexed
+  // with the postDeletionIndex.
+  SmallVector<std::pair<unsigned, PortInfo>> newPorts;
+
+  // A mapping of old result to new result.
+  SmallVector<std::pair<unsigned, unsigned>> resultMap;
+
   const DenseMap<Attribute, std::pair<ClassOp, ClassOp>> &classes;
 };
 
@@ -102,10 +112,6 @@ LogicalResult LowerModule::lowerModule() {
   // updated if there is no body.
   unsigned postDeletionIndex = 0;
   unsigned postInsertionIndex = 0;
-
-  // The ports that should be inserted, _after deletion_.  These are indexed
-  // with the postDeletionIndex.
-  SmallVector<std::pair<unsigned, PortInfo>> newPorts;
 
   // The new port annotations.  These will be set after all deletions and
   // insertions.
@@ -163,6 +169,10 @@ LogicalResult LowerModule::lowerModule() {
       postInsertionIndex += 2;
       continue;
     }
+
+    // Record the mapping of the old port to the new port.  This can be used
+    // later to update instances.
+    resultMap.push_back({postDeletionIndex, postInsertionIndex});
 
     // If this operation has no body, then there is no need to continue.
     if (!body)
@@ -234,18 +244,51 @@ LogicalResult LowerModule::lowerModule() {
   // Set new port annotations now that all deletions and insertions are done.
   op.setPortAnnotationsAttr(ArrayAttr::get(context, portAnnotations));
 
+  LLVM_DEBUG({
+    llvm::dbgs() << "    portMap:\n";
+    for (auto [oldIndex, newIndex] : resultMap)
+      llvm::dbgs() << "      - " << oldIndex << ": " << newIndex << "\n";
+  });
+
   return success();
 }
 
-void LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
+LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*op));
-  for (auto *use : llvm::make_early_inc_range(*node)) {
+  for (auto *use : llvm::make_early_inc_range(node->uses())) {
     auto instanceOp = cast<InstanceOp>(*use->getInstance());
+    LLVM_DEBUG(llvm::dbgs()
+               << "      - " << instanceOp.getInstanceName() << "\n");
+
+    for (auto bit : eraseVector.set_bits()) {
+      auto result = instanceOp.getResult(bit);
+      for (auto *user : llvm::make_early_inc_range(result.getUsers())) {
+        if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
+          castOp.getResult().replaceAllUsesWith(castOp.getInput());
+          castOp.erase();
+          continue;
+        }
+        user->emitOpError()
+            << "has an unimplemented lowering in the LowerDomains pass.";
+        return failure();
+      }
+    }
+
     ImplicitLocOpBuilder builder(instanceOp.getLoc(), instanceOp);
-    auto newInstanceOp = instanceOp.erasePorts(builder, eraseVector);
-    instanceGraph.replaceInstance(instanceOp, newInstanceOp);
+    auto erased = instanceOp.erasePorts(builder, eraseVector);
+    auto inserted = erased.cloneAndInsertPorts(newPorts);
+    for (auto [oldIndex, newIndex] : resultMap) {
+      auto oldPort = erased.getResult(oldIndex);
+      auto newPort = inserted.getResult(newIndex);
+      oldPort.replaceAllUsesWith(newPort);
+    }
+    instanceGraph.replaceInstance(instanceOp, inserted);
+
     instanceOp.erase();
+    erased.erase();
   }
+
+  return success();
 }
 
 class LowerCircuit {
@@ -309,12 +352,12 @@ LogicalResult LowerCircuit::lowerCircuit() {
     auto moduleOp = dyn_cast<FModuleLike>(node.getModule<Operation *>());
     if (!moduleOp)
       return success();
-    LLVM_DEBUG(llvm::dbgs() << "  - " << moduleOp.getName() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "  - module: " << moduleOp.getName() << "\n");
     LowerModule lowerModule(moduleOp, classes);
     if (failed(lowerModule.lowerModule()))
       return failure();
-    lowerModule.lowerInstances(instanceGraph);
-    return success();
+    LLVM_DEBUG(llvm::dbgs() << "    instances:\n");
+    return lowerModule.lowerInstances(instanceGraph);
   });
 
   return success();
