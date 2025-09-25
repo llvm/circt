@@ -71,9 +71,13 @@ class SourceFiles:
 
 class SimProcess:
 
-  def __init__(self, proc: subprocess.Popen, port: int):
+  def __init__(self,
+               proc: subprocess.Popen,
+               port: int,
+               threads: Optional[List[threading.Thread]] = None):
     self.proc = proc
     self.port = port
+    self.threads: List[threading.Thread] = threads or []
 
   def force_stop(self):
     """Make sure to stop the simulation no matter what."""
@@ -85,6 +89,10 @@ class SimProcess:
       except subprocess.TimeoutExpired:
         # If the simulation doesn't exit of its own free will, kill it.
         self.proc.kill()
+
+    # Join reader threads (they should exit once pipes are closed).
+    for t in self.threads:
+      t.join()
 
 
 class Simulator:
@@ -230,18 +238,19 @@ class Simulator:
         # Slow the simulation down to one tick per millisecond.
         simEnv["DEBUG_PERIOD"] = "1"
     rcmd = self.run_command(gui)
-    rcmd = self.run_command(gui)
-    simProc = self._start_process_with_callbacks(rcmd,
-                                                 env=simEnv,
-                                                 cwd=self.run_dir,
-                                                 stdout_cb=self._run_stdout_cb,
-                                                 stderr_cb=self._run_stderr_cb,
-                                                 wait=False)
+    # Start process with asynchronous output capture.
+    proc, threads = self._start_process_with_callbacks(
+        rcmd,
+        env=simEnv,
+        cwd=self.run_dir,
+        stdout_cb=self._run_stdout_cb,
+        stderr_cb=self._run_stderr_cb,
+        wait=False)
 
     # Get the port which the simulation RPC selected.
     checkCount = 0
     while (not os.path.exists(portFileName)) and \
-            simProc.poll() is None:
+            proc.poll() is None:
       time.sleep(0.1)
       checkCount += 1
       if checkCount > 500 and not gui:
@@ -261,17 +270,17 @@ class Simulator:
       checkCount += 1
       if checkCount > 200:
         raise Exception(f"Cosim RPC port ({port}) never opened")
-      if simProc.poll() is not None:
+      if proc.poll() is not None:
         raise Exception("Simulation exited early")
       time.sleep(0.05)
-    return SimProcess(proc=simProc, port=port)
+    return SimProcess(proc=proc, port=port, threads=threads)
 
-  def _start_process_with_callbacks(self, cmd: List[str],
-                                    env: Optional[Dict[str, str]],
-                                    cwd: Optional[Path],
-                                    stdout_cb: Optional[Callable[[str], None]],
-                                    stderr_cb: Optional[Callable[[str], None]],
-                                    wait: bool) -> subprocess.Popen | int:
+  def _start_process_with_callbacks(
+      self, cmd: List[str], env: Optional[Dict[str, str]], cwd: Optional[Path],
+      stdout_cb: Optional[Callable[[str],
+                                   None]], stderr_cb: Optional[Callable[[str],
+                                                                        None]],
+      wait: bool) -> int | tuple[subprocess.Popen, List[threading.Thread]]:
     """Start a subprocess and stream its stdout/stderr to callbacks.
 
     If wait is True, blocks until process completes and returns its exit code.
@@ -294,11 +303,10 @@ class Simulator:
         if cb:
           try:
             cb(raw)
-          except Exception:
-            # Swallow callback exceptions to avoid killing streaming threads.
-            pass
+          except Exception as e:
+            print(f"Exception in simulator output callback: {e}")
 
-    threads = [
+    threads: List[threading.Thread] = [
         threading.Thread(target=_reader,
                          args=(proc.stdout, stdout_cb),
                          daemon=True),
@@ -312,7 +320,7 @@ class Simulator:
       for t in threads:
         t.join()
       return proc.wait()
-    return proc
+    return proc, threads
 
   def run(self,
           inner_command: str,
