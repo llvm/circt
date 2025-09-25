@@ -18,7 +18,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
-#include <algorithm>
 
 #define DEBUG_TYPE "datapath-to-comb"
 
@@ -123,9 +122,6 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
       return success();
     }
 
-    if (a == b)
-      return lowerSqrAndArray(rewriter, a, op, width);
-
     // Use result rows as a heuristic to guide partial product
     // implementation
     if (op.getNumResults() > 16 || forceBooth)
@@ -163,50 +159,6 @@ private:
           comb::ConcatOp::create(rewriter, loc, ValueRange{ppRow, shiftBy});
       auto ppAlignTrunc = rewriter.createOrFold<comb::ExtractOp>(
           loc, ppAlign, 0, width); // Truncate to width+i bits
-      partialProducts.push_back(ppAlignTrunc);
-    }
-
-    rewriter.replaceOp(op, partialProducts);
-    return success();
-  }
-
-  static LogicalResult lowerSqrAndArray(PatternRewriter &rewriter, Value a,
-                                        PartialProductOp op, unsigned width) {
-
-    Location loc = op.getLoc();
-    // Keep a as a bitvector - multiply by each digit of b
-    SmallVector<Value> aBits = extractBits(rewriter, a);
-
-    SmallVector<Value> partialProducts;
-    partialProducts.reserve(width);
-    // AND Array Construction:
-    // partialProducts[i] = ({b[i],..., b[i]} & a) << i
-    assert(op.getNumResults() <= width &&
-           "Cannot return more results than the operator width");
-    auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
-    for (unsigned i = 0; i < op.getNumResults(); ++i) {
-      SmallVector<Value> row;
-      row.reserve(width);
-      if (i > 0) {
-        auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(2 * i, 0));
-        row.push_back(shiftBy);
-      }
-      row.push_back(aBits[i]);
-      row.push_back(zeroFalse);
-      for (unsigned j = i + 1; j < width; ++j) {
-        if (j >= op.getNumResults()) {
-          row.push_back(zeroFalse);
-          continue;
-        }
-
-        auto ppBit =
-            rewriter.createOrFold<comb::AndOp>(loc, aBits[i], aBits[j]);
-        row.push_back(ppBit);
-      }
-      std::reverse(row.begin(), row.end());
-      auto ppRow = comb::ConcatOp::create(rewriter, loc, row);
-      auto ppAlignTrunc = rewriter.createOrFold<comb::ExtractOp>(
-          loc, ppRow, 0, width); // Truncate to width+i bits
       partialProducts.push_back(ppAlignTrunc);
     }
 
@@ -418,8 +370,8 @@ private:
                                      unsigned width) {
 
     Location loc = op.getLoc();
-    // Encode (a+b) by implementing a half-adder - then note the following
-    // fact carry[i] & save[i] == false
+    // Encode (a+b) by implementing a half-adder - then note the following fact
+    // carry[i] & save[i] == false
     auto carry = rewriter.createOrFold<comb::AndOp>(loc, a, b);
     auto save = rewriter.createOrFold<comb::XorOp>(loc, a, b);
 
