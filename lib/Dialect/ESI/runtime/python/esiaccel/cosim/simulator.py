@@ -123,36 +123,42 @@ class Simulator:
     self.run_dir = run_dir
     self.debug = debug
 
-    # Install callbacks (possibly wrapping default file log writers).
-    self._run_stdout_cb = run_stdout_callback
-    self._run_stderr_cb = run_stderr_callback
-    self._compile_stdout_cb = compile_stdout_callback
-    self._compile_stderr_cb = compile_stderr_callback
-
+    # Unified list of any log file handles we opened.
     self._default_files: List[IO[str]] = []
 
-    def _ensure_default_log(cb_attr: str, log_attr: str, filename: str):
-      """Create a default log file and callback if the callback is unset."""
-      if getattr(self, cb_attr) is not None:
-        # User provided a callback, don't override it.
-        return
+    def _ensure_default(cb: Optional[Callable[[str], None]], filename: str):
+      """Return (callback, file_handle_or_None) with optional file creation.
+
+      Behavior:
+        * If a callback is provided, return it unchanged with no file.
+        * If no callback and make_default_logs is False, return (None, None).
+        * If no callback and make_default_logs is True, create a log file and
+          return a writer callback plus the opened file handle.
+      """
+      if cb is not None:
+        return cb, None
+      if not make_default_logs:
+        return None, None
       p = self.run_dir / filename
       p.parent.mkdir(parents=True, exist_ok=True)
       logf = p.open("w+")
       self._default_files.append(logf)
-      setattr(self, log_attr, logf)
-      # Install simple line-wise writer+flush callback.
-      setattr(self,
-              cb_attr,
-              lambda line, _lf=logf: (_lf.write(line + "\n"), _lf.flush()))
 
-    if make_default_logs:
-      _ensure_default_log('_compile_stdout_cb', '_compile_stdout_log',
-                          'compile_stdout.log')
-      _ensure_default_log('_compile_stderr_cb', '_compile_stderr_log',
-                          'compile_stderr.log')
-      _ensure_default_log('_run_stdout_cb', '_run_stdout_log', 'sim_stdout.log')
-      _ensure_default_log('_run_stderr_cb', '_run_stderr_log', 'sim_stderr.log')
+      def _writer(line: str, _lf=logf):
+        _lf.write(line + "\n")
+        _lf.flush()
+
+      return _writer, logf
+
+    # Initialize all four (compile/run stdout/stderr) uniformly.
+    self._compile_stdout_cb, self._compile_stdout_log = _ensure_default(
+        compile_stdout_callback, 'compile_stdout.log')
+    self._compile_stderr_cb, self._compile_stderr_log = _ensure_default(
+        compile_stderr_callback, 'compile_stderr.log')
+    self._run_stdout_cb, self._run_stdout_log = _ensure_default(
+        run_stdout_callback, 'sim_stdout.log')
+    self._run_stderr_cb, self._run_stderr_log = _ensure_default(
+        run_stderr_callback, 'sim_stderr.log')
 
   @staticmethod
   def get_env() -> Dict[str, str]:
@@ -186,12 +192,13 @@ class Simulator:
         # If we have the default file loggers, print the compilation logs to
         # console. Else, assume that the user has already captured them.
         if self.UsesStderr:
-          if hasattr(self, "_compile_stderr_log"):
+          if self._compile_stderr_log is not None:
             self._compile_stderr_log.seek(0)
             print(self._compile_stderr_log.read())
-        elif hasattr(self, "_compile_stdout_log"):
-          self._compile_stdout_log.seek(0)
-          print(self._compile_stdout_log.read())
+        else:
+          if self._compile_stdout_log is not None:
+            self._compile_stdout_log.seek(0)
+            print(self._compile_stdout_log.read())
 
         return ret
     return 0
