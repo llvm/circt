@@ -151,7 +151,7 @@ def DPICallOp : SimOp<"func.dpi.call",
 // String Formatting
 //===----------------------------------------------------------------------===//
 
-def FormatLitOp : SimOp<"fmt.lit", [Pure, ConstantLike]> {
+def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let summary = "Literal string fragment";
   let description = [{
     Creates a constant, raw ASCII string literal for formatted printing.

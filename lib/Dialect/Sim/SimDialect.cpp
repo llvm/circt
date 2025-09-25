@@ -41,7 +41,7 @@ Operation *SimDialect::materializeConstant(::mlir::OpBuilder &builder,
                                            ::mlir::Location loc) {
 
   if (auto fmtStrType = llvm::dyn_cast<FormatStringType>(type))
-    return FormatLitOp::create(builder, loc, fmtStrType,
-                               llvm::cast<StringAttr>(value));
+    return FormatLiteralOp::create(builder, loc, fmtStrType,
+                                   llvm::cast<StringAttr>(value));
   return nullptr;
 }
