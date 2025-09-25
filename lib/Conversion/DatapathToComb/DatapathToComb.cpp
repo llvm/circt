@@ -123,6 +123,18 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
       return success();
     }
 
+    // Square partial product array can be reduced to upper triangular array.
+    // For example: AND array for a 4-bit squarer:
+    //    0    0    0 a0a3 a0a2 a0a1 a0a0
+    //    0    0 a1a3 a1a2 a1a1 a1a0    0
+    //    0 a2a3 a2a2 a2a1 a2a0    0    0
+    // a3a3 a3a2 a3a1 a3a0    0    0    0
+    //
+    // Can be reduced to:
+    //    0    0 a0a3 a0a2 a0a1    0   a0
+    //    0 a1a3 a1a2    0   a1    0    0
+    // a2a3    0   a2    0    0    0    0
+    //   a3    0    0    0    0    0    0
     if (a == b)
       return lowerSqrAndArray(rewriter, a, op, width);
 

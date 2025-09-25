@@ -66,6 +66,7 @@ hw.module @partial_product_square(in %a : i3, out pp0 : i3, out pp1 : i3, out pp
   // CHECK-NEXT: %[[A01:.+]] = comb.and %[[A0]], %[[A1]] : i1
   // CHECK-NEXT: %[[PP0:.+]] = comb.concat %[[A01]], %false, %[[A0]] : i1, i1, i1
   // CHECK-NEXT: %[[PP1:.+]] = comb.concat %[[A1]], %c0_i2 : i1, i2
+  // CHECK-NEXT: hw.output %[[PP0]], %[[PP1]], %c0_i3 : i3, i3, i3
   %0:3 = datapath.partial_product %a, %a : (i3, i3) -> (i3, i3, i3)
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
@@ -86,6 +87,7 @@ hw.module @partial_product_square_zext(in %a : i3, out pp0 : i6, out pp1 : i6, o
   // CHECK-NEXT: %[[A12:.+]] = comb.and %[[A1]], %[[A2]] : i1
   // CHECK-NEXT: %[[PP1:.+]] = comb.concat %false, %[[A12]], %false, %[[A1]], %c0_i2 : i1, i1, i1, i1, i2
   // CHECK-NEXT: %[[PP2:.+]] = comb.concat %false, %[[A2]], %c0_i4 : i1, i1, i4
+  // CHECK-NEXT: hw.output %[[PP0]], %[[PP1]], %[[PP2]] : i6, i6, i6
   %c0_i3 = hw.constant 0 : i3
   %0 = comb.concat %c0_i3, %a : i3, i3
   %1:3 = datapath.partial_product %0, %0 : (i6, i6) -> (i6, i6, i6)
