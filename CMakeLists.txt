@@ -36,6 +36,7 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 #-------------------------------------------------------------------------------
 
   # MSVC-specific compiler configuration
+  message(WARNING "Standalone path")
   if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
     # Enable UTF-8 support for source files and string literals.  This is
@@ -113,6 +114,16 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   endif()
 
 else()
+
+  message(WARNING "Unified path")
+  if (MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
+    # Enable UTF-8 support for source files and string literals.  This is
+    # required by dependencies like fmt library.
+    string(APPEND CMAKE_CXX_FLAGS " /utf-8")
+    string(APPEND CMAKE_C_FLAGS " /utf-8")
+  endif ()
+
   # CMake library generation settings.
   set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
   set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL
