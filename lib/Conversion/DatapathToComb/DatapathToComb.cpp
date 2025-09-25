@@ -18,6 +18,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
+#include <algorithm>
 
 #define DEBUG_TYPE "datapath-to-comb"
 
@@ -122,6 +123,21 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
       return success();
     }
 
+    // Square partial product array can be reduced to upper triangular array.
+    // For example: AND array for a 4-bit squarer:
+    //    0    0    0 a0a3 a0a2 a0a1 a0a0
+    //    0    0 a1a3 a1a2 a1a1 a1a0    0
+    //    0 a2a3 a2a2 a2a1 a2a0    0    0
+    // a3a3 a3a2 a3a1 a3a0    0    0    0
+    //
+    // Can be reduced to:
+    //    0    0 a0a3 a0a2 a0a1    0   a0
+    //    0 a1a3 a1a2    0   a1    0    0
+    // a2a3    0   a2    0    0    0    0
+    //   a3    0    0    0    0    0    0
+    if (a == b)
+      return lowerSqrAndArray(rewriter, a, op, width);
+
     // Use result rows as a heuristic to guide partial product
     // implementation
     if (op.getNumResults() > 16 || forceBooth)
@@ -160,6 +176,70 @@ private:
       auto ppAlignTrunc = rewriter.createOrFold<comb::ExtractOp>(
           loc, ppAlign, 0, width); // Truncate to width+i bits
       partialProducts.push_back(ppAlignTrunc);
+    }
+
+    rewriter.replaceOp(op, partialProducts);
+    return success();
+  }
+
+  static LogicalResult lowerSqrAndArray(PatternRewriter &rewriter, Value a,
+                                        PartialProductOp op, unsigned width) {
+
+    Location loc = op.getLoc();
+    SmallVector<Value> aBits = extractBits(rewriter, a);
+
+    SmallVector<Value> partialProducts;
+    partialProducts.reserve(width);
+    // AND Array Construction - reducing to upper triangle:
+    // partialProducts[i] = ({a[i],..., a[i]} & a) << i
+    // optimised to: {a[i] & a[n-1], ..., a[i] & a[i+1], 0, a[i], 0, ..., 0}
+    assert(op.getNumResults() <= width &&
+           "Cannot return more results than the operator width");
+    auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+    for (unsigned i = 0; i < op.getNumResults(); ++i) {
+      SmallVector<Value> row;
+      row.reserve(width);
+
+      if (2 * i >= width) {
+        // Pad the remaining rows with zeros
+        auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+        partialProducts.push_back(zeroWidth);
+        continue;
+      }
+
+      if (i > 0) {
+        auto shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(2 * i, 0));
+        row.push_back(shiftBy);
+      }
+      row.push_back(aBits[i]);
+
+      // Track width of constructed row
+      unsigned rowWidth = 2 * i + 1;
+      if (rowWidth < width) {
+        row.push_back(zeroFalse);
+        ++rowWidth;
+      }
+
+      for (unsigned j = i + 1; j < width; ++j) {
+        // Stop when we reach the required width
+        if (rowWidth == width)
+          break;
+
+        // Otherwise pad with zeros or partial product bits
+        ++rowWidth;
+        // Number of results indicates number of non-zero bits in input
+        if (j >= op.getNumResults()) {
+          row.push_back(zeroFalse);
+          continue;
+        }
+
+        auto ppBit =
+            rewriter.createOrFold<comb::AndOp>(loc, aBits[i], aBits[j]);
+        row.push_back(ppBit);
+      }
+      std::reverse(row.begin(), row.end());
+      auto ppRow = comb::ConcatOp::create(rewriter, loc, row);
+      partialProducts.push_back(ppRow);
     }
 
     rewriter.replaceOp(op, partialProducts);
@@ -370,8 +450,8 @@ private:
                                      unsigned width) {
 
     Location loc = op.getLoc();
-    // Encode (a+b) by implementing a half-adder - then note the following fact
-    // carry[i] & save[i] == false
+    // Encode (a+b) by implementing a half-adder - then note the following
+    // fact carry[i] & save[i] == false
     auto carry = rewriter.createOrFold<comb::AndOp>(loc, a, b);
     auto save = rewriter.createOrFold<comb::XorOp>(loc, a, b);
 

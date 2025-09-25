@@ -29,6 +29,24 @@ hw.module @partial_product_zext(in %a : i3, in %b : i3, out sum : i6) {
   hw.output %3 : i6
 }
 
+// RUN: circt-lec %t.mlir %s -c1=partial_product_square -c2=partial_product_square --shared-libs=%libz3 | FileCheck %s --check-prefix=SQR4
+// SQR4: c1 == c2
+hw.module @partial_product_square(in %a : i4, out sum : i4) {
+  %0:4 = datapath.partial_product %a, %a : (i4, i4) -> (i4, i4, i4, i4)
+  %1 = comb.add bin %0#0, %0#1, %0#2, %0#3 : i4
+  hw.output %1 : i4
+}
+
+// RUN: circt-lec %t.mlir %s -c1=partial_product_square_zext -c2=partial_product_square_zext --shared-libs=%libz3 | FileCheck %s --check-prefix=SQR3_ZEXT
+// SQR3_ZEXT: c1 == c2
+hw.module @partial_product_square_zext(in %a : i3, out sum : i6) {
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.concat %c0_i3, %a : i3, i3
+  %1:3 = datapath.partial_product %0, %0 : (i6, i6) -> (i6, i6, i6)
+  %2 = comb.add %1#0, %1#1, %1#2 : i6
+  hw.output %2 : i6
+}
+
 // RUN: circt-lec %t.mlir %s -c1=partial_product_sext -c2=partial_product_sext --shared-libs=%libz3 | FileCheck %s --check-prefix=AND3_SEXT
 // AND3_SEXT: c1 == c2
 hw.module @partial_product_sext(in %a : i3, in %b : i3, out sum : i6) {
