@@ -16,3 +16,8 @@ if(TARGET Boost::headers)
   add_compile_definitions(
     $<TARGET_PROPERTY:Boost::headers,INTERFACE_COMPILE_DEFINITIONS>)
 endif()
+
+# UTF-8 flag is required for MSVC when including the "fmt" library headers
+# which can get pulled in by the slang headers.
+add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
