@@ -59,7 +59,8 @@ class Verilator(Simulator):
     ]
     if self.debug:
       cmd += [
-          "--trace", "--trace-params", "--trace-structs", "--trace-underscore"
+          "--trace-fst", "--trace-params", "--trace-structs",
+          "--trace-underscore"
       ]
       cflags.append("-DTRACE")
     if len(cflags) > 0:
