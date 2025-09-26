@@ -2168,8 +2168,11 @@ public:
     assert(localTokens.empty());
     // Wrap to this column.
     ps.scopedBox(PP::ibox0, [&]() {
+      // Require unsigned in an assignment context since every wire is
+      // declared as unsigned.
       emitSubExpr(exp, parenthesizeIfLooserThan,
-                  /*signRequirement*/ NoRequirement,
+                  /*signRequirement*/
+                  isAssignmentLikeContext ? RequireUnsigned : NoRequirement,
                   /*isSelfDeterminedUnsignedValue*/ false,
                   isAssignmentLikeContext);
     });
