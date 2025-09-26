@@ -9,7 +9,8 @@ import socket
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Callable, IO
+import threading
 
 _thisdir = Path(__file__).parent
 CosimCollateralDir = _thisdir
@@ -77,9 +78,13 @@ class SourceFiles:
 
 class SimProcess:
 
-  def __init__(self, proc: subprocess.Popen, port: int):
+  def __init__(self,
+               proc: subprocess.Popen,
+               port: int,
+               threads: Optional[List[threading.Thread]] = None):
     self.proc = proc
     self.port = port
+    self.threads: List[threading.Thread] = threads or []
 
   def force_stop(self):
     """Make sure to stop the simulation no matter what."""
@@ -92,6 +97,10 @@ class SimProcess:
         # If the simulation doesn't exit of its own free will, kill it.
         self.proc.kill()
 
+    # Join reader threads (they should exit once pipes are closed).
+    for t in self.threads:
+      t.join()
+
 
 class Simulator:
 
@@ -100,10 +109,71 @@ class Simulator:
   # broken behavior by overriding this.
   UsesStderr = True
 
-  def __init__(self, sources: SourceFiles, run_dir: Path, debug: bool):
+  def __init__(self,
+               sources: SourceFiles,
+               run_dir: Path,
+               debug: bool,
+               run_stdout_callback: Optional[Callable[[str], None]] = None,
+               run_stderr_callback: Optional[Callable[[str], None]] = None,
+               compile_stdout_callback: Optional[Callable[[str], None]] = None,
+               compile_stderr_callback: Optional[Callable[[str], None]] = None,
+               make_default_logs: bool = True):
+    """Simulator base class.
+
+    Optional sinks can be provided for capturing output. If not provided,
+    the simulator will write to log files in `run_dir`.
+
+    Args:
+      sources: SourceFiles describing RTL/DPI inputs.
+      run_dir: Directory where build/run artifacts are placed.
+      debug: Enable cosim debug mode.
+      run_stdout_callback: Line-based callback for runtime stdout.
+      run_stderr_callback: Line-based callback for runtime stderr.
+      compile_stdout_callback: Line-based callback for compile stdout.
+      compile_stderr_callback: Line-based callback for compile stderr.
+      make_default_logs: If True and corresponding callback is not supplied,
+        create log file and emit via internally-created callback.
+    """
     self.sources = sources
     self.run_dir = run_dir
     self.debug = debug
+
+    # Unified list of any log file handles we opened.
+    self._default_files: List[IO[str]] = []
+
+    def _ensure_default(cb: Optional[Callable[[str], None]], filename: str):
+      """Return (callback, file_handle_or_None) with optional file creation.
+
+      Behavior:
+        * If a callback is provided, return it unchanged with no file.
+        * If no callback and make_default_logs is False, return (None, None).
+        * If no callback and make_default_logs is True, create a log file and
+          return a writer callback plus the opened file handle.
+      """
+      if cb is not None:
+        return cb, None
+      if not make_default_logs:
+        return None, None
+      p = self.run_dir / filename
+      p.parent.mkdir(parents=True, exist_ok=True)
+      logf = p.open("w+")
+      self._default_files.append(logf)
+
+      def _writer(line: str, _lf=logf):
+        _lf.write(line + "\n")
+        _lf.flush()
+
+      return _writer, logf
+
+    # Initialize all four (compile/run stdout/stderr) uniformly.
+    self._compile_stdout_cb, self._compile_stdout_log = _ensure_default(
+        compile_stdout_callback, 'compile_stdout.log')
+    self._compile_stderr_cb, self._compile_stderr_log = _ensure_default(
+        compile_stderr_callback, 'compile_stderr.log')
+    self._run_stdout_cb, self._run_stdout_log = _ensure_default(
+        run_stdout_callback, 'sim_stdout.log')
+    self._run_stderr_cb, self._run_stderr_log = _ensure_default(
+        run_stderr_callback, 'sim_stderr.log')
 
   @staticmethod
   def get_env() -> Dict[str, str]:
@@ -123,23 +193,29 @@ class Simulator:
   def compile(self) -> int:
     cmds = self.compile_commands()
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    with (self.run_dir / "compile_stdout.log").open("w") as stdout, (
-        self.run_dir / "compile_stderr.log").open("w") as stderr:
-      for cmd in cmds:
-        stderr.write(" ".join(cmd) + "\n")
-        cp = subprocess.run(cmd,
-                            env=Simulator.get_env(),
-                            capture_output=True,
-                            text=True)
-        stdout.write(cp.stdout)
-        stderr.write(cp.stderr)
-        if cp.returncode != 0:
-          print("====== Compilation failure:")
-          if self.UsesStderr:
-            print(cp.stderr)
-          else:
-            print(cp.stdout)
-          return cp.returncode
+    for cmd in cmds:
+      ret = self._start_process_with_callbacks(
+          cmd,
+          env=Simulator.get_env(),
+          cwd=None,
+          stdout_cb=self._compile_stdout_cb,
+          stderr_cb=self._compile_stderr_cb,
+          wait=True)
+      if isinstance(ret, int) and ret != 0:
+        print("====== Compilation failure")
+
+        # If we have the default file loggers, print the compilation logs to
+        # console. Else, assume that the user has already captured them.
+        if self.UsesStderr:
+          if self._compile_stderr_log is not None:
+            self._compile_stderr_log.seek(0)
+            print(self._compile_stderr_log.read())
+        else:
+          if self._compile_stdout_log is not None:
+            self._compile_stdout_log.seek(0)
+            print(self._compile_stdout_log.read())
+
+        return ret
     return 0
 
   def run_command(self, gui: bool) -> List[str]:
@@ -148,11 +224,12 @@ class Simulator:
 
   def run_proc(self, gui: bool = False) -> SimProcess:
     """Run the simulation process. Returns the Popen object and the port which
-      the simulation is listening on."""
-    # Open log files
+      the simulation is listening on.
+
+    If user-provided stdout/stderr sinks were supplied in the constructor,
+    they are used. Otherwise, log files are created in `run_dir`.
+    """
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    simStdout = open(self.run_dir / "sim_stdout.log", "w")
-    simStderr = open(self.run_dir / "sim_stderr.log", "w")
 
     # Erase the config file if it exists. We don't want to read
     # an old config.
@@ -168,19 +245,19 @@ class Simulator:
         # Slow the simulation down to one tick per millisecond.
         simEnv["DEBUG_PERIOD"] = "1"
     rcmd = self.run_command(gui)
-    simProc = subprocess.Popen(self.run_command(gui),
-                               stdout=simStdout,
-                               stderr=simStderr,
-                               env=simEnv,
-                               cwd=self.run_dir,
-                               preexec_fn=os.setsid)
-    simStderr.close()
-    simStdout.close()
+    # Start process with asynchronous output capture.
+    proc, threads = self._start_process_with_callbacks(
+        rcmd,
+        env=simEnv,
+        cwd=self.run_dir,
+        stdout_cb=self._run_stdout_cb,
+        stderr_cb=self._run_stderr_cb,
+        wait=False)
 
     # Get the port which the simulation RPC selected.
     checkCount = 0
     while (not os.path.exists(portFileName)) and \
-            simProc.poll() is None:
+            proc.poll() is None:
       time.sleep(0.1)
       checkCount += 1
       if checkCount > 500 and not gui:
@@ -200,10 +277,57 @@ class Simulator:
       checkCount += 1
       if checkCount > 200:
         raise Exception(f"Cosim RPC port ({port}) never opened")
-      if simProc.poll() is not None:
+      if proc.poll() is not None:
         raise Exception("Simulation exited early")
       time.sleep(0.05)
-    return SimProcess(proc=simProc, port=port)
+    return SimProcess(proc=proc, port=port, threads=threads)
+
+  def _start_process_with_callbacks(
+      self, cmd: List[str], env: Optional[Dict[str, str]], cwd: Optional[Path],
+      stdout_cb: Optional[Callable[[str],
+                                   None]], stderr_cb: Optional[Callable[[str],
+                                                                        None]],
+      wait: bool) -> int | tuple[subprocess.Popen, List[threading.Thread]]:
+    """Start a subprocess and stream its stdout/stderr to callbacks.
+
+    If wait is True, blocks until process completes and returns its exit code.
+    If wait is False, returns the Popen object (threads keep streaming).
+    """
+    proc = subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            env=env,
+                            cwd=cwd,
+                            text=True,
+                            preexec_fn=os.setsid)
+
+    def _reader(pipe, cb):
+      if pipe is None:
+        return
+      for raw in pipe:
+        if raw.endswith('\n'):
+          raw = raw[:-1]
+        if cb:
+          try:
+            cb(raw)
+          except Exception as e:
+            print(f"Exception in simulator output callback: {e}")
+
+    threads: List[threading.Thread] = [
+        threading.Thread(target=_reader,
+                         args=(proc.stdout, stdout_cb),
+                         daemon=True),
+        threading.Thread(target=_reader,
+                         args=(proc.stderr, stderr_cb),
+                         daemon=True),
+    ]
+    for t in threads:
+      t.start()
+    if wait:
+      for t in threads:
+        t.join()
+      return proc.wait()
+    return proc, threads
 
   def run(self,
           inner_command: str,
