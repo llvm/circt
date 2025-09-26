@@ -97,6 +97,11 @@ static cl::opt<bool> enableAnnotationWarning(
     cl::desc("Warn about annotations that were not removed by lower-to-hw"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    emitChiselAssertsAsSVA("emit-chisel-asserts-as-sva",
+                           cl::desc("Convert all chisel asserts into SVA"),
+                           cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
     cl::desc("Ignore annotations without a class when parsing"),
@@ -592,7 +597,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
+    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
+                                         emitChiselAssertsAsSVA.getValue()));
 
     if (outputFormat == OutputIRHW) {
       if (!disableOptimization) {

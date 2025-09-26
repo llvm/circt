@@ -1,4 +1,5 @@
 ; RUN: firtool --verify-diagnostics --verilog %s | FileCheck %s
+; RUN: firtool --verify-diagnostics --verilog --emit-chisel-asserts-as-sva %s | FileCheck %s --check-prefix=SVA
 ; Tests extracted from:
 ; - test/scala/firrtl/extractverif/ExtractAssertsSpec.scala
 
@@ -30,6 +31,10 @@ circuit Foo:
     ; CHECK-NEXT:   if (`STOP_COND_)
     ; CHECK-NEXT:     $fatal;
     ; CHECK-NEXT: end
+
+    ; SVA: wire _GEN = ~enable | predicate1 | reset;
+    ; SVA-NEXT: assert__verif_library: assert property (@(posedge clock) _GEN) else $error("Assertion failed (verification library): ");
+
     when not(or(predicate1, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"ifElseFatal\"},\"baseMsg\":\"Assertion failed (verification library): \"}</extraction-summary> bar")
       stop(clock, enable, 1)
