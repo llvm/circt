@@ -134,8 +134,11 @@ mapfile -t OPT_OS < <(echo "${OPT_OS[@]}" | tr ' ' '\n' | sort -u)
 # For non-full installs, install the following tools.
 binaries=(
     circt-opt
+    circt-reduce
     circt-synth
     circt-test
+    circt-translate
+    circt-verilog
     firtool
     om-linker
 )
