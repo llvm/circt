@@ -30,7 +30,7 @@
 #include CONCAT3(V,TOP_MODULE,.h)
 // clang-format on
 
-#include "verilated_vcd_c.h"
+#include "verilated_fst_c.h"
 
 #include "signal.h"
 #include <iostream>
@@ -64,12 +64,12 @@ int main(int argc, char **argv) {
   }
 
 #ifdef TRACE
-  VerilatedVcdC *tfp = nullptr;
+  VerilatedFstC *tfp = nullptr;
 #endif
 
   if (waveformFile) {
 #ifdef TRACE
-    tfp = new VerilatedVcdC();
+    tfp = new VerilatedFstC();
     Verilated::traceEverOn(true);
     dut.trace(tfp, 99); // Trace 99 levels of hierarchy
     tfp->open(waveformFile);
@@ -95,11 +95,11 @@ int main(int argc, char **argv) {
   // Run for a few cycles with reset held.
   for (timeStamp = 0; timeStamp < 8 && !Verilated::gotFinish(); timeStamp++) {
     dut.eval();
-    dut.clk = !dut.clk;
 #ifdef TRACE
     if (tfp)
       tfp->dump(timeStamp);
 #endif
+    dut.clk = !dut.clk;
   }
 
   // Take simulation out of reset.
@@ -108,12 +108,12 @@ int main(int argc, char **argv) {
   // Run for the specified number of cycles out of reset.
   for (; !Verilated::gotFinish() && !stopSimulation; timeStamp++) {
     dut.eval();
-    dut.clk = !dut.clk;
-
 #ifdef TRACE
     if (tfp)
       tfp->dump(timeStamp);
 #endif
+    dut.clk = !dut.clk;
+
     if (debugPeriod)
       std::this_thread::sleep_for(std::chrono::milliseconds(debugPeriod));
   }
