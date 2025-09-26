@@ -104,6 +104,12 @@ static cl::opt<bool> verbose("v", cl::init(true),
                              cl::desc("Print reduction progress to stderr"),
                              cl::cat(mainCategory));
 
+cl::opt<int64_t> maxGreedyRewrites(
+    "max-greedy-rewrites", cl::init(-1),
+    cl::desc("Maximum number of rewrites GreedyPatternRewriteDriver may "
+             "apply (negative value keeps the default)"),
+    cl::cat(mainCategory));
+
 static cl::opt<unsigned>
     maxChunks("max-chunks", cl::init(0),
               cl::desc("Stop increasing granularity beyond this number of "

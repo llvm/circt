@@ -11,9 +11,12 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace mlir;
 using namespace circt;
+
+extern llvm::cl::opt<int64_t> maxGreedyRewrites;
 
 //===----------------------------------------------------------------------===//
 // Reduction Patterns
@@ -101,6 +104,8 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   config.setUseTopDownTraversal(true);
   config.setRegionSimplificationLevel(
       mlir::GreedySimplifyRegionLevel::Disabled);
+  if (maxGreedyRewrites >= 0)
+    config.setMaxNumRewrites(maxGreedyRewrites);
   return createCanonicalizerPass(config);
 }
 
