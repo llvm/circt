@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-domains))' --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-domains))' --split-input-file %s | FileCheck --implicit-check-not firrtl.domain %s
 
 // Deeply check the lowering of domains and how associations are lowered.  Later
 // tests will ignore these deep checks.
@@ -18,12 +18,9 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    firrtl.propassign %associations_out, %associations_in
   firrtl.domain @ClockDomain {}
   // CHECK-LABEL: firrtl.module @Foo(
-  // CHECK-NOT:     firrtl.domain
   // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
-  // CHECK-NOT:     firrtl.domain
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
   // CHECK-SAME:    in %a: !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]
-  // CHECK-NOT:       domains
   firrtl.module @Foo(
     in %A: !firrtl.domain of @ClockDomain,
     in %a: !firrtl.uint<1> domains [%A]
@@ -76,26 +73,14 @@ firrtl.circuit "Foo" {
 // Check the behavior of external modules.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain {}
-  // The external module should have all domain ports erased and domain
-  // associations removed.
-  //
   // CHECK-LABEL: firrtl.extmodule @Bar(
-  // CHECK-NOT:     firrtl.domain
+  // CHECK-SAME:    in A: !firrtl.class<@ClockDomain()>
+  // CHECK-SAME:    out A_out: !firrtl.class<@ClockDomain_out(
   // CHECK-SAME:    in a: !firrtl.uint<1>
-  // CHECK-NOT:       domains
   firrtl.extmodule @Bar(
     in A: !firrtl.domain of @ClockDomain,
     in a: !firrtl.uint<1> domains [A]
   )
-  // CHECK-LABEL: firrtl.module @Foo(
   firrtl.module @Foo(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %a: !firrtl.uint<1> domains [%A]
-  ) {
-    %bar_A, %bar_a = firrtl.instance bar @Bar(
-      in A: !firrtl.domain of @ClockDomain,
-      in a: !firrtl.uint<1> domains[A]
-    )
-    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
-  }
+  ) {}
 }

@@ -125,31 +125,30 @@ LogicalResult LowerModule::lowerModule() {
     if (domain) {
       eraseVector.set(index);
 
-      // If this module does _not_ have a body, then we don't add ports or need
-      // to populate `domainInfo`.
-      if (!body)
-        continue;
-
       // Instantiate a domain object with association information.
       auto port = cast<PortInfo>(op.getPorts()[index]);
       auto name = cast<FlatSymbolRefAttr>(port.domains);
       auto [classIn, classOut] = classes.lookup(name.getAttr());
-      auto object = ObjectOp::create(
-          *builder, port.loc, classOut,
-          StringAttr::get(context, Twine(port.name) + "_object"));
-      domainInfo[index] = {object, postInsertionIndex, postInsertionIndex + 1};
 
-      // Erase users of the domain in the module body.
-      auto arg = body->getArgument(index);
-      for (auto *user : llvm::make_early_inc_range(arg.getUsers())) {
-        if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
-          castOp.getResult().replaceAllUsesWith(castOp.getInput());
-          castOp.erase();
-          continue;
+      if (body) {
+        auto object = ObjectOp::create(
+            *builder, port.loc, classOut,
+            StringAttr::get(context, Twine(port.name) + "_object"));
+        domainInfo[index] = {object, postInsertionIndex,
+                             postInsertionIndex + 1};
+
+        // Erase users of the domain in the module body.
+        auto arg = body->getArgument(index);
+        for (auto *user : llvm::make_early_inc_range(arg.getUsers())) {
+          if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
+            castOp.getResult().replaceAllUsesWith(castOp.getInput());
+            castOp.erase();
+            continue;
+          }
+          user->emitOpError()
+              << "has an unimplemented lowering in the LowerDomains pass.";
+          return failure();
         }
-        user->emitOpError()
-            << "has an unimplemented lowering in the LowerDomains pass.";
-        return failure();
       }
 
       // Add input and output property ports that encode the property inputs
@@ -159,10 +158,10 @@ LogicalResult LowerModule::lowerModule() {
           {{postDeletionIndex,
             PortInfo(port.name, classIn.getInstanceType(), Direction::In)},
            {postDeletionIndex,
-            PortInfo(builder->getStringAttr(Twine(port.name) + "_out"),
-                     object.getType(), Direction::Out)}});
+            PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
+                     classOut.getInstanceType(), Direction::Out)}});
       portAnnotations.append(
-          {builder->getArrayAttr({}), builder->getArrayAttr({})});
+          {ArrayAttr::get(context, {}), ArrayAttr::get(context, {})});
 
       // Don't increment the postDeletionIndex since we deleted one port.
       // Increment the postInsertionIndex by 2 since we added two ports.
@@ -173,10 +172,6 @@ LogicalResult LowerModule::lowerModule() {
     // Record the mapping of the old port to the new port.  This can be used
     // later to update instances.
     resultMap.push_back({postDeletionIndex, postInsertionIndex});
-
-    // If this operation has no body, then there is no need to continue.
-    if (!body)
-      continue;
 
     // This port will not be deleted, so increment both indices.
     ++postDeletionIndex;
@@ -193,10 +188,10 @@ LogicalResult LowerModule::lowerModule() {
     SmallVector<Annotation> newAnnotations;
     for (auto attr : domainAttr) {
       auto domainIndex = cast<IntegerAttr>(attr).getUInt();
-      auto id = DistinctAttr::create(builder->getUnitAttr());
+      auto id = DistinctAttr::create(UnitAttr::get(context));
       newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
-          builder->getContext(),
-          {{"class", builder->getStringAttr("circt.tracker")}, {"id", id}})));
+          context,
+          {{"class", StringAttr::get(context, "circt.tracker")}, {"id", id}})));
       domainInfo[domainIndex].associations.push_back(id);
     }
     if (!newAnnotations.empty())
@@ -210,8 +205,8 @@ LogicalResult LowerModule::lowerModule() {
 
   // Insert new property ports and hook these up to the object that was
   // instantiated earlier.
+  op.insertPorts(newPorts);
   if (body) {
-    op.insertPorts(newPorts);
     for (auto const &[_, info] : domainInfo) {
       auto [object, inputPort, outputPort, associations] = info;
       builder->setInsertionPointAfter(object);
