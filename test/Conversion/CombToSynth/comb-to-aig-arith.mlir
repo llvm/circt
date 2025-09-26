@@ -25,7 +25,7 @@ hw.module @add(in %lhs: i2, in %rhs: i2, out out: i2) {
   // CHECK-NEXT: %[[sum1:.*]] = comb.xor bin %[[lhs1]], %[[rhs1]], %[[carry0]] : i1
   // CHECK-NEXT: %[[concat:.*]] = comb.concat %[[sum1]], %[[sum0]] : i1, i1
   // CHECK-NEXT: hw.output %[[concat]] : i2
-  %0 = comb.add %lhs, %rhs {synth.arch = "RIPPLECARRY"} : i2
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "RIPPLE-CARRY"} : i2
   hw.output %0 : i2
 }
 
@@ -53,7 +53,7 @@ hw.module @add_sklanskey(in %lhs: i3, in %rhs: i3, out out: i3) {
   // CHECK-NEXT: %[[S2:.+]] = comb.xor %[[P2]], %[[G10]] : i1
   // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[S2]], %[[S1]], %[[P0]] : i1, i1, i1
   // CHECK-NEXT: hw.output %[[RES]] : i3
-  %0 = comb.add %lhs, %rhs {synth.arch = "SKLANSKEY"} : i3
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "SKLANSKEY"} : i3
   hw.output %0 : i3
 }
 
@@ -83,7 +83,7 @@ hw.module @add_kogge_stone(in %lhs: i3, in %rhs: i3, out out: i3) {
   // CHECK-NEXT: %[[S2:.+]] = comb.xor %[[P2]], %[[G10]] : i1
   // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[S2]], %[[S1]], %[[P0]] : i1, i1, i1
   // CHECK-NEXT: hw.output %[[RES]] : i3
-  %0 = comb.add %lhs, %rhs {synth.arch = "KOGGE-STONE"} : i3
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i3
   hw.output %0 : i3
 }
 
@@ -122,7 +122,7 @@ hw.module @add_brent_kung(in %lhs: i4, in %rhs: i4, out out: i4) {
   // CHECK-NEXT: %[[S3:.+]] = comb.xor %[[P3]], %[[G20]] : i1
   // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[S3]], %[[S2]], %[[S1]], %[[P0]] : i1, i1, i1, i1
   // CHECK-NEXT: hw.output %[[RES]] : i4
-  %0 = comb.add %lhs, %rhs {synth.arch = "BRENT-KUNG"} : i4
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "BRENT-KUNG"} : i4
   hw.output %0 : i4
 }
 

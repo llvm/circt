@@ -481,26 +481,34 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     // Check if the architecture is specified by an attribute.
-    StringRef arch;
-    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch"))
-      arch = strAttr.getValue();
+    auto arch = determineAdderArch(op, width);
+    if (arch == AdderArchitecture::RippleCarry)
+      return lowerRippleCarryAdder(op, inputs, rewriter);
+    return lowerParallelPrefixAdder(op, inputs, rewriter);
+  }
 
-    if (arch == "SKLANSKEY" || arch == "KOGGE-STONE" || arch == "BRENT-KUNG") {
-      lowerParallelPrefixAdder(op, inputs, rewriter);
-      return success();
+  enum AdderArchitecture { RippleCarry, Sklanskey, KoggeStone, BrentKung };
+  static AdderArchitecture determineAdderArch(Operation *op, int64_t width) {
+    auto strAttr = op->getAttrOfType<StringAttr>("synth.test.arch");
+    if (strAttr) {
+      return llvm::StringSwitch<AdderArchitecture>(strAttr.getValue())
+          .Case("SKLANSKEY", Sklanskey)
+          .Case("KOGGE-STONE", KoggeStone)
+          .Case("BRENT-KUNG", BrentKung)
+          .Case("RIPPLE-CARRY", RippleCarry);
     }
-
-    if (arch == "RIPPLE-CARRY" || width < 8)
-      lowerRippleCarryAdder(op, inputs, rewriter);
-    else
-      lowerParallelPrefixAdder(op, inputs, rewriter);
-
-    return success();
+    // Determine based on width.
+    if (width < 8)
+      return AdderArchitecture::RippleCarry;
+    if (width <= 32)
+      return AdderArchitecture::Sklanskey;
+    return AdderArchitecture::KoggeStone;
   }
 
   // Implement a basic ripple-carry adder for small bitwidths.
-  void lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
-                             ConversionPatternRewriter &rewriter) const {
+  LogicalResult
+  lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
+                        ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
     // Implement a naive Ripple-carry full adder.
     Value carry;
@@ -538,13 +546,15 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                             << width << "\n");
 
     replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(rewriter, op, results);
+    return success();
   }
 
   // Implement a parallel prefix adder - with Kogge-Stone or Brent-Kung trees
   // Will introduce unused signals for the carry bits but these will be removed
   // by the AIG pass.
-  void lowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
-                                ConversionPatternRewriter &rewriter) const {
+  LogicalResult
+  lowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
+                           ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
 
     auto aBits = extractBits(rewriter, inputs[0]);
@@ -578,25 +588,31 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     SmallVector<Value> gPrefix = g;
 
     // Check if the architecture is specified by an attribute.
-    StringRef arch;
-    if (auto strAttr = op->getAttrOfType<StringAttr>("synth.arch"))
-      arch = strAttr.getValue();
+    auto arch = determineAdderArch(op, width);
 
-    if (arch == "SKLANSKEY") {
-      // Call Sklansky implementation
+    switch (arch) {
+    case AdderArchitecture::RippleCarry:
+      llvm_unreachable("Ripple-Carry should be handled separately");
+      break;
+    case AdderArchitecture::Sklanskey:
       lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    } else if (arch == "KOGGE-STONE") {
+      break;
+    case AdderArchitecture::KoggeStone:
       lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    } else if (arch == "BRENT-KUNG") {
+      break;
+    case AdderArchitecture::BrentKung:
       lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    } else {
-      // Default to Sklanskey for small bitwidths and kogge-stone for reduced
-      // wiring congestion at larger bitwidths.
-      if (width <= 32)
-        lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-      else
-        lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      break;
     }
+    // if (arch == AdderArchitecture::Sklanskey) {
+    //   lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    // } else if (arch == AdderArchitecture::KoggeStone) {
+    //   lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    // } else if (arch == AdderArchitecture::BrentKung) {
+    //   lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    // } else {
+    //   return failure();
+    // }
 
     // Generate result sum bits
     // NOTE: The result is stored in reverse order.
@@ -619,6 +635,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       for (int64_t i = 1; i < width; ++i)
         llvm::dbgs() << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n";
     });
+
+    return success();
   }
 
   // Implement the Sklansky parallel prefix tree
