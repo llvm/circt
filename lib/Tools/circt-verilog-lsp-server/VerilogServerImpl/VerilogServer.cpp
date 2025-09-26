@@ -565,7 +565,7 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
     if (auto *syn = expr.getSyntax()) {
       if (auto *item = syn->as_if<slang::syntax::PackageImportItemSyntax>()) {
-        insertSymbol(def, item->package.location(), false);
+        insertSymbol(def, item->package.location(), /*isDefinition=*/false);
       }
     }
     visitDefault(expr);
