@@ -35,13 +35,17 @@ namespace circt {
 namespace lsp {
 struct VerilogServerOptions {
   VerilogServerOptions(const std::vector<std::string> &libDirs,
-                       const std::vector<std::string> &extraSourceLocationDirs)
-      : libDirs(libDirs), extraSourceLocationDirs(extraSourceLocationDirs) {}
+                       const std::vector<std::string> &extraSourceLocationDirs,
+                       const std::vector<std::string> &commandFiles)
+      : libDirs(libDirs), extraSourceLocationDirs(extraSourceLocationDirs),
+        commandFiles(commandFiles) {}
   /// Additional list of RTL directories to search.
   const std::vector<std::string> &libDirs;
-
   /// Additional list of external source directories to search.
   const std::vector<std::string> &extraSourceLocationDirs;
+  /// Additional list of command files that reference dependencies of the
+  /// project.
+  const std::vector<std::string> &commandFiles;
 };
 // namespace lsp
 
