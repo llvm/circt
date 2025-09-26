@@ -8,6 +8,7 @@
 
 #include "LSPServer.h"
 #include "VerilogServerImpl/VerilogServer.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/LSP/Protocol.h"
 #include "llvm/Support/LSP/Transport.h"
 #include <optional>
