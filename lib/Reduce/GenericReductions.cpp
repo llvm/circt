@@ -11,12 +11,9 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
-#include "llvm/Support/CommandLine.h"
 
 using namespace mlir;
 using namespace circt;
-
-extern llvm::cl::opt<int64_t> maxGreedyRewrites;
 
 //===----------------------------------------------------------------------===//
 // Reduction Patterns
@@ -99,20 +96,23 @@ struct MakeSymbolsPrivate : public Reduction {
 // Reduction Registration
 //===----------------------------------------------------------------------===//
 
-static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
+static std::unique_ptr<Pass>
+createSimpleCanonicalizerPass(std::optional<int64_t> maxNumRewrites) {
   GreedyRewriteConfig config;
   config.setUseTopDownTraversal(true);
   config.setRegionSimplificationLevel(
       mlir::GreedySimplifyRegionLevel::Disabled);
-  if (maxGreedyRewrites >= 0)
-    config.setMaxNumRewrites(maxGreedyRewrites);
+  if (maxNumRewrites)
+    config.setMaxNumRewrites(*maxNumRewrites);
   return createCanonicalizerPass(config);
 }
 
-void circt::populateGenericReducePatterns(MLIRContext *context,
-                                          ReducePatternSet &patterns) {
+void circt::populateGenericReducePatterns(
+    MLIRContext *context, ReducePatternSet &patterns,
+    std::optional<int64_t> maxNumRewrites) {
   patterns.add<PassReduction, 103>(context, createSymbolDCEPass());
-  patterns.add<PassReduction, 102>(context, createSimpleCanonicalizerPass());
+  patterns.add<PassReduction, 102>(
+      context, createSimpleCanonicalizerPass(maxNumRewrites));
   patterns.add<PassReduction, 101>(context, createCSEPass());
   patterns.add<MakeSymbolsPrivate, 100>();
   patterns.add<UnusedSymbolPruner, 99>();
