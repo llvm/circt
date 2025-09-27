@@ -956,7 +956,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: domain ClockDomain :
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
 
   // CHECK-LABEL: module Domains :
   firrtl.module @Domains(

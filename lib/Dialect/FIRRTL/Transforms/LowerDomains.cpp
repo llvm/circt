@@ -237,7 +237,9 @@ LogicalResult LowerModule::lowerModule() {
   }
 
   // Set new port annotations now that all deletions and insertions are done.
-  op.setPortAnnotationsAttr(ArrayAttr::get(context, portAnnotations));
+  // Only do this for modules which support port annotations.
+  if (!isa<ClassOp>(op))
+    op.setPortAnnotationsAttr(ArrayAttr::get(context, portAnnotations));
 
   LLVM_DEBUG({
     llvm::dbgs() << "    portMap:\n";
@@ -251,7 +253,9 @@ LogicalResult LowerModule::lowerModule() {
 LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*op));
   for (auto *use : llvm::make_early_inc_range(node->uses())) {
-    auto instanceOp = cast<InstanceOp>(*use->getInstance());
+    auto instanceOp = dyn_cast<InstanceOp>(*use->getInstance());
+    if (!instanceOp)
+      continue;
     LLVM_DEBUG(llvm::dbgs()
                << "      - " << instanceOp.getInstanceName() << "\n");
 
@@ -330,6 +334,8 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   PropAssignOp::create(builder, classOut.getArgument(3),
                        classOut.getArgument(2));
   classes.insert({name, {classIn, classOut}});
+  instanceGraph.erase(instanceGraph.lookup(op));
+  instanceGraph.addModule(classIn);
   op.erase();
   return success();
 }
