@@ -56,11 +56,6 @@ static bool canRemoveModule(mlir::SymbolOpInterface symbol) {
   // If the symbol is not private, it cannot be removed.
   if (!symbol.isPrivate())
     return false;
-  // Classes may be referenced in object types, so can not normally be removed
-  // if we can't find any symbol uses. Since we know that dedup will update the
-  // types of instances appropriately, we can ignore that and return true here.
-  if (isa<ClassLike>(*symbol))
-    return true;
   // If module can not be removed even if no uses can be found, we can not
   // delete it. The implication is that there are hidden symbol uses that dedup
   // will not properly update.
@@ -224,39 +219,13 @@ private:
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  void update(ClassType type) {
-    update(type.getTypeID());
-    // Don't hash the class name directly, since it may be replaced during
-    // dedup. Record the class name instead and lazily combine their hashes
-    // using the same mechanism as instances and modules.
-    referredModuleNames.push_back(type.getNameAttr().getAttr());
-    for (auto &element : type.getElements()) {
-      update(element.name.getAsOpaquePointer());
-      update(element.type);
-      update(static_cast<unsigned>(element.direction));
-    }
-  }
-
-  // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
     if (auto bundle = type_dyn_cast<BundleType>(type))
       return update(bundle);
-    if (auto klass = type_dyn_cast<ClassType>(type))
-      return update(klass);
     update(type.getAsOpaquePointer());
   }
 
-  void update(OpResult result) {
-    // Like instance ops, don't use object ops' result types since they might be
-    // replaced by dedup. Record the class names and lazily combine their hashes
-    // using the same mechanism as instances and modules.
-    if (auto objectOp = dyn_cast<ObjectOp>(result.getOwner())) {
-      referredModuleNames.push_back(objectOp.getType().getNameAttr().getAttr());
-      return;
-    }
-
-    update(result.getType());
-  }
+  void update(OpResult result) { update(result.getType()); }
 
   /// Hash the top level attribute dictionary of the operation.  This function
   /// has special handling for inner symbols, ports, and referenced modules.
@@ -265,10 +234,7 @@ private:
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
       // Skip names and annotations, except in certain cases.
-      // Names of ports are load bearing for classes, so we do hash those.
-      bool isClassPortNames =
-          isa<ClassLike>(op) && name == constants.portNamesAttr;
-      if (constants.nonessentialAttributes.contains(name) && !isClassPortNames)
+      if (constants.nonessentialAttributes.contains(name))
         continue;
 
       // Hash the attribute name (an interned pointer).
@@ -1029,10 +995,6 @@ private:
       if (auto instOp = dyn_cast<InstanceOp>(*inst)) {
         instOp.setModuleNameAttr(toModuleRef);
         instOp.setPortNamesAttr(toModule.getPortNamesAttr());
-      } else if (auto objectOp = dyn_cast<ObjectOp>(*inst)) {
-        auto classLike = cast<ClassLike>(*toNode->getModule());
-        ClassType classType = detail::getInstanceTypeForClassLike(classLike);
-        objectOp.getResult().setType(classType);
       }
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
@@ -1482,72 +1444,6 @@ private:
 // Fixup
 //===----------------------------------------------------------------------===//
 
-/// This fixes up ClassLikes with ClassType ports, when the classes have
-/// deduped. For each ClassType port, if the object reference being assigned is
-/// a different type, update the port type. Returns true if the ClassOp was
-/// updated and the associated ObjectOps should be updated.
-bool fixupClassOp(ClassOp classOp) {
-  // New port type attributes, if necessary.
-  SmallVector<Attribute> newPortTypes;
-  bool anyDifferences = false;
-
-  // Check each port.
-  for (size_t i = 0, e = classOp.getNumPorts(); i < e; ++i) {
-    // Check if this port is a ClassType. If not, save the original type
-    // attribute in case we need to update port types.
-    auto portClassType = dyn_cast<ClassType>(classOp.getPortType(i));
-    if (!portClassType) {
-      newPortTypes.push_back(classOp.getPortTypeAttr(i));
-      continue;
-    }
-
-    // Check if this port is assigned a reference of a different ClassType.
-    Type newPortClassType;
-    BlockArgument portArg = classOp.getArgument(i);
-    for (auto &use : portArg.getUses()) {
-      if (auto propassign = dyn_cast<PropAssignOp>(use.getOwner())) {
-        Type sourceType = propassign.getSrc().getType();
-        if (propassign.getDest() == use.get() && sourceType != portClassType) {
-          // Double check that all references are the same new type.
-          if (newPortClassType) {
-            assert(newPortClassType == sourceType &&
-                   "expected all references to be of the same type");
-            continue;
-          }
-
-          newPortClassType = sourceType;
-        }
-      }
-    }
-
-    // If there was no difference, save the original type attribute in case we
-    // need to update port types and move along.
-    if (!newPortClassType) {
-      newPortTypes.push_back(classOp.getPortTypeAttr(i));
-      continue;
-    }
-
-    // The port type changed, so update the block argument, save the new port
-    // type attribute, and indicate there was a difference.
-    classOp.getArgument(i).setType(newPortClassType);
-    newPortTypes.push_back(TypeAttr::get(newPortClassType));
-    anyDifferences = true;
-  }
-
-  // If necessary, update port types.
-  if (anyDifferences)
-    classOp.setPortTypes(newPortTypes);
-
-  return anyDifferences;
-}
-
-/// This fixes up ObjectOps when the signature of their ClassOp changes. This
-/// amounts to updating the ObjectOp result type to match the newly updated
-/// ClassOp type.
-void fixupObjectOp(ObjectOp objectOp, ClassType newClassType) {
-  objectOp.getResult().setType(newClassType);
-}
-
 /// This fixes up connects when the field names of a bundle type changes.  It
 /// finds all fields which were previously bulk connected and legalizes it
 /// into a connect for each field.
@@ -1580,23 +1476,7 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
 void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
     auto module = cast<FModuleLike>(*node->getModule());
-
-    // Handle class declarations here.
-    bool shouldFixupObjects = false;
-    auto classOp = dyn_cast<ClassOp>(module.getOperation());
-    if (classOp)
-      shouldFixupObjects = fixupClassOp(classOp);
-
     for (auto *instRec : node->uses()) {
-      // Handle object instantiations here.
-      if (classOp) {
-        if (shouldFixupObjects) {
-          fixupObjectOp(instRec->getInstance<ObjectOp>(),
-                        classOp.getInstanceType());
-        }
-        continue;
-      }
-
       auto inst = instRec->getInstance<InstanceOp>();
       // Only handle module instantiations here.
       if (!inst)
