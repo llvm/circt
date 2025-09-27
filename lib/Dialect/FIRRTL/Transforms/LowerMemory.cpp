@@ -24,6 +24,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Parallel.h"
 #include <optional>
 #include <set>
@@ -189,6 +190,9 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
   return ports;
 }
 
+static constexpr llvm::StringLiteral
+    kExtMemoryEffectNLAAttrName("circt.layerSink.externalMemoryEffect");
+
 FMemModuleOp
 LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
                                   const SmallVectorImpl<PortInfo> &ports) {
@@ -208,6 +212,21 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
       mem.numReadWritePorts, mem.dataWidth, mem.maskBits, mem.readLatency,
       mem.writeLatency, mem.depth,
       *symbolizeRUWBehavior(static_cast<uint32_t>(mem.readUnderWrite)));
+  // Mark the generated external memory as effectful so downstream passes do not
+  // treat it as pure and drop the wrapper wiring around it.  We create a
+  // temporary HierPathOp, which LayerSink will consume and erase.
+  auto circuit = op->getParentOfType<CircuitOp>();
+  OpBuilder nlaBuilder(circuit);
+  nlaBuilder.setInsertionPointToEnd(circuit.getBodyBlock());
+  auto pathAttr = nlaBuilder.getArrayAttr(SmallVector<Attribute, 1>{
+      FlatSymbolRefAttr::get(moduleOp.getModuleNameAttr())});
+  auto nlaName = circuitNamespace.newName(
+      (moduleOp.getModuleNameAttr().getValue() + "_effect_nla").str());
+  auto nla = nlaBuilder.create<hw::HierPathOp>(
+      mem.loc, StringAttr::get(&getContext(), nlaName), pathAttr);
+  nla->setAttr(kExtMemoryEffectNLAAttrName,
+               FlatSymbolRefAttr::get(moduleOp.getModuleNameAttr()));
+  SymbolTable::setSymbolVisibility(nla, SymbolTable::Visibility::Private);
   SymbolTable::setSymbolVisibility(moduleOp, SymbolTable::Visibility::Private);
   return moduleOp;
 }

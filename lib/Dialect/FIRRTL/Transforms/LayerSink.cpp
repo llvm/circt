@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/Threading.h"
@@ -33,6 +34,9 @@ namespace firrtl {
 using namespace circt;
 using namespace firrtl;
 using namespace mlir;
+
+static constexpr llvm::StringLiteral
+    kExtMemoryEffectNLAAttrName("circt.layerSink.externalMemoryEffect");
 
 //===----------------------------------------------------------------------===//
 // Helpers
@@ -87,7 +91,10 @@ static bool cloneable(Operation *op) {
 namespace {
 class EffectInfo {
 public:
-  EffectInfo(CircuitOp circuit, InstanceGraph &instanceGraph) {
+  EffectInfo(CircuitOp circuit, InstanceGraph &instanceGraph,
+             DenseSet<StringAttr> explicitEffectfulModules)
+      : explicitEffectfulModules(std::move(explicitEffectfulModules)) {
+    DenseSet<InstanceGraphNode *> visited;
     instanceGraph.walkPostOrder(
         [&](auto &node) { update(node.getModule().getOperation()); });
   }
@@ -111,6 +118,7 @@ public:
   }
 
 private:
+  DenseSet<StringAttr> explicitEffectfulModules;
   /// Record whether the module contains any effectful ops.
   void update(FModuleOp moduleOp) {
     moduleOp.getBodyBlock()->walk([&](Operation *op) {
@@ -129,6 +137,14 @@ private:
     if (auto annos = getAnnotationsIfPresent(moduleOp))
       if (!annos.empty())
         return markEffectful(moduleOp);
+
+    if (explicitEffectfulModules.contains(moduleOp.getModuleNameAttr()))
+      return markEffectful(moduleOp);
+
+    // Treat generated memory modules as effectful since they model stateful
+    // hardware even though they have no body.
+    if (isa<FMemModuleOp>(moduleOp.getOperation()))
+      return markEffectful(moduleOp);
 
     for (auto annos : moduleOp.getPortAnnotations())
       if (!cast<ArrayAttr>(annos).empty())
@@ -486,7 +502,19 @@ void LayerSinkPass::runOnOperation() {
                  << "\n"
                  << "Circuit: '" << circuit.getName() << "'\n";);
   auto &instanceGraph = getAnalysis<InstanceGraph>();
-  EffectInfo effectInfo(circuit, instanceGraph);
+
+  DenseSet<StringAttr> explicitEffectModules;
+  SmallVector<hw::HierPathOp, 4> effectNLAs;
+  for (auto nla : circuit.getOps<hw::HierPathOp>()) {
+    if (!nla->hasAttr(kExtMemoryEffectNLAAttrName))
+      continue;
+    if (auto leaf = nla.leafMod())
+      explicitEffectModules.insert(leaf);
+    effectNLAs.push_back(nla);
+  }
+
+  EffectInfo effectInfo(circuit, instanceGraph,
+                        std::move(explicitEffectModules));
 
   std::atomic<bool> changed(false);
   parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
@@ -494,6 +522,9 @@ void LayerSinkPass::runOnOperation() {
                     if (ModuleLayerSink::run(moduleOp, effectInfo))
                       changed = true;
                   });
+
+  for (auto nla : effectNLAs)
+    nla.erase();
 
   if (!changed)
     markAllAnalysesPreserved();
