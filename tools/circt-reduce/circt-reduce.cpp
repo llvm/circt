@@ -199,7 +199,10 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Gather a list of reduction patterns that we should try.
   ReducePatternSet patterns;
-  populateGenericReducePatterns(&context, patterns);
+  std::optional<int64_t> maxNumRewritesOpt;
+  if (maxGreedyRewrites >= 0)
+    maxNumRewritesOpt = maxGreedyRewrites;
+  populateGenericReducePatterns(&context, patterns, maxNumRewritesOpt);
   ReducePatternInterfaceCollection reducePatternCollection(&context);
   reducePatternCollection.populateReducePatterns(patterns);
   auto reductionFilter = [&](const Reduction &reduction) {
