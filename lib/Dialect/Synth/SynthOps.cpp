@@ -49,6 +49,7 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
   auto width = inputs[0].getBitWidth();
   APInt result(width, 0);
 
+  // is every input of same width ?
   for (size_t bit = 0; bit < width; ++bit) {
     size_t count = 0;
     for (size_t i = 0; i < inputs.size(); ++i) {
@@ -67,12 +68,78 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
 OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   // TODO: Implement maj(x, 1, 1) = 1, maj(x, 0, 0) = 0
 
+  // x x 1 -> x
+  // x 1 1 -> 1
+  // x ~x 1 -> 1
+  // x 0 0 -> 0
+  // x 1 1 -> 1
+
+  if (getNumOperands() != 3)
+    return {};
+  bool isOpConstant = true;
+  // for all constant inputs
   SmallVector<APInt, 3> inputValues;
+  size_t i = 0;
   for (auto input : adaptor.getInputs()) {
     auto attr = llvm::dyn_cast_or_null<IntegerAttr>(input);
     if (!attr)
-      return {};
-    inputValues.push_back(attr.getValue());
+      isOpConstant = false;
+    else {
+      auto value = isInverted(i) ? ~attr.getValue() : attr.getValue();
+      inputValues.push_back(value);
+    }
+    i++;
+  }
+  if (!isOpConstant) {
+    // x 0 0
+    // x 1 1
+    if (inputValues.size() == 2) {
+      if (inputValues[0] != inputValues[1])
+        return {};
+      else
+        return IntegerAttr::get(
+            IntegerType::get(getContext(), inputValues[0].getBitWidth()),
+            inputValues[0]);
+    }
+    auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
+      APInt value;
+      if (mlir::matchPattern(getInputs()[index], mlir::m_ConstantInt(&value)))
+        return isInverted(index) ? ~value : value;
+      return std::nullopt;
+    };
+    // Pattern match following cases:
+    // maj_inv(x, x, y) -> x
+    // maj_inv(x, y, not y) -> x
+    for (int i = 0; i < 2; ++i) {
+      for (int j = i + 1; j < 3; ++j) {
+        int k = 3 - (i + j);
+        assert(k >= 0 && k < 3);
+        // If we have two identical operands, we can fold.
+        if (getOperand(i) == getOperand(j)) {
+          // If they are inverted differently, we can fold to the third.
+          if (isInverted(i) != isInverted(j)) {
+            return getOperand(k);
+          }
+          return getOperand(i);
+        }
+
+        // If i and j are constant.
+        if (auto c1 = getConstant(i)) {
+          if (auto c2 = getConstant(j)) {
+            // If both constants are equal, we can fold.
+            if (*c1 == *c2) {
+              // auto value = cast<IntegerAttr>(getInputs()[i]).getValue();
+              //  return IntegerAttr::get(IntegerType::get(getContext(),
+              //  value.getBitWidth()),value);
+              return IntegerAttr::get(getType(), *c1);
+            }
+            // If constants are complementary, we can fold.
+            if (*c1 == ~*c2)
+              return getOperand(k);
+          }
+        }
+      }
+    }
   }
 
   auto result = evaluate(inputValues);
@@ -112,37 +179,36 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
     return success();
   };
 
-  // Pattern match following cases:
-  // maj_inv(x, x, y) -> x
-  // maj_inv(x, y, not y) -> x
-  for (int i = 0; i < 2; ++i) {
-    for (int j = i + 1; j < 3; ++j) {
-      int k = 3 - (i + j);
-      assert(k >= 0 && k < 3);
-      // If we have two identical operands, we can fold.
-      if (op.getOperand(i) == op.getOperand(j)) {
-        // If they are inverted differently, we can fold to the third.
-        if (op.isInverted(i) != op.isInverted(j))
-          return replaceWithIndex(k);
-        return replaceWithIndex(i);
-      }
+  // for (int i = 0; i < 2; ++i) {
+  //   for (int j = i + 1; j < 3; ++j) {
+  //     int k = 3 - (i + j);
+  //     assert(k >= 0 && k < 3);
+  //     // If we have two identical operands, we can fold.
+  //     if (op.getOperand(i) == op.getOperand(j)) {
+  //       // If they are inverted differently, we can fold to the third.
+  //       if (op.isInverted(i) != op.isInverted(j)) {
+  //         return replaceWithIndex(k);
+  //       }
+  //       rewriter.replaceOp(op, op.getOperand(i));
+  //       return success();
+  //     }
 
-      // If i and j are constant.
-      if (auto c1 = getConstant(i)) {
-        if (auto c2 = getConstant(j)) {
-          // If both constants are equal, we can fold.
-          if (*c1 == *c2) {
-            rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-                op, op.getType(), mlir::IntegerAttr::get(op.getType(), *c1));
-            return success();
-          }
-          // If constants are complementary, we can fold.
-          if (*c1 == ~*c2)
-            return replaceWithIndex(k);
-        }
-      }
-    }
-  }
+  //    // If i and j are constant.
+  //    if (auto c1 = getConstant(i)) {
+  //      if (auto c2 = getConstant(j)) {
+  //        // If both constants are equal, we can fold.
+  //        if (*c1 == *c2) {
+  //          rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+  //              op, op.getType(), mlir::IntegerAttr::get(op.getType(), *c1));
+  //          return success();
+  //        }
+  //        // If constants are complementary, we can fold.
+  //        if (*c1 == ~*c2)
+  //          return replaceWithIndex(k);
+  //      }
+  //    }
+  //  }
+  //}
   return failure();
 }
 
