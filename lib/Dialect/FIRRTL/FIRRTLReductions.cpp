@@ -1134,7 +1134,15 @@ struct EagerInliner : public OpReduction<InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
-    nlaTable = std::make_unique<NLATable>(op);
+    CircuitOp circuit;
+    for (auto &topLevelOp : *op.getBody())
+      if ((circuit = dyn_cast<CircuitOp>(topLevelOp)))
+        break;
+
+    if (circuit)
+      nlaTable = std::make_unique<NLATable>(circuit.getOperation());
+    else
+      nlaTable.reset();
     innerSymTables = std::make_unique<hw::InnerSymbolTableCollection>();
   }
   void afterReduction(mlir::ModuleOp op) override {
@@ -1150,6 +1158,9 @@ struct EagerInliner : public OpReduction<InstanceOp> {
 
     // Only inline FModuleOp instances
     if (!isa<FModuleOp>(moduleOp))
+      return 0;
+
+    if (!nlaTable)
       return 0;
 
     // Skip instances that participate in any NLAs
