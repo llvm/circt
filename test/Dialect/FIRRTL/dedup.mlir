@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s | FileCheck %s
+// RUN: circt-opt --firrtl-dedup %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Empty"
 firrtl.circuit "Empty" {
@@ -866,4 +866,28 @@ firrtl.circuit "UninstantiatedClasses" attributes {annotations = [
   // CHECK-NOT: firrtl.class private @Eggs
   firrtl.class private @Spam() {}
   firrtl.class private @Eggs() {}
+}
+
+// CHECK-LABEL: "UpdateAttrsAndTypes"
+// Ops that contain references to symbols have to have the symbol references
+// updated after dedup.
+firrtl.circuit "UpdateAttrsAndTypes" {
+  // CHECK: @Foo()
+  // CHECK-NOT: @Bar()
+  firrtl.class private @Foo() {}
+  firrtl.class private @Bar() {}
+
+  // CHECK: @UpdateAttrsAndTypes()
+  firrtl.module @UpdateAttrsAndTypes() {
+    // CHECK-NEXT: firrtl.wire : !firrtl.class<@Foo()>
+    // CHECK-NEXT: firrtl.wire : !firrtl.class<@Foo()>
+    %wire1 = firrtl.wire : !firrtl.class<@Foo()>
+    %wire2 = firrtl.wire : !firrtl.class<@Bar()>
+
+    // Should work on attributes and types of arbitrary operations, too.
+    // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    %0 = builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    %1 = builtin.unrealized_conversion_cast to !firrtl.class<@Bar()> {a = @Bar, b = [@Bar]}
+  }
 }
