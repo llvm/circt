@@ -39,9 +39,9 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
          "Number of inputs must match number of operands");
 
   if (inputs.size() == 3) {
-    auto a = (isInverted(0) ? ~inputs[0] : inputs[0]);
-    auto b = (isInverted(1) ? ~inputs[1] : inputs[1]);
-    auto c = (isInverted(2) ? ~inputs[2] : inputs[2]);
+    auto a = inputs[0];
+    auto b = inputs[1];
+    auto c = inputs[2];
     return (a & b) | (a & c) | (b & c);
   }
 
@@ -49,12 +49,11 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
   auto width = inputs[0].getBitWidth();
   APInt result(width, 0);
 
-  // is every input of same width ?
   for (size_t bit = 0; bit < width; ++bit) {
     size_t count = 0;
     for (size_t i = 0; i < inputs.size(); ++i) {
       // Count the number of 1s, considering inversion.
-      if (isInverted(i) ^ inputs[i][bit])
+      if (inputs[i][bit])
         count++;
     }
 
@@ -74,8 +73,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   // x 0 0 -> 0
   // x 1 1 -> 1
 
-  if (getNumOperands() != 3)
-    return {};
   bool isOpConstant = true;
   // for all constant inputs
   SmallVector<APInt, 3> inputValues;
@@ -91,12 +88,12 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
     i++;
   }
   if (!isOpConstant) {
+    if (getNumOperands() != 3)
+      return {};
     // x 0 0
     // x 1 1
     if (inputValues.size() == 2) {
-      if (inputValues[0] != inputValues[1])
-        return {};
-      else
+      if (inputValues[0] == inputValues[1])
         return IntegerAttr::get(
             IntegerType::get(getContext(), inputValues[0].getBitWidth()),
             inputValues[0]);
@@ -127,12 +124,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         if (auto c1 = getConstant(i)) {
           if (auto c2 = getConstant(j)) {
             // If both constants are equal, we can fold.
-            if (*c1 == *c2) {
-              // auto value = cast<IntegerAttr>(getInputs()[i]).getValue();
-              //  return IntegerAttr::get(IntegerType::get(getContext(),
-              //  value.getBitWidth()),value);
-              return IntegerAttr::get(getType(), *c1);
-            }
             // If constants are complementary, we can fold.
             if (*c1 == ~*c2)
               return getOperand(k);
@@ -140,6 +131,7 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         }
       }
     }
+    return {};
   }
 
   auto result = evaluate(inputValues);
