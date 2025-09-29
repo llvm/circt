@@ -25,6 +25,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
 
@@ -1134,12 +1135,14 @@ struct EagerInliner : public OpReduction<InstanceOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
-    nlaTable = std::make_unique<NLATable>(op);
+    nlaTables.clear();
+    for (auto circuitOp : op.getOps<CircuitOp>())
+      nlaTables.insert({circuitOp, std::make_unique<NLATable>(circuitOp)});
     innerSymTables = std::make_unique<hw::InnerSymbolTableCollection>();
   }
   void afterReduction(mlir::ModuleOp op) override {
     nlaRemover.remove(op);
-    nlaTable.reset();
+    nlaTables.clear();
     innerSymTables.reset();
   }
 
@@ -1153,8 +1156,14 @@ struct EagerInliner : public OpReduction<InstanceOp> {
       return 0;
 
     // Skip instances that participate in any NLAs
+    auto circuitOp = instOp->getParentOfType<CircuitOp>();
+    if (!circuitOp)
+      return 0;
+    auto it = nlaTables.find(circuitOp);
+    if (it == nlaTables.end() || !it->second)
+      return 0;
     DenseSet<hw::HierPathOp> nlas;
-    nlaTable->getInstanceNLAs(instOp, nlas);
+    it->second->getInstanceNLAs(instOp, nlas);
     if (!nlas.empty())
       return 0;
 
@@ -1209,7 +1218,7 @@ struct EagerInliner : public OpReduction<InstanceOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
-  std::unique_ptr<NLATable> nlaTable;
+  DenseMap<CircuitOp, std::unique_ptr<NLATable>> nlaTables;
   std::unique_ptr<hw::InnerSymbolTableCollection> innerSymTables;
 };
 
