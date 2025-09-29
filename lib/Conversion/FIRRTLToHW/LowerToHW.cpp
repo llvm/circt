@@ -27,7 +27,9 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
@@ -2214,8 +2216,32 @@ Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
 Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
                                                                 Type type) {
   // Base case.
-  if (hw::type_isa<IntegerType>(type))
-    return builder.getIntegerAttr(type, cast<IntegerAttr>(value).getValue());
+  if (isa<seq::ClockType>(type)) {
+    if (auto clockAttr = dyn_cast<seq::ClockConstAttr>(value))
+      return clockAttr;
+    if (auto boolAttr = dyn_cast<BoolAttr>(value))
+      return seq::ClockConstAttr::get(
+          builder.getContext(),
+          boolAttr.getValue() ? seq::ClockConst::High : seq::ClockConst::Low);
+    if (auto typedAttr = dyn_cast<TypedAttr>(value))
+      if (typedAttr.getType() == type)
+        return value;
+    return seq::ClockConstAttr::get(builder.getContext(), seq::ClockConst::Low);
+  }
+
+  if (hw::type_isa<IntegerType>(type)) {
+    if (auto intAttr = dyn_cast<IntegerAttr>(value))
+      return builder.getIntegerAttr(type, intAttr.getValue());
+    if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
+      auto intTy = cast<IntegerType>(type);
+      APInt intValue(intTy.getWidth(), boolAttr.getValue());
+      return builder.getIntegerAttr(intTy, intValue);
+    }
+    if (auto typedAttr = dyn_cast<TypedAttr>(value))
+      if (typedAttr.getType() == type)
+        return value;
+    return builder.getZeroAttr(type);
+  }
 
   auto cache = hwAggregateConstantMap.lookup({value, type});
   if (cache)
@@ -2223,16 +2249,35 @@ Attribute FIRRTLLowering::getOrCreateAggregateConstantAttribute(Attribute value,
 
   // Recursively construct elements.
   SmallVector<Attribute> values;
-  for (auto e : llvm::enumerate(cast<ArrayAttr>(value))) {
-    Type subType;
-    if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
-      subType = array.getElementType();
-    else if (auto structType = hw::type_dyn_cast<hw::StructType>(type))
-      subType = structType.getElements()[e.index()].type;
-    else
-      assert(false && "type must be either array or struct");
+  if (auto elements = dyn_cast<ArrayAttr>(value)) {
+    values.reserve(elements.size());
+    for (auto e : llvm::enumerate(elements)) {
+      Type subType;
+      if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
+        subType = array.getElementType();
+      else if (auto structType = hw::type_dyn_cast<hw::StructType>(type))
+        subType = structType.getElements()[e.index()].type;
+      else
+        assert(false && "type must be either array or struct");
 
-    values.push_back(getOrCreateAggregateConstantAttribute(e.value(), subType));
+      values.push_back(
+          getOrCreateAggregateConstantAttribute(e.value(), subType));
+    }
+  } else if (auto dict = dyn_cast<DictionaryAttr>(value)) {
+    auto structType = hw::type_dyn_cast<hw::StructType>(type);
+    assert(structType && "dictionary value should correspond to struct type");
+    values.reserve(structType.getElements().size());
+    for (auto element : structType.getElements()) {
+      Attribute fieldAttr = dict.get(element.name);
+      assert(fieldAttr && "expected field attribute for struct element");
+      values.push_back(
+          getOrCreateAggregateConstantAttribute(fieldAttr, element.type));
+    }
+  } else {
+    if (auto typedAttr = dyn_cast<TypedAttr>(value))
+      if (typedAttr.getType() == type)
+        return value;
+    return builder.getZeroAttr(type);
   }
 
   // FIRRTL and HW have a different operand ordering for arrays.
