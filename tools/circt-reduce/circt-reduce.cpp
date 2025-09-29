@@ -104,6 +104,12 @@ static cl::opt<bool> verbose("v", cl::init(true),
                              cl::desc("Print reduction progress to stderr"),
                              cl::cat(mainCategory));
 
+cl::opt<int64_t> maxNumRewrites(
+    "max-num-rewrites", cl::init(-1),
+    cl::desc("Maximum number of rewrites GreedyPatternRewriteDriver may "
+             "apply (negative value keeps the default)"),
+    cl::cat(mainCategory));
+
 static cl::opt<unsigned>
     maxChunks("max-chunks", cl::init(0),
               cl::desc("Stop increasing granularity beyond this number of "
@@ -193,7 +199,10 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Gather a list of reduction patterns that we should try.
   ReducePatternSet patterns;
-  populateGenericReducePatterns(&context, patterns);
+  std::optional<int64_t> maxNumRewritesOpt;
+  if (maxNumRewrites >= 0)
+    maxNumRewritesOpt = maxNumRewrites;
+  populateGenericReducePatterns(&context, patterns, maxNumRewritesOpt);
   ReducePatternInterfaceCollection reducePatternCollection(&context);
   reducePatternCollection.populateReducePatterns(patterns);
   auto reductionFilter = [&](const Reduction &reduction) {
