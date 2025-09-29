@@ -104,10 +104,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
     // Pattern match following cases:
     // maj_inv(x, x, y) -> x
     // maj_inv(x, y, not y) -> x
-    auto retIndex = [&](size_t index) {
-      if (!isInverted(index))
-        return getOperand(index);
-    };
     for (int i = 0; i < 2; ++i) {
       for (int j = i + 1; j < 3; ++j) {
         int k = 3 - (i + j);
@@ -164,36 +160,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
     return success();
   };
 
-  // for (int i = 0; i < 2; ++i) {
-  //   for (int j = i + 1; j < 3; ++j) {
-  //     int k = 3 - (i + j);
-  //     assert(k >= 0 && k < 3);
-  //     // If we have two identical operands, we can fold.
-  //     if (op.getOperand(i) == op.getOperand(j)) {
-  //       // If they are inverted differently, we can fold to the third.
-  //       if (op.isInverted(i) != op.isInverted(j)) {
-  //         return replaceWithIndex(k);
-  //       }
-  //       rewriter.replaceOp(op, op.getOperand(i));
-  //       return success();
-  //     }
-
-  //    // If i and j are constant.
-  //    if (auto c1 = getConstant(i)) {
-  //      if (auto c2 = getConstant(j)) {
-  //        // If both constants are equal, we can fold.
-  //        if (*c1 == *c2) {
-  //          rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-  //              op, op.getType(), mlir::IntegerAttr::get(op.getType(), *c1));
-  //          return success();
-  //        }
-  //        // If constants are complementary, we can fold.
-  //        if (*c1 == ~*c2)
-  //          return replaceWithIndex(k);
-  //      }
-  //    }
-  //  }
-  //}
   return failure();
 }
 
