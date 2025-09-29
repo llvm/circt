@@ -71,9 +71,7 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   // x 1 1 -> 1
   // x ~x 1 -> 1
   // x 0 0 -> 0
-  // ~x 0 0 -> 0
   // x 1 1 -> 1
-  // ~x 1 1 -> 1
 
   bool isOpConstant = true;
   // for all constant inputs
@@ -103,15 +101,13 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
       else
         return getOperand(index); // fix if it is a Inverted
     }
-    auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
-      APInt value;
-      if (mlir::matchPattern(getInputs()[index], mlir::m_ConstantInt(&value)))
-        return isInverted(index) ? ~value : value;
-      return std::nullopt;
-    };
     // Pattern match following cases:
     // maj_inv(x, x, y) -> x
     // maj_inv(x, y, not y) -> x
+    auto retIndex = [&](size_t index) {
+      if (!isInverted(index))
+        return getOperand(index);
+    };
     for (int i = 0; i < 2; ++i) {
       for (int j = i + 1; j < 3; ++j) {
         int k = 3 - (i + j);
@@ -120,9 +116,11 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         if (getOperand(i) == getOperand(j)) {
           // If they are inverted differently, we can fold to the third.
           if (isInverted(i) != isInverted(j)) {
-            return getOperand(k);
+            if (!isInverted(k))
+              return getOperand(k);
           }
-          return getOperand(i);
+          if (!isInverted(i))
+            return getOperand(i);
         }
       }
     }
