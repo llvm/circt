@@ -293,13 +293,22 @@ class Simulator:
     If wait is True, blocks until process completes and returns its exit code.
     If wait is False, returns the Popen object (threads keep streaming).
     """
-    proc = subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            env=env,
-                            cwd=cwd,
-                            text=True,
-                            preexec_fn=os.setsid)
+    if os.name == "posix":
+      proc = subprocess.Popen(cmd,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,
+                              env=env,
+                              cwd=cwd,
+                              text=True,
+                              preexec_fn=os.setsid)
+    else:  # windows
+      proc = subprocess.Popen(cmd,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,
+                              env=env,
+                              cwd=cwd,
+                              text=True,
+                              creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
 
     def _reader(pipe, cb):
       if pipe is None:
