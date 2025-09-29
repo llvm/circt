@@ -616,15 +616,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
       break;
     }
-    // if (arch == AdderArchitecture::Sklanskey) {
-    //   lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    // } else if (arch == AdderArchitecture::KoggeStone) {
-    //   lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    // } else if (arch == AdderArchitecture::BrentKung) {
-    //   lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    // } else {
-    //   return failure();
-    // }
 
     // Generate result sum bits
     // NOTE: The result is stored in reverse order.
