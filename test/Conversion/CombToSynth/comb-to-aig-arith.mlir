@@ -25,8 +25,105 @@ hw.module @add(in %lhs: i2, in %rhs: i2, out out: i2) {
   // CHECK-NEXT: %[[sum1:.*]] = comb.xor bin %[[lhs1]], %[[rhs1]], %[[carry0]] : i1
   // CHECK-NEXT: %[[concat:.*]] = comb.concat %[[sum1]], %[[sum0]] : i1, i1
   // CHECK-NEXT: hw.output %[[concat]] : i2
-  %0 = comb.add %lhs, %rhs : i2
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "RIPPLE-CARRY"} : i2
   hw.output %0 : i2
+}
+
+// CHECK-LABEL: @add_sklanskey
+hw.module @add_sklanskey(in %lhs: i3, in %rhs: i3, out out: i3) {
+  // CHECK-NEXT: %[[LHS0:.+]] = comb.extract %lhs from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[LHS1:.+]] = comb.extract %lhs from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[LHS2:.+]] = comb.extract %lhs from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS0:.+]] = comb.extract %rhs from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS1:.+]] = comb.extract %rhs from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS2:.+]] = comb.extract %rhs from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[P0:.+]] = comb.xor %[[LHS0]], %[[RHS0]] : i1
+  // CHECK-NEXT: %[[G0:.+]] = comb.and %[[LHS0]], %[[RHS0]] : i1
+  // CHECK-NEXT: %[[P1:.+]] = comb.xor %[[LHS1]], %[[RHS1]] : i1
+  // CHECK-NEXT: %[[G1:.+]] = comb.and %[[LHS1]], %[[RHS1]] : i1
+  // CHECK-NEXT: %[[P2:.+]] = comb.xor %[[LHS2]], %[[RHS2]] : i1
+  // CHECK-NEXT: %[[G2:.+]] = comb.and %[[LHS2]], %[[RHS2]] : i1
+  // Reduction Tree
+  // CHECK-NEXT: %[[G10PRE:.+]] = comb.and %[[P1]], %[[G0]] : i1
+  // CHECK-NEXT: %[[G10:.+]] = comb.or %[[G1]], %[[G10PRE]] : i1
+  // CHECK-NEXT: comb.and %[[P1]], %[[P0]] : i1
+  // CHECK-NEXT: comb.and %[[P2]], %[[G10]] : i1
+  // Sum Completion
+  // CHECK-NEXT: %[[S1:.+]] = comb.xor %[[P1]], %[[G0]] : i1
+  // CHECK-NEXT: %[[S2:.+]] = comb.xor %[[P2]], %[[G10]] : i1
+  // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[S2]], %[[S1]], %[[P0]] : i1, i1, i1
+  // CHECK-NEXT: hw.output %[[RES]] : i3
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "SKLANSKEY"} : i3
+  hw.output %0 : i3
+}
+
+// CHECK-LABEL: @add_kogge_stone
+hw.module @add_kogge_stone(in %lhs: i3, in %rhs: i3, out out: i3) {
+  // CHECK-NEXT: %[[LHS0:.+]] = comb.extract %lhs from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[LHS1:.+]] = comb.extract %lhs from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[LHS2:.+]] = comb.extract %lhs from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS0:.+]] = comb.extract %rhs from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS1:.+]] = comb.extract %rhs from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS2:.+]] = comb.extract %rhs from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[P0:.+]] = comb.xor %[[LHS0]], %[[RHS0]] : i1
+  // CHECK-NEXT: %[[G0:.+]] = comb.and %[[LHS0]], %[[RHS0]] : i1
+  // CHECK-NEXT: %[[P1:.+]] = comb.xor %[[LHS1]], %[[RHS1]] : i1
+  // CHECK-NEXT: %[[G1:.+]] = comb.and %[[LHS1]], %[[RHS1]] : i1
+  // CHECK-NEXT: %[[P2:.+]] = comb.xor %[[LHS2]], %[[RHS2]] : i1
+  // CHECK-NEXT: %[[G2:.+]] = comb.and %[[LHS2]], %[[RHS2]] : i1
+  // Reduction Tree
+  // CHECK-NEXT: %[[G10PRE:.+]] = comb.and %[[P1]], %[[G0]] : i1
+  // CHECK-NEXT: %[[G10:.+]] = comb.or %[[G1]], %[[G10PRE]] : i1
+  // CHECK-NEXT: %[[G21PRE:.+]] = comb.and %[[P2]], %[[G1]] : i1
+  // CHECK-NEXT: comb.or %[[G2]], %[[G21PRE]] : i1
+  // CHECK-NEXT: %[[P21:.+]] = comb.and %[[P2]], %[[P1]] : i1
+  // CHECK-NEXT: comb.and %[[P21]], %[[G0]] : i1
+  // Sum Completion
+  // CHECK-NEXT: %[[S1:.+]] = comb.xor %[[P1]], %[[G0]] : i1
+  // CHECK-NEXT: %[[S2:.+]] = comb.xor %[[P2]], %[[G10]] : i1
+  // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[S2]], %[[S1]], %[[P0]] : i1, i1, i1
+  // CHECK-NEXT: hw.output %[[RES]] : i3
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i3
+  hw.output %0 : i3
+}
+
+// CHECK-LABEL: @add_brent_kung
+hw.module @add_brent_kung(in %lhs: i4, in %rhs: i4, out out: i4) {
+  // CHECK-NEXT: %[[LHS0:.+]] = comb.extract %lhs from 0 : (i4) -> i1
+  // CHECK-NEXT: %[[LHS1:.+]] = comb.extract %lhs from 1 : (i4) -> i1
+  // CHECK-NEXT: %[[LHS2:.+]] = comb.extract %lhs from 2 : (i4) -> i1
+  // CHECK-NEXT: %[[LHS3:.+]] = comb.extract %lhs from 3 : (i4) -> i1
+  // CHECK-NEXT: %[[RHS0:.+]] = comb.extract %rhs from 0 : (i4) -> i1
+  // CHECK-NEXT: %[[RHS1:.+]] = comb.extract %rhs from 1 : (i4) -> i1
+  // CHECK-NEXT: %[[RHS2:.+]] = comb.extract %rhs from 2 : (i4) -> i1
+  // CHECK-NEXT: %[[RHS3:.+]] = comb.extract %rhs from 3 : (i4) -> i1
+  //
+  // CHECK-NEXT: %[[P0:.+]] = comb.xor %[[LHS0]], %[[RHS0]] : i1
+  // CHECK-NEXT: %[[G0:.+]] = comb.and %[[LHS0]], %[[RHS0]] : i1
+  // CHECK-NEXT: %[[P1:.+]] = comb.xor %[[LHS1]], %[[RHS1]] : i1
+  // CHECK-NEXT: %[[G1:.+]] = comb.and %[[LHS1]], %[[RHS1]] : i1
+  // CHECK-NEXT: %[[P2:.+]] = comb.xor %[[LHS2]], %[[RHS2]] : i1
+  // CHECK-NEXT: %[[G2:.+]] = comb.and %[[LHS2]], %[[RHS2]] : i1
+  // CHECK-NEXT: %[[P3:.+]] = comb.xor %[[LHS3]], %[[RHS3]] : i1
+  // CHECK-NEXT: %[[G3:.+]] = comb.and %[[LHS3]], %[[RHS3]] : i1
+  // Reduction Tree
+  // CHECK-NEXT: %[[G10PRE:.+]] = comb.and %[[P1]], %[[G0]] : i1
+  // CHECK-NEXT: %[[G10:.+]] = comb.or %[[G1]], %[[G10PRE]] : i1
+  // CHECK-NEXT: comb.and %[[P1]], %[[P0]] : i1
+  // CHECK-NEXT: %[[G32PRE:.+]] = comb.and %[[P3]], %[[G2]] : i1
+  // CHECK-NEXT: comb.or %[[G3]], %[[G32PRE]] : i1
+  // CHECK-NEXT: %[[P32:.+]] = comb.and %[[P3]], %[[P2]] : i1
+  // CHECK-NEXT: comb.and %[[P32]], %[[G10]] : i1
+  // CHECK-NEXT: %[[G20PRE:.+]] = comb.and %[[P2]], %[[G10]] : i1
+  // CHECK-NEXT: %[[G20:.+]] = comb.or %[[G2]], %[[G20PRE]] : i1
+  // Sum Completion
+  // CHECK-NEXT: %[[S1:.+]] = comb.xor %[[P1]], %[[G0]] : i1
+  // CHECK-NEXT: %[[S2:.+]] = comb.xor %[[P2]], %[[G10]] : i1
+  // CHECK-NEXT: %[[S3:.+]] = comb.xor %[[P3]], %[[G20]] : i1
+  // CHECK-NEXT: %[[RES:.+]] = comb.concat %[[S3]], %[[S2]], %[[S1]], %[[P0]] : i1, i1, i1, i1
+  // CHECK-NEXT: hw.output %[[RES]] : i4
+  %0 = comb.add %lhs, %rhs {synth.test.arch = "BRENT-KUNG"} : i4
+  hw.output %0 : i4
 }
 
 // CHECK-LABEL: @add_17

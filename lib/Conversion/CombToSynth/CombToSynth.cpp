@@ -480,17 +480,47 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       return success();
     }
 
-    if (width < 8)
-      lowerRippleCarryAdder(op, inputs, rewriter);
-    else
-      lowerParallelPrefixAdder(op, inputs, rewriter);
+    // Check if the architecture is specified by an attribute.
+    auto arch = determineAdderArch(op, width);
+    if (arch == AdderArchitecture::RippleCarry)
+      return lowerRippleCarryAdder(op, inputs, rewriter);
+    return lowerParallelPrefixAdder(op, inputs, rewriter);
+  }
 
-    return success();
+  enum AdderArchitecture { RippleCarry, Sklanskey, KoggeStone, BrentKung };
+  static AdderArchitecture determineAdderArch(Operation *op, int64_t width) {
+    auto strAttr = op->getAttrOfType<StringAttr>("synth.test.arch");
+    if (strAttr) {
+      return llvm::StringSwitch<AdderArchitecture>(strAttr.getValue())
+          .Case("SKLANSKEY", Sklanskey)
+          .Case("KOGGE-STONE", KoggeStone)
+          .Case("BRENT-KUNG", BrentKung)
+          .Case("RIPPLE-CARRY", RippleCarry);
+    }
+    // Determine using width as a heuristic.
+    // TODO: Perform a more thorough analysis to motivate the choices or
+    // implement an adder synthesis algorithm to construct an optimal adder
+    // under the given timing constraints - see the work of Zimmermann
+
+    // For very small adders, overhead of a parallel prefix adder is likely not
+    // worth it.
+    if (width < 8)
+      return AdderArchitecture::RippleCarry;
+
+    // Sklanskey is a good compromise for high-performance, but has high fanout
+    // which may lead to wiring congestion for very large adders.
+    if (width <= 32)
+      return AdderArchitecture::Sklanskey;
+
+    // Kogge-Stone uses greater area than Sklanskey but has lower fanout thus
+    // may be preferable for larger adders.
+    return AdderArchitecture::KoggeStone;
   }
 
   // Implement a basic ripple-carry adder for small bitwidths.
-  void lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
-                             ConversionPatternRewriter &rewriter) const {
+  LogicalResult
+  lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
+                        ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
     // Implement a naive Ripple-carry full adder.
     Value carry;
@@ -528,13 +558,15 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                             << width << "\n");
 
     replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(rewriter, op, results);
+    return success();
   }
 
   // Implement a parallel prefix adder - with Kogge-Stone or Brent-Kung trees
   // Will introduce unused signals for the carry bits but these will be removed
   // by the AIG pass.
-  void lowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
-                                ConversionPatternRewriter &rewriter) const {
+  LogicalResult
+  lowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
+                           ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
 
     auto aBits = extractBits(rewriter, inputs[0]);
@@ -566,10 +598,33 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     // Create copies of p and g for the prefix computation
     SmallVector<Value> pPrefix = p;
     SmallVector<Value> gPrefix = g;
-    if (width < 32)
+
+    // Check if the architecture is specified by an attribute.
+    auto arch = determineAdderArch(op, width);
+
+    switch (arch) {
+    case AdderArchitecture::RippleCarry:
+      llvm_unreachable("Ripple-Carry should be handled separately");
+      break;
+    case AdderArchitecture::Sklanskey:
+      lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      break;
+    case AdderArchitecture::KoggeStone:
       lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
-    else
+      break;
+    case AdderArchitecture::BrentKung:
       lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      break;
+    }
+    // if (arch == AdderArchitecture::Sklanskey) {
+    //   lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    // } else if (arch == AdderArchitecture::KoggeStone) {
+    //   lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    // } else if (arch == AdderArchitecture::BrentKung) {
+    //   lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+    // } else {
+    //   return failure();
+    // }
 
     // Generate result sum bits
     // NOTE: The result is stored in reverse order.
@@ -591,6 +646,62 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                    << "RES0 = P0\n";
       for (int64_t i = 1; i < width; ++i)
         llvm::dbgs() << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n";
+    });
+
+    return success();
+  }
+
+  // Implement the Sklansky parallel prefix tree
+  // High fan-out, low depth, low area
+  void lowerSklanskeyPrefixTree(comb::AddOp op, ValueRange inputs,
+                                ConversionPatternRewriter &rewriter,
+                                SmallVector<Value> &pPrefix,
+                                SmallVector<Value> &gPrefix) const {
+    auto width = op.getType().getIntOrFloatBitWidth();
+    SmallVector<Value> pPrefixNew = pPrefix;
+    SmallVector<Value> gPrefixNew = gPrefix;
+
+    for (int64_t stride = 1; stride < width; stride *= 2) {
+      for (int64_t i = stride; i < width; i += 2 * stride) {
+        for (int64_t k = 0; k < stride && i + k < width; ++k) {
+          int64_t idx = i + k;
+          int64_t j = i - 1;
+          // Group generate: g_idx OR (p_idx AND g_j)
+          Value andPG = comb::AndOp::create(rewriter, op.getLoc(), pPrefix[idx],
+                                            gPrefix[j]);
+          gPrefixNew[idx] =
+              comb::OrOp::create(rewriter, op.getLoc(), gPrefix[idx], andPG);
+
+          // Group propagate: p_idx AND p_j
+          pPrefixNew[idx] = comb::AndOp::create(rewriter, op.getLoc(),
+                                                pPrefix[idx], pPrefix[j]);
+        }
+      }
+      pPrefix = pPrefixNew;
+      gPrefix = gPrefixNew;
+    }
+    LLVM_DEBUG({
+      int64_t stage = 0;
+      for (int64_t stride = 1; stride < width; stride *= 2) {
+        llvm::dbgs()
+            << "--------------------------------------- Sklanskey Stage "
+            << stage << "\n";
+        for (int64_t i = stride; i < width; i += 2 * stride) {
+          for (int64_t k = 0; k < stride && i + k < width; ++k) {
+            int64_t idx = i + k;
+            int64_t j = i - 1;
+            // Group generate: g_i OR (p_i AND g_j)
+            llvm::dbgs() << "G" << idx << stage + 1 << " = G" << idx << stage
+                         << " OR (P" << idx << stage << " AND G" << j << stage
+                         << ")\n";
+
+            // Group propagate: p_i AND p_j
+            llvm::dbgs() << "P" << idx << stage + 1 << " = P" << idx << stage
+                         << " AND P" << j << stage << "\n";
+          }
+        }
+        ++stage;
+      }
     });
   }
 
