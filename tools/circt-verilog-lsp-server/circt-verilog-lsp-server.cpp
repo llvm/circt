@@ -67,6 +67,19 @@ int main(int argc, char **argv) {
       llvm::cl::value_desc("directory"), llvm::cl::Prefix);
 
   //===--------------------------------------------------------------------===//
+  // Command files
+  //===--------------------------------------------------------------------===//
+
+  llvm::cl::list<std::string> commandFiles{
+      "C",
+      llvm::cl::desc(
+          "One or more command files, which are independent compilation units "
+          "where modules are automatically instantiated."),
+      llvm::cl::value_desc("filename"), llvm::cl::Prefix};
+  llvm::cl::alias commandFilesLong{
+      "command-file", llvm::cl::desc("Alias for -C"),
+      llvm::cl::aliasopt(commandFiles), llvm::cl::NotHidden};
+  //===--------------------------------------------------------------------===//
   // Testing
   //===--------------------------------------------------------------------===//
 
@@ -100,6 +113,7 @@ int main(int argc, char **argv) {
                                      prettyPrint);
 
   // Configure the servers and start the main language server.
-  circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs);
+  circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs,
+                                           commandFiles);
   return failed(circt::lsp::CirctVerilogLspServerMain(options, transport));
 }
