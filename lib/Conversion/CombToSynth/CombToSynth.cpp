@@ -497,11 +497,23 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
           .Case("BRENT-KUNG", BrentKung)
           .Case("RIPPLE-CARRY", RippleCarry);
     }
-    // Determine based on width.
+    // Determine using width as a heuristic.
+    // TODO: Perform a more thorough analysis to motivate the choices or
+    // implement an adder synthesis algorithm to construct an optimal adder
+    // under the given timing constraints - see the work of Zimmermann
+
+    // For very small adders, overhead of a parallel prefix adder is likely not
+    // worth it.
     if (width < 8)
       return AdderArchitecture::RippleCarry;
+
+    // Sklanskey is a good compromise for high-performance, but has high fanout
+    // which may lead to wiring congestion for very large adders.
     if (width <= 32)
       return AdderArchitecture::Sklanskey;
+
+    // Kogge-Stone uses greater area than Sklanskey but has lower fanout thus
+    // may be preferable for larger adders.
     return AdderArchitecture::KoggeStone;
   }
 
