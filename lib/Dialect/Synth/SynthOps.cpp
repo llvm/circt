@@ -71,17 +71,20 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   // x 1 1 -> 1
   // x ~x 1 -> 1
   // x 0 0 -> 0
+  // ~x 0 0 -> 0
   // x 1 1 -> 1
+  // ~x 1 1 -> 1
 
   bool isOpConstant = true;
   // for all constant inputs
   SmallVector<APInt, 3> inputValues;
-  size_t i = 0;
+  size_t i = 0, index;
   for (auto input : adaptor.getInputs()) {
     auto attr = llvm::dyn_cast_or_null<IntegerAttr>(input);
-    if (!attr)
+    if (!attr) {
       isOpConstant = false;
-    else {
+      index = i;
+    } else {
       auto value = isInverted(i) ? ~attr.getValue() : attr.getValue();
       inputValues.push_back(value);
     }
@@ -97,6 +100,8 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         return IntegerAttr::get(
             IntegerType::get(getContext(), inputValues[0].getBitWidth()),
             inputValues[0]);
+      else
+        return getOperand(index); // fix if it is a Inverted
     }
     auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
       APInt value;
@@ -118,16 +123,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
             return getOperand(k);
           }
           return getOperand(i);
-        }
-
-        // If i and j are constant.
-        if (auto c1 = getConstant(i)) {
-          if (auto c2 = getConstant(j)) {
-            // If both constants are equal, we can fold.
-            // If constants are complementary, we can fold.
-            if (*c1 == ~*c2)
-              return getOperand(k);
-          }
         }
       }
     }
