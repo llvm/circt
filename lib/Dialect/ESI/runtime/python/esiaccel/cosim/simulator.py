@@ -81,10 +81,12 @@ class SimProcess:
   def __init__(self,
                proc: subprocess.Popen,
                port: int,
-               threads: Optional[List[threading.Thread]] = None):
+               threads: Optional[List[threading.Thread]] = None,
+               gui: bool = False):
     self.proc = proc
     self.port = port
     self.threads: List[threading.Thread] = threads or []
+    self.gui = gui
 
   def force_stop(self):
     """Make sure to stop the simulation no matter what."""
@@ -231,6 +233,10 @@ class Simulator:
     """
     self.run_dir.mkdir(parents=True, exist_ok=True)
 
+    env_gui = os.environ.get("COSIM_GUI", "0")
+    if env_gui != "0":
+      gui = True
+
     # Erase the config file if it exists. We don't want to read
     # an old config.
     portFileName = self.run_dir / "cosim.cfg"
@@ -280,7 +286,7 @@ class Simulator:
       if proc.poll() is not None:
         raise Exception("Simulation exited early")
       time.sleep(0.05)
-    return SimProcess(proc=proc, port=port, threads=threads)
+    return SimProcess(proc=proc, port=port, threads=threads, gui=gui)
 
   def _start_process_with_callbacks(
       self, cmd: List[str], env: Optional[Dict[str, str]], cwd: Optional[Path],
@@ -361,8 +367,12 @@ class Simulator:
         testEnv = os.environ.copy()
         testEnv["ESI_COSIM_PORT"] = str(simProc.port)
         testEnv["ESI_COSIM_HOST"] = "localhost"
-        return subprocess.run(inner_command, cwd=os.getcwd(),
-                              env=testEnv).returncode
+        ret = subprocess.run(inner_command, cwd=os.getcwd(),
+                             env=testEnv).returncode
+        if simProc.gui:
+          print("GUI mode - waiting for simulator to exit...")
+          simProc.proc.wait()
+        return ret
     finally:
-      if simProc:
+      if simProc and simProc.proc.poll() is None:
         simProc.force_stop()
