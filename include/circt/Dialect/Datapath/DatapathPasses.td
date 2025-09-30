@@ -14,9 +14,9 @@ include "mlir/Pass/PassBase.td"
 def DatapathReduceDelay : Pass<"datapath-reduce-delay"> {
   let summary = "Reduce datapath delay at a cost of potentially greater area.";
   let description = [{
-    This pass performs datapath transformations to reduce the delay of all 
-    paths. The transformations include logic replication/duplication to operate 
-    on carry-save values, potentially increasing area usage.
+    This pass performs datapath transformations to reduce the delay of any 
+    matching paths. The transformations include logic replication/duplication to 
+    operate on carry-save values, potentially increasing area usage.
   }];
   let constructor = "circt::datapath::createDatapathReduceDelayPass()";
   let dependentDialects = ["datapath::DatapathDialect"];

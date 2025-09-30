@@ -26,15 +26,16 @@ using namespace mlir;
 
 namespace {
 
-// Fold add operations even if used multiple times incurring area overhead
+// Fold add operations even if used multiple times incurring area overhead as
+// transformation reduces shared logic - but reduces delay
 // add = a+b;
 // out1 = add + c;
-// out2 = add + d;
+// out2 = add << d;
 // -->
 // add = a + b;
 // comp1 = compress(a, b, c);
 // out1 = comp1[0] + comp1[1];
-// out2 = add + d;
+// out2 = add << d;
 struct FoldAddReplicate : public OpRewritePattern<comb::AddOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -140,8 +141,6 @@ struct DatapathReduceDelayPass
   void runOnOperation() override {
     Operation *op = getOperation();
     MLIRContext *ctx = op->getContext();
-    // Load the Datapath dialect so the rewriter can create Datapath ops
-    ctx->loadDialect<DatapathDialect>();
 
     RewritePatternSet patterns(ctx);
     patterns.add<FoldAddReplicate, FoldMuxAdd>(ctx);

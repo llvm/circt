@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTDatapathTransforms
   CIRCTComb
   CIRCTDatapath
   CIRCTSupport
+  CIRCTTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils
