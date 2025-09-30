@@ -65,6 +65,7 @@ struct LoweringConfig {
   unsigned timeWidth = 5;
 };
 
+
 class MachineOpConverter {
 public:
   MachineOpConverter(OpBuilder &builder, MachineOp machineOp,
@@ -73,6 +74,14 @@ public:
   LogicalResult dispatch();
 
 private:
+ // Build the integer constant 2^exp.
+  Value intPow2(unsigned exp, Location loc) {
+    unsigned cstBits = exp + 1;
+    llvm::APInt ap(cstBits, 1);
+    ap = ap.shl(exp);
+    auto attr = b.getIntegerAttr(b.getIntegerType(cstBits), ap);
+    return b.create<smt::IntConstantOp>(loc, attr);
+  }
   // Helpers (mode-aware).
   Type numTypeForWidth(unsigned w) {
     if (cfg.useBitVec)
@@ -388,34 +397,79 @@ private:
     }
 
     // comb.concat
+        // comb.concat
     if (auto concatOp = dyn_cast<comb::ConcatOp>(op)) {
-      if (!cfg.useBitVec) {
-        op.emitError() << "concat is unsupported in int mode";
-        assert(false && "concat needs bit-vectors");
+      if (cfg.useBitVec) {
+        Value acc = toBV(args[0]);
+        int accW = bvWidth(acc);
+        for (size_t i = 1; i < args.size(); ++i) {
+          Value next = toBV(args[i]);
+          int nextW = bvWidth(next);
+          auto resTy = b.getType<smt::BitVectorType>(accW + nextW);
+          acc = b.create<smt::ConcatOp>(loc, resTy, acc, next);
+          accW += nextW;
+        }
+        return acc;
       }
-      Value acc = toBV(args[0]);
-      int accW = bvWidth(acc);
+
+      // Int mode: concatenate by "shift-and-add":
+      // If acc encodes the left part and next encodes the right part,
+      // concat(acc, next) = acc * 2^(width(next)) + next
+      // We compute 2^width(next) as a constant Int, since widths are known statically.
+      SmallVector<unsigned> opWidths;
+      opWidths.reserve(concatOp->getNumOperands());
+      for (Value orig : concatOp->getOperands())
+        opWidths.push_back(getPackedBitWidth(orig.getType()));
+
+      Value acc = toInt(args[0]);
       for (size_t i = 1; i < args.size(); ++i) {
-        Value next = toBV(args[i]);
-        int nextW = bvWidth(next);
-        auto resTy = b.getType<smt::BitVectorType>(accW + nextW);
-        acc = b.create<smt::ConcatOp>(loc, resTy, acc, next);
-        accW += nextW;
+        unsigned nextW = opWidths[i];
+
+        // Build the Int constant 2^nextW.
+        // Use bitwidth (nextW + 1) to be sufficient to hold the value.
+        unsigned cstBits = nextW + 1;
+        llvm::APInt twoPow(cstBits, 1);
+        twoPow = twoPow.shl(nextW);
+        auto powAttr = b.getIntegerAttr(b.getIntegerType(cstBits), twoPow);
+        Value powC = b.create<smt::IntConstantOp>(loc, powAttr);
+
+        // acc = acc * 2^nextW + toInt(args[i])
+        Value scaled = b.create<smt::IntMulOp>(loc, SmallVector<Value>{acc, powC});
+        Value nextInt = toInt(args[i]);
+        acc = b.create<smt::IntAddOp>(loc, SmallVector<Value>{scaled, nextInt});
       }
       return acc;
     }
 
     // comb.extract
     if (auto extOp = dyn_cast<comb::ExtractOp>(op)) {
-      if (!cfg.useBitVec) {
-        op.emitError() << "extract is unsupported in int mode";
-        assert(false && "extract needs bit-vectors");
-      }
-      unsigned low = extOp.getLowBit();
-      unsigned width = extOp.getType().getIntOrFloatBitWidth();
-      auto resTy = b.getType<smt::BitVectorType>(width);
-      return b.create<smt::ExtractOp>(loc, resTy, low, toBV(args.front()));
-    }
+  unsigned low = extOp.getLowBit();
+  unsigned width = extOp.getType().getIntOrFloatBitWidth();
+
+  if (cfg.useBitVec) {
+    auto resTy = b.getType<smt::BitVectorType>(width);
+    return b.create<smt::ExtractOp>(loc, resTy, low, toBV(args.front()));
+  }
+
+  // Integer mode:
+  // extract(x, low, width) = ((x div 2^low) mod 2^width)
+  Value xInt = toInt(args.front());
+
+  // q = x div 2^low  (skip division if low == 0)
+  Value q = xInt;
+  if (low != 0)
+    q = b.create<smt::IntDivOp>(loc, xInt, intPow2(low, loc));
+
+  if (width == 1) {
+    // Return a Bool for i1. Compute the selected bit as Int 0/1 and convert.
+    Value bitInt = b.create<smt::IntModOp>(loc, q, intPow2(1, loc)); // mod 2
+    return numericToBool(bitInt, loc); // 0 -> false, 1 -> true
+  }
+
+  // General case: result is Int in [0, 2^width)
+  Value maskRange = intPow2(width, loc); // 2^width
+  return b.create<smt::IntModOp>(loc, q, maskRange);
+}
 
     // comb.replicate
     if (auto repOp = dyn_cast<comb::ReplicateOp>(op)) {
@@ -429,7 +483,7 @@ private:
     }
 
     // comb.shr_u
-    if (auto shruOp = dyn_cast<comb::ShrUOp>(op)) {
+    if (comb::ShrUOp shruOp = dyn_cast<comb::ShrUOp>(op)) {
       if (!cfg.useBitVec) {
         op.emitError() << "logical shift right is unsupported in int mode";
         assert(false && "shift needs bit-vectors");
