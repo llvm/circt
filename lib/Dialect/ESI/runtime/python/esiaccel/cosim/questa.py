@@ -25,7 +25,7 @@ class Questa(Simulator):
     sources.append(Questa.DefaultDriver)
     for src in sources:
       cmds.append(f"vlog -incr +acc -sv +define+TOP_MODULE={self.sources.top}"
-                  f" +define+SIMULATION {str(src)}")
+                  f" +define+SIMULATION {src.as_posix()}")
     cmds.append(f"vopt -incr driver -o driver_opt +acc")
     return cmds
 
