@@ -217,6 +217,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     loweringOptions.disableDatapath = disableDatapath;
     loweringOptions.timingAware = !disableTimingAware;
     loweringOptions.targetIR = targetIR;
+    loweringOptions.synthesisStrategy = synthesisStrategy;
     circt::synth::buildCombLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilCombLowering))
       return;

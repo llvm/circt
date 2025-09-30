@@ -34,6 +34,7 @@ add_circt_dialect_library(CIRCTSynthTransforms
   CIRCTCombToSynth
   CIRCTCombToDatapath
   CIRCTDatapathToComb
+  CIRCTDatapathTransforms
   CIRCTExportAIGER
   CIRCTImportAIGER
   CIRCTHWTransforms
