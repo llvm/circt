@@ -78,8 +78,6 @@ struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
                                 PatternRewriter &rewriter) const override {
 
     SmallVector<Value, 8> newCompressOperands;
-    auto zero =
-        hw::ConstantOp::create(rewriter, addOp.getLoc(), addOp.getType(), 0);
     for (Value operand : addOp.getOperands()) {
       // Detect a mux operand - then check if it contains add operations
       if (comb::MuxOp nestedMuxOp = operand.getDefiningOp<comb::MuxOp>()) {
@@ -101,14 +99,18 @@ struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
 
         // Pad with zeros to match number of operands
         // a ? b+c : d -> (a ? b : d) + (a ? c : 0)
-        for (size_t i = 0; i < maxOperands; ++i) {
-          auto tOp = i < trueValOperands.size() ? trueValOperands[i] : zero;
-          auto fOp = i < falseValOperands.size() ? falseValOperands[i] : zero;
-          auto newMux = rewriter.create<comb::MuxOp>(
-              addOp.getLoc(), nestedMuxOp.getCond(), tOp, fOp);
-          newCompressOperands.push_back(newMux.getResult());
+        if (maxOperands > 1) {
+          auto zero = rewriter.create<hw::ConstantOp>(
+              addOp.getLoc(), rewriter.getIntegerAttr(addOp.getType(), 0));
+          for (size_t i = 0; i < maxOperands; ++i) {
+            auto tOp = i < trueValOperands.size() ? trueValOperands[i] : zero;
+            auto fOp = i < falseValOperands.size() ? falseValOperands[i] : zero;
+            auto newMux = rewriter.create<comb::MuxOp>(
+                addOp.getLoc(), nestedMuxOp.getCond(), tOp, fOp);
+            newCompressOperands.push_back(newMux.getResult());
+          }
+          continue;
         }
-        continue;
       }
       // If not matched just add the operand without modification
       newCompressOperands.push_back(operand);
