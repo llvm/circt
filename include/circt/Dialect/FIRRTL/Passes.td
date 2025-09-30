@@ -257,6 +257,10 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
     Statistic<"erasedModules", "num-erased-modules",
       "Number of modules which were erased by deduplication">
   ];
+  let options = [
+    Option<"dedupClasses", "dedup-classes", "bool", "true",
+      "Deduplicate classes, violating their nominal typing.">
+  ];
 }
 
 def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
