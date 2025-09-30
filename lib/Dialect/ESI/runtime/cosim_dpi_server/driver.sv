@@ -18,7 +18,21 @@
 `define TOP_MODULE ESI_Cosim_Top
 `endif
 
+// Allow reading environment variables to control waveform dumping.
+import "DPI-C" function string getenv(input string env_name);
+
 module driver();
+
+  // If the SAVE_WAVE environment variable is set, dump a VCD waveform to that
+  // filename.
+  initial begin
+    string save_wave = getenv("SAVE_WAVE");
+    if (save_wave != "") begin
+      $display("[driver] Saving waveform to %s", save_wave);
+      $dumpfile(save_wave);
+      $dumpvars(0, driver);
+    end
+  end
 
   logic clk = 0;
   logic rst = 0;
