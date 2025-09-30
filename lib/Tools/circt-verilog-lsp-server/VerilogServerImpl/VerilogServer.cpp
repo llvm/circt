@@ -33,11 +33,13 @@
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/text/SourceLocation.h"
 #include "slang/text/SourceManager.h"
+#include "slang/util/Enum.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/LSP/Logging.h"
 #include "llvm/Support/LSP/Protocol.h"
@@ -104,13 +106,13 @@ public:
 
   VerilogDocument &getDocument() { return document; }
 
-  /// The type of interval map used to store source references. SMRange is
-  /// half-open, so we also need to use a half-open interval map.
-  using MapT =
-      llvm::IntervalMap<const char *, VerilogIndexSymbol,
-                        llvm::IntervalMapImpl::NodeSizer<
-                            const char *, VerilogIndexSymbol>::LeafSize,
-                        llvm::IntervalMapHalfOpenInfo<const char *>>;
+  // Half open interval map containing paired pointers into Slang's buffer
+  using SlangBufferPointer = char const *;
+  using MapT = llvm::IntervalMap<
+      SlangBufferPointer, VerilogIndexSymbol,
+      llvm::IntervalMapImpl::NodeSizer<SlangBufferPointer,
+                                       VerilogIndexSymbol>::LeafSize,
+      llvm::IntervalMapHalfOpenInfo<const SlangBufferPointer>>;
 
   MapT &getIntervalMap() { return intervalMap; }
 
@@ -158,11 +160,6 @@ public:
 
   const llvm::lsp::URIForFile &getURI() const { return uri; }
 
-  llvm::SourceMgr &getSourceMgr() { return sourceMgr; }
-  llvm::SmallDenseMap<uint32_t, uint32_t> &getBufferIDMap() {
-    return bufferIDMap;
-  }
-
   const slang::SourceManager &getSlangSourceManager() const {
     return driver.sourceManager;
   }
@@ -171,8 +168,7 @@ public:
   llvm::lsp::Location getLspLocation(slang::SourceLocation loc) const;
   llvm::lsp::Location getLspLocation(slang::SourceRange range) const;
 
-  // Return SMLoc from slang location.
-  llvm::SMLoc getSMLoc(slang::SourceLocation loc);
+  slang::BufferID getMainBufferID() const { return mainBufferId; }
 
   //===--------------------------------------------------------------------===//
   // Definitions and References
@@ -186,19 +182,20 @@ public:
                         const llvm::lsp::Position &pos,
                         std::vector<llvm::lsp::Location> &references);
 
+  std::optional<uint32_t> lspPositionToOffset(const llvm::lsp::Position &pos);
+  const char *getPointerFor(const llvm::lsp::Position &pos);
+
 private:
-  std::optional<std::pair<uint32_t, SmallString<128>>>
+  std::optional<std::pair<slang::BufferID, SmallString<128>>>
   getOrOpenFile(StringRef filePath);
 
   VerilogServerContext &globalContext;
 
-  // A map from slang buffer ID to the corresponding buffer ID in the LLVM
-  // source manager.
-  llvm::SmallDenseMap<uint32_t, uint32_t> bufferIDMap;
+  slang::BufferID mainBufferId;
 
   // A map from a file name to the corresponding buffer ID in the LLVM
   // source manager.
-  llvm::StringMap<std::pair<uint32_t, SmallString<128>>> filePathMap;
+  llvm::StringMap<std::pair<slang::BufferID, SmallString<128>>> filePathMap;
 
   // The compilation result.
   FailureOr<std::unique_ptr<slang::ast::Compilation>> compilation;
@@ -206,11 +203,12 @@ private:
   // The slang driver.
   slang::driver::Driver driver;
 
-  // The LLVM source manager.
-  llvm::SourceMgr sourceMgr;
-
   /// The index of the parsed module.
   VerilogIndex index;
+
+  /// The precomputed line offsets for faster lookups
+  std::vector<uint32_t> lineOffsets;
+  void computeLineOffsets(std::string_view text);
 
   // The URI of the document.
   llvm::lsp::URIForFile uri;
@@ -324,17 +322,6 @@ VerilogDocument::VerilogDocument(
         mainBufferFileInCommandFileList(cmdFile, canonPath.str().str());
   }
 
-  auto memBufferOwn =
-      llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file());
-  if (!memBufferOwn) {
-    circt::lsp::Logger::error(
-        Twine("Failed to create memory buffer for file ") + uri.file());
-    return;
-  }
-
-  const unsigned int mainBufferId =
-      sourceMgr.AddNewSourceBuffer(std::move(memBufferOwn), SMLoc());
-
   // Build the set of include directories for this file.
   llvm::SmallString<32> uriDirectory(uri.file());
   llvm::sys::path::remove_filename(uriDirectory);
@@ -344,10 +331,14 @@ VerilogDocument::VerilogDocument(
   libDirs.insert(libDirs.end(), context.options.libDirs.begin(),
                  context.options.libDirs.end());
 
-  // Populate source managers.
-  const llvm::MemoryBuffer *memBuffer = sourceMgr.getMemoryBuffer(mainBufferId);
+  auto memBuffer = llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file());
+  if (!memBuffer) {
+    circt::lsp::Logger::error(
+        Twine("Failed to create memory buffer for file ") + uri.file());
+    return;
+  }
 
-  // This block compiles the top file to determine all definitions
+  // This block parses the top file to determine all definitions
   // This is used in a second pass to declare all those definitions
   // as top modules, so they are elaborated and subsequently indexed.
   {
@@ -357,10 +348,7 @@ VerilogDocument::VerilogDocument(
         topDriver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
     topDriver.sourceLoader.addBuffer(topSlangBuffer);
 
-    topDriver.options.compilationFlags.emplace(
-        slang::ast::CompilationFlags::LintMode, false);
-    topDriver.options.compilationFlags.emplace(
-        slang::ast::CompilationFlags::DisableInstanceCaching, false);
+    topDriver.addStandardArgs();
 
     if (!topDriver.processOptions()) {
       return;
@@ -372,17 +360,21 @@ VerilogDocument::VerilogDocument(
       return;
     }
 
-    FailureOr<std::unique_ptr<slang::ast::Compilation>> topCompilation =
-        topDriver.createCompilation();
-    if (failed(topCompilation))
-      return;
-
+    // Extract all the top modules in the file directly from the syntax tree
     std::vector<std::string> topModules;
-    for (const auto *defs : (*topCompilation)->getDefinitions())
-      topModules.emplace_back(defs->name);
-
-    // Make sure that all possible definitions in the main buffer are
-    // topModules!
+    for (auto &t : topDriver.syntaxTrees) {
+      if (auto *compUnit =
+              t->root().as_if<slang::syntax::CompilationUnitSyntax>()) {
+        for (auto *member : compUnit->members) {
+          // While it's called "ModuleDeclarationSyntax", it also covers
+          // packages
+          if (auto *moduleDecl =
+                  member->as_if<slang::syntax::ModuleDeclarationSyntax>()) {
+            topModules.emplace_back(moduleDecl->header->name.valueText());
+          }
+        }
+      }
+    }
     driver.options.topModules = std::move(topModules);
   }
 
@@ -391,12 +383,12 @@ VerilogDocument::VerilogDocument(
   }
 
   // If the main buffer is **not** present in a command file, add it into
-  // slang's source manager and bind to llvm source manager.
+  // slang's source manager.
   if (!skipMainBufferSlangImport) {
     auto slangBuffer =
         driver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
     driver.sourceLoader.addBuffer(slangBuffer);
-    bufferIDMap[slangBuffer.id.getId()] = mainBufferId;
+    mainBufferId = slangBuffer.id;
   }
 
   auto diagClient = std::make_shared<LSPDiagnosticClient>(*this, diagnostics);
@@ -423,51 +415,39 @@ VerilogDocument::VerilogDocument(
   if (failed(compilation))
     return;
 
-  // If the main buffer is present in a command file, compile it only once
-  // and import directly from the command file; then figure out which buffer id
-  // it was assigned and bind to llvm source manager.
-  llvm::SmallString<256> slangCanonPath;
-  std::unique_ptr<llvm::MemoryBuffer> newBuffer;
-  uint32_t newBufferId;
+  if (skipMainBufferSlangImport) {
+    // If the main buffer is present in a command file, compile it only once
+    // and import directly from the command file; then figure out which buffer
+    // id it was assigned and bind to llvm source manager.
+    llvm::SmallString<256> slangCanonPath;
+    bool mainBufferIdSet = false;
 
-  // Iterate through all buffers in the slang compilation and set up
-  // a binding to the LLVM Source Manager.
-  auto *sourceManager = (**compilation).getSourceManager();
-  for (auto slangBuffer : sourceManager->getAllBuffers()) {
-    std::string_view slangRawPath = sourceManager->getRawFileName(slangBuffer);
-    if (std::error_code ec =
-            llvm::sys::fs::real_path(slangRawPath, slangCanonPath))
-      continue;
-
-    if (slangCanonPath == canonPath && skipMainBufferSlangImport) {
-      bufferIDMap[slangBuffer.getId()] = mainBufferId;
-      continue;
-    }
-
-    if (slangCanonPath == canonPath && !skipMainBufferSlangImport) {
-      continue;
-    }
-
-    if (!bufferIDMap.contains(slangBuffer.getId())) {
-
-      auto uriOrError = llvm::lsp::URIForFile::fromFile(slangCanonPath);
-      if (auto e = uriOrError.takeError()) {
-        circt::lsp::Logger::error(
-            Twine("Failed to get URI from file " + slangCanonPath));
+    // Iterate through all buffers in the slang compilation and set up
+    // a binding to the LLVM Source Manager.
+    auto *sourceManager = (**compilation).getSourceManager();
+    for (auto slangBuffer : sourceManager->getAllBuffers()) {
+      std::string_view slangRawPath =
+          sourceManager->getRawFileName(slangBuffer);
+      if (std::error_code ec =
+              llvm::sys::fs::real_path(slangRawPath, slangCanonPath))
         continue;
-      }
 
-      newBuffer = llvm::MemoryBuffer::getMemBufferCopy(
-          sourceManager->getSourceText(slangBuffer), uriOrError->file());
-      newBufferId = sourceMgr.AddNewSourceBuffer(std::move(newBuffer), SMLoc());
-      bufferIDMap[slangBuffer.getId()] = newBufferId;
-      continue;
+      if (slangCanonPath == canonPath) {
+        mainBufferId = slangBuffer;
+        mainBufferIdSet = true;
+        break;
+      }
     }
-    circt::lsp::Logger::error(Twine("Failed to add buffer ID! "));
+
+    if (!mainBufferIdSet)
+      circt::lsp::Logger::error(
+          Twine("Failed to set main buffer id after compilation! "));
   }
 
   for (auto &diag : (*compilation)->getAllDiagnostics())
     driver.diagEngine.issue(diag);
+
+  computeLineOffsets(driver.sourceManager.getSourceText(mainBufferId));
 
   // Populate the index.
   index.initialize(**compilation);
@@ -479,8 +459,8 @@ VerilogDocument::getLspLocation(slang::SourceLocation loc) const {
     const auto &slangSourceManager = getSlangSourceManager();
     auto line = slangSourceManager.getLineNumber(loc) - 1;
     auto column = slangSourceManager.getColumnNumber(loc) - 1;
-    auto it = bufferIDMap.find(loc.buffer().getId());
-    if (it != bufferIDMap.end() && it->second == sourceMgr.getMainFileID())
+    auto it = loc.buffer();
+    if (it == mainBufferId)
       return llvm::lsp::Location(uri, llvm::lsp::Range(Position(line, column)));
 
     llvm::StringRef fileName = slangSourceManager.getFileName(loc);
@@ -519,40 +499,7 @@ VerilogDocument::getLspLocation(slang::SourceRange range) const {
       start.uri, llvm::lsp::Range(start.range.start, end.range.end));
 }
 
-llvm::SMLoc VerilogDocument::getSMLoc(slang::SourceLocation loc) {
-  auto bufferID = loc.buffer().getId();
-  llvm::SmallString<256> slangCanonPath("");
-
-  // Check if the source is already opened by LLVM source manager.
-  auto bufferIDMapIt = bufferIDMap.find(bufferID);
-  if (bufferIDMapIt == bufferIDMap.end()) {
-    // If not, open the source file and add it to the LLVM source manager.
-    auto path = getSlangSourceManager().getFullPath(loc.buffer());
-
-    // If file is not open yet and not a real path, skip it.
-    if (std::error_code ec =
-            llvm::sys::fs::real_path(path.string(), slangCanonPath))
-      return llvm::SMLoc();
-
-    auto memBuffer = llvm::MemoryBuffer::getFile(slangCanonPath);
-    if (!memBuffer) {
-      circt::lsp::Logger::error(
-          "Failed to open file: " + path.filename().string() +
-          memBuffer.getError().message());
-      return llvm::SMLoc();
-    }
-
-    auto id = sourceMgr.AddNewSourceBuffer(std::move(memBuffer.get()), SMLoc());
-    bufferIDMapIt =
-        bufferIDMap.insert({bufferID, static_cast<uint32_t>(id)}).first;
-  }
-
-  const auto *buffer = sourceMgr.getMemoryBuffer(bufferIDMapIt->second);
-
-  return llvm::SMLoc::getFromPointer(buffer->getBufferStart() + loc.offset());
-}
-
-std::optional<std::pair<uint32_t, SmallString<128>>>
+std::optional<std::pair<slang::BufferID, SmallString<128>>>
 VerilogDocument::getOrOpenFile(StringRef filePath) {
 
   auto fileInfo = filePathMap.find(filePath);
@@ -560,17 +507,21 @@ VerilogDocument::getOrOpenFile(StringRef filePath) {
     return fileInfo->second;
 
   auto getIfExist = [&](StringRef path)
-      -> std::optional<std::pair<uint32_t, SmallString<128>>> {
+      -> std::optional<std::pair<slang::BufferID, SmallString<128>>> {
     if (llvm::sys::fs::exists(path)) {
       auto memoryBuffer = llvm::MemoryBuffer::getFile(path);
       if (!memoryBuffer) {
         return std::nullopt;
       }
-      auto id = sourceMgr.AddNewSourceBuffer(std::move(*memoryBuffer), SMLoc());
 
-      fileInfo =
-          filePathMap.insert(std::make_pair(filePath, std::make_pair(id, path)))
-              .first;
+      auto newSlangBuffer = driver.sourceManager.assignText(
+          path.str(), memoryBuffer.get()->getBufferStart());
+      driver.sourceLoader.addBuffer(newSlangBuffer);
+
+      fileInfo = filePathMap
+                     .insert(std::make_pair(
+                         filePath, std::make_pair(newSlangBuffer.id, path)))
+                     .first;
 
       return fileInfo->second;
     }
@@ -702,7 +653,7 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
     // TODO: This implementation does not handle expanded MACROs. Return
     // instead.
-    if (range.start() >= range.end()) {
+    if (range.start().offset() >= range.end().offset()) {
       return;
     }
 
@@ -813,11 +764,9 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
   const auto &root = compilation.getRoot();
   VerilogIndexer visitor(*this);
-
   for (auto *inst : root.topInstances) {
 
-    // Skip all modules, interfaces, etc. that are not defined in this files
-    if (!(document.getLspLocation(inst->location).uri == document.getURI()))
+    if (inst->body.location.buffer() != document.getMainBufferID())
       continue;
 
     // Visit the body of the instance.
@@ -893,10 +842,9 @@ void VerilogIndex::parseSourceLocation(StringRef toParse) {
 }
 
 void VerilogIndex::parseSourceLocation() {
-  auto &sourceMgr = getDocument().getSourceMgr();
-  auto *getMainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
-  StringRef text(getMainBuffer->getBufferStart(),
-                 getMainBuffer->getBufferSize());
+  auto &sourceMgr = document.getSlangSourceManager();
+  auto getMainBuffer = sourceMgr.getSourceText(document.getMainBufferID());
+  StringRef text(getMainBuffer);
 
   // Loop over comments starting with "@[", and parse the source location.
   // TODO: Consider supporting other location format. This is currently
@@ -942,6 +890,7 @@ circt::lsp::VerilogServer::~VerilogServer() = default;
 void circt::lsp::VerilogServer::addDocument(
     const URIForFile &uri, StringRef contents, int64_t version,
     std::vector<llvm::lsp::Diagnostic> &diagnostics) {
+
   impl->files[uri.file()] = std::make_unique<VerilogTextFile>(
       impl->context, uri, contents, version, diagnostics);
 }
@@ -993,19 +942,25 @@ void VerilogIndex::insertSymbol(const slang::ast::Symbol *symbol,
   assert(from.start().valid() && from.end().valid());
 
   // TODO: Currently doesn't handle expanded macros
-  if (!from.start().valid() || !from.end().valid() ||
-      from.start() >= from.end())
+  if (from.start().offset() >= from.end().offset())
     return;
 
-  const char *startLoc = getDocument().getSMLoc(from.start()).getPointer();
-  const char *endLoc = getDocument().getSMLoc(from.end()).getPointer() + 1;
-  if (!startLoc || !endLoc || startLoc >= endLoc)
+  auto lhsBufferId = from.start().buffer();
+  auto rhsBufferId = from.end().buffer();
+  if (lhsBufferId.getId() != rhsBufferId.getId() || !rhsBufferId.valid() ||
+      !lhsBufferId.valid())
     return;
 
-  assert(startLoc && endLoc);
+  auto buffer = document.getSlangSourceManager().getSourceText(lhsBufferId);
 
-  if (startLoc != endLoc && !intervalMap.overlaps(startLoc, endLoc)) {
-    intervalMap.insert(startLoc, endLoc, symbol);
+  const auto *lhsBound = buffer.data() + from.start().offset();
+  const auto *rhsBound = buffer.data() + from.end().offset();
+
+  if (lhsBound >= rhsBound)
+    return;
+
+  if (!intervalMap.overlaps(lhsBound, rhsBound)) {
+    intervalMap.insert(lhsBound, rhsBound, symbol);
     if (!isDefinition)
       references[symbol].push_back(from);
   }
@@ -1015,9 +970,9 @@ void VerilogIndex::insertSymbolDefinition(const slang::ast::Symbol *symbol) {
   if (!symbol->location)
     return;
   auto size = symbol->name.size() ? symbol->name.size() : 1;
-  insertSymbol(symbol,
-               slang::SourceRange(symbol->location, symbol->location + size),
-               true);
+  auto range = slang::SourceRange(symbol->location, symbol->location + size);
+
+  insertSymbol(symbol, range, true);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1030,15 +985,79 @@ static llvm::lsp::Range getRange(const mlir::FileLineColRange &fileLoc) {
       llvm::lsp::Position(fileLoc.getEndLine(), fileLoc.getEndColumn()));
 }
 
+/// Build a vector of line start offsets (0-based).
+void VerilogDocument::computeLineOffsets(std::string_view text) {
+  lineOffsets.clear();
+  lineOffsets.reserve(1024);
+  lineOffsets.push_back(0);
+  for (size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == '\n') {
+      lineOffsets.push_back(static_cast<uint32_t>(i + 1));
+    }
+  }
+}
+
+// LSP (0-based line, UTF-16 character) -> byte offset into UTF-8 buffer.
+std::optional<uint32_t>
+VerilogDocument::lspPositionToOffset(const llvm::lsp::Position &pos) {
+
+  auto &sm = getSlangSourceManager();
+
+  std::string_view text = sm.getSourceText(mainBufferId);
+
+  // Clamp line index
+  if ((unsigned)pos.line >= lineOffsets.size())
+    return std::nullopt;
+
+  size_t lineStart = lineOffsets[pos.line];
+  size_t lineEnd = ((unsigned)(pos.line + 1) < lineOffsets.size())
+                       ? lineOffsets[pos.line + 1] - 1
+                       : text.size();
+
+  const llvm::UTF8 *src =
+      reinterpret_cast<const llvm::UTF8 *>(text.data() + lineStart);
+  const llvm::UTF8 *srcEnd =
+      reinterpret_cast<const llvm::UTF8 *>(text.data() + lineEnd);
+
+  // Convert up to 'target' UTF-16 code units; stop early if line ends.
+  const uint32_t target = pos.character;
+  if (target == 0)
+    return static_cast<uint32_t>(
+        src - reinterpret_cast<const llvm::UTF8 *>(text.data()));
+
+  std::vector<llvm::UTF16> sink(target);
+  llvm::UTF16 *out = sink.data();
+  llvm::UTF16 *outEnd = out + sink.size();
+
+  (void)llvm::ConvertUTF8toUTF16(&src, srcEnd, &out, outEnd,
+                                 llvm::lenientConversion);
+
+  return static_cast<uint32_t>(reinterpret_cast<const char *>(src) -
+                               text.data());
+}
+
+const char *VerilogDocument::getPointerFor(const llvm::lsp::Position &pos) {
+  auto &sm = getSlangSourceManager();
+  auto slangBufferOffset = lspPositionToOffset(pos);
+
+  if (!slangBufferOffset.has_value())
+    return nullptr;
+
+  uint32_t offset = slangBufferOffset.value();
+  return sm.getSourceText(mainBufferId).data() + offset;
+}
+
 void VerilogDocument::getLocationsOf(
     const llvm::lsp::URIForFile &uri, const llvm::lsp::Position &defPos,
     std::vector<llvm::lsp::Location> &locations) {
-  SMLoc posLoc = defPos.getAsSMLoc(sourceMgr);
+
+  const auto &slangBufferPointer = getPointerFor(defPos);
+
   const auto &intervalMap = index.getIntervalMap();
-  auto it = intervalMap.find(posLoc.getPointer());
+  auto it = intervalMap.find(slangBufferPointer);
 
   // Found no element in the given index.
-  if (!it.valid() || posLoc.getPointer() < it.start())
+  if (!it.valid() || slangBufferPointer < it.start())
     return;
 
   auto element = it.value();
@@ -1057,7 +1076,6 @@ void VerilogDocument::getLocationsOf(
         circt::lsp::Logger::error("failed to open file " + filePath);
         return;
       }
-
       locations.emplace_back(uri.get(), getRange(fileLoc));
     }
 
@@ -1076,10 +1094,12 @@ void VerilogDocument::getLocationsOf(
 void VerilogDocument::findReferencesOf(
     const llvm::lsp::URIForFile &uri, const llvm::lsp::Position &pos,
     std::vector<llvm::lsp::Location> &references) {
-  SMLoc posLoc = pos.getAsSMLoc(sourceMgr);
+
+  const auto &slangBufferPointer = getPointerFor(pos);
   const auto &intervalMap = index.getIntervalMap();
-  auto intervalIt = intervalMap.find(posLoc.getPointer());
-  if (!intervalIt.valid() || posLoc.getPointer() < intervalIt.start())
+  auto intervalIt = intervalMap.find(slangBufferPointer);
+
+  if (!intervalIt.valid() || slangBufferPointer < intervalIt.start())
     return;
 
   const auto *symbol = dyn_cast<const slang::ast::Symbol *>(intervalIt.value());
