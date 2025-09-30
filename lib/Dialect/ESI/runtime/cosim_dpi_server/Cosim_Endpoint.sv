@@ -82,15 +82,6 @@ module Cosim_Endpoint_ToHost
                        TO_HOST_SIZE_BYTES_FLOOR_IN_BITS];
   endgenerate
 
-  initial begin
-    $display("TO_HOST_SIZE_BITS: %d", TO_HOST_SIZE_BITS);
-    $display("TO_HOST_SIZE_BYTES: %d", TO_HOST_SIZE_BYTES);
-    $display("TO_HOST_SIZE_BITS_DIFF: %d", TO_HOST_SIZE_BITS_DIFF);
-    $display("TO_HOST_SIZE_BYTES_FLOOR: %d", TO_HOST_SIZE_BYTES_FLOOR);
-    $display("TO_HOST_SIZE_BYTES_FLOOR_IN_BITS: %d",
-             TO_HOST_SIZE_BYTES_FLOOR_IN_BITS);
-  end
-
 endmodule
 
 module Cosim_Endpoint_FromHost
@@ -223,14 +214,5 @@ module Cosim_Endpoint_FromHost
   // Drive the module's outward-facing signals from the pipeline output.
   assign DataOutValid = DataOut_x_valid;
   assign DataOut = DataOut_x;
-
-  initial begin
-    $display("FROM_HOST_SIZE_BITS: %d", FROM_HOST_SIZE_BITS);
-    $display("FROM_HOST_SIZE_BYTES: %d", FROM_HOST_SIZE_BYTES);
-    $display("FROM_HOST_SIZE_BITS_DIFF: %d", FROM_HOST_SIZE_BITS_DIFF);
-    $display("FROM_HOST_SIZE_BYTES_FLOOR: %d", FROM_HOST_SIZE_BYTES_FLOOR);
-    $display("FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS: %d",
-             FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS);
-  end
 
 endmodule
