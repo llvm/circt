@@ -9,6 +9,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
 #include "circt/Dialect/Datapath/DatapathPasses.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -24,32 +25,104 @@ using namespace datapath;
 using namespace mlir;
 
 namespace {
+
+// Fold add operations even if used multiple times incurring area overhead
+// add = a+b;
+// out1 = add + c;
+// out2 = add + d;
+// -->
+// add = a + b;
+// comp1 = compress(a, b, c);
+// out1 = comp1[0] + comp1[1];
+// out2 = add + d;
 struct FoldAddReplicate : public OpRewritePattern<comb::AddOp> {
   using OpRewritePattern::OpRewritePattern;
 
   LogicalResult matchAndRewrite(comb::AddOp addOp,
                                 PatternRewriter &rewriter) const override {
 
-    auto replicatedAddOps = 0;
     SmallVector<Value, 8> newCompressOperands;
-    // Check if any operand is an AddOp that will not be folded by comb folds
+    // Check if any operand is an AddOp that has not be folded by comb folds
     for (Value operand : addOp.getOperands()) {
       if (comb::AddOp nestedAddOp = operand.getDefiningOp<comb::AddOp>()) {
         llvm::append_range(newCompressOperands, nestedAddOp.getOperands());
-        ++replicatedAddOps;
       } else {
         newCompressOperands.push_back(operand);
       }
     }
 
-    if (replicatedAddOps < 1)
-      return failure(); // No nested AddOp found to fold
+    // Nothing to be folded
+    if (newCompressOperands.size() <= addOp.getNumOperands())
+      return failure();
 
     // Create a new CompressOp with all collected operands
     auto newCompressOp = rewriter.create<datapath::CompressOp>(
         addOp.getLoc(), newCompressOperands, 2);
 
-    // Replace the original AddOp with our new CompressOp
+    // Add the results of the CompressOp
+    rewriter.replaceOpWithNewOp<comb::AddOp>(addOp, newCompressOp.getResults(),
+                                             true);
+    return success();
+  }
+};
+
+// (a ? b+c : d+e) + f
+// -->
+// (a ? b : d) + (a ? c : e) + f
+struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // When used in conjunction with datapath canonicalization will only replicate
+  // two input adders.
+  LogicalResult matchAndRewrite(comb::AddOp addOp,
+                                PatternRewriter &rewriter) const override {
+
+    SmallVector<Value, 8> newCompressOperands;
+    auto zero =
+        hw::ConstantOp::create(rewriter, addOp.getLoc(), addOp.getType(), 0);
+    for (Value operand : addOp.getOperands()) {
+      // Detect a mux operand - then check if it contains add operations
+      if (comb::MuxOp nestedMuxOp = operand.getDefiningOp<comb::MuxOp>()) {
+
+        SmallVector<Value> trueValOperands = {nestedMuxOp.getTrueValue()};
+        SmallVector<Value> falseValOperands = {nestedMuxOp.getFalseValue()};
+        // match a ? b+c : xx
+        if (comb::AddOp trueVal =
+                nestedMuxOp.getTrueValue().getDefiningOp<comb::AddOp>())
+          trueValOperands = trueVal.getOperands();
+
+        // match a ? xx : c+d
+        if (comb::AddOp falseVal =
+                nestedMuxOp.getFalseValue().getDefiningOp<comb::AddOp>())
+          falseValOperands = falseVal.getOperands();
+
+        auto maxOperands =
+            std::max(trueValOperands.size(), falseValOperands.size());
+
+        // Pad with zeros to match number of operands
+        // a ? b+c : d -> (a ? b : d) + (a ? c : 0)
+        for (size_t i = 0; i < maxOperands; ++i) {
+          auto tOp = i < trueValOperands.size() ? trueValOperands[i] : zero;
+          auto fOp = i < falseValOperands.size() ? falseValOperands[i] : zero;
+          auto newMux = rewriter.create<comb::MuxOp>(
+              addOp.getLoc(), nestedMuxOp.getCond(), tOp, fOp);
+          newCompressOperands.push_back(newMux.getResult());
+        }
+        continue;
+      }
+      // If not matched just add the operand without modification
+      newCompressOperands.push_back(operand);
+    }
+
+    // Nothing to be folded
+    if (newCompressOperands.size() <= addOp.getNumOperands())
+      return failure();
+
+    // Create a new CompressOp with all collected operands
+    auto newCompressOp = rewriter.create<datapath::CompressOp>(
+        addOp.getLoc(), newCompressOperands, 2);
+
+    // Add the results of the CompressOp
     rewriter.replaceOpWithNewOp<comb::AddOp>(addOp, newCompressOp.getResults(),
                                              true);
     return success();
@@ -69,7 +142,7 @@ struct DatapathReduceDelayPass
     ctx->loadDialect<DatapathDialect>();
 
     RewritePatternSet patterns(ctx);
-    patterns.add<FoldAddReplicate>(ctx);
+    patterns.add<FoldAddReplicate, FoldMuxAdd>(ctx);
 
     if (failed(applyPatternsGreedily(op, std::move(patterns))))
       signalPassFailure();
