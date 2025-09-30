@@ -314,10 +314,22 @@ if(ESI_COSIM)
 
   add_dependencies(ESIRuntime CosimBackend)
 
-  install(TARGETS CosimBackend
-    DESTINATION ${ESIRT_INSTALL_LIBDIR}
-    COMPONENT ESIRuntime
-  )
+  if(WIN32)
+    # Windows cosim backend carries a lot of runtime dependencies, mainly
+    # transitively through gRPC. Make sure they're installed as well.
+    install(TARGETS CosimBackend
+      DESTINATION ${ESIRT_INSTALL_LIBDIR}
+      RUNTIME_DEPENDENCIES
+        PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
+        POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
+      COMPONENT ESIRuntime
+    )
+  else()
+    install(TARGETS CosimBackend
+      DESTINATION ${ESIRT_INSTALL_LIBDIR}
+      COMPONENT ESIRuntime
+    )
+  endif()
 
   # Build the RTL DPI cosim server.
   add_subdirectory(cosim_dpi_server)
