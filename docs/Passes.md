@@ -24,6 +24,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "CombPasses.md"]
 
+## Datapath Dialect Passes
+
+[include "DatapathPasses.md"]
+
 ## DC Dialect Passes
 
 [include "DCPasses.md"]
