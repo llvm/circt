@@ -366,6 +366,7 @@ private:
   LogicalResult processOp(Operation *);
   LogicalResult processOp(InstanceOp);
   LogicalResult processOp(UnsafeDomainCastOp);
+  LogicalResult processOp(DomainDefineOp);
 
   LogicalResult updateModule(FModuleOp);
 
@@ -572,17 +573,23 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
     return processOp(instance);
   if (auto cast = dyn_cast<UnsafeDomainCastOp>(op))
     return processOp(cast);
+  if (auto def = dyn_cast<DomainDefineOp>(op))
+    return processOp(def);
 
   // For all operations (including connections), propagate domains from operands
   // to results This is a conservative approach - all operands and results share
   // the same domain associations.
   Value lhs;
   for (auto rhs : op->getOperands()) {
+    if (!isa<FIRRTLBaseType>(rhs.getType()))
+      continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
     lhs = rhs;
   }
   for (auto rhs : op->getResults()) {
+    if (!isa<FIRRTLBaseType>(rhs.getType()))
+      continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
     lhs = rhs;
@@ -649,6 +656,14 @@ LogicalResult InferModuleDomains::processOp(UnsafeDomainCastOp op) {
 
   auto *row = allocateRow(elements);
   setDomainAssociation(op.getResult(), row);
+  return success();
+}
+
+LogicalResult InferModuleDomains::processOp(DomainDefineOp op) {
+  auto src = op.getSrc();
+  auto dst = op.getDest();
+  auto *term = getTermForDomain(src);
+  setTermForDomain(dst, term);
   return success();
 }
 
