@@ -197,7 +197,14 @@ firrtl.module @Fprintf(
 }
 
 // CHECK-LABEL: firrtl.domain @ClockDomain
-firrtl.domain @ClockDomain {
+// CHECK-SAME:    in %name_in: !firrtl.string,
+// CHECK-SAME:    out %name_out: !firrtl.string
+firrtl.domain @ClockDomain(
+  in %name_in: !firrtl.string,
+  out %name_out: !firrtl.string
+) {
+  // CHECK-NEXT: firrtl.propassign %name_out, %name_in : !firrtl.string
+  firrtl.propassign %name_out, %name_in : !firrtl.string
 }
 
 firrtl.module @DomainsSubmodule(

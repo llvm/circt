@@ -6909,6 +6909,96 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 }
 
 //===----------------------------------------------------------------------===//
+// DomainOp
+//===----------------------------------------------------------------------===//
+
+void DomainOp::build(OpBuilder &builder, OperationState &result,
+                     StringAttr name, ArrayRef<PortInfo> ports) {
+  assert(
+      llvm::all_of(ports,
+                   [](const auto &port) { return port.annotations.empty(); }) &&
+      "domain ports may not have annotations");
+  buildClass<DomainOp>(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto &elt : ports)
+    body->addArgument(elt.type, elt.loc);
+}
+
+SmallVector<PortInfo> DomainOp::getPorts() {
+  return ::getPortImpl(cast<FModuleLike>((Operation *)*this));
+}
+
+void DomainOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  getBodyBlock()->eraseArguments(portIndices);
+}
+
+void DomainOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+}
+
+Convention DomainOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr DomainOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+ArrayAttr DomainOp::getParameters() { return {}; }
+
+ArrayAttr DomainOp::getPortAnnotationsAttr() {
+  return ArrayAttr::get(getContext(), {});
+}
+
+ArrayRef<Attribute> DomainOp::getPortAnnotations() { return {}; }
+
+void DomainOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("domains do not support annotations");
+}
+
+ArrayAttr DomainOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
+
+ArrayRef<Attribute> DomainOp::getLayers() { return {}; }
+
+SmallVector<::circt::hw::PortInfo> DomainOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
+
+::circt::hw::PortInfo DomainOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
+}
+
+BlockArgument DomainOp::getArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
+}
+
+bool DomainOp::canDiscardOnUseEmpty() { return true; }
+
+LogicalResult
+DomainOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+void DomainOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                        mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void DomainOp::print(OpAsmPrinter &p) {
+  printClassLike(p, cast<ClassLike>(getOperation()));
+}
+
+ParseResult DomainOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto hasSSAIdentifiers = true;
+  return parseClassLike<DomainOp>(parser, result, hasSSAIdentifiers);
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
