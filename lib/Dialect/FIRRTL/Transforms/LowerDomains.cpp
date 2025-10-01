@@ -18,8 +18,6 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "firrtl-lower-domains"
-
 namespace circt {
 namespace firrtl {
 #define GEN_PASS_DEF_LOWERDOMAINS
@@ -29,6 +27,13 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
+
+class LowerDomainsPass : public impl::LowerDomainsBase<LowerDomainsPass> {
+  void runOnOperation() override;
+};
+
+#define DEBUG_TYPE                                                             \
+  impl::LowerDomainsBase<LowerDomainsPass>::getArgumentName().data()
 
 namespace {
 /// Track information about a domain.
@@ -356,10 +361,6 @@ LogicalResult LowerCircuit::lowerCircuit() {
   return success();
 }
 } // namespace
-
-class LowerDomainsPass : public impl::LowerDomainsBase<LowerDomainsPass> {
-  void runOnOperation() override;
-};
 
 void LowerDomainsPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n";);
