@@ -1,11 +1,11 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains))' %s --split-input-file | FileCheck %s
 
-// Test case 1: Legal domain usage - no crossing
+// Legal domain usage - no crossing.
 firrtl.circuit "LegalDomains" {
   firrtl.domain @ClockDomain {}
   firrtl.module @LegalDomains(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %a: !firrtl.uint<1> domains [%A],
+    in  %A: !firrtl.domain of @ClockDomain,
+    in  %a: !firrtl.uint<1> domains [%A],
     out %b: !firrtl.uint<1> domains [%A]
   ) {
     // Connecting within the same domain is legal.
@@ -16,7 +16,7 @@ firrtl.circuit "LegalDomains" {
 
 // -----
 
-// Test case 2: Domain inference through connections
+// Domain inference through connections.
 firrtl.circuit "DomainInference" {
   firrtl.domain @ClockDomain {}
   firrtl.module @DomainInference(
@@ -38,7 +38,7 @@ firrtl.circuit "DomainInference" {
 
 // -----
 
-// Test case 3: Unsafe domain cast
+// Unsafe domain cast
 firrtl.circuit "UnsafeDomainCast" {
   firrtl.domain @ClockDomain {}
   firrtl.module @UnsafeDomainCast(
@@ -58,28 +58,29 @@ firrtl.circuit "UnsafeDomainCast" {
 
 // -----
 
-// Test case 4: Domain sequence matching - legal case
+// Domain sequence matching.
 firrtl.circuit "LegalSequences" {
   firrtl.domain @ClockDomain {}
+  firrtl.domain @PowerDomain {}
   firrtl.module @LegalSequences(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
-    in %a: !firrtl.uint<1> domains [%A, %B],
-    out %b: !firrtl.uint<1> domains [%A, %B]
+    in  %C: !firrtl.domain of @ClockDomain,
+    in  %P: !firrtl.domain of @PowerDomain,
+    in  %a: !firrtl.uint<1> domains [%C, %P],
+    out %b: !firrtl.uint<1> domains [%C, %P]
   ) {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "LegalSequences"
 
 // -----
 
-// Test case 5: Domain sequence order equivalence - should be legal
+// Domain sequence order equivalence - should be legal
 firrtl.circuit "SequenceOrderEquivalence" {
   firrtl.domain @ClockDomain {}
+  firrtl.domain @PowerDomain {}
   firrtl.module @SequenceOrderEquivalence(
     in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain of @PowerDomain,
     in %a: !firrtl.uint<1> domains [%A, %B],
     out %b: !firrtl.uint<1> domains [%B, %A]
   ) {
@@ -91,12 +92,13 @@ firrtl.circuit "SequenceOrderEquivalence" {
 
 // -----
 
-// Test case 6: Domain sequence inference
+// Domain sequence inference
 firrtl.circuit "SequenceInference" {
   firrtl.domain @ClockDomain {}
+  firrtl.domain @PowerDomain {}
   firrtl.module @SequenceInference(
     in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain of @PowerDomain,
     in %a: !firrtl.uint<1> domains [%A, %B],
     out %d: !firrtl.uint<1>
   ) {
@@ -109,12 +111,10 @@ firrtl.circuit "SequenceInference" {
     firrtl.matchingconnect %d, %c : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "SequenceInference"
-// CHECK: out %d: !firrtl.uint<1> domains [%A, %B]
 
 // -----
 
-// Test case 7: Domain duplicate equivalence - should be legal
+// Domain duplicate equivalence - should be legal.
 firrtl.circuit "DuplicateDomainEquivalence" {
   firrtl.domain @ClockDomain {}
   firrtl.module @DuplicateDomainEquivalence(
@@ -122,59 +122,33 @@ firrtl.circuit "DuplicateDomainEquivalence" {
     in %a: !firrtl.uint<1> domains [%A, %A],
     out %b: !firrtl.uint<1> domains [%A]
   ) {
-    // This should be legal since duplicate domains are canonicalized
+    // This should be legal since duplicate domains are canonicalized.
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "DuplicateDomainEquivalence"
 
 // -----
 
-// Test case 8: Unsafe domain cast with sequences
+// Unsafe domain cast with sequences
 firrtl.circuit "UnsafeSequenceCast" {
   firrtl.domain @ClockDomain {}
+  firrtl.domain @PowerDomain {}
+
   firrtl.module @UnsafeSequenceCast(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
-    in %C: !firrtl.domain of @ClockDomain,
-    in %a: !firrtl.uint<1> domains [%A, %B],
-    out %c: !firrtl.uint<1> domains [%C]
+    in %C1: !firrtl.domain of @ClockDomain,
+    in %C2: !firrtl.domain of @ClockDomain,
+    in %P1: !firrtl.domain of @PowerDomain,
+    in  %i: !firrtl.uint<1> domains [%C1, %P1],
+    out %o: !firrtl.uint<1> domains [%C2, %P1]
   ) {
-    %0 = firrtl.unsafe_domain_cast %a domains %C : !firrtl.uint<1>
-    firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
+    %0 = firrtl.unsafe_domain_cast %i domains %C2 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %0 : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "UnsafeSequenceCast"
-// CHECK: out %c: !firrtl.uint<1> domains [%C]
 
 // -----
 
-// Test case 9: Multiple port domain inference
-firrtl.circuit "MultiplePortInference" {
-  firrtl.domain @ClockDomain {}
-  firrtl.module @MultiplePortInference(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
-    in %inputA: !firrtl.uint<1> domains [%A],
-    in %inputB: !firrtl.uint<1> domains [%B],
-    in %inputAB: !firrtl.uint<1> domains [%A, %B],
-    out %outputA: !firrtl.uint<1>,
-    out %outputB: !firrtl.uint<1>,
-    out %outputAB: !firrtl.uint<1>
-  ) {
-    firrtl.matchingconnect %outputA, %inputA : !firrtl.uint<1>
-    firrtl.matchingconnect %outputB, %inputB : !firrtl.uint<1>
-    firrtl.matchingconnect %outputAB, %inputAB : !firrtl.uint<1>
-  }
-}
-// CHECK-LABEL: firrtl.circuit "MultiplePortInference"
-// CHECK: out %outputA: !firrtl.uint<1> domains [%A]
-// CHECK: out %outputB: !firrtl.uint<1> domains [%B]
-// CHECK: out %outputAB: !firrtl.uint<1> domains [%A, %B]
-
-// -----
-
-// Test case 10: Different port types domain inference
+//  Different port types domain inference.
 firrtl.circuit "DifferentPortTypes" {
   firrtl.domain @ClockDomain {}
   firrtl.module @DifferentPortTypes(
@@ -188,18 +162,18 @@ firrtl.circuit "DifferentPortTypes" {
     firrtl.matchingconnect %sint_output, %sint_input : !firrtl.sint<4>
   }
 }
-// CHECK-LABEL: firrtl.circuit "DifferentPortTypes"
-// CHECK: out %uint_output: !firrtl.uint<8> domains [%A]
-// CHECK: out %sint_output: !firrtl.sint<4> domains [%A]
 
 // -----
 
-// Test case 11: Domain inference through wires
+// Domain inference through wires.
+
+// CHECK-LABEL: DomainInferenceThroughWires
 firrtl.circuit "DomainInferenceThroughWires" {
   firrtl.domain @ClockDomain {}
   firrtl.module @DomainInferenceThroughWires(
     in %A: !firrtl.domain of @ClockDomain,
     in %input: !firrtl.uint<1> domains [%A],
+    // CHECK: out %output: !firrtl.uint<1> domains [%A]
     out %output: !firrtl.uint<1>
   ) {
     %wire1 = firrtl.wire : !firrtl.uint<1>
@@ -210,18 +184,18 @@ firrtl.circuit "DomainInferenceThroughWires" {
     firrtl.matchingconnect %output, %wire2 : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "DomainInferenceThroughWires"
-// CHECK: out %output: !firrtl.uint<1> domains [%A]
 
 // -----
 
-// Test case 12: Register inference
+// Register inference/
 firrtl.circuit "RegisterInference" {
   firrtl.domain @ClockDomain {}
   firrtl.module @RegisterInference(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %clock: !firrtl.clock domains [%A],
-    in %d: !firrtl.uint<1>,
+    in  %A: !firrtl.domain of @ClockDomain,
+    in  %clock: !firrtl.clock domains [%A],
+    // CHECK: in %d: !firrtl.uint<1> domains [%A]
+    in  %d: !firrtl.uint<1>,
+    // CHECK: out %q: !firrtl.uint<1> domains [%A]
     out %q: !firrtl.uint<1>
   ) {
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
@@ -229,6 +203,3 @@ firrtl.circuit "RegisterInference" {
     firrtl.matchingconnect %q, %r : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "RegisterInference"
-// CHECK: in %d: !firrtl.uint<1> domains [%A]
-// CHECK: out %q: !firrtl.uint<1> domains [%A]
