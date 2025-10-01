@@ -18,7 +18,6 @@ def DatapathReduceDelay : Pass<"datapath-reduce-delay"> {
     matching paths. The transformations include logic replication/duplication to 
     operate on carry-save values, potentially increasing area usage.
   }];
-  let constructor = "circt::datapath::createDatapathReduceDelayPass()";
   let dependentDialects = ["datapath::DatapathDialect"];
 }
 

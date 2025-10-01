@@ -28,7 +28,7 @@ namespace {
 
 // Fold add operations even if used multiple times incurring area overhead as
 // transformation reduces shared logic - but reduces delay
-// add = a+b;
+// add = a + b;
 // out1 = add + c;
 // out2 = add << d;
 // -->
@@ -67,7 +67,7 @@ struct FoldAddReplicate : public OpRewritePattern<comb::AddOp> {
   }
 };
 
-// (a ? b+c : d+e) + f
+// (a ? b + c : d + e) + f
 // -->
 // (a ? b : d) + (a ? c : e) + f
 struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
@@ -81,40 +81,46 @@ struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
     SmallVector<Value, 8> newCompressOperands;
     for (Value operand : addOp.getOperands()) {
       // Detect a mux operand - then check if it contains add operations
-      if (comb::MuxOp nestedMuxOp = operand.getDefiningOp<comb::MuxOp>()) {
+      comb::MuxOp nestedMuxOp = operand.getDefiningOp<comb::MuxOp>();
 
-        SmallVector<Value> trueValOperands = {nestedMuxOp.getTrueValue()};
-        SmallVector<Value> falseValOperands = {nestedMuxOp.getFalseValue()};
-        // match a ? b+c : xx
-        if (comb::AddOp trueVal =
-                nestedMuxOp.getTrueValue().getDefiningOp<comb::AddOp>())
-          trueValOperands = trueVal.getOperands();
-
-        // match a ? xx : c+d
-        if (comb::AddOp falseVal =
-                nestedMuxOp.getFalseValue().getDefiningOp<comb::AddOp>())
-          falseValOperands = falseVal.getOperands();
-
-        auto maxOperands =
-            std::max(trueValOperands.size(), falseValOperands.size());
-
-        // Pad with zeros to match number of operands
-        // a ? b+c : d -> (a ? b : d) + (a ? c : 0)
-        if (maxOperands > 1) {
-          auto zero = rewriter.create<hw::ConstantOp>(
-              addOp.getLoc(), rewriter.getIntegerAttr(addOp.getType(), 0));
-          for (size_t i = 0; i < maxOperands; ++i) {
-            auto tOp = i < trueValOperands.size() ? trueValOperands[i] : zero;
-            auto fOp = i < falseValOperands.size() ? falseValOperands[i] : zero;
-            auto newMux = rewriter.create<comb::MuxOp>(
-                addOp.getLoc(), nestedMuxOp.getCond(), tOp, fOp);
-            newCompressOperands.push_back(newMux.getResult());
-          }
-          continue;
-        }
-      }
       // If not matched just add the operand without modification
-      newCompressOperands.push_back(operand);
+      if (!nestedMuxOp) {
+        newCompressOperands.push_back(operand);
+        continue;
+      }
+
+      SmallVector<Value> trueValOperands = {nestedMuxOp.getTrueValue()};
+      SmallVector<Value> falseValOperands = {nestedMuxOp.getFalseValue()};
+      // match a ? b + c : xx
+      if (comb::AddOp trueVal =
+              nestedMuxOp.getTrueValue().getDefiningOp<comb::AddOp>())
+        trueValOperands = trueVal.getOperands();
+
+      // match a ? xx : c + d
+      if (comb::AddOp falseVal =
+              nestedMuxOp.getFalseValue().getDefiningOp<comb::AddOp>())
+        falseValOperands = falseVal.getOperands();
+
+      auto maxOperands =
+          std::max(trueValOperands.size(), falseValOperands.size());
+
+      // No nested additions
+      if (maxOperands <= 1) {
+        newCompressOperands.push_back(operand);
+        continue;
+      }
+
+      // Pad with zeros to match number of operands
+      // a ? b + c : d -> (a ? b : d) + (a ? c : 0)
+      auto zero = rewriter.create<hw::ConstantOp>(
+          addOp.getLoc(), rewriter.getIntegerAttr(addOp.getType(), 0));
+      for (size_t i = 0; i < maxOperands; ++i) {
+        auto tOp = i < trueValOperands.size() ? trueValOperands[i] : zero;
+        auto fOp = i < falseValOperands.size() ? falseValOperands[i] : zero;
+        auto newMux = rewriter.create<comb::MuxOp>(
+            addOp.getLoc(), nestedMuxOp.getCond(), tOp, fOp);
+        newCompressOperands.push_back(newMux.getResult());
+      }
     }
 
     // Nothing to be folded
@@ -150,7 +156,3 @@ struct DatapathReduceDelayPass
   };
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::datapath::createDatapathReduceDelayPass() {
-  return std::make_unique<DatapathReduceDelayPass>();
-}

@@ -7,4 +7,4 @@ mlir_tablegen(DatapathPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTDatapathTransformsIncGen)
 
 # Generate Pass documentation.
-add_circt_doc(Passes DatapathPasses -gen-pass-doc)
+add_circt_doc(DatapathPasses DatapathPasses -gen-pass-doc)
