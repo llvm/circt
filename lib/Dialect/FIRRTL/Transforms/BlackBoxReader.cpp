@@ -291,7 +291,7 @@ void BlackBoxReaderPass::runOnOperation() {
       AnnotationSet annotations(extmodule);
       annotations.addAnnotations({builder.getDictionaryAttr({
         {builder.getStringAttr("class"),
-         builder.getStringAttr("circt.InlineFilesAnnotation")},
+         builder.getStringAttr("circt.ModuleExternFilesAnno")},
         {builder.getStringAttr("files"), inlineFilesAttr}
       })});
       annotations.applyToOperation(extmodule);

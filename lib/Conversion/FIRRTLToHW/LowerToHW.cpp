@@ -1180,7 +1180,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 
   ArrayAttr files;
   annos.removeAnnotations([&](Annotation anno) {
-    if (anno.isClass("circt.InlineFilesAnnotation")) {
+    if (anno.isClass("circt.ModuleExternFilesAnno")) {
       if (auto fileRefs = anno.getMember<ArrayAttr>("files")) {
         files = fileRefs;
       }

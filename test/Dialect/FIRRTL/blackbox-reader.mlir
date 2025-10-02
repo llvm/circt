@@ -15,17 +15,17 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK-LABEL: firrtl.extmodule @ExtFoo()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
   // CHECK-SAME: class = "firrtl.transforms.BlackBox"
-  // CHECK-SAME: class = "circt.InlineFilesAnnotation"
+  // CHECK-SAME: class = "circt.ModuleExternFilesAnno"
   // CHECK-SAME: files = [@blackbox_hello.v]
   firrtl.extmodule @ExtFoo() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello.v", text = "// world"}]}
   // CHECK-LABEL: firrtl.extmodule @ExtFoo2()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
-  // CHECK-SAME: class = "circt.InlineFilesAnnotation"
+  // CHECK-SAME: class = "circt.ModuleExternFilesAnno"
   // CHECK-SAME: files = [@blackbox_hello2.v]
   firrtl.extmodule @ExtFoo2() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello2.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.extmodule @ExtFoo3()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
-  // CHECK-SAME: class = "circt.InlineFilesAnnotation"
+  // CHECK-SAME: class = "circt.ModuleExternFilesAnno"
   // CHECK-SAME: files = [@blackbox_hello3.v]
   firrtl.extmodule @ExtFoo3() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello3.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.module @DUTBlackboxes
