@@ -98,6 +98,7 @@ public:
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
+  bool shouldDedupClasses() const { return dedupClasses; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
@@ -213,6 +214,11 @@ public:
 
   FirtoolOptions &setNoDedup(bool value) {
     noDedup = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDedupClasses(bool value) {
+    dedupClasses = value;
     return *this;
   }
 
@@ -405,6 +411,7 @@ private:
   bool disableOptimization;
   bool vbToBV;
   bool noDedup;
+  bool dedupClasses;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
   bool lowerMemories;

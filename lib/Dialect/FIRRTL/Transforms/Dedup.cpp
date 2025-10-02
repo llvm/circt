@@ -1674,6 +1674,8 @@ static void fixupSymbolSensitiveOps(
 
 namespace {
 class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
+  using DedupBase::DedupBase;
+
   void runOnOperation() override {
     auto *context = &getContext();
     auto circuit = getOperation();
@@ -1755,6 +1757,10 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
           // Only dedup extmodule's with defname.
           if (auto ext = dyn_cast<FExtModuleOp>(*module);
               ext && !ext.getDefname().has_value())
+            return success();
+
+          // Only dedup classes if enabled.
+          if (isa<ClassOp>(*module) && !dedupClasses)
             return success();
 
           StructuralHasher hasher(hasherConstants);

@@ -100,8 +100,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConst());
 
-  if (opt.shouldDedup())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup());
+  if (opt.shouldDedup()) {
+    firrtl::DedupOptions opts;
+    opts.dedupClasses = opt.shouldDedupClasses();
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup(opts));
+  }
 
   if (opt.shouldConvertVecOfBundle()) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypes(
@@ -551,6 +554,12 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> dedupClasses{
+      "dedup-classes",
+      llvm::cl::desc(
+          "Deduplicate FIRRTL classes, violating their nominal typing"),
+      llvm::cl::init(true)};
+
   llvm::cl::opt<firrtl::CompanionMode> companionMode{
       "grand-central-companion-mode",
       llvm::cl::desc("Specifies the handling of Grand Central companions"),
@@ -782,7 +791,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
       disableOptimization(false), vbToBV(false), noDedup(false),
-      companionMode(firrtl::CompanionMode::Bind),
+      dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), lowerMemories(false),
       blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
       extractTestCode(false), ignoreReadEnableMem(false),
@@ -816,6 +825,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableOptimization = clOptions->disableOptimization;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
+  dedupClasses = clOptions->dedupClasses;
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
