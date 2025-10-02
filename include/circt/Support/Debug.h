@@ -43,6 +43,7 @@ llvm::raw_ostream &debugPassHeader(const mlir::Pass *pass, unsigned width = 80);
 ///    ===-----------------------------------===
 llvm::raw_ostream &debugFooter(unsigned width = 80);
 
+#ifndef NDEBUG
 /// RAII helper for creating a pass header and footer automatically.  The heaer
 /// is printed on construction and the footer on destruction.
 class ScopedDebugPassLogger {
@@ -66,7 +67,6 @@ private:
   unsigned width;
 };
 
-#ifndef NDEBUG
 #define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
   ScopedDebugPassLogger _scopedDebugPassLogger(PASS);
 #else
