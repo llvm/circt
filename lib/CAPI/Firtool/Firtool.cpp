@@ -189,11 +189,6 @@ void circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setReplSeqMemFile(unwrap(value));
 }
 
-void circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
-                                           bool value) {
-  unwrap(options)->setExtractTestCode(value);
-}
-
 void circtFirtoolOptionsSetIgnoreReadEnableMem(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setIgnoreReadEnableMem(value);

@@ -312,12 +312,6 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   pm.addPass(
       verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
-  if (opt.shouldExtractTestCode())
-    pm.addPass(sv::createSVExtractTestCodePass(
-        opt.shouldEtcDisableInstanceExtraction(),
-        opt.shouldEtcDisableRegisterExtraction(),
-        opt.shouldEtcDisableModuleInlining()));
-
   pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
   pm.addPass(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
@@ -605,10 +599,6 @@ struct FirtoolCmdOptions {
       "repl-seq-mem-file", llvm::cl::desc("File name for seq mem metadata"),
       llvm::cl::init("")};
 
-  llvm::cl::opt<bool> extractTestCode{
-      "extract-test-code", llvm::cl::desc("Run the extract test code pass"),
-      llvm::cl::init(false)};
-
   llvm::cl::opt<bool> ignoreReadEnableMem{
       "ignore-read-enable-mem",
       llvm::cl::desc("Ignore the read enable signal, instead of "
@@ -794,9 +784,9 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), lowerMemories(false),
       blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
-      extractTestCode(false), ignoreReadEnableMem(false),
-      disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), addMuxPragmas(false),
+      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
+      outputAnnotationFilename(""), enableAnnotationWarning(false),
+      addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
       etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
@@ -833,7 +823,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   blackBoxRootPath = clOptions->blackBoxRootPath;
   replSeqMem = clOptions->replSeqMem;
   replSeqMemFile = clOptions->replSeqMemFile;
-  extractTestCode = clOptions->extractTestCode;
   ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
   disableRandom = clOptions->disableRandom;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;

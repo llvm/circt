@@ -207,11 +207,6 @@ nestOrAddToHierarchicalRunner(OpPassManager &pm,
 
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
-  // ExtractTestCode is used to move verification code from design to
-  // remove registers/logic used only for verification.
-  pm.addPass(sv::createSVExtractTestCodePass(
-      /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
-      /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
     circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
