@@ -10,13 +10,13 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Naming.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
-#include <mlir/IR/Diagnostics.h>
 
 using namespace mlir;
 using namespace circt;
@@ -2071,7 +2071,6 @@ bool comb::foldMuxChainWithComparison(
   if (foldingStyle == MuxChainWithComparisonFoldingStyle::BalancedMuxTree) {
     SmallVector<Value> bits;
     comb::extractBits(rewriter, indexValue, bits);
-
     auto result = constructMuxTree(rewriter, rootMux->getLoc(), bits, table,
                                    nextTreeValue);
     replaceOpAndCopyNamehint(rewriter, rootMux, result);

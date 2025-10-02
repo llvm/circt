@@ -213,6 +213,8 @@ Value PriorityMuxReshape::buildBalancedPriorityMux(
 
   // Recursive case: split range in half. Take the ceiling to ensure the first
   // half is larger.
+  // TODO: Ideally the separator index should be selected based on arrival times
+  //       of results.
   unsigned mid = llvm::divideCeil(size, 2);
   assert(mid > 0);
   auto loc = rewriter.getFusedLoc(ArrayRef<Location>(locs).take_front(mid));
