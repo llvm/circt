@@ -39,9 +39,9 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
          "Number of inputs must match number of operands");
 
   if (inputs.size() == 3) {
-    auto a = inputs[0];
-    auto b = inputs[1];
-    auto c = inputs[2];
+    auto a = (isInverted(0) ? ~inputs[0] : inputs[0]);
+    auto b = (isInverted(1) ? ~inputs[1] : inputs[1]);
+    auto c = (isInverted(2) ? ~inputs[2] : inputs[2]);
     return (a & b) | (a & c) | (b & c);
   }
 
@@ -53,7 +53,7 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
     size_t count = 0;
     for (size_t i = 0; i < inputs.size(); ++i) {
       // Count the number of 1s, considering inversion.
-      if (inputs[i][bit])
+      if (isInverted(i) ^ inputs[i][bit])
         count++;
     }
 
@@ -67,64 +67,84 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
 OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   // TODO: Implement maj(x, 1, 1) = 1, maj(x, 0, 0) = 0
 
-  // x x 1 -> x
-  // x 1 1 -> 1
-  // x ~x 1 -> 1
-  // x 0 0 -> 0
-  // x 1 1 -> 1
-
-  bool isOpConstant = true;
-  // for all constant inputs
   SmallVector<APInt, 3> inputValues;
-  size_t i = 0, index;
-  for (auto input : adaptor.getInputs()) {
+  SmallVector<size_t, 3> nonConstantValues;
+  for (auto [i, input] : llvm::enumerate(adaptor.getInputs())) {
     auto attr = llvm::dyn_cast_or_null<IntegerAttr>(input);
-    if (!attr) {
-      isOpConstant = false;
-      index = i;
-    } else {
-      auto value = isInverted(i) ? ~attr.getValue() : attr.getValue();
-      inputValues.push_back(value);
-    }
-    i++;
+    if (attr)
+      inputValue.push_back(attr.getValue());
+    else
+      nonConstantValues.push_back(i);
   }
-  if (!isOpConstant) {
-    if (getNumOperands() != 3)
-      return {};
-    // x 0 0
-    // x 1 1
-    if (inputValues.size() == 2) {
-      if (inputValues[0] == inputValues[1])
+
+  if (nonConstantValues.size() == 0)
+    return IntegerAttr::get(getType(), evaluate(inputValues));
+
+  if (getNumOperands() != 3)
+    return {};
+  if (nonConstantValues.size() == 1) {
+    auto k = nonConstantValues[0]; // for 3 operands
+    auto i = (k + 1) % 3;
+    auto j = (k + 2) % 3;
+    auto c1 = adaptor.getInputs()[i];
+    auto c2 = adaptor.getInputs()[j];
+    // x 0 0 -> 0
+    // x 1 1 -> 1
+    // x 0 ~0 -> x
+    // x 1 ~1 -> x
+    // x ~1 ~1 -> ~1 -> 0
+    // ~x 0 0 -> ~x ?
+    if (c1 == c2) {
+      if (isInverted(i) != isInverted(j)) {
+        if (!isInverted(k))
+          return getOperand(k);
+        else
+          return {}; // ~x ? Invert the Operand can be handled  by
+                     // canoncialisation?
+      } else if (isInverted(i)) {
+        auto value = cast<IntegerAttr>(c1).getValue();
+        value = ~value;
         return IntegerAttr::get(
-            IntegerType::get(getContext(), inputValues[0].getBitWidth()),
-            inputValues[0]);
-      else
-        return getOperand(index); // fix if it is a Inverted
+            IntegerType::get(getContext(), value.getBitWidth()), value);
+      } else
+        return getOperand(i);
+    } else if (isInverted(i) != isInverted(j)) {
+      // ~x 0 ~1 -> 0
+      // could be bug for multi bit value
+      // fix multi bit value
+      auto width = adaptor.getInputs()[i].getBitWidth();
+      if (width != 1)
+        return {};
+      if (isInverted(i))
+        return getOperand(j);
+      return getOperand(i);
     }
-    // Pattern match following cases:
-    // maj_inv(x, x, y) -> x
-    // maj_inv(x, y, not y) -> x
-    for (int i = 0; i < 2; ++i) {
-      for (int j = i + 1; j < 3; ++j) {
-        int k = 3 - (i + j);
-        assert(k >= 0 && k < 3);
-        // If we have two identical operands, we can fold.
-        if (getOperand(i) == getOperand(j)) {
-          // If they are inverted differently, we can fold to the third.
-          if (isInverted(i) != isInverted(j)) {
-            if (!isInverted(k))
-              return getOperand(k);
-          }
-          if (!isInverted(i))
-            return getOperand(i);
-        }
+  } else if (nonConstantValues.size() == 2) {
+    // x x 1 -> x
+    // x ~x 1 -> 1
+    // ~x ~x 1 -> ~x
+    auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
+    auto i = nonConstantValues[0];
+    auto j = nonConstantValues[1];
+    auto c1 = adaptor.getInputs()[i];
+    auto c2 = adaptor.getInputs()[j];
+    if (c1 == c2) {
+      if (isInverted(i) != isInverted(j)) {
+        if (!isInverted(k))
+          return getOperand(k);
+        auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
+        value = ~value;
+        return IntegerAttr::get(
+            IntegerType::get(getContext(), value.getBitWidth()), value);
+      } else {
+        if (isInverted(i))
+          return {}; // how to return ~x?
+        else
+          return getOperand(k);
       }
     }
-    return {};
   }
-
-  auto result = evaluate(inputValues);
-  return IntegerAttr::get(getType(), result);
+  return {};
 }
 
 LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
@@ -160,6 +180,33 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
     return success();
   };
 
+  // Pattern match following cases:
+  // maj_inv(x, x, y) -> x
+  // maj_inv(x, y, not y) -> x
+  for (int i = 0; i < 2; ++i) {
+    for (int j = i + 1; j < 3; ++j) {
+      int k = 3 - (i + j);
+      assert(k >= 0 && k < 3);
+      // If we have two identical operands, we can fold.
+      if (op.getOperand(i) == op.getOperand(j)) {
+        // If they are inverted differently, we can fold to the third.
+        if (op.isInverted(i) != op.isInverted(j)) {
+          return replaceWithIndex(k);
+        }
+        rewriter.replaceOp(op, op.getOperand(i));
+        return success();
+      }
+
+      // If i and j are constant.
+      if (auto c1 = getConstant(i)) {
+        if (auto c2 = getConstant(j)) {
+          // If constants are complementary, we can fold.
+          if (*c1 == ~*c2)
+            return replaceWithIndex(k);
+        }
+      }
+    }
+  }
   return failure();
 }
 
