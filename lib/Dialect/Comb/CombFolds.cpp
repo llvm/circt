@@ -16,6 +16,7 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
+#include <mlir/IR/Diagnostics.h>
 
 using namespace mlir;
 using namespace circt;
@@ -1973,13 +1974,17 @@ getMuxChainCondConstant(Value cond, Value indexValue, bool isInverted,
 /// Given a mux, check to see if the "on true" value (or "on false" value if
 /// isFalseSide=true) is a mux tree with the same condition.  This allows us
 /// to turn things like `mux(VAL == 0, A, (mux (VAL == 1), B, C))` into
-/// `array_get (array_create(A, B, C), VAL)` which is far more compact and
-/// allows synthesis tools to do more interesting optimizations.
+/// `array_get (array_create(A, B, C), VAL)` or a balanced mux tree which is far
+/// more compact and allows synthesis tools to do more interesting
+/// optimizations.
 ///
 /// This returns false if we cannot form the mux tree (or do not want to) and
 /// returns true if the mux was replaced.
-static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
-                         PatternRewriter &rewriter) {
+bool comb::foldMuxChainWithComparison(
+    PatternRewriter &rewriter, MuxOp rootMux, bool isFalseSide,
+    llvm::function_ref<MuxChainWithComparisonFoldingStyle(size_t indexWidth,
+                                                          size_t numEntries)>
+        styleFn) {
   // Get the index value being compared.  Later we check to see if it is
   // compared to a constant with the right predicate.
   auto rootCmp = rootMux.getCond().getDefiningOp<ICmpOp>();
@@ -2039,24 +2044,16 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     nextTreeValue = getTreeValue(nextMux);
   }
 
-  // We need to have more than three values to create an array.  This is an
-  // arbitrary threshold which is saying that one or two muxes together is ok,
-  // but three should be folded.
-  if (valuesFound.size() < 3)
-    return false;
-
-  // If the array is greater that 9 bits, it will take over 512 elements and
-  // it will be too large for a single expression.
   auto indexWidth = cast<IntegerType>(indexValue.getType()).getWidth();
-  if (indexWidth >= 9)
+
+  if (indexWidth > 20)
+    return false; // Too big to make a table.
+
+  auto foldingStyle = styleFn(indexWidth, valuesFound.size());
+  if (foldingStyle == MuxChainWithComparisonFoldingStyle::None)
     return false;
 
-  // Next we need to see if the values are dense-ish.  We don't want to have
-  // a tremendous number of replicated entries in the array.  Some sparsity is
-  // ok though, so we require the table to be at least 5/8 utilized.
   uint64_t tableSize = 1ULL << indexWidth;
-  if (valuesFound.size() < (tableSize * 5) / 8)
-    return false; // Not dense enough.
 
   // Ok, we're going to do the transformation, start by building the table
   // filled with the "otherwise" value.
@@ -2071,13 +2068,26 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     table[idx] = elt.second;
   }
 
+  if (foldingStyle == MuxChainWithComparisonFoldingStyle::BalancedMuxTree) {
+    SmallVector<Value> bits;
+    comb::extractBits(rewriter, indexValue, bits);
+
+    auto result = constructMuxTree(rewriter, rootMux->getLoc(), bits, table,
+                                   nextTreeValue);
+    replaceOpAndCopyNamehint(rewriter, rootMux, result);
+    return true;
+  }
+
+  assert(foldingStyle == MuxChainWithComparisonFoldingStyle::ArrayGet &&
+         "unknown folding style");
+
   // The hw.array_create operation has the operand list in unintuitive order
   // with a[0] stored as the last element, not the first.
   std::reverse(table.begin(), table.end());
 
   // Build the array_create and the array_get.
   auto fusedLoc = rewriter.getFusedLoc(locationsFound);
-  auto array = hw::ArrayCreateOp::create(rewriter, fusedLoc, table);
+  auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);
   replaceOpWithNewOpAndCopyNamehint<hw::ArrayGetOp>(rewriter, rootMux, array,
                                                     indexValue);
   return true;
@@ -2376,6 +2386,22 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
                                 PatternRewriter &rewriter) const override;
 };
 
+MuxChainWithComparisonFoldingStyle
+foldToArrayCreateOnlyWhenDense(size_t indexWidth, size_t numEntries) {
+  // If the array is greater that 9 bits, it will take over 512 elements and
+  // it will be too large for a single expression.
+  if (indexWidth >= 9 || numEntries < 3)
+    return MuxChainWithComparisonFoldingStyle::None;
+
+  // Next we need to see if the values are dense-ish.  We don't want to have
+  // a tremendous number of replicated entries in the array.  Some sparsity is
+  // ok though, so we require the table to be at least 5/8 utilized.
+  uint64_t tableSize = 1ULL << indexWidth;
+  if (numEntries >= tableSize * 5 / 8)
+    return MuxChainWithComparisonFoldingStyle::ArrayGet;
+  return MuxChainWithComparisonFoldingStyle::None;
+}
+
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
   if (isOpTriviallyRecursive(op))
@@ -2530,7 +2556,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
-    if (foldMuxChain(op, /*isFalse*/ true, rewriter))
+    if (foldMuxChainWithComparison(rewriter, op, /*isFalse*/ true,
+                                   foldToArrayCreateOnlyWhenDense))
       return success();
   }
 
@@ -2545,7 +2572,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
-    if (foldMuxChain(op, /*isFalseSide*/ false, rewriter))
+    if (foldMuxChainWithComparison(rewriter, op, /*isFalseSide*/ false,
+                                   foldToArrayCreateOnlyWhenDense))
       return success();
   }
 
