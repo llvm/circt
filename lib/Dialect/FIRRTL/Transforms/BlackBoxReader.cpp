@@ -60,6 +60,8 @@ struct AnnotationInfo {
   hw::OutputFileAttr outputFileAttr;
   /// The body of the BlackBox.  (This should be Verilog text.)
   StringAttr inlineText;
+  /// The extmodule operation.
+  Operation *extmodule;
 
 #if !defined(NDEBUG)
   /// Pretty print the AnnotationInfo in a YAML-esque format.
@@ -117,6 +119,9 @@ private:
   /// written to the DUT directory and not the TestHarness directory), then this
   /// will map will be updated.
   llvm::MapVector<StringAttr, AnnotationInfo> emittedFileMap;
+
+  /// A map from extmodule operations to emit.file ops that implement them.
+  DenseMap<Operation *, SmallVector<emit::FileOp>> moduleToFilesMap;
 };
 } // end anonymous namespace
 
@@ -197,6 +202,7 @@ void BlackBoxReaderPass::runOnOperation() {
     bool foundBBoxAnno = false;
     annotations.removeAnnotations([&](Annotation anno) {
       AnnotationInfo annotationInfo;
+      annotationInfo.extmodule = extmoduleOp;
       if (!runOnAnnotation(extmoduleOp, anno, builder, isCover, annotationInfo))
         return false;
 
@@ -251,6 +257,10 @@ void BlackBoxReaderPass::runOnOperation() {
           emit::VerbatimOp::create(builder, loc, text);
         });
 
+    if (annotationInfo.extmodule) {
+      moduleToFilesMap[annotationInfo.extmodule].push_back(fileOp);
+    }
+
     if (!annotationInfo.outputFileAttr.getExcludeFromFilelist().getValue())
       fileListFiles.push_back(fileOp);
   }
@@ -271,6 +281,23 @@ void BlackBoxReaderPass::runOnOperation() {
       symbols.push_back(FlatSymbolRefAttr::get(file.getSymNameAttr()));
   }
 
+  for (auto &[extmodule, fileOps] : moduleToFilesMap) {
+    SmallVector<Attribute> fileRefs;
+    for (auto fileOp : fileOps) {
+      fileRefs.push_back(FlatSymbolRefAttr::get(fileOp.getSymNameAttr()));
+    }
+    if (!fileRefs.empty()) {
+      auto inlineFilesAttr = builder.getArrayAttr(fileRefs);
+      AnnotationSet annotations(extmodule);
+      annotations.addAnnotations({builder.getDictionaryAttr({
+        {builder.getStringAttr("class"),
+         builder.getStringAttr("circt.InlineFilesAnnotation")},
+        {builder.getStringAttr("files"), inlineFilesAttr}
+      })});
+      annotations.applyToOperation(extmodule);
+    }
+  }
+
   // If nothing has changed we can preserve the analysis.
   if (!anythingChanged)
     markAllAnalysesPreserved();
@@ -279,6 +306,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // Clean up.
   emittedFileMap.clear();
   fileListFiles.clear();
+  moduleToFilesMap.clear();
 }
 
 /// Run on an operation-annotation pair. The annotation need not be a black box

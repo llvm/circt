@@ -2,6 +2,7 @@
 // RUN: cd %t
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-blackbox-reader))' Foo.mlir | FileCheck Foo.mlir
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-blackbox-reader))' NoDUT.mlir | FileCheck NoDUT.mlir
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-blackbox-reader),lower-firrtl-to-hw)' InlineFiles.mlir | FileCheck InlineFiles.mlir
 
 //--- Baz.sv
 /* Baz */
@@ -14,12 +15,18 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK-LABEL: firrtl.extmodule @ExtFoo()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
   // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.InlineFilesAnnotation"
+  // CHECK-SAME: files = [@blackbox_hello.v]
   firrtl.extmodule @ExtFoo() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello.v", text = "// world"}]}
   // CHECK-LABEL: firrtl.extmodule @ExtFoo2()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "circt.InlineFilesAnnotation"
+  // CHECK-SAME: files = [@blackbox_hello2.v]
   firrtl.extmodule @ExtFoo2() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello2.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.extmodule @ExtFoo3()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "circt.InlineFilesAnnotation"
+  // CHECK-SAME: files = [@blackbox_hello3.v]
   firrtl.extmodule @ExtFoo3() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello3.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.module @DUTBlackboxes
   firrtl.module @DUTBlackboxes() attributes {annotations = [
@@ -81,5 +88,44 @@ firrtl.circuit "NoDUT" attributes {annotations = [
   }
   // CHECK:      emit.file ".{{/|\\\\}}NoDUTBlackBox.sv" sym @blackbox_NoDUTBlackBox.sv {
   // CHECK-NEXT:   emit.verbatim "module NoDUTBlackBox();\0Aendmodule\0A"
+  // CHECK-NEXT: }
+}
+
+//--- InlineFiles.mlir
+// Test that inline files are properly linked to hw.module.extern operations
+// after FIRRTL-to-HW lowering.
+//
+firrtl.circuit "InlineFilesTest" {
+  // CHECK-LABEL: hw.module.extern @ExtWithInline()
+  // CHECK-SAME: files = [@blackbox_inline1.v, @blackbox_inline2.sv]
+  firrtl.extmodule @ExtWithInline() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "inline1.v", text = "module ExtWithInline(); endmodule"},
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "inline2.sv", text = "// Another file"}
+  ]}
+
+  // CHECK-LABEL: hw.module.extern @ExtWithoutInline()
+  // CHECK-NOT: files
+  firrtl.extmodule @ExtWithoutInline()
+
+  // CHECK-LABEL: hw.module.extern @ExtWithSingleInline()
+  // CHECK-SAME: files = [@blackbox_single.v]
+  firrtl.extmodule @ExtWithSingleInline() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBoxInlineAnno", name = "single.v", text = "// Single inline file"}
+  ]}
+
+  firrtl.module @InlineFilesTest() {
+    firrtl.instance ext1 @ExtWithInline()
+    firrtl.instance ext2 @ExtWithoutInline()
+    firrtl.instance ext3 @ExtWithSingleInline()
+  }
+
+  // CHECK: emit.file ".{{/|\\\\}}inline1.v" sym @blackbox_inline1.v {
+  // CHECK-NEXT: emit.verbatim "module ExtWithInline(); endmodule"
+  // CHECK-NEXT: }
+  // CHECK: emit.file ".{{/|\\\\}}inline2.sv" sym @blackbox_inline2.sv {
+  // CHECK-NEXT: emit.verbatim "// Another file"
+  // CHECK-NEXT: }
+  // CHECK: emit.file ".{{/|\\\\}}single.v" sym @blackbox_single.v {
+  // CHECK-NEXT: emit.verbatim "// Single inline file"
   // CHECK-NEXT: }
 }

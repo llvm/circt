@@ -247,13 +247,17 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     module name in Verilog we can use.  TODO: This is a hack because we don't
     have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
+
+    The 'files' attribute (when present) contains references to emit.file
+    ops that provide the implementation for this external module.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
                        OptionalAttr<LocationArrayAttr>:$port_locs,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<StrAttr>:$verilogName);
+                       OptionalAttr<StrAttr>:$verilogName,
+                       OptionalAttr<FlatSymbolRefArrayAttr>:$files);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -266,7 +270,12 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
+                   CArg<"ArrayAttr", "{}">:$inlineFiles)>
   ];
 
   let extraModuleClassDeclaration = [{

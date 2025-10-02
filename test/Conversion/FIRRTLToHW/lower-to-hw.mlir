@@ -1900,3 +1900,25 @@ firrtl.circuit "Foo" {
     dbg.variable "d", %d : !firrtl.uint<1337>
   }
 }
+
+// -----
+
+// Test that circt.InlineFilesAnnotation is properly converted to files attribute
+firrtl.circuit "InlineFilesConversion" {
+  // CHECK-LABEL: hw.module.extern @ExtWithInlineFiles()
+  // CHECK-SAME: files = [@file1, @file2]
+  firrtl.extmodule @ExtWithInlineFiles() attributes {annotations = [
+    {class = "circt.InlineFilesAnnotation", files = [@file1, @file2]}
+  ]}
+
+  // CHECK-LABEL: hw.module.extern @ExtWithoutInlineFiles()
+  // CHECK-NOT: files
+  firrtl.extmodule @ExtWithoutInlineFiles() attributes {annotations = [
+    {class = "firrtl.transforms.BlackBox"}
+  ]}
+
+  firrtl.module @InlineFilesConversion() {
+    firrtl.instance ext1 @ExtWithInlineFiles()
+    firrtl.instance ext2 @ExtWithoutInlineFiles()
+  }
+}
