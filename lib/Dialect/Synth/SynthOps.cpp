@@ -72,7 +72,7 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   for (auto [i, input] : llvm::enumerate(adaptor.getInputs())) {
     auto attr = llvm::dyn_cast_or_null<IntegerAttr>(input);
     if (attr)
-      inputValue.push_back(attr.getValue());
+      inputValues.push_back(attr.getValue());
     else
       nonConstantValues.push_back(i);
   }
@@ -112,7 +112,8 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
       // ~x 0 ~1 -> 0
       // could be bug for multi bit value
       // fix multi bit value
-      auto width = adaptor.getInputs()[i].getBitWidth();
+      auto value = cast<IntegerAttr>(c1).getValue();
+      auto width = value.getBitWidth();
       if (width != 1)
         return {};
       if (isInverted(i))
