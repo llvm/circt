@@ -47,11 +47,13 @@
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 
 using namespace llvm::lsp;
 
@@ -638,7 +640,7 @@ private:
 
   /// The chunks of this file. The order of these chunks is the order in which
   /// they appear in the text file.
-  std::unique_ptr<VerilogDocument> document;
+  std::shared_ptr<VerilogDocument> document;
 };
 } // namespace
 
@@ -670,20 +672,26 @@ void VerilogTextFile::initialize(
     const llvm::lsp::URIForFile &uri, int64_t newVersion,
     std::vector<llvm::lsp::Diagnostic> &diagnostics) {
   version = newVersion;
-  document =
-      std::make_unique<VerilogDocument>(context, uri, contents, diagnostics);
+  auto newDoc =
+      std::make_shared<VerilogDocument>(context, uri, contents, diagnostics);
+  std::atomic_store_explicit(&document, std::move(newDoc),
+                             std::memory_order_release);
 }
 
 void VerilogTextFile::getLocationsOf(
     const llvm::lsp::URIForFile &uri, llvm::lsp::Position defPos,
     std::vector<llvm::lsp::Location> &locations) {
-  document->getLocationsOf(uri, defPos, locations);
+  auto doc = std::atomic_load_explicit(&document, std::memory_order_acquire);
+  if (doc)
+    doc->getLocationsOf(uri, defPos, locations);
 }
 
 void VerilogTextFile::findReferencesOf(
     const llvm::lsp::URIForFile &uri, llvm::lsp::Position pos,
     std::vector<llvm::lsp::Location> &references) {
-  document->findReferencesOf(uri, pos, references);
+  auto doc = std::atomic_load_explicit(&document, std::memory_order_acquire);
+  if (doc)
+    doc->findReferencesOf(uri, pos, references);
 }
 
 namespace {
