@@ -84,9 +84,7 @@ struct AssignOutputDirsPass
 } // namespace
 
 void AssignOutputDirsPass::runOnOperation() {
-#ifndef NDEBUG
-  ScopedDebugPassLogger _(this);
-#endif
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   SmallString<64> outputDir(outputDirOption);
   if (fs::make_absolute(outputDir)) {
     emitError(mlir::UnknownLoc::get(&getContext()),
@@ -149,4 +147,5 @@ void AssignOutputDirsPass::runOnOperation() {
 
   if (!changed)
     markAllAnalysesPreserved();
+  LLVM_DEBUG(debugFooter() << "\n");
 }

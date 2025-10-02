@@ -1622,12 +1622,11 @@ LogicalResult Inliner::run() {
 namespace {
 class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
   void runOnOperation() override {
-#ifndef NDEBUG
-    ScopedDebugPassLogger _(this);
-#endif
+    LLVM_DEBUG(debugPassHeader(this) << "\n");
     Inliner inliner(getOperation(), getAnalysis<SymbolTable>());
     if (failed(inliner.run()))
       signalPassFailure();
+    LLVM_DEBUG(debugFooter() << "\n");
   }
 };
 } // namespace
