@@ -275,7 +275,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
                    CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
-                   CArg<"ArrayAttr", "{}">:$inlineFiles)>
+                   CArg<"ArrayAttr", "{}">:$files)>
   ];
 
   let extraModuleClassDeclaration = [{
