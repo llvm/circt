@@ -122,7 +122,9 @@ private:
 
 /// Emit the annotated source code for black boxes in a circuit.
 void BlackBoxReaderPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
+#ifndef NDEBUG
+  ScopedDebugPassLogger _(this);
+#endif
   CircuitOp circuitOp = getOperation();
   CircuitNamespace ns(circuitOp);
 
@@ -279,7 +281,6 @@ void BlackBoxReaderPass::runOnOperation() {
   // Clean up.
   emittedFileMap.clear();
   fileListFiles.clear();
-  LLVM_DEBUG(debugFooter() << "\n");
 }
 
 /// Run on an operation-annotation pair. The annotation need not be a black box
