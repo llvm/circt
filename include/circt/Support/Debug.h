@@ -15,6 +15,7 @@
 
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/Debug.h"
 
 namespace circt {
 
@@ -48,17 +49,31 @@ class ScopedDebugPassLogger {
 
 public:
   ScopedDebugPassLogger(const mlir::Pass *pass, unsigned width = 80)
-      : width(width) {
-    debugPassHeader(pass, width) << "\n";
+      : pass(pass), width(width) {
+    if (::llvm::DebugFlag &&
+        ::llvm::isCurrentDebugType(pass->getArgument().data(), 1))
+      debugPassHeader(pass, width) << "\n";
   }
 
   ~ScopedDebugPassLogger() {
-    debugFooter(width) << "\n";
+    if (::llvm::DebugFlag &&
+        ::llvm::isCurrentDebugType(pass->getArgument().data(), 1))
+      debugFooter(width) << "\n";
   }
 
 private:
+  const mlir::Pass *pass;
   unsigned width;
 };
+
+#ifndef NDEBUG
+#define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
+  ScopedDebugPassLogger _scopedDebugPassLogger(PASS);
+#else
+#define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
+  do {                                                                         \
+  } while (0);
+#endif
 
 } // namespace circt
 
