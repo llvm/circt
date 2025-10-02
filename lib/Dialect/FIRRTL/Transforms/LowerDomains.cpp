@@ -363,9 +363,7 @@ LogicalResult LowerCircuit::lowerCircuit() {
 } // namespace
 
 void LowerDomainsPass::runOnOperation() {
-#ifndef NDEBUG
-  ScopedDebugPassLogger _(this);
-#endif
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   LowerCircuit lowerCircuit(getOperation(), getAnalysis<InstanceGraph>());
   if (failed(lowerCircuit.lowerCircuit()))
