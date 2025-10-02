@@ -363,11 +363,11 @@ LogicalResult LowerCircuit::lowerCircuit() {
 } // namespace
 
 void LowerDomainsPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+#ifndef NDEBUG
+  ScopedDebugPassLogger _(this);
+#endif
 
   LowerCircuit lowerCircuit(getOperation(), getAnalysis<InstanceGraph>());
   if (failed(lowerCircuit.lowerCircuit()))
     return signalPassFailure();
-
-  LLVM_DEBUG(debugFooter() << "\n";);
 }
