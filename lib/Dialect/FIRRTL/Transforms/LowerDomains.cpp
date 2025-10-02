@@ -44,11 +44,11 @@ struct DomainInfo {
   /// The index of the created input port for this domain.  This port does not
   /// include association information and only contains the information that the
   /// user must provide.
-  size_t inputPort;
+  unsigned inputPort;
 
   /// The index of the created output port for this domain, which includes
   /// association information.
-  size_t outputPort;
+  unsigned outputPort;
 
   /// The associations to other ports for this domain.  This is in terms of
   /// distinct attributes that have already been established in the annotations
@@ -110,7 +110,7 @@ LogicalResult LowerModule::lowerModule() {
 
   // Information about a domain.  This is built up during the first iteration
   // over the ports.  This needs to preserve insertion order.
-  llvm::MapVector<int, DomainInfo> indexToDomain;
+  llvm::MapVector<unsigned, DomainInfo> indexToDomain;
 
   // The new port annotations.  These will be set after all deletions and
   // insertions.
