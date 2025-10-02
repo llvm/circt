@@ -47,7 +47,7 @@ struct EliminateWiresPass
 } // end anonymous namespace
 
 void EliminateWiresPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   auto module = getOperation();
   auto &dominance = getAnalysis<mlir::DominanceInfo>();

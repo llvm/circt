@@ -474,7 +474,7 @@ struct LowerSignaturesPass
 
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   // Cached attr
   AttrCache cache(&getContext());

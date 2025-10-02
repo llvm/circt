@@ -122,7 +122,7 @@ private:
 
 /// Emit the annotated source code for black boxes in a circuit.
 void BlackBoxReaderPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
   CircuitOp circuitOp = getOperation();
   CircuitNamespace ns(circuitOp);
 

@@ -51,7 +51,7 @@ struct PassiveWiresPass
 
 // This is the main entrypoint for the lowering pass.
 void PassiveWiresPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   auto module = getOperation();
 

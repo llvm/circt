@@ -85,7 +85,7 @@ struct VectorizationPass
 } // namespace
 
 void VectorizationPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
   LLVM_DEBUG(llvm::dbgs() << "Module: '" << getOperation().getName() << "'\n");
 
   RewritePatternSet patterns(&getContext());

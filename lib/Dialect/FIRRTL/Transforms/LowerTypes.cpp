@@ -1673,7 +1673,7 @@ struct LowerTypesPass
 
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   std::vector<FModuleLike> ops;
   // Symbol Table

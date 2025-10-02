@@ -606,7 +606,7 @@ struct ProbesToSignalsPass
 } // end anonymous namespace
 
 void ProbesToSignalsPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 

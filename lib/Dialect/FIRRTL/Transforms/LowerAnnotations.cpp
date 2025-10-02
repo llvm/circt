@@ -1210,7 +1210,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
 // This is the main entrypoint for the lowering pass.
 void LowerAnnotationsPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);

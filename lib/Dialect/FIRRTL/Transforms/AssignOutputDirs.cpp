@@ -84,7 +84,7 @@ struct AssignOutputDirsPass
 } // namespace
 
 void AssignOutputDirsPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
   SmallString<64> outputDir(outputDirOption);
   if (fs::make_absolute(outputDir)) {
     emitError(mlir::UnknownLoc::get(&getContext()),

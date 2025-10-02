@@ -131,7 +131,7 @@ static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
 }
 
 void InjectDUTHierarchy::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   CircuitOp circuit = getOperation();
 

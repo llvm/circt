@@ -835,7 +835,7 @@ struct LowerOpenAggsPass
 
 // This is the main entrypoint for the lowering pass.
 void LowerOpenAggsPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 

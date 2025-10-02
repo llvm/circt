@@ -1809,7 +1809,7 @@ GrandCentralPass::getEnclosingModule(Value value, FlatSymbolRefAttr sym) {
 
 /// This method contains the business logic of this pass.
 void GrandCentralPass::runOnOperation() {
-  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   CircuitOp circuitOp = getOperation();
 

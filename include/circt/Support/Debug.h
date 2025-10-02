@@ -68,11 +68,11 @@ private:
 };
 
 #define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
-  ScopedDebugPassLogger _scopedDebugPassLogger(PASS);
+  ScopedDebugPassLogger _scopedDebugPassLogger(PASS)
 #else
 #define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
   do {                                                                         \
-  } while (0);
+  } while (0)
 #endif
 
 } // namespace circt

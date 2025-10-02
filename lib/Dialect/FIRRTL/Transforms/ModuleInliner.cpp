@@ -1622,7 +1622,7 @@ LogicalResult Inliner::run() {
 namespace {
 class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
   void runOnOperation() override {
-    CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+    CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
     Inliner inliner(getOperation(), getAnalysis<SymbolTable>());
     if (failed(inliner.run()))
       signalPassFailure();
