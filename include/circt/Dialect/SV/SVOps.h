@@ -55,7 +55,7 @@ char getLetter(CasePatternBit bit);
 class CasePattern {
 
 public:
-  enum CasePatternKind { CPK_bit, CPK_enum, CPK_default };
+  enum CasePatternKind { CPK_bit, CPK_enum, CPK_expr, CPK_default };
   CasePattern(CasePatternKind kind) : kind(kind) {}
   virtual ~CasePattern() {}
   CasePatternKind getKind() const { return kind; }
@@ -138,6 +138,21 @@ public:
 
 private:
   hw::EnumFieldAttr enumAttr;
+};
+
+class CaseExprPattern : public CasePattern {
+public:
+  CaseExprPattern(MLIRContext *ctx)
+      : CasePattern(CasePatternKind::CPK_expr),
+        exprAttr(CaseExprPatternAttr::get(ctx)) {}
+
+  Attribute attr() const override { return exprAttr; }
+
+  static bool classof(const CasePattern *S) { return S->getKind() == CPK_expr; }
+
+private:
+  // The expression pattern is recognized by a CaseExprPatternAttr
+  CaseExprPatternAttr exprAttr;
 };
 
 // This provides information about one case.

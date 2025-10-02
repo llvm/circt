@@ -350,6 +350,11 @@ def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
 def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
                                    [CaseStmt, CaseXStmt, CaseZStmt]>;
 
+def CaseExprPatternAttr : AttrDef<SVDialect, "CaseExprPattern"> {
+  let summary = "Represents a case expression pattern";
+  let mnemonic = "expr";
+}
+
 def ValidationQualifierPlain: I32EnumAttrCase<"ValidationQualifierPlain", 0, "plain">;
 def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 1, "unique">;
 def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 2, "unique0">;
@@ -373,6 +378,7 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
                        AnyType:$cond, ArrayAttr:$casePatterns,
+                       Variadic<AnyType>:$caseValues,
                        DefaultValuedAttr<ValidationQualifierTypeAttr,
                        "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
                       $validationQualifier);

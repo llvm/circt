@@ -841,6 +841,10 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
           result.push_back({std::make_unique<CaseEnumPattern>(enumAttr),
                             &getRegion(nextRegion++).front()});
         })
+        .Case<CaseExprPatternAttr>([&](auto exprAttr) {
+          result.push_back({std::make_unique<CaseExprPattern>(getContext()),
+                            &getRegion(nextRegion++).front()});
+        })
         .Case<IntegerAttr>([&](auto intAttr) {
           result.push_back({std::make_unique<CaseBitPattern>(intAttr),
                             &getRegion(nextRegion++).front()});
@@ -911,6 +915,8 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute> casePatterns;
   SmallVector<CasePatternBit, 16> caseBits;
   while (1) {
+    mlir::OptionalParseResult caseValueParseResult;
+    OpAsmParser::UnresolvedOperand caseValueOperand;
     if (succeeded(parser.parseOptionalKeyword("default"))) {
       casePatterns.push_back(CaseDefaultPattern(parser.getContext()).attr());
     } else if (failed(parser.parseOptionalKeyword("case"))) {
@@ -930,6 +936,13 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
       casePatterns.push_back(
           hw::EnumFieldAttr::get(parser.getEncodedSourceLoc(loc),
                                  builder.getStringAttr(caseVal), condType));
+    } else if ((caseValueParseResult =
+                    parser.parseOptionalOperand(caseValueOperand))
+                   .has_value()) {
+      if (failed(caseValueParseResult.value()) ||
+          parser.resolveOperand(caseValueOperand, condType, result.operands))
+        return failure();
+      casePatterns.push_back(CaseExprPattern(parser.getContext()).attr());
     } else {
       // Parse the pattern.  It always starts with b, so it is an MLIR
       // keyword.
@@ -1005,6 +1018,7 @@ void CaseOp::print(OpAsmPrinter &p) {
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"casePatterns", "caseStyle", "validationQualifier"});
 
+  size_t caseValueIndex = 0;
   for (auto &caseInfo : getCases()) {
     p.printNewline();
     auto &pattern = caseInfo.pattern;
@@ -1017,6 +1031,10 @@ void CaseOp::print(OpAsmPrinter &p) {
         })
         .Case<CaseEnumPattern>([&](auto enumPattern) {
           p << "case " << enumPattern->getFieldValue();
+        })
+        .Case<CaseExprPattern>([&](auto) {
+          p << "case ";
+          p.printOperand(getCaseValues()[caseValueIndex++]);
         })
         .Case<CaseDefaultPattern>([&](auto) { p << "default"; })
         .Default([&](auto) { assert(false && "unhandled case pattern"); });
