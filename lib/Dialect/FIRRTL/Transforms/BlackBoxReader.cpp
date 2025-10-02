@@ -289,11 +289,10 @@ void BlackBoxReaderPass::runOnOperation() {
     if (!fileRefs.empty()) {
       auto inlineFilesAttr = builder.getArrayAttr(fileRefs);
       AnnotationSet annotations(extmodule);
-      annotations.addAnnotations({builder.getDictionaryAttr({
-        {builder.getStringAttr("class"),
-         builder.getStringAttr("circt.ModuleExternFilesAnno")},
-        {builder.getStringAttr("files"), inlineFilesAttr}
-      })});
+      annotations.addAnnotations({builder.getDictionaryAttr(
+          {{builder.getStringAttr("class"),
+            builder.getStringAttr("circt.ModuleExternFilesAnno")},
+           {builder.getStringAttr("files"), inlineFilesAttr}})});
       annotations.applyToOperation(extmodule);
     }
   }
