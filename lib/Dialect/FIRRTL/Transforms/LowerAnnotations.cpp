@@ -31,7 +31,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "lower-annos"
+#define DEBUG_TYPE "firrtl-lower-annotations"
 
 namespace circt {
 namespace firrtl {
@@ -1210,10 +1210,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
 // This is the main entrypoint for the lowering pass.
 void LowerAnnotationsPass::runOnOperation() {
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);
-
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
 
   // Grab the annotations from a non-standard attribute called "rawAnnotations".
   // This is a temporary location for all annotations that are earmarked for

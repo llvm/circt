@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(vectorization)))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-vectorization)))' %s | FileCheck %s
 
 firrtl.circuit "ElementWise" {
 // CHECK-LABEL: @ElementWise
@@ -27,4 +27,3 @@ firrtl.module @ElementWise(in %a: !firrtl.vector<uint<1>, 2>, in %b: !firrtl.vec
   firrtl.matchingconnect %c_2, %12 : !firrtl.vector<uint<1>, 2>
 }
 }
-

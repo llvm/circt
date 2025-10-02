@@ -478,10 +478,11 @@ struct LayerSinkPass final
 } // namespace
 
 void LayerSinkPass::runOnOperation() {
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+
   auto circuit = getOperation();
-  LLVM_DEBUG(debugPassHeader(this)
-                 << "\n"
-                 << "Circuit: '" << circuit.getName() << "'\n";);
+  LLVM_DEBUG(llvm::dbgs() << "Circuit: '" << circuit.getName() << "'\n");
+
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   EffectInfo effectInfo(circuit, instanceGraph);
 

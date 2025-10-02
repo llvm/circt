@@ -313,7 +313,8 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+
   auto circuits = getOperation().getOps<CircuitOp>();
   if (circuits.empty())
     return;

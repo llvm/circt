@@ -47,7 +47,8 @@ struct EliminateWiresPass
 } // end anonymous namespace
 
 void EliminateWiresPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+
   auto module = getOperation();
   auto &dominance = getAnalysis<mlir::DominanceInfo>();
 

@@ -47,8 +47,9 @@ struct RemoveUnusedPortsPass
 } // namespace
 
 void RemoveUnusedPortsPass::runOnOperation() {
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+
   auto &instanceGraph = getAnalysis<InstanceGraph>();
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
   // Iterate in the reverse order of instance graph iterator, i.e. from leaves
   // to top.
   for (auto *node : llvm::post_order(&instanceGraph))

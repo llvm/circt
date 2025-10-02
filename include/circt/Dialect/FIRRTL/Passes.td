@@ -479,7 +479,7 @@ def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
   let summary = "Perform SFC Compatibility fixes";
 }
 
-def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+def MergeConnections : Pass<"firrtl-merge-connections", "firrtl::FModuleOp"> {
   let summary = "Merge field-level connections into full bundle connections";
   let options = [
     Option<"enableAggressiveMerging", "aggressive-merging", "bool", "false",
@@ -487,7 +487,7 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   ];
 }
 
-def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
+def Vectorization : Pass<"firrtl-vectorization", "firrtl::FModuleOp"> {
   let summary = "Transform firrtl primitive operations into vector operations";
 }
 

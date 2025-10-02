@@ -332,9 +332,8 @@ struct MergeConnectionsPass
 } // namespace
 
 void MergeConnectionsPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this)
-             << "\n"
-             << "Module: '" << getOperation().getName() << "'\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
+  LLVM_DEBUG(llvm::dbgs() << "Module: '" << getOperation().getName() << "'\n");
 
   MergeConnection mergeConnection(getOperation(), enableAggressiveMerging);
   bool changed = mergeConnection.run();

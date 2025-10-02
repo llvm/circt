@@ -33,7 +33,7 @@
 #include "llvm/Support/YAMLTraits.h"
 #include <variant>
 
-#define DEBUG_TYPE "gct"
+#define DEBUG_TYPE "firrtl-grand-central"
 
 namespace circt {
 namespace firrtl {
@@ -1809,7 +1809,7 @@ GrandCentralPass::getEnclosingModule(Value value, FlatSymbolRefAttr sym) {
 
 /// This method contains the business logic of this pass.
 void GrandCentralPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this)
 
   CircuitOp circuitOp = getOperation();
 
