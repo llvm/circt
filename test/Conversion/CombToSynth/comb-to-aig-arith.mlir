@@ -227,29 +227,29 @@ hw.module @icmp_unsigned_compare(in %lhs: i2, in %rhs: i2, out out_ugt: i1, out 
   %uge = comb.icmp uge %lhs, %rhs : i2
   %ult = comb.icmp ult %lhs, %rhs : i2
   %ule = comb.icmp ule %lhs, %rhs : i2
-  // CHECK-NEXT:   %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
-  // CHECK-NEXT:   %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
   // CHECK-NEXT:   %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
   // CHECK-NEXT:   %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
-  // CHECK-NEXT:   %[[LSB_NEQ:.+]] = comb.xor bin %[[LHS_0]], %[[RHS_0]]
-  // CHECK-NEXT:   %[[LSB_GT:.+]] = synth.aig.and_inv %[[LHS_0]], not %[[RHS_0]]
-  // CHECK-NEXT:   %[[MSB_NEQ:.+]] = comb.xor bin %[[LHS_1]], %[[RHS_1]]
-  // CHECK-NEXT:   %[[MSB_EQ:.+]] = synth.aig.and_inv not %[[MSB_NEQ]]
-  // CHECK-NEXT:   %[[MSB_GT:.+]] = synth.aig.and_inv %[[LHS_1]], not %[[RHS_1]]
-  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_GT:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_GT]]
-  // CHECK-NEXT:   %[[UGT:.+]] = comb.or bin %[[MSB_GT]], %[[MSB_EQ_AND_LSB_GT]]
-  // CHECK-NEXT:   %[[LSB_EQ:.+]] = synth.aig.and_inv not %[[LSB_NEQ]]
-  // CHECK-NEXT:   %[[LSB_UGE:.+]] = comb.or bin %[[LSB_GT]], %[[LSB_EQ]]
-  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_UGE:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_UGE]]
-  // CHECK-NEXT:   %[[UGE:.+]] = comb.or bin %[[MSB_GT]], %[[MSB_EQ_AND_LSB_UGE]]
-  // CHECK-NEXT:   %[[LSB_LT:.+]] = synth.aig.and_inv not %[[LHS_0]], %[[RHS_0]]
-  // CHECK-NEXT:   %[[MSB_LT:.+]] = synth.aig.and_inv not %[[LHS_1]], %[[RHS_1]]
-  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_LT:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_LT]]
-  // CHECK-NEXT:   %[[ULT:.+]] = comb.or bin %[[MSB_LT]], %[[MSB_EQ_AND_LSB_LT]]
-  // CHECK-NEXT:   %[[LSB_LE:.+]] = comb.or bin %[[LSB_LT]], %[[LSB_EQ]]
-  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_LE:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_LE]]
-  // CHECK-NEXT:   %[[ULE:.+]] = comb.or bin %[[MSB_LT]], %[[MSB_EQ_AND_LSB_LE]]
-  // CHECK-NEXT:   hw.output %[[UGT]], %[[UGE]], %[[ULT]], %[[ULE]]
+  // CHECK-NEXT:   %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
+  // CHECK-NEXT:   %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
+  // CHECK-NEXT:   %[[LSB_NEQ:.+]] = comb.xor bin %[[RHS_0]], %[[LHS_0]] : i1
+  // CHECK-NEXT:   %[[LSB_GT:.+]] = synth.aig.and_inv not %[[RHS_0]], %[[LHS_0]] : i1
+  // CHECK-NEXT:   %[[MSB_NEQ:.+]] = comb.xor bin %[[RHS_1]], %[[LHS_1]] : i1
+  // CHECK-NEXT:   %[[MSB_EQ:.+]] = synth.aig.and_inv not %[[MSB_NEQ]] : i1
+  // CHECK-NEXT:   %[[MSB_GT:.+]] = synth.aig.and_inv not %[[RHS_1]], %[[LHS_1]] : i1
+  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_GT:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_GT]] : i1
+  // CHECK-NEXT:   %[[UGT:.+]] = comb.or bin %[[MSB_GT]], %[[MSB_EQ_AND_LSB_GT]] : i1
+  // CHECK-NEXT:   %[[LSB_EQ:.+]] = synth.aig.and_inv not %[[LSB_NEQ]] : i1
+  // CHECK-NEXT:   %[[LSB_UGE:.+]] = comb.or bin %[[LSB_GT]], %[[LSB_EQ]] : i1
+  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_UGE:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_UGE]] : i1
+  // CHECK-NEXT:   %[[UGE:.+]] = comb.or bin %[[MSB_GT]], %[[MSB_EQ_AND_LSB_UGE]] : i1
+  // CHECK-NEXT:   %[[LSB_LT:.+]] = synth.aig.and_inv not %[[LHS_0]], %[[RHS_0]] : i1
+  // CHECK-NEXT:   %[[MSB_LT:.+]] = synth.aig.and_inv not %[[LHS_1]], %[[RHS_1]] : i1
+  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_LT:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_LT]] : i1
+  // CHECK-NEXT:   %[[ULT:.+]] = comb.or bin %[[MSB_LT]], %[[MSB_EQ_AND_LSB_LT]] : i1
+  // CHECK-NEXT:   %[[LSB_LE:.+]] = comb.or bin %[[LSB_LT]], %[[LSB_EQ]] : i1
+  // CHECK-NEXT:   %[[MSB_EQ_AND_LSB_LE:.+]] = comb.and bin %[[MSB_EQ]], %[[LSB_LE]] : i1
+  // CHECK-NEXT:   %[[ULE:.+]] = comb.or bin %[[MSB_LT]], %[[MSB_EQ_AND_LSB_LE]] : i1
+  // CHECK-NEXT:   hw.output %[[UGT]], %[[UGE]], %[[ULT]], %[[ULE]] : i1, i1, i1, i1
   // CHECK-NEXT: }
   hw.output %ugt, %uge, %ult, %ule : i1, i1, i1, i1
 }
@@ -260,12 +260,12 @@ hw.module @icmp_signed_compare(in %lhs: i2, in %rhs: i2, out out_sgt: i1, out ou
   %sge = comb.icmp sge %lhs, %rhs : i2
   %slt = comb.icmp slt %lhs, %rhs : i2
   %sle = comb.icmp sle %lhs, %rhs : i2
-  // CHECK-NEXT:   %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
   // CHECK-NEXT:   %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
-  // CHECK-NEXT:   %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
   // CHECK-NEXT:   %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
-  // CHECK-NEXT:   %[[LSB_NEQ:.+]] = comb.xor bin %[[LHS_0]], %[[RHS_0]]
-  // CHECK-NEXT:   %[[LSB_GT:.+]] = synth.aig.and_inv %[[LHS_0]], not %[[RHS_0]]
+  // CHECK-NEXT:   %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
+  // CHECK-NEXT:   %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+  // CHECK-NEXT:   %[[LSB_NEQ:.+]] = comb.xor bin %[[RHS_0]], %[[LHS_0]]
+  // CHECK-NEXT:   %[[LSB_GT:.+]] = synth.aig.and_inv not %[[RHS_0]], %[[LHS_0]]
   // CHECK-NEXT:   %[[SIGN_NEQ:.+]] = comb.xor %[[LHS_1]], %[[RHS_1]]
   // CHECK-NEXT:   %[[SGT:.+]] = comb.mux %[[SIGN_NEQ]], %[[RHS_1]], %[[LSB_GT]]
   // CHECK-NEXT:   %[[LSB_EQ:.+]] = synth.aig.and_inv not %[[LSB_NEQ]]

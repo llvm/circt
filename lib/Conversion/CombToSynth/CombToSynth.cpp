@@ -133,6 +133,16 @@ static Value createMajorityFunction(OpBuilder &rewriter, Location loc, Value a,
   return comb::OrOp::create(rewriter, loc, ValueRange{andOp, aAndB}, true);
 }
 
+static Value extractMSB(OpBuilder &builder, Value val) {
+  return builder.createOrFold<comb::ExtractOp>(
+      val.getLoc(), val, val.getType().getIntOrFloatBitWidth() - 1, 1);
+}
+
+static Value extractOtherThanMSB(OpBuilder &builder, Value val) {
+  return builder.createOrFold<comb::ExtractOp>(
+      val.getLoc(), val, 0, val.getType().getIntOrFloatBitWidth() - 1);
+}
+
 namespace {
 // A union of Value and IntegerAttr to cleanly handle constant values.
 using ConstantOrValue = llvm::PointerUnion<Value, mlir::IntegerAttr>;
@@ -460,9 +470,240 @@ struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Adder Architecture Selection
+//===----------------------------------------------------------------------===//
+
+enum AdderArchitecture { RippleCarry, Sklanskey, KoggeStone, BrentKung };
+AdderArchitecture determineAdderArch(Operation *op, int64_t width) {
+  auto strAttr = op->getAttrOfType<StringAttr>("synth.test.arch");
+  if (strAttr) {
+    return llvm::StringSwitch<AdderArchitecture>(strAttr.getValue())
+        .Case("SKLANSKEY", Sklanskey)
+        .Case("KOGGE-STONE", KoggeStone)
+        .Case("BRENT-KUNG", BrentKung)
+        .Case("RIPPLE-CARRY", RippleCarry);
+  }
+  // Determine using width as a heuristic.
+  // TODO: Perform a more thorough analysis to motivate the choices or
+  // implement an adder synthesis algorithm to construct an optimal adder
+  // under the given timing constraints - see the work of Zimmermann
+
+  // For very small adders, overhead of a parallel prefix adder is likely not
+  // worth it.
+  if (width < 8)
+    return AdderArchitecture::RippleCarry;
+
+  // Sklanskey is a good compromise for high-performance, but has high fanout
+  // which may lead to wiring congestion for very large adders.
+  if (width <= 32)
+    return AdderArchitecture::Sklanskey;
+
+  // Kogge-Stone uses greater area than Sklanskey but has lower fanout thus
+  // may be preferable for larger adders.
+  return AdderArchitecture::KoggeStone;
+}
+
+//===----------------------------------------------------------------------===//
+// Parallel Prefix Tree
+//===----------------------------------------------------------------------===//
+
+// Implement the Kogge-Stone parallel prefix tree
+// Described in https://en.wikipedia.org/wiki/Kogge%E2%80%93Stone_adder
+// Slightly better delay than Brent-Kung, but more area.
+void lowerKoggeStonePrefixTree(OpBuilder &builder, Location loc,
+                               SmallVector<Value> &pPrefix,
+                               SmallVector<Value> &gPrefix) {
+
+  auto width = static_cast<int64_t>(pPrefix.size());
+  assert(width == static_cast<int64_t>(gPrefix.size()));
+  SmallVector<Value> pPrefixNew = pPrefix;
+  SmallVector<Value> gPrefixNew = gPrefix;
+
+  // Kogge-Stone parallel prefix computation
+  for (int64_t stride = 1; stride < width; stride *= 2) {
+
+    for (int64_t i = stride; i < width; ++i) {
+      int64_t j = i - stride;
+
+      // Group generate: g_i OR (p_i AND g_j)
+      Value andPG = comb::AndOp::create(builder, loc, pPrefix[i], gPrefix[j]);
+      gPrefixNew[i] = comb::OrOp::create(builder, loc, gPrefix[i], andPG);
+
+      // Group propagate: p_i AND p_j
+      pPrefixNew[i] = comb::AndOp::create(builder, loc, pPrefix[i], pPrefix[j]);
+    }
+
+    pPrefix = pPrefixNew;
+    gPrefix = gPrefixNew;
+  }
+
+  LLVM_DEBUG({
+    int64_t stage = 0;
+    for (int64_t stride = 1; stride < width; stride *= 2) {
+      llvm::dbgs()
+          << "--------------------------------------- Kogge-Stone Stage "
+          << stage << "\n";
+      for (int64_t i = stride; i < width; ++i) {
+        int64_t j = i - stride;
+        // Group generate: g_i OR (p_i AND g_j)
+        llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
+                     << " OR (P" << i << stage << " AND G" << j << stage
+                     << ")\n";
+
+        // Group propagate: p_i AND p_j
+        llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                     << " AND P" << j << stage << "\n";
+      }
+      ++stage;
+    }
+  });
+}
+
+// Implement the Sklansky parallel prefix tree
+// High fan-out, low depth, low area
+void lowerSklanskeyPrefixTree(OpBuilder &builder, Location loc,
+                              SmallVector<Value> &pPrefix,
+                              SmallVector<Value> &gPrefix) {
+  auto width = static_cast<int64_t>(pPrefix.size());
+  assert(width == static_cast<int64_t>(gPrefix.size()));
+  SmallVector<Value> pPrefixNew = pPrefix;
+  SmallVector<Value> gPrefixNew = gPrefix;
+  for (int64_t stride = 1; stride < width; stride *= 2) {
+    for (int64_t i = stride; i < width; i += 2 * stride) {
+      for (int64_t k = 0; k < stride && i + k < width; ++k) {
+        int64_t idx = i + k;
+        int64_t j = i - 1;
+
+        // Group generate: g_idx OR (p_idx AND g_j)
+        Value andPG =
+            comb::AndOp::create(builder, loc, pPrefix[idx], gPrefix[j]);
+        gPrefixNew[idx] = comb::OrOp::create(builder, loc, gPrefix[idx], andPG);
+
+        // Group propagate: p_idx AND p_j
+        pPrefixNew[idx] =
+            comb::AndOp::create(builder, loc, pPrefix[idx], pPrefix[j]);
+      }
+    }
+
+    pPrefix = pPrefixNew;
+    gPrefix = gPrefixNew;
+  }
+
+  LLVM_DEBUG({
+    int64_t stage = 0;
+    for (int64_t stride = 1; stride < width; stride *= 2) {
+      llvm::dbgs() << "--------------------------------------- Sklanskey Stage "
+                   << stage << "\n";
+      for (int64_t i = stride; i < width; i += 2 * stride) {
+        for (int64_t k = 0; k < stride && i + k < width; ++k) {
+          int64_t idx = i + k;
+          int64_t j = i - 1;
+          // Group generate: g_i OR (p_i AND g_j)
+          llvm::dbgs() << "G" << idx << stage + 1 << " = G" << idx << stage
+                       << " OR (P" << idx << stage << " AND G" << j << stage
+                       << ")\n";
+
+          // Group propagate: p_i AND p_j
+          llvm::dbgs() << "P" << idx << stage + 1 << " = P" << idx << stage
+                       << " AND P" << j << stage << "\n";
+        }
+      }
+      ++stage;
+    }
+  });
+}
+
+// Implement the Brent-Kung parallel prefix tree
+// Described in https://en.wikipedia.org/wiki/Brent%E2%80%93Kung_adder
+// Slightly worse delay than Kogge-Stone, but less area.
+void lowerBrentKungPrefixTree(OpBuilder &builder, Location loc,
+                              SmallVector<Value> &pPrefix,
+                              SmallVector<Value> &gPrefix) {
+  auto width = static_cast<int64_t>(pPrefix.size());
+  assert(width == static_cast<int64_t>(gPrefix.size()));
+  SmallVector<Value> pPrefixNew = pPrefix;
+  SmallVector<Value> gPrefixNew = gPrefix;
+  // Brent-Kung parallel prefix computation
+  // Forward phase
+  int64_t stride;
+  for (stride = 1; stride < width; stride *= 2) {
+    for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
+      int64_t j = i - stride;
+
+      // Group generate: g_i OR (p_i AND g_j)
+      Value andPG = comb::AndOp::create(builder, loc, pPrefix[i], gPrefix[j]);
+      gPrefixNew[i] = comb::OrOp::create(builder, loc, gPrefix[i], andPG);
+
+      // Group propagate: p_i AND p_j
+      pPrefixNew[i] = comb::AndOp::create(builder, loc, pPrefix[i], pPrefix[j]);
+    }
+    pPrefix = pPrefixNew;
+    gPrefix = gPrefixNew;
+  }
+
+  // Backward phase
+  for (; stride > 0; stride /= 2) {
+    for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
+      int64_t j = i - stride;
+
+      // Group generate: g_i OR (p_i AND g_j)
+      Value andPG = comb::AndOp::create(builder, loc, pPrefix[i], gPrefix[j]);
+      gPrefixNew[i] = comb::OrOp::create(builder, loc, gPrefix[i], andPG);
+
+      // Group propagate: p_i AND p_j
+      pPrefixNew[i] = comb::AndOp::create(builder, loc, pPrefix[i], pPrefix[j]);
+    }
+    pPrefix = pPrefixNew;
+    gPrefix = gPrefixNew;
+  }
+
+  LLVM_DEBUG({
+    int64_t stage = 0;
+    for (stride = 1; stride < width; stride *= 2) {
+      llvm::dbgs() << "--------------------------------------- Brent-Kung FW "
+                   << stage << " : Stride " << stride << "\n";
+      for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
+        int64_t j = i - stride;
+
+        // Group generate: g_i OR (p_i AND g_j)
+        llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
+                     << " OR (P" << i << stage << " AND G" << j << stage
+                     << ")\n";
+
+        // Group propagate: p_i AND p_j
+        llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                     << " AND P" << j << stage << "\n";
+      }
+      ++stage;
+    }
+
+    for (; stride > 0; stride /= 2) {
+      if (stride * 3 - 1 < width)
+        llvm::dbgs() << "--------------------------------------- Brent-Kung BW "
+                     << stage << " : Stride " << stride << "\n";
+
+      for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
+        int64_t j = i - stride;
+
+        // Group generate: g_i OR (p_i AND g_j)
+        llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
+                     << " OR (P" << i << stage << " AND G" << j << stage
+                     << ")\n";
+
+        // Group propagate: p_i AND p_j
+        llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
+                     << " AND P" << j << stage << "\n";
+      }
+      --stage;
+    }
+  });
+}
+
 template <bool lowerToMIG>
 struct CombAddOpConversion : OpConversionPattern<AddOp> {
   using OpConversionPattern<AddOp>::OpConversionPattern;
+
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -485,36 +726,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     if (arch == AdderArchitecture::RippleCarry)
       return lowerRippleCarryAdder(op, inputs, rewriter);
     return lowerParallelPrefixAdder(op, inputs, rewriter);
-  }
-
-  enum AdderArchitecture { RippleCarry, Sklanskey, KoggeStone, BrentKung };
-  static AdderArchitecture determineAdderArch(Operation *op, int64_t width) {
-    auto strAttr = op->getAttrOfType<StringAttr>("synth.test.arch");
-    if (strAttr) {
-      return llvm::StringSwitch<AdderArchitecture>(strAttr.getValue())
-          .Case("SKLANSKEY", Sklanskey)
-          .Case("KOGGE-STONE", KoggeStone)
-          .Case("BRENT-KUNG", BrentKung)
-          .Case("RIPPLE-CARRY", RippleCarry);
-    }
-    // Determine using width as a heuristic.
-    // TODO: Perform a more thorough analysis to motivate the choices or
-    // implement an adder synthesis algorithm to construct an optimal adder
-    // under the given timing constraints - see the work of Zimmermann
-
-    // For very small adders, overhead of a parallel prefix adder is likely not
-    // worth it.
-    if (width < 8)
-      return AdderArchitecture::RippleCarry;
-
-    // Sklanskey is a good compromise for high-performance, but has high fanout
-    // which may lead to wiring congestion for very large adders.
-    if (width <= 32)
-      return AdderArchitecture::Sklanskey;
-
-    // Kogge-Stone uses greater area than Sklanskey but has lower fanout thus
-    // may be preferable for larger adders.
-    return AdderArchitecture::KoggeStone;
   }
 
   // Implement a basic ripple-carry adder for small bitwidths.
@@ -571,6 +782,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
 
     auto aBits = extractBits(rewriter, inputs[0]);
     auto bBits = extractBits(rewriter, inputs[1]);
+
     // Construct propagate (p) and generate (g) signals
     SmallVector<Value> p, g;
     p.reserve(width);
@@ -607,13 +819,13 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       llvm_unreachable("Ripple-Carry should be handled separately");
       break;
     case AdderArchitecture::Sklanskey:
-      lowerSklanskeyPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      lowerSklanskeyPrefixTree(rewriter, op.getLoc(), pPrefix, gPrefix);
       break;
     case AdderArchitecture::KoggeStone:
-      lowerKoggeStonePrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      lowerKoggeStonePrefixTree(rewriter, op.getLoc(), pPrefix, gPrefix);
       break;
     case AdderArchitecture::BrentKung:
-      lowerBrentKungPrefixTree(op, inputs, rewriter, pPrefix, gPrefix);
+      lowerBrentKungPrefixTree(rewriter, op.getLoc(), pPrefix, gPrefix);
       break;
     }
 
@@ -640,204 +852,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     });
 
     return success();
-  }
-
-  // Implement the Sklansky parallel prefix tree
-  // High fan-out, low depth, low area
-  void lowerSklanskeyPrefixTree(comb::AddOp op, ValueRange inputs,
-                                ConversionPatternRewriter &rewriter,
-                                SmallVector<Value> &pPrefix,
-                                SmallVector<Value> &gPrefix) const {
-    auto width = op.getType().getIntOrFloatBitWidth();
-    SmallVector<Value> pPrefixNew = pPrefix;
-    SmallVector<Value> gPrefixNew = gPrefix;
-
-    for (int64_t stride = 1; stride < width; stride *= 2) {
-      for (int64_t i = stride; i < width; i += 2 * stride) {
-        for (int64_t k = 0; k < stride && i + k < width; ++k) {
-          int64_t idx = i + k;
-          int64_t j = i - 1;
-          // Group generate: g_idx OR (p_idx AND g_j)
-          Value andPG = comb::AndOp::create(rewriter, op.getLoc(), pPrefix[idx],
-                                            gPrefix[j]);
-          gPrefixNew[idx] =
-              comb::OrOp::create(rewriter, op.getLoc(), gPrefix[idx], andPG);
-
-          // Group propagate: p_idx AND p_j
-          pPrefixNew[idx] = comb::AndOp::create(rewriter, op.getLoc(),
-                                                pPrefix[idx], pPrefix[j]);
-        }
-      }
-      pPrefix = pPrefixNew;
-      gPrefix = gPrefixNew;
-    }
-    LLVM_DEBUG({
-      int64_t stage = 0;
-      for (int64_t stride = 1; stride < width; stride *= 2) {
-        llvm::dbgs()
-            << "--------------------------------------- Sklanskey Stage "
-            << stage << "\n";
-        for (int64_t i = stride; i < width; i += 2 * stride) {
-          for (int64_t k = 0; k < stride && i + k < width; ++k) {
-            int64_t idx = i + k;
-            int64_t j = i - 1;
-            // Group generate: g_i OR (p_i AND g_j)
-            llvm::dbgs() << "G" << idx << stage + 1 << " = G" << idx << stage
-                         << " OR (P" << idx << stage << " AND G" << j << stage
-                         << ")\n";
-
-            // Group propagate: p_i AND p_j
-            llvm::dbgs() << "P" << idx << stage + 1 << " = P" << idx << stage
-                         << " AND P" << j << stage << "\n";
-          }
-        }
-        ++stage;
-      }
-    });
-  }
-
-  // Implement the Kogge-Stone parallel prefix tree
-  // Described in https://en.wikipedia.org/wiki/Kogge%E2%80%93Stone_adder
-  // Slightly better delay than Brent-Kung, but more area.
-  void lowerKoggeStonePrefixTree(comb::AddOp op, ValueRange inputs,
-                                 ConversionPatternRewriter &rewriter,
-                                 SmallVector<Value> &pPrefix,
-                                 SmallVector<Value> &gPrefix) const {
-    auto width = op.getType().getIntOrFloatBitWidth();
-    SmallVector<Value> pPrefixNew = pPrefix;
-    SmallVector<Value> gPrefixNew = gPrefix;
-
-    // Kogge-Stone parallel prefix computation
-    for (int64_t stride = 1; stride < width; stride *= 2) {
-      for (int64_t i = stride; i < width; ++i) {
-        int64_t j = i - stride;
-
-        // Group generate: g_i OR (p_i AND g_j)
-        Value andPG =
-            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefixNew[i] =
-            comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
-
-        // Group propagate: p_i AND p_j
-        pPrefixNew[i] =
-            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
-      }
-      pPrefix = pPrefixNew;
-      gPrefix = gPrefixNew;
-    }
-    LLVM_DEBUG({
-      int64_t stage = 0;
-      for (int64_t stride = 1; stride < width; stride *= 2) {
-        llvm::dbgs()
-            << "--------------------------------------- Kogge-Stone Stage "
-            << stage << "\n";
-        for (int64_t i = stride; i < width; ++i) {
-          int64_t j = i - stride;
-          // Group generate: g_i OR (p_i AND g_j)
-          llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
-                       << " OR (P" << i << stage << " AND G" << j << stage
-                       << ")\n";
-
-          // Group propagate: p_i AND p_j
-          llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
-                       << " AND P" << j << stage << "\n";
-        }
-        ++stage;
-      }
-    });
-  }
-
-  // Implement the Brent-Kung parallel prefix tree
-  // Described in https://en.wikipedia.org/wiki/Brent%E2%80%93Kung_adder
-  // Slightly worse delay than Kogge-Stone, but less area.
-  void lowerBrentKungPrefixTree(comb::AddOp op, ValueRange inputs,
-                                ConversionPatternRewriter &rewriter,
-                                SmallVector<Value> &pPrefix,
-                                SmallVector<Value> &gPrefix) const {
-    auto width = op.getType().getIntOrFloatBitWidth();
-    SmallVector<Value> pPrefixNew = pPrefix;
-    SmallVector<Value> gPrefixNew = gPrefix;
-    // Brent-Kung parallel prefix computation
-    // Forward phase
-    int64_t stride;
-    for (stride = 1; stride < width; stride *= 2) {
-      for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
-        int64_t j = i - stride;
-
-        // Group generate: g_i OR (p_i AND g_j)
-        Value andPG =
-            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefixNew[i] =
-            comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
-
-        // Group propagate: p_i AND p_j
-        pPrefixNew[i] =
-            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
-      }
-      pPrefix = pPrefixNew;
-      gPrefix = gPrefixNew;
-    }
-
-    // Backward phase
-    for (; stride > 0; stride /= 2) {
-      for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
-        int64_t j = i - stride;
-
-        // Group generate: g_i OR (p_i AND g_j)
-        Value andPG =
-            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], gPrefix[j]);
-        gPrefixNew[i] =
-            comb::OrOp::create(rewriter, op.getLoc(), gPrefix[i], andPG);
-
-        // Group propagate: p_i AND p_j
-        pPrefixNew[i] =
-            comb::AndOp::create(rewriter, op.getLoc(), pPrefix[i], pPrefix[j]);
-      }
-      pPrefix = pPrefixNew;
-      gPrefix = gPrefixNew;
-    }
-
-    LLVM_DEBUG({
-      int64_t stage = 0;
-      for (stride = 1; stride < width; stride *= 2) {
-        llvm::dbgs() << "--------------------------------------- Brent-Kung FW "
-                     << stage << " : Stride " << stride << "\n";
-        for (int64_t i = stride * 2 - 1; i < width; i += stride * 2) {
-          int64_t j = i - stride;
-
-          // Group generate: g_i OR (p_i AND g_j)
-          llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
-                       << " OR (P" << i << stage << " AND G" << j << stage
-                       << ")\n";
-
-          // Group propagate: p_i AND p_j
-          llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
-                       << " AND P" << j << stage << "\n";
-        }
-        ++stage;
-      }
-
-      for (; stride > 0; stride /= 2) {
-        if (stride * 3 - 1 < width)
-          llvm::dbgs()
-              << "--------------------------------------- Brent-Kung BW "
-              << stage << " : Stride " << stride << "\n";
-
-        for (int64_t i = stride * 3 - 1; i < width; i += stride * 2) {
-          int64_t j = i - stride;
-
-          // Group generate: g_i OR (p_i AND g_j)
-          llvm::dbgs() << "G" << i << stage + 1 << " = G" << i << stage
-                       << " OR (P" << i << stage << " AND G" << j << stage
-                       << ")\n";
-
-          // Group propagate: p_i AND p_j
-          llvm::dbgs() << "P" << i << stage + 1 << " = P" << i << stage
-                       << " AND P" << j << stage << "\n";
-        }
-        --stage;
-      }
-    });
   }
 };
 
@@ -1034,32 +1048,110 @@ struct CombModSOpConversion : DivModOpConversionBase<ModSOp> {
 
 struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
   using OpConversionPattern<ICmpOp>::OpConversionPattern;
-  static Value constructUnsignedCompare(ICmpOp op, ArrayRef<Value> aBits,
-                                        ArrayRef<Value> bBits, bool isLess,
-                                        bool includeEq,
-                                        ConversionPatternRewriter &rewriter) {
+
+  // Simple comparator for small bit widths
+  static Value constructRippleCarry(Location loc, Value a, Value b,
+                                    bool includeEq,
+                                    ConversionPatternRewriter &rewriter) {
     // Construct following unsigned comparison expressions.
     // a <= b  ==> (~a[n] &  b[n]) | (a[n] == b[n] & a[n-1:0] <= b[n-1:0])
     // a <  b  ==> (~a[n] &  b[n]) | (a[n] == b[n] & a[n-1:0] < b[n-1:0])
-    // a >= b  ==> ( a[n] & ~b[n]) | (a[n] == b[n] & a[n-1:0] >= b[n-1:0])
-    // a >  b  ==> ( a[n] & ~b[n]) | (a[n] == b[n] & a[n-1:0] > b[n-1:0])
-    Value acc =
-        hw::ConstantOp::create(rewriter, op.getLoc(), op.getType(), includeEq);
+    auto aBits = extractBits(rewriter, a);
+    auto bBits = extractBits(rewriter, b);
+    Value acc = hw::ConstantOp::create(rewriter, loc, APInt(1, includeEq));
 
     for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
       auto aBitXorBBit =
-          rewriter.createOrFold<comb::XorOp>(op.getLoc(), aBit, bBit, true);
+          rewriter.createOrFold<comb::XorOp>(loc, aBit, bBit, true);
       auto aEqualB = rewriter.createOrFold<synth::aig::AndInverterOp>(
-          op.getLoc(), aBitXorBBit, true);
+          loc, aBitXorBBit, true);
       auto pred = rewriter.createOrFold<synth::aig::AndInverterOp>(
-          op.getLoc(), aBit, bBit, isLess, !isLess);
+          loc, aBit, bBit, true, false);
 
       auto aBitAndBBit = rewriter.createOrFold<comb::AndOp>(
-          op.getLoc(), ValueRange{aEqualB, acc}, true);
-      acc = rewriter.createOrFold<comb::OrOp>(op.getLoc(), pred, aBitAndBBit,
-                                              true);
+          loc, ValueRange{aEqualB, acc}, true);
+      acc = rewriter.createOrFold<comb::OrOp>(loc, pred, aBitAndBBit, true);
     }
     return acc;
+  }
+
+  // Compute prefix comparison using parallel prefix algorithm
+  static Value computePrefixComparison(ConversionPatternRewriter &rewriter,
+                                       Location loc, SmallVector<Value> pPrefix,
+                                       SmallVector<Value> gPrefix,
+                                       bool includeEq, AdderArchitecture arch) {
+    auto width = pPrefix.size();
+    // Apply the appropriate prefix tree algorithm
+    switch (arch) {
+    case AdderArchitecture::RippleCarry:
+      llvm_unreachable("Ripple-Carry should be handled separately");
+      break;
+    case AdderArchitecture::Sklanskey:
+      lowerSklanskeyPrefixTree(rewriter, loc, pPrefix, gPrefix);
+      break;
+    case AdderArchitecture::KoggeStone:
+      lowerKoggeStonePrefixTree(rewriter, loc, pPrefix, gPrefix);
+      break;
+    case AdderArchitecture::BrentKung:
+      lowerBrentKungPrefixTree(rewriter, loc, pPrefix, gPrefix);
+      break;
+    }
+
+    // Final result: gPrefix[width-1] gives us "a < b"
+    if (includeEq) {
+      // a <= b iff (a < b) OR (a == b)
+      // a == b iff pPrefix[width-1] (all bits are equal)
+      return comb::OrOp::create(rewriter, loc, gPrefix[width - 1],
+                                pPrefix[width - 1]);
+    }
+    // a < b iff gPrefix[width-1]
+    return gPrefix[width - 1];
+  }
+
+  // Construct an unsigned comparator using either ripple-carry or
+  // parallel-prefix architecture. Comparison uses parallel prefix tree as an
+  // internal component, so use `AdderArchitecture` enum to select architecture.
+  static Value constructUnsignedCompare(Operation *op, Location loc, Value a,
+                                        Value b, bool isLess, bool includeEq,
+                                        ConversionPatternRewriter &rewriter) {
+    // Ensure a <= b by swapping for simplicity.
+    if (!isLess)
+      std::swap(a, b);
+    auto width = a.getType().getIntOrFloatBitWidth();
+
+    // Check if the architecture is specified by an attribute.
+    auto arch = determineAdderArch(op, width);
+    if (arch == AdderArchitecture::RippleCarry)
+      return constructRippleCarry(loc, a, b, includeEq, rewriter);
+
+    // For larger widths, use parallel prefix tree
+    auto aBits = extractBits(rewriter, a);
+    auto bBits = extractBits(rewriter, b);
+
+    // For comparison, we compute:
+    // - Equal bits: eq_i = ~(a_i ^ b_i)
+    // - Greater bits: gt_i = ~a_i & b_i (a_i < b_i)
+    // - Propagate: p_i = eq_i (equality propagates)
+    // - Generate: g_i = gt_i (greater-than generates)
+    SmallVector<Value> eq, gt;
+    eq.reserve(width);
+    gt.reserve(width);
+
+    auto one =
+        hw::ConstantOp::create(rewriter, loc, rewriter.getIntegerType(1), 1);
+
+    for (auto [aBit, bBit] : llvm::zip(aBits, bBits)) {
+      // eq_i = ~(a_i ^ b_i) = a_i == b_i
+      auto xorBit = comb::XorOp::create(rewriter, loc, aBit, bBit);
+      eq.push_back(comb::XorOp::create(rewriter, loc, xorBit, one));
+
+      // gt_i = ~a_i & b_i = a_i < b_i
+      auto notA = comb::XorOp::create(rewriter, loc, aBit, one);
+      gt.push_back(comb::AndOp::create(rewriter, loc, notA, bBit));
+    }
+
+    return computePrefixComparison(rewriter, loc, std::move(eq), std::move(gt),
+                                   includeEq, arch);
   }
 
   LogicalResult
@@ -1100,11 +1192,9 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
                     op.getPredicate() == ICmpPredicate::ule;
       bool includeEq = op.getPredicate() == ICmpPredicate::uge ||
                        op.getPredicate() == ICmpPredicate::ule;
-      auto aBits = extractBits(rewriter, lhs);
-      auto bBits = extractBits(rewriter, rhs);
       replaceOpAndCopyNamehint(rewriter, op,
-                               constructUnsignedCompare(op, aBits, bBits,
-                                                        isLess, includeEq,
+                               constructUnsignedCompare(op, op.getLoc(), lhs,
+                                                        rhs, isLess, includeEq,
                                                         rewriter));
       return success();
     }
@@ -1120,17 +1210,15 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
       bool includeEq = op.getPredicate() == ICmpPredicate::sge ||
                        op.getPredicate() == ICmpPredicate::sle;
 
-      auto aBits = extractBits(rewriter, lhs);
-      auto bBits = extractBits(rewriter, rhs);
-
       // Get a sign bit
-      auto signA = aBits.back();
-      auto signB = bBits.back();
+      auto signA = extractMSB(rewriter, lhs);
+      auto signB = extractMSB(rewriter, rhs);
+      auto aRest = extractOtherThanMSB(rewriter, lhs);
+      auto bRest = extractOtherThanMSB(rewriter, rhs);
 
       // Compare magnitudes (all bits except sign)
       auto sameSignResult = constructUnsignedCompare(
-          op, ArrayRef(aBits).drop_back(), ArrayRef(bBits).drop_back(), isLess,
-          includeEq, rewriter);
+          op, op.getLoc(), aRest, bRest, isLess, includeEq, rewriter);
 
       // XOR of signs: true if signs are different
       auto signsDiffer =
