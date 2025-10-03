@@ -175,6 +175,20 @@ public:
   LogicalResult lowerInstances(InstanceGraph &);
 
 private:
+  /// Erase all users of domain type ports.
+  LogicalResult eraseDomainUsers(Value value) {
+    for (auto *user : llvm::make_early_inc_range(value.getUsers())) {
+      if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
+        castOp.getResult().replaceAllUsesWith(castOp.getInput());
+        castOp.erase();
+        continue;
+      }
+      return user->emitOpError()
+             << "has an unimplemented lowering in the LowerDomains pass.";
+    }
+    return success();
+  }
+
   // The module this class is lowering
   FModuleLike &op;
 
@@ -246,16 +260,8 @@ LogicalResult LowerModule::lowerModule() {
         indexToDomain[i] = {object, iIns, iIns + 1};
 
         // Erase users of the domain in the module body.
-        auto arg = body->getArgument(i);
-        for (auto *user : llvm::make_early_inc_range(arg.getUsers())) {
-          if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
-            castOp.getResult().replaceAllUsesWith(castOp.getInput());
-            castOp.erase();
-            continue;
-          }
-          return user->emitOpError()
-                 << "has an unimplemented lowering in the LowerDomains pass.";
-        }
+        if (failed(eraseDomainUsers(body->getArgument(i))))
+          return failure();
       }
 
       // Add input and output property ports that encode the property inputs
@@ -365,18 +371,9 @@ LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
     LLVM_DEBUG(llvm::dbgs()
                << "      - " << instanceOp.getInstanceName() << "\n");
 
-    for (auto bit : eraseVector.set_bits()) {
-      auto result = instanceOp.getResult(bit);
-      for (auto *user : llvm::make_early_inc_range(result.getUsers())) {
-        if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
-          castOp.getResult().replaceAllUsesWith(castOp.getInput());
-          castOp.erase();
-          continue;
-        }
-        return user->emitOpError()
-               << "has an unimplemented lowering in the LowerDomains pass.";
-      }
-    }
+    for (auto bit : eraseVector.set_bits())
+      if (failed(eraseDomainUsers(instanceOp.getResult(bit))))
+        return failure();
 
     ImplicitLocOpBuilder builder(instanceOp.getLoc(), instanceOp);
     auto erased = instanceOp.erasePorts(builder, eraseVector);
