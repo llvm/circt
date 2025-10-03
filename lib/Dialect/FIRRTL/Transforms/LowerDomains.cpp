@@ -356,7 +356,12 @@ LogicalResult LowerModule::lowerModule() {
 LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*op));
   for (auto *use : llvm::make_early_inc_range(node->uses())) {
-    auto instanceOp = cast<InstanceOp>(*use->getInstance());
+    auto instanceOp = dyn_cast<InstanceOp>(*use->getInstance());
+    if (!instanceOp) {
+      use->getInstance().emitOpError()
+          << "has an unimplemented lowering in LowerDomains";
+      return failure();
+    }
     LLVM_DEBUG(llvm::dbgs()
                << "      - " << instanceOp.getInstanceName() << "\n");
 
