@@ -113,18 +113,19 @@ private:
 };
 
 LogicalResult LowerModule::lowerModule() {
-  // Only lower modules or external modules!
-  //
   // Much of the lowering is conditioned on whether or not this module has a
   // body.  If it has a body, then we need to instantiate an object for each
   // domain port and hook up all the domain ports to annotations added to each
-  // associated port.
-  Block *body = nullptr;
-  if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
-    body = moduleOp.getBodyBlock();
-  } else if (!isa<FExtModuleOp>(op)) {
+  // associated port.  Skip modules which don't have domains.
+  auto shouldProcess =
+      TypeSwitch<Operation *, std::optional<Block *>>(op)
+          .Case<FModuleOp>([](auto op) { return op.getBodyBlock(); })
+          .Case<FExtModuleOp>([](auto) { return nullptr; })
+          // Skip all other modules.
+          .Default([](auto) { return std::nullopt; });
+  if (!shouldProcess)
     return success();
-  }
+  Block *body = *shouldProcess;
 
   auto *context = op.getContext();
 
