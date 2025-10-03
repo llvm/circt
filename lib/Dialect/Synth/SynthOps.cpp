@@ -83,8 +83,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() != 3)
     return {};
 
-  // Return if the idx-th operand is a constant (inverted if necessary),
-  // otherwise return std::nullopt.
   auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
     APInt value;
     if (mlir::matchPattern(getInputs()[index], mlir::m_ConstantInt(&value)))
@@ -121,7 +119,7 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         return getOperand(i);
     } else {
       if (isInverted(k))
-        return {};
+        return {}; //~x
       else
         return getOperand(k);
     }
@@ -165,6 +163,14 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
   if (op.getNumOperands() != 3)
     return failure();
 
+  // Return if the idx-th operand is a constant (inverted if necessary),
+  // otherwise return std::nullopt.
+  auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
+    APInt value;
+    if (mlir::matchPattern(op.getInputs()[index], mlir::m_ConstantInt(&value)))
+      return op.isInverted(index) ? ~value : value;
+    return std::nullopt;
+  };
   // Replace the op with the idx-th operand (inverted if necessary).
   auto replaceWithIndex = [&](int index) {
     bool inverted = op.isInverted(index);
@@ -191,6 +197,15 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
         }
         rewriter.replaceOp(op, op.getOperand(i));
         return success();
+      }
+
+      // If i and j are constant.
+      if (auto c1 = getConstant(i)) {
+        if (auto c2 = getConstant(j)) {
+          // If constants are complementary, we can fold.
+          if (*c1 == ~*c2)
+            return replaceWithIndex(k);
+        }
       }
     }
   }
