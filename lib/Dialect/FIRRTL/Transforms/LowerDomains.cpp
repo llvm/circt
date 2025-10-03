@@ -66,11 +66,23 @@ struct DomainInfo {
   SmallVector<DistinctAttr> associations{};
 };
 
+/// Store of the two classes created from a domain, an input class (which is
+/// one-to-one with the domain) and an output class (which tracks the input
+/// class and any associations).
+struct Classes {
+
+  /// The domain-lowered class.
+  ClassOp input;
+
+  /// A class tracking an instance of the input class and a list of
+  /// associations.
+  ClassOp output;
+};
+
 class LowerModule {
 
 public:
-  LowerModule(FModuleLike &op,
-              const DenseMap<Attribute, std::pair<ClassOp, ClassOp>> &classes)
+  LowerModule(FModuleLike &op, const DenseMap<Attribute, Classes> &classes)
       : op(op), eraseVector(BitVector(op.getNumPorts())),
         domainToClasses(classes) {}
 
@@ -97,7 +109,7 @@ private:
   SmallVector<std::pair<unsigned, unsigned>> resultMap;
 
   // Mapping of domain name to the lowered input and output class
-  const DenseMap<Attribute, std::pair<ClassOp, ClassOp>> &domainToClasses;
+  const DenseMap<Attribute, Classes> &domainToClasses;
 };
 
 LogicalResult LowerModule::lowerModule() {
@@ -311,7 +323,7 @@ public:
 private:
   CircuitOp circuit;
   InstanceGraph &instanceGraph;
-  DenseMap<Attribute, std::pair<ClassOp, ClassOp>> classes;
+  DenseMap<Attribute, Classes> classes;
 };
 
 LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
