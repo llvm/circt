@@ -155,7 +155,7 @@ LogicalResult LowerModule::lowerModule() {
       auto [classIn, classOut] = domainToClasses.at(domain.getAttr());
 
       if (body) {
-        auto builder = OpBuilder::atBlockBegin(body);
+        auto builder = OpBuilder::atBlockEnd(body);
         auto object = ObjectOp::create(
             builder, port.loc, classOut,
             StringAttr::get(context, Twine(port.name) + "_object"));
