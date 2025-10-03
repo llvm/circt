@@ -99,7 +99,12 @@ hw.module @test_index_comparison(in %index: i4, out output: i32) {
   %c4_i32 = hw.constant 4 : i32
 
   // Create a mux chain that compares index against constants
-  // This represents: if (index == 0) 0 else if (index == 1) 1 else if (index == 2) 2 else if (index == 3) 3 else 4
+  // This represents:
+  //   if (index == 0) 0
+  //   else if (index == 1) 1
+  //   else if (index == 2) 2
+  //   else if (index == 3) 3
+  //   else 4
   %cmp0 = comb.icmp eq %index, %c0_i4 : i4
   %cmp1 = comb.icmp eq %index, %c1_i4 : i4
   %cmp2 = comb.icmp eq %index, %c2_i4 : i4
