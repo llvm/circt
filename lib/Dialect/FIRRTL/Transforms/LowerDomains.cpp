@@ -220,7 +220,7 @@ LogicalResult LowerModule::lowerModule() {
     portAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
-  // Erease domain ports and clear domain association information.
+  // Erase domain ports and clear domain association information.
   op.erasePorts(eraseVector);
   op.setDomainInfoAttr(ArrayAttr::get(context, {}));
 
