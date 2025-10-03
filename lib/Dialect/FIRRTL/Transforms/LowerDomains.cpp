@@ -152,7 +152,6 @@ LogicalResult LowerModule::lowerModule() {
       eraseVector.set(i);
 
       // Instantiate a domain object with association information.
-      auto port = cast<PortInfo>(op.getPorts()[i]);
       auto name = cast<FlatSymbolRefAttr>(port.domains);
       auto [classIn, classOut] = domainToClasses.lookup(name.getAttr());
 
