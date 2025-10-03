@@ -82,69 +82,73 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
 
   if (getNumOperands() != 3)
     return {};
+
+  // Return if the idx-th operand is a constant (inverted if necessary),
+  // otherwise return std::nullopt.
+  auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
+    APInt value;
+    if (mlir::matchPattern(getInputs()[index], mlir::m_ConstantInt(&value)))
+      return isInverted(index) ? ~value : value;
+    return std::nullopt;
+  };
   if (nonConstantValues.size() == 1) {
     auto k = nonConstantValues[0]; // for 3 operands
     auto i = (k + 1) % 3;
     auto j = (k + 2) % 3;
-    auto c1 = adaptor.getInputs()[i];
-    auto c2 = adaptor.getInputs()[j];
+    auto c1 = getConstant(i);
+    auto c2 = getConstant(j);
     // x 0 0 -> 0
     // x 1 1 -> 1
     // x 0 ~0 -> x
     // x 1 ~1 -> x
     // x ~1 ~1 -> ~1 -> 0
-    // ~x 0 0 -> ~x ?
+    // ~x 0 0 -> ~x  no fold
+    // ~x 0 ~1 -> 0
     if (c1 == c2) {
       if (isInverted(i) != isInverted(j)) {
-        if (!isInverted(k))
-          return getOperand(k);
+        if (isInverted(i))
+          return getOperand(j);
         else
-          return {}; // ~x ? Invert the Operand can be handled  by
-                     // canoncialisation?
-      } else if (isInverted(i)) {
-        auto value = cast<IntegerAttr>(c1).getValue();
+          return getOperand(i);
+      }
+      if (isInverted(i)) {
+        // return the inverted value
+        auto value = cast<IntegerAttr>(adaptor.getInputs()[i]).getValue();
         value = ~value;
         return IntegerAttr::get(
             IntegerType::get(getContext(), value.getBitWidth()), value);
       } else
         return getOperand(i);
-    } else if (isInverted(i) != isInverted(j)) {
-      // ~x 0 ~1 -> 0
-      // could be bug for multi bit value
-      // fix multi bit value
-      auto value = cast<IntegerAttr>(c1).getValue();
-      auto width = value.getBitWidth();
-      if (width != 1)
+    } else {
+      if (isInverted(k))
         return {};
-      if (isInverted(i))
-        return getOperand(j);
-      return getOperand(i);
-    }
-  } else if (nonConstantValues.size() == 2) {
-    // x x 1 -> x
-    // x ~x 1 -> 1
-    // ~x ~x 1 -> ~x
-    auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
-    auto i = nonConstantValues[0];
-    auto j = nonConstantValues[1];
-    auto c1 = adaptor.getInputs()[i];
-    auto c2 = adaptor.getInputs()[j];
-    if (c1 == c2) {
-      if (isInverted(i) != isInverted(j)) {
-        if (!isInverted(k))
-          return getOperand(k);
-        auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
-        value = ~value;
-        return IntegerAttr::get(
-            IntegerType::get(getContext(), value.getBitWidth()), value);
-      } else {
-        if (isInverted(i))
-          return {}; // how to return ~x?
-        else
-          return getOperand(k);
-      }
+      else
+        return getOperand(k);
     }
   }
+  // else if (nonConstantValues.size() == 2) {
+  //   // x x 1 -> x
+  //   // x ~x 1 -> 1
+  //   // ~x ~x 1 -> ~x
+  //   auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
+  //   auto i = nonConstantValues[0];
+  //   auto j = nonConstantValues[1];
+  //   auto c1 = adaptor.getInputs()[i];
+  //   auto c2 = adaptor.getInputs()[j];
+  //   if (c1 == c2) {
+  //     if (isInverted(i) != isInverted(j)) {
+  //       if (!isInverted(k))
+  //         return getOperand(k);
+  //       auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
+  //       value = ~value;
+  //       return IntegerAttr::get(
+  //           IntegerType::get(getContext(), value.getBitWidth()), value);
+  //     } else {
+  //             if(isInverted(i))return {};
+  //             else return getOperand(i);
+  //     }
+  //   }
+  // }
   return {};
 }
 
@@ -160,15 +164,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
   // For now, only support 3 operands.
   if (op.getNumOperands() != 3)
     return failure();
-
-  // Return if the idx-th operand is a constant (inverted if necessary),
-  // otherwise return std::nullopt.
-  auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
-    APInt value;
-    if (mlir::matchPattern(op.getInputs()[index], mlir::m_ConstantInt(&value)))
-      return op.isInverted(index) ? ~value : value;
-    return std::nullopt;
-  };
 
   // Replace the op with the idx-th operand (inverted if necessary).
   auto replaceWithIndex = [&](int index) {
@@ -196,15 +191,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
         }
         rewriter.replaceOp(op, op.getOperand(i));
         return success();
-      }
-
-      // If i and j are constant.
-      if (auto c1 = getConstant(i)) {
-        if (auto c2 = getConstant(j)) {
-          // If constants are complementary, we can fold.
-          if (*c1 == ~*c2)
-            return replaceWithIndex(k);
-        }
       }
     }
   }
