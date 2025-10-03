@@ -6,10 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This lower all FIRRTL domain information into properties.  This is part of
-// the compilation of FIRRTL domains where they are inferred and checked (See:
-// the InferDomains pass) and then lowered (this pass).  This pass has the
-// additional effect of removing all domain information from the circuit.
+// This pass lowers all FIRRTL domain information into classes, objects, and
+// properties.  This is part of the compilation of FIRRTL domains where they are
+// inferred and checked (See: the InferDomains pass) and then lowered (this
+// pass).  After this pass runs, all domain information has been removed from
+// its original representation.
+//
+// Each domain is lowered into two classes: (1) a class that has the exact same
+// input/output properties as its corresponding domain and (2) a class that is
+// used to track the associations of the domain.  Every input domain port is
+// lowered to an input of type (1) and an output of type (2).  Every output
+// domain port is lowered to an output of type (2).
+//
+// Intuitively, (1) is the information that a user must specify about a domain
+// and (2) is the associations for that domain.
 //
 //===----------------------------------------------------------------------===//
 
@@ -36,23 +46,23 @@ class LowerDomainsPass : public impl::LowerDomainsBase<LowerDomainsPass> {
   impl::LowerDomainsBase<LowerDomainsPass>::getArgumentName().data()
 
 namespace {
-/// Track information about a domain.
+/// Track information about the lowering of a domain port.
 struct DomainInfo {
-  /// The instantiated class inside a module which contains domain information.
+  /// An instance of an object which will be used to track an instance of the
+  /// domain-lowered class (which is the identity of the domain) and all its
+  /// associations.
   ObjectOp op;
 
-  /// The index of the created input port for this domain.  This port does not
-  /// include association information and only contains the information that the
-  /// user must provide.
+  /// The index of the input port that will be hooked up to a field of the
+  /// ObjectOp.  This port is an instance of the domain-lowered class.
   unsigned inputPort;
 
-  /// The index of the created output port for this domain, which includes
-  /// association information.
+  /// The index of the output port that the ObjectOp will be connected to.  This
+  /// port communicates back to the user information about the associations.
   unsigned outputPort;
 
-  /// The associations to other ports for this domain.  This is in terms of
-  /// distinct attributes that have already been established in the annotations
-  /// for the associated ports.
+  /// A vector of associations that will be hooked up to the associations of
+  /// this ObjectOp.
   SmallVector<DistinctAttr> associations = SmallVector<DistinctAttr>();
 };
 
