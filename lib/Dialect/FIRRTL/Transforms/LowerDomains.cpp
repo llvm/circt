@@ -28,6 +28,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Mutex.h"
 
 namespace circt {
 namespace firrtl {
@@ -80,11 +81,80 @@ struct Classes {
   ClassOp output;
 };
 
+/// Thread safe, lazy pool of constant attributes
+class Constants {
+
+public:
+  Constants(MLIRContext *context) : context(context) {}
+
+  // Return an empty ArrayAttr.
+  ArrayAttr getEmptyArrayAttr() {
+    if (!emptyArrayAttr) {
+      llvm::sys::SmartScopedLock<true> lock(mutex);
+      emptyArrayAttr = ArrayAttr::get(context, {});
+    }
+    return emptyArrayAttr;
+  }
+
+private:
+  /// Construct all the field info attributes.
+  void constructFieldNameAttrs() {
+    if (domainInfoIn)
+      return;
+    llvm::sys::SmartScopedLock<true> lock(mutex);
+    domainInfoIn = StringAttr::get(context, "domainInfo_in");
+    domainInfoOut = StringAttr::get(context, "domainInfo_out");
+    associationsIn = StringAttr::get(context, "associations_in");
+    associationsOut = StringAttr::get(context, "associations_out");
+  }
+
+public:
+  StringAttr getDomainInfoIn() {
+    constructFieldNameAttrs();
+    assert(domainInfoIn);
+    return domainInfoIn;
+  }
+
+  StringAttr getDomainInfoOut() {
+    constructFieldNameAttrs();
+    assert(domainInfoOut);
+    return domainInfoOut;
+  }
+
+  StringAttr getAssociationsIn() {
+    constructFieldNameAttrs();
+    assert(associationsIn);
+    return associationsIn;
+  }
+
+  StringAttr getAssociationsOut() {
+    constructFieldNameAttrs();
+    assert(associationsOut);
+    return associationsOut;
+  }
+
+private:
+  /// Mutex indicating that, when held, allows for mutation.
+  llvm::sys::SmartMutex<true> mutex;
+
+  /// An MLIR context necessary for creating new attributes.
+  MLIRContext *context;
+
+  /// Lazily constructed attributes
+  ArrayAttr emptyArrayAttr;
+  StringAttr domainInfoIn;
+  StringAttr domainInfoOut;
+  StringAttr associationsIn;
+  StringAttr associationsOut;
+};
+
 class LowerModule {
 
 public:
-  LowerModule(FModuleLike &op, const DenseMap<Attribute, Classes> &classes)
-      : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes) {}
+  LowerModule(FModuleLike &op, const DenseMap<Attribute, Classes> &classes,
+              Constants &constants)
+      : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes),
+        constants(constants) {}
 
   // Lower the associated module.  Replace domain ports with input/ouput class
   // ports.
@@ -110,6 +180,9 @@ private:
 
   // Mapping of domain name to the lowered input and output class
   const DenseMap<Attribute, Classes> &domainToClasses;
+
+  // Lazy constant pool
+  Constants &constants;
 };
 
 LogicalResult LowerModule::lowerModule() {
@@ -184,7 +257,7 @@ LogicalResult LowerModule::lowerModule() {
            {iDel, PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
                            classOut.getInstanceType(), Direction::Out)}});
       portAnnotations.append(
-          {ArrayAttr::get(context, {}), ArrayAttr::get(context, {})});
+          {constants.getEmptyArrayAttr(), constants.getEmptyArrayAttr()});
 
       // Don't increment the iDel since we deleted one port.
       // Increment the iIns by 2 since we added two ports.
@@ -223,7 +296,7 @@ LogicalResult LowerModule::lowerModule() {
 
   // Erase domain ports and clear domain association information.
   op.erasePorts(eraseVector);
-  op.setDomainInfoAttr(ArrayAttr::get(context, {}));
+  op.setDomainInfoAttr(constants.getEmptyArrayAttr());
 
   // Insert new property ports and hook these up to the object that was
   // instantiated earlier.
@@ -312,7 +385,8 @@ class LowerCircuit {
 
 public:
   LowerCircuit(CircuitOp circuit, InstanceGraph &instanceGraph)
-      : circuit(circuit), instanceGraph(instanceGraph) {}
+      : circuit(circuit), instanceGraph(instanceGraph),
+        constants(circuit.getContext()) {}
 
   LogicalResult lowerDomain(DomainOp);
   LogicalResult lowerCircuit();
@@ -320,6 +394,7 @@ public:
 private:
   CircuitOp circuit;
   InstanceGraph &instanceGraph;
+  Constants constants;
   DenseMap<Attribute, Classes> classes;
 };
 
@@ -334,16 +409,16 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
       ListType::get(context, cast<PropertyType>(PathType::get(context)));
   auto classOut =
       ClassOp::create(builder, StringAttr::get(context, Twine(name) + "_out"),
-                      {{/*name=*/StringAttr::get(context, "domainInfo_in"),
+                      {{/*name=*/constants.getDomainInfoIn(),
                         /*type=*/classInType,
                         /*dir=*/Direction::In},
-                       {/*name=*/StringAttr::get(context, "domainInfo_out"),
+                       {/*name=*/constants.getDomainInfoOut(),
                         /*type=*/classInType,
                         /*dir=*/Direction::Out},
-                       {/*name=*/StringAttr::get(context, "associations_in"),
+                       {/*name=*/constants.getAssociationsIn(),
                         /*type=*/pathListType,
                         /*dir=*/Direction::In},
-                       {/*name=*/StringAttr::get(context, "associations_out"),
+                       {/*name=*/constants.getAssociationsOut(),
                         /*type=*/pathListType,
                         /*dir=*/Direction::Out}});
   builder.setInsertionPointToStart(classOut.getBodyBlock());
@@ -370,7 +445,7 @@ LogicalResult LowerCircuit::lowerCircuit() {
     if (!moduleOp)
       return success();
     LLVM_DEBUG(llvm::dbgs() << "  - module: " << moduleOp.getName() << "\n");
-    LowerModule lowerModule(moduleOp, classes);
+    LowerModule lowerModule(moduleOp, classes, constants);
     if (failed(lowerModule.lowerModule()))
       return failure();
     LLVM_DEBUG(llvm::dbgs() << "    instances:\n");
