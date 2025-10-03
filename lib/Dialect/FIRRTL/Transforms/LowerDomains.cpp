@@ -63,7 +63,7 @@ struct DomainInfo {
 
   /// A vector of associations that will be hooked up to the associations of
   /// this ObjectOp.
-  SmallVector<DistinctAttr> associations = SmallVector<DistinctAttr>();
+  SmallVector<DistinctAttr> associations{};
 };
 
 class LowerModule {
