@@ -195,7 +195,7 @@ LogicalResult LowerModule::lowerModule() {
     // Record the mapping of the old port to the new port.  This can be used
     // later to update instances.  This port will not be deleted, so
     // post-increment both indices.
-    resultMap.push_back({iDel++, iIns++});
+    resultMap.emplace_back(iDel++, iIns++);
 
     // If this port has domain associations, then we need to add port annotation
     // trackers.  These will be hooked up to the Object's associations later.
