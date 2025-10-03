@@ -514,6 +514,24 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CombToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToLLVM : Pass<"convert-comb-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Convert Comb and HW to LLVM";
+  let description = [{
+    This pass translates Comb and HW operations to LLVM IR. It combines
+    both HW and Comb conversion patterns to provide a complete lowering
+    from hardware description to LLVM IR.
+  }];
+  let constructor = "circt::createConvertCombToLLVMPass()";
+  let dependentDialects = [
+    "mlir::LLVM::LLVMDialect",
+    "mlir::arith::ArithDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // HWArithToHW
 //===----------------------------------------------------------------------===//
 
