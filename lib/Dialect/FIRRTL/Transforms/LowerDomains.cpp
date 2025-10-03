@@ -26,6 +26,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Support/Debug.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 namespace circt {
@@ -112,10 +113,8 @@ private:
 };
 
 LogicalResult LowerModule::lowerModule() {
-  // Only lower modules or external modules.
-  if (!isa<FModuleOp, FExtModuleOp>(op))
-    return success();
-
+  // Only lower modules or external modules!
+  //
   // Much of the lowering is conditioned on whether or not his module has a
   // body.  If it has a body, then we need to instantiate an object for each
   // domain port and hook up all the domain ports to annotations added to each
@@ -125,6 +124,8 @@ LogicalResult LowerModule::lowerModule() {
   if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
     body = moduleOp.getBodyBlock();
     builder = OpBuilder::atBlockBegin(body);
+  } else if (!isa<FExtModuleOp>(op)) {
+    return success();
   }
 
   auto *context = op.getContext();
