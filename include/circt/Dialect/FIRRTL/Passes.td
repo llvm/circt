@@ -915,6 +915,10 @@ def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {
     Lower all domain information into FIRRTL properties.  This has the effect of
     erasing all domain information.
   }];
+  let statistics = [
+    Statistic<"numDomains", "num-domains",
+      "Number of domains lowered">
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -41,6 +41,7 @@ using namespace circt;
 using namespace firrtl;
 
 class LowerDomainsPass : public impl::LowerDomainsBase<LowerDomainsPass> {
+  using Base::Base;
   void runOnOperation() override;
 };
 
@@ -395,9 +396,10 @@ LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
 class LowerCircuit {
 
 public:
-  LowerCircuit(CircuitOp circuit, InstanceGraph &instanceGraph)
+  LowerCircuit(CircuitOp circuit, InstanceGraph &instanceGraph,
+               llvm::Statistic &numDomains)
       : circuit(circuit), instanceGraph(instanceGraph),
-        constants(circuit.getContext()) {}
+        constants(circuit.getContext()), numDomains(numDomains) {}
 
   LogicalResult lowerDomain(DomainOp);
   LogicalResult lowerCircuit();
@@ -406,6 +408,7 @@ private:
   CircuitOp circuit;
   InstanceGraph &instanceGraph;
   Constants constants;
+  llvm::Statistic &numDomains;
   DenseMap<Attribute, Classes> classes;
 };
 
@@ -439,6 +442,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
                        classOut.getArgument(2));
   classes.insert({name, {classIn, classOut}});
   op.erase();
+  ++numDomains;
   return success();
 }
 
@@ -470,7 +474,8 @@ LogicalResult LowerCircuit::lowerCircuit() {
 void LowerDomainsPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
-  LowerCircuit lowerCircuit(getOperation(), getAnalysis<InstanceGraph>());
+  LowerCircuit lowerCircuit(getOperation(), getAnalysis<InstanceGraph>(),
+                            numDomains);
   if (failed(lowerCircuit.lowerCircuit()))
     return signalPassFailure();
 
