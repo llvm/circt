@@ -815,6 +815,7 @@ LogicalResult MachineOpConverter::dispatch() {
           } else {
             zeroTime = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
           }
+          
           Value atZero = b.create<smt::EqOp>(loc, forallArgs.back(), zeroTime);
 
           return b.create<smt::ImpliesOp>(loc, atZero, inInit);
