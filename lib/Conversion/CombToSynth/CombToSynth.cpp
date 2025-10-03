@@ -1076,6 +1076,11 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
   }
 
   // Compute prefix comparison using parallel prefix algorithm
+  // Note: This generates all intermediate prefix values even though we only
+  // need the final result. Optimizing this to skip intermediate computations
+  // is non-trivial because each iteration depends on results from previous
+  // iterations. We rely on DCE passes to remove unused operations.
+  // TODO: Lazily compute only the required prefix values.
   static Value computePrefixComparison(ConversionPatternRewriter &rewriter,
                                        Location loc, SmallVector<Value> pPrefix,
                                        SmallVector<Value> gPrefix,

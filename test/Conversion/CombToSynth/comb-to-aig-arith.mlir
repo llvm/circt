@@ -254,6 +254,36 @@ hw.module @icmp_unsigned_compare(in %lhs: i2, in %rhs: i2, out out_ugt: i1, out 
   hw.output %ugt, %uge, %ult, %ule : i1, i1, i1, i1
 }
 
+// CHECK-LABEL: @icmp_unsigned_compare_prefix_tree
+hw.module @icmp_unsigned_compare_prefix_tree(in %lhs: i3, in %rhs: i3, out out_ult: i1) {
+  %ult = comb.icmp ult %lhs, %rhs {synth.test.arch = "SKLANSKEY"}: i3
+  // CHECK:      %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[LHS_2:.+]] = comb.extract %lhs from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i3) -> i1
+  // CHECK-NEXT: %[[RHS_2:.+]] = comb.extract %rhs from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[TRUE:.+]] = hw.constant true
+  // CHECK-NEXT: %[[LSB_NEQ:.+]] = comb.xor %[[LHS_0]], %[[RHS_0]] : i1
+  // CHECK-NEXT: %[[LSB_EQ:.+]] = comb.xor %[[LSB_NEQ]], %[[TRUE]] : i1
+  // CHECK-NEXT: %[[LHS_0_NOT:.+]] = comb.xor %[[LHS_0]], %[[TRUE]] : i1
+  // CHECK-NEXT: %[[LSB_LT:.+]] = comb.and %[[LHS_0_NOT]], %[[RHS_0]] : i1
+  // CHECK-NEXT: %[[BIT1_NEQ:.+]] = comb.xor %[[LHS_1]], %[[RHS_1]] : i1
+  // CHECK-NEXT: %[[BIT1_EQ:.+]] = comb.xor %[[BIT1_NEQ]], %[[TRUE]] : i1
+  // CHECK-NEXT: %[[LHS_1_NOT:.+]] = comb.xor %[[LHS_1]], %[[TRUE]] : i1
+  // CHECK-NEXT: %[[BIT1_LT:.+]] = comb.and %[[LHS_1_NOT]], %[[RHS_1]] : i1
+  // CHECK-NEXT: %[[MSB_NEQ:.+]] = comb.xor %[[LHS_2]], %[[RHS_2]] : i1
+  // CHECK-NEXT: %[[MSB_EQ:.+]] = comb.xor %[[MSB_NEQ]], %[[TRUE]] : i1
+  // CHECK-NEXT: %[[LHS_2_NOT:.+]] = comb.xor %[[LHS_2]], %[[TRUE]] : i1
+  // CHECK-NEXT: %[[MSB_LT:.+]] = comb.and %[[LHS_2_NOT]], %[[RHS_2]] : i1
+  // CHECK-NEXT: %[[BIT1_EQ_AND_LSB_LT:.+]] = comb.and %[[BIT1_EQ]], %[[LSB_LT]] : i1
+  // CHECK-NEXT: %[[BIT10_LT:.+]] = comb.or %[[BIT1_LT]], %[[BIT1_EQ_AND_LSB_LT]] : i1
+  // CHECK:      %[[MSB_EQ_AND_BIT10_LT:.+]] = comb.and %[[MSB_EQ]], %[[BIT10_LT]] : i1
+  // CHECK-NEXT: %[[ULT:.+]] = comb.or %[[MSB_LT]], %[[MSB_EQ_AND_BIT10_LT]] : i1
+  // CHECK-NEXT: hw.output %[[ULT]] : i1
+  hw.output %ult : i1
+}
+
 // CHECK-LABEL: @icmp_signed_compare
 hw.module @icmp_signed_compare(in %lhs: i2, in %rhs: i2, out out_sgt: i1, out out_sge: i1, out out_slt: i1, out out_sle: i1) {
   %sgt = comb.icmp sgt %lhs, %rhs : i2
@@ -432,4 +462,3 @@ hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8)
   // ALLOW_ICMP-NEXT: hw.output %[[DIVU]], %[[MODU]] : i8, i8
   hw.output %0, %1 : i8, i8
 }
-
