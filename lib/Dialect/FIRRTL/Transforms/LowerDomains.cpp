@@ -170,9 +170,8 @@ LogicalResult LowerModule::lowerModule() {
             castOp.erase();
             continue;
           }
-          user->emitOpError()
-              << "has an unimplemented lowering in the LowerDomains pass.";
-          return failure();
+          return user->emitOpError()
+                 << "has an unimplemented lowering in the LowerDomains pass.";
         }
       }
 
