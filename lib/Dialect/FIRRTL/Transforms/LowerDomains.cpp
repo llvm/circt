@@ -476,4 +476,6 @@ void LowerDomainsPass::runOnOperation() {
   LowerCircuit lowerCircuit(getOperation(), getAnalysis<InstanceGraph>());
   if (failed(lowerCircuit.lowerCircuit()))
     return signalPassFailure();
+
+  markAllAnalysesPreserved();
 }
