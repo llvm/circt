@@ -1,7 +1,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s --hw-aggregate-to-comb --convert-comb-to-synth --convert-synth-to-comb -o %t.mlir
+// RUN: circt-opt %s --convert-comb-to-synth --convert-synth-to-comb -o %t.mlir
 
 // RUN: circt-lec %t.mlir %s -c1=icmp_unsigned_ripple_carry -c2=icmp_unsigned_ripple_carry --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMP_UNSIGNED_RIPPLE_CARRY
 // COMB_ICMP_UNSIGNED_RIPPLE_CARRY: c1 == c2
