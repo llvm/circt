@@ -55,7 +55,7 @@ namespace {
 struct LoweringConfig {
   // If true, represent all non-boolean values as !smt.bv<w>. Otherwise, use
   // !smt.int for widths > 1, and !smt.bool for width == 1.
-  bool useBitVec = true;
+  bool useBitVec = false;
 
   // If true, include a "time" parameter in the relation and increment it on
   // transitions. If false, omit it entirely.
@@ -395,9 +395,10 @@ private:
       Type resTy = args[1].getType();
       return b.create<smt::IteOp>(loc, resTy, condBool, args[1], args[2]);
     }
+    
+    llvm::outs() << "\n\n\n\n\nBitvector flag" << cfg.useBitVec << "\n\n";
 
     // comb.concat
-        // comb.concat
     if (auto concatOp = dyn_cast<comb::ConcatOp>(op)) {
       if (cfg.useBitVec) {
         Value acc = toBV(args[0]);
@@ -474,8 +475,17 @@ private:
     // comb.replicate
     if (auto repOp = dyn_cast<comb::ReplicateOp>(op)) {
       if (!cfg.useBitVec) {
-        op.emitError() << "replicate is unsupported in int mode";
-        assert(false && "replicate needs bit-vectors");
+        auto operand = repOp.getOperand(); 
+        int width = operand.getType().getIntOrFloatBitWidth(); 
+        if (width == 1){
+          unsigned count = repOp.getMultiple();
+          auto lhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(2 ^ count - 1));
+          auto rhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
+          auto cond= toBool(args[0]);
+          return b.create<smt::IteOp>(loc, b.getType<smt::IntType>(), cond, lhs, rhs);
+        } else 
+          op.emitError() << "replicate is only unsupported in int mode for width == 1";
+          assert(false && "shift needs bit-vectors");
       }
       unsigned count = repOp.getMultiple();
       Value in = toBV(args[0]);
@@ -1012,10 +1022,10 @@ void FSMToSMTSafetyPass::runOnOperation() {
   // Normalize option string.
   std::string mode = bitVecOrInt;
   std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
-  if (mode == "int" || mode == "ints" || mode == "integer")
-    cfg.useBitVec = false;
-  else
-    cfg.useBitVec = true; // default
+  // if (mode == "int" || mode == "ints" || mode == "integer")
+  //   cfg.useBitVec = false;
+  // else
+  //   cfg.useBitVec = true; // default
 
   // Optional: set time width; keep 5 as stable default (can be parameterized later).
   cfg.timeWidth = 5;
