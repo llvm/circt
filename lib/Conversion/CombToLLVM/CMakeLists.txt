@@ -1,7 +1,6 @@
 add_circt_conversion_library(CIRCTCombToLLVM
   CombToLLVM.cpp
 
-
   DEPENDS
   CIRCTConversionPassIncGen
 
@@ -10,6 +9,15 @@ add_circt_conversion_library(CIRCTCombToLLVM
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  CIRCTCombToArith
+  CIRCTHW
+  CIRCTHWToLLVM
+  CIRCTSupport
+  MLIRArithToLLVM
+  MLIRControlFlowToLLVM
+  MLIRFuncToLLVM
+  MLIRIndexToLLVM
   MLIRLLVMCommonConversion
+  MLIRSCFToControlFlow
   MLIRTransforms
 )
