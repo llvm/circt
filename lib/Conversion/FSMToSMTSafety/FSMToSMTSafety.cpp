@@ -246,13 +246,12 @@ private:
   Value getCombValue(Operation &op, Location &loc,
                      SmallVector<Value> args) {
     auto toBV = [&](Value v) -> Value {
+      if (isa<smt::IntType>(v.getType()))
+        return b.create<smt::Int2BVOp>(loc, b.getType<smt::BitVectorType>(64), v);
       if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
         return v;
       if (llvm::isa<smt::BoolType>(v.getType()))
         return boolToBV1(b, loc, v);
-      op.emitError() << "expected SMT BV or Bool operand, got " << v;
-      assert(false && "unexpected SMT operand type");
-      return v;
     };
 
     auto toInt = [&](Value v) -> Value {
@@ -298,11 +297,12 @@ private:
 
     // comb.add
     if (auto addOp = dyn_cast<comb::AddOp>(op)) {
+      // bitvec
       if (cfg.useBitVec) {
         return b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
                                       args);
       }
-      // int mode
+      // int
       SmallVector<Value> ops;
       for (auto v : args) ops.push_back(toInt(v));
       return b.create<smt::IntAddOp>(loc, ops);
@@ -310,6 +310,7 @@ private:
 
     // comb.sub
     if (auto subOp = dyn_cast<comb::SubOp>(op)) {
+      // bitvec
       if (cfg.useBitVec) {
         Value rhs = toBV(args[1]);
         auto rhsTy = llvm::cast<smt::BitVectorType>(rhs.getType());
@@ -317,34 +318,35 @@ private:
         return b.create<smt::BVAddOp>(loc,
                b.getType<smt::BitVectorType>(widths[0]), args[0], neg);
       }
-      // int mode
+      // int
       return b.create<smt::IntSubOp>(loc, toInt(args[0]), toInt(args[1]));
     }
 
     // comb.mul
     if (auto mulOp = dyn_cast<comb::MulOp>(op)) {
+      // bitvec
       if (cfg.useBitVec) {
         return b.create<smt::BVMulOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
                                       args);
       }
+      // int 
       SmallVector<Value> ops;
       for (auto v : args) ops.push_back(toInt(v));
       return b.create<smt::IntMulOp>(loc, ops);
     }
 
-    // comb.and (note: on i1 this is boolean and)
+    // comb.and (boolean and for i1)
     if (auto andOp = dyn_cast<comb::AndOp>(op)) {
       if (args.size() == 1)
         return args[0];
-
+      // bitvec 
       if (cfg.useBitVec) {
         Value result = toBV(args[0]);
         for (size_t i = 1; i < args.size(); ++i)
           result = b.create<smt::BVAndOp>(loc, result, toBV(args[i]));
         return result;
       }
-
-      // int mode: require all bools for logical-and
+      // int 
       SmallVector<Value> bools;
       for (auto v : args) bools.push_back(toBool(v));
       Value result = bools[0];
@@ -355,13 +357,14 @@ private:
 
     // comb.or (boolean or for i1)
     if (auto orOp = dyn_cast<comb::OrOp>(op)) {
+      // bitvec
       if (cfg.useBitVec) {
         Value result = toBV(args[0]);
         for (size_t i = 1; i < args.size(); ++i)
           result = b.create<smt::BVOrOp>(loc, result, toBV(args[i]));
         return result;
       }
-
+      // int
       SmallVector<Value> bools;
       for (auto v : args) bools.push_back(toBool(v));
       Value result = bools[0];
@@ -372,13 +375,14 @@ private:
 
     // comb.xor (boolean xor for i1)
     if (auto xorOp = dyn_cast<comb::XorOp>(op)) {
+      // bitvec
       if (cfg.useBitVec) {
         Value result = toBV(args[0]);
         for (size_t i = 1; i < args.size(); ++i)
           result = b.create<smt::BVXOrOp>(loc, result, toBV(args[i]));
         return result;
       }
-
+      // int
       SmallVector<Value> bools;
       for (auto v : args) bools.push_back(toBool(v));
       Value result = bools[0];
@@ -396,10 +400,9 @@ private:
       return b.create<smt::IteOp>(loc, resTy, condBool, args[1], args[2]);
     }
     
-    llvm::outs() << "\n\n\n\n\nBitvector flag" << cfg.useBitVec << "\n\n";
-
     // comb.concat
     if (auto concatOp = dyn_cast<comb::ConcatOp>(op)) {
+      // bitvec
       if (cfg.useBitVec) {
         Value acc = toBV(args[0]);
         int accW = bvWidth(acc);
@@ -412,8 +415,7 @@ private:
         }
         return acc;
       }
-
-      // Int mode: concatenate by "shift-and-add":
+      // int: concatenate by "shift-and-add":
       // If acc encodes the left part and next encodes the right part,
       // concat(acc, next) = acc * 2^(width(next)) + next
       // We compute 2^width(next) as a constant Int, since widths are known statically.
@@ -421,11 +423,9 @@ private:
       opWidths.reserve(concatOp->getNumOperands());
       for (Value orig : concatOp->getOperands())
         opWidths.push_back(getPackedBitWidth(orig.getType()));
-
       Value acc = toInt(args[0]);
       for (size_t i = 1; i < args.size(); ++i) {
         unsigned nextW = opWidths[i];
-
         // Build the Int constant 2^nextW.
         // Use bitwidth (nextW + 1) to be sufficient to hold the value.
         unsigned cstBits = nextW + 1;
@@ -433,7 +433,6 @@ private:
         twoPow = twoPow.shl(nextW);
         auto powAttr = b.getIntegerAttr(b.getIntegerType(cstBits), twoPow);
         Value powC = b.create<smt::IntConstantOp>(loc, powAttr);
-
         // acc = acc * 2^nextW + toInt(args[i])
         Value scaled = b.create<smt::IntMulOp>(loc, SmallVector<Value>{acc, powC});
         Value nextInt = toInt(args[i]);
@@ -444,65 +443,63 @@ private:
 
     // comb.extract
     if (auto extOp = dyn_cast<comb::ExtractOp>(op)) {
-  unsigned low = extOp.getLowBit();
-  unsigned width = extOp.getType().getIntOrFloatBitWidth();
-
-  if (cfg.useBitVec) {
-    auto resTy = b.getType<smt::BitVectorType>(width);
-    return b.create<smt::ExtractOp>(loc, resTy, low, toBV(args.front()));
-  }
-
-  // Integer mode:
-  // extract(x, low, width) = ((x div 2^low) mod 2^width)
-  Value xInt = toInt(args.front());
-
-  // q = x div 2^low  (skip division if low == 0)
-  Value q = xInt;
-  if (low != 0)
-    q = b.create<smt::IntDivOp>(loc, xInt, intPow2(low, loc));
-
-  if (width == 1) {
-    // Return a Bool for i1. Compute the selected bit as Int 0/1 and convert.
-    Value bitInt = b.create<smt::IntModOp>(loc, q, intPow2(1, loc)); // mod 2
-    return numericToBool(bitInt, loc); // 0 -> false, 1 -> true
-  }
-
-  // General case: result is Int in [0, 2^width)
-  Value maskRange = intPow2(width, loc); // 2^width
-  return b.create<smt::IntModOp>(loc, q, maskRange);
-}
+      unsigned low = extOp.getLowBit();
+      unsigned width = extOp.getType().getIntOrFloatBitWidth();
+      // bitvec 
+      if (cfg.useBitVec) {
+        auto resTy = b.getType<smt::BitVectorType>(width);
+        return b.create<smt::ExtractOp>(loc, resTy, low, toBV(args.front()));
+      }
+      // int: extract(x, low, width) = ((x div 2^low) mod 2^width)
+      Value xInt = toInt(args.front());
+      // q = x div 2^low  (skip division if low == 0)
+      Value q = xInt;
+      if (low != 0)
+        q = b.create<smt::IntDivOp>(loc, xInt, intPow2(low, loc));
+      if (width == 1) {
+        // Return a Bool for i1. Compute the selected bit as Int 0/1 and convert.
+        Value bitInt = b.create<smt::IntModOp>(loc, q, intPow2(1, loc)); // mod 2
+        return numericToBool(bitInt, loc); // 0 -> false, 1 -> true
+      }
+      // General case: result is Int in [0, 2^width)
+      Value maskRange = intPow2(width, loc); // 2^width
+      return b.create<smt::IntModOp>(loc, q, maskRange);
+    }
 
     // comb.replicate
     if (auto repOp = dyn_cast<comb::ReplicateOp>(op)) {
-      if (!cfg.useBitVec) {
-        auto operand = repOp.getOperand(); 
-        int width = operand.getType().getIntOrFloatBitWidth(); 
-        if (width == 1){
-          unsigned count = repOp.getMultiple();
-          auto lhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(2 ^ count - 1));
-          auto rhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
-          auto cond= toBool(args[0]);
-          return b.create<smt::IteOp>(loc, b.getType<smt::IntType>(), cond, lhs, rhs);
-        } 
-        op.emitError() << "replicate is only unsupported in int mode for width == 1";
-        assert(false && "replicate needs 1-long bit-vector");
+      // bitvec
+      if (cfg.useBitVec){
+        unsigned count = repOp.getMultiple();
+        Value in = toBV(args[0]);
+        return b.create<smt::RepeatOp>(loc, count, in);
       }
-      unsigned count = repOp.getMultiple();
-      Value in = toBV(args[0]);
-      return b.create<smt::RepeatOp>(loc, count, in);
+      // int: we only support replicate of i1, which is lowered as ite(cond, 2^count-1, 0)
+      if (repOp.getOperand().getType().getIntOrFloatBitWidth() == 1){
+        unsigned count = repOp.getMultiple();
+        auto lhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(2 ^ count - 1));
+        auto rhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
+        auto cond= toBool(args[0]);
+        return b.create<smt::IteOp>(loc, b.getType<smt::IntType>(), cond, lhs, rhs);
+      } 
+      op.emitError() << "replicate is only unsupported in int mode for width == 1";
+      assert(false && "replicate needs 1-long bit-vector");
     }
 
-    // comb.shr_u
+    // comb.shru
     if (comb::ShrUOp shruOp = dyn_cast<comb::ShrUOp>(op)) {
-      if (!cfg.useBitVec) {
-        op.emitError() << "logical shift right is unsupported in int mode";
-        assert(false && "shift needs bit-vectors");
+      // bitvec 
+      SmallVector<Value> bvArgs; 
+      for (auto a : args) bvArgs.push_back(toBV(a));
+      auto bvOp = b.create<smt::BVLShrOp>(loc, bvArgs);
+      if (cfg.useBitVec) {
+        return bvOp;
       }
-      SmallVector<Value> bvArgs;
-      for (auto v : args) bvArgs.push_back(toBV(v));
-      return b.create<smt::BVLShrOp>(loc, bvArgs);
+      // int 
+      return b.create<smt::BV2IntOp>(loc, bvOp->getResult(0));
+      // return b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
     }
-
+  
     // comb.icmp
     if (auto icmp = dyn_cast<comb::ICmpOp>(op)) {
       auto pred = icmp.getPredicate();
