@@ -48,6 +48,16 @@ class LowerDomainsPass : public impl::LowerDomainsBase<LowerDomainsPass> {
   impl::LowerDomainsBase<LowerDomainsPass>::getArgumentName().data()
 
 namespace {
+/// Minimally track information about an association of a port to a domain.
+struct AssociationInfo {
+  /// The DistinctAttr (annotation) that is used to identify the port.
+  DistinctAttr distinctAttr;
+
+  /// The port's location.  This is used to generate exact information about
+  /// certain property ops created later.
+  Location loc;
+};
+
 /// Track information about the lowering of a domain port.
 struct DomainInfo {
   /// An instance of an object which will be used to track an instance of the
@@ -63,9 +73,9 @@ struct DomainInfo {
   /// port communicates back to the user information about the associations.
   unsigned outputPort;
 
-  /// A vector of associations that will be hooked up to the associations of
-  /// this ObjectOp.
-  SmallVector<DistinctAttr> associations{};
+  /// A vector of minimal association info that will be hooked up to the
+  /// associations of this ObjectOp.
+  SmallVector<AssociationInfo> associations{};
 };
 
 /// Store of the two classes created from a domain, an input class (which is
@@ -229,9 +239,9 @@ LogicalResult LowerModule::lowerModule() {
       auto [classIn, classOut] = domainToClasses.at(domain.getAttr());
 
       if (body) {
-        auto builder = OpBuilder::atBlockEnd(body);
+        auto builder = ImplicitLocOpBuilder::atBlockEnd(port.loc, body);
         auto object = ObjectOp::create(
-            builder, port.loc, classOut,
+            builder, classOut,
             StringAttr::get(context, Twine(port.name) + "_object"));
         indexToDomain[i] = {object, iIns, iIns + 1};
 
@@ -287,7 +297,7 @@ LogicalResult LowerModule::lowerModule() {
       newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
           context,
           {{"class", StringAttr::get(context, "circt.tracker")}, {"id", id}})));
-      indexToDomain[domainIndex].associations.push_back(id);
+      indexToDomain[domainIndex].associations.push_back({id, port.loc});
     }
     if (!newAnnotations.empty())
       port.annotations.addAnnotations(newAnnotations);
@@ -308,26 +318,25 @@ LogicalResult LowerModule::lowerModule() {
       builder.setInsertionPointAfter(object);
       // Assign input domain info.
       auto subDomainInfoIn =
-          ObjectSubfieldOp::create(builder, builder.getUnknownLoc(), object, 0);
-      PropAssignOp::create(builder, builder.getUnknownLoc(), subDomainInfoIn,
+          ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
+      PropAssignOp::create(builder, object.getLoc(), subDomainInfoIn,
                            body->getArgument(inputPort));
       auto subAssociations =
-          ObjectSubfieldOp::create(builder, builder.getUnknownLoc(), object, 2);
+          ObjectSubfieldOp::create(builder, object.getLoc(), object, 2);
       // Assign associations.
       SmallVector<Value> paths;
-      for (auto id : associations) {
+      for (auto [id, loc] : associations) {
         paths.push_back(PathOp::create(
-            builder, builder.getUnknownLoc(),
+            builder, loc,
             TargetKindAttr::get(context, TargetKind::MemberReference), id));
       }
       auto list = ListCreateOp::create(
-          builder, builder.getUnknownLoc(),
+          builder, object.getLoc(),
           ListType::get(context, cast<PropertyType>(PathType::get(context))),
           paths);
-      PropAssignOp::create(builder, builder.getUnknownLoc(), subAssociations,
-                           list);
+      PropAssignOp::create(builder, object.getLoc(), subAssociations, list);
       // Connect the object to the output port.
-      PropAssignOp::create(builder, builder.getUnknownLoc(),
+      PropAssignOp::create(builder, object.getLoc(),
                            body->getArgument(outputPort), object);
     }
   }
