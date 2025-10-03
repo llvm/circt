@@ -120,6 +120,8 @@ def PrintLongestPathAnalysis
                  Option<"topModuleName", "top-module-name", "std::string", "",
                         "Name of the top module to analyze (empty for automatic "
                         "inference from instance graph)">];
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect",
+                           "circt::synth::SynthDialect"];
 }
 
 class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {

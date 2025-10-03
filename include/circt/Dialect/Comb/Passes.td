@@ -34,4 +34,16 @@ def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
   }];
 }
 
+def BalanceMux : Pass<"comb-balance-mux"> {
+  let summary = "Balance and optimize mux chains";
+  let description = [{
+    Optimizes mux chains through enhanced folding and priority mux
+    rebalancing. Converts index comparisons to arrays and rebalances
+    linear chains into balanced trees, reducing depth from O(n) to O(log n).
+  }];
+  let options = [Option<
+      "muxChainThreshold", "mux-chain-threshold", "unsigned", "16",
+      "Minimum number of linear mux chains to trigger rebalancing">];
+}
+
 #endif // CIRCT_DIALECT_COMB_PASSES_TD

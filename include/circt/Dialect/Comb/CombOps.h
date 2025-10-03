@@ -86,6 +86,17 @@ Value createDynamicInject(OpBuilder &builder, Location loc, Value value,
 Value createInject(OpBuilder &builder, Location loc, Value value,
                    unsigned offset, Value replacement);
 
+/// Enum for mux chain folding styles.
+enum MuxChainWithComparisonFoldingStyle { None, BalancedMuxTree, ArrayGet };
+/// Mux chain folding that converts chains of muxes with index
+/// comparisons into array operations or balanced mux trees. `styleFn` is a
+/// callback that returns the desired folding style based on the index
+/// width and number of entries.
+bool foldMuxChainWithComparison(
+    PatternRewriter &rewriter, MuxOp rootMux, bool isFalseSide,
+    llvm::function_ref<MuxChainWithComparisonFoldingStyle(size_t indexWidth,
+                                                          size_t numEntries)>
+        styleFn);
 } // namespace comb
 } // namespace circt
 

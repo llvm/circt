@@ -15,6 +15,7 @@
 #include "circt/Conversion/CombToSynth.h"
 #include "circt/Conversion/DatapathToComb.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/Datapath/DatapathPasses.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -63,6 +64,10 @@ void circt::synth::buildCombLoweringPipeline(
   }
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
+  // Balance mux chains. For area oriented flow, we want to keep the mux chains
+  // unless they are very deep.
+  comb::BalanceMuxOptions balanceOptions{OptimizationStrategyTiming ? 16 : 64};
+  pm.addPass(comb::createBalanceMux(balanceOptions));
 
   pm.addPass(circt::hw::createHWAggregateToComb());
   circt::ConvertCombToSynthOptions convOptions;
