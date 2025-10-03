@@ -207,8 +207,8 @@ LogicalResult LowerModule::lowerModule() {
     }
 
     SmallVector<Annotation> newAnnotations;
-    for (auto attr : domainAttr) {
-      auto domainIndex = cast<IntegerAttr>(attr).getUInt();
+    for (auto indexAttr : domainAttr.getAsRange<IntegerAttr>()) {
+      auto domainIndex = indexAttr.getUInt();
       auto id = DistinctAttr::create(UnitAttr::get(context));
       newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
           context,
