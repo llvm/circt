@@ -153,7 +153,7 @@ LogicalResult LowerModule::lowerModule() {
 
       // Instantiate a domain object with association information.
       auto name = cast<FlatSymbolRefAttr>(port.domains);
-      auto [classIn, classOut] = domainToClasses.lookup(name.getAttr());
+      auto [classIn, classOut] = domainToClasses.at(name.getAttr());
 
       if (body) {
         auto builder = OpBuilder::atBlockBegin(body);
