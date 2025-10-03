@@ -28,7 +28,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: %[[domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
     // CHECK-NEXT: %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
-    // CHECK-NEXT: %[[path:.+]] = firrtl.path member_reference distinct[0]<>
+    // CHECK-NEXT: %[[path:.+]] = firrtl.path reference distinct[0]<>
     // CHECK-NEXT: %[[list:.+]] = firrtl.list.create %[[path]] :
     // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
     // CHECK-NEXT: firrtl.propassign %A_out, %A_object :

@@ -327,8 +327,8 @@ LogicalResult LowerModule::lowerModule() {
       SmallVector<Value> paths;
       for (auto [id, loc] : associations) {
         paths.push_back(PathOp::create(
-            builder, loc,
-            TargetKindAttr::get(context, TargetKind::MemberReference), id));
+            builder, loc, TargetKindAttr::get(context, TargetKind::Reference),
+            id));
       }
       auto list = ListCreateOp::create(
           builder, object.getLoc(),
