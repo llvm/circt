@@ -83,8 +83,7 @@ class LowerModule {
 
 public:
   LowerModule(FModuleLike &op, const DenseMap<Attribute, Classes> &classes)
-      : op(op), eraseVector(BitVector(op.getNumPorts())),
-        domainToClasses(classes) {}
+      : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes) {}
 
   // Lower the associated module.  Remove domain ports and remove all domain
   // information.
