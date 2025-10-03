@@ -85,12 +85,12 @@ public:
   LowerModule(FModuleLike &op, const DenseMap<Attribute, Classes> &classes)
       : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes) {}
 
-  // Lower the associated module.  Remove domain ports and remove all domain
-  // information.
+  // Lower the associated module.  Replace domain ports with input/ouput class
+  // ports.
   LogicalResult lowerModule();
 
   // Lower all instances of the associated module.  This relies on state built
-  // up during `lowerModule`.
+  // up during `lowerModule` and must be run _afterwards_.
   LogicalResult lowerInstances(InstanceGraph &);
 
 private:
