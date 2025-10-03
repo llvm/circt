@@ -120,10 +120,8 @@ LogicalResult LowerModule::lowerModule() {
   // domain port and hook up all the domain ports to annotations added to each
   // associated port.
   Block *body = nullptr;
-  std::optional<OpBuilder> builder;
   if (auto moduleOp = dyn_cast<FModuleOp>(*op)) {
     body = moduleOp.getBodyBlock();
-    builder = OpBuilder::atBlockBegin(body);
   } else if (!isa<FExtModuleOp>(op)) {
     return success();
   }
@@ -159,8 +157,9 @@ LogicalResult LowerModule::lowerModule() {
       auto [classIn, classOut] = domainToClasses.lookup(name.getAttr());
 
       if (body) {
+        auto builder = OpBuilder::atBlockBegin(body);
         auto object = ObjectOp::create(
-            *builder, port.loc, classOut,
+            builder, port.loc, classOut,
             StringAttr::get(context, Twine(port.name) + "_object"));
         indexToDomain[i] = {object, iIns, iIns + 1};
 
@@ -234,29 +233,30 @@ LogicalResult LowerModule::lowerModule() {
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
       auto [object, inputPort, outputPort, associations] = info;
-      builder->setInsertionPointAfter(object);
+      OpBuilder builder(object);
+      builder.setInsertionPointAfter(object);
       // Assign input domain info.
-      auto subDomainInfoIn = ObjectSubfieldOp::create(
-          *builder, builder->getUnknownLoc(), object, 0);
-      PropAssignOp::create(*builder, builder->getUnknownLoc(), subDomainInfoIn,
+      auto subDomainInfoIn =
+          ObjectSubfieldOp::create(builder, builder.getUnknownLoc(), object, 0);
+      PropAssignOp::create(builder, builder.getUnknownLoc(), subDomainInfoIn,
                            body->getArgument(inputPort));
-      auto subAssociations = ObjectSubfieldOp::create(
-          *builder, builder->getUnknownLoc(), object, 2);
+      auto subAssociations =
+          ObjectSubfieldOp::create(builder, builder.getUnknownLoc(), object, 2);
       // Assign associations.
       SmallVector<Value> paths;
       for (auto id : associations) {
         paths.push_back(PathOp::create(
-            *builder, builder->getUnknownLoc(),
+            builder, builder.getUnknownLoc(),
             TargetKindAttr::get(context, TargetKind::MemberReference), id));
       }
       auto list = ListCreateOp::create(
-          *builder, builder->getUnknownLoc(),
+          builder, builder.getUnknownLoc(),
           ListType::get(context, cast<PropertyType>(PathType::get(context))),
           paths);
-      PropAssignOp::create(*builder, builder->getUnknownLoc(), subAssociations,
+      PropAssignOp::create(builder, builder.getUnknownLoc(), subAssociations,
                            list);
       // Connect the object to the output port.
-      PropAssignOp::create(*builder, builder->getUnknownLoc(),
+      PropAssignOp::create(builder, builder.getUnknownLoc(),
                            body->getArgument(outputPort), object);
     }
   }
