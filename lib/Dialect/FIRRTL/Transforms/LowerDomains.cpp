@@ -115,7 +115,7 @@ private:
 LogicalResult LowerModule::lowerModule() {
   // Only lower modules or external modules!
   //
-  // Much of the lowering is conditioned on whether or not his module has a
+  // Much of the lowering is conditioned on whether or not this module has a
   // body.  If it has a body, then we need to instantiate an object for each
   // domain port and hook up all the domain ports to annotations added to each
   // associated port.
