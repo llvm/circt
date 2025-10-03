@@ -484,9 +484,8 @@ private:
           auto cond= toBool(args[0]);
           return b.create<smt::IteOp>(loc, b.getType<smt::IntType>(), cond, lhs, rhs);
         } 
-         
         op.emitError() << "replicate is only unsupported in int mode for width == 1";
-        assert(false && "shift needs bit-vectors");
+        assert(false && "replicate needs 1-long bit-vector");
       }
       unsigned count = repOp.getMultiple();
       Value in = toBV(args[0]);
