@@ -7,13 +7,13 @@
   "uri":"test:///foo.sv",
   "languageId":"verilog",
   "version":1,
-  "text":"module test(// @[include/test.mlir:2:5]\noutput out// @[include/test.mlir:2:{24,25}]\n); assign out = 1'h1; // @[include/test.mlir:3:14, :4:9]\nendmodule"
+  "text":"// 🙂😎🤖🔥🚀✨🐍🎉 emojis before module\nmodule test(// @[include/test.mlir:2:5]\noutput out// @[include/test.mlir:2:{24,25}]\n); assign out = 1'h1; // @[include/test.mlir:3:14, :4:9]\nendmodule"
 }}}
 // -----
 // Find definition of `out`
 {"jsonrpc":"2.0","id":1,"method":"textDocument/definition","params":{
   "textDocument":{"uri":"test:///foo.sv"},
-  "position":{"line":2,"character":10}
+  "position":{"line":3,"character":10}
 }}
 // CHECK:       "id": 1,
 // CHECK-NEXT:  "jsonrpc": "2.0",
@@ -22,11 +22,11 @@
 // CHECK-NEXT:      "range": {
 // CHECK-NEXT:        "end": {
 // CHECK-NEXT:          "character": 10,
-// CHECK-NEXT:          "line": 1
+// CHECK-NEXT:          "line": 2
 // CHECK-NEXT:        },
 // CHECK-NEXT:        "start": {
 // CHECK-NEXT:          "character": 7,
-// CHECK-NEXT:          "line": 1
+// CHECK-NEXT:          "line": 2
 // CHECK-NEXT:        }
 // CHECK-NEXT:      },
 // CHECK-NEXT:      "uri": "test:///foo.sv"
@@ -36,7 +36,7 @@
 // Find definition of `include/test.mlir:2:5`
 {"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{
   "textDocument":{"uri":"test:///foo.sv"},
-  "position":{"line":0,"character":20}
+  "position":{"line":1,"character":20}
 }}
 // CHECK:       "id": 2,
 // CHECK-NEXT:  "jsonrpc": "2.0",
@@ -58,7 +58,7 @@
 // -----
 {"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{
   "textDocument":{"uri":"test:///foo.sv"},
-  "position":{"line":1,"character":17}
+  "position":{"line":2,"character":17}
 }}
 // Find definition of `include/test.mlir:2:{24,25}`
 // CHECK:       "id": 3,
@@ -80,7 +80,7 @@
 // -----
 {"jsonrpc":"2.0","id":4,"method":"textDocument/definition","params":{
   "textDocument":{"uri":"test:///foo.sv"},
-  "position":{"line":1,"character":39}
+  "position":{"line":2,"character":39}
 }}
 // Find definition of `include/test.mlir:2:{24,25}`
 // CHECK:       "id": 4,
