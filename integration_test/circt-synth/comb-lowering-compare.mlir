@@ -25,11 +25,12 @@ hw.module @icmp_unsigned_sklanskey(in %lhs: i3, in %rhs: i3, out out_ugt: i1, ou
 
 // RUN: circt-lec %t.mlir %s -c1=icmp_unsigned_kogge_stone -c2=icmp_unsigned_kogge_stone --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMP_UNSIGNED_KOGGE_STONE
 // COMB_ICMP_UNSIGNED_KOGGE_STONE: c1 == c2
-hw.module @icmp_unsigned_kogge_stone(in %lhs: i3, in %rhs: i3, out out_ugt: i1, out out_uge: i1, out out_ult: i1, out out_ule: i1) {
-  %ugt = comb.icmp ugt %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i3
-  %uge = comb.icmp uge %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i3
-  %ult = comb.icmp ult %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i3
-  %ule = comb.icmp ule %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i3
+// Use slightly larger width to verify the lazy prefix tree logic
+hw.module @icmp_unsigned_kogge_stone(in %lhs: i14, in %rhs: i14, out out_ugt: i1, out out_uge: i1, out out_ult: i1, out out_ule: i1) {
+  %ugt = comb.icmp ugt %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i14
+  %uge = comb.icmp uge %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i14
+  %ult = comb.icmp ult %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i14
+  %ule = comb.icmp ule %lhs, %rhs {synth.test.arch = "KOGGE-STONE"} : i14
   hw.output %ugt, %uge, %ult, %ule : i1, i1, i1, i1
 }
 
