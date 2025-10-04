@@ -80,6 +80,68 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// Spot check that insertions and deletions of ports involving prime numbers of
+// ports and different positions for domain ports works.  This test is
+// intentionally NOT testing everything here due to the complexity of
+// maintaining this test.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain {}
+  // CHECK-LABEL: firrtl.module @Foo
+  // CHECK-SAME:  in %A:
+  // CHECK-SAME:  out %A_out:
+  // CHECK-SAME:  in %B:
+  // CHECK-SAME:  out %B_out:
+  // CHECK-SAME:  in %a0:
+  // CHECK-SAME:  in %a1:
+  // CHECK-SAME:  in %a2:
+  // CHECK-SAME:  in %b0:
+  // CHECK-SAME:  in %b1:
+  // CHECK-SAME:  in %b2:
+  // CHECK-SAME:  in %b3:
+  // CHECK-SAME:  in %b4:
+  firrtl.module @Foo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain of @ClockDomain,
+    in %a0: !firrtl.uint<1> domains [%A],
+    in %a1: !firrtl.uint<1> domains [%A],
+    in %a2: !firrtl.uint<1> domains [%A],
+    in %b0: !firrtl.uint<1> domains [%B],
+    in %b1: !firrtl.uint<1> domains [%B],
+    in %b2: !firrtl.uint<1> domains [%B],
+    in %b3: !firrtl.uint<1> domains [%B],
+    in %b4: !firrtl.uint<1> domains [%B]
+  ) {
+  }
+  // CHECK-LABEL: firrtl.module @Bar
+  // CHECK-SAME:  in %A:
+  // CHECK-SAME:  out %A_out:
+  // CHECK-SAME:  in %a0:
+  // CHECK-SAME:  in %a1:
+  // CHECK-SAME:  in %a2:
+  // CHECK-SAME:  in %B:
+  // CHECK-SAME:  out %B_out:
+  // CHECK-SAME:  in %b0:
+  // CHECK-SAME:  in %b1:
+  // CHECK-SAME:  in %b2:
+  // CHECK-SAME:  in %b3:
+  // CHECK-SAME:  in %b4:
+  firrtl.module @Bar(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a0: !firrtl.uint<1> domains [%A],
+    in %a1: !firrtl.uint<1> domains [%A],
+    in %a2: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain of @ClockDomain,
+    in %b0: !firrtl.uint<1> domains [%B],
+    in %b1: !firrtl.uint<1> domains [%B],
+    in %b2: !firrtl.uint<1> domains [%B],
+    in %b3: !firrtl.uint<1> domains [%B],
+    in %b4: !firrtl.uint<1> domains [%B]
+  ) {
+  }
+}
+
+// -----
+
 // Check that output domains work.
 //
 // TODO: This is currently insufficient as we don't yet have domain connection
