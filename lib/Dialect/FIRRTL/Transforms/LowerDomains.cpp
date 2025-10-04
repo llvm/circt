@@ -66,9 +66,10 @@ struct DomainInfo {
   /// associations.
   ObjectOp op;
 
-  /// The index of the input port that will be hooked up to a field of the
-  /// ObjectOp.  This port is an instance of the domain-lowered class.
-  unsigned inputPort;
+  /// The index of the optional input port that will be hooked up to a field of
+  /// the ObjectOp.  This port is an instance of the domain-lowered class.  If
+  /// this is created due to an output domain port, then this is nullopt.
+  std::optional<unsigned> inputPort;
 
   /// The index of the output port that the ObjectOp will be connected to.  This
   /// port communicates back to the user information about the associations.
@@ -258,7 +259,10 @@ LogicalResult LowerModule::lowerModule() {
         auto object = ObjectOp::create(
             builder, classOut,
             StringAttr::get(context, Twine(port.name) + "_object"));
-        indexToDomain[i] = {object, iIns, iIns + 1};
+        if (port.direction == Direction::In)
+          indexToDomain[i] = {object, iIns, iIns + 1};
+        else
+          indexToDomain[i] = {object, std::nullopt, iIns};
 
         // Erase users of the domain in the module body.
         if (failed(eraseDomainUsers(body->getArgument(i))))
@@ -268,17 +272,19 @@ LogicalResult LowerModule::lowerModule() {
       // Add input and output property ports that encode the property inputs
       // (which the user must provide for the domain) and the outputs that
       // encode this information and the associations.
-      newPorts.append(
-          {{iDel,
-            PortInfo(port.name, classIn.getInstanceType(), Direction::In)},
-           {iDel, PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
-                           classOut.getInstanceType(), Direction::Out)}});
-      portAnnotations.append(
-          {constants.getEmptyArrayAttr(), constants.getEmptyArrayAttr()});
+      if (port.direction == Direction::In) {
+        newPorts.push_back({iDel, PortInfo(port.name, classIn.getInstanceType(),
+                                           Direction::In)});
+        portAnnotations.push_back(constants.getEmptyArrayAttr());
+        ++iIns;
+      }
+      newPorts.push_back(
+          {iDel, PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
+                          classOut.getInstanceType(), Direction::Out)});
+      portAnnotations.push_back(constants.getEmptyArrayAttr());
+      ++iIns;
 
       // Don't increment the iDel since we deleted one port.
-      // Increment the iIns by 2 since we added two ports.
-      iIns += 2;
       continue;
     }
 
@@ -321,16 +327,22 @@ LogicalResult LowerModule::lowerModule() {
   // Insert new property ports and hook these up to the object that was
   // instantiated earlier.
   op.insertPorts(newPorts);
+
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
       auto [object, inputPort, outputPort, associations] = info;
       OpBuilder builder(object);
       builder.setInsertionPointAfter(object);
-      // Assign input domain info.
-      auto subDomainInfoIn =
-          ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
-      PropAssignOp::create(builder, object.getLoc(), subDomainInfoIn,
-                           body->getArgument(inputPort));
+      // Assign input domain info if needed.
+      //
+      // TODO: Change this to hook up to its connection once domain connects are
+      // available.
+      if (inputPort) {
+        auto subDomainInfoIn =
+            ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
+        PropAssignOp::create(builder, object.getLoc(), subDomainInfoIn,
+                             body->getArgument(*inputPort));
+      }
       auto subAssociations =
           ObjectSubfieldOp::create(builder, object.getLoc(), object, 2);
       // Assign associations.

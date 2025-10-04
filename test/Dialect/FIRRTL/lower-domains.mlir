@@ -80,6 +80,31 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// Check that output domains work.
+//
+// TODO: This is currently insufficient as we don't yet have domain connection
+// operations.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain {}
+  // CHECK-LABEL: firrtl.module @Foo
+  // CHECK-NOT:     in %A: !firrtl.class<@ClockDomain()>
+  // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
+  firrtl.module @Foo(
+    out %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A]
+  ) {
+    // CHECK:      %A_object = firrtl.object @ClockDomain
+    // CHECK-NOT:  firrtl.object.subfield %A_object[domainInfo_in]
+    // CHECK-NEXT: %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
+    // CHECK-NEXT: %[[path:.+]] = firrtl.path reference distinct[0]<>
+    // CHECK-NEXT: %[[list:.+]] = firrtl.list.create %[[path]] :
+    // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
+    // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
+  }
+}
+
+// -----
+
 // Check the behavior of the lowering of an instance.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain {}
