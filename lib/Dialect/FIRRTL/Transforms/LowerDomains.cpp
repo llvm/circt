@@ -290,7 +290,8 @@ LogicalResult LowerModule::lowerModule() {
     // If this port has domain associations, then we need to add port annotation
     // trackers.  These will be hooked up to the Object's associations later.
     // However, if there is no domain information, then annotations do not need
-    // to be modified.  Early continue first, adding trackers otherwise.
+    // to be modified.  Early continue first, adding trackers otherwise.  Only
+    // create one tracker for all associations.
     ArrayAttr domainAttr = cast<ArrayAttr>(port.domains);
     if (!domainAttr || domainAttr.empty()) {
       portAnnotations.push_back(port.annotations.getArrayAttr());
@@ -298,13 +299,15 @@ LogicalResult LowerModule::lowerModule() {
     }
 
     SmallVector<Annotation> newAnnotations;
+    DistinctAttr id;
     for (auto indexAttr : domainAttr.getAsRange<IntegerAttr>()) {
-      auto domainIndex = indexAttr.getUInt();
-      auto id = DistinctAttr::create(UnitAttr::get(context));
-      newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
-          context,
-          {{"class", StringAttr::get(context, "circt.tracker")}, {"id", id}})));
-      indexToDomain[domainIndex].associations.push_back({id, port.loc});
+      if (!id) {
+        id = DistinctAttr::create(UnitAttr::get(context));
+        newAnnotations.push_back(Annotation(DictionaryAttr::getWithSorted(
+            context, {{"class", StringAttr::get(context, "circt.tracker")},
+                      {"id", id}})));
+      }
+      indexToDomain[indexAttr.getUInt()].associations.push_back({id, port.loc});
     }
     if (!newAnnotations.empty())
       port.annotations.addAnnotations(newAnnotations);
