@@ -25,10 +25,11 @@ class JSONTransport;
 namespace circt {
 namespace lsp {
 class VerilogServer;
-
+struct LSPServerOptions;
 /// Run the main loop of the LSP server using the given Verilog server and
 /// transport.
-llvm::LogicalResult runVerilogLSPServer(VerilogServer &server,
+llvm::LogicalResult runVerilogLSPServer(const LSPServerOptions &lspOptions,
+                                        VerilogServer &server,
                                         llvm::lsp::JSONTransport &transport);
 
 } // namespace lsp

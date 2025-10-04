@@ -79,6 +79,25 @@ int main(int argc, char **argv) {
   llvm::cl::alias commandFilesLong{
       "command-file", llvm::cl::desc("Alias for -C"),
       llvm::cl::aliasopt(commandFiles), llvm::cl::NotHidden};
+
+  //===------------------------------------------------------------------===//
+  // Debounce tuning
+  //===------------------------------------------------------------------===//
+  llvm::cl::opt<bool> noDebounce{
+      "no-debounce",
+      llvm::cl::desc("Disable debouncing (rebuild synchronously on change)"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<unsigned> debounceMinMs{
+      "debounce-min-ms",
+      llvm::cl::desc("Minimum idle time (ms) before rebuild"),
+      llvm::cl::init(150)};
+
+  llvm::cl::opt<unsigned> debounceMaxMs{
+      "debounce-max-ms",
+      llvm::cl::desc("Maximum wait (ms) while edits continue; 0 = no cap"),
+      llvm::cl::init(500)};
+
   //===--------------------------------------------------------------------===//
   // Testing
   //===--------------------------------------------------------------------===//
@@ -102,6 +121,9 @@ int main(int argc, char **argv) {
     inputStyle = llvm::lsp::JSONStreamStyle::Delimited;
     logLevel = llvm::lsp::Logger::Level::Debug;
     prettyPrint = true;
+    noDebounce = true;
+    debounceMinMs = 0;
+    debounceMaxMs = 0;
   }
 
   // Configure the logger.
@@ -115,5 +137,8 @@ int main(int argc, char **argv) {
   // Configure the servers and start the main language server.
   circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs,
                                            commandFiles);
-  return failed(circt::lsp::CirctVerilogLspServerMain(options, transport));
+  circt::lsp::LSPServerOptions lspOptions(noDebounce, debounceMinMs,
+                                          debounceMaxMs);
+  return failed(
+      circt::lsp::CirctVerilogLspServerMain(lspOptions, options, transport));
 }
