@@ -3,6 +3,10 @@ include(SlangCompilerOptions)
 
 add_circt_library(CIRCTVerilogLspServerImpl
   VerilogServer.cpp
+  VerilogTextFile.cpp
+  VerilogDocument.cpp
+  VerilogIndex.cpp
+  LSPDiagnosticClient.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/circt/Tools/circt-verilog-lsp-server
