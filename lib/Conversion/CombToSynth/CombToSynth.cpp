@@ -855,25 +855,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   }
 };
 
-struct CombSubOpConversion : OpConversionPattern<SubOp> {
-  using OpConversionPattern<SubOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(SubOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto lhs = op.getLhs();
-    auto rhs = op.getRhs();
-    // Since `-rhs = ~rhs + 1` holds, rewrite `sub(lhs, rhs)` to:
-    // sub(lhs, rhs) => add(lhs, -rhs) => add(lhs, add(~rhs, 1))
-    // => add(lhs, ~rhs, 1)
-    auto notRhs = synth::aig::AndInverterOp::create(rewriter, op.getLoc(), rhs,
-                                                    /*invert=*/true);
-    auto one = hw::ConstantOp::create(rewriter, op.getLoc(), op.getType(), 1);
-    replaceOpWithNewOpAndCopyNamehint<comb::AddOp>(
-        rewriter, op, ValueRange{lhs, notRhs, one}, true);
-    return success();
-  }
-};
-
 struct CombMulOpConversion : OpConversionPattern<MulOp> {
   using OpConversionPattern<MulOp>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<MulOp>::OpAdaptor;
@@ -1376,12 +1357,14 @@ populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
       CombAndOpConversion, CombXorOpConversion, CombMuxOpConversion,
       CombParityOpConversion,
       // Arithmetic Ops
-      CombSubOpConversion, CombMulOpConversion, CombICmpOpConversion,
+      CombMulOpConversion, CombICmpOpConversion,
       // Shift Ops
       CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
       // Variadic ops that must be lowered to binary operations
       CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
       CombLowerVariadicOp<MulOp>>(patterns.getContext());
+
+  patterns.add(comb::convertSubToAdd);
 
   if (lowerToMIG) {
     patterns.add<CombOrToMIGConversion, CombLowerVariadicOp<OrOp>,

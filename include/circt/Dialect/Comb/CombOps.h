@@ -86,6 +86,10 @@ Value createDynamicInject(OpBuilder &builder, Location loc, Value value,
 Value createInject(OpBuilder &builder, Location loc, Value value,
                    unsigned offset, Value replacement);
 
+/// Replace a subtraction with an addition of the two's complement.
+LogicalResult convertSubToAdd(comb::SubOp subOp,
+                              mlir::PatternRewriter &rewriter);
+
 /// Enum for mux chain folding styles.
 enum MuxChainWithComparisonFoldingStyle { None, BalancedMuxTree, ArrayGet };
 /// Mux chain folding that converts chains of muxes with index
