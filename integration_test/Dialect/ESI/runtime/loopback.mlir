@@ -11,6 +11,7 @@
 // RUN: esiquery trace w:%t6/hw/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
 
 // Test cosimulation
+// RUN: cp %esi_prims %t6/hw
 // RUN: esi-cosim.py --source %t6/hw --top top -- %python %s.py cosim env
 
 // Test C++ header generation against the manifest file

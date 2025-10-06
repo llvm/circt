@@ -6,6 +6,7 @@
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog
 
 // Test cosimulation
+// RUN: cp %esi_prims %t6/hw
 // RUN: esi-cosim.py --source %t6/hw --top top -- esitester cosim env wait | FileCheck %s
 
 hw.module @top(in %clk : !seq.clock, in %rst : i1) {
