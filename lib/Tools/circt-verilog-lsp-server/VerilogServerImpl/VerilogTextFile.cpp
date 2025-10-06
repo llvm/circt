@@ -26,9 +26,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VerilogTextFile.h"
+#include "slang/util/CommandLine.h"
+
 #include "../Utils/LSPUtils.h"
 #include "VerilogDocument.h"
+#include "VerilogServerContext.h"
+#include "VerilogTextFile.h"
+#include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 
 using namespace circt::lsp;
 using namespace llvm;
@@ -39,6 +43,7 @@ VerilogTextFile::VerilogTextFile(
     StringRef fileContents, int64_t version,
     std::vector<llvm::lsp::Diagnostic> &diagnostics)
     : context(context), contents(fileContents.str()) {
+  initializeProjectDriver();
   initialize(uri, version, diagnostics);
 }
 
@@ -58,12 +63,81 @@ LogicalResult VerilogTextFile::update(
   return success();
 }
 
+void VerilogTextFile::initializeProjectDriver() {
+  if (context.options.commandFiles.empty())
+    return;
+
+  projectDriver = std::make_unique<slang::driver::Driver>();
+
+  // --- Apply project command files (the “-C”s) to this per-buffer driver ---
+  for (const std::string &cmdFile : context.options.commandFiles) {
+    if (!projectDriver->processCommandFiles(cmdFile, false, true)) {
+      circt::lsp::Logger::error(Twine("Failed to open command file ") +
+                                cmdFile);
+      return;
+    }
+
+    // Open command file and parse it ourselves to get include dirs...
+    slang::CommandLine unitCmdLine;
+    std::vector<std::string> includes;
+    unitCmdLine.add("-I,--include-directory,+incdir", includes, "", "",
+                    slang::CommandLineFlags::CommaList);
+    std::vector<std::string> defines;
+    unitCmdLine.add("-D,--define-macro,+define", defines, "");
+
+    std::optional<std::string> libraryName;
+    unitCmdLine.add("--library", libraryName, "");
+
+    std::vector<std::string> files;
+    unitCmdLine.setPositional(
+        [&](std::string_view value) {
+          files.emplace_back(value);
+          return "";
+        },
+        "");
+
+    slang::CommandLine::ParseOptions parseOpts;
+    parseOpts.expandEnvVars = true;
+    parseOpts.ignoreProgramName = true;
+    parseOpts.supportComments = true;
+    parseOpts.ignoreDuplicates = true;
+
+    slang::SmallVector<char> buffer;
+    if (auto readEc = slang::OS::readFile(cmdFile, buffer)) {
+      continue;
+    }
+    std::string_view argStr(buffer.data(), buffer.size());
+    if (!unitCmdLine.parse(argStr, parseOpts)) {
+      continue;
+    }
+    projectIncludeDirectories.insert(projectIncludeDirectories.end(),
+                                     includes.begin(), includes.end());
+  }
+
+  projectDriver->options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::LintMode, false);
+  projectDriver->options.compilationFlags.emplace(
+      slang::ast::CompilationFlags::DisableInstanceCaching, false);
+
+  if (!projectDriver->processOptions()) {
+    circt::lsp::Logger::error(
+        Twine("Failed to apply slang options on project "));
+    return;
+  }
+
+  if (!projectDriver->parseAllSources()) {
+    circt::lsp::Logger::error(Twine("Failed to parse Verilog project files "));
+    return;
+  }
+}
+
 void VerilogTextFile::initialize(
     const llvm::lsp::URIForFile &uri, int64_t newVersion,
     std::vector<llvm::lsp::Diagnostic> &diagnostics) {
   version = newVersion;
-  document =
-      std::make_unique<VerilogDocument>(context, uri, contents, diagnostics);
+  document = std::make_unique<VerilogDocument>(context, uri, contents,
+                                               diagnostics, projectDriver.get(),
+                                               projectIncludeDirectories);
 }
 
 void VerilogTextFile::getLocationsOf(
