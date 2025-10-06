@@ -501,7 +501,8 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   auto classIn = ClassOp::create(builder, name, op.getPorts());
   builder.setInsertionPointToStart(classIn.getBodyBlock());
   mlir::IRMapping mapper;
-  for (auto [dom, cls] : llvm::zip(op.getArguments(), classIn.getArguments()))
+  for (auto [dom, cls] :
+       llvm::zip_equal(op.getArguments(), classIn.getArguments()))
     mapper.map(dom, cls);
   for (Operation &op : op.getBody().getOps())
     builder.clone(op, mapper);

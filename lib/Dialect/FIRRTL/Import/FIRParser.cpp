@@ -5767,7 +5767,6 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   domainOp.setPublic();
   deferredModules.emplace_back(DeferredModuleToParse{
       domainOp, portLocs, getLexer().getCursor(), indent});
-  // domainOp->getRegion(0).push_back(new Block());
 
   return skipToModuleEnd(indent);
 }
