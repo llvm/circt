@@ -173,7 +173,7 @@ private:
     auto z = oneConst(/*w*/ 2, loc);
     return b.create<smt::EqOp>(loc, v, z);
   }
-
+  
   // Type width computation for lowering aggregates.
   static unsigned getPackedBitWidth(Type t) {
     if (auto intTy = llvm::dyn_cast<IntegerType>(t))
@@ -221,6 +221,7 @@ private:
     }
     assert(false && "unsupported comparison predicate");
   }
+  
 
   // In int mode, map both signed/unsigned preds to Int preds (best-effort).
   smt::IntPredicate getSmtIntPred(comb::ICmpPredicate p) {
@@ -347,12 +348,27 @@ private:
         return result;
       }
       // int 
-      SmallVector<Value> bools;
-      for (auto v : args) bools.push_back(toBool(v));
-      Value result = bools[0];
-      for (size_t i = 1; i < bools.size(); ++i)
-        result = b.create<smt::AndOp>(loc, result, bools[i]);
-      return result;
+      int width = op.getOperand(0).getType().getIntOrFloatBitWidth();
+      if (width== 1){
+        SmallVector<Value> bools;
+        for (auto v : args) bools.push_back(toBool(v));
+        Value result = bools[0];
+        for (size_t i = 1; i < bools.size(); ++i)
+          result = b.create<smt::AndOp>(loc, result, bools[i]);
+        return result;
+      } 
+      SmallVector<Value> convertedOps;
+      for (auto v : args){
+        if ((isa<smt::IntType>(v.getType())))
+          convertedOps.push_back(toBV(v));
+        else 
+          llvm::outs() << "\n\nunsupported comb.and op: " << v;
+      Value result = convertedOps[0];
+      for (size_t i = 1; i < convertedOps.size(); ++i)
+        result = b.create<smt::BVAndOp>(loc, result, convertedOps[i]);
+      auto boolRes = b.create<smt::BV2IntOp>(loc, result);
+      return boolRes;
+      }
     }
 
     // comb.or (boolean or for i1)
@@ -365,12 +381,26 @@ private:
         return result;
       }
       // int
-      SmallVector<Value> bools;
-      for (auto v : args) bools.push_back(toBool(v));
-      Value result = bools[0];
-      for (size_t i = 1; i < bools.size(); ++i)
-        result = b.create<smt::OrOp>(loc, result, bools[i]);
-      return result;
+      int width = op.getOperand(0).getType().getIntOrFloatBitWidth();
+      if (width== 1){
+        SmallVector<Value> bools;
+        for (auto v : args) bools.push_back(toBool(v));
+        Value result = bools[0];
+        for (size_t i = 1; i < bools.size(); ++i)
+          result = b.create<smt::AndOp>(loc, result, bools[i]);
+        return result;
+      } 
+      SmallVector<Value> convertedOps;
+      for (auto v : args){
+        if ((isa<smt::IntType>(v.getType())))
+          convertedOps.push_back(toBV(v));
+        else 
+          llvm::outs() << "\n\nunsupported comb.and op: " << v;
+      Value result = convertedOps[0];
+      for (size_t i = 1; i < convertedOps.size(); ++i)
+        result = b.create<smt::BVOrOp>(loc, result, convertedOps[i]);
+      auto boolRes = b.create<smt::BV2IntOp>(loc, result);
+      return boolRes;
     }
 
     // comb.xor (boolean xor for i1)
@@ -383,12 +413,26 @@ private:
         return result;
       }
       // int
-      SmallVector<Value> bools;
-      for (auto v : args) bools.push_back(toBool(v));
-      Value result = bools[0];
-      for (size_t i = 1; i < bools.size(); ++i)
-        result = b.create<smt::XOrOp>(loc, result, bools[i]);
-      return result;
+      int width = op.getOperand(0).getType().getIntOrFloatBitWidth();
+      if (width== 1){
+        SmallVector<Value> bools;
+        for (auto v : args) bools.push_back(toBool(v));
+        Value result = bools[0];
+        for (size_t i = 1; i < bools.size(); ++i)
+          result = b.create<smt::AndOp>(loc, result, bools[i]);
+        return result;
+      } 
+      SmallVector<Value> convertedOps;
+      for (auto v : args){
+        if ((isa<smt::IntType>(v.getType())))
+          convertedOps.push_back(toBV(v));
+        else 
+          llvm::outs() << "\n\nunsupported comb.and op: " << v;
+      Value result = convertedOps[0];
+      for (size_t i = 1; i < convertedOps.size(); ++i)
+        result = b.create<smt::BVXorOp>(loc, result, convertedOps[i]);
+      auto boolRes = b.create<smt::BV2IntOp>(loc, result);
+      return boolRes;
     }
 
     // comb.mux
