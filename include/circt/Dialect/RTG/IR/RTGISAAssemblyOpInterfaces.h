@@ -16,6 +16,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
 
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h.inc"
 

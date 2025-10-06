@@ -9,7 +9,7 @@ from .core import Value, Type
 from .base import ir
 from .integers import Integer
 
-from typing import Union
+from typing import Union, List
 
 
 class Immediate(Value):
@@ -29,6 +29,16 @@ class Immediate(Value):
     # Note that the upper limit is exclusive
     return Immediate(width, Integer.random(0, 2**width - 1))
 
+  # @staticmethod
+  # def concat(elements: List[Immediate]) -> Immediate:
+  #   """
+  #   Concatenates a variadic number of immediates into a single immediate. The
+  #   operands are concatenated in order, with the first operand becoming the most
+  #   significant bits of the result.
+  #   """
+
+  #   return rtg.ConcatImmediateOp(elements)
+
   def concat(self, *others: Immediate) -> Immediate:
     """
     Concatenates this immediate with the provided immediates. The operands are
@@ -37,6 +47,14 @@ class Immediate(Value):
     """
 
     return rtg.ConcatImmediateOp([self, *others])
+
+  def replicate(self, count: int) -> Immediate:
+    """
+    Replicates this immediate the provided number of times. The result is a
+    single immediate with the value of this immediate repeated.
+    """
+
+    return Immediate.concat(*([self] * count))
 
   def __getitem__(self, slice_range) -> Immediate:
     """
@@ -70,6 +88,24 @@ class Immediate(Value):
     """
 
     return Immediate(width, 2**width - 1)
+
+  @staticmethod
+  def smax(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the maximum signed value it can
+    hold.
+    """
+
+    return Immediate(width, 2**(width - 1) - 1)
+  
+  @staticmethod
+  def smin(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the minimum signed value it can
+    hold.
+    """
+
+    return Immediate(width, 1 << (width - 1))
 
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"

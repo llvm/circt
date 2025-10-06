@@ -21,6 +21,7 @@ using namespace mlir;
 
 void circt::rtg::buildRandomizationPipeline(
     OpPassManager &pm, const RandomizationPipelineOptions &options) {
+  pm.nestAny().addPass(rtg::createMaterializeConstraintsPass());
   {
     ElaborationPassOptions passOptions;
     passOptions.seed = options.seed;
@@ -33,15 +34,15 @@ void circt::rtg::buildRandomizationPipeline(
     MemoryAllocationPassOptions passOptions;
     passOptions.useImmediates = options.memoriesAsImmediates;
     testPm.addPass(rtg::createMemoryAllocationPass(passOptions));
-    testPm.addPass(rtg::createLowerUniqueLabelsPass());
-    testPm.addPass(rtg::createLinearScanRegisterAllocationPass());
+    // testPm.addPass(rtg::createLowerUniqueLabelsPass());
+    // testPm.addPass(rtg::createLinearScanRegisterAllocationPass());
   }
   {
     auto &anyPm = pm.nestAny();
     anyPm.addPass(mlir::createCSEPass());
     anyPm.addPass(createSimpleCanonicalizerPass());
   }
-  pm.addPass(rtg::createUniqueValidateOpsPass());
+  // pm.addPass(rtg::createUniqueValidateOpsPass());
 }
 
 //===----------------------------------------------------------------------===//

@@ -805,6 +805,7 @@ def ValidateOp : RTGOp<"validate", [
   AllTypesMatch<["defaultValue", "value"]>,
   AllTypesMatch<["defaultUsedValues", "elseValues", "values"]>,
   AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<RegisterAllocationOpInterface>,
 ]> {
   let summary = "validate the value in the given resource";
   let description = [{
@@ -1017,4 +1018,23 @@ def SpaceOp : RTGISAOp<"space", []> {
   let arguments = (ins Index:$size);
 
   let assemblyFormat = "$size attr-dict";
+}
+
+def SegmentKindAttr : I32EnumAttr<"SegmentKind", "kind of segment", [
+  I32EnumAttrCase<"Data", 0, "data">,
+  I32EnumAttrCase<"Text", 1, "text">
+]> {
+  let cppNamespace = "::circt::rtg";
+}
+
+def SegmentOp : RTGISAOp<"segment", [
+  SingleBlock,
+  NoTerminator,
+]> {
+  let summary = "defines a new segment";
+
+  let arguments = (ins SegmentKindAttr:$kind);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
 }

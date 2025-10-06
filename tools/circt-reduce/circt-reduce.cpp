@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWReductions.h"
+#include "circt/Dialect/RTG/RTGReductions.h"
 #include "circt/InitAllDialects.h"
 #include "circt/Reduce/GenericReductions.h"
 #include "circt/Reduce/Tester.h"
@@ -25,9 +26,12 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Index/IR/IndexDialect.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Tools/Plugins/DialectPlugin.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
@@ -137,6 +141,10 @@ static cl::opt<unsigned>
 static cl::opt<bool> testMustFail(
     "test-must-fail", cl::init(false),
     cl::desc("Consider an input to be interesting on non-zero exit status."),
+    cl::cat(mainCategory));
+
+static cl::list<std::string> dialectPlugins(
+    "load-dialect-plugin", cl::desc("Load dialects from plugin library"),
     cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
@@ -514,6 +522,28 @@ int main(int argc, char **argv) {
   // llvm/circt and not llvm/llvm-project.
   setBugReportMsg(circtBugReportMsg);
 
+  // Register all the dialects.
+  mlir::DialectRegistry registry;
+  registerAllDialects(registry);
+  registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
+                  LLVM::LLVMDialect, index::IndexDialect, arith::ArithDialect>();
+  arc::registerReducePatternDialectInterface(registry);
+  emit::registerReducePatternDialectInterface(registry);
+  firrtl::registerReducePatternDialectInterface(registry);
+  hw::registerReducePatternDialectInterface(registry);
+  rtg::registerReducePatternDialectInterface(registry);
+
+  // Set up dialect plugin loading callback
+  dialectPlugins.setCallback([&](const std::string &pluginPath) {
+    auto plugin = mlir::DialectPlugin::load(pluginPath);
+    if (!plugin) {
+      llvm::errs() << "Failed to load dialect plugin from '" << pluginPath
+                   << "'. Request ignored.\n";
+      return;
+    }
+    plugin.get().registerDialectRegistryCallbacks(registry);
+  });
+  
   // Register and hide default LLVM options, other than for this tool.
   registerMLIRContextCLOptions();
   registerAsmPrinterCLOptions();
@@ -521,16 +551,6 @@ int main(int argc, char **argv) {
 
   // Parse the command line options provided by the user.
   cl::ParseCommandLineOptions(argc, argv, "CIRCT test case reduction tool\n");
-
-  // Register all the dialects.
-  mlir::DialectRegistry registry;
-  registerAllDialects(registry);
-  registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
-                  LLVM::LLVMDialect>();
-  arc::registerReducePatternDialectInterface(registry);
-  emit::registerReducePatternDialectInterface(registry);
-  firrtl::registerReducePatternDialectInterface(registry);
-  hw::registerReducePatternDialectInterface(registry);
 
   // Create a context.
   mlir::MLIRContext context(registry);

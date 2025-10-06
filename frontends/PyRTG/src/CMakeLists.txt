@@ -30,11 +30,14 @@ declare_mlir_python_sources(PyRTGSources.Core
     configs.py
     control_flow.py
     core.py
+    exceptions.py
     immediates.py
     index.py
+    instructions.py
     integers.py
     labels.py
     memories.py
+    modes.py
     rtg.py
     scf.py
     sequences.py

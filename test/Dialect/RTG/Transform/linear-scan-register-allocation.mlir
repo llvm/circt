@@ -65,6 +65,6 @@ rtg.test @spilling() {
 
 rtg.test @unsupportedUser() {
   %0 = rtg.virtual_reg [#rtgtest.ra]
-  // expected-error @below {{only operations implementing 'InstructionOpInterface' and 'rtg.validate' are allowed to use registers}}
+  // expected-error @below {{only operations implementing 'RegisterAllocationOpInterface' are allowed to use registers}}
   rtg.set_create %0 : !rtgtest.ireg
 }
