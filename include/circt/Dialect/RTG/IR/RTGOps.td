@@ -16,6 +16,7 @@ include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/Properties.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -657,6 +658,7 @@ def CommentOp : RTGOp<"comment", []> {
 def FixedRegisterOp : RTGOp<"fixed_reg", [
   Pure, ConstantLike,
   DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "returns a value representing a fixed register";
   let description = [{

@@ -432,6 +432,10 @@ LogicalResult FixedRegisterOp::inferReturnTypes(
 
 OpFoldResult FixedRegisterOp::fold(FoldAdaptor adaptor) { return getRegAttr(); }
 
+void FixedRegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getReg().getRegisterAssembly());
+}
+
 //===----------------------------------------------------------------------===//
 // VirtualRegisterOp
 //===----------------------------------------------------------------------===//
