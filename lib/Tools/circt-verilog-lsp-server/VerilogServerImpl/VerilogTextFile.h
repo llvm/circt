@@ -64,10 +64,16 @@ private:
   void initialize(const llvm::lsp::URIForFile &uri, int64_t newVersion,
                   std::vector<llvm::lsp::Diagnostic> &diagnostics);
 
+  void initializeProjectDriver();
+
   VerilogServerContext &context;
 
   /// The full string contents of the file.
   std::string contents;
+
+  /// The project-scale driver
+  std::unique_ptr<slang::driver::Driver> projectDriver;
+  std::vector<std::string> projectIncludeDirectories;
 
   /// The version of this file.
   int64_t version = 0;

@@ -37,9 +37,11 @@ struct VerilogServerContext;
 
 class VerilogDocument {
 public:
-  VerilogDocument(VerilogServerContext &globalContext,
-                  const llvm::lsp::URIForFile &uri, llvm::StringRef contents,
-                  std::vector<llvm::lsp::Diagnostic> &diagnostics);
+  VerilogDocument(
+      VerilogServerContext &globalContext, const llvm::lsp::URIForFile &uri,
+      llvm::StringRef contents, std::vector<llvm::lsp::Diagnostic> &diagnostics,
+      const slang::driver::Driver *projectDriver = nullptr,
+      const std::vector<std::string> &projectIncludeDirectories = {});
   VerilogDocument(const VerilogDocument &) = delete;
   VerilogDocument &operator=(const VerilogDocument &) = delete;
 

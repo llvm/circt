@@ -55,75 +55,73 @@ using namespace circt::lsp;
 using namespace llvm;
 using namespace llvm::lsp;
 
-static std::filesystem::path
-canonicalizeFileName(const std::filesystem::path &file) {
-  std::error_code ec;
-  std::filesystem::path path = std::filesystem::weakly_canonical(file, ec);
-  if (ec)
-    path = std::filesystem::absolute(file).lexically_normal();
-  return path;
+static inline void setTopModules(slang::driver::Driver &driver) {
+  // Parse the main buffer
+  if (!driver.parseAllSources()) {
+    circt::lsp::Logger::error(Twine("Failed to parse main buffer "));
+    return;
+  }
+  // Extract all the top modules in the file directly from the syntax tree
+  std::vector<std::string> topModules;
+  for (auto &t : driver.syntaxTrees) {
+    if (auto *compUnit =
+            t->root().as_if<slang::syntax::CompilationUnitSyntax>()) {
+      for (auto *member : compUnit->members) {
+        // While it's called "ModuleDeclarationSyntax", it also covers
+        // packages
+        if (auto *moduleDecl =
+                member->as_if<slang::syntax::ModuleDeclarationSyntax>()) {
+          topModules.emplace_back(moduleDecl->header->name.valueText());
+        }
+      }
+    }
+  }
+  driver.options.topModules = std::move(topModules);
 }
 
-// Filter out the main buffer file from the command file list, if it is in
-// there.
-static inline bool
-mainBufferFileInCommandFileList(const std::string &cmdfileStr,
-                                const std::string &targetAbsStr) {
-  const std::filesystem::path targetAbs =
-      canonicalizeFileName(std::filesystem::path(targetAbsStr));
+static inline void
+copyBuffers(slang::driver::Driver &driver,
+            const slang::driver::Driver *const projectDriver,
+            const llvm::SmallString<256> &mainBufferFileName) {
+  for (auto bId : projectDriver->sourceManager.getAllBuffers()) {
+    std::string_view slangRawPath =
+        projectDriver->sourceManager.getRawFileName(bId);
 
-  std::string error;
-  auto cmdFile = mlir::openInputFile(cmdfileStr, &error);
-  if (!cmdFile) {
-    circt::lsp::Logger::error(Twine("Failed to open command file ") +
-                              cmdfileStr + ": " + error);
-    return false;
-  }
-
-  const std::filesystem::path base =
-      std::filesystem::path(cmdFile->getBufferIdentifier().str()).parent_path();
-
-  // Read line by line, ignoring empty lines and comments.
-  for (llvm::line_iterator i(*cmdFile); !i.is_at_eof(); ++i) {
-    llvm::StringRef line = i->trim();
-
-    if (line.empty())
+    llvm::SmallString<256> slangCanonPath;
+    if (llvm::sys::fs::real_path(slangRawPath, slangCanonPath))
       continue;
 
-    static constexpr llvm::StringRef commandPrefixes[] = {"+", "-"};
-    auto isCommand = [&line](llvm::StringRef s) { return line.starts_with(s); };
-    if (llvm::any_of(commandPrefixes, isCommand))
+    if (slangCanonPath ==
+        mainBufferFileName) // skip the file you're already compiling
       continue;
 
-    auto candRel = std::filesystem::path(line.str());
-    auto candAbs = canonicalizeFileName(
-        candRel.is_absolute() ? candRel : (base / candRel));
+    bool alreadyLoaded = false;
+    for (auto id : driver.sourceManager.getAllBuffers()) {
+      if (driver.sourceManager.getFullPath(id).string() ==
+          slangCanonPath.str()) {
+        alreadyLoaded = true;
+        break;
+      }
+    }
+    if (alreadyLoaded)
+      continue;
 
-    if (candAbs == targetAbs)
-      return true;
+    auto buffer = driver.sourceManager.assignText(
+        slangCanonPath.str(), projectDriver->sourceManager.getSourceText(bId));
+    driver.sourceLoader.addBuffer(buffer);
   }
-  return false;
 }
 
 VerilogDocument::VerilogDocument(
     VerilogServerContext &context, const llvm::lsp::URIForFile &uri,
-    StringRef contents, std::vector<llvm::lsp::Diagnostic> &diagnostics)
+    StringRef contents, std::vector<llvm::lsp::Diagnostic> &diagnostics,
+    const slang::driver::Driver *const projectDriver,
+    const std::vector<std::string> &projectIncludeDirectories)
     : globalContext(context), uri(uri) {
-  bool skipMainBufferSlangImport = false;
 
   llvm::SmallString<256> canonPath(uri.file());
   if (std::error_code ec = llvm::sys::fs::real_path(uri.file(), canonPath))
     canonPath = uri.file(); // fall back, but try to keep it absolute
-
-  // --- Apply project command files (the “-C”s) to this per-buffer driver ---
-  for (const std::string &cmdFile : context.options.commandFiles) {
-    if (!driver.processCommandFiles(cmdFile, false, true)) {
-      circt::lsp::Logger::error(Twine("Failed to open command file ") +
-                                cmdFile);
-    }
-    skipMainBufferSlangImport |=
-        mainBufferFileInCommandFileList(cmdFile, canonPath.str().str());
-  }
 
   // Build the set of include directories for this file.
   llvm::SmallString<32> uriDirectory(uri.file());
@@ -134,6 +132,9 @@ VerilogDocument::VerilogDocument(
   libDirs.insert(libDirs.end(), context.options.libDirs.begin(),
                  context.options.libDirs.end());
 
+  for (const auto &libDir : libDirs)
+    driver.sourceLoader.addSearchDirectories(libDir);
+
   auto memBuffer = llvm::MemoryBuffer::getMemBufferCopy(contents, uri.file());
   if (!memBuffer) {
     circt::lsp::Logger::error(
@@ -141,58 +142,10 @@ VerilogDocument::VerilogDocument(
     return;
   }
 
-  // This block parses the top file to determine all definitions
-  // This is used in a second pass to declare all those definitions
-  // as top modules, so they are elaborated and subsequently indexed.
-  {
-    slang::driver::Driver topDriver;
-
-    auto topSlangBuffer =
-        topDriver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
-    topDriver.sourceLoader.addBuffer(topSlangBuffer);
-
-    topDriver.addStandardArgs();
-
-    if (!topDriver.processOptions()) {
-      return;
-    }
-
-    if (!topDriver.parseAllSources()) {
-      circt::lsp::Logger::error(Twine("Failed to parse Verilog file ") +
-                                uri.file());
-      return;
-    }
-
-    // Extract all the top modules in the file directly from the syntax tree
-    std::vector<std::string> topModules;
-    for (auto &t : topDriver.syntaxTrees) {
-      if (auto *compUnit =
-              t->root().as_if<slang::syntax::CompilationUnitSyntax>()) {
-        for (auto *member : compUnit->members) {
-          // While it's called "ModuleDeclarationSyntax", it also covers
-          // packages
-          if (auto *moduleDecl =
-                  member->as_if<slang::syntax::ModuleDeclarationSyntax>()) {
-            topModules.emplace_back(moduleDecl->header->name.valueText());
-          }
-        }
-      }
-    }
-    driver.options.topModules = std::move(topModules);
-  }
-
-  for (const auto &libDir : libDirs) {
-    driver.sourceLoader.addSearchDirectories(libDir);
-  }
-
-  // If the main buffer is **not** present in a command file, add it into
-  // slang's source manager.
-  if (!skipMainBufferSlangImport) {
-    auto slangBuffer =
-        driver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
-    driver.sourceLoader.addBuffer(slangBuffer);
-    mainBufferId = slangBuffer.id;
-  }
+  auto topSlangBuffer =
+      driver.sourceManager.assignText(uri.file(), memBuffer->getBuffer());
+  driver.sourceLoader.addBuffer(topSlangBuffer);
+  mainBufferId = topSlangBuffer.id;
 
   auto diagClient = std::make_shared<LSPDiagnosticClient>(*this, diagnostics);
   driver.diagEngine.addClient(diagClient);
@@ -202,11 +155,25 @@ VerilogDocument::VerilogDocument(
   driver.options.compilationFlags.emplace(
       slang::ast::CompilationFlags::DisableInstanceCaching, false);
 
+  for (auto &dir : projectIncludeDirectories)
+    (void)driver.sourceManager.addUserDirectories(dir);
+
   if (!driver.processOptions()) {
+    circt::lsp::Logger::error(Twine("Failed to process slang driver options!"));
     return;
   }
 
   driver.diagEngine.setIgnoreAllWarnings(false);
+
+  // Import dependencies from projectDriver if it exists.
+  if (projectDriver) {
+    // Copy options from project driver
+    driver.options = projectDriver->options;
+    // Set top modules according to main buffer
+    setTopModules(driver);
+    // Copy dependency buffers from project driver
+    copyBuffers(driver, projectDriver, canonPath);
+  }
 
   if (!driver.parseAllSources()) {
     circt::lsp::Logger::error(Twine("Failed to parse Verilog file ") +
@@ -215,36 +182,10 @@ VerilogDocument::VerilogDocument(
   }
 
   compilation = driver.createCompilation();
-  if (failed(compilation))
+  if (failed(compilation)) {
+    circt::lsp::Logger::error(Twine("Failed to compile Verilog file ") +
+                              uri.file());
     return;
-
-  if (skipMainBufferSlangImport) {
-    // If the main buffer is present in a command file, compile it only once
-    // and import directly from the command file; then figure out which buffer
-    // id it was assigned and bind to llvm source manager.
-    llvm::SmallString<256> slangCanonPath;
-    bool mainBufferIdSet = false;
-
-    // Iterate through all buffers in the slang compilation and set up
-    // a binding to the LLVM Source Manager.
-    auto *sourceManager = (**compilation).getSourceManager();
-    for (auto slangBuffer : sourceManager->getAllBuffers()) {
-      std::string_view slangRawPath =
-          sourceManager->getRawFileName(slangBuffer);
-      if (std::error_code ec =
-              llvm::sys::fs::real_path(slangRawPath, slangCanonPath))
-        continue;
-
-      if (slangCanonPath == canonPath) {
-        mainBufferId = slangBuffer;
-        mainBufferIdSet = true;
-        break;
-      }
-    }
-
-    if (!mainBufferIdSet)
-      circt::lsp::Logger::error(
-          Twine("Failed to set main buffer id after compilation! "));
   }
 
   for (auto &diag : (*compilation)->getAllDiagnostics())
@@ -253,7 +194,6 @@ VerilogDocument::VerilogDocument(
   computeLineOffsets(driver.sourceManager.getSourceText(mainBufferId));
 
   index = std::make_unique<VerilogIndex>(mainBufferId, driver.sourceManager);
-
   // Populate the index.
   index->initialize(**compilation);
 }
