@@ -29,8 +29,39 @@ using namespace llvm;
 
 namespace {
 
+/// Helper function to determine whether an AST node is outside of the main
+/// buffer. If this can't be safely determined, return false.
+template <typename T>
+inline bool definitelyOutsideMainBuffer(const T &t, slang::BufferID bufferId) {
+  if constexpr (requires {
+                  t.location;
+                }) { // AST nodes with location, e.g. Symbols
+    auto r = t.location;
+    if (r.valid())
+      return r.buffer() != bufferId;
+  }
+
+  if constexpr (requires {
+                  t.sourceRange;
+                }) { // AST nodes with sourceRange, e.g. expressions
+    auto r = t.sourceRange;
+    if (r.start().valid() && r.end().valid())
+      return r.start().buffer() != bufferId && r.end().buffer() != bufferId;
+  }
+
+  if constexpr (requires { t.getSyntax(); }) { // Fallback to syntax range
+    if (auto *syn = t.getSyntax()) {
+      auto r = syn->sourceRange(); // SyntaxNodes always have a source range.
+      if (r.start().valid() && r.end().valid())
+        return r.start().buffer() != bufferId && r.end().buffer() != bufferId;
+    }
+  }
+  return false; // not enough info => don’t prune
+}
+
 // Index the AST to find symbol uses and definitions.
 struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
+  using ASTBase = slang::ast::ASTVisitor<VerilogIndexer, true, true>;
   VerilogIndexer(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 
@@ -73,12 +104,10 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
   void visit(const slang::ast::NetSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
-    visitDefault(expr);
   }
 
   void visit(const slang::ast::VariableSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
-    visitDefault(expr);
   }
 
   void visit(const slang::ast::ExplicitImportSymbol &expr) {
@@ -91,7 +120,6 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
         insertSymbol(def, item->package.location(), /*isDefinition=*/false);
       }
     }
-    visitDefault(expr);
   }
 
   void visit(const slang::ast::WildcardImportSymbol &expr) {
@@ -104,7 +132,6 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
         insertSymbol(def, item->package.location(), false);
       }
     }
-    visitDefault(expr);
   }
 
   void visit(const slang::ast::InstanceSymbol &expr) {
@@ -128,22 +155,25 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
     // Link the module instance name back to the module definition
     insertSymbol(def, expr.location, /*isDefinition=*/false);
-    visitDefault(expr);
   }
 
   void visit(const slang::ast::VariableDeclStatement &expr) {
     insertSymbol(&expr.symbol, expr.sourceRange, /*isDefinition=*/true);
-    visitDefault(expr);
   }
 
   template <typename T>
-  void visit(const T &t) {
+  void visit(const T &node) {
     if constexpr (std::is_base_of_v<slang::ast::Expression, T>)
-      visitExpression(t);
+      visitExpression(node);
     if constexpr (std::is_base_of_v<slang::ast::Symbol, T>)
-      visitSymbol(t);
+      visitSymbol(node);
 
-    visitDefault(t);
+    // Check if this node is already out of the main buffer.
+    if (definitelyOutsideMainBuffer(node, index.getBufferId()))
+      return;
+
+    // Otherwise, recurse and keep indexing.
+    ASTBase::template visitDefault<T>(node);
   }
 
   template <typename T>
