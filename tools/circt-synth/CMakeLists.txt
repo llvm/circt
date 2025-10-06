@@ -12,6 +12,7 @@ target_link_libraries(circt-synth
   CIRCTDebug
   CIRCTEmit
   CIRCTHW
+  CIRCTImportAIGER
   CIRCTLTL
   CIRCTOM
   CIRCTSeq
