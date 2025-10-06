@@ -7,6 +7,11 @@
 emit.file "" {
   rtg.comment "Begin of test0"
 
+  %idx8 = index.constant 8
+  // CHECK-ALLOWED-NEXT:    .space 8
+  // CHECK-NEXT:    .space 8
+  rtg.isa.space %idx8
+
   %rd = rtg.fixed_reg #rtgtest.ra
   %rs = rtg.fixed_reg #rtgtest.s0
   %imm = rtg.constant #rtg.isa.immediate<12, 0>

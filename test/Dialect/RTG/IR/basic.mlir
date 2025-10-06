@@ -12,6 +12,9 @@ rtg.test @constants() {
 
   // CHECK-NEXT: rtg.comment "this is a comment"
   rtg.comment "this is a comment"
+
+  // CHECK-NEXT: rtg.isa.space [[V0]]
+  rtg.isa.space %1
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType

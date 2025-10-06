@@ -1004,3 +1004,11 @@ def MemorySizeOp : RTGISAOp<"memory_size", [Pure]> {
 
   let assemblyFormat = "$memory `:` qualified(type($memory)) attr-dict";
 }
+
+def SpaceOp : RTGISAOp<"space", []> {
+  let summary = "reserve the given number of bytes";
+
+  let arguments = (ins Index:$size);
+
+  let assemblyFormat = "$size attr-dict";
+}
