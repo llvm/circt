@@ -76,17 +76,25 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
 
   DenseMap<Operation *, unsigned> opIndices;
   unsigned maxIdx;
-  for (auto [i, op] :
-       llvm::enumerate(getOperation()->getRegion(0).getBlocks().front())) {
-    // TODO: ideally check that the IR is already fully elaborated
-    opIndices[&op] = i;
-    maxIdx = i;
-  }
+  // Find Text segment and walk its operations
+  // FIXME: assumes there is exactly one such segment
+  rtg::SegmentOp textSeg;
+  getOperation()->walk([&](rtg::SegmentOp segOp) {
+    if (segOp.getKind() != rtg::SegmentKind::Text)
+      return;
+    
+    textSeg = segOp;
+    for (auto [i, op] : llvm::enumerate(*segOp.getBody())) {
+      // TODO: ideally check that the IR is already fully elaborated
+      opIndices[&op] = i;
+      maxIdx = i;
+    }
+  });
 
   // Collect all the register intervals we have to consider.
   SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
   SmallVector<RegisterLiveRange *> active;
-  for (auto &op : getOperation()->getRegion(0).getBlocks().front()) {
+  for (auto &op : *textSeg.getBody()) {
     if (!isa<rtg::ConstantOp, rtg::VirtualRegisterOp>(&op) ||
         !isa<rtg::RegisterTypeInterface>(op.getResult(0).getType()))
       continue;
