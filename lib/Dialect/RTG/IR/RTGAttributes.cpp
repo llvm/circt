@@ -105,6 +105,25 @@ void ImmediateAttr::print(AsmPrinter &odsPrinter) const {
   odsPrinter << "<" << getValue().getBitWidth() << ", " << getValue() << ">";
 }
 
+Type VirtualRegisterConfigAttr::getType() const {
+  return getAllowedRegs()[0].getType();
+}
+
+LogicalResult VirtualRegisterConfigAttr::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+    ArrayRef<rtg::RegisterAttrInterface> allowedRegs) {
+  if (allowedRegs.empty())
+    return emitError() << "must have at least one allowed register";
+
+  if (!llvm::all_of(allowedRegs, [&](auto reg) {
+        return reg.getType() == allowedRegs[0].getType();
+      })) {
+    return emitError() << "all allowed registers must be of the same type";
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

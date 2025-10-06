@@ -227,4 +227,24 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
       .def_property_readonly("value", [](MlirAttribute self) {
         return rtgImmediateAttrGetValue(self);
       });
+
+  mlir_attribute_subclass(m, "VirtualRegisterConfigAttr",
+                          rtgAttrIsAVirtualRegisterConfig)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, const std::vector<MlirAttribute> &allowedRegs,
+             MlirContext ctxt) {
+            return cls(rtgVirtualRegisterConfigAttrGet(ctxt, allowedRegs.size(),
+                                                       allowedRegs.data()));
+          },
+          nb::arg("self"), nb::arg("allowed_regs"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("regs", [](MlirAttribute self) {
+        std::vector<MlirAttribute> regs;
+        for (unsigned
+                 i = 0,
+                 numRegs = rtgVirtualRegisterConfigAttrGetNumRegisters(self);
+             i < numRegs; ++i)
+          regs.push_back(rtgVirtualRegisterConfigAttrGetRegister(self, i));
+        return regs;
+      });
 }

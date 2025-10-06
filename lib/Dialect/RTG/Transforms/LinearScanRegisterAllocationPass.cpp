@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
@@ -137,8 +138,10 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       continue;
 
     // Handle virtual registers.
+    auto configAttr =
+        cast<rtg::VirtualRegisterConfigAttr>(lr->regOp.getAllowedRegsAttr());
     rtg::RegisterAttrInterface availableReg;
-    for (auto reg : lr->regOp.getAllowedRegs()) {
+    for (auto reg : configAttr.getAllowedRegs()) {
       if (llvm::none_of(active, [&](auto *r) { return r->fixedReg == reg; })) {
         availableReg = cast<rtg::RegisterAttrInterface>(reg);
         break;

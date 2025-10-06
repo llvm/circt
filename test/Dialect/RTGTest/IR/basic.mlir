@@ -197,13 +197,22 @@ rtg.test @instructions(imm = %imm: !rtg.isa.immediate<12>, imm13 = %imm13: !rtg.
 // -----
 
 rtg.test @emptyAllowed() {
-  // expected-error @below {{must have at least one allowed register}}
-  rtg.virtual_reg []
+  // expected-error @below {{expected attribute value}}
+  // expected-error @below {{failed to parse VirtualRegisterConfigAttr parameter 'allowedRegs' which is to be a `::llvm::ArrayRef<rtg::RegisterAttrInterface>`}}
+  rtg.virtual_reg #rtg.virtual_register_config[]
 }
 
 // -----
 
 rtg.test @invalidAllowedAttr() {
-  // expected-error @below {{allowed register attributes must be of RegisterAttrInterface}}
-  rtg.virtual_reg ["invalid"]
+  // expected-error @below {{invalid kind of attribute specified}}
+  // expected-error @below {{failed to parse VirtualRegisterConfigAttr parameter 'allowedRegs' which is to be a `::llvm::ArrayRef<rtg::RegisterAttrInterface>`}}
+  rtg.virtual_reg #rtg.virtual_register_config["invalid"]
+}
+
+// -----
+
+rtg.test @invalidAllowedAttr() {
+  // expected-error @below {{all allowed registers must be of the same type}}
+  rtg.virtual_reg #rtg.virtual_register_config[#rtgtest.a0, #rtgtest.f0]
 }

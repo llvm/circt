@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Emit/EmitOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGAttrInterfaces.h"
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyTypeInterfaces.h"

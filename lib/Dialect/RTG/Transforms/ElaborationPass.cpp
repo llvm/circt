@@ -427,7 +427,7 @@ struct IdentityValue {
 
 /// Represents a unique virtual register.
 struct VirtualRegisterStorage : IdentityValue {
-  VirtualRegisterStorage(ArrayAttr allowedRegs, Type type)
+  VirtualRegisterStorage(VirtualRegisterConfigAttr allowedRegs, Type type)
       : IdentityValue(type), allowedRegs(allowedRegs) {}
 
   // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
@@ -435,7 +435,7 @@ struct VirtualRegisterStorage : IdentityValue {
 
   // The list of fixed registers allowed to be selected for this virtual
   // register.
-  const ArrayAttr allowedRegs;
+  const VirtualRegisterConfigAttr allowedRegs;
 };
 
 struct UniqueLabelStorage : IdentityValue {
