@@ -11,6 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ImportAIGER.h"
 #include "circt/Conversion/SynthToComb.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -33,6 +34,7 @@
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
@@ -60,6 +62,19 @@ using namespace synth;
 //===----------------------------------------------------------------------===//
 
 static cl::OptionCategory mainCategory("circt-synth Options");
+
+/// Allow the user to specify the input file format.  This can be used to
+/// override the input, and can be used to specify ambiguous cases like standard
+/// input.
+enum InputFormatKind { InputUnspecified, InputAIGERFile, InputMLIRFile };
+
+static cl::opt<InputFormatKind> inputFormat(
+    "input-format", cl::desc("Specify the input file format"),
+    cl::values(clEnumValN(InputUnspecified, "unspecified",
+                          "Unspecified input format"),
+               clEnumValN(InputAIGERFile, "aiger", "AIGER input format"),
+               clEnumValN(InputMLIRFile, "mlir", "MLIR input format")),
+    cl::init(InputUnspecified), cl::cat(mainCategory));
 
 static cl::opt<std::string> inputFilename(cl::Positional, cl::init("-"),
                                           cl::desc("Specify an input file"),
@@ -300,11 +315,48 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
+  // Set up the input file.
+  std::unique_ptr<llvm::MemoryBuffer> input;
+
+  {
+    std::string errorMessage;
+    input = openInputFile(inputFilename, &errorMessage);
+    if (!input) {
+      llvm::errs() << errorMessage << "\n";
+      return failure();
+    }
+  }
+
+  // Figure out the input format if unspecified.
+  if (inputFormat == InputUnspecified) {
+    if (StringRef(inputFilename).ends_with(".aig"))
+      inputFormat = InputAIGERFile;
+    else if (StringRef(inputFilename).ends_with(".mlir") ||
+             StringRef(inputFilename).ends_with(".mlirbc") ||
+             mlir::isBytecode(*input))
+      inputFormat = InputMLIRFile;
+    else {
+      llvm::errs() << "unknown input format: "
+                      "specify with -format=aiger or -format=mlir\n";
+      return failure();
+    }
+  }
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
   OwningOpRef<ModuleOp> module;
   {
-    auto parserTimer = ts.nest("Parse MLIR input");
     // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilename, &context);
+    if (inputFormat == InputAIGERFile) {
+      circt::aiger::ImportAIGEROptions options;
+      module =
+          OwningOpRef<ModuleOp>(ModuleOp::create(UnknownLoc::get(&context)));
+      if (failed(aiger::importAIGER(sourceMgr, &context, ts, module.get(),
+                                    &options)))
+        module = {};
+    } else {
+      auto parserTimer = ts.nest("Parse MLIR input");
+      module = parseSourceFile<ModuleOp>(sourceMgr, &context);
+    }
   }
   if (!module)
     return failure();
