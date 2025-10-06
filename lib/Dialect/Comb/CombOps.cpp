@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
@@ -215,6 +216,22 @@ Value comb::createInject(OpBuilder &builder, Location loc, Value value,
     fragments.push_back(
         comb::ExtractOp::create(builder, loc, value, 0, offset));
   return builder.createOrFold<comb::ConcatOp>(loc, fragments);
+}
+
+llvm::LogicalResult comb::convertSubToAdd(comb::SubOp subOp,
+                                          mlir::PatternRewriter &rewriter) {
+  auto lhs = subOp.getLhs();
+  auto rhs = subOp.getRhs();
+  // Since `-rhs = ~rhs + 1` holds, rewrite `sub(lhs, rhs)` to:
+  // sub(lhs, rhs) => add(lhs, -rhs) => add(lhs, add(~rhs, 1))
+  // => add(lhs, ~rhs, 1)
+  auto notRhs =
+      comb::createOrFoldNot(subOp.getLoc(), rhs, rewriter, subOp.getTwoState());
+  auto one =
+      hw::ConstantOp::create(rewriter, subOp.getLoc(), subOp.getType(), 1);
+  replaceOpWithNewOpAndCopyNamehint<comb::AddOp>(
+      rewriter, subOp, ValueRange{lhs, notRhs, one}, subOp.getTwoState());
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
