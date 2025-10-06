@@ -112,8 +112,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x10000: Start of MMIO space for requests. Mapping is contained in the
-               manifest so can be dynamically queried.
+    - 0x400: Start of MMIO space for requests. Mapping is contained in the
+             manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
     - addr(Manifest ROM) + 8: Start of compressed manifest
@@ -133,16 +133,12 @@ class ChannelMMIO(esi.ServiceImplementation):
   # TODO: make the amount of register space each client gets a parameter.
   # Supporting this will require more address decode logic.
   #
-  # TODO: if the compressed manifest is larger than 'RegisterSpace', we won't be
-  # allocating enough address space. This should be fixed with the more complex
-  # address decode logic mentioned above.
-  #
   # TODO: only supports one outstanding transaction at a time. This is NOT
   # enforced or checked! Enforce this.
 
-  RegisterSpace = 0x100000
+  RegisterSpace = 0x400
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = 0xFFFFF
+  AddressMask = 0x3FF
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -204,7 +200,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     counted_output.assign(data_resp_channel)
 
     # Get the selection index and the address to hand off to the clients.
-    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(cmd_channel)
+    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
+        cmd_channel, len(table), manifest_loc)
 
     # Build the demux/mux and assign the results of each appropriately.
     read_clients_clog2 = clog2(len(table))
@@ -231,8 +228,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     data_resp_channel.assign(resp_channel)
 
   @staticmethod
-  def build_addr_read(
-      read_addr_chan: ChannelSignal) -> Tuple[BitsSignal, ChannelSignal]:
+  def build_addr_read(read_addr_chan: ChannelSignal, num_clients: int,
+                      manifest_loc: int) -> Tuple[BitsSignal, ChannelSignal]:
     """Build a channel for the address read request. Returns the index to select
     the client and a channel for the masked address to be passed to the
     clients."""
@@ -241,19 +238,27 @@ class ChannelMMIO(esi.ServiceImplementation):
     # change to support more flexibility in addressing. Not clear if what we're
     # doing now it sufficient or not.
 
+    manifest_loc_const = UInt(32)(manifest_loc)
+
     cmd_ready_wire = Wire(Bits(1))
     cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
+    is_manifest_read = cmd.offset > manifest_loc_const
     sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
-    sel_bits.assign(cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:])
+    # If reading the manifest, override the selection to select the manifest instead.
+    sel_bits.assign(
+        Mux(is_manifest_read,
+            cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:],
+            Bits(32 - ChannelMMIO.RegisterSpaceBits)(num_clients - 1)))
+    regular_client_offset = (cmd.offset.as_bits() &
+                             Bits(32)(ChannelMMIO.AddressMask)).as_uint()
+    offset = Mux(is_manifest_read, regular_client_offset,
+                 (cmd.offset - manifest_loc_const).as_uint(32))
     client_cmd = NamedWire(esi.MMIOReadWriteCmdType, "client_cmd")
     client_cmd.assign(
         esi.MMIOReadWriteCmdType({
-            "write":
-                cmd.write,
-            "offset": (cmd.offset.as_bits() &
-                       Bits(32)(ChannelMMIO.AddressMask)).as_uint(),
-            "data":
-                cmd.data
+            "write": cmd.write,
+            "offset": offset,
+            "data": cmd.data
         }))
     client_addr_chan, client_addr_ready = Channel(
         esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
