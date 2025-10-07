@@ -18,3 +18,8 @@ hw.module @counter(in %a: i16, in %clk: !seq.clock, out result: i16) {
     %add = comb.mul %reg, %a : i16
     hw.output %reg : i16
 }
+
+// COMMON-NOT: "test"
+hw.module @test(in %a: i16, out result: i16) {
+    hw.output %a : i16
+}

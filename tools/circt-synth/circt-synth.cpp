@@ -269,6 +269,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     options.outputFile = outputLongestPath;
     options.showTopKPercent = outputLongestPathTopKPercent;
     options.emitJSON = outputLongestPathJSON;
+    options.topModuleName = topName;
     pm.addPass(circt::synth::createPrintLongestPathAnalysis(options));
   }
 
