@@ -130,25 +130,36 @@ static LogicalResult checkForCFGLoop(llhd::ProcessOp procOp) {
       }));
   toCheck.push_back(&procOp.getBody().front());
 
-  SmallVector<Block *> worklist;
+  SmallVector<Block *> cfStack;
   DenseSet<Block *> visited;
   for (auto *block : toCheck) {
-    worklist.clear();
+    cfStack.clear();
     visited.clear();
-    worklist.push_back(block);
+    cfStack.push_back(block);
 
-    while (!worklist.empty()) {
-      Block *curr = worklist.pop_back_val();
-      if (isa<llhd::WaitOp>(curr->getTerminator()))
+    while (!cfStack.empty()) {
+      Block *curr = cfStack.back();
+      if (isa<llhd::WaitOp>(curr->getTerminator())) {
+        visited.insert(curr);
+        cfStack.pop_back();
         continue;
+      }
 
-      visited.insert(curr);
-
+      bool allSuccessorsVisited = true;
       for (auto *succ : curr->getSuccessors()) {
-        if (visited.contains(succ))
+        if (llvm::is_contained(cfStack, succ))
           return failure();
 
-        worklist.push_back(succ);
+        if (!visited.contains(succ)) {
+          cfStack.push_back(succ);
+          allSuccessorsVisited = false;
+          break;
+        }
+      }
+
+      if (allSuccessorsVisited) {
+        visited.insert(curr);
+        cfStack.pop_back();
       }
     }
   }
