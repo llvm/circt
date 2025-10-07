@@ -386,21 +386,79 @@ class LongestPathAnalysis:
     return LongestPathCollection(
         self.analysis.get_paths(value, bit_pos, elaborate_paths))
 
+  def get_internal_paths(self,
+                         module_name: str,
+                         elaborate_paths: bool = True) -> LongestPathCollection:
+    """
+        Get internal paths within the module.
+
+        Internal paths are paths that start and end at sequential elements
+        (registers/flip-flops), forming complete paths through combinational
+        logic. These paths may cross module boundaries but both endpoints are
+        sequential elements, not ports.
+
+        Args:
+            module_name: Name of the module to analyze
+            elaborate_paths: Whether to include full hierarchical instance information
+
+        Returns:
+            LongestPathCollection containing all internal paths sorted by delay
+        """
+    return LongestPathCollection(
+        self.analysis.get_internal_paths(module_name, elaborate_paths))
+
+  def get_paths_from_input_ports_to_internal(
+      self, module_name: str) -> LongestPathCollection:
+    """
+        Get external paths from module input ports to internal sequential elements.
+
+        These are input-to-register paths that start at module input ports and end
+        at internal sequential elements (registers/flip-flops).
+
+        Args:
+            module_name: Name of the module to analyze
+
+        Returns:
+            LongestPathCollection containing input-to-internal paths sorted by delay
+        """
+    return LongestPathCollection(
+        self.analysis.get_paths_from_input_ports_to_internal(module_name))
+
+  def get_paths_from_internal_to_output_ports(
+      self, module_name: str) -> LongestPathCollection:
+    """
+        Get external paths from internal sequential elements to module output ports.
+
+        These are register-to-output paths that start at internal sequential elements
+        (registers/flip-flops) and end at module output ports.
+
+        Args:
+            module_name: Name of the module to analyze
+
+        Returns:
+            LongestPathCollection containing internal-to-output paths sorted by delay
+        """
+    return LongestPathCollection(
+        self.analysis.get_paths_from_internal_to_output_ports(module_name))
+
   def get_all_paths(self,
                     module_name: str,
                     elaborate_paths: bool = True) -> LongestPathCollection:
     """
-        Perform longest path analysis and return all timing paths inside
-        the module hierarchy.
-        This method analyzes the specified module and returns a collection
-        of all timing paths, sorted by delay in descending order.
+        Get all timing paths in the module (internal and external paths combined).
+
         Args:
             module_name: Name of the module to analyze
+            elaborate_paths: Whether to include full hierarchical instance information
+                           (only applies to internal paths)
+
         Returns:
             LongestPathCollection containing all paths sorted by delay
         """
-    return LongestPathCollection(
-        self.analysis.get_all_paths(module_name, elaborate_paths))
+    collection = self.get_internal_paths(module_name, elaborate_paths)
+    collection.merge(self.get_paths_from_input_ports_to_internal(module_name))
+    collection.merge(self.get_paths_from_internal_to_output_ports(module_name))
+    return collection
 
 
 @dataclass

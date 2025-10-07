@@ -596,7 +596,7 @@ public:
       llvm::MapVector<Object,
                       std::pair<int64_t, llvm::ImmutableList<DebugPoint>>>;
 
-  void getClosedPaths(SmallVectorImpl<DataflowPath> &results) const;
+  void getInternalPaths(SmallVectorImpl<DataflowPath> &results) const;
   void setTopLevel() { this->topLevel = true; }
   bool isTopLevel() const { return topLevel; }
   hw::HWModuleOp getHWModuleOp() const { return module; }
@@ -1926,7 +1926,7 @@ FailureOr<int64_t> LongestPathAnalysis::getMaxDelay(Value value,
 }
 
 LogicalResult
-LongestPathAnalysis::getClosedPaths(StringAttr moduleName,
+LongestPathAnalysis::getInternalPaths(StringAttr moduleName,
                                     SmallVectorImpl<DataflowPath> &results,
                                     bool elaboratePaths) const {
   if (!isAnalysisValid)
@@ -1956,7 +1956,7 @@ LogicalResult
 LongestPathAnalysis::getAllPaths(StringAttr moduleName,
                                  SmallVectorImpl<DataflowPath> &results,
                                  bool elaboratePaths) const {
-  if (failed(getClosedPaths(moduleName, results, elaboratePaths)))
+  if (failed(getInternalPaths(moduleName, results, elaboratePaths)))
     return failure();
   if (failed(getOpenPathsFromInputPortsToInternal(moduleName, results)))
     return failure();

@@ -59,19 +59,56 @@ void circt::python::populateDialectSynthSubmodule(nb::module_ &m) {
 
              return collection;
            })
-      .def("get_all_paths",
+      .def("get_internal_paths",
            [](SynthLongestPathAnalysis *self, const std::string &moduleName,
               bool elaboratePaths) -> SynthLongestPathCollection {
              MlirStringRef moduleNameRef =
                  mlirStringRefCreateFromCString(moduleName.c_str());
 
-             auto collection =
-                 SynthLongestPathCollection(synthLongestPathAnalysisGetAllPaths(
-                     *self, moduleNameRef, elaboratePaths));
+             auto collection = SynthLongestPathCollection(
+                 synthLongestPathAnalysisGetInternalPaths(*self, moduleNameRef,
+                                                          elaboratePaths));
 
              if (synthLongestPathCollectionIsNull(collection))
                throw nb::value_error(
                    "Failed to get all paths, see previous error(s).");
+
+             return collection;
+           })
+      // Get open paths from module input ports to internal sequential elements.
+      .def("get_paths_from_input_ports_to_internal",
+           [](SynthLongestPathAnalysis *self,
+              const std::string &moduleName) -> SynthLongestPathCollection {
+             MlirStringRef moduleNameRef =
+                 mlirStringRefCreateFromCString(moduleName.c_str());
+
+             auto collection = SynthLongestPathCollection(
+                 synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
+                     *self, moduleNameRef));
+
+             if (synthLongestPathCollectionIsNull(collection))
+               throw nb::value_error(
+                   "Failed to get paths from input ports to internal, see "
+                   "previous error(s).");
+
+             return collection;
+           })
+      // Get external paths from internal sequential elements to module output
+      // ports.
+      .def("get_paths_from_internal_to_output_ports",
+           [](SynthLongestPathAnalysis *self,
+              const std::string &moduleName) -> SynthLongestPathCollection {
+             MlirStringRef moduleNameRef =
+                 mlirStringRefCreateFromCString(moduleName.c_str());
+
+             auto collection = SynthLongestPathCollection(
+                 synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
+                     *self, moduleNameRef));
+
+             if (synthLongestPathCollectionIsNull(collection))
+               throw nb::value_error(
+                   "Failed to get paths from internal to output ports, see "
+                   "previous error(s).");
 
              return collection;
            });

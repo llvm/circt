@@ -257,7 +257,7 @@ public:
   // and ends at sequential elements (registers/flip-flops), forming a complete
   // timing path through combinational logic. The path may cross module
   // boundaries but both end points are sequential elements, not ports.
-  LogicalResult getClosedPaths(StringAttr moduleName,
+  LogicalResult getInternalPaths(StringAttr moduleName,
                                SmallVectorImpl<DataflowPath> &results,
                                bool elaboratePaths = false) const;
 
@@ -275,7 +275,7 @@ public:
 
   // Get all timing paths in the given module including both closed and open
   // paths. This is a convenience method that combines results from
-  // getClosedPaths, getOpenPathsFromInputPortsToInternal, and
+  // getInternalPaths, getOpenPathsFromInputPortsToInternal, and
   // getOpenPathsFromInternalToOutputPorts. If elaboratedPaths is true, paths
   // include full hierarchical instance information.
   LogicalResult getAllPaths(StringAttr moduleName,
