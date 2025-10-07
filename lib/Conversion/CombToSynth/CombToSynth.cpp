@@ -707,7 +707,7 @@ public:
                            ArrayRef<Value> pPrefix, ArrayRef<Value> gPrefix)
       : builder(builder), loc(loc), width(width) {
     assert(width > 0 && "width must be positive");
-    for (size_t i = 0; i < static_cast<size_t>(width); ++i)
+    for (int64_t i = 0; i < width; ++i)
       prefixCache[{0, i}] = {pPrefix[i], gPrefix[i]};
   }
 
@@ -732,13 +732,13 @@ private:
 
 std::pair<Value, Value>
 LazyKoggeStonePrefixTree::getGroupAndPropagate(int64_t level, int64_t i) {
-  assert(i < static_cast<int64_t>(width) && "i out of bounds");
+  assert(i < width && "i out of bounds");
   auto key = std::make_pair(level, i);
   auto it = prefixCache.find(key);
   if (it != prefixCache.end())
     return it->second;
 
-  assert(level > 0 && "level must be positive");
+  assert(level > 0 && "If the level is 0, we should have hit the cache");
 
   int64_t previousStride = 1ULL << (level - 1);
   if (i < previousStride) {
@@ -1176,13 +1176,13 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
     }
     }
 
-    // Final result: gPrefix[width-1] gives us "a < b"
+    // Final result: `finalGroup` gives us "a < b"
     if (includeEq) {
       // a <= b iff (a < b) OR (a == b)
-      // a == b iff pPrefix[width-1] (all bits are equal)
+      // a == b iff `finalPropagate` (all bits are equal)
       return comb::OrOp::create(rewriter, loc, finalGroup, finalPropagate);
     }
-    // a < b iff gPrefix[width-1]
+    // a < b iff `finalGroup`
     return finalGroup;
   }
 
