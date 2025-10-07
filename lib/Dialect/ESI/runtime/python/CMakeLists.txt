@@ -14,7 +14,7 @@ set(ESIPythonRuntimeSources
 )
 
 # Pybind11 is used to wrap the ESICppRuntime APIs.
-find_package(Python3 COMPONENTS Interpreter Development)
+find_package(Python3 COMPONENTS Interpreter Development.Module)
 if(Python3_FOUND)
   IF(MSVC)
     # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
@@ -155,6 +155,7 @@ if(Python3_FOUND)
 
   endif()
 else() # Python not found.
+  message(WARNING "Python3 not found. Disabling ESI Runtime Python API.")
   if (WHEEL_BUILD)
     message (FATAL_ERROR "python-dev is required for a wheel build.")
   endif()

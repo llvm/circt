@@ -3,12 +3,12 @@ requires = [
   "setuptools>=68",
   "setuptools_scm>=8.0",
   "wheel",
-  "cmake>=3.12",
+  "cmake>=3.23,<4",
 
   # MLIR build depends.
   "numpy",
   "pybind11>=2.11,<=2.12",
-  "nanobind==2.4.0",
+  "nanobind==2.9.2",
   "PyYAML",
 
   # PyCDE depends
