@@ -242,7 +242,7 @@ class ChannelMMIO(esi.ServiceImplementation):
 
     cmd_ready_wire = Wire(Bits(1))
     cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
-    is_manifest_read = cmd.offset > manifest_loc_const
+    is_manifest_read = cmd.offset >= manifest_loc_const
     sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
     # If reading the manifest, override the selection to select the manifest instead.
     sel_bits.assign(
