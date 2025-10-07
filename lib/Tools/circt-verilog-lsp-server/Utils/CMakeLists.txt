@@ -10,7 +10,14 @@
 
 add_circt_library(CIRCTVerilogLspServerUtils
   LSPUtils.cpp
+  PendingChanges.cpp
 
   LINK_LIBS PUBLIC
   MLIRLspServerSupportLib
+)
+
+# An interface library target to expose headers to unittests
+add_library(CIRCTVerilogLspUtilsHeaders INTERFACE)
+target_include_directories(CIRCTVerilogLspUtilsHeaders INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR}
 )

@@ -12,8 +12,9 @@
 #include "llvm/Support/LSP/Transport.h"
 
 llvm::LogicalResult circt::lsp::CirctVerilogLspServerMain(
+    const circt::lsp::LSPServerOptions &lspOptions,
     const circt::lsp::VerilogServerOptions &options,
     llvm::lsp::JSONTransport &transport) {
   circt::lsp::VerilogServer server(options);
-  return circt::lsp::runVerilogLSPServer(server, transport);
+  return circt::lsp::runVerilogLSPServer(lspOptions, server, transport);
 }

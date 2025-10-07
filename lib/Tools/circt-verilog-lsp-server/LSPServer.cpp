@@ -7,10 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "LSPServer.h"
+#include "Utils/PendingChanges.h"
 #include "VerilogServerImpl/VerilogServer.h"
+#include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/LSP/Protocol.h"
 #include "llvm/Support/LSP/Transport.h"
+
+#include <cstdint>
+#include <mutex>
 #include <optional>
 
 #define DEBUG_TYPE "circt-verilog-lsp-server"
@@ -23,9 +28,13 @@ using namespace llvm::lsp;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 struct LSPServer {
-  LSPServer(circt::lsp::VerilogServer &server, JSONTransport &transport)
-      : server(server), transport(transport) {}
+
+  LSPServer(const circt::lsp::LSPServerOptions &options,
+            circt::lsp::VerilogServer &server, JSONTransport &transport)
+      : server(server), transport(transport),
+        debounceOptions(circt::lsp::DebounceOptions::fromLSPOptions(options)) {}
 
   //===--------------------------------------------------------------------===//
   // Initialization
@@ -60,16 +69,34 @@ struct LSPServer {
   circt::lsp::VerilogServer &server;
   JSONTransport &transport;
 
-  /// An outgoing notification used to send diagnostics to the client when they
-  /// are ready to be processed.
-  OutgoingNotification<PublishDiagnosticsParams> publishDiagnostics;
+  /// A thread-safe version of `publishDiagnostics`
+  void sendDiagnostics(const PublishDiagnosticsParams &p) {
+    std::scoped_lock lk(diagnosticsMutex);
+    publishDiagnostics(p); // serialize the write
+  }
+
+  void
+  setPublishDiagnostics(OutgoingNotification<PublishDiagnosticsParams> diag) {
+    std::scoped_lock lk(diagnosticsMutex);
+    publishDiagnostics = std::move(diag);
+  }
 
   /// Used to indicate that the 'shutdown' request was received from the
   /// Language Server client.
   bool shutdownRequestReceived = false;
-};
-} // namespace
 
+private:
+  /// A mutex to serialize access to publishing diagnostics
+  std::mutex diagnosticsMutex;
+  /// An outgoing notification used to send diagnostics to the client when they
+  /// are ready to be processed.
+  OutgoingNotification<PublishDiagnosticsParams> publishDiagnostics;
+
+  circt::lsp::PendingChangesMap pendingChanges;
+  circt::lsp::DebounceOptions debounceOptions;
+};
+
+} // namespace
 //===----------------------------------------------------------------------===//
 // Initialization
 //===----------------------------------------------------------------------===//
@@ -101,6 +128,7 @@ void LSPServer::onInitialize(const InitializeParams &params,
 void LSPServer::onInitialized(const InitializedParams &) {}
 void LSPServer::onShutdown(const NoParams &, Callback<std::nullptr_t> reply) {
   shutdownRequestReceived = true;
+  pendingChanges.abort();
   reply(nullptr);
 }
 
@@ -115,10 +143,11 @@ void LSPServer::onDocumentDidOpen(const DidOpenTextDocumentParams &params) {
                      params.textDocument.version, diagParams.diagnostics);
 
   // Publish any recorded diagnostics.
-  publishDiagnostics(diagParams);
+  sendDiagnostics(diagParams);
 }
 
 void LSPServer::onDocumentDidClose(const DidCloseTextDocumentParams &params) {
+  pendingChanges.erase(params.textDocument.uri);
   std::optional<int64_t> version =
       server.removeDocument(params.textDocument.uri);
   if (!version)
@@ -127,18 +156,23 @@ void LSPServer::onDocumentDidClose(const DidCloseTextDocumentParams &params) {
   // Empty out the diagnostics shown for this document. This will clear out
   // anything currently displayed by the client for this document (e.g. in the
   // "Problems" pane of VSCode).
-  publishDiagnostics(
-      PublishDiagnosticsParams(params.textDocument.uri, *version));
+  sendDiagnostics(PublishDiagnosticsParams(params.textDocument.uri, *version));
 }
 
 void LSPServer::onDocumentDidChange(const DidChangeTextDocumentParams &params) {
-  PublishDiagnosticsParams diagParams(params.textDocument.uri,
-                                      params.textDocument.version);
-  server.updateDocument(params.textDocument.uri, params.contentChanges,
-                        params.textDocument.version, diagParams.diagnostics);
+  pendingChanges.debounceAndUpdate(
+      params, debounceOptions,
+      [this, params](std::unique_ptr<circt::lsp::PendingChanges> result) {
+        if (!result)
+          return; // obsolete
 
-  // Publish any recorded diagnostics.
-  publishDiagnostics(diagParams);
+        PublishDiagnosticsParams diagParams(params.textDocument.uri,
+                                            result->version);
+        server.updateDocument(params.textDocument.uri, result->changes,
+                              result->version, diagParams.diagnostics);
+
+        sendDiagnostics(diagParams);
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -163,10 +197,17 @@ void LSPServer::onReference(const ReferenceParams &params,
 // Entry Point
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
-                                              JSONTransport &transport) {
-  LSPServer lspServer(server, transport);
+LogicalResult
+circt::lsp::runVerilogLSPServer(const circt::lsp::LSPServerOptions &options,
+                                VerilogServer &server,
+                                JSONTransport &transport) {
+  LSPServer lspServer(options, server, transport);
   MessageHandler messageHandler(transport);
+
+  // Diagnostics
+  lspServer.setPublishDiagnostics(
+      messageHandler.outgoingNotification<PublishDiagnosticsParams>(
+          "textDocument/publishDiagnostics"));
 
   // Initialization
   messageHandler.method("initialize", &lspServer, &LSPServer::onInitialize);
@@ -179,19 +220,14 @@ LogicalResult circt::lsp::runVerilogLSPServer(VerilogServer &server,
                               &LSPServer::onDocumentDidOpen);
   messageHandler.notification("textDocument/didClose", &lspServer,
                               &LSPServer::onDocumentDidClose);
+
   messageHandler.notification("textDocument/didChange", &lspServer,
                               &LSPServer::onDocumentDidChange);
-
   // Definitions and References
   messageHandler.method("textDocument/definition", &lspServer,
                         &LSPServer::onGoToDefinition);
   messageHandler.method("textDocument/references", &lspServer,
                         &LSPServer::onReference);
-
-  // Diagnostics
-  lspServer.publishDiagnostics =
-      messageHandler.outgoingNotification<PublishDiagnosticsParams>(
-          "textDocument/publishDiagnostics");
 
   // Run the main loop of the transport.
   if (Error error = transport.run(messageHandler)) {
