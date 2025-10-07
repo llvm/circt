@@ -25,9 +25,9 @@
 // assumes that all domain information is available.  It is not written in such
 // a way that partial domain information can be lowered incrementally, e.g.,
 // interleaving InferDomains and LowerDomains with passes that incrementally add
-// comain information will not work.  This is because LowerDomains is closer to
+// domain information will not work.  This is because LowerDomains is closer to
 // a conversion than a pass.  It is expected that this is part of the FIRRTL to
-// HW pass pipelined.
+// HW pass pipeline.
 //
 // There are a number of limitations in this pass presently, much of which are
 // coupled to the representation of domains.  Currently, domain information on
@@ -99,11 +99,10 @@ struct DomainInfo {
   SmallVector<AssociationInfo> associations{};
 };
 
-/// Store of the two classes created from a domain, an input class (which is
+/// Struct of the two classes created from a domain, an input class (which is
 /// one-to-one with the domain) and an output class (which tracks the input
 /// class and any associations).
 struct Classes {
-
   /// The domain-lowered class.
   ClassOp input;
 
