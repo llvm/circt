@@ -116,17 +116,53 @@ synthLongestPathAnalysisGetPaths(SynthLongestPathAnalysis analysis,
 }
 
 SynthLongestPathCollection
-synthLongestPathAnalysisGetAllPaths(SynthLongestPathAnalysis analysis,
-                                    MlirStringRef moduleName,
-                                    bool elaboratePaths) {
+synthLongestPathAnalysisGetInternalPaths(SynthLongestPathAnalysis analysis,
+                                         MlirStringRef moduleName,
+                                         bool elaboratePaths) {
   auto *wrapper = unwrap(analysis);
   auto *lpa = wrapper->analysis.get();
   auto moduleNameAttr = StringAttr::get(lpa->getContext(), unwrap(moduleName));
 
   auto *collection = new LongestPathCollection(lpa->getContext());
   if (!lpa->isAnalysisAvailable(moduleNameAttr) ||
-      failed(
-          lpa->getAllPaths(moduleNameAttr, collection->paths, elaboratePaths)))
+      failed(lpa->getInternalPaths(moduleNameAttr, collection->paths,
+                                   elaboratePaths)))
+    return {nullptr};
+
+  collection->sortInDescendingOrder();
+  return wrap(collection);
+}
+
+// Get external paths from module input ports to internal sequential elements.
+SynthLongestPathCollection
+synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
+    SynthLongestPathAnalysis analysis, MlirStringRef moduleName) {
+  auto *wrapper = unwrap(analysis);
+  auto *lpa = wrapper->analysis.get();
+  auto moduleNameAttr = StringAttr::get(lpa->getContext(), unwrap(moduleName));
+
+  auto *collection = new LongestPathCollection(lpa->getContext());
+  if (!lpa->isAnalysisAvailable(moduleNameAttr) ||
+      failed(lpa->getOpenPathsFromInputPortsToInternal(moduleNameAttr,
+                                                       collection->paths)))
+    return {nullptr};
+
+  collection->sortInDescendingOrder();
+  return wrap(collection);
+}
+
+// Get external paths from internal sequential elements to module output ports.
+SynthLongestPathCollection
+synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
+    SynthLongestPathAnalysis analysis, MlirStringRef moduleName) {
+  auto *wrapper = unwrap(analysis);
+  auto *lpa = wrapper->analysis.get();
+  auto moduleNameAttr = StringAttr::get(lpa->getContext(), unwrap(moduleName));
+
+  auto *collection = new LongestPathCollection(lpa->getContext());
+  if (!lpa->isAnalysisAvailable(moduleNameAttr) ||
+      failed(lpa->getOpenPathsFromInternalToOutputPorts(moduleNameAttr,
+                                                        collection->paths)))
     return {nullptr};
 
   collection->sortInDescendingOrder();

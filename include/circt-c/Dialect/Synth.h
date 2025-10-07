@@ -57,14 +57,27 @@ MLIR_CAPI_EXPORTED SynthLongestPathAnalysis synthLongestPathAnalysisCreate(
 MLIR_CAPI_EXPORTED void
 synthLongestPathAnalysisDestroy(SynthLongestPathAnalysis analysis);
 
+// Get paths to a specific value and bit position
 MLIR_CAPI_EXPORTED SynthLongestPathCollection synthLongestPathAnalysisGetPaths(
     SynthLongestPathAnalysis analysis, MlirValue value, int64_t bitPos,
     bool elaboratePaths);
 
+// Get internal paths within the module (register-to-register paths).
+// Internal paths start and end at sequential elements, not ports.
 MLIR_CAPI_EXPORTED SynthLongestPathCollection
-synthLongestPathAnalysisGetAllPaths(SynthLongestPathAnalysis analysis,
-                                    MlirStringRef moduleName,
-                                    bool elaboratePaths);
+synthLongestPathAnalysisGetInternalPaths(SynthLongestPathAnalysis analysis,
+                                         MlirStringRef moduleName,
+                                         bool elaboratePaths);
+
+// Get external paths from module input ports to internal sequential elements.
+MLIR_CAPI_EXPORTED SynthLongestPathCollection
+synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
+    SynthLongestPathAnalysis analysis, MlirStringRef moduleName);
+
+// Get external paths from internal sequential elements to module output ports.
+MLIR_CAPI_EXPORTED SynthLongestPathCollection
+synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
+    SynthLongestPathAnalysis analysis, MlirStringRef moduleName);
 
 //===----------------------------------------------------------------------===//
 // LongestPathCollection
