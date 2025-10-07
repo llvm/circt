@@ -65,6 +65,13 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
   VerilogIndexer(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 
+  template <typename T>
+  void recurseIfInMainBuffer(const T &node) {
+    if (definitelyOutsideMainBuffer(node, index.getBufferId()))
+      return;
+    visitDefault(node);
+  }
+
   void insertSymbol(const slang::ast::Symbol *symbol, slang::SourceRange range,
                     bool isDefinition = true) {
     if (symbol->name.empty())
@@ -104,10 +111,12 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
   void visit(const slang::ast::NetSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
+    recurseIfInMainBuffer(expr);
   }
 
   void visit(const slang::ast::VariableSymbol &expr) {
     insertSymbol(&expr, expr.location, /*isDefinition=*/true);
+    recurseIfInMainBuffer(expr);
   }
 
   void visit(const slang::ast::ExplicitImportSymbol &expr) {
@@ -120,6 +129,7 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
         insertSymbol(def, item->package.location(), /*isDefinition=*/false);
       }
     }
+    recurseIfInMainBuffer(expr);
   }
 
   void visit(const slang::ast::WildcardImportSymbol &expr) {
@@ -132,6 +142,14 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
         insertSymbol(def, item->package.location(), false);
       }
     }
+    recurseIfInMainBuffer(expr);
+  }
+
+  void visit(const slang::ast::InstanceBodySymbol &expr) {
+    // Insert the symbols in the port list.
+    for (const auto *symbol : expr.getPortList())
+      index.insertSymbolDefinition(symbol);
+    recurseIfInMainBuffer(expr);
   }
 
   void visit(const slang::ast::InstanceSymbol &expr) {
@@ -155,10 +173,12 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 
     // Link the module instance name back to the module definition
     insertSymbol(def, expr.location, /*isDefinition=*/false);
+    recurseIfInMainBuffer(expr);
   }
 
   void visit(const slang::ast::VariableDeclStatement &expr) {
     insertSymbol(&expr.symbol, expr.sourceRange, /*isDefinition=*/true);
+    recurseIfInMainBuffer(expr);
   }
 
   template <typename T>
@@ -168,12 +188,7 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
     if constexpr (std::is_base_of_v<slang::ast::Symbol, T>)
       visitSymbol(node);
 
-    // Check if this node is already out of the main buffer.
-    if (definitelyOutsideMainBuffer(node, index.getBufferId()))
-      return;
-
-    // Otherwise, recurse and keep indexing.
-    ASTBase::template visitDefault<T>(node);
+    recurseIfInMainBuffer(node);
   }
 
   template <typename T>
@@ -184,17 +199,21 @@ struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
 void VerilogIndex::initialize(slang::ast::Compilation &compilation) {
   const auto &root = compilation.getRoot();
   VerilogIndexer visitor(*this);
-  for (auto *inst : root.topInstances) {
 
+  // Index packages defined in the current main buffer
+  for (auto *package : compilation.getPackages()) {
+    if (package->location.buffer() != getBufferId())
+      continue;
+    // Visit the body of the top instance.
+    package->visit(visitor);
+  }
+
+  // Index modules defined in the current main buffer
+  for (auto *inst : root.topInstances) {
     if (inst->body.location.buffer() != getBufferId())
       continue;
-
-    // Visit the body of the instance.
+    // Visit the body of the top instance.
     inst->body.visit(visitor);
-
-    // Insert the symbols in the port list.
-    for (const auto *symbol : inst->body.getPortList())
-      insertSymbolDefinition(symbol);
   }
 
   // Parse the source location from the main file.
