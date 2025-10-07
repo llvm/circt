@@ -4,6 +4,7 @@ requires = [
   "setuptools_scm>=8.0",
   "wheel",
   "cmake>=3.23,<4",
+  "ninja>=1.10",
 
   # MLIR build depends.
   "numpy",
@@ -14,7 +15,6 @@ requires = [
   # PyCDE depends
   "cocotb>=1.6.2",
   "cocotb-test>=0.2.2",
-  "jinja2",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -47,7 +47,7 @@ name = "pycde"
 dynamic = ["version"]
 description = "Python CIRCT Design Entry"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
-dependencies = ['numpy', 'jinja2']
+dependencies = ['numpy']
 requires-python = ">=3.8"
 
 [project.urls]
