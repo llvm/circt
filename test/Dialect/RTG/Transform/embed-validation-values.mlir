@@ -99,3 +99,17 @@ rtg.test @embed_value() {
   rtgtest.rv32i.lui %0, %6#1 : !rtg.isa.immediate<32>
   rtgtest.rv32i.lui %0, %6#2 : !rtg.isa.immediate<32>
 }
+
+//--- test7.mlir
+// RUN: circt-opt %t/test7.mlir --rtg-embed-validation-values=filename=%S/validation-values-3.txt | FileCheck %s --check-prefix=CHECK-TEST7
+
+// CHECK-TEST7-LABEL: rtg.test @embed_value
+rtg.test @embed_value() {
+  // CHECK-TEST7-NEXT: [[REG:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK-TEST7-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<32, 4096>
+  // CHECK-TEST7-NEXT: rtgtest.rv32i.lui [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+  %reg = rtg.fixed_reg #rtgtest.t0
+  %imm = rtg.constant #rtg.isa.immediate<32, 0x1000>
+  %exp_val = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
+}
