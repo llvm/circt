@@ -46,7 +46,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/InstanceGraphInterface.h"
-#include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -499,13 +498,7 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   // Create the new input class.  This is what the user will need to specify to
   // evaluate OM. Clone the body of the domain into the class.
   auto classIn = ClassOp::create(builder, name, op.getPorts());
-  builder.setInsertionPointToStart(classIn.getBodyBlock());
-  mlir::IRMapping mapper;
-  for (auto [dom, cls] :
-       llvm::zip_equal(op.getArguments(), classIn.getArguments()))
-    mapper.map(dom, cls);
-  for (Operation &op : op.getBody().getOps())
-    builder.clone(op, mapper);
+  classIn.getBody().takeBody(op.getBody());
 
   // Create the new output class.  This is what will be returned to the user.
   auto classInType = classIn.getInstanceType();
