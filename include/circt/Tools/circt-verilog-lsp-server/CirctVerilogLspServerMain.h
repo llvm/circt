@@ -49,9 +49,27 @@ struct VerilogServerOptions {
 };
 // namespace lsp
 
+struct LSPServerOptions {
+  LSPServerOptions(bool disableDebounce = false, unsigned debounceMinMs = 200,
+                   unsigned debounceMaxMs = 1500)
+      : disableDebounce(disableDebounce), debounceMinMs(debounceMinMs),
+        debounceMaxMs(debounceMaxMs) {}
+
+  /// Disable debouncing entirely (updates applied synchronously).
+  const bool disableDebounce;
+
+  /// Minimum debounce delay in milliseconds.
+  const unsigned debounceMinMs;
+
+  /// Maximum debounce delay in milliseconds.
+  /// A value of 0 means "no cap".
+  const unsigned debounceMaxMs;
+};
+
 /// Implementation for tools like `circt-verilog-lsp-server`.
 llvm::LogicalResult
-CirctVerilogLspServerMain(const VerilogServerOptions &options,
+CirctVerilogLspServerMain(const LSPServerOptions &lspOptions,
+                          const VerilogServerOptions &options,
                           llvm::lsp::JSONTransport &transport);
 
 } // namespace lsp
