@@ -700,6 +700,67 @@ void lowerBrentKungPrefixTree(OpBuilder &builder, Location loc,
   });
 }
 
+// TODO: Generalize to other parallel prefix trees.
+class LazyKoggeStonePrefixTree {
+public:
+  LazyKoggeStonePrefixTree(OpBuilder &builder, Location loc, int64_t width,
+                           ArrayRef<Value> pPrefix, ArrayRef<Value> gPrefix)
+      : builder(builder), loc(loc), width(width) {
+    assert(width > 0 && "width must be positive");
+    for (int64_t i = 0; i < width; ++i)
+      prefixCache[{0, i}] = {pPrefix[i], gPrefix[i]};
+  }
+
+  // Get the final group and propagate values for bit i.
+  std::pair<Value, Value> getFinal(int64_t i) {
+    assert(i >= 0 && i < width && "i out of bounds");
+    // Final level is ceil(log2(width)) in Kogge-Stone.
+    return getGroupAndPropagate(llvm::Log2_64_Ceil(width), i);
+  }
+
+private:
+  // Recursively get the group and propagate values for bit i at level `level`.
+  // Level 0 is the initial level with the input propagate and generate values.
+  // Level n computes the group and propagate values for a stride of 2^(n-1).
+  // Uses memoization to cache intermediate results.
+  std::pair<Value, Value> getGroupAndPropagate(int64_t level, int64_t i);
+  OpBuilder &builder;
+  Location loc;
+  int64_t width;
+  DenseMap<std::pair<int64_t, int64_t>, std::pair<Value, Value>> prefixCache;
+};
+
+std::pair<Value, Value>
+LazyKoggeStonePrefixTree::getGroupAndPropagate(int64_t level, int64_t i) {
+  assert(i < width && "i out of bounds");
+  auto key = std::make_pair(level, i);
+  auto it = prefixCache.find(key);
+  if (it != prefixCache.end())
+    return it->second;
+
+  assert(level > 0 && "If the level is 0, we should have hit the cache");
+
+  int64_t previousStride = 1ULL << (level - 1);
+  if (i < previousStride) {
+    // No dependency, just copy from the previous level.
+    auto [propagateI, generateI] = getGroupAndPropagate(level - 1, i);
+    prefixCache[key] = {propagateI, generateI};
+    return prefixCache[key];
+  }
+  // Get the dependency index.
+  int64_t j = i - previousStride;
+  auto [propagateI, generateI] = getGroupAndPropagate(level - 1, i);
+  auto [propagateJ, generateJ] = getGroupAndPropagate(level - 1, j);
+  // Group generate: g_i OR (p_i AND g_j)
+  Value andPG = comb::AndOp::create(builder, loc, propagateI, generateJ);
+  Value newGenerate = comb::OrOp::create(builder, loc, generateI, andPG);
+  // Group propagate: p_i AND p_j
+  Value newPropagate =
+      comb::AndOp::create(builder, loc, propagateI, propagateJ);
+  prefixCache[key] = {newPropagate, newGenerate};
+  return prefixCache[key];
+}
+
 template <bool lowerToMIG>
 struct CombAddOpConversion : OpConversionPattern<AddOp> {
   using OpConversionPattern<AddOp>::OpConversionPattern;
@@ -1061,37 +1122,49 @@ struct CombICmpOpConversion : OpConversionPattern<ICmpOp> {
   // need the final result. Optimizing this to skip intermediate computations
   // is non-trivial because each iteration depends on results from previous
   // iterations. We rely on DCE passes to remove unused operations.
-  // TODO: Lazily compute only the required prefix values.
+  // TODO: Lazily compute only the required prefix values. Kogge-Stone is
+  // already implemented in a lazy manner below, but other architectures can
+  // also be optimized.
   static Value computePrefixComparison(ConversionPatternRewriter &rewriter,
                                        Location loc, SmallVector<Value> pPrefix,
                                        SmallVector<Value> gPrefix,
                                        bool includeEq, AdderArchitecture arch) {
     auto width = pPrefix.size();
+    Value finalGroup, finalPropagate;
     // Apply the appropriate prefix tree algorithm
     switch (arch) {
     case AdderArchitecture::RippleCarry:
       llvm_unreachable("Ripple-Carry should be handled separately");
       break;
-    case AdderArchitecture::Sklanskey:
+    case AdderArchitecture::Sklanskey: {
       lowerSklanskeyPrefixTree(rewriter, loc, pPrefix, gPrefix);
+      finalGroup = gPrefix[width - 1];
+      finalPropagate = pPrefix[width - 1];
       break;
+    }
     case AdderArchitecture::KoggeStone:
-      lowerKoggeStonePrefixTree(rewriter, loc, pPrefix, gPrefix);
+      // Use lazy Kogge-Stone implementation to avoid computing all
+      // intermediate prefix values.
+      std::tie(finalPropagate, finalGroup) =
+          LazyKoggeStonePrefixTree(rewriter, loc, width, pPrefix, gPrefix)
+              .getFinal(width - 1);
       break;
-    case AdderArchitecture::BrentKung:
+    case AdderArchitecture::BrentKung: {
       lowerBrentKungPrefixTree(rewriter, loc, pPrefix, gPrefix);
+      finalGroup = gPrefix[width - 1];
+      finalPropagate = pPrefix[width - 1];
       break;
+    }
     }
 
-    // Final result: gPrefix[width-1] gives us "a < b"
+    // Final result: `finalGroup` gives us "a < b"
     if (includeEq) {
       // a <= b iff (a < b) OR (a == b)
-      // a == b iff pPrefix[width-1] (all bits are equal)
-      return comb::OrOp::create(rewriter, loc, gPrefix[width - 1],
-                                pPrefix[width - 1]);
+      // a == b iff `finalPropagate` (all bits are equal)
+      return comb::OrOp::create(rewriter, loc, finalGroup, finalPropagate);
     }
-    // a < b iff gPrefix[width-1]
-    return gPrefix[width - 1];
+    // a < b iff `finalGroup`
+    return finalGroup;
   }
 
   // Construct an unsigned comparator using either ripple-carry or
