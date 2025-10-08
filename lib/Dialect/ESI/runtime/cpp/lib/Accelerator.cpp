@@ -15,9 +15,12 @@
 #include "esi/Accelerator.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <sstream>
 #include <stdexcept>
+#include <vector>
 
 #include <iostream>
 
@@ -144,9 +147,45 @@ static std::filesystem::path getLibPath() {
 #endif
 }
 
+/// Parse the ESI_BACKENDS environment variable and return a vector of directory
+/// paths.
+static std::vector<std::filesystem::path> getESIBackendDirectories() {
+  std::vector<std::filesystem::path> directories;
+
+  const char *esiBackends = std::getenv("ESI_BACKENDS");
+  if (!esiBackends) {
+    return directories; // Return empty vector if environment variable is not
+                        // set
+  }
+
+  std::string pathsStr(esiBackends);
+  if (pathsStr.empty()) {
+    return directories;
+  }
+
+  // Use platform-specific path separator
+#ifdef _WIN32
+  const char separator = ';';
+#else
+  const char separator = ':';
+#endif
+
+  std::stringstream ss(pathsStr);
+  std::string path;
+
+  while (std::getline(ss, path, separator)) {
+    if (!path.empty()) {
+      directories.emplace_back(path);
+    }
+  }
+
+  return directories;
+}
+
 /// Load a backend plugin dynamically. Plugins are expected to be named
-/// lib<BackendName>Backend.so and located in one of 1) CWD, 2) in the same
-/// directory as the application, or 3) in the same directory as this library.
+/// lib<BackendName>Backend.so and located in one of 1) CWD, 2) directories
+/// specified in ESI_BACKENDS environment variable, 3) in the same directory as
+/// the application, or 4) in the same directory as this library.
 static void loadBackend(Context &ctxt, std::string backend) {
   Logger &logger = ctxt.getLogger();
   backend[0] = toupper(backend[0]);
@@ -168,20 +207,36 @@ static void loadBackend(Context &ctxt, std::string backend) {
   logger.debug("CONNECT",
                "trying to find backend plugin: " + backendPath.string());
   if (!std::filesystem::exists(backendPath)) {
-    // Next, try the directory of the executable.
-    backendPath = getExePath().parent_path().append(backendFileName);
-    logger.debug("CONNECT",
-                 "trying to find backend plugin: " + backendPath.string());
-    if (!std::filesystem::exists(backendPath)) {
-      // Finally, try the directory of the library.
-      backendPath = getLibPath().parent_path().append(backendFileName);
+    // Next, try directories specified in ESI_BACKENDS environment variable.
+    std::vector<std::filesystem::path> esiBackendDirs =
+        getESIBackendDirectories();
+    bool found = false;
+    for (const auto &dir : esiBackendDirs) {
+      backendPath = dir / backendFileName;
+      logger.debug("CONNECT",
+                   "trying to find backend plugin: " + backendPath.string());
+      if (std::filesystem::exists(backendPath)) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      // Next, try the directory of the executable.
+      backendPath = getExePath().parent_path().append(backendFileName);
       logger.debug("CONNECT",
                    "trying to find backend plugin: " + backendPath.string());
       if (!std::filesystem::exists(backendPath)) {
-        // If all else fails, just try the name.
-        backendPathStr = backendFileName;
+        // Finally, try the directory of the library.
+        backendPath = getLibPath().parent_path().append(backendFileName);
         logger.debug("CONNECT",
-                     "trying to find backend plugin: " + backendPathStr);
+                     "trying to find backend plugin: " + backendPath.string());
+        if (!std::filesystem::exists(backendPath)) {
+          // If all else fails, just try the name.
+          backendPathStr = backendFileName;
+          logger.debug("CONNECT",
+                       "trying to find backend plugin: " + backendPathStr);
+        }
       }
     }
   }
