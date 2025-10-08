@@ -184,7 +184,7 @@ private:
 class LowerModule {
 
 public:
-  LowerModule(FModuleLike &op, const DenseMap<Attribute, Classes> &classes,
+  LowerModule(FModuleLike op, const DenseMap<Attribute, Classes> &classes,
               Constants &constants)
       : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes),
         constants(constants) {}
@@ -213,7 +213,7 @@ private:
   }
 
   // The module this class is lowering
-  FModuleLike &op;
+  FModuleLike op;
 
   // Ports that should be erased
   BitVector eraseVector;
