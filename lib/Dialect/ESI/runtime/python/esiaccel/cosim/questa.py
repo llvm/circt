@@ -4,15 +4,41 @@
 
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Callable, Dict
 
-from .simulator import CosimCollateralDir, Simulator
+from .simulator import CosimCollateralDir, Simulator, SourceFiles
 
 
 class Questa(Simulator):
   """Run and compile funcs for Questasim."""
 
   DefaultDriver = CosimCollateralDir / "driver.sv"
+
+  def __init__(
+      self,
+      sources: SourceFiles,
+      run_dir: Path,
+      debug: bool,
+      run_stdout_callback: Optional[Callable[[str], None]] = None,
+      run_stderr_callback: Optional[Callable[[str], None]] = None,
+      compile_stdout_callback: Optional[Callable[[str], None]] = None,
+      compile_stderr_callback: Optional[Callable[[str], None]] = None,
+      make_default_logs: bool = True,
+      macro_definitions: Optional[Dict[str, str]] = None,
+      # An optional list of questa error codes to suppress
+      suppressed_questa_errors: Optional[List[int]] = None):
+    super().__init__(
+        sources=sources,
+        run_dir=run_dir,
+        debug=debug,
+        run_stdout_callback=run_stdout_callback,
+        run_stderr_callback=run_stderr_callback,
+        compile_stdout_callback=compile_stdout_callback,
+        compile_stderr_callback=compile_stderr_callback,
+        make_default_logs=make_default_logs,
+        macro_definitions=macro_definitions,
+    )
+    self.suppressed_questa_errors = suppressed_questa_errors
 
   # Questa doesn't use stderr for error messages. Everything goes to stdout.
   UsesStderr = False
@@ -23,9 +49,27 @@ class Questa(Simulator):
     ]
     sources = self.sources.rtl_sources
     sources.append(Questa.DefaultDriver)
+
+    # Format macro definition command
+    if self.macro_definitions:
+      macro_definitions_cmd = " ".join([
+          f"+define+{k}={v}" if v is not None else f"+define+{k}"
+          for k, v in self.macro_definitions.items()
+      ])
+    else:
+      macro_definitions_cmd = ""
+
+    # Format error suppression command
+    if self.suppressed_questa_errors:
+      suppressed_questa_errors_cmd = " ".join(
+          [f"-suppress {ec}" for ec in self.suppressed_questa_errors])
+    else:
+      suppressed_questa_errors_cmd = ""
+
     for src in sources:
-      cmds.append(f"vlog -incr +acc -sv +define+TOP_MODULE={self.sources.top}"
-                  f" +define+SIMULATION {src.as_posix()}")
+      cmds.append(
+          f"vlog -incr +acc -sv {macro_definitions_cmd} {suppressed_questa_errors_cmd} +define+TOP_MODULE={self.sources.top}"
+          f" +define+SIMULATION {src.as_posix()}")
     cmds.append(f"vopt -incr driver -o driver_opt +acc")
     return cmds
 
@@ -53,9 +97,28 @@ class Questa(Simulator):
           vsim,
           "driver_opt",
           "-batch",
+      ]
+
+      if self.debug:
+        # Create waveform dump .do file
+        wave_file = Path("wave.do")
+        with wave_file.open("w") as f:
+          f.write("log -r /*\n")
+        cmd += [
+            "-do",
+            str(wave_file.resolve()),
+        ]
+        # Questa will by default log to a vsim.wlf file in the current
+        # directory.
+        print(
+            f"Debug mode enabled - waveform will be in {wave_file.resolve().parent / 'vsim.wlf'}"
+        )
+
+      cmd += [
           "-do",
           "run -all",
       ]
+
     for lib in self.sources.dpi_so_paths():
       svLib = os.path.splitext(lib)[0]
       cmd.append("-sv_lib")

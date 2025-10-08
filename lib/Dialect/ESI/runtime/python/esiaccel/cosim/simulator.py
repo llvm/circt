@@ -119,7 +119,8 @@ class Simulator:
                run_stderr_callback: Optional[Callable[[str], None]] = None,
                compile_stdout_callback: Optional[Callable[[str], None]] = None,
                compile_stderr_callback: Optional[Callable[[str], None]] = None,
-               make_default_logs: bool = True):
+               make_default_logs: bool = True,
+               macro_definitions: Optional[Dict[str, str]] = None):
     """Simulator base class.
 
     Optional sinks can be provided for capturing output. If not provided,
@@ -135,10 +136,13 @@ class Simulator:
       compile_stderr_callback: Line-based callback for compile stderr.
       make_default_logs: If True and corresponding callback is not supplied,
         create log file and emit via internally-created callback.
+      macro_definitions: Optional dictionary of macro definitions to be defined
+        during compilation.
     """
     self.sources = sources
     self.run_dir = run_dir
     self.debug = debug
+    self.macro_definitions = macro_definitions
 
     # Unified list of any log file handles we opened.
     self._default_files: List[IO[str]] = []
