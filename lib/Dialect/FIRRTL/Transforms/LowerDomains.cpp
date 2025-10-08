@@ -43,6 +43,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Debug.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -185,9 +186,9 @@ class LowerModule {
 
 public:
   LowerModule(FModuleLike op, const DenseMap<Attribute, Classes> &classes,
-              Constants &constants)
+              Constants &constants, InstanceGraph &instanceGraph)
       : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes),
-        constants(constants) {}
+        constants(constants), instanceGraph(instanceGraph) {}
 
   // Lower the associated module.  Replace domain ports with input/ouput class
   // ports.
@@ -195,7 +196,7 @@ public:
 
   // Lower all instances of the associated module.  This relies on state built
   // up during `lowerModule` and must be run _afterwards_.
-  LogicalResult lowerInstances(InstanceGraph &);
+  LogicalResult lowerInstances();
 
 private:
   /// Erase all users of domain type ports.
@@ -230,6 +231,12 @@ private:
 
   // Lazy constant pool
   Constants &constants;
+
+  // Reference to an instance graph.  This _will_ be mutated.
+  //
+  // TODO: The mutation of this is _not_ thread safe.  This needs to be fixed if
+  // this pass is parallelized.
+  InstanceGraph &instanceGraph;
 };
 
 LogicalResult LowerModule::lowerModule() {
@@ -280,6 +287,8 @@ LogicalResult LowerModule::lowerModule() {
         auto object = ObjectOp::create(
             builder, classOut,
             StringAttr::get(context, Twine(port.name) + "_object"));
+        instanceGraph.lookup(op)->addInstance(object,
+                                              instanceGraph.lookup(classOut));
         if (port.direction == Direction::In)
           indexToDomain[i] = {object, iIns, iIns + 1};
         else
@@ -396,7 +405,14 @@ LogicalResult LowerModule::lowerModule() {
   return success();
 }
 
-LogicalResult LowerModule::lowerInstances(InstanceGraph &instanceGraph) {
+LogicalResult LowerModule::lowerInstances() {
+  // TODO: There is nothing to do unless this instance is a module or external
+  // module.  This mirros code in the `lowerModule` member function.  Figure out
+  // a way to clean this up, possible by making `LowerModule` a true noop if
+  // this is not one of these kinds of modulelikes.
+  if (!isa<FModuleOp, FExtModuleOp>(op))
+    return success();
+
   auto *node = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*op));
   for (auto *use : llvm::make_early_inc_range(node->uses())) {
     auto instanceOp = dyn_cast<InstanceOp>(*use->getInstance());
@@ -477,6 +493,8 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   PropAssignOp::create(builder, classOut.getArgument(3),
                        classOut.getArgument(2));
   classes.insert({name, {classIn, classOut}});
+  instanceGraph.addModule(classIn);
+  instanceGraph.addModule(classOut);
   op.erase();
   ++numDomains;
   return success();
@@ -496,11 +514,11 @@ LogicalResult LowerCircuit::lowerCircuit() {
     if (!moduleOp)
       return success();
     LLVM_DEBUG(llvm::dbgs() << "  - module: " << moduleOp.getName() << "\n");
-    LowerModule lowerModule(moduleOp, classes, constants);
+    LowerModule lowerModule(moduleOp, classes, constants, instanceGraph);
     if (failed(lowerModule.lowerModule()))
       return failure();
     LLVM_DEBUG(llvm::dbgs() << "    instances:\n");
-    return lowerModule.lowerInstances(instanceGraph);
+    return lowerModule.lowerInstances();
   });
 
   return success();
