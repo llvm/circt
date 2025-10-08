@@ -267,9 +267,9 @@ LogicalResult LowerModule::lowerModule() {
   auto ports = op.getPorts();
   for (unsigned i = 0, iDel = 0, iIns = 0, e = op.getNumPorts(); i != e; ++i) {
     auto port = cast<PortInfo>(ports[i]);
+
     // Mark domain type ports for removal.  Add information to `domainInfo`.
-    auto domain = dyn_cast<FlatSymbolRefAttr>(port.domains);
-    if (domain) {
+    if (auto domain = dyn_cast<FlatSymbolRefAttr>(port.domains)) {
       eraseVector.set(i);
 
       // Instantiate a domain object with association information.
