@@ -119,11 +119,12 @@ public:
 
   // Return an empty ArrayAttr.
   ArrayAttr getEmptyArrayAttr() {
-    if (!emptyArrayAttr) {
-      llvm::sys::SmartScopedLock<true> lock(mutex);
-      emptyArrayAttr = ArrayAttr::get(context, {});
-    }
-    return emptyArrayAttr;
+    if (emptyArrayAttr)
+      return emptyArrayAttr;
+    llvm::sys::SmartScopedLock<true> lock(mutex);
+    if (emptyArrayAttr)
+      return emptyArrayAttr;
+    return emptyArrayAttr = ArrayAttr::get(context, {});
   }
 
 private:
@@ -132,6 +133,8 @@ private:
     if (domainInfoIn)
       return;
     llvm::sys::SmartScopedLock<true> lock(mutex);
+    if (domainInfoIn)
+      return;
     domainInfoIn = StringAttr::get(context, "domainInfo_in");
     domainInfoOut = StringAttr::get(context, "domainInfo_out");
     associationsIn = StringAttr::get(context, "associations_in");
