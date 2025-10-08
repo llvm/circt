@@ -147,37 +147,36 @@ static std::filesystem::path getLibPath() {
 #endif
 }
 
-/// Parse the ESI_BACKENDS environment variable and return a vector of directory
-/// paths.
+/// Get the list of directories to search for backend plugins.
 static std::vector<std::filesystem::path> getESIBackendDirectories() {
   std::vector<std::filesystem::path> directories;
 
+  // First, check current directory.
+  directories.push_back(std::filesystem::current_path());
+
+  // Next, parse the ESI_BACKENDS environment variable and add those.
   const char *esiBackends = std::getenv("ESI_BACKENDS");
-  if (!esiBackends) {
-    return directories; // Return empty vector if environment variable is not
-                        // set
-  }
-
-  std::string pathsStr(esiBackends);
-  if (pathsStr.empty()) {
-    return directories;
-  }
-
-  // Use platform-specific path separator
+  if (esiBackends) {
+    // Use platform-specific path separator
 #ifdef _WIN32
-  const char separator = ';';
+    const char separator = ';';
 #else
-  const char separator = ':';
+    const char separator = ':';
 #endif
 
-  std::stringstream ss(pathsStr);
-  std::string path;
+    std::string pathsStr(esiBackends);
+    std::stringstream ss(pathsStr);
+    std::string path;
 
-  while (std::getline(ss, path, separator)) {
-    if (!path.empty()) {
-      directories.emplace_back(path);
-    }
+    while (std::getline(ss, path, separator))
+      if (!path.empty())
+        directories.emplace_back(path);
   }
+
+  // Next, try the directory of the executable.
+  directories.push_back(getExePath().parent_path());
+  // Finally, try the directory of the library.
+  directories.push_back(getLibPath().parent_path());
 
   return directories;
 }
@@ -199,62 +198,36 @@ static void loadBackend(Context &ctxt, std::string backend) {
 #eror "Unsupported platform"
 #endif
 
-  // Look for library using the C++ std API.
-
   // First, try the current directory.
-  std::filesystem::path backendPath = backendFileName;
-  std::string backendPathStr;
-  logger.debug("CONNECT",
-               "trying to find backend plugin: " + backendPath.string());
-  if (!std::filesystem::exists(backendPath)) {
-    // Next, try directories specified in ESI_BACKENDS environment variable.
-    std::vector<std::filesystem::path> esiBackendDirs =
-        getESIBackendDirectories();
-    bool found = false;
-    for (const auto &dir : esiBackendDirs) {
-      backendPath = dir / backendFileName;
-      logger.debug("CONNECT",
-                   "trying to find backend plugin: " + backendPath.string());
-      if (std::filesystem::exists(backendPath)) {
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      // Next, try the directory of the executable.
-      backendPath = getExePath().parent_path().append(backendFileName);
-      logger.debug("CONNECT",
-                   "trying to find backend plugin: " + backendPath.string());
-      if (!std::filesystem::exists(backendPath)) {
-        // Finally, try the directory of the library.
-        backendPath = getLibPath().parent_path().append(backendFileName);
-        logger.debug("CONNECT",
-                     "trying to find backend plugin: " + backendPath.string());
-        if (!std::filesystem::exists(backendPath)) {
-          // If all else fails, just try the name.
-          backendPathStr = backendFileName;
-          logger.debug("CONNECT",
-                       "trying to find backend plugin: " + backendPathStr);
-        }
-      }
+  std::filesystem::path backendPath;
+  // Next, try directories specified in ESI_BACKENDS environment variable.
+  std::vector<std::filesystem::path> esiBackendDirs =
+      getESIBackendDirectories();
+  bool found = false;
+  for (const auto &dir : esiBackendDirs) {
+    backendPath = dir / backendFileName;
+    logger.debug("CONNECT",
+                 "trying to find backend plugin: " + backendPath.string());
+    if (std::filesystem::exists(backendPath)) {
+      found = true;
+      break;
     }
   }
+
   // If the path was found, convert it to a string.
-  if (backendPathStr.empty()) {
+  if (found) {
     backendPath = std::filesystem::absolute(backendPath);
     logger.debug("CONNECT", "found backend plugin: " + backendPath.string());
-    backendPathStr = backendPath.string();
   } else {
-    // Otherwise, signal that the path wasn't found by clearing the path and
-    // just use the name. (This is only used on Windows to add the same
-    // directory as the backend DLL to the DLL search path.)
-    backendPath.clear();
+    // If all else fails, just try the name.
+    backendPath = backendFileName;
+    logger.debug("CONNECT",
+                 "trying to find backend plugin: " + backendFileName);
   }
 
     // Attempt to load it.
 #ifdef __linux__
-  void *handle = dlopen(backendPathStr.c_str(), RTLD_NOW | RTLD_GLOBAL);
+  void *handle = dlopen(backendPath.string().c_str(), RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
     std::string error(dlerror());
     logger.error("CONNECT",
@@ -265,7 +238,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
 #elif _WIN32
   // Set the DLL directory to the same directory as the backend DLL in case it
   // has transitive dependencies.
-  if (backendPath != std::filesystem::path()) {
+  if (found) {
     std::filesystem::path backendPathParent = backendPath.parent_path();
     // If backendPath has no parent directory (e.g., it's a relative path or
     // a filename without a directory), fallback to the current working
@@ -281,7 +254,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
   }
 
   // Load the backend plugin.
-  HMODULE handle = LoadLibraryA(backendPathStr.c_str());
+  HMODULE handle = LoadLibraryA(backendPath.string().c_str());
   if (!handle) {
     DWORD error = GetLastError();
     // Get the error message string
@@ -301,7 +274,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
     }
 
     std::string fullError = "While attempting to load backend plugin '" +
-                            backendPathStr + "': " + errorMessage +
+                            backendPath.string() + "': " + errorMessage +
                             " (error code: " + std::to_string(error) + ")";
 
     logger.error("CONNECT", fullError);
@@ -310,7 +283,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
 #else
 #eror "Unsupported platform"
 #endif
-  logger.info("CONNECT", "loaded backend plugin: " + backendPathStr);
+  logger.info("CONNECT", "loaded backend plugin: " + backendPath.string());
 }
 
 namespace registry {
