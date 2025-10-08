@@ -48,7 +48,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Mutex.h"
+#include "llvm/Support/Threading.h"
 
 namespace circt {
 namespace firrtl {
@@ -115,71 +115,74 @@ struct Classes {
 /// Thread safe, lazy pool of constant attributes
 class Constants {
 
+  /// Lazily constructed empty array attribute.
+  struct EmptyArray {
+    llvm::once_flag flag;
+    ArrayAttr attr;
+  };
+
+  /// Lazy constructed attributes necessary for building an output class.
+  struct ClassOut {
+    llvm::once_flag flag;
+    StringAttr domainInfoIn;
+    StringAttr domainInfoOut;
+    StringAttr associationsIn;
+    StringAttr associationsOut;
+  };
+
 public:
   Constants(MLIRContext *context) : context(context) {}
 
-  // Return an empty ArrayAttr.
+  /// Return an empty ArrayAttr.
   ArrayAttr getEmptyArrayAttr() {
-    if (emptyArrayAttr)
-      return emptyArrayAttr;
-    llvm::sys::SmartScopedLock<true> lock(mutex);
-    if (emptyArrayAttr)
-      return emptyArrayAttr;
-    return emptyArrayAttr = ArrayAttr::get(context, {});
+    llvm::call_once(emptyArray.flag,
+                    [&] { emptyArray.attr = ArrayAttr::get(context, {}); });
+    return emptyArray.attr;
   }
 
 private:
   /// Construct all the field info attributes.
-  void constructFieldNameAttrs() {
-    if (domainInfoIn)
-      return;
-    llvm::sys::SmartScopedLock<true> lock(mutex);
-    if (domainInfoIn)
-      return;
-    domainInfoIn = StringAttr::get(context, "domainInfo_in");
-    domainInfoOut = StringAttr::get(context, "domainInfo_out");
-    associationsIn = StringAttr::get(context, "associations_in");
-    associationsOut = StringAttr::get(context, "associations_out");
+  void initClassOut() {
+    llvm::call_once(classOut.flag, [&] {
+      classOut.domainInfoIn = StringAttr::get(context, "domainInfo_in");
+      classOut.domainInfoOut = StringAttr::get(context, "domainInfo_out");
+      classOut.associationsIn = StringAttr::get(context, "associations_in");
+      classOut.associationsOut = StringAttr::get(context, "associations_out");
+    });
   }
 
 public:
+  /// Return a "domainInfo_in" attr.
   StringAttr getDomainInfoIn() {
-    constructFieldNameAttrs();
-    assert(domainInfoIn);
-    return domainInfoIn;
+    initClassOut();
+    return classOut.domainInfoIn;
   }
 
+  /// Return a "domainInfo_out" attr.
   StringAttr getDomainInfoOut() {
-    constructFieldNameAttrs();
-    assert(domainInfoOut);
-    return domainInfoOut;
+    initClassOut();
+    return classOut.domainInfoOut;
   }
 
+  /// Return an "associations_in" attr.
   StringAttr getAssociationsIn() {
-    constructFieldNameAttrs();
-    assert(associationsIn);
-    return associationsIn;
+    initClassOut();
+    return classOut.associationsIn;
   }
 
+  /// Return an "associations_out" attr.
   StringAttr getAssociationsOut() {
-    constructFieldNameAttrs();
-    assert(associationsOut);
-    return associationsOut;
+    initClassOut();
+    return classOut.associationsOut;
   }
 
 private:
-  /// Mutex indicating that, when held, allows for mutation.
-  llvm::sys::SmartMutex<true> mutex;
-
   /// An MLIR context necessary for creating new attributes.
   MLIRContext *context;
 
   /// Lazily constructed attributes
-  ArrayAttr emptyArrayAttr;
-  StringAttr domainInfoIn;
-  StringAttr domainInfoOut;
-  StringAttr associationsIn;
-  StringAttr associationsOut;
+  EmptyArray emptyArray;
+  ClassOut classOut;
 };
 
 class LowerModule {
