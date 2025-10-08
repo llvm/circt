@@ -440,44 +440,12 @@ void FixedRegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // VirtualRegisterOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult VirtualRegisterOp::verify() {
-  if (getAllowedRegs().empty())
-    return emitOpError("must have at least one allowed register");
-
-  if (llvm::any_of(getAllowedRegs(), [](Attribute attr) {
-        return !isa<RegisterAttrInterface>(attr);
-      }))
-    return emitOpError("all elements must be of RegisterAttrInterface");
-
-  if (!llvm::all_equal(
-          llvm::map_range(getAllowedRegs().getAsRange<RegisterAttrInterface>(),
-                          [](auto attr) { return attr.getType(); })))
-    return emitOpError("all allowed registers must be of the same type");
-
-  return success();
-}
-
 LogicalResult VirtualRegisterOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   auto allowedRegs = properties.as<Properties *>()->getAllowedRegs();
-  if (allowedRegs.empty()) {
-    if (loc)
-      return mlir::emitError(*loc, "must have at least one allowed register");
-
-    return failure();
-  }
-
-  auto regAttr = dyn_cast<RegisterAttrInterface>(allowedRegs[0]);
-  if (!regAttr) {
-    if (loc)
-      return mlir::emitError(
-          *loc, "allowed register attributes must be of RegisterAttrInterface");
-
-    return failure();
-  }
-  inferredReturnTypes.push_back(regAttr.getType());
+  inferredReturnTypes.push_back(allowedRegs.getType());
   return success();
 }
 

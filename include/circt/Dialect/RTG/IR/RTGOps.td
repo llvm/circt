@@ -20,6 +20,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/RTG/IR/RTGAttributes.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
@@ -685,11 +686,10 @@ def VirtualRegisterOp : RTGOp<"virtual_reg", [
   }];
 
   // ArrayAttr of RegisterAttrInterfaces
-  let arguments = (ins ArrayAttr:$allowedRegs);
+  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
   let results = (outs RegisterTypeInterface:$result);
 
   let assemblyFormat = "$allowedRegs attr-dict";
-  let hasVerifier = 1;
 }
 
 //===- Test Specification Operations --------------------------------------===//

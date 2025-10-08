@@ -185,6 +185,23 @@ MLIR_CAPI_EXPORTED bool rtgAttrIsAAnyContextAttr(MlirAttribute attr);
 MLIR_CAPI_EXPORTED MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt,
                                                       MlirType type);
 
+/// Checks if the attribute is an RTG virtual register config attribute.
+MLIR_CAPI_EXPORTED bool rtgAttrIsAVirtualRegisterConfig(MlirAttribute attr);
+
+/// Creates an RTG virtual register config attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgVirtualRegisterConfigAttrGet(
+    MlirContext ctxt, intptr_t numRegs, MlirAttribute const *allowedRegs);
+
+/// Returns the number of allowed registers in the RTG virtual register config
+/// attribute.
+MLIR_CAPI_EXPORTED intptr_t
+rtgVirtualRegisterConfigAttrGetNumRegisters(MlirAttribute attr);
+
+/// Returns the allowed register at the given index in the RTG virtual register
+/// config attribute.
+MLIR_CAPI_EXPORTED MlirAttribute
+rtgVirtualRegisterConfigAttrGetRegister(MlirAttribute attr, intptr_t index);
+
 #ifdef __cplusplus
 }
 #endif

@@ -25,41 +25,42 @@ class IntegerRegister(Value):
     self._value = value
 
   def virtual() -> IntegerRegister:
-    return rtg.VirtualRegisterOp([
-        # Choose temporaries with highest priority
-        rtgtest.RegT0Attr.get(),
-        rtgtest.RegT1Attr.get(),
-        rtgtest.RegT2Attr.get(),
-        rtgtest.RegT3Attr.get(),
-        rtgtest.RegT4Attr.get(),
-        rtgtest.RegT5Attr.get(),
-        rtgtest.RegT6Attr.get(),
-        # Function arguments in reverse order
-        rtgtest.RegA7Attr.get(),
-        rtgtest.RegA6Attr.get(),
-        rtgtest.RegA5Attr.get(),
-        rtgtest.RegA4Attr.get(),
-        rtgtest.RegA3Attr.get(),
-        rtgtest.RegA2Attr.get(),
-        rtgtest.RegA1Attr.get(),
-        rtgtest.RegA0Attr.get(),
-        # Callee saved temporaries
-        rtgtest.RegS1Attr.get(),
-        rtgtest.RegS2Attr.get(),
-        rtgtest.RegS3Attr.get(),
-        rtgtest.RegS4Attr.get(),
-        rtgtest.RegS5Attr.get(),
-        rtgtest.RegS6Attr.get(),
-        rtgtest.RegS7Attr.get(),
-        rtgtest.RegS8Attr.get(),
-        rtgtest.RegS9Attr.get(),
-        rtgtest.RegS10Attr.get(),
-        rtgtest.RegS11Attr.get(),
-        # Some special registers last
-        rtgtest.RegS0Attr.get(),
-        rtgtest.RegRaAttr.get(),
-        rtgtest.RegSpAttr.get(),
-    ])
+    return rtg.VirtualRegisterOp(
+        rtg.VirtualRegisterConfigAttr.get([
+            # Choose temporaries with highest priority
+            rtgtest.RegT0Attr.get(),
+            rtgtest.RegT1Attr.get(),
+            rtgtest.RegT2Attr.get(),
+            rtgtest.RegT3Attr.get(),
+            rtgtest.RegT4Attr.get(),
+            rtgtest.RegT5Attr.get(),
+            rtgtest.RegT6Attr.get(),
+            # Function arguments in reverse order
+            rtgtest.RegA7Attr.get(),
+            rtgtest.RegA6Attr.get(),
+            rtgtest.RegA5Attr.get(),
+            rtgtest.RegA4Attr.get(),
+            rtgtest.RegA3Attr.get(),
+            rtgtest.RegA2Attr.get(),
+            rtgtest.RegA1Attr.get(),
+            rtgtest.RegA0Attr.get(),
+            # Callee saved temporaries
+            rtgtest.RegS1Attr.get(),
+            rtgtest.RegS2Attr.get(),
+            rtgtest.RegS3Attr.get(),
+            rtgtest.RegS4Attr.get(),
+            rtgtest.RegS5Attr.get(),
+            rtgtest.RegS6Attr.get(),
+            rtgtest.RegS7Attr.get(),
+            rtgtest.RegS8Attr.get(),
+            rtgtest.RegS9Attr.get(),
+            rtgtest.RegS10Attr.get(),
+            rtgtest.RegS11Attr.get(),
+            # Some special registers last
+            rtgtest.RegS0Attr.get(),
+            rtgtest.RegRaAttr.get(),
+            rtgtest.RegSpAttr.get(),
+        ]))
 
   def zero() -> IntegerRegister:
     return rtg.FixedRegisterOp(rtgtest.RegZeroAttr.get())
