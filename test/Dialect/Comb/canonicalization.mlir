@@ -1950,3 +1950,10 @@ func.func @AndMaskToConcat(%arg0: i10, %arg1: i10, %arg2: i20) {
   call @use_i10(%f2) : (i10) -> ()
   return
 }
+
+hw.module @issue9403(in %sel: i1, out out1: ui1) {
+  %true = hwarith.constant 1 : ui1
+  %false = hwarith.constant 0 : ui1
+  %mux1 = comb.mux %sel, %true, %false : ui1
+  hw.output %mux1 : ui1
+}

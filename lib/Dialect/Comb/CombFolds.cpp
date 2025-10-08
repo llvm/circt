@@ -1916,11 +1916,12 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   }
 
   // mux(cond, 1, 0) -> cond
-  if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
-    if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
-      if (tv.getValue().isOne() && fv.getValue().isZero() &&
-          hw::getBitWidth(getType()) == 1 && getCond() != getResult())
-        return getCond();
+  if (getCond().getType() == getTrueValue().getType())
+    if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
+      if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
+        if (tv.getValue().isOne() && fv.getValue().isZero() &&
+            hw::getBitWidth(getType()) == 1 && getCond() != getResult())
+          return getCond();
 
   return {};
 }
@@ -2406,12 +2407,16 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (isOpTriviallyRecursive(op))
     return failure();
 
+  bool isSignlessInt = false;
+  if (auto intType = dyn_cast<IntegerType>(op.getType()))
+    isSignlessInt = intType.isSignless();
+
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
     return failure();
   APInt value;
 
-  if (matchPattern(op.getTrueValue(), m_ConstantInt(&value))) {
+  if (matchPattern(op.getTrueValue(), m_ConstantInt(&value)) && isSignlessInt) {
     if (value.getBitWidth() == 1) {
       // mux(a, 0, b) -> and(~a, b) for single-bit values.
       if (value.isZero()) {
@@ -2479,7 +2484,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   }
 
   if (matchPattern(op.getFalseValue(), m_ConstantInt(&value)) &&
-      value.getBitWidth() == 1) {
+      isSignlessInt && value.getBitWidth() == 1) {
     // mux(a, b, 0) -> and(a, b) for single-bit values.
     if (value.isZero()) {
       replaceOpWithNewOpAndCopyNamehint<AndOp>(rewriter, op, op.getCond(),
