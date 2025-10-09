@@ -31,7 +31,7 @@ jobs:
     outputs:
       cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v19.1
+      image: ghcr.io/circt/images/circt-integration-test:v19.2
       volumes:
         - /mnt:/__w/circt
     strategy:
