@@ -1279,3 +1279,7 @@ func.func @SeverityToPrint() {
   return
 }
 
+// CHECK-LABEL: func.func @CHandle(%arg0: !llvm.ptr)
+func.func @CHandle(%arg0: !moore.chandle) {
+    return
+}
