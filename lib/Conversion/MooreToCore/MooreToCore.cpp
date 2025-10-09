@@ -21,6 +21,8 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -30,6 +32,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/IR/DerivedTypes.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
@@ -539,6 +542,20 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     Type resultType = typeConverter->convertType(op.getResult().getType());
     if (!resultType)
       return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
+
+    // Handle CHandle types
+    if (isa<mlir::LLVM::LLVMPointerType>(resultType)) {
+      // Use converted initializer if present; otherwise synthesize null ptr.
+      Value init = adaptor.getInitial();
+      if (!init)
+        init = rewriter.create<mlir::LLVM::ZeroOp>(loc, resultType);
+      else if (init.getType() != resultType)
+        init = typeConverter->materializeTargetConversion(rewriter, loc,
+                                                          resultType, init);
+      // For pointer-typed variables we produce the SSA pointer value directly.
+      rewriter.replaceOp(op, init);
+      return success();
+    }
 
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
@@ -1712,6 +1729,7 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<mlir::math::MathDialect>();
   target.addLegalDialect<sim::SimDialect>();
+  target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalDialect<verif::VerifDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
@@ -1798,10 +1816,25 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
         return hw::StructType::get(type.getContext(), fields);
       });
 
+  // Conversion of CHandle to LLVMPointerType
+  typeConverter.addConversion([&](ChandleType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
+  // Helper: types that we model "by-ref as SSA value" (no hw.inout wrapper).
+  auto isByRefAsSSA = [](Type t) -> bool {
+    return isa<mlir::LLVM::LLVMPointerType>(t);
+  };
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    if (auto innerType = typeConverter.convertType(type.getNestedType()))
+    if (auto innerType = typeConverter.convertType(type.getNestedType())) {
       if (hw::isHWValueType(innerType))
         return hw::InOutType::get(innerType);
+      // Otherwise, if we intentionally model this "by-ref as SSA", pass it
+      // through, e.g. CHandleType.
+      if (isByRefAsSSA(innerType))
+        return innerType;
+    }
     return {};
   });
 
@@ -2006,12 +2039,20 @@ namespace {
 struct MooreToCorePass
     : public circt::impl::ConvertMooreToCoreBase<MooreToCorePass> {
   void runOnOperation() override;
+  void getDependentDialects(mlir::DialectRegistry &r) const override;
 };
 } // namespace
 
 /// Create a Moore to core dialects conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
   return std::make_unique<MooreToCorePass>();
+}
+
+void MooreToCorePass::getDependentDialects(mlir::DialectRegistry &r) const {
+  r.insert<mlir::LLVM::LLVMDialect, comb::CombDialect, hw::HWDialect,
+           seq::SeqDialect, llhd::LLHDDialect, ltl::LTLDialect,
+           mlir::BuiltinDialect, mlir::math::MathDialect, sim::SimDialect,
+           verif::VerifDialect, scf::SCFDialect>();
 }
 
 /// This is the main entrypoint for the Moore to Core conversion pass.

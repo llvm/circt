@@ -162,6 +162,10 @@ struct TypeVisitor {
     return moore::StringType::get(context.getContext());
   }
 
+  Type visit(const slang::ast::CHandleType &type) {
+    return moore::ChandleType::get(context.getContext());
+  }
+
   /// Emit an error for all other types.
   template <typename T>
   Type visit(T &&node) {
