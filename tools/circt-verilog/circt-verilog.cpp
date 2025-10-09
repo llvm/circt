@@ -32,6 +32,8 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -611,12 +613,15 @@ int main(int argc, char **argv) {
     moore::MooreDialect,
     scf::SCFDialect,
     seq::SeqDialect,
-    verif::VerifDialect
+    verif::VerifDialect,
+    mlir::LLVM::LLVMDialect
   >();
   // clang-format on
 
   // Perform the actual work and use "exit" to avoid slow context teardown.
   mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
+
   MLIRContext context(registry);
   exit(failed(execute(&context)));
 }
