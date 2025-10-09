@@ -12,7 +12,7 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    i4 = IntegerType.get_signless(4)
+    i2 = IntegerType.get_signless(4)
 
     # Create a module with comb.mul
     def build_module(module):
@@ -21,8 +21,8 @@ with Context() as ctx, Location.unknown():
 
     hw.HWModuleOp(
         name="foo",
-        input_ports=[("a", i4), ("b", i4)],
-        output_ports=[("out", i4)],
+        input_ports=[("a", i2), ("b", i2)],
+        output_ports=[("out", i2)],
         body_builder=build_module,
     )
 
@@ -159,19 +159,19 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    i4 = IntegerType.get_signless(2)
+    i2 = IntegerType.get_signless(2)
 
     # Create a module with comb.mul
     def build_module(module):
       clock, a, b = module.entry_block.arguments
       and_inv = synth.AndInverterOp([a, b], [False, True])
-      r = seq.CompRegOp(i4, and_inv, clock)
+      r = seq.CompRegOp(i2, and_inv, clock)
       hw.OutputOp([r])
 
     module = hw.HWModuleOp(
         name="foo",
-        input_ports=[("clock", seq.ClockType.get(ctx)), ("a", i4), ("b", i4)],
-        output_ports=[("out", i4)],
+        input_ports=[("clock", seq.ClockType.get(ctx)), ("a", i2), ("b", i2)],
+        output_ports=[("out", i2)],
         body_builder=build_module,
     )
 
