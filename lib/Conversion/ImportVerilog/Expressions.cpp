@@ -1014,6 +1014,12 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
+    // Call the conversion function with the appropriate arity. These return one
+    // of the following:
+    //
+    // - `failure()` if the system call was recognized but some error occurred
+    // - `Value{}` if the system call was not recognized
+    // - non-null `Value` result otherwise
     switch (args.size()) {
     case (0):
       result = context.convertSystemCallArity0(subroutine, loc);
@@ -1027,15 +1033,21 @@ struct RvalueExprVisitor : public ExprVisitor {
       break;
 
     default:
-      mlir::emitError(loc)
-          << "system call with more than 1 argument is not supported";
       break;
     }
 
+    // If we have recognized the system call but the conversion has encountered
+    // and already reported an error, simply return the usual null `Value` to
+    // indicate failure.
     if (failed(result))
       return {};
+
+    // If we have recognized the system call and got a non-null `Value` result,
+    // return that.
     if (*result)
       return *result;
+
+    // Otherwise we didn't recognize the system call.
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
                          << "`";
     return {};
