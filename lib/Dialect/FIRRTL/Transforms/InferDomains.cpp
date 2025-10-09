@@ -738,10 +738,8 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
         // If the output port is not driven, drive it.
         if (!driven) {
           auto loc = port.getLoc();
-          auto typeName = getDomainPortTypeName(oldModuleDomainInfo, i);
-          auto typeRef = FlatSymbolRefAttr::get(typeName);
           auto value = val->value;
-          DomainDefineOp::create(builder, loc, port, value, typeRef);
+          DomainDefineOp::create(builder, loc, port, value);
         }
       }
 
@@ -942,14 +940,10 @@ PortInsertions InferModuleDomains::generalizeModule(FModuleOp module) {
   }
 
   // Drive the exports.
-  auto domainInfo = module.getDomainInfoAttr();
   auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
-
   for (auto [value, portIndex] : pendingExports) {
     auto port = module.getArgument(portIndex);
-    auto typeName = getDomainPortTypeName(domainInfo, portIndex);
-    auto typeNameRef = FlatSymbolRefAttr::get(typeName);
-    DomainDefineOp::create(builder, port.getLoc(), port, value, typeNameRef);
+    DomainDefineOp::create(builder, port.getLoc(), port, value);
     exportTable[value].push_back(port);
     setTermForDomain(port, allocate<ValueTerm>(value));
   }
@@ -980,7 +974,6 @@ LogicalResult InferModuleDomains::updateOpDomainAssociations(InstanceOp op) {
   auto *context = op.getContext();
   OpBuilder builder(context);
   builder.setInsertionPointAfter(op);
-  auto domainInfo = op.getDomainInfoAttr();
   auto numPorts = op->getNumResults();
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = op.getResult(i);
@@ -1002,10 +995,8 @@ LogicalResult InferModuleDomains::updateOpDomainAssociations(InstanceOp op) {
           term = find(term);
           if (auto *val = dyn_cast<ValueTerm>(term)) {
             auto loc = port.getLoc();
-            auto typeName = getDomainPortTypeName(domainInfo, i);
-            auto typeRef = FlatSymbolRefAttr::get(typeName);
             auto value = val->value;
-            DomainDefineOp::create(builder, loc, port, value, typeRef);
+            DomainDefineOp::create(builder, loc, port, value);
           } else {
             return op.emitError() << "unable to infer input domain value";
           }
@@ -1192,7 +1183,6 @@ void InferModuleDomains::render(Diagnostic &out, VariableIDTable &idTable,
     auto value = val->value;
     auto [name, rooted] = getFieldName(FieldRef(value, 0), false);
     out << name;
-    // out.attachNote(val->value.getLoc()) << name << " defined here";
     return;
   }
   if (auto *row = dyn_cast<RowTerm>(term)) {
