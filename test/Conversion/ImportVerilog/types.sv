@@ -153,3 +153,9 @@ module String;
   // CHECK-NEXT: %s = moore.variable : <string>
   string s;
 endmodule
+
+// CHECK-LABEL: moore.module @CHandle
+module CHandle;
+   // CHECK: %test = moore.variable : <chandle>
+   chandle test;
+endmodule

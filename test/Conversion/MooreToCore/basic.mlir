@@ -1278,4 +1278,9 @@ func.func @SeverityToPrint() {
 
   return
 }
-
+// CHECK-LABEL: func.func @CHandle
+func.func @CHandle(){
+  // CHECK: [[TEST:%.*]] = llvm.mlir.zero : !llvm.ptr
+  %test = moore.variable : <chandle>
+  return
+}
