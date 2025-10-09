@@ -89,7 +89,7 @@ TEST(LongestPathTest, BasicTest) {
                                     LongestPathAnalysisOptions(true, false));
     llvm::SmallVector<DataflowPath> results;
     auto closedPath =
-        longestPath.getClosedPaths(basicModule.getModuleNameAttr(), results);
+        longestPath.getInternalPaths(basicModule.getModuleNameAttr(), results);
 
     ASSERT_TRUE(succeeded(closedPath));
     auto p = cast<seq::FirRegOp>(*basicModule.getBodyBlock()->begin());
@@ -130,7 +130,7 @@ TEST(LongestPathTest, BasicTest) {
 
     LongestPathAnalysis longestPathWithoutDebug(module.get(), am);
     results.clear();
-    EXPECT_TRUE(succeeded(longestPathWithoutDebug.getClosedPaths(
+    EXPECT_TRUE(succeeded(longestPathWithoutDebug.getInternalPaths(
         basicModule.getModuleNameAttr(), results)));
     EXPECT_EQ(results.size(), 4u);
     // No history must be recorded.
@@ -145,7 +145,7 @@ TEST(LongestPathTest, BasicTest) {
                                     LongestPathAnalysisOptions(true, false));
     llvm::SmallVector<DataflowPath> results;
     auto closedPath =
-        longestPath.getClosedPaths(basicModule.getModuleNameAttr(), results);
+        longestPath.getInternalPaths(basicModule.getModuleNameAttr(), results);
 
     ASSERT_TRUE(succeeded(closedPath));
     // In local analysis, instance results are treated as start point.
@@ -196,9 +196,9 @@ TEST(LongestPathTest, ElaborationTest) {
                                   LongestPathAnalysisOptions(true, false));
   llvm::SmallVector<DataflowPath> elaboratedPaths, unelaboratedPaths;
   auto elaborated =
-      longestPath.getClosedPaths(basicModule.getModuleNameAttr(),
-                                 elaboratedPaths, /*elaboratePaths=*/true);
-  auto unelaborated = longestPath.getClosedPaths(
+      longestPath.getInternalPaths(basicModule.getModuleNameAttr(),
+                                   elaboratedPaths, /*elaboratePaths=*/true);
+  auto unelaborated = longestPath.getInternalPaths(
       basicModule.getModuleNameAttr(), unelaboratedPaths,
       /*elaboratePaths=*/false);
 
@@ -272,6 +272,63 @@ TEST(LongestPathTest, Incremental) {
   ASSERT_EQ(*delayMul, 8);
   // After analysis, mul can no longer be safely mutated
   ASSERT_TRUE(!longestPath.isOperationValidToMutate(mul));
+}
+
+TEST(LongestPathTest, OpenPaths) {
+  MLIRContext context;
+  context.loadDialect<SynthDialect>();
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<seq::SeqDialect>();
+  context.loadDialect<comb::CombDialect>();
+
+  // Parse the IR string into a module
+  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &context);
+  ASSERT_TRUE(module);
+
+  // Find the 'basic' module
+  SymbolTable symbolTable(module.get());
+  auto basicModule = symbolTable.lookup<hw::HWModuleOp>("basic");
+  ASSERT_TRUE(basicModule);
+  ModuleAnalysisManager mam(module.get(), nullptr);
+  AnalysisManager am(mam);
+
+  LongestPathAnalysis longestPath(module.get(), am,
+                                  LongestPathAnalysisOptions(true, false));
+
+  // Test getOpenPathsFromInputPortsToInternal (input-to-register paths)
+  llvm::SmallVector<DataflowPath> inputToInternalPaths;
+  auto inputToInternalResult = longestPath.getOpenPathsFromInputPortsToInternal(
+      basicModule.getModuleNameAttr(), inputToInternalPaths);
+  ASSERT_TRUE(succeeded(inputToInternalResult));
+
+  // There should be paths from input ports (a, b) to registers (p, q)
+  // a[0] -> p[0], a[1] -> p[1], b[0] -> q[0], b[1] -> q[1]
+  EXPECT_GT(inputToInternalPaths.size(), 0u);
+
+  // Verify that these are input-to-register paths
+  for (auto &path : inputToInternalPaths) {
+    // Start point should be an input port (block argument)
+    EXPECT_TRUE(isa<BlockArgument>(path.getStartPoint().value));
+    // End point should be a register (Object, not OutputPort)
+    EXPECT_TRUE(std::holds_alternative<Object>(path.getEndPoint()));
+  }
+
+  // Test getOpenPathsFromInternalToOutputPorts (register-to-output paths)
+  llvm::SmallVector<DataflowPath> internalToOutputPaths;
+  auto internalToOutputResult =
+      longestPath.getOpenPathsFromInternalToOutputPorts(
+          basicModule.getModuleNameAttr(), internalToOutputPaths);
+  ASSERT_TRUE(succeeded(internalToOutputResult));
+
+  // There should be paths from registers to output ports
+  EXPECT_GT(internalToOutputPaths.size(), 0u);
+
+  // Verify that these are register-to-output paths
+  for (auto &path : internalToOutputPaths) {
+    // End point should be an output port
+    EXPECT_TRUE(
+        std::holds_alternative<DataflowPath::OutputPort>(path.getEndPoint()));
+  }
 }
 
 } // namespace

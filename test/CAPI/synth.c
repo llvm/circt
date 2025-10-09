@@ -65,9 +65,9 @@ void testLongestPathAnalysis(void) {
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     SynthLongestPathCollection collection1 =
-        synthLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
+        synthLongestPathAnalysisGetInternalPaths(analysis, moduleName, true);
     SynthLongestPathCollection collection2 =
-        synthLongestPathAnalysisGetAllPaths(analysis, moduleName, false);
+        synthLongestPathAnalysisGetInternalPaths(analysis, moduleName, false);
 
     size_t pathCount = synthLongestPathCollectionGetSize(collection1);
     printf("Path count with elaboration: %zu\n", pathCount);
@@ -147,9 +147,26 @@ void testLongestPathAnalysis(void) {
       // CHECK: Root operation is null: false
     }
 
+    // External paths.
+    MlirStringRef childModule = mlirStringRefCreateFromCString("ch");
+    SynthLongestPathCollection collection3 =
+        synthLongestPathAnalysisGetPathsFromInputPortsToInternal(analysis,
+                                                                 childModule);
+    SynthLongestPathCollection collection4 =
+        synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(analysis,
+                                                                  childModule);
+    printf("Input-to-internal paths count: %zu\n",
+           synthLongestPathCollectionGetSize(collection3));
+    printf("Internal-to-output paths count: %zu\n",
+           synthLongestPathCollectionGetSize(collection4));
+    // CHECK: Input-to-internal paths count: 0
+    // CHECK-NEXT: Internal-to-output paths count: 2
+
     // Cleanup
     synthLongestPathCollectionDestroy(collection1);
     synthLongestPathCollectionDestroy(collection2);
+    synthLongestPathCollectionDestroy(collection3);
+    synthLongestPathCollectionDestroy(collection4);
     synthLongestPathAnalysisDestroy(analysis);
 
     printf("LongestPathAnalysis with debug points: PASS\n");
@@ -163,7 +180,7 @@ void testLongestPathAnalysis(void) {
 
     MlirStringRef moduleName = mlirStringRefCreateFromCString("top");
     SynthLongestPathCollection collection =
-        synthLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
+        synthLongestPathAnalysisGetInternalPaths(analysis, moduleName, true);
 
     if (!synthLongestPathCollectionIsNull(collection)) {
       size_t size = synthLongestPathCollectionGetSize(collection);
@@ -212,7 +229,8 @@ void testErrorHandling(void) {
 
   MlirStringRef invalidModuleName = mlirStringRefCreateFromCString("unknown");
   SynthLongestPathCollection invalidCollection =
-      synthLongestPathAnalysisGetAllPaths(analysis, invalidModuleName, true);
+      synthLongestPathAnalysisGetInternalPaths(analysis, invalidModuleName,
+                                               true);
 
   if (synthLongestPathCollectionIsNull(invalidCollection)) {
     // CHECK: Invalid module name handling: PASS

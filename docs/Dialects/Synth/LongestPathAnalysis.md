@@ -69,7 +69,7 @@ The `LongestPathAnalysis` class provides the following key methods:
 
 #### Path Query Methods
 
-- `getClosedPaths(StringAttr, SmallVectorImpl<DataflowPath>&, bool elaboratePaths = false)`: Gets all closed paths (register-to-register) in a module
+- `getInternalPaths(StringAttr, SmallVectorImpl<DataflowPath>&, bool elaboratePaths = false)`: Gets all closed paths (register-to-register) in a module
 - `getOpenPathsFromInputPortsToInternal(StringAttr, SmallVectorImpl<DataflowPath>&)`: Gets open paths from module input ports to internal sequential elements
 - `getOpenPathsFromInternalToOutputPorts(StringAttr, SmallVectorImpl<DataflowPath>&)`: Gets open paths from internal sequential elements to module output ports
 - `getAllPaths(StringAttr, SmallVectorImpl<DataflowPath>&, bool elaboratePaths = false)`: Convenience method that combines all path types

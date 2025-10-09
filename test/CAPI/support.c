@@ -60,7 +60,7 @@ void testInstancePath(void) {
       synthLongestPathAnalysisCreate(moduleOp, true, false, false, moduleName);
 
   SynthLongestPathCollection collection =
-      synthLongestPathAnalysisGetAllPaths(analysis, moduleName, true);
+      synthLongestPathAnalysisGetInternalPaths(analysis, moduleName, true);
 
   if (synthLongestPathCollectionIsNull(collection) ||
       synthLongestPathCollectionGetSize(collection) < 1)

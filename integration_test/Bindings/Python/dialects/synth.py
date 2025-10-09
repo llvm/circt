@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import hw, comb, synth
+from circt.dialects import hw, comb, synth, seq
 from circt.ir import Context, Location, Module, InsertionPoint, IntegerType, ArrayAttr
 from circt.passmanager import PassManager
 from circt.dialects.synth import LongestPathAnalysis, LongestPathCollection, DataflowPath
@@ -12,7 +12,7 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    i4 = IntegerType.get_signless(4)
+    i2 = IntegerType.get_signless(4)
 
     # Create a module with comb.mul
     def build_module(module):
@@ -21,8 +21,8 @@ with Context() as ctx, Location.unknown():
 
     hw.HWModuleOp(
         name="foo",
-        input_ports=[("a", i4), ("b", i4)],
-        output_ports=[("out", i4)],
+        input_ports=[("a", i2), ("b", i2)],
+        output_ports=[("out", i2)],
         body_builder=build_module,
     )
 
@@ -147,10 +147,51 @@ with Context() as ctx, Location.unknown():
     c2 = analysis.get_paths(result1, 0)
     # CHECK-NEXT: len(c1) = 1
     # CHECK-NEXT: len(c2) = 1
-    print("len(c1) =", len(c1))
-    print("len(c2) =", len(c2))
-
     s1, s2 = len(c1), len(c2)
+    print("len(c1) =", s1)
+    print("len(c2) =", s2)
     c1.merge(c2)
     # CHECK-NEXT: merge: True
     print("merge:", len(c1) == s1 + s2)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+
+  m = Module.create()
+  with InsertionPoint(m.body):
+    i2 = IntegerType.get_signless(2)
+
+    # Create a module with comb.mul
+    def build_module(module):
+      clock, a, b = module.entry_block.arguments
+      and_inv = synth.AndInverterOp([a, b], [False, True])
+      r = seq.CompRegOp(i2, and_inv, clock)
+      hw.OutputOp([r])
+
+    module = hw.HWModuleOp(
+        name="foo",
+        input_ports=[("clock", seq.ClockType.get(ctx)), ("a", i2), ("b", i2)],
+        output_ports=[("out", i2)],
+        body_builder=build_module,
+    )
+
+    analysis = LongestPathAnalysis(m.operation,
+                                   collect_debug_info=True,
+                                   keep_only_max_delay_paths=True,
+                                   lazy_computation=False,
+                                   top_module_name="foo")
+    internal = analysis.get_internal_paths("foo")
+    from_input = analysis.get_paths_from_input_ports_to_internal("foo")
+    to_output = analysis.get_paths_from_internal_to_output_ports("foo")
+
+    # CHECK-NEXT: len(internal) = 0
+    # Not path between r -> r
+    print("len(internal) =", len(internal))
+
+    # CHECK-NEXT: len(from_input) = 4
+    # 2 paths from a -> r, 2 paths from b -> r
+    print("len(from_input) =", len(from_input))
+
+    # CHECK-NEXT: len(to_output) = 2
+    # 2 path from r -> out
+    print("len(to_output) =", len(to_output))
