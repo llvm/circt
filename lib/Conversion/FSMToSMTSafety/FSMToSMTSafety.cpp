@@ -304,10 +304,13 @@ private:
         return b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
                                       args);
       }
-      // int
-      SmallVector<Value> ops;
-      for (auto v : args) ops.push_back(toInt(v));
-      return b.create<smt::IntAddOp>(loc, ops);
+   // int (wraparound: mod 2^w)
+   SmallVector<Value> ops;
+   for (auto v : args) ops.push_back(toInt(v));
+   Value sum = b.create<smt::IntAddOp>(loc, ops);
+   unsigned w = cast<IntegerType>(addOp.getType()).getIntOrFloatBitWidth();
+   Value modulus = intPow2(w, loc); // 2^w as !smt.int
+   return b.create<smt::IntModOp>(loc, sum, modulus);
     }
 
     // comb.sub
