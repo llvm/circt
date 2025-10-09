@@ -185,6 +185,12 @@ private:
   ClassOut classOut;
 };
 
+/// Class that is used to lower a module that may contain domain ports.  This is
+/// intended to be used by calling `lowerModule()` to lower the module.  This
+/// builds up state in the class which is then used when calling
+/// `lowerInstances()` to update all instantiations of this module.  If
+/// multi-threading, care needs to be taken to only call `lowerInstances()`
+/// when instantiating modules are not _also_ being updated.
 class LowerModule {
 
 public:
@@ -193,12 +199,12 @@ public:
       : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes),
         constants(constants), instanceGraph(instanceGraph) {}
 
-  // Lower the associated module.  Replace domain ports with input/ouput class
-  // ports.
+  /// Lower the associated module.  Replace domain ports with input/ouput class
+  /// ports.
   LogicalResult lowerModule();
 
-  // Lower all instances of the associated module.  This relies on state built
-  // up during `lowerModule` and must be run _afterwards_.
+  /// Lower all instances of the associated module.  This relies on state built
+  /// up during `lowerModule` and must be run _afterwards_.
   LogicalResult lowerInstances();
 
 private:
@@ -216,29 +222,29 @@ private:
     return success();
   }
 
-  // The module this class is lowering
+  /// The module this class is lowering
   FModuleLike op;
 
-  // Ports that should be erased
+  /// Ports that should be erased
   BitVector eraseVector;
 
-  // The ports that should be inserted, _after deletion_ by application of
-  // `eraseVector`.
+  /// The ports that should be inserted, _after deletion_ by application of
+  /// `eraseVector`.
   SmallVector<std::pair<unsigned, PortInfo>> newPorts;
 
-  // A mapping of old result to new result
+  /// A mapping of old result to new result
   SmallVector<std::pair<unsigned, unsigned>> resultMap;
 
-  // Mapping of domain name to the lowered input and output class
+  /// Mapping of domain name to the lowered input and output class
   const DenseMap<Attribute, Classes> &domainToClasses;
 
-  // Lazy constant pool
+  /// Lazy constant pool
   Constants &constants;
 
-  // Reference to an instance graph.  This _will_ be mutated.
-  //
-  // TODO: The mutation of this is _not_ thread safe.  This needs to be fixed if
-  // this pass is parallelized.
+  /// Reference to an instance graph.  This _will_ be mutated.
+  ///
+  /// TODO: The mutation of this is _not_ thread safe.  This needs to be fixed
+  /// if this pass is parallelized.
   InstanceGraph &instanceGraph;
 };
 
@@ -448,6 +454,9 @@ LogicalResult LowerModule::lowerInstances() {
   return success();
 }
 
+/// Class used to lwoer a circuit that contains domains.  This hides any state
+/// that may need to be cleared across invocations of this pass to keep the
+/// actual pass code cleaner.
 class LowerCircuit {
 
 public:
@@ -456,14 +465,27 @@ public:
       : circuit(circuit), instanceGraph(instanceGraph),
         constants(circuit.getContext()), numDomains(numDomains) {}
 
-  LogicalResult lowerDomain(DomainOp);
+  /// Lower the circuit, removing all domains.
   LogicalResult lowerCircuit();
 
 private:
+  /// Lower one domain.
+  LogicalResult lowerDomain(DomainOp);
+
+  /// The circuit this class is lowering.
   CircuitOp circuit;
+
+  /// A reference to an instance graph.  This will be mutated.
   InstanceGraph &instanceGraph;
+
+  /// Internal store of lazily constructed constants.
   Constants constants;
+
+  /// Mutable reference to the number of domains this class will lower.
   llvm::Statistic &numDomains;
+
+  /// Store of the mapping from a domain name to the classes that it has been
+  /// lowered into.
   DenseMap<Attribute, Classes> classes;
 };
 
