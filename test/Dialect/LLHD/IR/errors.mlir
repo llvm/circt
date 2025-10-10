@@ -50,16 +50,6 @@ hw.module @extract_element_tuple_index_out_of_bounds(inout %tup : !hw.struct<foo
 
 // -----
 
-// expected-note @+1 {{prior use here}}
-func.func @check_illegal_store(%i1Ptr : !llhd.ptr<i1>, %i32Const : i32) {
-  // expected-error @+1 {{use of value '%i32Const' expects different type than prior uses: 'i1' vs 'i32'}}
-  llhd.store %i1Ptr, %i32Const : !llhd.ptr<i1>
-
-  return
-}
-
-// -----
-
 // expected-error @+1 {{unknown  type `illegaltype` in dialect `llhd`}}
 func.func @illegaltype(%arg0: !llhd.illegaltype) {
     return

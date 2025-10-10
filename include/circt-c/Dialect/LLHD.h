@@ -27,22 +27,9 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(LLHD, llhd);
 
 /// Check if a type is a time type.
 MLIR_CAPI_EXPORTED bool llhdTypeIsATimeType(MlirType);
-/// Check if a type is a signal type.
-MLIR_CAPI_EXPORTED bool llhdTypeIsASignalType(MlirType);
-/// Check if a type is a pointer type.
-MLIR_CAPI_EXPORTED bool llhdTypeIsAPointerType(MlirType);
 
 /// Create a time type.
 MLIR_CAPI_EXPORTED MlirType llhdTimeTypeGet(MlirContext ctx);
-/// Create a signal type.
-MLIR_CAPI_EXPORTED MlirType llhdSignalTypeGet(MlirType element);
-/// Create a pointer type.
-MLIR_CAPI_EXPORTED MlirType llhdPointerTypeGet(MlirType element);
-
-/// Get the inner type of a signal.
-MLIR_CAPI_EXPORTED MlirType llhdSignalTypeGetElementType(MlirType);
-/// Get the inner type of a pointer.
-MLIR_CAPI_EXPORTED MlirType llhdPointerTypeGetElementType(MlirType);
 
 //===----------------------------------------------------------------------===//
 // Attributes
