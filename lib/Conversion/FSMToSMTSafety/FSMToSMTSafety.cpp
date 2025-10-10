@@ -323,8 +323,13 @@ private:
         return b.create<smt::BVAddOp>(loc,
                b.getType<smt::BitVectorType>(widths[0]), args[0], neg);
       }
-      // int
-      return b.create<smt::IntSubOp>(loc, toInt(args[0]), toInt(args[1]));
+      // int (wraparound: mod 2^w)
+      SmallVector<Value> ops;
+      for (auto v : args) ops.push_back(toInt(v));
+      Value sub = b.create<smt::IntAddOp>(loc, ops);
+      unsigned w = cast<IntegerType>(subOp.getType()).getIntOrFloatBitWidth();
+      Value modulus = intPow2(w, loc); 
+      return b.create<smt::IntModOp>(loc, sub, modulus);
     }
 
     // comb.mul
@@ -337,7 +342,10 @@ private:
       // int 
       SmallVector<Value> ops;
       for (auto v : args) ops.push_back(toInt(v));
-      return b.create<smt::IntMulOp>(loc, ops);
+      auto mul = b.create<smt::IntMulOp>(loc, ops);
+      unsigned w = cast<IntegerType>(mulOp.getType()).getIntOrFloatBitWidth();
+      Value modulus = intPow2(w, loc); 
+      return b.create<smt::IntModOp>(loc, mul, modulus);
     }
 
     // comb.and (boolean and for i1)
