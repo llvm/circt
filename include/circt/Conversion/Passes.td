@@ -494,7 +494,6 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
     "mlir::cf::ControlFlowDialect",
     "mlir::scf::SCFDialect",
     "mlir::math::MathDialect",
-    "mlir::LLVM::LLVMDialect",
     "sim::SimDialect",
     "verif::VerifDialect",
   ];

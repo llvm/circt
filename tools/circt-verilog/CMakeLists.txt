@@ -22,7 +22,6 @@ set(libs
   MLIRSCFDialect
   MLIRSCFDialect
   MLIRSupport
-  MLIRLLVMIRTransforms
 )
 
 add_circt_tool(circt-verilog circt-verilog.cpp DEPENDS ${libs})

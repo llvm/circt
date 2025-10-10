@@ -21,8 +21,6 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -32,7 +30,6 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/IR/DerivedTypes.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
@@ -542,18 +539,6 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     Type resultType = typeConverter->convertType(op.getResult().getType());
     if (!resultType)
       return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
-
-    // Handle CHandle types
-    if (isa<mlir::LLVM::LLVMPointerType>(resultType)) {
-      // Use converted initializer if present; otherwise synthesize null ptr.
-      Value init = adaptor.getInitial();
-      if (!init)
-        init = rewriter.create<mlir::LLVM::ZeroOp>(loc, resultType);
-
-      // For pointer-typed variables we produce the SSA pointer value directly.
-      rewriter.replaceOp(op, init);
-      return success();
-    }
 
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
@@ -1727,7 +1712,6 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<mlir::math::MathDialect>();
   target.addLegalDialect<sim::SimDialect>();
-  target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalDialect<verif::VerifDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
@@ -1814,28 +1798,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
         return hw::StructType::get(type.getContext(), fields);
       });
 
-  // Conversion of CHandle to LLVMPointerType
-  typeConverter.addConversion([&](ChandleType type) -> std::optional<Type> {
-    return LLVM::LLVMPointerType::get(type.getContext());
-  });
-
-  // Explicitly mark LLVMPointerType as a legal target
-  typeConverter.addConversion(
-      [](LLVM::LLVMPointerType t) -> std::optional<Type> { return t; });
-
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    if (auto innerType = typeConverter.convertType(type.getNestedType())) {
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
       if (hw::isHWValueType(innerType))
         return hw::InOutType::get(innerType);
-      // TODO: There is some abstraction missing here to correctly return a
-      // reference of a CHandle; return an error for now.
-      if (isa<mlir::LLVM::LLVMPointerType>(innerType)) {
-        mlir::emitError(mlir::UnknownLoc::get(type.getContext()))
-            << "Emission of references of LLVMPointerType is currently "
-               "unsupported!";
-        return {};
-      }
-    }
     return {};
   });
 
