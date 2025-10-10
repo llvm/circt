@@ -86,10 +86,10 @@ static bool isPort(FModuleOp module, Value value) {
 /// Each declared domain in the circuit is assigned an index, based on the order
 /// in which it appears. Domain associations for hardware values are represented
 /// as a list of domains, sorted by the index of the domain type.
-using DomainIndex = size_t;
+using DomainTypeID = size_t;
 
 /// Information about the domains in the circuit. Able to map domains to their
-/// domain-index, which in this pass is the canonical way to reference the type
+/// type ID, which in this pass is the canonical way to reference the type
 /// of a domain.
 namespace {
 struct CircuitDomainInfo {
@@ -101,22 +101,22 @@ struct CircuitDomainInfo {
 
   ArrayRef<DomainOp> getDomains() const { return domainTable; }
   size_t getNumDomains() const { return domainTable.size(); }
-  DomainOp getDomain(DomainIndex id) const { return domainTable[id]; }
+  DomainOp getDomain(DomainTypeID id) const { return domainTable[id]; }
 
-  DomainIndex getDomainIndex(DomainOp op) const {
-    return indexTable.at(op.getNameAttr());
+  DomainTypeID getDomainTypeID(DomainOp op) const {
+    return typeIDTable.at(op.getNameAttr());
   }
-  DomainIndex getDomainIndex(StringAttr name) const {
-    return indexTable.at(name);
+  DomainTypeID getDomainTypeID(StringAttr name) const {
+    return typeIDTable.at(name);
   }
-  DomainIndex getDomainIndex(FlatSymbolRefAttr ref) const {
-    return getDomainIndex(ref.getAttr());
+  DomainTypeID getDomainTypeID(FlatSymbolRefAttr ref) const {
+    return getDomainTypeID(ref.getAttr());
   }
-  DomainIndex getDomainIndex(ArrayAttr info, size_t i) const {
+  DomainTypeID getDomainTypeID(ArrayAttr info, size_t i) const {
     auto name = getDomainPortTypeName(info, i);
-    return getDomainIndex(name);
+    return getDomainTypeID(name);
   }
-  DomainIndex getDomainIndex(Value value) const {
+  DomainTypeID getDomainTypeID(Value value) const {
     assert(isa<DomainType>(value.getType()));
     if (auto arg = dyn_cast<BlockArgument>(value)) {
       auto *block = arg.getOwner();
@@ -124,7 +124,7 @@ struct CircuitDomainInfo {
       auto module = cast<FModuleOp>(owner);
       auto info = module.getDomainInfoAttr();
       auto i = arg.getArgNumber();
-      return getDomainIndex(info, i);
+      return getDomainTypeID(info, i);
     }
 
     auto result = dyn_cast<OpResult>(value);
@@ -132,29 +132,27 @@ struct CircuitDomainInfo {
     auto instance = cast<InstanceOp>(owner);
     auto info = instance.getDomainInfoAttr();
     auto i = result.getResultNumber();
-    return getDomainIndex(info, i);
+    return getDomainTypeID(info, i);
   }
 
-  void clear() {
-    domainTable.clear();
-    indexTable.clear();
-  }
-
-  void processCircuit(CircuitOp circuit) {
-    clear();
-    for (auto decl : circuit.getOps<DomainOp>())
-      processDomain(decl);
-  }
-
+private:
   void processDomain(DomainOp op) {
     auto index = domainTable.size();
     auto name = op.getNameAttr();
     domainTable.push_back(op);
-    indexTable.insert({name, index});
+    typeIDTable.insert({name, index});
   }
 
+  void processCircuit(CircuitOp circuit) {
+    for (auto decl : circuit.getOps<DomainOp>())
+      processDomain(decl);
+  }
+
+  /// A map from domain type ID to op.
   SmallVector<DomainOp> domainTable;
-  DenseMap<StringAttr, DomainIndex> indexTable;
+
+  /// A map from domain name to type ID.
+  DenseMap<StringAttr, DomainTypeID> typeIDTable;
 };
 } // namespace
 
@@ -515,14 +513,14 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
   auto numPorts = module.getNumPorts();
 
   // Process module ports - domain ports define explicit domains.
-  DenseMap<unsigned, unsigned> domainIndexTable;
+  DenseMap<unsigned, unsigned> domainTypeIDTable;
   for (size_t i = 0; i < numPorts; ++i) {
     BlockArgument port = module.getArgument(i);
 
     // This is a domain port.
     if (isa<DomainType>(port.getType())) {
-      auto index = circuitInfo.getDomainIndex(portDomainInfo, i);
-      domainIndexTable[i] = index;
+      auto typeID = circuitInfo.getDomainTypeID(portDomainInfo, i);
+      domainTypeIDTable[i] = typeID;
       if (module.getPortDirection(i) == Direction::In) {
         setTermForDomain(port, allocate<ValueTerm>(port));
       }
@@ -537,15 +535,15 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
     SmallVector<Term *> elements(circuitInfo.getNumDomains());
     for (auto domainPortIndexAttr : portDomains.getAsRange<IntegerAttr>()) {
       auto domainPortIndex = domainPortIndexAttr.getUInt();
-      auto domainIndex = domainIndexTable[domainPortIndex];
+      auto domainTypeID = domainTypeIDTable[domainPortIndex];
       auto domainValue = module.getArgument(domainPortIndex);
       auto *term = getTermForDomain(domainValue);
-      auto &slot = elements[domainIndex];
+      auto &slot = elements[domainTypeID];
       if (failed(unify(slot, term))) {
-        emitPortDomainCrossingError(port, domainIndex, slot, term);
+        emitPortDomainCrossingError(port, domainTypeID, slot, term);
         return failure();
       }
-      elements[domainIndex] = term;
+      elements[domainTypeID] = term;
     }
     auto *row = allocateRow(elements);
     setDomainAssociation(port, row);
@@ -576,9 +574,9 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
   if (auto def = dyn_cast<DomainDefineOp>(op))
     return processOp(def);
 
-  // For all operations (including connections), propagate domains from operands
-  // to results This is a conservative approach - all operands and results share
-  // the same domain associations.
+  // For all other operations (including connections), propagate domains from
+  // operands to results This is a conservative approach - all operands and
+  // results share the same domain associations.
   Value lhs;
   for (auto rhs : op->getOperands()) {
     if (!isa<FIRRTLBaseType>(rhs.getType()))
@@ -606,7 +604,7 @@ LogicalResult InferModuleDomains::processOp(InstanceOp op) {
     LLVM_DEBUG(llvm::errs() << "handling instance port: " << port << "\n");
 
     if (isa<DomainType>(port.getType())) {
-      auto typeID = circuitInfo.getDomainIndex(domainInfo, i);
+      auto typeID = circuitInfo.getDomainTypeID(domainInfo, i);
       domainPortTypeIDTable[i] = typeID;
       if (op.getPortDirection(i) == Direction::Out) {
         setTermForDomain(port, allocate<ValueTerm>(port));
@@ -650,7 +648,7 @@ LogicalResult InferModuleDomains::processOp(UnsafeDomainCastOp op) {
   RowTerm *inputRow = getDomainAssociationAsRow(input);
   SmallVector<Term *> elements(inputRow->elements);
   for (auto domain : op.getDomains()) {
-    auto index = circuitInfo.getDomainIndex(domain);
+    auto index = circuitInfo.getDomainTypeID(domain);
     elements[index] = getTermForDomain(domain);
   }
 
@@ -750,10 +748,10 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
     if (isa<FIRRTLBaseType>(type)) {
       auto associations = copyPortDomainAssociations(oldModuleDomainInfo, i);
       auto *row = getDomainAssociationAsRow(port);
-      for (size_t domainTypeID = 0; domainTypeID < numDomains; ++domainTypeID) {
-        if (associations[domainTypeID])
+      for (size_t DomainTypeID = 0; DomainTypeID < numDomains; ++DomainTypeID) {
+        if (associations[DomainTypeID])
           continue;
-        auto domain = cast<ValueTerm>(find(row->elements[domainTypeID]))->value;
+        auto domain = cast<ValueTerm>(find(row->elements[DomainTypeID]))->value;
         size_t domainPortIndex = 0;
         if (auto arg = dyn_cast<BlockArgument>(domain)) {
           if (arg.getOwner()->getParentOp() == module) {
@@ -781,7 +779,7 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
             return failure();
           }
         }
-        associations[domainTypeID] = IntegerAttr::get(
+        associations[DomainTypeID] = IntegerAttr::get(
             IntegerType::get(context, 32, IntegerType::Unsigned),
             domainPortIndex);
       }
@@ -806,9 +804,9 @@ InferModuleDomains::copyPortDomainAssociations(ArrayAttr moduleDomainInfo,
   auto oldAssociations = getPortDomainAssociation(moduleDomainInfo, portIndex);
   for (auto domainPortIndexAttr : oldAssociations.getAsRange<IntegerAttr>()) {
     auto domainPortIndex = domainPortIndexAttr.getUInt();
-    auto domainTypeID =
-        circuitInfo.getDomainIndex(moduleDomainInfo, domainPortIndex);
-    result[domainTypeID] = domainPortIndexAttr;
+    auto DomainTypeID =
+        circuitInfo.getDomainTypeID(moduleDomainInfo, domainPortIndex);
+    result[DomainTypeID] = domainPortIndexAttr;
   };
   return result;
 }
@@ -1209,11 +1207,11 @@ void InferModuleDomains::emitPortDomainCrossingError(BlockArgument port,
   VariableIDTable idTable;
 
   auto portIndex = port.getArgNumber();
-  auto domainType = circuitInfo.getDomain(domainTypeID);
-  auto domainTypeName = domainType.getName();
+  auto domainOp = circuitInfo.getDomain(domainTypeID);
+  auto domainName = domainOp.getName();
 
   auto diag = emitError(port.getLoc());
-  diag << "illegal " << domainTypeName << " crossing in port #" << portIndex;
+  diag << "illegal " << domainName << " crossing in port #" << portIndex;
 
   auto &note1 = diag.attachNote();
   note1 << "1st instance: ";
