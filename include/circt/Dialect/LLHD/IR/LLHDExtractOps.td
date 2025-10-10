@@ -27,7 +27,7 @@ class SigPtrIndexBitWidthConstraint<string index, string input>
 class SigArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"result must be a signal of the array element type",
                    input, result,
-                   "hw::InOutType::get(llhd::getLLHDElementType($_self))">;
+                   "RefType::get(llhd::getLLHDElementType($_self))">;
 
 class SameSigPtrArrayElementTypeConstraint<string result, string input>
   : PredOpTrait<"arrays element type must match",
@@ -44,11 +44,11 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 // Integer Operations
 //===----------------------------------------------------------------------===//
 
-def SigExtractOp : LLHDOp<"sig.extract",
-    [Pure,
-     SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-     SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
-
+def SigExtractOp : LLHDOp<"sig.extract", [
+  Pure,
+   SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+   SigPtrIndexBitWidthConstraint<"lowBit", "input">,
+ ]> {
   let summary = "Extract a range of bits from an integer signal";
   let description = [{
     The `llhd.sig.extract` operation allows to access a range of bits
@@ -56,12 +56,12 @@ def SigExtractOp : LLHDOp<"sig.extract",
     operand. The result length is defined by the result type.
   }];
 
-  let arguments = (ins InOutTypeOf<[HWIntegerType]>:$input,
+  let arguments = (ins RefTypeOf<HWIntegerType>:$input,
                        HWIntegerType:$lowBit);
-  let results = (outs InOutTypeOf<[HWIntegerType]>: $result);
+  let results = (outs RefTypeOf<HWIntegerType>: $result);
 
   let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
   }];
 
   let extraClassDeclaration = [{
@@ -75,12 +75,12 @@ def SigExtractOp : LLHDOp<"sig.extract",
 // Array Operations
 //===----------------------------------------------------------------------===//
 
-def SigArraySliceOp : LLHDOp<"sig.array_slice",
-    [Pure,
-     SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-     SameSigPtrArrayElementTypeConstraint<"result", "input">,
-     SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
-
+def SigArraySliceOp : LLHDOp<"sig.array_slice", [
+  Pure,
+  SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+  SameSigPtrArrayElementTypeConstraint<"result", "input">,
+  SigPtrIndexBitWidthConstraint<"lowIndex", "input">,
+]> {
   let summary = "Get a range of consecutive values from a signal of an array";
   let description = [{
     The `llhd.sig.array_slice` operation allows to access a sub-range of the
@@ -102,23 +102,27 @@ def SigArraySliceOp : LLHDOp<"sig.array_slice",
     ```
   }];
 
-  let arguments = (ins InOutTypeOf<[ArrayType]>: $input,
+  let arguments = (ins RefTypeOf<ArrayType>: $input,
                        HWIntegerType: $lowIndex);
-  let results = (outs InOutTypeOf<[ArrayType]>: $result);
+  let results = (outs RefTypeOf<ArrayType>: $result);
 
   let assemblyFormat = [{
-    $input `at` $lowIndex attr-dict `:` functional-type($input, $result)
+    $input `at` $lowIndex attr-dict `:` type($input) `->` type($result)
   }];
 
   let extraClassDeclaration = [{
-    unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
-    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
+    unsigned getResultWidth() {
+      return getLLHDTypeWidth(getResult().getType());
+    }
+    unsigned getInputWidth() {
+      return getLLHDTypeWidth(getInput().getType());
+    }
     hw::ArrayType getInputArrayType() {
-      return llvm::cast<hw::ArrayType>(llvm::cast<hw::InOutType>(
+      return llvm::cast<hw::ArrayType>(llvm::cast<RefType>(
         getInput().getType()).getElementType());
     }
     hw::ArrayType getResultArrayType() {
-      return llvm::cast<hw::ArrayType>(llvm::cast<hw::InOutType>(
+      return llvm::cast<hw::ArrayType>(llvm::cast<RefType>(
         getResult().getType()).getElementType());
     }
   }];
@@ -126,13 +130,13 @@ def SigArraySliceOp : LLHDOp<"sig.array_slice",
   let hasCanonicalizeMethod = true;
 }
 
-def SigArrayGetOp : LLHDOp<"sig.array_get",
-    [Pure,
-     DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
-     DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
-     SigPtrIndexBitWidthConstraint<"index", "input">,
-     SigArrayElementTypeConstraint<"result", "input">]> {
-
+def SigArrayGetOp : LLHDOp<"sig.array_get", [
+  Pure,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  SigPtrIndexBitWidthConstraint<"index", "input">,
+  SigArrayElementTypeConstraint<"result", "input">,
+]> {
   let summary = "Extract an element from a signal of an array.";
   let description = [{
     The `llhd.sig.array_get` operation allows to access the element of the
@@ -147,14 +151,16 @@ def SigArrayGetOp : LLHDOp<"sig.array_get",
     ```
   }];
 
-  let arguments = (ins InOutTypeOf<[ArrayType]>:$input, HWIntegerType:$index);
-  let results = (outs InOutTypeOf<[HWNonInOutType]>: $result);
+  let arguments = (ins RefTypeOf<ArrayType>:$input, HWIntegerType:$index);
+  let results = (outs RefType: $result);
 
-  let assemblyFormat = "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:` type($input)
+  }];
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
-      return llvm::cast<hw::ArrayType>(llvm::cast<hw::InOutType>(
+      return llvm::cast<hw::ArrayType>(llvm::cast<RefType>(
         getInput().getType()).getElementType());
     }
   }];
@@ -164,10 +170,13 @@ def SigArrayGetOp : LLHDOp<"sig.array_get",
 // Structure Operations
 //===----------------------------------------------------------------------===//
 
-def SigStructExtractOp : LLHDOp<"sig.struct_extract", [Pure,
+def SigStructExtractOp : LLHDOp<"sig.struct_extract", [
+  Pure,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  InferTypeOpInterface,
+]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
     The `llhd.sig.struct_extract` operation allows access to the field of the
@@ -183,14 +192,16 @@ def SigStructExtractOp : LLHDOp<"sig.struct_extract", [Pure,
     ```
   }];
 
-  let arguments = (ins InOutTypeOf<[StructType]>:$input, StrAttr:$field);
-  let results = (outs InOutTypeOf<[HWNonInOutType]>:$result);
+  let arguments = (ins RefTypeOf<StructType>:$input, StrAttr:$field);
+  let results = (outs RefTypeOf<HWNonInOutType>:$result);
 
-  let assemblyFormat = "$input `[` $field `]` attr-dict `:` qualified(type($input))";
+  let assemblyFormat = [{
+    $input `[` $field `]` attr-dict `:` type($input)
+  }];
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
-      return llvm::cast<hw::StructType>(llvm::cast<hw::InOutType>(
+      return llvm::cast<hw::StructType>(llvm::cast<RefType>(
         getInput().getType()).getElementType());
     }
   }];

@@ -35,7 +35,7 @@ using llvm::SpecificBumpPtrAllocator;
 /// in an integer, the number of elements in an array, or the number of fields
 /// in a struct. Returns zero for everything else.
 static unsigned getLength(Type type) {
-  return TypeSwitch<Type, unsigned>(cast<hw::InOutType>(type).getElementType())
+  return TypeSwitch<Type, unsigned>(cast<RefType>(type).getElementType())
       .Case<IntegerType>([](auto type) { return type.getWidth(); })
       .Case<hw::ArrayType>([](auto type) { return type.getNumElements(); })
       .Case<hw::StructType>([](auto type) { return type.getElements().size(); })
@@ -253,7 +253,7 @@ SignalSlice ModuleContext::traceProjectionImpl(Value value) {
 
   if (auto op = value.getDefiningOp<SigStructExtractOp>()) {
     auto structType = cast<hw::StructType>(
-        cast<hw::InOutType>(op.getInput().getType()).getElementType());
+        cast<RefType>(op.getInput().getType()).getElementType());
     auto input = traceProjection(op.getInput());
     if (!input)
       return {};
@@ -387,7 +387,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
 /// to `slices` directly.
 void ModuleContext::addDefaultDriveSlices(Signal &signal,
                                           SmallVectorImpl<DriveSlice> &slices) {
-  auto type = cast<hw::InOutType>(signal.value.getType()).getElementType();
+  auto type = cast<RefType>(signal.value.getType()).getElementType();
 
   // Sort the slices such that we can find gaps easily.
   llvm::sort(slices, [](auto &a, auto &b) { return a.offset < b.offset; });
@@ -536,7 +536,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   });
 
   Value result;
-  auto type = cast<hw::InOutType>(signal.value.getType()).getElementType();
+  auto type = cast<RefType>(signal.value.getType()).getElementType();
   ImplicitLocOpBuilder builder(signal.value.getLoc(),
                                signal.value.getContext());
   builder.setInsertionPointAfterValue(signal.value);

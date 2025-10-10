@@ -405,8 +405,7 @@ void DriveHoister::finalizeDriveSets() {
     // terminator.
     for (auto *suspendOp : suspendOps) {
       auto operands = DriveOperands{
-          DriveValue::dontCare(
-              cast<hw::InOutType>(slot.getType()).getElementType()),
+          DriveValue::dontCare(cast<RefType>(slot.getType()).getElementType()),
           DriveValue::dontCare(TimeType::get(processOp.getContext())),
           DriveValue(falseAttr),
       };

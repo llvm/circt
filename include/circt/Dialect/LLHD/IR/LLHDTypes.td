@@ -35,6 +35,46 @@ def LLHDTimeType : LLHDType<"Time"> {
   let mnemonic = "time";
 }
 
+def RefType : LLHDType<"Ref"> {
+  let summary = "a reference to a signal or variable";
+  let description = [{
+    Represents a reference to a value. Signals return a reference to the
+    underlying value, which allows them to be probed or driven.
+  }];
+  let mnemonic = "ref";
+  let parameters = (ins "::mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// Type Constraints
+//===----------------------------------------------------------------------===//
+
+
+/// A ref type with a specific nested type.
+class RefTypeOf<Type type> : ConfinedType<RefType,
+  [SubstLeaves<"$_self", "llvm::cast<llhd::RefType>($_self).getElementType()",
+               type.predicate>],
+  "ref of " # type.summary, "llhd::RefType"
+> {
+  Type nestedType = type;
+}
+
+class TypeMatchesRefElementType<string type, string refType> : TypesMatchWith<
+  type # " type must match " # refType # " ref element type",
+  type, refType, "RefType::get($_self)"
+>;
+
+class RefElementTypeMatchesType<string refType, string type> : TypesMatchWith<
+  refType # " ref element type must match " # type # " type",
+  refType, type, "cast<RefType>($_self).getElementType()"
+>;
+
 //===----------------------------------------------------------------------===//
 // Attribute declarations
 //===----------------------------------------------------------------------===//

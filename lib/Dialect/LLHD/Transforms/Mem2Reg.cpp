@@ -208,7 +208,7 @@ static DefSlot delayedSlot(Value slot) { return {slot, 1}; }
 static Value getSlot(DefSlot slot) { return slot.getPointer(); }
 static bool isDelayed(DefSlot slot) { return slot.getInt(); }
 static Type getStoredType(Value slot) {
-  return cast<hw::InOutType>(slot.getType()).getElementType();
+  return cast<RefType>(slot.getType()).getElementType();
 }
 static Type getStoredType(DefSlot slot) {
   return getStoredType(slot.getPointer());
@@ -587,22 +587,21 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                                ProjectionStack &projections) {
   for (auto &projection : llvm::reverse(projections)) {
     projection.into = value;
-    value =
-        TypeSwitch<Operation *, Value>(projection.op)
-            .Case<SigArrayGetOp>([&](auto op) {
-              return builder.createOrFold<hw::ArrayGetOp>(op.getLoc(), value,
-                                                          op.getIndex());
-            })
-            .Case<SigStructExtractOp>([&](auto op) {
-              return builder.createOrFold<hw::StructExtractOp>(
-                  op.getLoc(), value, op.getFieldAttr());
-            })
-            .Case<SigExtractOp>([&](auto op) {
-              auto type = cast<hw::InOutType>(op.getType()).getElementType();
-              auto width = type.getIntOrFloatBitWidth();
-              return comb::createDynamicExtract(builder, op.getLoc(), value,
-                                                op.getLowBit(), width);
-            });
+    value = TypeSwitch<Operation *, Value>(projection.op)
+                .Case<SigArrayGetOp>([&](auto op) {
+                  return builder.createOrFold<hw::ArrayGetOp>(
+                      op.getLoc(), value, op.getIndex());
+                })
+                .Case<SigStructExtractOp>([&](auto op) {
+                  return builder.createOrFold<hw::StructExtractOp>(
+                      op.getLoc(), value, op.getFieldAttr());
+                })
+                .Case<SigExtractOp>([&](auto op) {
+                  auto type = cast<RefType>(op.getType()).getElementType();
+                  auto width = type.getIntOrFloatBitWidth();
+                  return comb::createDynamicExtract(builder, op.getLoc(), value,
+                                                    op.getLowBit(), width);
+                });
   }
   return value;
 }
