@@ -55,7 +55,7 @@ static bool isDeltaDelay(Value value) {
 /// Check whether an operation is a `llhd.drive` with an epsilon delay. This
 /// corresponds to a blocking assignment in Verilog.
 static bool isBlockingDrive(Operation *op) {
-  if (auto driveOp = dyn_cast<DrvOp>(op))
+  if (auto driveOp = dyn_cast<DriveOp>(op))
     return isEpsilonDelay(driveOp.getTime());
   return false;
 }
@@ -63,7 +63,7 @@ static bool isBlockingDrive(Operation *op) {
 /// Check whether an operation is a `llhd.drive` with a delta delay. This
 /// corresponds to a non-blocking assignment in Verilog.
 static bool isDeltaDrive(Operation *op) {
-  if (auto driveOp = dyn_cast<DrvOp>(op))
+  if (auto driveOp = dyn_cast<DriveOp>(op))
     return isDeltaDelay(driveOp.getTime());
   return false;
 }
@@ -208,7 +208,7 @@ static DefSlot delayedSlot(Value slot) { return {slot, 1}; }
 static Value getSlot(DefSlot slot) { return slot.getPointer(); }
 static bool isDelayed(DefSlot slot) { return slot.getInt(); }
 static Type getStoredType(Value slot) {
-  return cast<hw::InOutType>(slot.getType()).getElementType();
+  return cast<RefType>(slot.getType()).getNestedType();
 }
 static Type getStoredType(DefSlot slot) {
   return getStoredType(slot.getPointer());
@@ -297,7 +297,7 @@ struct OpNode : public LatticeNode {
 struct ProbeNode : public OpNode {
   Value slot;
 
-  ProbeNode(PrbOp op, Value slot, LatticeValue *valueBefore,
+  ProbeNode(ProbeOp op, Value slot, LatticeValue *valueBefore,
             LatticeValue *valueAfter)
       : OpNode(Kind::Probe, op, valueBefore, valueAfter), slot(slot) {}
 
@@ -308,7 +308,7 @@ struct DriveNode : public OpNode {
   DefSlot slot;
   Def *def;
 
-  DriveNode(DrvOp op, Value slot, Def *def, LatticeValue *valueBefore,
+  DriveNode(DriveOp op, Value slot, Def *def, LatticeValue *valueBefore,
             LatticeValue *valueAfter)
       : OpNode(Kind::Drive, op, valueBefore, valueAfter),
         slot(isDeltaDrive(op) ? delayedSlot(slot) : blockingSlot(slot)),
@@ -321,7 +321,7 @@ struct DriveNode : public OpNode {
   bool drivesProjection() const { return op->getOperand(0) != getSlot(slot); }
 
   /// Return the drive op.
-  DrvOp getDriveOp() const { return cast<DrvOp>(op); }
+  DriveOp getDriveOp() const { return cast<DriveOp>(op); }
 
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
 };
@@ -587,22 +587,21 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                                ProjectionStack &projections) {
   for (auto &projection : llvm::reverse(projections)) {
     projection.into = value;
-    value =
-        TypeSwitch<Operation *, Value>(projection.op)
-            .Case<SigArrayGetOp>([&](auto op) {
-              return builder.createOrFold<hw::ArrayGetOp>(op.getLoc(), value,
-                                                          op.getIndex());
-            })
-            .Case<SigStructExtractOp>([&](auto op) {
-              return builder.createOrFold<hw::StructExtractOp>(
-                  op.getLoc(), value, op.getFieldAttr());
-            })
-            .Case<SigExtractOp>([&](auto op) {
-              auto type = cast<hw::InOutType>(op.getType()).getElementType();
-              auto width = type.getIntOrFloatBitWidth();
-              return comb::createDynamicExtract(builder, op.getLoc(), value,
-                                                op.getLowBit(), width);
-            });
+    value = TypeSwitch<Operation *, Value>(projection.op)
+                .Case<SigArrayGetOp>([&](auto op) {
+                  return builder.createOrFold<hw::ArrayGetOp>(
+                      op.getLoc(), value, op.getIndex());
+                })
+                .Case<SigStructExtractOp>([&](auto op) {
+                  return builder.createOrFold<hw::StructExtractOp>(
+                      op.getLoc(), value, op.getFieldAttr());
+                })
+                .Case<SigExtractOp>([&](auto op) {
+                  auto type = cast<RefType>(op.getType()).getNestedType();
+                  auto width = type.getIntOrFloatBitWidth();
+                  return comb::createDynamicExtract(builder, op.getLoc(), value,
+                                                    op.getLowBit(), width);
+                });
   }
   return value;
 }
@@ -654,7 +653,7 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
 
   void captureAcrossWait();
-  void captureAcrossWait(PrbOp probeOp, ArrayRef<WaitOp> waitOps,
+  void captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
                          Liveness &liveness, DominanceInfo &dominance);
 
   void constructLattice();
@@ -806,7 +805,8 @@ void Promoter::findPromotableSlots() {
           projections.insert({user->getResult(0), operand});
           return true;
         }
-        return isa<PrbOp>(user) || isBlockingDrive(user) || isDeltaDrive(user);
+        return isa<ProbeOp>(user) || isBlockingDrive(user) ||
+               isDeltaDrive(user);
       };
       checkedUsers.clear();
       if (!llvm::all_of(operand.getUsers(), [&](auto *user) {
@@ -862,7 +862,7 @@ void Promoter::captureAcrossWait() {
 
   SmallVector<WaitOp> crossingWaitOps;
   for (auto &block : region) {
-    for (auto probeOp : block.getOps<PrbOp>()) {
+    for (auto probeOp : block.getOps<ProbeOp>()) {
       for (auto waitOp : waitOps)
         if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(probeOp))
           crossingWaitOps.push_back(waitOp);
@@ -878,7 +878,7 @@ void Promoter::captureAcrossWait() {
 /// probe to use the added block arguments as appropriate. This may insert
 /// additional block arguments in case the probe and added block arguments both
 /// reach the same block.
-void Promoter::captureAcrossWait(PrbOp probeOp, ArrayRef<WaitOp> waitOps,
+void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
                                  Liveness &liveness, DominanceInfo &dominance) {
   LLVM_DEBUG({
     llvm::dbgs() << "Capture " << probeOp << "\n";
@@ -978,7 +978,7 @@ void Promoter::constructLattice() {
     // Handle operations.
     for (auto &op : block.without_terminator()) {
       // Handle probes.
-      if (auto probeOp = dyn_cast<PrbOp>(op)) {
+      if (auto probeOp = dyn_cast<ProbeOp>(op)) {
         if (!promotable.contains(probeOp.getSignal()))
           continue;
         auto *node = lattice.createNode<ProbeNode>(
@@ -989,7 +989,7 @@ void Promoter::constructLattice() {
       }
 
       // Handle drives.
-      if (auto driveOp = dyn_cast<DrvOp>(op)) {
+      if (auto driveOp = dyn_cast<DriveOp>(op)) {
         if (!isBlockingDrive(&op) && !isDeltaDrive(&op))
           continue;
         if (!promotable.contains(driveOp.getSignal()))
@@ -1386,7 +1386,7 @@ void Promoter::insertProbes(BlockEntry *node) {
       if (op->getBlock() == node->block)
         builder.setInsertionPointAfterValue(neededDef);
     }
-    auto value = PrbOp::create(builder, neededDef.getLoc(), neededDef);
+    auto value = ProbeOp::create(builder, neededDef.getLoc(), neededDef);
     auto *def = lattice.createDef(value, DriveCondition::never());
     node->insertedProbes.push_back({neededDef, def});
   }
@@ -1496,7 +1496,7 @@ void Promoter::insertDrives(BlockExit *node) {
     auto enable = reachingDef->condition.isConditional()
                       ? reachingDef->getConditionOrPlaceholder()
                       : Value{};
-    DrvOp::create(builder, getLoc(slot), getSlot(slot), value, time, enable);
+    DriveOp::create(builder, getLoc(slot), getSlot(slot), value, time, enable);
   };
 
   for (auto slot : slots)
@@ -1804,7 +1804,7 @@ void Promoter::removeUnusedLocalSignal(SignalNode *signal) {
   worklist.push_back(signal->op);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val();
-    if (!isa<SignalOp, DrvOp, SigArrayGetOp, SigArraySliceOp, SigExtractOp,
+    if (!isa<SignalOp, DriveOp, SigArrayGetOp, SigArraySliceOp, SigExtractOp,
              SigStructExtractOp>(op))
       return;
     for (auto *user : op->getUsers())

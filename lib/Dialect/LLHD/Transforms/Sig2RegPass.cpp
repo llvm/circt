@@ -91,7 +91,7 @@ public:
 
       auto result =
           TypeSwitch<Operation *, LogicalResult>(curr)
-              .Case<llhd::PrbOp>([&](llhd::PrbOp probeOp) {
+              .Case<llhd::ProbeOp>([&](llhd::ProbeOp probeOp) {
                 auto bw = hw::getBitWidth(probeOp.getResult().getType());
                 if (bw <= 0)
                   return failure();
@@ -99,7 +99,7 @@ public:
                 readIntervals.emplace_back(offset, bw, probeOp.getResult());
                 return success();
               })
-              .Case<llhd::DrvOp>([&](llhd::DrvOp driveOp) {
+              .Case<llhd::DriveOp>([&](llhd::DriveOp driveOp) {
                 if (driveOp.getEnable()) {
                   LLVM_DEBUG(llvm::dbgs()
                              << "  - Conditional driver, skipping...\n\n");
@@ -135,8 +135,8 @@ public:
                 }
 
                 auto bw = hw::getBitWidth(
-                    cast<hw::InOutType>(extractOp.getInput().getType())
-                        .getElementType());
+                    cast<llhd::RefType>(extractOp.getInput().getType())
+                        .getNestedType());
                 if (bw <= 0)
                   return failure();
 
@@ -344,7 +344,7 @@ void Sig2RegPass::runOnOperation() {
     // If the signal is only driven, but never read or used otherwise, remove
     // it.
     if (llvm::all_of(sigOp->getUses(), [](auto &use) {
-          return isa<llhd::DrvOp>(use.getOwner()) &&
+          return isa<llhd::DriveOp>(use.getOwner()) &&
                  use.getOperandNumber() == 0;
         })) {
       LLVM_DEBUG(llvm::dbgs() << "  - Removing drive-only signal "

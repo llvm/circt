@@ -235,7 +235,7 @@ bool Deseq::analyzeProcess() {
   // Ensure that all process results lead to conditional drive operations.
   SmallPtrSet<Operation *, 8> seenDrives;
   for (auto &use : process->getUses()) {
-    auto driveOp = dyn_cast<DrvOp>(use.getOwner());
+    auto driveOp = dyn_cast<DriveOp>(use.getOwner());
     if (!driveOp) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping " << process.getLoc() << ": feeds non-drive "
