@@ -17,12 +17,16 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <vector>
 
 namespace circt {
 namespace lsp {
+
+using SteadyClock = std::chrono::steady_clock;
+using NowFn = std::function<SteadyClock::time_point()>;
 
 /// Build a pool strategy with a sensible minimum.
 static llvm::ThreadPoolStrategy makeStrategy(unsigned maxThreads) {
@@ -56,7 +60,16 @@ class PendingChangesMap {
 public:
   explicit PendingChangesMap(
       unsigned maxThreads = std::thread::hardware_concurrency())
-      : pool(makeStrategy(maxThreads)), tasks(pool) {}
+      : pool(makeStrategy(maxThreads)), tasks(pool),
+        nowFn([] { return SteadyClock::now(); }), useManualClock(false) {}
+
+  // Test-only path: provide a manual clock source.
+  explicit PendingChangesMap(unsigned maxThreads, NowFn now)
+      : pool(makeStrategy(maxThreads)), tasks(pool), nowFn(std::move(now)),
+        useManualClock(true) {}
+
+  /// Destructor ensures all pending work is cleared.
+  ~PendingChangesMap() { abort(); }
 
   /// Call during server shutdown; Erase all file changes, then clear file map.
   /// Thread-safe.
@@ -106,6 +119,13 @@ private:
   /// Internal concurrency used for sleeps + checks.
   llvm::StdThreadPool pool;
   llvm::ThreadPoolTaskGroup tasks;
+
+  /// Injectable time source for unit testing
+  NowFn nowFn;
+  bool useManualClock;
+
+  /// Test wrapper around a thread timeout
+  void waitForMinMs(uint64_t ms, SteadyClock::time_point start);
 };
 
 } // namespace lsp
