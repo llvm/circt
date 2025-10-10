@@ -31,6 +31,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerCHIRRTL.cpp
   LowerClasses.cpp
   LowerDPI.cpp
+  LowerDomains.cpp
   LowerIntmodules.cpp
   LowerIntrinsics.cpp
   LowerLayers.cpp

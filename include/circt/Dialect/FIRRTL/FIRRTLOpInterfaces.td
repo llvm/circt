@@ -238,6 +238,9 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
       return domains[portIndex];
     }]>,
 
+    InterfaceMethod<"Set the domain info of all ports", "void",
+    "setDomainInfoAttr", (ins "::mlir::ArrayAttr":$domainInfo)>,
+
     //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
