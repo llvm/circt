@@ -159,3 +159,7 @@ module CHandle;
    // CHECK: %test = moore.variable : <chandle>
    chandle test;
 endmodule
+
+// CHECK-LABEL: func.func private @takesCHandle(%arg0: !moore.chandle) {
+function automatic void takesCHandle(chandle test);
+endfunction
