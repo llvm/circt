@@ -1819,19 +1819,17 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
 
-  // Helper: types that we model "by-ref as SSA value" (no hw.inout wrapper).
-  auto isByRefAsSSA = [](Type t) -> bool {
-    return isa<mlir::LLVM::LLVMPointerType>(t);
-  };
-
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType())) {
       if (hw::isHWValueType(innerType))
         return hw::InOutType::get(innerType);
-      // Otherwise, if we intentionally model this "by-ref as SSA", pass it
-      // through, e.g. CHandleType.
-      if (isByRefAsSSA(innerType))
-        return innerType;
+      // TODO: There is some abstraction missing here to correctly return a reference
+      // of a CHandle; return an error for now.
+      if (isa<mlir::LLVM::LLVMPointerType>(innerType)) {
+      mlir::emitError(mlir::UnknownLoc::get(type.getContext()))
+          << "Emission of references of LLVMPointerType is currently unsupported!";
+        return {};
+      }
     }
     return {};
   });
