@@ -1819,15 +1819,20 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
 
+  // Explicitly mark LLVMPointerType as a legal target
+  typeConverter.addConversion(
+      [](LLVM::LLVMPointerType t) -> std::optional<Type> { return t; });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType())) {
       if (hw::isHWValueType(innerType))
         return hw::InOutType::get(innerType);
-      // TODO: There is some abstraction missing here to correctly return a reference
-      // of a CHandle; return an error for now.
+      // TODO: There is some abstraction missing here to correctly return a
+      // reference of a CHandle; return an error for now.
       if (isa<mlir::LLVM::LLVMPointerType>(innerType)) {
-      mlir::emitError(mlir::UnknownLoc::get(type.getContext()))
-          << "Emission of references of LLVMPointerType is currently unsupported!";
+        mlir::emitError(mlir::UnknownLoc::get(type.getContext()))
+            << "Emission of references of LLVMPointerType is currently "
+               "unsupported!";
         return {};
       }
     }
