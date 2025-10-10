@@ -24,24 +24,6 @@ class LLHDType<string name> : TypeDef<LLHDDialect, name> { }
 // Type declarations
 //===----------------------------------------------------------------------===//
 
-def LLHDPtrType : LLHDType<"Ptr"> {
-  let summary = "pointer type";
-  let description = [{
-    Represents a pointer to a memory location holding a value of its element
-    type. May be used to load and store data in distinct memory slots.
-  }];
-
-  let mnemonic = "ptr";
-  let parameters = (ins "::mlir::Type":$elementType);
-  let assemblyFormat = "`<` $elementType `>`";
-
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
-      return $_get(elementType.getContext(), elementType);
-    }]>
-  ];
-}
-
 def LLHDTimeType : LLHDType<"Time"> {
   let summary = "time type";
   let description = [{
@@ -50,19 +32,8 @@ def LLHDTimeType : LLHDType<"Time"> {
     infinitesimal time steps, and an epsilon value representing an absolute time
     slot within a delta step (used to model SystemVerilog scheduling regions).
   }];
-
   let mnemonic = "time";
 }
-
-//===----------------------------------------------------------------------===//
-// Type Constraints
-//===----------------------------------------------------------------------===//
-
-class LLHDPtrTypeOf<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<PtrType>($_self)">,
-    "llvm::cast<PtrType>($_self).getElementType()", "LLHD pointer type">;
-
-def LLHDAnySigOrPtrType : AnyTypeOf<[LLHDPtrType, InOutType]>;
 
 //===----------------------------------------------------------------------===//
 // Attribute declarations

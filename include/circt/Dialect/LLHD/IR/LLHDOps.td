@@ -13,6 +13,5 @@ include "circt/Dialect/LLHD/IR/LLHDValueOps.td"
 include "circt/Dialect/LLHD/IR/LLHDSignalOps.td"
 include "circt/Dialect/LLHD/IR/LLHDExtractOps.td"
 include "circt/Dialect/LLHD/IR/LLHDStructureOps.td"
-include "circt/Dialect/LLHD/IR/LLHDMemoryOps.td"
 
 #endif // CIRCT_DIALECT_LLHD_IR_LLHDOPS_TD

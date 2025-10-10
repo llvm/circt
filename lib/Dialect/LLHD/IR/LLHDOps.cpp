@@ -26,8 +26,6 @@ using namespace llhd;
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = dyn_cast<hw::InOutType>(type))
     type = sig.getElementType();
-  else if (auto ptr = dyn_cast<llhd::PtrType>(type))
-    type = ptr.getElementType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
   if (auto tup = dyn_cast<hw::StructType>(type))
@@ -38,8 +36,6 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 Type circt::llhd::getLLHDElementType(Type type) {
   if (auto sig = dyn_cast<hw::InOutType>(type))
     type = sig.getElementType();
-  else if (auto ptr = dyn_cast<llhd::PtrType>(type))
-    type = ptr.getElementType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
   return type;
@@ -142,7 +138,7 @@ SignalOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// SigExtractOp and PtrExtractOp
+// SigExtractOp
 //===----------------------------------------------------------------------===//
 
 template <class Op>
@@ -163,34 +159,20 @@ OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
   return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrExtractOp::fold(FoldAdaptor adaptor) {
-  return foldSigPtrExtractOp(*this, adaptor.getOperands());
-}
-
 //===----------------------------------------------------------------------===//
-// SigArraySliceOp and PtrArraySliceOp
+// SigArraySliceOp
 //===----------------------------------------------------------------------===//
-
-template <class Op>
-static OpFoldResult foldSigPtrArraySliceOp(Op op,
-                                           ArrayRef<Attribute> operands) {
-  if (!operands[1])
-    return nullptr;
-
-  // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
-  if (op.getResultWidth() == op.getInputWidth() &&
-      cast<IntegerAttr>(operands[1]).getValue().isZero())
-    return op.getInput();
-
-  return nullptr;
-}
 
 OpFoldResult llhd::SigArraySliceOp::fold(FoldAdaptor adaptor) {
-  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
-}
+  auto lowIndex = dyn_cast_or_null<IntegerAttr>(adaptor.getLowIndex());
+  if (!lowIndex)
+    return {};
 
-OpFoldResult llhd::PtrArraySliceOp::fold(FoldAdaptor adaptor) {
-  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
+  // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
+  if (getResultWidth() == getInputWidth() && lowIndex.getValue().isZero())
+    return getInput();
+
+  return {};
 }
 
 template <class Op>
@@ -220,11 +202,6 @@ static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
 }
 
 LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
-                                                  PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArraySliceOp(op, rewriter);
-}
-
-LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
                                                   PatternRewriter &rewriter) {
   return canonicalizeSigPtrArraySliceOp(op, rewriter);
 }
@@ -276,18 +253,18 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
 }
 
 //===----------------------------------------------------------------------===//
-// SigStructExtractOp and PtrStructExtractOp
+// SigStructExtractOp
 //===----------------------------------------------------------------------===//
 
-template <class OpType, class SigPtrType>
-static LogicalResult inferReturnTypesOfStructExtractOp(
+LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  typename OpType::Adaptor adaptor(operands, attrs, properties, regions);
+  typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
+                                               regions);
   Type type =
       cast<hw::StructType>(
-          cast<SigPtrType>(adaptor.getInput().getType()).getElementType())
+          cast<hw::InOutType>(adaptor.getInput().getType()).getElementType())
           .getFieldType(adaptor.getField());
   if (!type) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
@@ -295,26 +272,8 @@ static LogicalResult inferReturnTypesOfStructExtractOp(
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(SigPtrType::get(type));
+  results.push_back(hw::InOutType::get(type));
   return success();
-}
-
-LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::SigStructExtractOp,
-                                           hw::InOutType>(
-      context, loc, operands, attrs, properties, regions, results);
-}
-
-LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::PtrStructExtractOp,
-                                           llhd::PtrType>(
-      context, loc, operands, attrs, properties, regions, results);
 }
 
 bool SigStructExtractOp::canRewire(
