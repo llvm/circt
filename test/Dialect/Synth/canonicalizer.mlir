@@ -63,7 +63,7 @@ hw.module @DoubleInversion(in %a: i1, in %b: i1, out o1: i1, out o2: i1, out o3:
 }
 
 // CHECK-LABEL: hw.module @maj_inv_basic
-hw.module @maj_inv_basic(in %a : i1, in %b : i1, out o1 : i1, out o2 : i1, out o3 : i1, out o4 : i1) {
+hw.module @maj_inv_basic(in %a : i1, in %b : i1, out o1 : i1, out o2 : i1, out o3 : i1, out o4 : i1, out o5 : i1) {
   // Single operand, not inverted -> replace with operand
   %0 = synth.mig.maj_inv %a : i1
 
@@ -76,8 +76,12 @@ hw.module @maj_inv_basic(in %a : i1, in %b : i1, out o1 : i1, out o2 : i1, out o
   // Two operands same but one inverted -> replace with the third
   %3 = synth.mig.maj_inv %a, not %a, %b : i1
 
-  // CHECK: hw.output %a, %a, %a, %b : i1, i1, i1, i1
-  hw.output %0, %1, %2, %3 : i1, i1, i1, i1
+  // Two operands same and both inverted -> replace with the same operand with inversion
+  // CHECK: %[[RESULT4:.+]] = synth.mig.maj_inv not %a : i1
+  %4 = synth.mig.maj_inv not %a, not %a, %b : i1
+
+  // CHECK: hw.output %a, %a, %a, %b, %[[RESULT4]]
+  hw.output %0, %1, %2, %3, %4 : i1, i1, i1, i1, i1
 }
 
 // CHECK-LABEL: hw.module @maj_inv_constants_canonicalization
