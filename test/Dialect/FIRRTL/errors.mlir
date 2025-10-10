@@ -3073,3 +3073,13 @@ firrtl.circuit "WrongNonDomainPortInfo" {
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [["hello"]]} {}
 }
+
+// -----
+
+firrtl.circuit "DomainsCannotBeInstantiated" {
+  firrtl.domain @A() {}
+  firrtl.module @DomainsCannotBeInstantiated() {
+    // expected-error @below {{cannot instantiate non-class op @A}}
+    firrtl.object @A()
+  }
+}

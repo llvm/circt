@@ -3831,12 +3831,14 @@ LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto className = classType.getNameAttr();
 
   // verify that the class exists.
-  auto classOp = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupSymbolIn(circuitOp, className));
-  if (!classOp)
+  Operation *op = symbolTable.lookupSymbolIn(circuitOp, className);
+  if (!op)
     return emitOpError() << "references unknown class " << className;
+  if (!isa<ClassOp, ExtClassOp>(op))
+    return emitOpError() << "cannot instantiate non-class op " << className;
 
   // verify that the result type agrees with the class definition.
+  auto classOp = dyn_cast<ClassLike>(op);
   if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
     return failure();
 
