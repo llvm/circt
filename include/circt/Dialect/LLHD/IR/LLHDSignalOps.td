@@ -19,9 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 def SignalOp : LLHDOp<"sig", [
   DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  TypesMatchWith<
-    "type of 'init' and underlying type of 'signal' have to match.",
-    "init", "result", "hw::InOutType::get($_self)">
+  TypeMatchesRefElementType<"init", "result">,
 ]> {
   let summary = "Create a signal.";
   let description = [{
@@ -43,9 +41,9 @@ def SignalOp : LLHDOp<"sig", [
   }];
   let arguments = (ins
     OptionalAttr<StrAttr>:$name,
-    HWValueType:$init
+    AnyType:$init
   );
-  let results = (outs Res<InOutType, "", [MemAlloc]>:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) $init attr-dict
     `:` type($init)
@@ -53,13 +51,12 @@ def SignalOp : LLHDOp<"sig", [
 }
 
 def PrbOp : LLHDOp<"prb", [
-    DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
-    DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-    TypesMatchWith<
-      "type of 'result' and underlying type of 'signal' have to match.",
-      "signal", "result", "llvm::cast<hw::InOutType>($_self).getElementType()">
-  ]> {
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypeMatchesRefElementType<"result", "signal">,
+  RefElementTypeMatchesType<"signal", "result">,
+]> {
   let summary = "Probe a signal.";
   let description = [{
     This operation probes a signal and returns the value it
@@ -77,17 +74,15 @@ def PrbOp : LLHDOp<"prb", [
     ```
   }];
 
-  let arguments = (ins InOutType:$signal);
-  let results = (outs HWValueType:$result);
+  let arguments = (ins RefType:$signal);
+  let results = (outs AnyType:$result);
 
-  let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
+  let assemblyFormat = "$signal attr-dict `:` type($result)";
 }
 
 def OutputOp : LLHDOp<"output", [
-    TypesMatchWith<
-      "type of 'value' and underlying type of 'result' have to match.",
-      "value", "result", "hw::InOutType::get($_self)">
-  ]> {
+  TypeMatchesRefElementType<"value", "result">,
+]> {
   let summary = "Introduce a new signal and drive a value onto it.";
   let description = [{
     The `llhd.output` operation introduces a new signal and continuously
@@ -113,23 +108,21 @@ def OutputOp : LLHDOp<"output", [
   }];
 
   let arguments = (ins OptionalAttr<StrAttr>: $name,
-                       HWValueType: $value,
+                       AnyType: $value,
                        LLHDTimeType: $time);
 
-  let results = (outs InOutType: $result);
+  let results = (outs RefType: $result);
 
   let assemblyFormat = [{
-    ( $name^ )? $value `after` $time attr-dict `:` qualified(type($value))
+    ( $name^ )? $value `after` $time attr-dict `:` type($value)
   }];
 }
 
 def DrvOp : LLHDOp<"drv", [
-    DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
-    DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
-    TypesMatchWith<
-      "type of 'value' and underlying type of 'signal' have to match.",
-      "signal", "value", "llvm::cast<hw::InOutType>($_self).getElementType()">
-  ]> {
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  TypeMatchesRefElementType<"value", "signal">,
+]> {
   let summary = "Drive a value into a signal.";
   let description = [{
     The `llhd.drv` operation drives a new value onto a signal. A time
@@ -152,15 +145,15 @@ def DrvOp : LLHDOp<"drv", [
     ```
   }];
 
-  let arguments = (ins Arg<InOutType, "the signal to drive to",
+  let arguments = (ins Arg<RefType, "the signal to drive to",
                            [MemWrite]>: $signal,
-                       HWValueType: $value,
+                       AnyType: $value,
                        LLHDTimeType: $time,
                        Optional<I1>: $enable);
 
   let assemblyFormat = [{
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
-    qualified(type($signal))
+    type($value)
   }];
 
   let hasFolder = 1;

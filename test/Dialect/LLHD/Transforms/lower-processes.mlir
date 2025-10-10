@@ -56,8 +56,8 @@ hw.module @SupportYieldOperands(in %a: i42) {
 hw.module @SupportSeparateProbesOfSameValue() {
   %c0_i42 = hw.constant 0 : i42
   %a = llhd.sig %c0_i42 : i42
-  %0 = llhd.prb %a : !hw.inout<i42>
-  %1 = llhd.prb %a : !hw.inout<i42>
+  %0 = llhd.prb %a : i42
+  %1 = llhd.prb %a : i42
   // CHECK: llhd.combinational
   llhd.process -> i42 {
     cf.br ^bb1

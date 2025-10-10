@@ -266,7 +266,7 @@ bool Lowering::isObserved(Value value) {
     for (auto operand : op->getOperands()) {
       if (observedValues.contains(operand))
         continue;
-      if (isa<hw::InOutType>(operand.getType()))
+      if (isa<RefType>(operand.getType()))
         return false;
       auto *defOp = operand.getDefiningOp();
       if (!defOp || !isMemoryEffectFree(defOp))

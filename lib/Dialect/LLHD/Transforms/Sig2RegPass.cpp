@@ -135,7 +135,7 @@ public:
                 }
 
                 auto bw = hw::getBitWidth(
-                    cast<hw::InOutType>(extractOp.getInput().getType())
+                    cast<llhd::RefType>(extractOp.getInput().getType())
                         .getElementType());
                 if (bw <= 0)
                   return failure();

@@ -24,7 +24,7 @@ using namespace mlir;
 using namespace llhd;
 
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
-  if (auto sig = dyn_cast<hw::InOutType>(type))
+  if (auto sig = dyn_cast<RefType>(type))
     type = sig.getElementType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
@@ -34,7 +34,7 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 }
 
 Type circt::llhd::getLLHDElementType(Type type) {
-  if (auto sig = dyn_cast<hw::InOutType>(type))
+  if (auto sig = dyn_cast<RefType>(type))
     type = sig.getElementType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
@@ -225,8 +225,7 @@ bool SigArrayGetOp::canRewire(const DestructurableMemorySlot &slot,
     return false;
   usedIndices.insert(index);
   mustBeSafelyUsed.emplace_back<MemorySlot>(
-      {getResult(),
-       cast<hw::InOutType>(getResult().getType()).getElementType()});
+      {getResult(), cast<RefType>(getResult().getType()).getElementType()});
   return true;
 }
 
@@ -262,17 +261,16 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
                                                regions);
-  Type type =
-      cast<hw::StructType>(
-          cast<hw::InOutType>(adaptor.getInput().getType()).getElementType())
-          .getFieldType(adaptor.getField());
+  Type type = cast<hw::StructType>(
+                  cast<RefType>(adaptor.getInput().getType()).getElementType())
+                  .getFieldType(adaptor.getField());
   if (!type) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(hw::InOutType::get(type));
+  results.push_back(RefType::get(type));
   return success();
 }
 
@@ -283,9 +281,9 @@ bool SigStructExtractOp::canRewire(
     const DataLayout &dataLayout) {
   if (slot.ptr != getInput())
     return false;
-  auto index = cast<hw::StructType>(
-                   cast<hw::InOutType>(getInput().getType()).getElementType())
-                   .getFieldIndex(getFieldAttr());
+  auto index =
+      cast<hw::StructType>(cast<RefType>(getInput().getType()).getElementType())
+          .getFieldIndex(getFieldAttr());
   if (!index)
     return false;
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
@@ -293,8 +291,7 @@ bool SigStructExtractOp::canRewire(
     return false;
   usedIndices.insert(indexAttr);
   mustBeSafelyUsed.emplace_back<MemorySlot>(
-      {getResult(),
-       cast<hw::InOutType>(getResult().getType()).getElementType()});
+      {getResult(), cast<RefType>(getResult().getType()).getElementType()});
   return true;
 }
 
@@ -302,9 +299,9 @@ DeletionKind
 SigStructExtractOp::rewire(const DestructurableMemorySlot &slot,
                            DenseMap<Attribute, MemorySlot> &subslots,
                            OpBuilder &builder, const DataLayout &dataLayout) {
-  auto index = cast<hw::StructType>(
-                   cast<hw::InOutType>(getInput().getType()).getElementType())
-                   .getFieldIndex(getFieldAttr());
+  auto index =
+      cast<hw::StructType>(cast<RefType>(getInput().getType()).getElementType())
+          .getFieldIndex(getFieldAttr());
   assert(index.has_value());
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
   auto it = subslots.find(indexAttr);
