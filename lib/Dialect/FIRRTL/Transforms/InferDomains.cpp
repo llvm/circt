@@ -157,6 +157,59 @@ private:
 } // namespace
 
 //====--------------------------------------------------------------------------
+// ModuleUpdateInfo: Summary of about how a module's interface has changed.
+//====--------------------------------------------------------------------------
+
+namespace {
+struct ModuleUpdateInfo {
+  ArrayAttr portDomainInfo;
+  PortInsertions portInsertions;
+};
+} // namespace
+
+static bool operator==(const ModuleUpdateInfo &lhs,
+                       const ModuleUpdateInfo &rhs) {
+  if (lhs.portDomainInfo != rhs.portDomainInfo)
+    return false;
+
+  if (lhs.portInsertions.size() != rhs.portInsertions.size())
+    return false;
+
+  for (size_t i = 0, e = lhs.portInsertions.size(); i < e; ++i) {
+    if (lhs.portInsertions != rhs.portInsertions)
+      return false;
+  }
+
+  return true;
+}
+
+static void updateInstance(OpBuilder &builder, const ModuleUpdateInfo &info,
+                           InstanceOp op) {
+  auto clone = op.insertPorts(info.portInsertions);
+  clone.setDomainInfoAttr(info.portDomainInfo);
+}
+
+static void updateInstance(OpBuilder &builder, const ModuleUpdateInfo &info,
+                           InstanceChoiceOp op) {
+  auto clone = op.insertPorts(info.portInsertions);
+  clone.setDomainInfoAttr(info.portDomainInfo);
+}
+
+using ModuleUpdateInfoTable = DenseMap<Operation *, ModuleUpdateInfo>;
+
+LogicalResult updateInstance(const ModuleUpdateInfoTable &table,
+                             InstanceOp op) {
+  return success();
+}
+
+LogicalResult updateInstance(const ModuleUpdateInfoTable &table,
+                             InstanceChoiceOp op) {
+  // verify that all modules have the same update.
+  auto _mod = op.getDefaultTargetAttr();
+  return success();
+}
+
+//====--------------------------------------------------------------------------
 // Terms: Syntax for unifying domain and domain-rows.
 //====--------------------------------------------------------------------------
 
@@ -343,14 +396,14 @@ namespace {
 class InferModuleDomains {
 public:
   /// Run infer-domains on a module.
-  static LogicalResult run(const CircuitDomainInfo &, FModuleOp);
+  static LogicalResult run(const CircuitDomainInfo &, InstanceGraphNode *node);
 
 private:
   /// Initialize module-level state.
   InferModuleDomains(const CircuitDomainInfo &);
 
   /// Execute on the given module.
-  LogicalResult operator()(FModuleOp);
+  LogicalResult operator()(InstanceGraphNode *node);
 
   /// Record the domain associations of hardware ports, and record the
   /// underlying value of output domain ports.
@@ -366,10 +419,10 @@ private:
   LogicalResult processOp(UnsafeDomainCastOp);
   LogicalResult processOp(DomainDefineOp);
 
-  LogicalResult updateModule(FModuleOp);
+  LogicalResult updateModule(FModuleOp, PortInsertions &);
 
   /// Build a table of exported domains: a map from domains defined internally,
-  /// to their aliasing output ports.
+  /// to their set of aliasing output ports.
   void initializeExportTable(FModuleOp);
 
   /// After generalizing the module, all domains should be solved. Reflect the
@@ -396,7 +449,10 @@ private:
   /// Add domain ports for any uninferred domains associated to hardware.
   /// Returns the inserted ports, which will be used later to generalize the
   /// instances of this module.
-  PortInsertions generalizeModule(FModuleOp);
+  PortInsertions generalizeModule(FModuleOp, PortInsertions &);
+
+  LogicalResult updateInstances(InstanceGraphNode *node,
+                                const PortInsertions &);
 
   void generalizeInstance(InstanceOp, const PortInsertions &);
 
@@ -472,14 +528,18 @@ private:
 } // namespace
 
 LogicalResult InferModuleDomains::run(const CircuitDomainInfo &circuitInfo,
-                                      FModuleOp module) {
-  return InferModuleDomains(circuitInfo)(module);
+                                      InstanceGraphNode *node) {
+  return InferModuleDomains(circuitInfo)(node);
 }
 
 InferModuleDomains::InferModuleDomains(const CircuitDomainInfo &circuitInfo)
     : circuitInfo(circuitInfo) {}
 
-LogicalResult InferModuleDomains::operator()(FModuleOp module) {
+LogicalResult InferModuleDomains::operator()(InstanceGraphNode *node) {
+  auto module = dyn_cast<FModuleOp>(node->getOperation());
+  if (!module)
+    return success();
+
   LLVM_DEBUG(
       llvm::errs() << "================================================\n";
       llvm::errs() << "infer module domains: " << module.getModuleName()
@@ -498,12 +558,12 @@ LogicalResult InferModuleDomains::operator()(FModuleOp module) {
     llvm::errs() << "  " << association.second << "\n";
   });
 
-  // PortInsertions insertions;
-  if (failed(updateModule(module)))
+  PortInsertions insertions;
+  if (failed(updateModule(module, insertions)))
     return failure();
 
-  // if (failed(updateInstances(insertions)))
-  //   return failure();
+  if (failed(updateInstances(node, insertions)))
+    return failure();
 
   return llvm::success(ok);
 }
@@ -665,10 +725,11 @@ LogicalResult InferModuleDomains::processOp(DomainDefineOp op) {
   return success();
 }
 
-LogicalResult InferModuleDomains::updateModule(FModuleOp op) {
+LogicalResult InferModuleDomains::updateModule(FModuleOp op,
+                                               PortInsertions &insertions) {
   initializeExportTable(op);
 
-  auto insertions = generalizeModule(op);
+  generalizeModule(op, insertions);
   if (failed(updatePortDomainAssociations(op)))
     return failure();
 
@@ -842,13 +903,14 @@ LogicalResult InferModuleDomains::getExportingPort(FModuleOp module,
   return success();
 }
 
-PortInsertions InferModuleDomains::generalizeModule(FModuleOp module) {
+PortInsertions
+InferModuleDomains::generalizeModule(FModuleOp module,
+                                     PortInsertions &insertions) {
   // If the port is hardware, we have to check the associated row of
   // domains. If any associated domain is a variable, we solve the variable
   // by generalizing the module with an additional input domain port. If any
   // associated domain is defined internally to the module, we have to add
   // an output domain port, to allow the domain to escape.
-  SmallVector<std::pair<unsigned, PortInfo>> insertions;
   DenseMap<VariableTerm *, unsigned> pendingSolutions;
   llvm::MapVector<Value, unsigned> pendingExports;
 
@@ -1004,6 +1066,38 @@ LogicalResult InferModuleDomains::updateOpDomainAssociations(InstanceOp op) {
   }
   return success();
 }
+
+LogicalResult
+InferModuleDomains::updateInstances(InstanceGraphNode *node,
+                                    const PortInsertions &insertions) {
+  // for (auto *use : node->uses()) {
+  //   auto *op = use->getOperation();
+  //   if (auto inst = dyn_cast<InstanceOp>(op))
+  //     if (failed(updateInstance(inst, insertions)))
+  //       return failure();
+
+  //   if (auto inst = dyn_cast<InstanceChoiceOp>(op))
+  //     if (failed(updateInstance(inst, insertions)))
+  //       return failure();
+
+  //   op->emitError("don't know how to update this instances");
+  //   return failure();
+  // }
+  return success();
+}
+
+// LogicalResult
+// InferModuleDomains::updateInstance(InstanceOp op,
+//                                    const PortInsertions &insertions) {
+//   op.cloneAndInsertPorts(insertions);
+// }
+
+// LogicalResult
+// InferModuleDomains::updateInstance(InstanceChoiceOp op,
+//                                    const PortInsertions &insertions) {
+//   /// Only update the instance choice op if we are the default.
+//   if (auto)
+// }
 
 LogicalResult InferModuleDomains::unifyAssociations(Operation *op, Value lhs,
                                                     Value rhs) {
@@ -1242,11 +1336,9 @@ void InferDomainsPass::runOnOperation() {
   for (auto *root : instanceGraph) {
     for (auto *node : llvm::post_order_ext(root, visited)) {
       auto *op = node->getModule<Operation *>();
-      if (auto module = llvm::dyn_cast_if_present<FModuleOp>(op)) {
-        if (failed(InferModuleDomains::run(circuitInfo, module))) {
-          signalPassFailure();
-          return;
-        }
+      if (failed(InferModuleDomains::run(circuitInfo, node))) {
+        signalPassFailure();
+        return;
       }
     }
   }
