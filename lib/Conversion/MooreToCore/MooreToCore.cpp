@@ -549,9 +549,7 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
       Value init = adaptor.getInitial();
       if (!init)
         init = rewriter.create<mlir::LLVM::ZeroOp>(loc, resultType);
-      else if (init.getType() != resultType)
-        init = typeConverter->materializeTargetConversion(rewriter, loc,
-                                                          resultType, init);
+
       // For pointer-typed variables we produce the SSA pointer value directly.
       rewriter.replaceOp(op, init);
       return success();
