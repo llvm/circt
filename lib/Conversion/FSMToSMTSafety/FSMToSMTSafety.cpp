@@ -323,12 +323,13 @@ private:
         return b.create<smt::BVAddOp>(loc,
                b.getType<smt::BitVectorType>(widths[0]), args[0], neg);
       }
-      // int (wraparound: mod 2^w)
+      // int ((2^w + a) - b) % 2^w
       SmallVector<Value> ops;
       for (auto v : args) ops.push_back(toInt(v));
-      Value sub = b.create<smt::IntAddOp>(loc, ops);
       unsigned w = cast<IntegerType>(subOp.getType()).getIntOrFloatBitWidth();
       Value modulus = intPow2(w, loc); 
+      Value add = b.create<smt::IntSubOp>(loc, modulus, ops[0]);
+      Value sub = b.create<smt::IntSubOp>(loc, add, ops[1]);
       return b.create<smt::IntModOp>(loc, sub, modulus);
     }
 
