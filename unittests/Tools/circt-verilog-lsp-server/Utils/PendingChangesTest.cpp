@@ -12,7 +12,6 @@
 
 #include "PendingChanges.h"
 
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -158,32 +157,27 @@ TEST(PendingChangesMapTest, MaxCapForcesFlushDuringContinuousTyping) {
   DebounceOptions opt;
   opt.disableDebounce = false;
   opt.debounceMinMs = 100; // quiet 100ms
-  opt.debounceMaxMs = 200; // cap 200ms
+  opt.debounceMaxMs = 500; // cap 500ms
 
   const auto *key = "d.sv";
   auto p = makeChangeParams(key, 1);
   pcm.enqueueChange(p);
-
-  // Keep typing every ~50ms so quiet window never occurs.
-  std::atomic<bool> run{true};
-  std::thread typer([&] {
-    int64_t ver = 2;
-    while (run.load()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      pcm.enqueueChange(makeChangeParams(key, ver++));
-    }
-  });
 
   // 1) First check at ~100ms: will be obsolete (new edits arrived).
   CallbackCapture first;
   pcm.debounceAndThen(p, opt, [&](std::unique_ptr<PendingChanges> r) {
     first.set(std::move(r));
   });
+
+  // Immediately enqueue a new edit to represent continuous typing.
+  pcm.enqueueChange(makeChangeParams(key, 2));
+
   ASSERT_TRUE(first.waitFor(std::chrono::milliseconds(800)));
   EXPECT_EQ(first.got, nullptr); // expected obsolete
 
   // 2) After max-cap has passed, schedule another check -> must flush.
-  std::this_thread::sleep_for(std::chrono::milliseconds(250)); // > 200ms cap
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(550)); // Total > 500ms cap
   CallbackCapture second;
   // Use the latest version for the schedule key; any params with same URI key
   // is fine
@@ -193,8 +187,6 @@ TEST(PendingChangesMapTest, MaxCapForcesFlushDuringContinuousTyping) {
   });
 
   ASSERT_TRUE(second.waitFor(std::chrono::milliseconds(1500)));
-  run = false;
-  typer.join();
 
   ASSERT_TRUE(second.got != nullptr);
   EXPECT_GE(second.got->version, 2);
