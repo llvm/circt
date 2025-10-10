@@ -1283,3 +1283,12 @@ func.func @SeverityToPrint() {
 func.func @CHandle(%arg0: !moore.chandle) {
     return
 }
+
+// CHECK-LABEL: @MultiDimensionalSlice
+moore.module @MultiDimensionalSlice(in %in : !moore.array<2 x array<2 x l2>>, out out : !moore.array<2 x l2>) {
+  // CHECK-NEXT: [[IDX:%.*]] = hw.constant false
+  // CHECK-NEXT: [[V:%.*]] = hw.array_get %in[[[IDX]]]
+  // CHECK-NEXT: hw.output [[V]] : !hw.array<2xi2>
+  %0 = moore.extract %in from 0 : array<2 x array<2 x l2>> -> array<2 x l2>
+  moore.output %0 : !moore.array<2 x l2>
+}

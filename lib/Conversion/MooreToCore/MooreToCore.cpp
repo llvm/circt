@@ -746,7 +746,8 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType)) {
+      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
+          resArrTy && resArrTy != arrTy.getElementType()) {
         int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
         if (elementWidth < 0)
           return failure();
