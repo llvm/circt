@@ -1933,6 +1933,7 @@ private:
   }
   ParseResult parseEnumExp(Value &result);
   ParseResult parsePathExp(Value &result);
+  ParseResult parseDomainExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
   ParseResult parseRWProbeStaticRefExp(FieldRef &refResult, Type &type,
@@ -2044,6 +2045,7 @@ private:
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseMatch(unsigned matchIndent);
+  ParseResult parseDomainDefine();
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
   ParseResult parseRefForceInitial();
@@ -2935,6 +2937,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseWhen(stmtIndent);
   case FIRToken::kw_match:
     return parseMatch(stmtIndent);
+  case FIRToken::kw_domain_define:
+    return parseDomainDefine();
   case FIRToken::kw_define:
     return parseRefDefine();
   case FIRToken::lp_force:
@@ -3713,6 +3717,35 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
   return success();
 }
 
+/// domain_exp ::= id
+/// domain_exp ::= domain_exp '.' id
+/// domain_exp ::= domain_exp '[' int ']'
+ParseResult FIRStmtParser::parseDomainExp(Value &result) {
+  auto loc = getToken().getLoc();
+  SymbolValueEntry entry;
+  StringRef id;
+  if (parseId(id, "expected domain expression") ||
+      moduleContext.lookupSymbolEntry(entry, id, loc))
+    return failure();
+
+  if (moduleContext.resolveSymbolEntry(result, entry, loc, false)) {
+    StringRef field;
+    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
+        parseFieldId(field, "expected field name") ||
+        moduleContext.resolveSymbolEntry(result, entry, field, loc))
+      return failure();
+  }
+
+  if (parseOptionalExpPostscript(result, /*allowDynamic=*/false))
+    return failure();
+
+  auto type = result.getType();
+  if (!type_isa<DomainType>(type))
+    return emitError(loc) << "expected domain-type expression, got " << type;
+
+  return success();
+}
+
 /// ref_expr ::= probe | rwprobe | static_reference
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRefExp(Value &result, const Twine &message) {
@@ -4024,6 +4057,22 @@ ParseResult FIRStmtParser::parsePathExp(Value &result) {
     return failure();
   result = UnresolvedPathOp::create(
       builder, StringAttr::get(getContext(), FIRToken::getStringValue(target)));
+  return success();
+}
+
+/// domain_define ::= 'domain_define' domain_exp '=' domain_exp info?
+ParseResult FIRStmtParser::parseDomainDefine() {
+  auto startTok = consumeToken(FIRToken::kw_domain_define);
+  auto startLoc = startTok.getLoc();
+  locationProcessor.setLoc(startLoc);
+
+  Value dest, src;
+  if (requireFeature(missingSpecFIRVersion, "domains", startLoc) ||
+      parseDomainExp(dest) || parseToken(FIRToken::equal, "expected '='") ||
+      parseDomainExp(src) || parseOptionalInfo())
+    return failure();
+
+  emitConnect(builder, dest, src);
   return success();
 }
 
