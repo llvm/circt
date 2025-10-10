@@ -338,7 +338,7 @@ LogicalResult LowerModule::lowerModule() {
     // to be modified.  Early continue first, adding trackers otherwise.  Only
     // create one tracker for all associations.
     ArrayAttr domainAttr = cast<ArrayAttr>(port.domains);
-    if (!domainAttr || domainAttr.empty()) {
+    if (domainAttr.empty()) {
       portAnnotations.push_back(port.annotations.getArrayAttr());
       continue;
     }
