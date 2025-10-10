@@ -2040,20 +2040,12 @@ namespace {
 struct MooreToCorePass
     : public circt::impl::ConvertMooreToCoreBase<MooreToCorePass> {
   void runOnOperation() override;
-  void getDependentDialects(mlir::DialectRegistry &r) const override;
 };
 } // namespace
 
 /// Create a Moore to core dialects conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
   return std::make_unique<MooreToCorePass>();
-}
-
-void MooreToCorePass::getDependentDialects(mlir::DialectRegistry &r) const {
-  r.insert<mlir::LLVM::LLVMDialect, comb::CombDialect, hw::HWDialect,
-           seq::SeqDialect, llhd::LLHDDialect, ltl::LTLDialect,
-           mlir::BuiltinDialect, mlir::math::MathDialect, sim::SimDialect,
-           verif::VerifDialect, scf::SCFDialect>();
 }
 
 /// This is the main entrypoint for the Moore to Core conversion pass.
