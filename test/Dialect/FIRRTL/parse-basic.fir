@@ -2196,7 +2196,14 @@ circuit NullaryCat:
 FIRRTL version 5.1.0
 circuit Domains:
   ; CHECK-LABEL: firrtl.domain @ClockDomain
+  ; CHECK-SAME:    in %name_in: !firrtl.string
+  ; CHECK-SAME:    out %name_out: !firrtl.string
   domain ClockDomain:
+    input name_in: String
+    output name_out: String
+
+    ; CHECK-NEXT: firrtl.propassign %name_out, %name_in
+    propassign name_out, name_in
 
   module Foo:
     input A: Domain of ClockDomain

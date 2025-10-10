@@ -16,7 +16,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %associations_out: !firrtl.list<path>
   // CHECK-NEXT:    firrtl.propassign %domainInfo_out, %domainInfo_in
   // CHECK-NEXT:    firrtl.propassign %associations_out, %associations_in
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.module @Foo(
   // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
@@ -45,14 +45,14 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %domainInfo_out: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    in %associations_in: !firrtl.list<path>
   // CHECK-SAME:    out %associations_out: !firrtl.list<path>
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.class @ResetDomain(
   // CHECK-LABEL: firrtl.class @ResetDomain_out(
   // CHECK-SAME:    in %domainInfo_in: !firrtl.class<@ResetDomain()>
   // CHECK-SAME:    out %domainInfo_out: !firrtl.class<@ResetDomain()>
   // CHECK-SAME:    in %associations_in: !firrtl.list<path>
   // CHECK-SAME:    out %associations_out: !firrtl.list<path>
-  firrtl.domain @ResetDomain {}
+  firrtl.domain @ResetDomain() {}
   // CHECK-LABEL: firrtl.module @Foo(
   // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
@@ -85,7 +85,7 @@ firrtl.circuit "Foo" {
 // intentionally NOT testing everything here due to the complexity of
 // maintaining this test.
 firrtl.circuit "Foo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.module @Foo
   // CHECK-SAME:  in %A:
   // CHECK-SAME:  out %A_out:
@@ -147,7 +147,7 @@ firrtl.circuit "Foo" {
 // TODO: This is currently insufficient as we don't yet have domain connection
 // operations.
 firrtl.circuit "Foo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.module @Foo
   // CHECK-NOT:     in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
@@ -169,7 +169,7 @@ firrtl.circuit "Foo" {
 
 // Check the behavior of the lowering of an instance.
 firrtl.circuit "Foo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.module @Bar(
   // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
@@ -202,7 +202,7 @@ firrtl.circuit "Foo" {
 
 // Check the behavior of external modules.
 firrtl.circuit "Foo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // CHECK-LABEL: firrtl.extmodule @Bar(
   // CHECK-SAME:    in A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out A_out: !firrtl.class<@ClockDomain_out(
@@ -213,4 +213,22 @@ firrtl.circuit "Foo" {
   )
   firrtl.module @Foo(
   ) {}
+}
+
+// -----
+
+// Check that input/output properties and domain bodies are copied over.
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: firrtl.class @ClockDomain(
+  // CHECK-SAME:    in %name_in: !firrtl.string,
+  // CHECK-SAME:    out %name_out: !firrtl.string
+  // CHECK-SAME:  )
+  // CHECK-NEXT:    firrtl.propassign %name_out, %name_in : !firrtl.string
+  firrtl.domain @ClockDomain(
+    in %name_in: !firrtl.string,
+    out %name_out: !firrtl.string
+  ) {
+    firrtl.propassign %name_out, %name_in : !firrtl.string
+  }
+  firrtl.module @Foo() {}
 }

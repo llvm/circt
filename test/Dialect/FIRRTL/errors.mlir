@@ -3047,7 +3047,7 @@ firrtl.circuit "WrongDomainKind" {
 // -----
 
 firrtl.circuit "DomainInfoNotArray" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // expected-error @below {{requires valid port domains}}
   firrtl.module @WrongDomainPortInfo(
     in %A: !firrtl.domain of @ClockDomain
@@ -3057,7 +3057,7 @@ firrtl.circuit "DomainInfoNotArray" {
 // -----
 
 firrtl.circuit "WrongDomainPortInfo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
   firrtl.module @WrongDomainPortInfo(
     in %A: !firrtl.domain of @ClockDomain
@@ -3067,9 +3067,19 @@ firrtl.circuit "WrongDomainPortInfo" {
 // -----
 
 firrtl.circuit "WrongNonDomainPortInfo" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain() {}
   // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
   firrtl.module @WrongNonDomainPortInfo(
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [["hello"]]} {}
+}
+
+// -----
+
+firrtl.circuit "DomainsCannotBeInstantiated" {
+  firrtl.domain @A() {}
+  firrtl.module @DomainsCannotBeInstantiated() {
+    // expected-error @below {{cannot instantiate non-class op @A}}
+    firrtl.object @A()
+  }
 }
