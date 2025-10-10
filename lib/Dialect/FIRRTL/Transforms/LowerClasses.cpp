@@ -1469,8 +1469,8 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
     return success();
 
   // Create a new instance with the property ports removed.
-  OpBuilder builder(firrtlInstance);
-  InstanceOp newInstance = firrtlInstance.erasePorts(builder, portsToErase);
+  InstanceOp newInstance =
+      firrtlInstance.cloneWithErasedPortsAndReplaceUses(portsToErase);
 
   // Replace the instance in the instance graph. This is called from multiple
   // threads, but because the instance graph data structure is not mutated, and

@@ -200,7 +200,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     }
 
     // Create a new instance op without unused ports.
-    instance.erasePorts(builder, removalPortIndexes);
+    instance.cloneWithErasedPortsAndReplaceUses(removalPortIndexes);
     // Remove old one.
     instance.erase();
   }

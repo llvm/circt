@@ -139,14 +139,20 @@ def InstanceOp : HardwareDeclOp<"instance", [
     /// Hooks for domain information.
     ArrayAttr getPortDomain(unsigned portIdx);
 
-    /// Builds a new instance with the ports listed in `portIndices` erased, and
-    /// updates any users of the remaining ports to point at the new instance.
-    InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
+    /// Clone this instance with inserted ports.
+    InstanceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
 
-    /// Clone the instance op and add ports.  This is usually used in
-    /// conjuction with adding ports to the referenced module. This will emit
-    /// the new InstanceOp to the same location.
-    InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
 
     //===------------------------------------------------------------------===//
     // Instance graph methods
@@ -211,12 +217,6 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     StringAttr getPortName(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
-
-    /// Builds a new instance with the ports listed in `portIndices` erased, and
-    /// updates any users of the remaining ports to point at the new instance.
-    InstanceChoiceOp erasePorts(OpBuilder &builder,
-                                const llvm::BitVector &portIndices);
-
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
@@ -233,6 +233,21 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     /// Return the list of case-module mappings.
     SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
     getTargetChoices();
+
+    /// Clone this instance with inserted ports.
+    InstanceChoiceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceChoiceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceChoiceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceChoiceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
   }];
 
   let builders = [

@@ -751,7 +751,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       liveElements.erase(oldResult);
 
     // Create a new instance op without dead ports.
-    auto newInstance = instance.erasePorts(builder, deadPortIndexes);
+    auto newInstance =
+        instance.cloneWithErasedPortsAndReplaceUses(deadPortIndexes);
 
     // Mark new results as alive.
     for (auto newResult : newInstance.getResults())

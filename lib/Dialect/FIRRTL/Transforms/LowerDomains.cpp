@@ -437,14 +437,8 @@ LogicalResult LowerModule::lowerInstances() {
       if (failed(eraseDomainUsers(instanceOp.getResult(bit))))
         return failure();
 
-    ImplicitLocOpBuilder builder(instanceOp.getLoc(), instanceOp);
-    auto erased = instanceOp.erasePorts(builder, eraseVector);
-    auto inserted = erased.cloneAndInsertPorts(newPorts);
-    for (auto [oldIndex, newIndex] : resultMap) {
-      auto oldPort = erased.getResult(oldIndex);
-      auto newPort = inserted.getResult(newIndex);
-      oldPort.replaceAllUsesWith(newPort);
-    }
+    auto erased = instanceOp.cloneWithErasedPortsAndReplaceUses(eraseVector);
+    auto inserted = erased.cloneWithInsertedPortsAndReplaceUses(newPorts);
     instanceGraph.replaceInstance(instanceOp, inserted);
 
     instanceOp.erase();

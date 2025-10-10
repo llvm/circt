@@ -753,18 +753,19 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
 
 /// Return an updated domain info Attribute with domain indices updated based on
 /// port insertions.
-static Attribute
-fixDomainInfoInsertions(MLIRContext *context, Attribute domainInfoAttr,
-                        const SmallVectorImpl<unsigned> &numInserted) {
+static Attribute fixDomainInfoInsertions(MLIRContext *context,
+                                         Attribute domainInfoAttr,
+                                         ArrayRef<unsigned> indexMap) {
   // This is a domain type port.  Return the original domain info unmodified.
   auto di = dyn_cast_or_null<ArrayAttr>(domainInfoAttr);
-  if (!di)
+  if (!di || di.empty())
     return domainInfoAttr;
+
   // This is a non-domain type port.  Update any indeices referenced.
   SmallVector<Attribute> domainInfo;
   for (auto attr : di) {
     auto oldIdx = cast<IntegerAttr>(attr).getUInt();
-    auto newIdx = oldIdx + numInserted[oldIdx];
+    auto newIdx = indexMap[oldIdx];
     if (oldIdx == newIdx)
       domainInfo.push_back(attr);
     else
@@ -807,7 +808,6 @@ static void insertPorts(FModuleLike op,
   SmallVector<bool> newDirections;
   SmallVector<Attribute> newNames, newTypes, newDomains, newAnnos, newSyms,
       newLocs, newInternalPaths;
-  SmallVector<unsigned> numInserted;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
@@ -816,33 +816,32 @@ static void insertPorts(FModuleLike op,
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
   newInternalPaths.reserve(newNumArgs);
-  numInserted.resize(op.getNumPorts());
+
+  SmallVector<unsigned> indexMap(oldNumArgs);
 
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
   unsigned oldIdx = 0;
+  unsigned inserted = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
     while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
       newDomains.push_back(fixDomainInfoInsertions(
-          op.getContext(), op.getDomainInfoAttrForPort(oldIdx), numInserted));
+          op.getContext(), op.getDomainInfoAttrForPort(oldIdx), indexMap));
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
       if (supportsInternalPaths)
         newInternalPaths.push_back(internalPaths[oldIdx]);
-      if (oldIdx == 0)
-        numInserted[0] = 0;
-      else
-        numInserted[oldIdx] = numInserted[oldIdx - 1];
+
+      indexMap[oldIdx] = oldIdx + inserted;
       ++oldIdx;
     }
   };
-  for (auto pair : llvm::enumerate(ports)) {
-    auto idx = pair.value().first;
-    auto &port = pair.value().second;
+
+  for (auto [idx, port] : ports) {
     migrateOldPorts(idx);
     newDirections.push_back(direction::unGet(port.direction));
     newNames.push_back(port.name);
@@ -850,15 +849,14 @@ static void insertPorts(FModuleLike op,
     newDomains.push_back(fixDomainInfoInsertions(
         op.getContext(),
         port.domains ? port.domains : ArrayAttr::get(op.getContext(), {}),
-        numInserted));
+        indexMap));
     auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
     newLocs.push_back(port.loc);
     if (supportsInternalPaths)
       newInternalPaths.push_back(emptyInternalPath);
-    if (idx < oldNumArgs)
-      numInserted[idx] += 1;
+    ++inserted;
   }
   migrateOldPorts(oldNumArgs);
 
@@ -2607,52 +2605,75 @@ LogicalResult InstanceOp::verify() {
   return failure();
 }
 
-/// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
-/// updates any users of the remaining ports to point at the new instance.
-InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
-                                  const llvm::BitVector &portIndices) {
-  assert(portIndices.size() >= getNumResults() &&
-         "portIndices is not at least as large as getNumResults()");
+static void replaceUsesRespectingInsertedPorts(
+    Operation *op1, Operation *op2,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  assert(op1 != op2);
+  size_t n = insertions.size();
+  size_t inserted = 0;
+  for (size_t i = 0, e = op1->getNumResults(); i < e; ++i) {
+    while (inserted < n) {
+      auto &[index, portInfo] = insertions[inserted];
+      if (i < index)
+        break;
+      ++inserted;
+    }
+    auto r1 = op1->getResult(i);
+    auto r2 = op2->getResult(i + inserted);
+    r1.replaceAllUsesWith(r2);
+  }
+}
 
-  if (portIndices.none())
-    return *this;
+static void replaceUsesRespectingErasedPorts(Operation *op1, Operation *op2,
+                                             const llvm::BitVector &erasures) {
+  assert(op1 != op2);
+  size_t erased = 0;
+  for (size_t i = 0, e = op1->getNumResults(); i < e; ++i) {
+    auto r1 = op1->getResult(i);
+    if (erasures[i]) {
+      assert(r1.use_empty() && "removed instance port has uses");
+      ++erased;
+      continue;
+    }
+    auto r2 = op2->getResult(i - erased);
+    r1.replaceAllUsesWith(r2);
+  }
+}
+
+InstanceOp InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
+  assert(erasures.size() >= getNumResults() &&
+         "erasures is not at least as large as getNumResults()");
 
   SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
-      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+      SmallVector<Type>(result_type_begin(), result_type_end()), erasures);
   SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
-      direction::unpackAttribute(getPortDirectionsAttr()), portIndices);
+      direction::unpackAttribute(getPortDirectionsAttr()), erasures);
   SmallVector<Attribute> newPortNames =
-      removeElementsAtIndices(getPortNames().getValue(), portIndices);
+      removeElementsAtIndices(getPortNames().getValue(), erasures);
   SmallVector<Attribute> newPortAnnotations =
-      removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+      removeElementsAtIndices(getPortAnnotations().getValue(), erasures);
   ArrayAttr newDomainInfo =
-      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), portIndices,
+      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), erasures,
                              /*supportsEmptyAttr=*/false);
 
-  auto newOp = InstanceOp::create(
+  OpBuilder builder(*this);
+  auto clone = InstanceOp::create(
       builder, getLoc(), newResultTypes, getModuleName(), getName(),
       getNameKind(), newPortDirections, newPortNames, newDomainInfo.getValue(),
       getAnnotations().getValue(), newPortAnnotations, getLayers(),
       getLowerToBind(), getDoNotPrint(), getInnerSymAttr());
 
-  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
-       oldIdx != numOldPorts; ++oldIdx) {
-    if (portIndices.test(oldIdx)) {
-      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
-      continue;
-    }
-    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
-    ++newIdx;
-  }
-
-  // Compy over "output_file" information so that this is not lost when ports
-  // are erased.
-  //
-  // TODO: Other attributes may need to be copied over.
   if (auto outputFile = (*this)->getAttr("output_file"))
-    newOp->setAttr("output_file", outputFile);
+    clone->setAttr("output_file", outputFile);
 
-  return newOp;
+  return clone;
+}
+
+InstanceOp InstanceOp::cloneWithErasedPortsAndReplaceUses(
+    const llvm::BitVector &erasures) {
+  auto clone = cloneWithErasedPorts(erasures);
+  replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
+  return clone;
 }
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
@@ -2674,62 +2695,79 @@ ArrayAttr InstanceOp::getPortDomain(unsigned portIdx) {
   return cast<ArrayAttr>(getDomainInfo()[portIdx]);
 }
 
-InstanceOp
-InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  auto portSize = ports.size();
-  auto newPortCount = getNumResults() + portSize;
-  SmallVector<Direction> newPortDirections;
-  newPortDirections.reserve(newPortCount);
-  SmallVector<Attribute> newPortNames;
-  newPortNames.reserve(newPortCount);
-  SmallVector<Type> newPortTypes;
-  newPortTypes.reserve(newPortCount);
-  SmallVector<Attribute> newPortAnnos;
-  newPortAnnos.reserve(newPortCount);
-  SmallVector<Attribute> newDomainInfo;
-  newDomainInfo.reserve(newPortCount);
-  SmallVector<unsigned> numInserted;
-  numInserted.resize(getNumResults());
+InstanceOp InstanceOp::cloneWithInsertedPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto *context = getContext();
+  auto empty = ArrayAttr::get(context, {});
 
-  unsigned oldIndex = 0;
-  unsigned newIndex = 0;
-  while (oldIndex + newIndex < newPortCount) {
-    // Check if we should insert a port here.
-    if (newIndex < portSize && ports[newIndex].first == oldIndex) {
-      auto &newPort = ports[newIndex].second;
-      newPortDirections.push_back(newPort.direction);
-      newPortNames.push_back(newPort.name);
-      newPortTypes.push_back(newPort.type);
-      newPortAnnos.push_back(newPort.annotations.getArrayAttr());
-      newDomainInfo.push_back(fixDomainInfoInsertions(
-          getContext(),
-          newPort.domains ? newPort.domains : ArrayAttr::get(getContext(), {}),
-          numInserted));
-      if (oldIndex < getNumResults())
-        numInserted[oldIndex] += 1;
-      ++newIndex;
-    } else {
-      // Copy the next old port.
-      newPortDirections.push_back(getPortDirection(oldIndex));
-      newPortNames.push_back(getPortName(oldIndex));
-      newPortTypes.push_back(getType(oldIndex));
-      newPortAnnos.push_back(getPortAnnotation(oldIndex));
-      newDomainInfo.push_back(getDomainInfo()[oldIndex]);
-      if (oldIndex == 0)
-        numInserted[oldIndex] = 0;
-      else
-        numInserted[oldIndex] += numInserted[oldIndex - 1];
-      ++oldIndex;
+  auto oldPortCount = getNumResults();
+  auto numInsertions = insertions.size();
+  auto newPortCount = oldPortCount + numInsertions;
+
+  SmallVector<Direction> newPortDirections;
+  SmallVector<Attribute> newPortNames;
+  SmallVector<Type> newPortTypes;
+  SmallVector<Attribute> newPortAnnos;
+  SmallVector<Attribute> newDomainInfo;
+
+  newPortDirections.reserve(newPortCount);
+  newPortNames.reserve(newPortCount);
+  newPortTypes.reserve(newPortCount);
+  newPortAnnos.reserve(newPortCount);
+  newDomainInfo.reserve(newPortCount);
+
+  SmallVector<unsigned> indexMap(oldPortCount);
+
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions) {
+      auto &[index, info] = insertions[inserted];
+      if (index > i)
+        break;
+
+      auto domains = fixDomainInfoInsertions(
+          context, info.domains ? info.domains : empty, indexMap);
+      newPortDirections.push_back(info.direction);
+      newPortNames.push_back(info.name);
+      newPortTypes.push_back(info.type);
+      newPortAnnos.push_back(info.annotations.getArrayAttr());
+      newDomainInfo.push_back(domains);
+      ++inserted;
     }
+
+    newPortDirections.push_back(getPortDirection(i));
+    newPortNames.push_back(getPortName(i));
+    newPortTypes.push_back(getType(i));
+    newPortAnnos.push_back(getPortAnnotation(i));
+    newDomainInfo.push_back(getDomainInfo()[i]);
+    indexMap[i] = i + inserted;
   }
 
-  // Create a new instance op with the reset inserted.
+  while (inserted < numInsertions) {
+    auto &[index, info] = insertions[inserted];
+    auto domains = fixDomainInfoInsertions(
+        context, info.domains ? info.domains : empty, indexMap);
+    newPortDirections.push_back(info.direction);
+    newPortNames.push_back(info.name);
+    newPortTypes.push_back(info.type);
+    newPortAnnos.push_back(info.annotations.getArrayAttr());
+    newDomainInfo.push_back(domains);
+    ++inserted;
+  }
+
   OpBuilder builder(*this);
   return InstanceOp::create(
       builder, getLoc(), newPortTypes, getModuleName(), getName(),
       getNameKind(), newPortDirections, newPortNames, newDomainInfo,
       getAnnotations().getValue(), newPortAnnos, getLayers(), getLowerToBind(),
       getDoNotPrint(), getInnerSymAttr());
+}
+
+InstanceOp InstanceOp::cloneWithInsertedPortsAndReplaceUses(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto clone = cloneWithInsertedPorts(insertions);
+  replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
+  return clone;
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -3140,54 +3178,120 @@ InstanceChoiceOp::getTargetChoices() {
   return choices;
 }
 
-InstanceChoiceOp
-InstanceChoiceOp::erasePorts(OpBuilder &builder,
-                             const llvm::BitVector &portIndices) {
-  assert(portIndices.size() >= getNumResults() &&
-         "portIndices is not at least as large as getNumResults()");
+InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto *context = getContext();
+  auto empty = ArrayAttr::get(context, {});
 
-  if (portIndices.none())
-    return *this;
+  auto oldPortCount = getNumResults();
+  auto numInsertions = insertions.size();
+  auto newPortCount = oldPortCount + numInsertions;
+
+  SmallVector<Direction> newPortDirections;
+  SmallVector<Attribute> newPortNames;
+  SmallVector<Type> newPortTypes;
+  SmallVector<Attribute> newPortAnnos;
+  SmallVector<Attribute> newDomainInfo;
+
+  newPortDirections.reserve(newPortCount);
+  newPortNames.reserve(newPortCount);
+  newPortTypes.reserve(newPortCount);
+  newPortAnnos.reserve(newPortCount);
+  newDomainInfo.reserve(newPortCount);
+
+  SmallVector<unsigned> indexMap(oldPortCount);
+
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions) {
+      auto &[index, info] = insertions[inserted];
+      if (i < index)
+        break;
+
+      auto domains = fixDomainInfoInsertions(
+          context, info.domains ? info.domains : empty, indexMap);
+      newPortDirections.push_back(info.direction);
+      newPortNames.push_back(info.name);
+      newPortTypes.push_back(info.type);
+      newPortAnnos.push_back(info.annotations.getArrayAttr());
+      newDomainInfo.push_back(domains);
+      ++inserted;
+    }
+
+    newPortDirections.push_back(getPortDirection(i));
+    newPortNames.push_back(getPortName(i));
+    newPortTypes.push_back(getType(i));
+    newPortAnnos.push_back(getPortAnnotations()[i]);
+    newDomainInfo.push_back(getDomainInfo()[i]);
+    indexMap[i] = i + inserted;
+  }
+
+  while (inserted < numInsertions) {
+    auto &[index, info] = insertions[inserted];
+    auto domains = fixDomainInfoInsertions(
+        context, info.domains ? info.domains : empty, indexMap);
+    newPortDirections.push_back(info.direction);
+    newPortNames.push_back(info.name);
+    newPortTypes.push_back(info.type);
+    newPortAnnos.push_back(info.annotations.getArrayAttr());
+    newDomainInfo.push_back(domains);
+    ++inserted;
+  }
+
+  OpBuilder builder(*this);
+  return InstanceChoiceOp::create(
+      builder, getLoc(), newPortTypes, getModuleNames(), getCaseNames(),
+      getName(), getNameKind(),
+      direction::packAttribute(context, newPortDirections),
+      ArrayAttr::get(context, newPortNames),
+      ArrayAttr::get(context, newDomainInfo), getAnnotationsAttr(),
+      ArrayAttr::get(context, newPortAnnos), getLayers(), getInnerSymAttr());
+}
+
+InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto clone = cloneWithInsertedPorts(insertions);
+  replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
+  return clone;
+}
+
+InstanceChoiceOp
+InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
+  assert(erasures.size() >= getNumResults() &&
+         "erasures is not at least as large as getNumResults()");
 
   SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
-      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+      SmallVector<Type>(result_type_begin(), result_type_end()), erasures);
   SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
-      direction::unpackAttribute(getPortDirectionsAttr()), portIndices);
+      direction::unpackAttribute(getPortDirectionsAttr()), erasures);
   SmallVector<Attribute> newPortNames =
-      removeElementsAtIndices(getPortNames().getValue(), portIndices);
+      removeElementsAtIndices(getPortNames().getValue(), erasures);
   SmallVector<Attribute> newPortAnnotations =
-      removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+      removeElementsAtIndices(getPortAnnotations().getValue(), erasures);
   ArrayAttr newPortDomains =
-      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), portIndices,
+      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), erasures,
                              /*supportsEmptyAttr=*/false);
 
-  auto newOp = InstanceChoiceOp::create(
+  OpBuilder builder(*this);
+  auto clone = InstanceChoiceOp::create(
       builder, getLoc(), newResultTypes, getModuleNames(), getCaseNames(),
       getName(), getNameKind(),
       direction::packAttribute(getContext(), newPortDirections),
-      ArrayAttr::get(getContext(), newPortNames),
-      ArrayAttr::get(getContext(), newPortDomains), getAnnotationsAttr(),
-      ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
-      getInnerSymAttr());
+      ArrayAttr::get(getContext(), newPortNames), newPortDomains,
+      getAnnotationsAttr(), ArrayAttr::get(getContext(), newPortAnnotations),
+      getLayers(), getInnerSymAttr());
 
-  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
-       oldIdx != numOldPorts; ++oldIdx) {
-    if (portIndices.test(oldIdx)) {
-      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
-      continue;
-    }
-    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
-    ++newIdx;
-  }
-
-  // Copy over "output_file" information so that this is not lost when ports
-  // are erased.
-  //
-  // TODO: Other attributes may need to be copied over.
   if (auto outputFile = (*this)->getAttr("output_file"))
-    newOp->setAttr("output_file", outputFile);
+    clone->setAttr("output_file", outputFile);
 
-  return newOp;
+  return clone;
+}
+
+InstanceChoiceOp InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
+    const llvm::BitVector &erasures) {
+  auto clone = cloneWithErasedPorts(erasures);
+  replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
+  return clone;
 }
 
 //===----------------------------------------------------------------------===//

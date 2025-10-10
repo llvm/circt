@@ -234,9 +234,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
       auto &subExtraPorts = subMemInfo.extraPorts;
 
       // Add the extra ports to the instance operation.
-      auto clone = inst.cloneAndInsertPorts(subExtraPorts);
-      inst.replaceAllUsesWith(
-          clone.getResults().drop_back(subExtraPorts.size()));
+      auto clone = inst.cloneWithInsertedPortsAndReplaceUses(subExtraPorts);
       instanceGraph->replaceInstance(inst, clone);
       inst->erase();
       inst = clone;
@@ -491,9 +489,7 @@ void AddSeqMemPortsPass::runOnOperation() {
           continue;
 
         // Add the extra ports to the instance operation.
-        auto clone = inst.cloneAndInsertPorts(subExtraPorts);
-        inst.replaceAllUsesWith(
-            clone.getResults().drop_back(subExtraPorts.size()));
+        auto clone = inst.cloneWithInsertedPortsAndReplaceUses(subExtraPorts);
         instanceGraph->replaceInstance(inst, clone);
         inst->erase();
         inst = clone;

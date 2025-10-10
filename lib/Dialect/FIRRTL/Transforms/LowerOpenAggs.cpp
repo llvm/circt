@@ -595,10 +595,9 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
   // Create new instance op with desired ports.
 
   // TODO: add and erase ports without intermediate + various array attributes.
-  auto tempOp = op.cloneAndInsertPorts(newPorts);
+  auto tempOp = op.cloneWithInsertedPorts(newPorts);
   opsToErase.push_back(tempOp);
-  ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newInst = tempOp.erasePorts(builder, portsToErase);
+  auto newInst = tempOp.cloneWithErasedPorts(portsToErase);
 
   auto mappingResult = walkMappings(
       portMappings, /*includeErased=*/false,
