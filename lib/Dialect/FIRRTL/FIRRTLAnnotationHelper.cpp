@@ -361,14 +361,14 @@ InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
   // Now update all the instances of `mod`.
   for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
-    auto clonedInst = useInst.cloneAndInsertPorts({{portNo, portInfo}});
+    auto clonedInst =
+        useInst.cloneWithInsertedPortsAndReplaceUses({{portNo, portInfo}});
     if (useInst == instOnPath)
       clonedInstOnPath = clonedInst;
     // Update all occurences of old instance.
     instancePathcache.replaceInstance(useInst, clonedInst);
     if (targetCaches)
       targetCaches->replaceOp(useInst, clonedInst);
-    useInst->replaceAllUsesWith(clonedInst.getResults().drop_back());
     useInst->erase();
   }
   return clonedInstOnPath;

@@ -794,8 +794,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
       else if (auto mod = dyn_cast<FExtModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
       else if (auto inst = dyn_cast<InstanceOp>(iter.getFirst())) {
-        ImplicitLocOpBuilder b(inst.getLoc(), inst);
-        inst.erasePorts(b, iter.getSecond());
+        inst.cloneWithErasedPortsAndReplaceUses(iter.getSecond());
         inst.erase();
       } else if (auto mem = dyn_cast<MemOp>(iter.getFirst())) {
         // Remove all debug ports of the memory.

@@ -1177,12 +1177,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     for (auto *inst : instanceGraph.lookup(fmodule)->uses()) {
       InstanceOp useInst = cast<InstanceOp>(inst->getInstance());
       auto enclosingModule = useInst->getParentOfType<FModuleOp>();
-      auto clonedInst = useInst.cloneAndInsertPorts(newPorts);
+      auto clonedInst = useInst.cloneWithInsertedPortsAndReplaceUses(newPorts);
       state.instancePathCache.replaceInstance(useInst, clonedInst);
-      // When RAUW-ing, ignore the new ports that we added when replacing (they
-      // cannot have uses).
-      useInst->replaceAllUsesWith(
-          clonedInst.getResults().drop_back(newPorts.size()));
       useInst->erase();
       // Record information in the moduleModifications strucutre for the module
       // _where this is instantiated_.  This is done so that when that module is
