@@ -498,12 +498,6 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle continuous assignments.
   LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
-    if (const auto *delay = assignNode.getDelay()) {
-      auto loc = context.convertLocation(delay->sourceRange);
-      return mlir::emitError(loc,
-                             "delayed continuous assignments not supported");
-    }
-
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
     auto lhs = context.convertLvalueExpression(expr.left());
@@ -515,6 +509,19 @@ struct ModuleVisitor : public BaseVisitor {
     if (!rhs)
       return failure();
 
+    // Handle delayed assignments.
+    if (auto *timingCtrl = assignNode.getDelay()) {
+      auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>();
+      assert(ctrl && "slang guarantees this to be a simple delay");
+      auto delay = context.convertRvalueExpression(
+          ctrl->expr, moore::TimeType::get(builder.getContext()));
+      if (!delay)
+        return failure();
+      moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
+      return success();
+    }
+
+    // Otherwise this is a regular assignment.
     moore::ContinuousAssignOp::create(builder, loc, lhs, rhs);
     return success();
   }

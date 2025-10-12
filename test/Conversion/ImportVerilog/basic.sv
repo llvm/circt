@@ -3245,3 +3245,66 @@ function automatic void ConcatSformatf(string testStr, string otherString, ref s
    // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
    $sformat(logicVector, "%s %s", testStr, otherString);
 endfunction
+
+// CHECK-LABEL: moore.module @ContinuousAssignment(
+module ContinuousAssignment;
+  // CHECK-NEXT: [[A:%.+]] = moore.variable
+  // CHECK-NEXT: [[B:%.+]] = moore.variable
+  bit [41:0] a;
+  bit [41:0] b;
+
+  // CHECK-NEXT: [[TMP:%.+]] = moore.read [[B]]
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[TMP]]
+  // CHECK-NEXT: moore.assign [[A]], [[NOTB]]
+  assign a = ~b;
+
+  // CHECK-NEXT: [[TMP:%.+]] = moore.read [[B]]
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[TMP]]
+  // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
+  // CHECK-NEXT: moore.delayed_assign [[A]], [[NOTB]], [[TIME]]
+  assign #1ns a = ~b;
+endmodule
+
+// CHECK-LABEL: func.func private @BlockingAssignment(
+// CHECK-SAME: [[A:%.+]]: !moore.ref<i42>
+// CHECK-SAME: [[B:%.+]]: !moore.i42
+// CHECK-SAME: [[C:%.+]]: !moore.i1
+task BlockingAssignment(
+  output bit [41:0] a,
+  input  bit [41:0] b,
+  input  bit c
+);
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: moore.blocking_assign [[A]], [[NOTB]]
+  a = ~b;
+
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
+  // CHECK-NEXT: moore.wait_delay [[TIME]]
+  // CHECK-NEXT: moore.blocking_assign [[A]], [[NOTB]]
+  a = #1ns ~b;
+
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   moore.detect_event posedge [[C]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: moore.blocking_assign [[A]], [[NOTB]]
+  a = @(posedge c) ~b;
+endtask
+
+// CHECK-LABEL: func.func private @NonBlockingAssignment(
+// CHECK-SAME: [[A:%.+]]: !moore.ref<i42>
+// CHECK-SAME: [[B:%.+]]: !moore.i42
+task NonBlockingAssignment(
+  output bit [41:0] a,
+  input  bit [41:0] b
+);
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: moore.nonblocking_assign [[A]], [[NOTB]]
+  a <= ~b;
+
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
+  // CHECK-NEXT: moore.delayed_nonblocking_assign [[A]], [[NOTB]], [[TIME]]
+  a <= #1ns ~b;
+endtask

@@ -155,7 +155,7 @@ struct LTLClockControlVisitor {
 // be handled by `handleDelayControl`.
 static LogicalResult handleRoot(Context &context,
                                 const slang::ast::TimingControl &ctrl,
-                                moore::WaitEventOp &implicitWaitOp) {
+                                moore::WaitEventOp *implicitWaitOp) {
   auto &builder = context.builder;
   auto loc = context.convertLocation(ctrl.sourceRange);
 
@@ -178,7 +178,9 @@ static LogicalResult handleRoot(Context &context,
     // empty wait op and let `Context::convertTimingControl` populate it once
     // the statement has been lowered.
   case TimingControlKind::ImplicitEvent:
-    implicitWaitOp = moore::WaitEventOp::create(builder, loc);
+    if (!implicitWaitOp)
+      return mlir::emitError(loc) << "implicit events cannot be used here";
+    *implicitWaitOp = moore::WaitEventOp::create(builder, loc);
     return success();
 
     // Handle event control.
@@ -207,6 +209,11 @@ static LogicalResult handleRoot(Context &context,
 }
 
 LogicalResult
+Context::convertTimingControl(const slang::ast::TimingControl &ctrl) {
+  return handleRoot(*this, ctrl, nullptr);
+}
+
+LogicalResult
 Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
                               const slang::ast::Statement &stmt) {
   // Convert the timing control. Implicit event control will create a new empty
@@ -221,7 +228,7 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
     // surrounding implicit event control's list of implicitly observed
     // variables.
     rvalueReadCallback = nullptr;
-    if (failed(handleRoot(*this, ctrl, implicitWaitOp)))
+    if (failed(handleRoot(*this, ctrl, &implicitWaitOp)))
       return failure();
   }
 
