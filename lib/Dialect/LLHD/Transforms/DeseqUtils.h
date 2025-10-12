@@ -215,7 +215,7 @@ struct ClockInfo {
 /// multiple clocks or resets are skipped.
 struct DriveInfo {
   /// The drive operation.
-  DrvOp op;
+  DriveOp op;
   /// The clock that triggers a change to the driven value. Guaranteed to be
   /// non-null.
   ClockInfo clock;
@@ -224,7 +224,7 @@ struct DriveInfo {
   ResetInfo reset;
 
   DriveInfo() {}
-  explicit DriveInfo(DrvOp op) : op(op) {}
+  explicit DriveInfo(DriveOp op) : op(op) {}
 };
 
 //===----------------------------------------------------------------------===//

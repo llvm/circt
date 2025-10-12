@@ -27,9 +27,16 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(LLHD, llhd);
 
 /// Check if a type is a time type.
 MLIR_CAPI_EXPORTED bool llhdTypeIsATimeType(MlirType);
+/// Check if a type is a reference type.
+MLIR_CAPI_EXPORTED bool llhdTypeIsARefType(MlirType);
 
 /// Create a time type.
 MLIR_CAPI_EXPORTED MlirType llhdTimeTypeGet(MlirContext ctx);
+/// Create a reference type.
+MLIR_CAPI_EXPORTED MlirType llhdRefTypeGet(MlirType element);
+
+/// Get the inner type of a reference.
+MLIR_CAPI_EXPORTED MlirType llhdRefTypeGetNestedType(MlirType);
 
 //===----------------------------------------------------------------------===//
 // Attributes

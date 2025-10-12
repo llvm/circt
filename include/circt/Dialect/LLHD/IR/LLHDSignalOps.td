@@ -19,9 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 def SignalOp : LLHDOp<"sig", [
   DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  TypesMatchWith<
-    "type of 'init' and underlying type of 'signal' have to match.",
-    "init", "result", "hw::InOutType::get($_self)">
+  TypeMatchesRefNestedType<"init", "result">,
 ]> {
   let summary = "Create a signal.";
   let description = [{
@@ -43,23 +41,22 @@ def SignalOp : LLHDOp<"sig", [
   }];
   let arguments = (ins
     OptionalAttr<StrAttr>:$name,
-    HWValueType:$init
+    AnyType:$init
   );
-  let results = (outs Res<InOutType, "", [MemAlloc]>:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) $init attr-dict
     `:` type($init)
   }];
 }
 
-def PrbOp : LLHDOp<"prb", [
-    DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
-    DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-    TypesMatchWith<
-      "type of 'result' and underlying type of 'signal' have to match.",
-      "signal", "result", "llvm::cast<hw::InOutType>($_self).getElementType()">
-  ]> {
+def ProbeOp : LLHDOp<"prb", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+  TypeMatchesRefNestedType<"result", "signal">,
+  RefNestedTypeMatchesType<"signal", "result">,
+]> {
   let summary = "Probe a signal.";
   let description = [{
     This operation probes a signal and returns the value it
@@ -73,21 +70,19 @@ def PrbOp : LLHDOp<"prb", [
     ```mlir
     %true = hw.constant true
     %sig_i1 = llhd.sig %true : i1
-    %prbd = llhd.prb %sig_i1 : !hw.inout<i1>
+    %prbd = llhd.prb %sig_i1 : i1
     ```
   }];
 
-  let arguments = (ins InOutType:$signal);
-  let results = (outs HWValueType:$result);
+  let arguments = (ins RefType:$signal);
+  let results = (outs AnyType:$result);
 
-  let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
+  let assemblyFormat = "$signal attr-dict `:` type($result)";
 }
 
 def OutputOp : LLHDOp<"output", [
-    TypesMatchWith<
-      "type of 'value' and underlying type of 'result' have to match.",
-      "value", "result", "hw::InOutType::get($_self)">
-  ]> {
+  TypeMatchesRefNestedType<"value", "result">,
+]> {
   let summary = "Introduce a new signal and drive a value onto it.";
   let description = [{
     The `llhd.output` operation introduces a new signal and continuously
@@ -108,28 +103,26 @@ def OutputOp : LLHDOp<"output", [
     %value = hw.constant true
     %time = llhd.constant_time <1ns, 0d, 0e>
     %sig = llhd.sig "sigName" %value : i1
-    llhd.drv %sig, %value after %time : !hw.inout<i1>
+    llhd.drv %sig, %value after %time : i1
     ```
   }];
 
   let arguments = (ins OptionalAttr<StrAttr>: $name,
-                       HWValueType: $value,
+                       AnyType: $value,
                        LLHDTimeType: $time);
 
-  let results = (outs InOutType: $result);
+  let results = (outs RefType: $result);
 
   let assemblyFormat = [{
-    ( $name^ )? $value `after` $time attr-dict `:` qualified(type($value))
+    ( $name^ )? $value `after` $time attr-dict `:` type($value)
   }];
 }
 
-def DrvOp : LLHDOp<"drv", [
-    DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
-    DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
-    TypesMatchWith<
-      "type of 'value' and underlying type of 'signal' have to match.",
-      "signal", "value", "llvm::cast<hw::InOutType>($_self).getElementType()">
-  ]> {
+def DriveOp : LLHDOp<"drv", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  TypeMatchesRefNestedType<"value", "signal">,
+]> {
   let summary = "Drive a value into a signal.";
   let description = [{
     The `llhd.drv` operation drives a new value onto a signal. A time
@@ -147,20 +140,20 @@ def DrvOp : LLHDOp<"drv", [
     %time = llhd.constant_time <1ns, 0d, 0e>
     %sig = llhd.sig %true : i1
 
-    llhd.drv %sig, %false after %time : !hw.inout<i1>
-    llhd.drv %sig, %false after %time if %true : !hw.inout<i1>
+    llhd.drv %sig, %false after %time : i1
+    llhd.drv %sig, %false after %time if %true : i1
     ```
   }];
 
-  let arguments = (ins Arg<InOutType, "the signal to drive to",
+  let arguments = (ins Arg<RefType, "the signal to drive to",
                            [MemWrite]>: $signal,
-                       HWValueType: $value,
+                       AnyType: $value,
                        LLHDTimeType: $time,
                        Optional<I1>: $enable);
 
   let assemblyFormat = [{
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
-    qualified(type($signal))
+    type($value)
   }];
 
   let hasFolder = 1;

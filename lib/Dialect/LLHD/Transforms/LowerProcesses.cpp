@@ -186,7 +186,7 @@ void Lowering::markObservedValues() {
 
     // Look through probe ops to mark the probe signal as well, just in case
     // there may be multiple probes of the same signal.
-    if (auto probeOp = dyn_cast<PrbOp>(op))
+    if (auto probeOp = dyn_cast<ProbeOp>(op))
       markObserved(probeOp.getSignal());
 
     // Look through operations that simply reshape incoming values into an
@@ -266,7 +266,7 @@ bool Lowering::isObserved(Value value) {
     for (auto operand : op->getOperands()) {
       if (observedValues.contains(operand))
         continue;
-      if (isa<hw::InOutType>(operand.getType()))
+      if (isa<RefType>(operand.getType()))
         return false;
       auto *defOp = operand.getDefiningOp();
       if (!defOp || !isMemoryEffectFree(defOp))

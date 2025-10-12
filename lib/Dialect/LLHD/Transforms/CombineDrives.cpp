@@ -35,7 +35,7 @@ using llvm::SpecificBumpPtrAllocator;
 /// in an integer, the number of elements in an array, or the number of fields
 /// in a struct. Returns zero for everything else.
 static unsigned getLength(Type type) {
-  return TypeSwitch<Type, unsigned>(cast<hw::InOutType>(type).getElementType())
+  return TypeSwitch<Type, unsigned>(cast<RefType>(type).getNestedType())
       .Case<IntegerType>([](auto type) { return type.getWidth(); })
       .Case<hw::ArrayType>([](auto type) { return type.getNumElements(); })
       .Case<hw::StructType>([](auto type) { return type.getElements().size(); })
@@ -64,7 +64,7 @@ struct ValueSlice {
 struct DriveSlice {
   /// The drive op assigning a value. This may be null if no current drive op
   /// exists.
-  DrvOp op;
+  DriveOp op;
   /// The value being assigned. Usually this is equal to `op.getValue()`, but
   /// may hold something like a default signal value if this slice was created
   /// to fill a gap in drives and no drive op exists.
@@ -120,7 +120,7 @@ struct Signal {
   SmallVector<ValueSlice> slices;
   /// The drives that assign a single value to the entire signal. There may be
   /// multiple drives with different delay and enable operands.
-  SmallVector<DrvOp, 2> completeDrives;
+  SmallVector<DriveOp, 2> completeDrives;
 
   /// Create a root signal.
   explicit Signal(Value root) : value(root) {}
@@ -253,7 +253,7 @@ SignalSlice ModuleContext::traceProjectionImpl(Value value) {
 
   if (auto op = value.getDefiningOp<SigStructExtractOp>()) {
     auto structType = cast<hw::StructType>(
-        cast<hw::InOutType>(op.getInput().getType()).getElementType());
+        cast<RefType>(op.getInput().getType()).getNestedType());
     auto input = traceProjection(op.getInput());
     if (!input)
       return {};
@@ -315,7 +315,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   // drives as separate vectors of drive slices.
   SmallMapVector<std::pair<Value, Value>, SmallVector<DriveSlice>, 2> drives;
   SmallPtrSet<Operation *, 8> knownDrives;
-  auto addDrive = [&](DrvOp op, unsigned offset, unsigned length) {
+  auto addDrive = [&](DriveOp op, unsigned offset, unsigned length) {
     knownDrives.insert(op);
     drives[{op.getTime(), op.getEnable()}].push_back(
         DriveSlice{op, op.getValue(), offset, length});
@@ -336,7 +336,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   // Gather all drives targeting this signal or slices of it directly.
   for (auto slice : signal.slices) {
     for (auto &use : slice.value.getUses()) {
-      auto driveOp = dyn_cast<DrvOp>(use.getOwner());
+      auto driveOp = dyn_cast<DriveOp>(use.getOwner());
       if (driveOp && use.getOperandNumber() == 0 &&
           driveOp->getBlock() == slice.value.getParentBlock())
         addDrive(driveOp, slice.offset, slice.length);
@@ -352,9 +352,9 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   while (!worklist.empty() && !hasUnknownUses) {
     auto value = worklist.pop_back_val();
     for (auto *user : value.getUsers()) {
-      if (isa<PrbOp>(user))
+      if (isa<ProbeOp>(user))
         continue;
-      if (isa<DrvOp>(user) && knownDrives.contains(user))
+      if (isa<DriveOp>(user) && knownDrives.contains(user))
         continue;
       if (isa<SigExtractOp, SigStructExtractOp, SigArrayGetOp, SigArraySliceOp>(
               user)) {
@@ -387,7 +387,7 @@ void ModuleContext::aggregateDrives(Signal &signal) {
 /// to `slices` directly.
 void ModuleContext::addDefaultDriveSlices(Signal &signal,
                                           SmallVectorImpl<DriveSlice> &slices) {
-  auto type = cast<hw::InOutType>(signal.value.getType()).getElementType();
+  auto type = cast<RefType>(signal.value.getType()).getNestedType();
 
   // Sort the slices such that we can find gaps easily.
   llvm::sort(slices, [](auto &a, auto &b) { return a.offset < b.offset; });
@@ -407,9 +407,9 @@ void ModuleContext::addDefaultDriveSlices(Signal &signal,
     }
     if (needSeparateFields) {
       for (auto idx = from; idx < to; ++idx)
-        gapSlices.push_back(DriveSlice{DrvOp{}, Value{}, idx, 0});
+        gapSlices.push_back(DriveSlice{DriveOp{}, Value{}, idx, 0});
     } else {
-      gapSlices.push_back(DriveSlice{DrvOp{}, Value{}, from, to - from});
+      gapSlices.push_back(DriveSlice{DriveOp{}, Value{}, from, to - from});
     }
   };
 
@@ -536,7 +536,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   });
 
   Value result;
-  auto type = cast<hw::InOutType>(signal.value.getType()).getElementType();
+  auto type = cast<RefType>(signal.value.getType()).getNestedType();
   ImplicitLocOpBuilder builder(signal.value.getLoc(),
                                signal.value.getContext());
   builder.setInsertionPointAfterValue(signal.value);
@@ -604,7 +604,7 @@ void ModuleContext::aggregateDriveSlices(Signal &signal, Value driveDelay,
   // Create the single drive with the aggregate result.
   assert(result);
   auto driveOp =
-      DrvOp::create(builder, signal.value, result, driveDelay, driveEnable);
+      DriveOp::create(builder, signal.value, result, driveDelay, driveEnable);
   signal.completeDrives.push_back(driveOp);
   LLVM_DEBUG(llvm::dbgs() << "  - Created " << driveOp << "\n");
 

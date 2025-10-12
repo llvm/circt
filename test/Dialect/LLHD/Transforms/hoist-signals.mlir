@@ -9,14 +9,14 @@ hw.module @SimpleProbesInProcessOp() {
   // CHECK-NEXT: llhd.process
   llhd.process {
     // CHECK-NOT: llhd.prb
-    %0 = llhd.prb %a : !hw.inout<i42>
+    %0 = llhd.prb %a : i42
     // CHECK-NEXT: call @use_i42([[A]])
     func.call @use_i42(%0) : (i42) -> ()
     llhd.wait ^bb1
   ^bb1:
     // CHECK: ^bb1:
     // CHECK-NOT: llhd.prb
-    %1 = llhd.prb %a : !hw.inout<i42>
+    %1 = llhd.prb %a : i42
     // CHECK-NEXT: call @use_i42([[A]])
     func.call @use_i42(%1) : (i42) -> ()
     llhd.halt
@@ -32,7 +32,7 @@ hw.module @SimpleProbesInCombinationalOp() {
   // CHECK-NEXT: llhd.combinational -> i42
   llhd.combinational -> i42 {
     // CHECK-NOT: llhd.prb
-    %0 = llhd.prb %a : !hw.inout<i42>
+    %0 = llhd.prb %a : i42
     // CHECK-NEXT: call @use_i42([[A]])
     func.call @use_i42(%0) : (i42) -> ()
     // CHECK-NEXT: llhd.yield [[A]]
@@ -48,21 +48,21 @@ hw.module @DontHoistProbesAcrossSideEffects() {
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv
-    llhd.drv %a, %c0_i42 after %0 : !hw.inout<i42>
+    llhd.drv %a, %c0_i42 after %0 : i42
     // CHECK-NEXT: llhd.prb %a
-    llhd.prb %a : !hw.inout<i42>
+    llhd.prb %a : i42
     cf.br ^bb1
   ^bb1:
     // CHECK: ^bb1:
     // CHECK-NEXT: llhd.prb %a
-    llhd.prb %a : !hw.inout<i42>
+    llhd.prb %a : i42
     llhd.wait ^bb2
   ^bb2:
     // CHECK: ^bb2:
     // CHECK-NEXT: call @maybe_side_effecting
     func.call @maybe_side_effecting() : () -> ()
     // CHECK-NEXT: llhd.prb %a
-    llhd.prb %a : !hw.inout<i42>
+    llhd.prb %a : i42
     llhd.halt
   }
 }
@@ -74,7 +74,7 @@ hw.module @DontHoistProbesIfLeakingAcrossWait() {
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
-    %0 = llhd.prb %a : !hw.inout<i42>
+    %0 = llhd.prb %a : i42
     llhd.wait ^bb1
   ^bb1:
     // CHECK: ^bb1:
@@ -85,7 +85,7 @@ hw.module @DontHoistProbesIfLeakingAcrossWait() {
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.prb %a
-    %0 = llhd.prb %a : !hw.inout<i42>
+    %0 = llhd.prb %a : i42
     cf.br ^bb1(%0 : i42)
   ^bb1(%1: i42):
     // CHECK: ^bb1([[A:%.+]]: i42):
@@ -110,8 +110,8 @@ hw.module @DontHoistLocalSignals() {
     // CHECK: ^bb1:
     // CHECK-NEXT: llhd.prb %a
     // CHECK-NEXT: llhd.drv %a
-    llhd.prb %a : !hw.inout<i42>
-    llhd.drv %a, %c0_i42 after %0 : !hw.inout<i42>
+    llhd.prb %a : i42
+    llhd.drv %a, %c0_i42 after %0 : i42
     llhd.halt
   }
 }
@@ -134,10 +134,10 @@ hw.module @SimpleDrives(in %u: i42, in %v: i42, in %w: i42) {
   ^bb1:
     // CHECK-NEXT: ^bb1:
     // CHECK-NOT: llhd.drv
-    llhd.drv %a, %u after %0 : !hw.inout<i42>
-    llhd.drv %b, %u after %0 : !hw.inout<i42>
-    llhd.drv %c, %u after %0 : !hw.inout<i42>
-    llhd.drv %d, %u after %0 : !hw.inout<i42>
+    llhd.drv %a, %u after %0 : i42
+    llhd.drv %b, %u after %0 : i42
+    llhd.drv %c, %u after %0 : i42
+    llhd.drv %d, %u after %0 : i42
     // CHECK-NEXT: llhd.wait yield (%w, %u, %u, %u, [[DEL]], %u, %true : i42, i42, i42, i42, !llhd.time, i42, i1), ^bb2
     llhd.wait yield (%w : i42), ^bb2
   ^bb2:
@@ -147,9 +147,9 @@ hw.module @SimpleDrives(in %u: i42, in %v: i42, in %w: i42) {
   ^bb3:
     // CHECK-NEXT: ^bb3:
     // CHECK-NOT: llhd.drv
-    llhd.drv %a, %u after %0 : !hw.inout<i42>
-    llhd.drv %b, %v after %0 : !hw.inout<i42>
-    llhd.drv %c, %u after %1 : !hw.inout<i42>
+    llhd.drv %a, %u after %0 : i42
+    llhd.drv %b, %v after %0 : i42
+    llhd.drv %c, %u after %1 : i42
     // CHECK-NEXT: llhd.halt %w, %u, %v, %u, [[EPS]], {{%c0_i42.*}}, %false : i42, i42, i42, i42, !llhd.time, i42, i1
     llhd.halt %w : i42
   }
@@ -170,7 +170,7 @@ hw.module @DontHoistDrivesAcrossSideEffects() {
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv %a
-    llhd.drv %a, %c0_i42 after %0 : !hw.inout<i42>
+    llhd.drv %a, %c0_i42 after %0 : i42
     // CHECK-NEXT: call @maybe_side_effecting
     func.call @maybe_side_effecting() : () -> ()
     llhd.halt
@@ -178,34 +178,34 @@ hw.module @DontHoistDrivesAcrossSideEffects() {
 }
 
 // CHECK-LABEL: @DontHoistDrivesOfSlotsWithUnsavoryUsers
-hw.module @DontHoistDrivesOfSlotsWithUnsavoryUsers(inout %c: i42) {
+hw.module @DontHoistDrivesOfSlotsWithUnsavoryUsers(in %c: !llhd.ref<i42>) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c0_i42 = hw.constant 0 : i42
   %a = llhd.sig %c0_i42 : i42
   %b = llhd.sig %c0_i42 : i42
   // Unsavory uses outside of process don't affect hoistability.
   // CHECK: call @use_inout_i42(%a)
-  func.call @use_inout_i42(%a) : (!hw.inout<i42>) -> ()
+  func.call @use_inout_i42(%a) : (!llhd.ref<i42>) -> ()
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NOT: llhd.drv
-    llhd.drv %a, %c0_i42 after %0 : !hw.inout<i42>
+    llhd.drv %a, %c0_i42 after %0 : i42
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: call @use_inout_i42(%b)
-    func.call @use_inout_i42(%b) : (!hw.inout<i42>) -> ()
+    func.call @use_inout_i42(%b) : (!llhd.ref<i42>) -> ()
     // CHECK-NEXT: llhd.drv %b
-    llhd.drv %b, %c0_i42 after %0 : !hw.inout<i42>
+    llhd.drv %b, %c0_i42 after %0 : i42
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
   // CHECK: llhd.process
   llhd.process {
     // CHECK-NEXT: llhd.drv %c
-    llhd.drv %c, %c0_i42 after %0 : !hw.inout<i42>
+    llhd.drv %c, %c0_i42 after %0 : i42
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
@@ -220,13 +220,13 @@ hw.module @OnlyHoistLastDrive(in %u: i42, in %v: i42) {
   // CHECK: [[RES:%.+]]:2 = llhd.process -> i42, i42
   llhd.process {
     // CHECK-NEXT: llhd.drv %a, %u
-    llhd.drv %a, %u after %0 : !hw.inout<i42>
+    llhd.drv %a, %u after %0 : i42
     // CHECK-NEXT: llhd.drv %b, %v
-    llhd.drv %b, %v after %0 : !hw.inout<i42>
+    llhd.drv %b, %v after %0 : i42
     // CHECK-NOT: llhd.drv %a, %v
-    llhd.drv %a, %v after %0 : !hw.inout<i42>
+    llhd.drv %a, %v after %0 : i42
     // CHECK-NOT: llhd.drv %b, %u
-    llhd.drv %b, %u after %0 : !hw.inout<i42>
+    llhd.drv %b, %u after %0 : i42
     // CHECK-NEXT: llhd.halt %v, %u : i42, i42
     llhd.halt
   }
@@ -242,18 +242,18 @@ hw.module @HoistProbesOutOfIf(in %u: i42, in %v: i1) {
   // CHECK-NEXT: scf.if
   scf.if %v {
     // CHECK-NOT: llhd.prb
-    %0 = llhd.prb %a : !hw.inout<i42>
+    %0 = llhd.prb %a : i42
     // CHECK-NEXT: call @use_i42([[A]])
     func.call @use_i42(%0) : (i42) -> ()
     // CHECK-NEXT: } else {
   } else {
     // CHECK-NOT: llhd.prb
-    %1 = llhd.prb %a : !hw.inout<i42>
+    %1 = llhd.prb %a : i42
     // CHECK-NEXT: call @use_i42([[A]])
     func.call @use_i42(%1) : (i42) -> ()
   }
 }
 
 func.func private @use_i42(%arg0: i42)
-func.func private @use_inout_i42(%arg0: !hw.inout<i42>)
+func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)
 func.func private @maybe_side_effecting()
