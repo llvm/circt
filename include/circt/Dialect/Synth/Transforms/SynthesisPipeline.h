@@ -72,6 +72,11 @@ struct SynthOptimizationPipelineOptions
   PassOptions::Option<bool> disableWordToBits{
       *this, "disable-word-to-bits",
       llvm::cl::desc("Disable LowerWordToBits pass"), llvm::cl::init(false)};
+
+  PassOptions::Option<bool> timingAware{
+      *this, "timing-aware",
+      llvm::cl::desc("Lower operators in a timing-aware fashion"),
+      llvm::cl::init(false)};
 };
 
 //===----------------------------------------------------------------------===//
