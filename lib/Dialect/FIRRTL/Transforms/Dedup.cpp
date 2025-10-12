@@ -1573,7 +1573,7 @@ static void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
   }
 }
 
-/// Adjust the symbol references in an op. Thsi includes updating its attributes
+/// Adjust the symbol references in an op. This includes updating its attributes
 /// and types.
 static void
 fixupSymbolSensitiveOp(Operation *op, InstanceGraph &instanceGraph,
