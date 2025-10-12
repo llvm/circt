@@ -92,4 +92,13 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
+def InlineInputOnlyModules :
+    Pass<"hw-inline-input-only-modules", "mlir::ModuleOp"> {
+  let summary = "Inline input-only modules";
+  let description = [{
+    This pass inlines input-only modules, which should never be emitted by
+    firtool.
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
