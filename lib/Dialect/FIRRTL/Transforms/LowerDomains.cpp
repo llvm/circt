@@ -199,7 +199,7 @@ public:
       : op(op), eraseVector(op.getNumPorts()), domainToClasses(classes),
         constants(constants), instanceGraph(instanceGraph) {}
 
-  /// Lower the associated module.  Replace domain ports with input/ouput class
+  /// Lower the associated module.  Replace domain ports with input/output class
   /// ports.
   LogicalResult lowerModule();
 
