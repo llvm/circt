@@ -1757,6 +1757,31 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     return builder.createOrFold<moore::FormatStringOp>(loc, value);
   }
 
+  // Handle Real To Int conversion
+  if (isa<moore::IntType>(type) && isa<moore::RealType>(value.getType())) {
+    auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
+        loc, dyn_cast<moore::IntType>(type).getTwoValued(), value);
+
+    if (dyn_cast<moore::IntType>(type).getDomain() == moore::Domain::FourValued)
+      return materializePackedToSBVConversion(*this, twoValInt, loc);
+    return twoValInt;
+  }
+
+  // Handle Int to Real conversion
+  if (isa<moore::RealType>(type) && isa<moore::IntType>(value.getType())) {
+    Value twoValInt;
+    // Check if int needs to be converted to two-valued first
+    if (dyn_cast<moore::IntType>(value.getType()).getDomain() ==
+        moore::Domain::TwoValued)
+      twoValInt = value;
+    else
+      twoValInt = materializeConversion(
+          dyn_cast<moore::IntType>(value.getType()).getTwoValued(), value, true,
+          loc);
+
+    return builder.createOrFold<moore::IntToRealOp>(loc, type, twoValInt);
+  }
+
   // TODO: Handle other conversions with dedicated ops.
   if (value.getType() != type)
     value = moore::ConversionOp::create(builder, loc, type, value);

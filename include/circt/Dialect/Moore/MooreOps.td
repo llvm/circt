@@ -703,6 +703,37 @@ def LogicToTimeOp : MooreOp<"logic_to_time", [Pure]> {
   let hasFolder = 1;
 }
 
+def RealToIntOp : MooreOp<"real_to_int", [
+  Pure
+]> {
+  let summary = "Convert a real value to a two-valued integer";
+  let description = [{
+    See IEEE 1800-2023 Section 6.24.1: "Cast operator" and 6.12:
+    "Real, shortreal and realtime data types". Accordingly,
+    output values are rounded.
+  }];
+  let arguments = (ins RealType:$input);
+  let results = (outs TwoValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def IntToRealOp : MooreOp<"int_to_real", [
+  Pure
+]> {
+  let summary = "Convert an integer value to a real";
+  let description = [{
+    See IEEE 1800-2023 Section 6.24.1: "Cast operator" and 6.12:
+    "Real, shortreal and realtime data types".
+  }];
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Resizing
 //===----------------------------------------------------------------------===//

@@ -3308,3 +3308,39 @@ task NonBlockingAssignment(
   // CHECK-NEXT: moore.delayed_nonblocking_assign [[A]], [[NOTB]], [[TIME]]
   a <= #1ns ~b;
 endtask
+
+// CHECK-LABEL: func.func private @RealConversion(
+// CHECK-SAME: [[SR:%[^,]+]]: !moore.f32
+// CHECK-SAME: [[LR:%[^,]+]]: !moore.f64
+// CHECK-SAME: [[INT:%[^,]+]]: !moore.i42
+// CHECK-SAME: [[LINT:%[^,]+]]: !moore.i64
+function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longint longi);
+   // CHECK: [[INTTEST:%.+]] = moore.real_to_int [[SR]] : f32 -> i32
+   int intTest = int'(sr);
+    // CHECK: [[INTTEST2:%.+]] = moore.real_to_int [[LR]] : f64 -> i32
+   int intTest2 = int'(r);
+   // CHECK: [[LINTTEST:%.+]] = moore.real_to_int [[SR]] : f32 -> i64
+   longint longIntTest = longint'(sr);
+   // CHECK: [[LINTTEST2:%.+]] = moore.real_to_int [[LR]] : f64 -> i64
+   longint longIntTest2 = longint'(r);
+
+
+   // CHECK: [[SRTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f32
+   shortreal srTest = shortreal'(i);
+   // CHECK: [[SRTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f32
+   shortreal srTest2 = shortreal'(longi);
+   // CHECK: [[RTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f64
+   real rTest = real'(i);
+   // CHECK: [[RTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f64
+   real rTest2 = real'(longi);
+
+   // CHECK: [[IMM:%.+]] = moore.real_to_int [[LR]] : f64 -> i32
+   // CHECK-NEXT: [[F:%.+]] = moore.int_to_logic [[IMM]] : i32
+   // CHECK-NEXT: [[logicTest:%.+]] = moore.variable [[F]] : <l32>
+   logic [31:0] logicTest = r;
+
+   // CHECK: [[R:%.+]] = moore.read [[logicTest]] : <l32>
+   // CHECK-NEXT: [[IMM2:%.+]] = moore.logic_to_int [[R]] : l32
+   // CHECK-Next: [[F2:%.+]] = moore.int_to_real [[IMM2]] : i32 -> f64
+   real realTest = real'(logicTest);
+endfunction
