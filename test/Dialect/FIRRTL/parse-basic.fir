@@ -2195,8 +2195,18 @@ circuit NullaryCat:
 ;// -----
 FIRRTL version 5.1.0
 circuit Domains:
-  ; CHECK-LABEL: firrtl.domain @ClockDomain
+  ; CHECK-LABEL: firrtl.domain @ClockDomain {
   domain ClockDomain:
+
+  ; CHECK-LABEL: firrtl.domain @PowerDomain [
+  ; CHECK-SAME:    #firrtl.domain.field<"name", !firrtl.string>
+  ; CHECK-SAME:    #firrtl.domain.field<"voltage", !firrtl.integer>
+  ; CHECK-SAME:    #firrtl.domain.field<"alwaysOn", !firrtl.bool>
+  ; CHECK-SAME:  ] {
+  domain PowerDomain:
+    name : String
+    voltage : Integer
+    alwaysOn : Bool
 
   module Foo:
     input A: Domain of ClockDomain

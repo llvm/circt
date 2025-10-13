@@ -958,6 +958,16 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: domain ClockDomain :
   firrtl.domain @ClockDomain {}
 
+  // CHECK-LABEL: domain PowerDomain :
+  // CHECK-NEXT:    name : String
+  // CHECK-NEXT:    voltage : Integer
+  // CHECk-NEXT:    alwaysOn : Bool
+  firrtl.domain @PowerDomain [
+    #firrtl.domain.field<"name", !firrtl.string>,
+    #firrtl.domain.field<"voltage", !firrtl.integer>,
+    #firrtl.domain.field<"alwaysOn", !firrtl.bool>
+  ] {}
+
   // CHECK-LABEL: module Domains :
   firrtl.module @Domains(
     // CHECK-NEXT: input A : Domain of ClockDomain

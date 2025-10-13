@@ -644,6 +644,13 @@ void Emitter::emitDeclaration(DomainOp op) {
   startStatement();
   ps << "domain " << PPExtString(op.getSymName()) << " :";
   emitLocationAndNewLine(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (auto attr : op.getFields()) {
+      auto fieldAttr = cast<DomainFieldAttr>(attr);
+      ps << PP::newline << PPExtString(fieldAttr.getName()) << " : ";
+      emitType(fieldAttr.getType().getValue());
+    }
+  });
 }
 
 /// Emit a layer definition.

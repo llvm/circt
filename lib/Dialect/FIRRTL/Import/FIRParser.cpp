@@ -5751,8 +5751,25 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
       info.parseOptionalInfo())
     return failure();
 
+  SmallVector<Attribute> fields;
+  while (true) {
+    auto nextIndent = getIndentation();
+    if (!nextIndent || *nextIndent <= indent)
+      break;
+
+    StringAttr fieldName;
+    PropertyType type;
+    if (parseId(fieldName, "field name") ||
+        parseToken(FIRToken::colon, "expected ':' after field name") ||
+        parsePropertyType(type, "field type") || info.parseOptionalInfo())
+      return failure();
+
+    fields.push_back(DomainFieldAttr::get(circuit.getContext(), fieldName,
+                                          TypeAttr::get(type)));
+  }
+
   auto builder = circuit.getBodyBuilder();
-  DomainOp::create(builder, info.getLoc(), name)
+  DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields))
       ->getRegion(0)
       .push_back(new Block());
 

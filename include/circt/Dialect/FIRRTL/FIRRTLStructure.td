@@ -614,11 +614,14 @@ def DomainOp : FIRRTLOp<"domain", [
     circuit.  E.g., this can be used to declare a `ClockDomain` type when
     modeling clocks in FIRRTL Dialect.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (
+    ins SymbolNameAttr:$sym_name,
+        DefaultValuedAttr<DomainFieldArrayAttr, "{}">:$fields
+  );
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $body
+    $sym_name ( $fields^ )? attr-dict-with-keyword $body
   }];
 }
 
