@@ -41,15 +41,16 @@ endmodule
 // -----
 module Foo;
   int x;
-  // expected-error @below {{delayed assignments not supported}}
-  initial x <= #1ns x;
+  bit y;
+  // expected-error @below {{unsupported non-blocking assignment timing control: SignalEvent}}
+  initial x <= @y x;
 endmodule
 
 // -----
 module Foo;
   int x;
-  // expected-error @below {{delayed continuous assignments not supported}}
-  assign #1ns x = x;
+  // expected-error @below {{implicit events cannot be used here}}
+  initial x = @* x;
 endmodule
 
 // -----

@@ -134,7 +134,14 @@ struct Context {
                             const slang::ast::Symbol &outermostModule);
   LogicalResult traverseInstanceBody(const slang::ast::Symbol &symbol);
 
-  // Convert a slang timing control into an MLIR timing control.
+  // Convert timing controls into a corresponding set of ops that delay
+  // execution of the current block. Produces an error if the implicit event
+  // control `@*` or `@(*)` is used.
+  LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl);
+  // Convert timing controls into a corresponding set of ops that delay
+  // execution of the current block. Then converts the given statement, taking
+  // note of the rvalues it reads and adding them to a wait op in case an
+  // implicit event control `@*` or `@(*)` is used.
   LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
                                      const slang::ast::Statement &stmt);
 

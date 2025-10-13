@@ -427,6 +427,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!lhs)
       return {};
 
+    // Determine the right-hand side value of the assignment.
     context.lvalueStack.push_back(lhs);
     auto rhs = context.convertRvalueExpression(
         expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
@@ -434,16 +435,38 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!rhs)
       return {};
 
-    if (expr.timingControl) {
-      auto loc = context.convertLocation(expr.timingControl->sourceRange);
-      mlir::emitError(loc, "delayed assignments not supported");
-      return {};
+    // If this is a blocking assignment, we can insert the delay/wait ops of the
+    // optional timing control directly in between computing the RHS and
+    // executing the assignment.
+    if (!expr.isNonBlocking()) {
+      if (expr.timingControl)
+        if (failed(context.convertTimingControl(*expr.timingControl)))
+          return {};
+      moore::BlockingAssignOp::create(builder, loc, lhs, rhs);
+      return rhs;
     }
 
-    if (expr.isNonBlocking())
-      moore::NonBlockingAssignOp::create(builder, loc, lhs, rhs);
-    else
-      moore::BlockingAssignOp::create(builder, loc, lhs, rhs);
+    // For non-blocking assignments, we only support time delays for now.
+    if (expr.timingControl) {
+      // Handle regular time delays.
+      if (auto *ctrl = expr.timingControl->as_if<slang::ast::DelayControl>()) {
+        auto delay = context.convertRvalueExpression(
+            ctrl->expr, moore::TimeType::get(builder.getContext()));
+        if (!delay)
+          return {};
+        moore::DelayedNonBlockingAssignOp::create(builder, loc, lhs, rhs,
+                                                  delay);
+        return rhs;
+      }
+
+      // All other timing controls are not supported.
+      auto loc = context.convertLocation(expr.timingControl->sourceRange);
+      mlir::emitError(loc)
+          << "unsupported non-blocking assignment timing control: "
+          << slang::ast::toString(expr.timingControl->kind);
+      return {};
+    }
+    moore::NonBlockingAssignOp::create(builder, loc, lhs, rhs);
     return rhs;
   }
 

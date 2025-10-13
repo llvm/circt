@@ -1470,7 +1470,7 @@ struct AssignedVariableOpConversion
   }
 };
 
-template <typename OpTy, unsigned DeltaTime, unsigned EpsilonTime>
+template <typename OpTy>
 struct AssignOpConversion : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
   using OpAdaptor = typename OpTy::Adaptor;
@@ -1478,13 +1478,26 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
   LogicalResult
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: When we support delay control in Moore dialect, we need to update
-    // this conversion.
-    auto timeAttr = llhd::TimeAttr::get(
-        op->getContext(), 0U, llvm::StringRef("ns"), DeltaTime, EpsilonTime);
-    auto time = llhd::ConstantTimeOp::create(rewriter, op->getLoc(), timeAttr);
-    rewriter.replaceOpWithNewOp<llhd::DriveOp>(op, adaptor.getDst(),
-                                               adaptor.getSrc(), time, Value{});
+    // Determine the delay for the assignment.
+    Value delay;
+    if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
+                  std::is_same_v<OpTy, BlockingAssignOp>) {
+      // Blocking and continuous assignments get a 0ns 0d 1e delay.
+      delay = llhd::ConstantTimeOp::create(
+          rewriter, op->getLoc(),
+          llhd::TimeAttr::get(op->getContext(), 0U, "ns", 0, 1));
+    } else if constexpr (std::is_same_v<OpTy, NonBlockingAssignOp>) {
+      // Non-blocking assignments get a 0ns 1d 0e delay.
+      delay = llhd::ConstantTimeOp::create(
+          rewriter, op->getLoc(),
+          llhd::TimeAttr::get(op->getContext(), 0U, "ns", 1, 0));
+    } else {
+      // Delayed assignments have a delay operand.
+      delay = adaptor.getDelay();
+    }
+
+    rewriter.replaceOpWithNewOp<llhd::DriveOp>(
+        op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
     return success();
   }
 };
@@ -1973,9 +1986,11 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     AShrOpConversion,
 
     // Patterns of assignment operations.
-    AssignOpConversion<ContinuousAssignOp, 0, 1>,
-    AssignOpConversion<BlockingAssignOp, 0, 1>,
-    AssignOpConversion<NonBlockingAssignOp, 1, 0>,
+    AssignOpConversion<ContinuousAssignOp>,
+    AssignOpConversion<DelayedContinuousAssignOp>,
+    AssignOpConversion<BlockingAssignOp>,
+    AssignOpConversion<NonBlockingAssignOp>,
+    AssignOpConversion<DelayedNonBlockingAssignOp>,
     AssignedVariableOpConversion,
 
     // Patterns of branch operations.

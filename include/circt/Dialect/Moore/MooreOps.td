@@ -337,6 +337,16 @@ class AssignOpBase<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
+class DelayedAssignOpBase<string mnemonic, list<Trait> traits = []> :
+    AssignOpBase<mnemonic, traits> {
+  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+  let assemblyFormat = [{
+    $dst `,` $src `,` $delay attr-dict `:` type($src)
+  }];
+}
+
+// Continuous assignment
+
 def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   let summary = "Continuous assignment within a module";
   let description = [{
@@ -347,6 +357,19 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
     See IEEE 1800-2017 § 10.3 "Continuous assignments".
   }];
 }
+
+def DelayedContinuousAssignOp :
+    DelayedAssignOpBase<"delayed_assign", [HasParent<"SVModuleOp">]> {
+  let summary = "Delayed continuous assignment within a module";
+  let description = [{
+    A continuous assignment with a delay.
+
+    See the `moore.assign` op.
+    See IEEE 1800-2017 § 10.3 "Continuous assignments".
+  }];
+}
+
+// Blocking assignment
 
 def BlockingAssignOp : AssignOpBase<"blocking_assign", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>
@@ -365,6 +388,8 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
   );
 }
 
+// Non-blocking assignment
+
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
@@ -375,6 +400,17 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
     in a subsequent time step as dictated by the delay or event control.
 
     See IEEE 1800-2017 § 10.4.2 "Nonblocking procedural assignments".
+  }];
+}
+
+def DelayedNonBlockingAssignOp :
+    DelayedAssignOpBase<"delayed_nonblocking_assign"> {
+  let summary = "Delayed nonblocking procedural assignment";
+  let description = [{
+    A nonblocking procedural assignment with an intra-assignment delay control.
+
+    See the `moore.nonblocking_assign` op.
+    See IEEE 1800-2017 § 9.4.5 "Intra-assignment timing controls".
   }];
 }
 
