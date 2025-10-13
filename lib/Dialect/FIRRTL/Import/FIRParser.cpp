@@ -5769,9 +5769,7 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields))
-      ->getRegion(0)
-      .push_back(new Block());
+  DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields));
 
   return success();
 }

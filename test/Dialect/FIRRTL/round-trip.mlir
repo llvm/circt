@@ -196,20 +196,19 @@ firrtl.module @Fprintf(
   firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
 }
 
-// CHECK-LABEL: firrtl.domain @ClockDomain {
-firrtl.domain @ClockDomain {
-}
+// CHECK-LABEL: firrtl.domain @ClockDomain
+firrtl.domain @ClockDomain
 
 // CHECK-LABEL: firrtl.domain @PowerDomain [
 // CHECK-SAME:    #firrtl.domain.field<"name", !firrtl.string>
 // CHECK-SAME:    #firrtl.domain.field<"voltage", !firrtl.integer>
 // CHECK-SAME:    #firrtl.domain.field<"alwaysOn", !firrtl.bool>
-// CHECK-SAME:  ] {
+// CHECK-SAME:  ]
 firrtl.domain @PowerDomain [
   #firrtl.domain.field<"name", !firrtl.string>,
   #firrtl.domain.field<"voltage", !firrtl.integer>,
   #firrtl.domain.field<"alwaysOn", !firrtl.bool>
-] {}
+]
 
 firrtl.module @DomainsSubmodule(
   in %A: !firrtl.domain of @ClockDomain,

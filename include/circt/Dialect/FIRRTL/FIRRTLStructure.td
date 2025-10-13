@@ -604,9 +604,7 @@ def SimulationOp : FIRRTLOp<"simulation", [
 
 def DomainOp : FIRRTLOp<"domain", [
   DeclareOpInterfaceMethods<Symbol>,
-  HasParent<"firrtl::CircuitOp">,
-  NoTerminator,
-  SingleBlock
+  HasParent<"firrtl::CircuitOp">
 ]> {
   let summary = "Define a domain type";
   let description = [{
@@ -619,9 +617,8 @@ def DomainOp : FIRRTLOp<"domain", [
         DefaultValuedAttr<DomainFieldArrayAttr, "{}">:$fields
   );
   let results = (outs);
-  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name ( $fields^ )? attr-dict-with-keyword $body
+    $sym_name ( $fields^ )? attr-dict-with-keyword
   }];
 }
 
