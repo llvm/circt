@@ -214,3 +214,18 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(
   ) {}
 }
+
+// -----
+
+// Check that input/output properties and domain bodies are copied over.
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: firrtl.class @ClockDomain(
+  // CHECK-SAME:    in %name_in: !firrtl.string,
+  // CHECK-SAME:    out %name_out: !firrtl.string
+  // CHECK-SAME:  )
+  // CHECK-NEXT:    firrtl.propassign %name_out, %name_in : !firrtl.string
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"name", !firrtl.string>
+  ]
+  firrtl.module @Foo() {}
+}

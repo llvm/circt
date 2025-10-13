@@ -493,8 +493,16 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   auto *context = op.getContext();
   auto name = op.getNameAttr();
-  // TODO: Update this once DomainOps have properties.
-  auto classIn = ClassOp::create(builder, name, {});
+  SmallVector<PortInfo> classInPorts;
+  for (auto field : op.getFields().getAsRange<DomainFieldAttr>())
+    classInPorts.append(
+        {{/*name=*/builder.getStringAttr(Twine(field.getName().getValue()) +
+                                         "_in"),
+          /*type=*/field.getType().getValue(), /*dir=*/Direction::In},
+         {/*name=*/builder.getStringAttr(Twine(field.getName().getValue()) +
+                                         "_out"),
+          /*type=*/field.getType().getValue(), /*dir=*/Direction::Out}});
+  auto classIn = ClassOp::create(builder, name, classInPorts);
   auto classInType = classIn.getInstanceType();
   auto pathListType =
       ListType::get(context, cast<PropertyType>(PathType::get(context)));
@@ -512,11 +520,16 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
                        {/*name=*/constants.getAssociationsOut(),
                         /*type=*/pathListType,
                         /*dir=*/Direction::Out}});
-  builder.setInsertionPointToStart(classOut.getBodyBlock());
-  PropAssignOp::create(builder, classOut.getArgument(1),
-                       classOut.getArgument(0));
-  PropAssignOp::create(builder, classOut.getArgument(3),
-                       classOut.getArgument(2));
+
+  auto connectPairWise = [&builder](ClassOp &classOp) {
+    builder.setInsertionPointToStart(classOp.getBodyBlock());
+    for (size_t i = 0, e = classOp.getNumPorts(); i != e; i += 2)
+      PropAssignOp::create(builder, classOp.getArgument(i + 1),
+                           classOp.getArgument(i));
+  };
+  connectPairWise(classIn);
+  connectPairWise(classOut);
+
   classes.insert({name, {classIn, classOut}});
   instanceGraph.addModule(classIn);
   instanceGraph.addModule(classOut);
