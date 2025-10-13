@@ -48,7 +48,9 @@ void PendingChangesMap::debounceAndUpdate(
 
 void PendingChangesMap::enqueueChange(
     const llvm::lsp::DidChangeTextDocumentParams &params) {
-  const auto now = nowFn();
+  // Key by normalized LSP file path. If your pipeline allows multiple
+  // spellings (symlinks/case), normalize upstream or canonicalize here.
+  const auto now = std::chrono::steady_clock::now();
   const std::string key = params.textDocument.uri.file().str();
 
   std::scoped_lock lock(mu);
@@ -69,7 +71,7 @@ void PendingChangesMap::debounceAndThen(
     DebounceOptions options,
     std::function<void(std::unique_ptr<PendingChanges>)> cb) {
   const std::string key = params.textDocument.uri.file().str();
-  const auto scheduleTime = nowFn();
+  const auto scheduleTime = std::chrono::steady_clock::now();
 
   // If debounce is disabled, run on main thread
   if (options.disableDebounce) {
@@ -85,7 +87,8 @@ void PendingChangesMap::debounceAndThen(
     // Simple timer: sleep min-quiet before checking. We rely on the fact
     // that newer edits can arrive while we sleep, updating lastChangeTime.
     if (options.debounceMinMs > 0)
-      waitForMinMs(options.debounceMinMs, scheduleTime);
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(options.debounceMinMs));
 
     std::unique_ptr<PendingChanges>
         result; // decided under lock, callback after
@@ -95,7 +98,7 @@ void PendingChangesMap::debounceAndThen(
       auto it = pending.find(key);
       if (it != pending.end()) {
         PendingChanges &pc = it->second;
-        const auto now = nowFn();
+        const auto now = std::chrono::steady_clock::now();
 
         // quietSinceSchedule: if no newer edits arrived after we scheduled
         // this task, then we consider the burst "quiet" and flush now.
@@ -137,21 +140,6 @@ PendingChangesMap::takeAndErase(llvm::StringMap<PendingChanges>::iterator it) {
   auto out = std::make_unique<PendingChanges>(std::move(it->second));
   pending.erase(it);
   return out;
-}
-
-void PendingChangesMap::waitForMinMs(uint64_t ms,
-                                     SteadyClock::time_point start) {
-  if (!ms)
-    return;
-  if (!useManualClock) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-    return;
-  }
-  // Manual clock: busy-wait with yields until now() reaches start + ms.
-  const auto target = start + std::chrono::milliseconds(ms);
-  while (nowFn() < target) {
-    std::this_thread::yield();
-  }
 }
 
 } // namespace lsp

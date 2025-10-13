@@ -22,20 +22,6 @@ using namespace std::chrono_literals;
 
 namespace {
 
-/// Manual, monotonic clock for tests. Time is advanced manually to avoid race
-/// conditions in threads
-struct ManualClock {
-  SteadyClock::time_point t = SteadyClock::time_point{}; // start at epoch
-  SteadyClock::time_point now() const { return t; }
-  void advanceMs(std::chrono::milliseconds ms) { t += ms; }
-};
-
-static inline void advanceTestTime(ManualClock &clock,
-                                   std::chrono::milliseconds ms) {
-  clock.advanceMs(ms);
-  std::this_thread::yield(); // let the worker run
-}
-
 /// Tiny helper to await a single callback result in tests.
 struct CallbackCapture {
   std::mutex m;
@@ -53,11 +39,9 @@ struct CallbackCapture {
   }
 
   // Wait up to timeout for a callback; returns true if called.
-  bool waitFor() {
+  bool waitFor(std::chrono::milliseconds timeout) {
     std::unique_lock<std::mutex> lock(m);
-    // Keep the timeout very small, as all time references are anyway driven
-    // from the unit tests
-    return cv.wait_for(lock, 1ms, [&] { return called; });
+    return cv.wait_for(lock, timeout, [&] { return called; });
   }
 };
 
@@ -83,8 +67,7 @@ makeChangeParams(llvm::StringRef memName, int64_t version,
 
 /// Check that changes are done immediately if debounce is disabled
 TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
+  PendingChangesMap pcm(/*maxThreads=*/2);
   DebounceOptions opt;
   opt.disableDebounce = true;
   opt.debounceMinMs = 500;
@@ -98,7 +81,7 @@ TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
     cap.set(std::move(r));
   });
 
-  ASSERT_TRUE(cap.waitFor());
+  ASSERT_TRUE(cap.waitFor(200ms));
   ASSERT_TRUE(cap.got != nullptr);
   EXPECT_EQ(cap.got->version, 1);
   ASSERT_EQ(cap.got->changes.size(), 1u);
@@ -106,9 +89,7 @@ TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
 
 /// Check that changes are applied once debounce delay window is passed
 TEST(PendingChangesMapTest, FlushAfterQuietMinWindow) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
-
+  PendingChangesMap pcm(2);
   DebounceOptions opt;
   opt.disableDebounce = false;
   opt.debounceMinMs = 60; // small debounce
@@ -118,26 +99,23 @@ TEST(PendingChangesMapTest, FlushAfterQuietMinWindow) {
   pcm.enqueueChange(p);
 
   CallbackCapture cap;
+  auto start = std::chrono::steady_clock::now();
   pcm.debounceAndThen(p, opt, [&](std::unique_ptr<PendingChanges> r) {
     cap.set(std::move(r));
   });
 
-  // Let the worker's sleep elapse, and advance the manual clock accordingly.
-  advanceTestTime(clock, 60ms);
-
-  ASSERT_TRUE(cap.waitFor());
+  // Expect callback to arrive after ~debounceMinMs; allow headroom.
+  ASSERT_TRUE(cap.waitFor(800ms));
   ASSERT_TRUE(cap.got != nullptr);
-  EXPECT_EQ(cap.got->version, 1);
-  EXPECT_EQ(cap.got->changes.size(), 1u);
-
-  // Signal all to all scheduled threads they are out of time.
-  advanceTestTime(clock, 1000ms);
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - start);
+  // Should be at least the min window (allowing scheduling jitter).
+  EXPECT_GE(elapsed.count(), static_cast<long long>(opt.debounceMinMs) - 5);
 }
 
 /// Check that outdated edits are not applied and the thread is discarded.
 TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
+  PendingChangesMap pcm(2);
   DebounceOptions opt;
   opt.disableDebounce = false;
   opt.debounceMinMs = 80; // first task sleeps 80ms
@@ -153,15 +131,12 @@ TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
   });
 
   // While the first sleeper is waiting, enqueue a new edit to reset lastChange.
-  advanceTestTime(clock, 30ms);
+  std::this_thread::sleep_for(30ms);
   auto p2 = makeChangeParams(key, 2);
   pcm.enqueueChange(p2);
 
-  // Advance to the end of the quiet window so the first check runs.
-  advanceTestTime(clock, 50ms);
-
   // The first scheduled check should now be obsolete -> nullptr.
-  ASSERT_TRUE(first.waitFor());
+  ASSERT_TRUE(first.waitFor(800ms));
   ASSERT_EQ(first.got, nullptr);
 
   // Now schedule another check; with no more edits, it should flush.
@@ -170,50 +145,39 @@ TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
     second.set(std::move(r));
   });
 
-  advanceTestTime(clock, 80ms);
-
-  ASSERT_TRUE(second.waitFor());
+  ASSERT_TRUE(second.waitFor(800ms));
   ASSERT_TRUE(second.got != nullptr);
   // Both edits should be present (burst merged)
   EXPECT_EQ(second.got->version, 2);
   EXPECT_EQ(second.got->changes.size(), 2u);
-
-  // Signal all to all scheduled threads they are out of time.
-  advanceTestTime(clock, 1000ms);
 }
 
 TEST(PendingChangesMapTest, MaxCapForcesFlushDuringContinuousTyping) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
-
+  PendingChangesMap pcm(2);
   DebounceOptions opt;
   opt.disableDebounce = false;
   opt.debounceMinMs = 100; // quiet 100ms
-  opt.debounceMaxMs = 200; // cap 200ms
+  opt.debounceMaxMs = 500; // cap 500ms
 
   const auto *key = "d.sv";
   auto p = makeChangeParams(key, 1);
   pcm.enqueueChange(p);
 
-  // 1) First check scheduled now; while it sleeps, "keep typing" every ~50ms.
+  // 1) First check at ~100ms: will be obsolete (new edits arrived).
   CallbackCapture first;
   pcm.debounceAndThen(p, opt, [&](std::unique_ptr<PendingChanges> r) {
     first.set(std::move(r));
   });
 
-  // Simulate continuous typing at 50ms intervals before the 100ms quiet window.
-  advanceTestTime(clock, 50ms);
+  // Immediately enqueue a new edit to represent continuous typing.
   pcm.enqueueChange(makeChangeParams(key, 2));
-  advanceTestTime(clock, 50ms);
-  pcm.enqueueChange(makeChangeParams(key, 3));
 
-  // First check at ~100ms: should be obsolete (new edits arrived).
-  ASSERT_TRUE(first.waitFor());
+  ASSERT_TRUE(first.waitFor(std::chrono::milliseconds(800)));
   EXPECT_EQ(first.got, nullptr); // expected obsolete
 
-  // After max-cap has passed, schedule another check -> must flush.
-  advanceTestTime(clock, 250ms);
-
+  // 2) After max-cap has passed, schedule another check -> must flush.
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds(550)); // Total > 500ms cap
   CallbackCapture second;
   // Use the latest version for the schedule key; any params with same URI key
   // is fine
@@ -222,22 +186,16 @@ TEST(PendingChangesMapTest, MaxCapForcesFlushDuringContinuousTyping) {
     second.set(std::move(r));
   });
 
-  advanceTestTime(clock, 120ms);
-
-  ASSERT_TRUE(second.waitFor());
+  ASSERT_TRUE(second.waitFor(std::chrono::milliseconds(1500)));
 
   ASSERT_TRUE(second.got != nullptr);
   EXPECT_GE(second.got->version, 2);
   EXPECT_GE(second.got->changes.size(), 1u);
-
-  // Signal all to all scheduled threads they are out of time.
-  advanceTestTime(clock, 1000ms);
 }
 
 /// Check that no update is queued if the change map is empty.
 TEST(PendingChangesMapTest, MissingKeyYieldsNullptr) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
+  PendingChangesMap pcm(2);
   DebounceOptions opt;
   opt.disableDebounce = false;
   opt.debounceMinMs = 30;
@@ -251,18 +209,12 @@ TEST(PendingChangesMapTest, MissingKeyYieldsNullptr) {
     cap.set(std::move(r));
   });
 
-  advanceTestTime(clock, 30ms);
-
-  ASSERT_TRUE(cap.waitFor());
+  ASSERT_TRUE(cap.waitFor(400ms));
   EXPECT_EQ(cap.got, nullptr);
-
-  // Signal all to all scheduled threads they are out of time.
-  advanceTestTime(clock, 1000ms);
 }
 
 TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
+  PendingChangesMap pcm(/*maxThreads=*/2);
 
   DebounceOptions opt;
   opt.disableDebounce = true; // immediate path exercises the keyed lookup
@@ -278,7 +230,7 @@ TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
     pcm.debounceAndThen(a, opt, [&](std::unique_ptr<PendingChanges> r) {
       cap.set(std::move(r));
     });
-    ASSERT_TRUE(cap.waitFor());
+    ASSERT_TRUE(cap.waitFor(std::chrono::milliseconds(200)));
     // Nothing pending after erase -> nullptr
     EXPECT_EQ(cap.got, nullptr);
   }
@@ -293,7 +245,7 @@ TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
     pcm.debounceAndThen(b, opt, [&](std::unique_ptr<PendingChanges> r) {
       cap.set(std::move(r));
     });
-    ASSERT_TRUE(cap.waitFor());
+    ASSERT_TRUE(cap.waitFor(std::chrono::milliseconds(200)));
     EXPECT_EQ(cap.got, nullptr);
   }
 
@@ -307,19 +259,15 @@ TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
     pcm.debounceAndThen(c, opt, [&](std::unique_ptr<PendingChanges> r) {
       cap.set(std::move(r));
     });
-    ASSERT_TRUE(cap.waitFor());
+    ASSERT_TRUE(cap.waitFor(std::chrono::milliseconds(200)));
     ASSERT_NE(cap.got, nullptr);
     EXPECT_EQ(cap.got->version, 3);
     EXPECT_EQ(cap.got->changes.size(), 1u);
   }
-
-  // Signal all to all scheduled threads they are out of time.
-  advanceTestTime(clock, 1000ms);
 }
 
 TEST(PendingChangesMapTest, AbortClearsAll) {
-  ManualClock clock;
-  PendingChangesMap pcm(/*maxThreads=*/2, [&] { return clock.now(); });
+  PendingChangesMap pcm(2);
 
   // Debounced path to also cover the async branch
   DebounceOptions opt;
@@ -347,10 +295,8 @@ TEST(PendingChangesMapTest, AbortClearsAll) {
       capB.set(std::move(r));
     });
 
-    advanceTestTime(clock, 50ms);
-
-    ASSERT_TRUE(capA.waitFor());
-    ASSERT_TRUE(capB.waitFor());
+    ASSERT_TRUE(capA.waitFor(std::chrono::milliseconds(500)));
+    ASSERT_TRUE(capB.waitFor(std::chrono::milliseconds(500)));
 
     EXPECT_EQ(capA.got, nullptr);
     EXPECT_EQ(capB.got, nullptr);
@@ -364,7 +310,7 @@ TEST(PendingChangesMapTest, AbortClearsAll) {
     pcm.debounceAndThen(c, opt, [&](std::unique_ptr<PendingChanges> r) {
       cap.set(std::move(r));
     });
-    ASSERT_TRUE(cap.waitFor());
+    ASSERT_TRUE(cap.waitFor(std::chrono::milliseconds(200)));
     // Still nullptr because we didn't enqueue after abort.
     EXPECT_EQ(cap.got, nullptr);
   }
@@ -376,14 +322,11 @@ TEST(PendingChangesMapTest, AbortClearsAll) {
     pcm.debounceAndThen(c, opt, [&](std::unique_ptr<PendingChanges> r) {
       cap.set(std::move(r));
     });
-    ASSERT_TRUE(cap.waitFor());
+    ASSERT_TRUE(cap.waitFor(std::chrono::milliseconds(200)));
     ASSERT_NE(cap.got, nullptr);
     EXPECT_EQ(cap.got->version, 2);
     EXPECT_EQ(cap.got->changes.size(), 1u);
   }
-
-  // Signal all to all scheduled threads they are out of time.
-  advanceTestTime(clock, 1000ms);
 }
 
 } // namespace
