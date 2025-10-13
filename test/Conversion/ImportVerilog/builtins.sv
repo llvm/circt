@@ -92,7 +92,7 @@ function void DisplayAndSeverityBuiltins(int x, real r);
 
   // CHECK: moore.fmt.real float [[R]]
   $write("%f", r);
-  // CHECK: [[XR:%.+]] = moore.conversion [[X]] : !moore.i32 -> !moore.f64
+  // CHECK: [[XR:%.+]] = moore.int_to_real [[X]] : i32 -> f64
   // CHECK: [[TMP:%.+]] = moore.fmt.real float [[XR]]
   // CHECK: moore.builtin.display [[TMP]]
   $write("%f", x);

@@ -468,3 +468,21 @@ func.func @TimeConversion(%arg0: !moore.time, %arg1: !moore.l64) {
   moore.logic_to_time %arg1
   return
 }
+
+// CHECK-LABEL: func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42)
+func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42) {
+  // CHECK: %0 = moore.real_to_int %arg0 : f32 -> i42
+  %0 = moore.real_to_int %arg0 : f32 -> i42
+  // CHECK: %1 = moore.int_to_real %arg1 : i42 -> f32
+  %1 = moore.int_to_real %arg1 : i42 -> f32
+  return
+}
+
+// CHECK-LABEL: func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42)
+func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42) {
+  // CHECK: %0 = moore.real_to_int %arg0 : f64 -> i42
+  %0 = moore.real_to_int %arg0 : f64 -> i42
+  // CHECK: %1 = moore.int_to_real %arg1 : i42 -> f64
+  %1 = moore.int_to_real %arg1 : i42 -> f64
+  return
+}
