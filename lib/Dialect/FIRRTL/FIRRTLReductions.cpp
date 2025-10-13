@@ -1674,7 +1674,7 @@ struct ForceDedup : public OpReduction<CircuitOp> {
         continue;
 
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
-      if (!modulesAttr)
+      if (!modulesAttr || modulesAttr.size() < 2)
         continue;
 
       // Each dedup group gets its own match with benefit proportional to group
