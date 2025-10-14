@@ -5813,8 +5813,8 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
         parsePropertyType(type, "field type") || info.parseOptionalInfo())
       return failure();
 
-    fields.push_back(DomainFieldAttr::get(circuit.getContext(), fieldName,
-                                          TypeAttr::get(type)));
+    fields.push_back(
+        DomainFieldAttr::get(circuit.getContext(), fieldName, type));
   }
 
   auto builder = circuit.getBodyBuilder();

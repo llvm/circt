@@ -3151,3 +3151,12 @@ firrtl.circuit "Top" {
     firrtl.domain.define %o, %i
   }
 }
+
+// -----
+
+// The type of a domain field must be a PropertyType.
+firrtl.circuit "NonPropertyTypeInDomainField" {
+  // expected-error @below {{an array of domain fields}}
+  firrtl.domain @Foo ["bar", !firrtl.uint<1>]
+  firrtl.module @NonPropertyTypeInDomainField() {}
+}

@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
 include "FIRRTLDialect.td"
+include "FIRRTLTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "circt/Types.td"
 
@@ -214,7 +215,7 @@ def DomainFieldAttr : AttrDef<FIRRTLDialect, "DomainField"> {
   let summary = "A single field of a domain";
   let parameters = (
     ins "::mlir::StringAttr":$name,
-        "::mlir::TypeAttr":$type
+        "::circt::firrtl::PropertyType":$type
   );
   let assemblyFormat = [{
     `<` $name `,` $type `>`

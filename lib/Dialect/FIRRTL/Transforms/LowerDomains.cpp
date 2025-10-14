@@ -495,13 +495,12 @@ LogicalResult LowerCircuit::lowerDomain(DomainOp op) {
   auto name = op.getNameAttr();
   SmallVector<PortInfo> classInPorts;
   for (auto field : op.getFields().getAsRange<DomainFieldAttr>())
-    classInPorts.append(
-        {{/*name=*/builder.getStringAttr(Twine(field.getName().getValue()) +
-                                         "_in"),
-          /*type=*/field.getType().getValue(), /*dir=*/Direction::In},
-         {/*name=*/builder.getStringAttr(Twine(field.getName().getValue()) +
-                                         "_out"),
-          /*type=*/field.getType().getValue(), /*dir=*/Direction::Out}});
+    classInPorts.append({{/*name=*/builder.getStringAttr(
+                              Twine(field.getName().getValue()) + "_in"),
+                          /*type=*/field.getType(), /*dir=*/Direction::In},
+                         {/*name=*/builder.getStringAttr(
+                              Twine(field.getName().getValue()) + "_out"),
+                          /*type=*/field.getType(), /*dir=*/Direction::Out}});
   auto classIn = ClassOp::create(builder, name, classInPorts);
   auto classInType = classIn.getInstanceType();
   auto pathListType =

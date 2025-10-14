@@ -649,7 +649,7 @@ void Emitter::emitDeclaration(DomainOp op) {
     for (auto attr : op.getFields()) {
       auto fieldAttr = cast<DomainFieldAttr>(attr);
       ps << PP::newline << PPExtString(fieldAttr.getName()) << " : ";
-      emitType(fieldAttr.getType().getValue());
+      emitType(fieldAttr.getType());
     }
   });
 }
