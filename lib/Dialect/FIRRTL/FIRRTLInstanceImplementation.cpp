@@ -64,6 +64,13 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
         instanceOp->emitOpError("the number of result annotations should be "
                                 "equal to the number of results"));
 
+  auto domainInfo = instanceOp->getAttrOfType<ArrayAttr>("domainInfo");
+  if (domainInfo.size() != numExpected)
+    return emitNote(
+        instanceOp->emitOpError()
+        << "has a wrong number of port domain info attributes; expected "
+        << numExpected << ", got " << domainInfo.size());
+
   // Check that the port names match the referenced module.
   if (portNames != referencedModule.getPortNamesAttr()) {
     // We know there is an error, try to figure out whats wrong.
@@ -120,6 +127,17 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
       }
     }
     llvm_unreachable("should have found something wrong");
+  }
+
+  // Check the domain info matches.
+  for (size_t i = 0; i < numResults; ++i) {
+    auto portDomainInfo = domainInfo[i];
+    auto modulePortDomainInfo = referencedModule.getDomainInfoAttrForPort(i);
+    if (portDomainInfo != modulePortDomainInfo)
+      return emitNote(instanceOp->emitOpError()
+                      << "domain info for " << portNames[i] << " must be "
+                      << modulePortDomainInfo << ", but got "
+                      << portDomainInfo);
   }
 
   // Check that the instance op lists the correct layer requirements.

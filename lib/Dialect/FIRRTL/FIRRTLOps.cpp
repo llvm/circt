@@ -2881,6 +2881,13 @@ void InstanceChoiceOp::build(
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
 
+  // Create the domain info attribute.
+  ArrayAttr domainInfoAttr = defaultModule.getDomainInfoAttr();
+  if (domainInfoAttr.empty()) {
+    domainInfoAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
+        resultTypes.size(), builder.getArrayAttr({})));
+  }
+
   // Gather the module & case names.
   SmallVector<Attribute> moduleNames, caseNames;
   moduleNames.push_back(SymbolRefAttr::get(defaultModule.getModuleNameAttr()));
@@ -2891,14 +2898,14 @@ void InstanceChoiceOp::build(
     moduleNames.push_back(SymbolRefAttr::get(caseModule.getModuleNameAttr()));
   }
 
-  return build(
-      builder, result, resultTypes, builder.getArrayAttr(moduleNames),
-      builder.getArrayAttr(caseNames), builder.getStringAttr(name),
-      NameKindEnumAttr::get(builder.getContext(), nameKind),
-      defaultModule.getPortDirectionsAttr(), defaultModule.getPortNamesAttr(),
-      defaultModule.getDomainInfoAttr(), builder.getArrayAttr(annotations),
-      portAnnotationsAttr, defaultModule.getLayersAttr(),
-      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+  return build(builder, result, resultTypes, builder.getArrayAttr(moduleNames),
+               builder.getArrayAttr(caseNames), builder.getStringAttr(name),
+               NameKindEnumAttr::get(builder.getContext(), nameKind),
+               defaultModule.getPortDirectionsAttr(),
+               defaultModule.getPortNamesAttr(), domainInfoAttr,
+               builder.getArrayAttr(annotations), portAnnotationsAttr,
+               defaultModule.getLayersAttr(),
+               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
 std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
@@ -3024,7 +3031,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   }
 
   if (parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
-                       /*supportsSymbols=*/false, /*supportsDomains=*/false,
+                       /*supportsSymbols=*/false, /*supportsDomains=*/true,
                        entryArgs, portDirections, portNames, portTypes,
                        portAnnotations, portSyms, portLocs, domains))
     return failure();
@@ -3165,10 +3172,9 @@ InstanceChoiceOp::erasePorts(OpBuilder &builder,
       builder, getLoc(), newResultTypes, getModuleNames(), getCaseNames(),
       getName(), getNameKind(),
       direction::packAttribute(getContext(), newPortDirections),
-      ArrayAttr::get(getContext(), newPortNames),
-      ArrayAttr::get(getContext(), newPortDomains), getAnnotationsAttr(),
-      ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
-      getInnerSymAttr());
+      ArrayAttr::get(getContext(), newPortNames), newPortDomains,
+      getAnnotationsAttr(), ArrayAttr::get(getContext(), newPortAnnotations),
+      getLayers(), getInnerSymAttr());
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
