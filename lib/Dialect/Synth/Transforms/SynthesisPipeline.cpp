@@ -101,19 +101,18 @@ void circt::synth::buildCombLoweringPipeline(
 
 void circt::synth::buildSynthOptimizationPipeline(
     OpPassManager &pm, const SynthOptimizationPipelineOptions &options) {
-
-  pm.addPass(createLowerVariadicPass(options.timingAware));
-
   // LowerWordToBits may not be scalable for large designs so conditionally
   // disable it. It's also worth considering keeping word-level representation
   // for faster synthesis.
   if (!options.disableWordToBits)
     pm.addPass(synth::createLowerWordToBits());
   pm.addPass(createCSEPass());
+  // Run after LowerWordToBits for more precise timing-info & scalability.
+  pm.addPass(createLowerVariadicPass(options.timingAware));
   pm.addPass(createStructuralHash());
   pm.addPass(createSimpleCanonicalizerPass());
   pm.addPass(synth::createMaximumAndCover());
-  pm.addPass(synth::createLowerVariadic());
+  pm.addPass(createLowerVariadicPass(options.timingAware));
   pm.addPass(createStructuralHash());
 
   if (!options.abcCommands.empty()) {
