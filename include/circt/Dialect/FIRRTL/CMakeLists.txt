@@ -4,11 +4,12 @@ add_circt_dialect(FIRRTL firrtl FIRRTL)
 set(LLVM_TARGET_DEFINITIONS FIRRTLEnums.td)
 mlir_tablegen(FIRRTLEnums.h.inc -gen-enum-decls)
 mlir_tablegen(FIRRTLEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(CIRCTFIRRTLEnumsIncGen)
 
 set(LLVM_TARGET_DEFINITIONS FIRRTL.td)
 mlir_tablegen(FIRRTLAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=firrtl)
 mlir_tablegen(FIRRTLAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=firrtl)
-add_public_tablegen_target(CIRCTFIRRTLEnumsIncGen)
+add_public_tablegen_target(CIRCTFIRRTLAttributesIncGen)
 
 set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
