@@ -33,7 +33,7 @@ hw.module @AddMul(in %x: i4, in %y: i4, in %z: i4, out out: i4) {
 hw.module @Tree1(in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1, in %f: i1, in %g: i1, out o1: i1) {
   // COMMON-NEXT: %[[AND_INV0:.+]] = synth.aig.and_inv %d, not %e : i1
   // TIMING-NEXT: %[[AND_INV1:.+]] = synth.aig.and_inv not %c, %f : i1
-  // TIMING-NEXT: %[[AND_INV2:.+]] = synth.aig.and_inv not %[[AND_INV0]], %1 : i1
+  // TIMING-NEXT: %[[AND_INV2:.+]] = synth.aig.and_inv not %[[AND_INV0]], %[[AND_INV1]] : i1
   // TIMING-NEXT: %[[AND_INV3:.+]] = synth.aig.and_inv %a, not %b : i1
   // TIMING-NEXT: %[[AND_INV4:.+]] = synth.aig.and_inv %g, %[[AND_INV3]] : i1
   // TIMING-NEXT: %[[AND_INV5:.+]] = synth.aig.and_inv not %[[AND_INV2]], %[[AND_INV4]] : i1
