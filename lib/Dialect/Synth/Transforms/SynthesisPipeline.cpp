@@ -36,14 +36,22 @@ using namespace circt::synth;
 
 /// Helper function to populate additional legal ops for partial legalization.
 template <typename... AllowedOpTy>
-static void partiallyLegalizeCombToSynth(SmallVectorImpl<std::string> &ops) {
+static void addOpName(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
-
+template <typename... OpToLowerTy>
+static std::unique_ptr<Pass> createLowerVariadicPass(bool timingAware) {
+  LowerVariadicOptions options;
+  addOpName<OpToLowerTy...>(options.opNames);
+  options.timingAware = timingAware;
+  return createLowerVariadic(options);
+}
 void circt::synth::buildCombLoweringPipeline(
     OpPassManager &pm, const CombLoweringPipelineOptions &options) {
   {
     if (!options.disableDatapath) {
+      // Lower variadic Mul into a binary op to enable datapath lowering.
+      pm.addPass(createLowerVariadicPass<comb::MulOp>(options.timingAware));
       pm.addPass(createConvertCombToDatapath());
       pm.addPass(createSimpleCanonicalizerPass());
       if (options.synthesisStrategy == OptimizationStrategyTiming)
@@ -55,10 +63,9 @@ void circt::synth::buildCombLoweringPipeline(
     }
     // Partially legalize Comb, then run CSE and canonicalization.
     circt::ConvertCombToSynthOptions convOptions;
-    partiallyLegalizeCombToSynth<comb::AndOp, comb::OrOp, comb::XorOp,
-                                 comb::MuxOp, comb::ICmpOp, hw::ArrayGetOp,
-                                 hw::ArraySliceOp, hw::ArrayCreateOp,
-                                 hw::ArrayConcatOp, hw::AggregateConstantOp>(
+    addOpName<comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp, comb::ICmpOp,
+              hw::ArrayGetOp, hw::ArraySliceOp, hw::ArrayCreateOp,
+              hw::ArrayConcatOp, hw::AggregateConstantOp>(
         convOptions.additionalLegalOps);
     pm.addPass(circt::createConvertCombToSynth(convOptions));
   }
@@ -68,6 +75,18 @@ void circt::synth::buildCombLoweringPipeline(
   // unless they are very deep.
   comb::BalanceMuxOptions balanceOptions{OptimizationStrategyTiming ? 16 : 64};
   pm.addPass(comb::createBalanceMux(balanceOptions));
+
+  // Lower variadic ops before running full lowering to target IR.
+  if (options.targetIR.getValue() == TargetIR::AIG) {
+    // For AIG, lower variadic XoR since AIG cannot keep variadic
+    // representation.
+    pm.addPass(createLowerVariadicPass<comb::XorOp>(options.timingAware));
+  } else if (options.targetIR.getValue() == TargetIR::MIG) {
+    // For MIG, lower variadic And, Or, and Xor since MIG cannot keep variadic
+    // representation.
+    pm.addPass(createLowerVariadicPass<comb::AndOp, comb::OrOp, comb::XorOp>(
+        options.timingAware));
+  }
 
   pm.addPass(circt::hw::createHWAggregateToComb());
   circt::ConvertCombToSynthOptions convOptions;
@@ -83,7 +102,7 @@ void circt::synth::buildCombLoweringPipeline(
 void circt::synth::buildSynthOptimizationPipeline(
     OpPassManager &pm, const SynthOptimizationPipelineOptions &options) {
 
-  pm.addPass(synth::createLowerVariadic());
+  pm.addPass(createLowerVariadicPass(options.timingAware));
 
   // LowerWordToBits may not be scalable for large designs so conditionally
   // disable it. It's also worth considering keeping word-level representation

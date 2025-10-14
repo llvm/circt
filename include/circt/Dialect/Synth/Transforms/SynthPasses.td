@@ -78,7 +78,19 @@ def GenericLutMapper : CutRewriterPassBase<"synth-generic-lut-mapper",
 }
 
 def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
-  let summary = "Lower variadic AndInverter operations to binary AndInverter";
+  let summary = "Lower variadic operations to binary operations";
+  let description = [{
+    This pass lowers variadic operations to binary operations using a
+    delay-aware algorithm. For commutative operations, it builds a balanced
+    tree by combining values with the earliest arrival times first to minimize
+    the critical path.
+  }];
+  let options = [
+    ListOption<"opNames", "op-names", "std::string",
+               "Specify operation names to lower (empty means all)">,
+    Option<"timingAware", "timing-aware", "bool", "true",
+           "Lower operators with timing information">
+  ];
 }
 
 def LowerWordToBits : Pass<"synth-lower-word-to-bits", "hw::HWModuleOp"> {
