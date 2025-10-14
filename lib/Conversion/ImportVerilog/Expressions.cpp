@@ -1084,8 +1084,7 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   /// Handle real literals.
   Value visit(const slang::ast::RealLiteral &expr) {
-    return moore::RealLiteralOp::create(
-        builder, loc, builder.getF64FloatAttr(expr.getValue()));
+    return context.materializeSVReal(*expr.getConstant(), *expr.type, loc);
   }
 
   /// Helper function to convert RValues at creation of a new Struct, Array or
@@ -1499,6 +1498,32 @@ Value Context::convertToBool(Value value) {
   return {};
 }
 
+/// Materialize a Slang real literal as a constant op.
+Value Context::materializeSVReal(const slang::ConstantValue &svreal,
+                                 const slang::ast::Type &astType,
+                                 Location loc) {
+
+  mlir::FloatType fTy = mlir::Float64Type::get(getContext());
+  Type resultType;
+  double val;
+  if (const auto *floatType = astType.as_if<slang::ast::FloatingType>()) {
+    if (floatType->floatKind == slang::ast::FloatingType::ShortReal) {
+      resultType = moore::RealType::getShortReal(getContext());
+      val = svreal.shortReal().v;
+    } else if (floatType->floatKind == slang::ast::FloatingType::Real) {
+      resultType = moore::RealType::getReal(getContext());
+      val = svreal.real().v;
+    }
+  }
+
+  if (!resultType)
+    return {};
+
+  mlir::FloatAttr attr = mlir::FloatAttr::get(fTy, val);
+  return moore::RealLiteralOp::create(builder, loc, resultType, attr)
+      .getResult();
+}
+
 /// Materialize a Slang integer literal as a constant op.
 Value Context::materializeSVInt(const slang::SVInt &svint,
                                 const slang::ast::Type &astType, Location loc) {
@@ -1579,6 +1604,8 @@ Value Context::materializeConstant(const slang::ConstantValue &constant,
     return materializeFixedSizeUnpackedArrayType(constant, *arr, loc);
   if (constant.isInteger())
     return materializeSVInt(constant.integer(), type, loc);
+  if (constant.isReal() || constant.isShortReal())
+    return materializeSVReal(constant, type, loc);
 
   return {};
 }

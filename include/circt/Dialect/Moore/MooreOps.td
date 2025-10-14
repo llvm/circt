@@ -584,7 +584,7 @@ def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
   let arguments = (ins F64Attr:$value);
-  let results = (outs RealF64:$result);
+  let results = (outs RealType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
