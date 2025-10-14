@@ -138,33 +138,58 @@ static uint64_t getUIntLikeFromAny(const std::any &obj) {
   throw std::bad_any_cast();
 }
 
-void SIntType::ensureValid(const std::any &obj) const {
-  if (getWidth() > 64)
-    throw std::runtime_error("Width exceeds 64 bits");
-
-  int64_t minVal = -(1LL << (getWidth() - 1));
-  int64_t maxVal = (1LL << (getWidth() - 1)) - 1;
-  if (getWidth() == 64) {
-    // For 64-bit, we use the full range
-    minVal = INT64_MIN;
-    maxVal = INT64_MAX;
-  }
-  try {
-    int64_t value = getIntLikeFromAny(obj);
-    if (value < minVal || value > maxVal) {
+static void ensureIntBytearray(const std::any &obj, unsigned width) {
+  if (auto *bytes = std::any_cast<std::vector<uint8_t>>(&obj)) {
+    size_t expectedSize = (width + 7) / 8; // Round up to nearest byte
+    if (bytes->size() != expectedSize) {
       throw std::runtime_error(
-          std::format("value {} out of range for {}-bit signed integer", value,
-                      getWidth()));
+          std::format("wrong size: expected {} bytes, got {}", expectedSize,
+                      bytes->size()));
     }
-  } catch (const std::bad_any_cast &) {
+  } else {
     throw std::runtime_error(
-        "must be a signed integer type (int8_t, int16_t, int32_t, or int64_t)");
+        "must be std::vector<uint8_t> for >64-bit deserialization");
+  }
+}
+
+void SIntType::ensureValid(const std::any &obj) const {
+  if (getWidth() > 64) {
+    // Bytearray handling
+    ensureIntBytearray(obj, getWidth());
+  } else {
+    // C-style integer handling
+
+    int64_t minVal = -(1LL << (getWidth() - 1));
+    int64_t maxVal = (1LL << (getWidth() - 1)) - 1;
+    if (getWidth() == 64) {
+      // For 64-bit, we use the full range
+      minVal = INT64_MIN;
+      maxVal = INT64_MAX;
+    }
+    try {
+      int64_t value = getIntLikeFromAny(obj);
+      if (value < minVal || value > maxVal) {
+        throw std::runtime_error(
+            std::format("value {} out of range for {}-bit signed integer",
+                        value, getWidth()));
+      }
+    } catch (const std::bad_any_cast &) {
+      throw std::runtime_error("must be a signed integer type (int8_t, "
+                               "int16_t, int32_t, or int64_t)");
+    }
   }
 }
 
 MessageData SIntType::serialize(const std::any &obj) const {
   ensureValid(obj);
 
+  if (getWidth() > 64) {
+    // Bytearray handling
+    auto bytes = std::any_cast<std::vector<uint8_t>>(obj);
+    return MessageData(bytes);
+  }
+
+  // C-style integer handling
   int64_t value = getIntLikeFromAny(obj);
   size_t byteSize = (getWidth() + 7) / 8;
 
@@ -174,12 +199,17 @@ MessageData SIntType::serialize(const std::any &obj) const {
 
 std::pair<std::any, std::span<const std::uint8_t>>
 SIntType::deserialize(std::span<const std::uint8_t> data) const {
-  if (getWidth() > 64)
-    throw std::runtime_error("Width exceeds 64 bits");
-
   size_t byteSize = (getWidth() + 7) / 8;
   if (data.size() < byteSize)
     throw std::runtime_error("Insufficient data for sint type");
+
+  if (getWidth() > 64) {
+    // Bytearray handling
+    std::vector<uint8_t> result(data.data(), data.data() + byteSize);
+    return {std::any(result), data.subspan(byteSize)};
+  }
+
+  // C-style integer handling
 
   // Use pointer casting with sign extension
   uint64_t value = 0;
@@ -210,8 +240,11 @@ SIntType::deserialize(std::span<const std::uint8_t> data) const {
 }
 
 void UIntType::ensureValid(const std::any &obj) const {
-  if (getWidth() > 64)
-    throw std::runtime_error("Width exceeds 64 bits");
+  if (getWidth() > 64) {
+    // For >64-bit values, require a byte array of the exact size.
+    ensureIntBytearray(obj, getWidth());
+    return;
+  }
 
   uint64_t maxVal =
       (getWidth() == 64) ? UINT64_MAX : ((1ULL << getWidth()) - 1);
@@ -230,22 +263,30 @@ void UIntType::ensureValid(const std::any &obj) const {
 
 MessageData UIntType::serialize(const std::any &obj) const {
   ensureValid(obj);
+  if (getWidth() > 64) {
+    // Bytearray handling for wide integers
+    auto bytes = std::any_cast<std::vector<uint8_t>>(obj);
+    return MessageData(bytes);
+  }
 
   uint64_t value = getUIntLikeFromAny(obj);
   size_t byteSize = (getWidth() + 7) / 8;
-
-  // Use pointer casting for performance
   return MessageData(reinterpret_cast<const uint8_t *>(&value), byteSize);
 }
 
 std::pair<std::any, std::span<const std::uint8_t>>
 UIntType::deserialize(std::span<const std::uint8_t> data) const {
-  if (getWidth() > 64)
-    throw std::runtime_error("Width exceeds 64 bits");
-
   size_t byteSize = (getWidth() + 7) / 8;
   if (data.size() < byteSize)
     throw std::runtime_error("Insufficient data for uint type");
+
+  if (getWidth() > 64) {
+    // Bytearray handling for >64-bit unsigned ints
+    std::vector<uint8_t> result(data.data(), data.data() + byteSize);
+    return {std::any(result), data.subspan(byteSize)};
+  }
+
+  // C-style integer handling
 
   // Use pointer casting for performance
   uint64_t value = 0;
