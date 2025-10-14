@@ -112,6 +112,8 @@ void circt::synth::buildSynthOptimizationPipeline(
   pm.addPass(createCSEPass());
   pm.addPass(createStructuralHash());
   pm.addPass(createSimpleCanonicalizerPass());
+  pm.addPass(synth::createMaximumAndCover());
+  pm.addPass(synth::createLowerVariadic());
   pm.addPass(createStructuralHash());
 
   if (!options.abcCommands.empty()) {
