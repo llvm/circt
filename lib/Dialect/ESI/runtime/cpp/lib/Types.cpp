@@ -411,22 +411,14 @@ ArrayType::deserialize(std::span<const std::uint8_t> data) const {
   std::vector<std::any> result;
   result.reserve(size); // Pre-allocate for performance
   std::span<const std::uint8_t> remaining = data;
-
-  if (isReverse()) {
-    // Elements are serialized in reverse order, so read forward then reverse.
-    for (uint64_t i = 0; i < size; ++i) {
-      auto [elementValue, newRemaining] = elementType->deserialize(remaining);
-      result.push_back(elementValue);
-      remaining = newRemaining;
-    }
-    std::reverse(result.begin(), result.end());
-  } else {
-    for (uint64_t i = 0; i < size; ++i) {
-      auto [elementValue, newRemaining] = elementType->deserialize(remaining);
-      result.push_back(elementValue);
-      remaining = newRemaining;
-    }
+  for (uint64_t i = 0; i < size; ++i) {
+    auto [elementValue, newRemaining] = elementType->deserialize(remaining);
+    result.push_back(elementValue);
+    remaining = newRemaining;
   }
+  // If elements were serialized in reverse order, restore original ordering.
+  if (isReverse())
+    std::reverse(result.begin(), result.end());
 
   return {std::any(result), remaining};
 }
