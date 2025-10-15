@@ -22,13 +22,13 @@ DebounceOptions::fromLSPOptions(const circt::lsp::LSPServerOptions &opts) {
 }
 
 void PendingChangesMap::abort() {
-  std::scoped_lock lock(mu);
+  std::scoped_lock<std::mutex> lock(mu);
   pending.clear();
   pool.wait();
 }
 
 void PendingChangesMap::erase(llvm::StringRef key) {
-  std::scoped_lock lock(mu);
+  std::scoped_lock<std::mutex> lock(mu);
   pending.erase(key);
 }
 
@@ -53,7 +53,7 @@ void PendingChangesMap::enqueueChange(
   const auto now = std::chrono::steady_clock::now();
   const std::string key = params.textDocument.uri.file().str();
 
-  std::scoped_lock lock(mu);
+  std::scoped_lock<std::mutex> lock(mu);
   PendingChanges &pending = getOrCreateEntry(key);
 
   pending.changes.insert(pending.changes.end(), params.contentChanges.begin(),
@@ -75,7 +75,7 @@ void PendingChangesMap::debounceAndThen(
 
   // If debounce is disabled, run on main thread
   if (options.disableDebounce) {
-    std::scoped_lock lock(mu);
+    std::scoped_lock<std::mutex> lock(mu);
     auto it = pending.find(key);
     if (it == pending.end())
       return cb(nullptr);
@@ -94,7 +94,7 @@ void PendingChangesMap::debounceAndThen(
         result; // decided under lock, callback after
 
     {
-      std::scoped_lock lock(mu);
+      std::scoped_lock<std::mutex> lock(mu);
       auto it = pending.find(key);
       if (it != pending.end()) {
         PendingChanges &pc = it->second;

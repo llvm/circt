@@ -44,7 +44,7 @@ VerilogTextFile::VerilogTextFile(
     std::vector<llvm::lsp::Diagnostic> &diagnostics)
     : context(context), contents(fileContents.str()) {
   initializeProjectDriver();
-  std::scoped_lock lk(contentMutex);
+  std::scoped_lock<std::shared_mutex> lk(contentMutex);
   initialize(uri, version, diagnostics);
 }
 
@@ -53,7 +53,7 @@ LogicalResult VerilogTextFile::update(
     ArrayRef<llvm::lsp::TextDocumentContentChangeEvent> changes,
     std::vector<llvm::lsp::Diagnostic> &diagnostics) {
 
-  std::scoped_lock lk(contentMutex);
+  std::scoped_lock<std::shared_mutex> lk(contentMutex);
   if (failed(llvm::lsp::TextDocumentContentChangeEvent::applyTo(changes,
                                                                 contents))) {
     circt::lsp::Logger::error(Twine("Failed to update contents of ") +
@@ -158,11 +158,11 @@ void VerilogTextFile::findReferencesOf(
 }
 
 std::shared_ptr<VerilogDocument> VerilogTextFile::getDocument() {
-  std::scoped_lock lk(docMutex);
+  std::scoped_lock<std::shared_mutex> lk(docMutex);
   return document;
 }
 
 void VerilogTextFile::setDocument(std::shared_ptr<VerilogDocument> newDoc) {
-  std::scoped_lock lk(docMutex);
+  std::scoped_lock<std::shared_mutex> lk(docMutex);
   document = std::move(newDoc);
 }

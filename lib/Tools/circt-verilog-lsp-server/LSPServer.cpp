@@ -71,13 +71,13 @@ struct LSPServer {
 
   /// A thread-safe version of `publishDiagnostics`
   void sendDiagnostics(const PublishDiagnosticsParams &p) {
-    std::scoped_lock lk(diagnosticsMutex);
+    std::scoped_lock<std::mutex> lk(diagnosticsMutex);
     publishDiagnostics(p); // serialize the write
   }
 
   void
   setPublishDiagnostics(OutgoingNotification<PublishDiagnosticsParams> diag) {
-    std::scoped_lock lk(diagnosticsMutex);
+    std::scoped_lock<std::mutex> lk(diagnosticsMutex);
     publishDiagnostics = std::move(diag);
   }
 

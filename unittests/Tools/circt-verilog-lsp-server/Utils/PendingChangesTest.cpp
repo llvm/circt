@@ -31,7 +31,7 @@ struct CallbackCapture {
 
   void set(std::unique_ptr<PendingChanges> r) {
     {
-      std::scoped_lock lock(m);
+      std::scoped_lock<std::mutex> lock(m);
       got = std::move(r);
       called = true;
     }
