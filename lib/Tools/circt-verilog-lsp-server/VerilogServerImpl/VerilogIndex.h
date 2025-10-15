@@ -85,7 +85,8 @@ private:
   // The parent document's source manager.
   const slang::SourceManager &sourceManager;
 };
-}; // namespace lsp
-}; // namespace circt
+
+} // namespace lsp
+} // namespace circt
 
 #endif

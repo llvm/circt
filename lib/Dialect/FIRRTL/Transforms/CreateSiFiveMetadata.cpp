@@ -497,7 +497,7 @@ struct ObjectModelIR {
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[3] = {"moduleName", "inDut", "libraries"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
-}; // namespace
+};
 
 class CreateSiFiveMetadataPass
     : public circt::firrtl::impl::CreateSiFiveMetadataBase<
@@ -525,7 +525,7 @@ public:
     this->replSeqMemFile = replSeqMemFile.str();
   }
 };
-} // end anonymous namespace
+} // namespace
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.

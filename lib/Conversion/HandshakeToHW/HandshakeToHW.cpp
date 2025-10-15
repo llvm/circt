@@ -1600,7 +1600,7 @@ public:
                                /*latency=*/1);
     }
   }
-}; // namespace
+};
 
 class SinkConversionPattern : public HandshakeConversionPattern<SinkOp> {
 public:

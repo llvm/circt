@@ -90,7 +90,7 @@ private:
                                  ArrayRef<Value> results, Value defaultValue,
                                  ArrayRef<Location> locs) const;
 };
-}; // namespace
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Implementation
