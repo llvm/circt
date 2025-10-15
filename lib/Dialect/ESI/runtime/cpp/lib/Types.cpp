@@ -389,11 +389,18 @@ MessageData ArrayType::serialize(const std::any &obj) const {
   if (totalSize > 0)
     result.reserve((totalSize + 7) / 8);
 
-  // Serialize elements in reverse order (to match Python implementation)
-  for (auto it = arrayData.rbegin(); it != arrayData.rend(); ++it) {
-    auto elementData = elementType->serialize(*it);
-    const auto &elementBytes = elementData.getData();
-    result.insert(result.end(), elementBytes.begin(), elementBytes.end());
+  if (isReverse()) {
+    for (auto it = arrayData.rbegin(); it != arrayData.rend(); ++it) {
+      auto elementData = elementType->serialize(*it);
+      const auto &elementBytes = elementData.getData();
+      result.insert(result.end(), elementBytes.begin(), elementBytes.end());
+    }
+  } else {
+    for (const auto &elem : arrayData) {
+      auto elementData = elementType->serialize(elem);
+      const auto &elementBytes = elementData.getData();
+      result.insert(result.end(), elementBytes.begin(), elementBytes.end());
+    }
   }
 
   return MessageData(std::move(result));
@@ -405,14 +412,21 @@ ArrayType::deserialize(std::span<const std::uint8_t> data) const {
   result.reserve(size); // Pre-allocate for performance
   std::span<const std::uint8_t> remaining = data;
 
-  // Deserialize elements (will be in reverse order, so we'll reverse at the
-  // end)
-  for (uint64_t i = 0; i < size; ++i) {
-    auto [elementValue, newRemaining] = elementType->deserialize(remaining);
-    result.push_back(elementValue);
-    remaining = newRemaining;
+  if (isReverse()) {
+    // Elements are serialized in reverse order, so read forward then reverse.
+    for (uint64_t i = 0; i < size; ++i) {
+      auto [elementValue, newRemaining] = elementType->deserialize(remaining);
+      result.push_back(elementValue);
+      remaining = newRemaining;
+    }
+    std::reverse(result.begin(), result.end());
+  } else {
+    for (uint64_t i = 0; i < size; ++i) {
+      auto [elementValue, newRemaining] = elementType->deserialize(remaining);
+      result.push_back(elementValue);
+      remaining = newRemaining;
+    }
   }
-  std::reverse(result.begin(), result.end());
 
   return {std::any(result), remaining};
 }
