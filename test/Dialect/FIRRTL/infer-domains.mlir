@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains))' %s --split-input-file | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains))' %s | FileCheck %s
 
 // Legal domain usage - no crossing.
 firrtl.circuit "LegalDomains" {
@@ -13,8 +13,6 @@ firrtl.circuit "LegalDomains" {
   }
 }
 // CHECK-LABEL: firrtl.circuit "LegalDomains"
-
-// -----
 
 // Domain inference through connections.
 firrtl.circuit "DomainInference" {
@@ -36,8 +34,6 @@ firrtl.circuit "DomainInference" {
 // CHECK-LABEL: firrtl.circuit "DomainInference"
 // CHECK: out %c: !firrtl.uint<1> domains [%A]
 
-// -----
-
 // Unsafe domain cast
 firrtl.circuit "UnsafeDomainCast" {
   firrtl.domain @ClockDomain
@@ -56,8 +52,6 @@ firrtl.circuit "UnsafeDomainCast" {
 }
 // CHECK-LABEL: firrtl.circuit "UnsafeDomainCast"
 
-// -----
-
 // Domain sequence matching.
 firrtl.circuit "LegalSequences" {
   firrtl.domain @ClockDomain
@@ -71,8 +65,6 @@ firrtl.circuit "LegalSequences" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
-
-// -----
 
 // Domain sequence order equivalence - should be legal
 firrtl.circuit "SequenceOrderEquivalence" {
@@ -89,8 +81,6 @@ firrtl.circuit "SequenceOrderEquivalence" {
   }
 }
 // CHECK-LABEL: firrtl.circuit "SequenceOrderEquivalence"
-
-// -----
 
 // Domain sequence inference
 firrtl.circuit "SequenceInference" {
@@ -112,8 +102,6 @@ firrtl.circuit "SequenceInference" {
   }
 }
 
-// -----
-
 // Domain duplicate equivalence - should be legal.
 firrtl.circuit "DuplicateDomainEquivalence" {
   firrtl.domain @ClockDomain
@@ -126,8 +114,6 @@ firrtl.circuit "DuplicateDomainEquivalence" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
-
-// -----
 
 // Unsafe domain cast with sequences
 firrtl.circuit "UnsafeSequenceCast" {
@@ -146,9 +132,9 @@ firrtl.circuit "UnsafeSequenceCast" {
   }
 }
 
-// -----
-
 //  Different port types domain inference.
+
+// CHECK-LABEL: DifferentPortTypes
 firrtl.circuit "DifferentPortTypes" {
   firrtl.domain @ClockDomain
   firrtl.module @DifferentPortTypes(
@@ -162,8 +148,6 @@ firrtl.circuit "DifferentPortTypes" {
     firrtl.matchingconnect %sint_output, %sint_input : !firrtl.sint<4>
   }
 }
-
-// -----
 
 // Domain inference through wires.
 
@@ -185,9 +169,9 @@ firrtl.circuit "DomainInferenceThroughWires" {
   }
 }
 
-// -----
+// Register inference.
 
-// Register inference/
+// CHECK-LABEL: RegisterInference
 firrtl.circuit "RegisterInference" {
   firrtl.domain @ClockDomain
   firrtl.module @RegisterInference(
@@ -201,5 +185,24 @@ firrtl.circuit "RegisterInference" {
     %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %r, %d : !firrtl.uint<1>
     firrtl.matchingconnect %q, %r : !firrtl.uint<1>
+  }
+}
+
+// Update domain on instance.
+
+// CHECK-LABEL: InstanceUpdate
+firrtl.circuit "InstanceUpdate" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module @Foo(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<1> domains [%ClockDomain])
+  firrtl.module @Foo(in %i : !firrtl.uint<1>) {}
+
+  // CHECK: firrtl.module @InstanceUpdate(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<1> domains [%ClockDomain]) {
+  // CHECK:   %foo_ClockDomain, %foo_i = firrtl.instance foo @Foo(in ClockDomain: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [ClockDomain])
+  // CHECK:   firrtl.domain.define %foo_ClockDomain, %ClockDomain
+  // CHECK:   firrtl.connect %foo_i, %i : !firrtl.uint<1>
+  // CHECK: }
+  firrtl.module @InstanceUpdate(in %i : !firrtl.uint<1>) {
+    %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<1>)
+    firrtl.connect %foo_i, %i : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

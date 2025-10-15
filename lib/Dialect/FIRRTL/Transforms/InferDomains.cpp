@@ -80,7 +80,7 @@ static bool isPort(FModuleOp module, Value value) {
 }
 
 //====--------------------------------------------------------------------------
-// CircuitDomainInfo: Information about the domains declared in a circuit.
+// Circuit-wide state.
 //====--------------------------------------------------------------------------
 
 /// Each declared domain in the circuit is assigned an index, based on the order
@@ -93,11 +93,7 @@ using DomainTypeID = size_t;
 /// of a domain.
 namespace {
 struct CircuitDomainInfo {
-  static CircuitDomainInfo get(CircuitOp circuit) {
-    CircuitDomainInfo info;
-    info.processCircuit(circuit);
-    return info;
-  }
+  CircuitDomainInfo(CircuitOp circuit) { processCircuit(circuit); }
 
   ArrayRef<DomainOp> getDomains() const { return domainTable; }
   size_t getNumDomains() const { return domainTable.size(); }
@@ -106,16 +102,20 @@ struct CircuitDomainInfo {
   DomainTypeID getDomainTypeID(DomainOp op) const {
     return typeIDTable.at(op.getNameAttr());
   }
+
   DomainTypeID getDomainTypeID(StringAttr name) const {
     return typeIDTable.at(name);
   }
+
   DomainTypeID getDomainTypeID(FlatSymbolRefAttr ref) const {
     return getDomainTypeID(ref.getAttr());
   }
+
   DomainTypeID getDomainTypeID(ArrayAttr info, size_t i) const {
     auto name = getDomainPortTypeName(info, i);
     return getDomainTypeID(name);
   }
+
   DomainTypeID getDomainTypeID(Value value) const {
     assert(isa<DomainType>(value.getType()));
     if (auto arg = dyn_cast<BlockArgument>(value)) {
@@ -154,13 +154,7 @@ private:
   /// A map from domain name to type ID.
   DenseMap<StringAttr, DomainTypeID> typeIDTable;
 };
-} // namespace
 
-//====--------------------------------------------------------------------------
-// ModuleUpdateInfo: Summary of about how a module's interface has changed.
-//====--------------------------------------------------------------------------
-
-namespace {
 /// Information about the changes made to the interface of a module, which can
 /// be replayed onto an instance.
 struct ModuleUpdateInfo {
@@ -169,23 +163,15 @@ struct ModuleUpdateInfo {
   /// The domain ports which have been inserted into a module.
   PortInsertions portInsertions;
 };
+
+struct GlobalState {
+  GlobalState(CircuitOp circuit) : circuitInfo(circuit) {}
+
+  CircuitDomainInfo circuitInfo;
+  DenseMap<StringAttr, ModuleUpdateInfo> moduleUpdateTable;
+};
+
 } // namespace
-
-static bool operator==(const ModuleUpdateInfo &lhs,
-                       const ModuleUpdateInfo &rhs) {
-  if (lhs.portDomainInfo != rhs.portDomainInfo)
-    return false;
-
-  if (lhs.portInsertions.size() != rhs.portInsertions.size())
-    return false;
-
-  for (size_t i = 0, e = lhs.portInsertions.size(); i < e; ++i) {
-    if (lhs.portInsertions != rhs.portInsertions)
-      return false;
-  }
-
-  return true;
-}
 
 //====--------------------------------------------------------------------------
 // Terms: Syntax for unifying domain and domain-rows.
@@ -374,14 +360,14 @@ namespace {
 class InferModuleDomains {
 public:
   /// Run infer-domains on a module.
-  static LogicalResult run(const CircuitDomainInfo &, InstanceGraphNode *node);
+  static LogicalResult run(GlobalState &, FModuleOp);
 
 private:
   /// Initialize module-level state.
-  InferModuleDomains(const CircuitDomainInfo &);
+  InferModuleDomains(GlobalState &);
 
   /// Execute on the given module.
-  LogicalResult operator()(InstanceGraphNode *node);
+  LogicalResult operator()(FModuleOp);
 
   /// Record the domain associations of hardware ports, and record the
   /// underlying value of output domain ports.
@@ -473,10 +459,6 @@ private:
   /// domains. If no mapping has been defined, returns nullptr.
   Term *getOptDomainAssociation(Value) const;
 
-  /// Get the changes made to a module, by the module's name.
-  const ModuleUpdateInfo &getModuleUpdateInfo(StringAttr name) const;
-  const ModuleUpdateInfo &getModuleUpdateInfo(FlatSymbolRefAttr ref) const;
-
   /// Allocate a row, where each domain is a variable.
   RowTerm *allocateRow();
 
@@ -498,7 +480,7 @@ private:
   void emitPortDomainCrossingError(BlockArgument, size_t, Term *, Term *) const;
 
   /// Information about the domains in a circuit.
-  const CircuitDomainInfo &circuitInfo;
+  GlobalState &globals;
 
   /// Term allocator.
   llvm::BumpPtrAllocator allocator;
@@ -512,27 +494,19 @@ private:
   /// A map from local domain definition to its aliasing output ports.
   DenseMap<Value, TinyPtrVector<BlockArgument>> exportTable;
 
-  /// A map from module name to the updates made to it.
-  DenseMap<StringAttr, ModuleUpdateInfo> moduleUpdateInfoTable;
-
   /// A boolean tracking if a non-fatal error occurred, or not.
   bool ok = true;
 };
 } // namespace
 
-LogicalResult InferModuleDomains::run(const CircuitDomainInfo &circuitInfo,
-                                      InstanceGraphNode *node) {
-  return InferModuleDomains(circuitInfo)(node);
+LogicalResult InferModuleDomains::run(GlobalState &globals, FModuleOp module) {
+  return InferModuleDomains(globals)(module);
 }
 
-InferModuleDomains::InferModuleDomains(const CircuitDomainInfo &circuitInfo)
-    : circuitInfo(circuitInfo) {}
+InferModuleDomains::InferModuleDomains(GlobalState &globals)
+    : globals(globals) {}
 
-LogicalResult InferModuleDomains::operator()(InstanceGraphNode *node) {
-  auto module = dyn_cast<FModuleOp>(node->getOperation());
-  if (!module)
-    return success();
-
+LogicalResult InferModuleDomains::operator()(FModuleOp module) {
   LLVM_DEBUG(
       llvm::errs() << "================================================\n";
       llvm::errs() << "infer module domains: " << module.getModuleName()
@@ -568,7 +542,7 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
 
     // This is a domain port.
     if (isa<DomainType>(port.getType())) {
-      auto typeID = circuitInfo.getDomainTypeID(portDomainInfo, i);
+      auto typeID = globals.circuitInfo.getDomainTypeID(portDomainInfo, i);
       domainTypeIDTable[i] = typeID;
       if (module.getPortDirection(i) == Direction::In) {
         setTermForDomain(port, allocate<ValueTerm>(port));
@@ -581,7 +555,7 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
     if (portDomains.empty())
       continue;
 
-    SmallVector<Term *> elements(circuitInfo.getNumDomains());
+    SmallVector<Term *> elements(globals.circuitInfo.getNumDomains());
     for (auto domainPortIndexAttr : portDomains) {
       auto domainPortIndex = domainPortIndexAttr.getUInt();
       auto domainTypeID = domainTypeIDTable[domainPortIndex];
@@ -645,14 +619,16 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
 }
 
 LogicalResult InferModuleDomains::processOp(InstanceOp op) {
-  const auto &update = getModuleUpdateInfo(op.getReferencedModuleNameAttr());
+  const auto &update =
+      globals.moduleUpdateTable.at(op.getReferencedModuleNameAttr());
   op = updateInstancePorts(op, update);
   processInstancePorts(op);
   return success();
 }
 
 LogicalResult InferModuleDomains::processOp(InstanceChoiceOp op) {
-  const auto &update = getModuleUpdateInfo(op.getDefaultTargetAttr().getAttr());
+  const auto &update =
+      globals.moduleUpdateTable.at(op.getDefaultTargetAttr().getAttr());
   op = updateInstancePorts(op, update);
   processInstancePorts(op);
   return success();
@@ -667,8 +643,8 @@ LogicalResult InferModuleDomains::processOp(UnsafeDomainCastOp op) {
   RowTerm *inputRow = getDomainAssociationAsRow(input);
   SmallVector<Term *> elements(inputRow->elements);
   for (auto domain : op.getDomains()) {
-    auto index = circuitInfo.getDomainTypeID(domain);
-    elements[index] = getTermForDomain(domain);
+    auto typeID = globals.circuitInfo.getDomainTypeID(domain);
+    elements[typeID] = getTermForDomain(domain);
   }
 
   auto *row = allocateRow(elements);
@@ -705,7 +681,7 @@ void InferModuleDomains::processInstancePorts(T op) {
     LLVM_DEBUG(llvm::errs() << "handling instance port: " << port << "\n");
 
     if (isa<DomainType>(port.getType())) {
-      auto typeID = circuitInfo.getDomainTypeID(domainInfo, i);
+      auto typeID = globals.circuitInfo.getDomainTypeID(domainInfo, i);
       domainPortTypeIDTable[i] = typeID;
       if (op.getPortDirection(i) == Direction::Out) {
         setTermForDomain(port, allocate<ValueTerm>(port));
@@ -719,7 +695,7 @@ void InferModuleDomains::processInstancePorts(T op) {
     // This is a port, which may have explicit domain information. Associate the
     // port with a row of domains, where each element is derived from the domain
     // associations recorded in the domain info attribute of the instance.
-    SmallVector<Term *> elements(circuitInfo.getNumDomains());
+    SmallVector<Term *> elements(globals.circuitInfo.getNumDomains());
     auto associations = getPortDomainAssociation(domainInfo, i);
     for (auto domainPortIndexAttr : associations) {
       auto domainPortIndex = domainPortIndexAttr.getUInt();
@@ -774,7 +750,7 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
   // to form the new port domain information for the module by examining the
   // the associated domains of each port.
   auto *context = module.getContext();
-  auto numDomains = circuitInfo.getNumDomains();
+  auto numDomains = globals.circuitInfo.getNumDomains();
   auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
   auto oldModuleDomainInfo = module.getDomainInfoAttr();
   auto numPorts = module.getNumPorts();
@@ -820,10 +796,10 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
     if (isa<FIRRTLBaseType>(type)) {
       auto associations = copyPortDomainAssociations(oldModuleDomainInfo, i);
       auto *row = getDomainAssociationAsRow(port);
-      for (size_t DomainTypeID = 0; DomainTypeID < numDomains; ++DomainTypeID) {
-        if (associations[DomainTypeID])
+      for (size_t domainTypeID = 0; domainTypeID < numDomains; ++domainTypeID) {
+        if (associations[domainTypeID])
           continue;
-        auto domain = cast<ValueTerm>(find(row->elements[DomainTypeID]))->value;
+        auto domain = cast<ValueTerm>(find(row->elements[domainTypeID]))->value;
         size_t domainPortIndex = 0;
         if (auto arg = dyn_cast<BlockArgument>(domain)) {
           if (arg.getOwner()->getParentOp() == module) {
@@ -851,7 +827,7 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
             return failure();
           }
         }
-        associations[DomainTypeID] = IntegerAttr::get(
+        associations[domainTypeID] = IntegerAttr::get(
             IntegerType::get(context, 32, IntegerType::Unsigned),
             domainPortIndex);
       }
@@ -866,18 +842,23 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
   auto newModuleDomainInfoAttr =
       ArrayAttr::get(module.getContext(), newModuleDomainInfo);
   module.setDomainInfoAttr(newModuleDomainInfoAttr);
+
+  // record the domain info for replaying on instances.
+  auto &update = globals.moduleUpdateTable[module.getNameAttr()];
+  update.portDomainInfo = newModuleDomainInfoAttr;
+
   return success();
 }
 
 SmallVector<Attribute>
 InferModuleDomains::copyPortDomainAssociations(ArrayAttr moduleDomainInfo,
                                                size_t portIndex) {
-  SmallVector<Attribute> result(circuitInfo.getNumDomains());
+  SmallVector<Attribute> result(globals.circuitInfo.getNumDomains());
   auto oldAssociations = getPortDomainAssociation(moduleDomainInfo, portIndex);
   for (auto domainPortIndexAttr : oldAssociations) {
     auto domainPortIndex = domainPortIndexAttr.getUInt();
     auto domainTypeID =
-        circuitInfo.getDomainTypeID(moduleDomainInfo, domainPortIndex);
+        globals.circuitInfo.getDomainTypeID(moduleDomainInfo, domainPortIndex);
     result[domainTypeID] = domainPortIndexAttr;
   };
   return result;
@@ -951,7 +932,7 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
           continue;
 
         // We must insert a new output domain port.
-        auto domainDecl = circuitInfo.getDomain(typeID);
+        auto domainDecl = globals.circuitInfo.getDomain(typeID);
         auto domainName = domainDecl.getNameAttr();
 
         auto portInsertionPoint = i;
@@ -977,7 +958,7 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
           continue;
 
         // insert a new input domain port for the variable.
-        auto domainDecl = circuitInfo.getDomain(typeID);
+        auto domainDecl = globals.circuitInfo.getDomain(typeID);
         auto domainName = domainDecl.getNameAttr();
 
         auto portInsertionPoint = i;
@@ -1019,8 +1000,8 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
   }
 
   // Record the insertions, so we can replay them on instances later.
-  auto &info = moduleUpdateInfoTable[module.getNameAttr()];
-  info.portInsertions = std::move(insertions);
+  auto &update = globals.moduleUpdateTable[module.getNameAttr()];
+  update.portInsertions = std::move(insertions);
 }
 
 LogicalResult
@@ -1077,16 +1058,6 @@ LogicalResult InferModuleDomains::updateOpDomainAssociations(InstanceOp op) {
     }
   }
   return success();
-}
-
-const ModuleUpdateInfo &
-InferModuleDomains::getModuleUpdateInfo(StringAttr name) const {
-  return moduleUpdateInfoTable.at(name);
-}
-
-const ModuleUpdateInfo &
-InferModuleDomains::getModuleUpdateInfo(FlatSymbolRefAttr ref) const {
-  return getModuleUpdateInfo(ref.getAttr());
 }
 
 LogicalResult InferModuleDomains::unifyAssociations(Operation *op, Value lhs,
@@ -1219,7 +1190,7 @@ void InferModuleDomains::setDomainAssociation(Value value, Term *term) {
 
 RowTerm *InferModuleDomains::allocateRow() {
   SmallVector<Term *> elements;
-  elements.resize(circuitInfo.getNumDomains());
+  elements.resize(globals.circuitInfo.getNumDomains());
   return allocateRow(elements);
 }
 
@@ -1270,8 +1241,8 @@ void InferModuleDomains::render(Diagnostic &out, VariableIDTable &idTable,
   if (auto *row = dyn_cast<RowTerm>(term)) {
     bool first = true;
     out << "[";
-    for (size_t i = 0, e = circuitInfo.getNumDomains(); i < e; ++i) {
-      auto domainOp = circuitInfo.getDomain(i);
+    for (size_t i = 0, e = globals.circuitInfo.getNumDomains(); i < e; ++i) {
+      auto domainOp = globals.circuitInfo.getDomain(i);
       if (!first) {
         out << ", ";
         first = false;
@@ -1291,7 +1262,7 @@ void InferModuleDomains::emitPortDomainCrossingError(BlockArgument port,
   VariableIDTable idTable;
 
   auto portIndex = port.getArgNumber();
-  auto domainOp = circuitInfo.getDomain(domainTypeID);
+  auto domainOp = globals.circuitInfo.getDomain(domainTypeID);
   auto domainName = domainOp.getName();
 
   auto diag = emitError(port.getLoc());
@@ -1321,12 +1292,16 @@ void InferDomainsPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n");
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
-  auto circuitInfo = CircuitDomainInfo::get(circuit);
+
+  GlobalState globals(circuit);
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : instanceGraph) {
     for (auto *node : llvm::post_order_ext(root, visited)) {
-      auto *op = node->getModule<Operation *>();
-      if (failed(InferModuleDomains::run(circuitInfo, node))) {
+      auto module = dyn_cast<FModuleOp>(node->getOperation());
+      if (!module)
+        continue;
+
+      if (failed(InferModuleDomains::run(globals, module))) {
         signalPassFailure();
         return;
       }
