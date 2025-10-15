@@ -565,9 +565,8 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG dd16a7947e0586d0541477f1b4b60eda7c986e35
-      # Shallow check-out doesn't work if the tag is ref spec is far from HEAD.
-      # GIT_SHALLOW ON
+      GIT_TAG v9.1
+      GIT_SHALLOW ON
     )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
@@ -612,7 +611,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 9.0 REQUIRED)
+    find_package(slang 9.1 REQUIRED)
   endif()
 endif()
 

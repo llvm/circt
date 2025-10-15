@@ -10,6 +10,7 @@
 #define LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_LSPDIAGNOSTICCLIENT_H_
 
 #include "VerilogDocument.h"
+#include "slang/diagnostics/DiagnosticClient.h"
 
 namespace circt {
 namespace lsp {
