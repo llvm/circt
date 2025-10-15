@@ -562,13 +562,12 @@ struct ModuleVisitor : public BaseVisitor {
       return success();
 
     // If the block has a name, add it to the list of block name prefices.
-    SmallString<64> prefixBuffer;
-    auto prefix = blockNamePrefix;
-    if (!genNode.name.empty()) {
-      prefixBuffer += blockNamePrefix;
-      prefixBuffer += genNode.name;
-      prefixBuffer += '.';
-      prefix = prefixBuffer;
+    SmallString<64> prefix = blockNamePrefix;
+    if (!genNode.name.empty() ||
+        genNode.getParentScope()->asSymbol().kind !=
+            slang::ast::SymbolKind::GenerateBlockArray) {
+      prefix += genNode.getExternalName();
+      prefix += '.';
     }
 
     // Visit each member of the generate block.
@@ -582,27 +581,20 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
     // If the block has a name, add it to the list of block name prefices and
     // prepare to append the array index and a `.` in each iteration.
-    SmallString<64> prefixBuffer;
-    if (!genArrNode.name.empty()) {
-      prefixBuffer += blockNamePrefix;
-      prefixBuffer += genArrNode.name;
-    }
-    auto prefixBufferBaseLen = prefixBuffer.size();
+    SmallString<64> prefix = blockNamePrefix;
+    prefix += genArrNode.getExternalName();
+    prefix += '_';
+    auto prefixBaseLen = prefix.size();
 
     // Visit each iteration entry of the generate block.
     for (const auto *entry : genArrNode.entries) {
-      // Append the index to the prefix if this block has a name.
-      auto prefix = blockNamePrefix;
-      if (prefixBufferBaseLen > 0) {
-        prefixBuffer.resize(prefixBufferBaseLen);
-        prefixBuffer += '_';
-        if (entry->arrayIndex)
-          prefixBuffer += entry->arrayIndex->toString();
-        else
-          Twine(entry->constructIndex).toVector(prefixBuffer);
-        prefixBuffer += '.';
-        prefix = prefixBuffer;
-      }
+      // Append the index to the prefix.
+      prefix.resize(prefixBaseLen);
+      if (entry->arrayIndex)
+        prefix += entry->arrayIndex->toString();
+      else
+        Twine(entry->constructIndex).toVector(prefix);
+      prefix += '.';
 
       // Visit this iteration entry.
       if (failed(entry->asSymbol().visit(ModuleVisitor(context, loc, prefix))))
