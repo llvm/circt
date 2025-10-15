@@ -2,7 +2,7 @@
 
 // Port annotated with same domain type twice.
 firrtl.circuit "DomainCrossOnPort" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @DomainCrossOnPort(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
@@ -17,7 +17,7 @@ firrtl.circuit "DomainCrossOnPort" {
 
 // Illegal domain crossing - connect op.
 firrtl.circuit "IllegalDomainCrossing" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
@@ -35,7 +35,7 @@ firrtl.circuit "IllegalDomainCrossing" {
 
 // Illegal domain crossing at matchingconnect op.
 firrtl.circuit "IllegalDomainCrossing" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,

@@ -60,10 +60,10 @@ static StringAttr getDomainPortTypeName(ArrayAttr info, size_t i) {
 
 /// From a domain info attribute, get the row of associated domains for a
 /// hardware value at index i.
-static ArrayAttr getPortDomainAssociation(ArrayAttr info, size_t i) {
+static auto getPortDomainAssociation(ArrayAttr info, size_t i) {
   if (info.empty())
-    return info;
-  return cast<ArrayAttr>(info[i]);
+    return info.getAsRange<IntegerAttr>();
+  return cast<ArrayAttr>(info[i]).getAsRange<IntegerAttr>();
 }
 
 /// Return true if the value is a port on the module.
@@ -161,8 +161,12 @@ private:
 //====--------------------------------------------------------------------------
 
 namespace {
+/// Information about the changes made to the interface of a module, which can
+/// be replayed onto an instance.
 struct ModuleUpdateInfo {
+  /// The updated domain information for a module.
   ArrayAttr portDomainInfo;
+  /// The domain ports which have been inserted into a module.
   PortInsertions portInsertions;
 };
 } // namespace
@@ -181,32 +185,6 @@ static bool operator==(const ModuleUpdateInfo &lhs,
   }
 
   return true;
-}
-
-static void updateInstance(OpBuilder &builder, const ModuleUpdateInfo &info,
-                           InstanceOp op) {
-  auto clone = op.insertPorts(info.portInsertions);
-  clone.setDomainInfoAttr(info.portDomainInfo);
-}
-
-static void updateInstance(OpBuilder &builder, const ModuleUpdateInfo &info,
-                           InstanceChoiceOp op) {
-  auto clone = op.insertPorts(info.portInsertions);
-  clone.setDomainInfoAttr(info.portDomainInfo);
-}
-
-using ModuleUpdateInfoTable = DenseMap<Operation *, ModuleUpdateInfo>;
-
-LogicalResult updateInstance(const ModuleUpdateInfoTable &table,
-                             InstanceOp op) {
-  return success();
-}
-
-LogicalResult updateInstance(const ModuleUpdateInfoTable &table,
-                             InstanceChoiceOp op) {
-  // verify that all modules have the same update.
-  auto _mod = op.getDefaultTargetAttr();
-  return success();
 }
 
 //====--------------------------------------------------------------------------
@@ -413,13 +391,24 @@ private:
   /// value of domains, defined within the body of the module.
   LogicalResult processBody(FModuleOp);
 
-  /// Record the domain associations of any operands or results.
+  /// Record the domain associations of any operands or results, updating the op
+  /// if necessary.
   LogicalResult processOp(Operation *);
   LogicalResult processOp(InstanceOp);
+  LogicalResult processOp(InstanceChoiceOp);
   LogicalResult processOp(UnsafeDomainCastOp);
   LogicalResult processOp(DomainDefineOp);
+  LogicalResult processOp(WhenOp);
 
-  LogicalResult updateModule(FModuleOp, PortInsertions &);
+  /// Apply the port changes of a module onto an instance-like op.
+  template <typename T>
+  T updateInstancePorts(T op, const ModuleUpdateInfo &update);
+
+  /// Record the domain associations of the ports of an instance-like op.
+  template <typename T>
+  void processInstancePorts(T op);
+
+  LogicalResult updateModule(FModuleOp);
 
   /// Build a table of exported domains: a map from domains defined internally,
   /// to their set of aliasing output ports.
@@ -449,10 +438,7 @@ private:
   /// Add domain ports for any uninferred domains associated to hardware.
   /// Returns the inserted ports, which will be used later to generalize the
   /// instances of this module.
-  PortInsertions generalizeModule(FModuleOp, PortInsertions &);
-
-  LogicalResult updateInstances(InstanceGraphNode *node,
-                                const PortInsertions &);
+  void generalizeModule(FModuleOp);
 
   void generalizeInstance(InstanceOp, const PortInsertions &);
 
@@ -486,6 +472,10 @@ private:
   /// For a hardware value, get the term which represents the row of associated
   /// domains. If no mapping has been defined, returns nullptr.
   Term *getOptDomainAssociation(Value) const;
+
+  /// Get the changes made to a module, by the module's name.
+  const ModuleUpdateInfo &getModuleUpdateInfo(StringAttr name) const;
+  const ModuleUpdateInfo &getModuleUpdateInfo(FlatSymbolRefAttr ref) const;
 
   /// Allocate a row, where each domain is a variable.
   RowTerm *allocateRow();
@@ -521,6 +511,9 @@ private:
 
   /// A map from local domain definition to its aliasing output ports.
   DenseMap<Value, TinyPtrVector<BlockArgument>> exportTable;
+
+  /// A map from module name to the updates made to it.
+  DenseMap<StringAttr, ModuleUpdateInfo> moduleUpdateInfoTable;
 
   /// A boolean tracking if a non-fatal error occurred, or not.
   bool ok = true;
@@ -558,11 +551,7 @@ LogicalResult InferModuleDomains::operator()(InstanceGraphNode *node) {
     llvm::errs() << "  " << association.second << "\n";
   });
 
-  PortInsertions insertions;
-  if (failed(updateModule(module, insertions)))
-    return failure();
-
-  if (failed(updateInstances(node, insertions)))
+  if (failed(updateModule(module)))
     return failure();
 
   return llvm::success(ok);
@@ -593,7 +582,7 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
       continue;
 
     SmallVector<Term *> elements(circuitInfo.getNumDomains());
-    for (auto domainPortIndexAttr : portDomains.getAsRange<IntegerAttr>()) {
+    for (auto domainPortIndexAttr : portDomains) {
       auto domainPortIndex = domainPortIndexAttr.getUInt();
       auto domainTypeID = domainTypeIDTable[domainPortIndex];
       auto domainValue = module.getArgument(domainPortIndex);
@@ -635,7 +624,7 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
     return processOp(def);
 
   // For all other operations (including connections), propagate domains from
-  // operands to results This is a conservative approach - all operands and
+  // operands to results. This is a conservative approach - all operands and
   // results share the same domain associations.
   Value lhs;
   for (auto rhs : op->getOperands()) {
@@ -656,46 +645,16 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
 }
 
 LogicalResult InferModuleDomains::processOp(InstanceOp op) {
-  DenseMap<unsigned, unsigned> domainPortTypeIDTable;
-  auto domainInfo = op.getDomainInfoAttr();
-  for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
-    Value port = op.getResult(i);
+  const auto &update = getModuleUpdateInfo(op.getReferencedModuleNameAttr());
+  op = updateInstancePorts(op, update);
+  processInstancePorts(op);
+  return success();
+}
 
-    LLVM_DEBUG(llvm::errs() << "handling instance port: " << port << "\n");
-
-    if (isa<DomainType>(port.getType())) {
-      auto typeID = circuitInfo.getDomainTypeID(domainInfo, i);
-      domainPortTypeIDTable[i] = typeID;
-      if (op.getPortDirection(i) == Direction::Out) {
-        setTermForDomain(port, allocate<ValueTerm>(port));
-      }
-      continue;
-    }
-
-    if (!isa<FIRRTLBaseType>(port.getType()))
-      continue;
-
-    // This is a port, which may have explicit domain information. Associate the
-    // port with a row of domains, where each element is derived from the domain
-    // associations recorded in the domain info attribute of the instance.
-    SmallVector<Term *> elements(circuitInfo.getNumDomains());
-    auto associations =
-        getPortDomainAssociation(domainInfo, i).getAsRange<IntegerAttr>();
-    for (auto domainPortIndexAttr : associations) {
-      auto domainPortIndex = domainPortIndexAttr.getUInt();
-      auto typeID = domainPortTypeIDTable[domainPortIndex];
-      auto *term = getTermForDomain(op.getResult(domainPortIndex));
-      elements[typeID] = term;
-    }
-
-    // Since we are processing bottom-up, we must have complete domain info
-    // for each port on the instance.
-    for (auto *element : elements)
-      assert(element && "must have complete domain information.");
-
-    setDomainAssociation(port, allocateRow(elements));
-  }
-
+LogicalResult InferModuleDomains::processOp(InstanceChoiceOp op) {
+  const auto &update = getModuleUpdateInfo(op.getDefaultTargetAttr().getAttr());
+  op = updateInstancePorts(op, update);
+  processInstancePorts(op);
   return success();
 }
 
@@ -725,11 +684,63 @@ LogicalResult InferModuleDomains::processOp(DomainDefineOp op) {
   return success();
 }
 
-LogicalResult InferModuleDomains::updateModule(FModuleOp op,
-                                               PortInsertions &insertions) {
+LogicalResult InferModuleDomains::processOp(WhenOp op) { return failure(); }
+
+template <typename T>
+T InferModuleDomains::updateInstancePorts(T op,
+                                          const ModuleUpdateInfo &update) {
+  auto clone = op.cloneWithInsertedPortsAndReplaceUses(update.portInsertions);
+  clone.setDomainInfoAttr(update.portDomainInfo);
+  op->erase();
+  return clone;
+}
+
+template <typename T>
+void InferModuleDomains::processInstancePorts(T op) {
+  DenseMap<unsigned, unsigned> domainPortTypeIDTable;
+  auto domainInfo = op.getDomainInfoAttr();
+  for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
+    Value port = op.getResult(i);
+
+    LLVM_DEBUG(llvm::errs() << "handling instance port: " << port << "\n");
+
+    if (isa<DomainType>(port.getType())) {
+      auto typeID = circuitInfo.getDomainTypeID(domainInfo, i);
+      domainPortTypeIDTable[i] = typeID;
+      if (op.getPortDirection(i) == Direction::Out) {
+        setTermForDomain(port, allocate<ValueTerm>(port));
+      }
+      continue;
+    }
+
+    if (!isa<FIRRTLBaseType>(port.getType()))
+      continue;
+
+    // This is a port, which may have explicit domain information. Associate the
+    // port with a row of domains, where each element is derived from the domain
+    // associations recorded in the domain info attribute of the instance.
+    SmallVector<Term *> elements(circuitInfo.getNumDomains());
+    auto associations = getPortDomainAssociation(domainInfo, i);
+    for (auto domainPortIndexAttr : associations) {
+      auto domainPortIndex = domainPortIndexAttr.getUInt();
+      auto typeID = domainPortTypeIDTable[domainPortIndex];
+      auto *term = getTermForDomain(op.getResult(domainPortIndex));
+      elements[typeID] = term;
+    }
+
+    // Since we are processing bottom-up, we must have complete domain info
+    // for each port on the instance.
+    for (auto *element : elements)
+      assert(element && "must have complete domain information.");
+
+    setDomainAssociation(port, allocateRow(elements));
+  }
+}
+
+LogicalResult InferModuleDomains::updateModule(FModuleOp op) {
   initializeExportTable(op);
 
-  generalizeModule(op, insertions);
+  generalizeModule(op);
   if (failed(updatePortDomainAssociations(op)))
     return failure();
 
@@ -863,11 +874,11 @@ InferModuleDomains::copyPortDomainAssociations(ArrayAttr moduleDomainInfo,
                                                size_t portIndex) {
   SmallVector<Attribute> result(circuitInfo.getNumDomains());
   auto oldAssociations = getPortDomainAssociation(moduleDomainInfo, portIndex);
-  for (auto domainPortIndexAttr : oldAssociations.getAsRange<IntegerAttr>()) {
+  for (auto domainPortIndexAttr : oldAssociations) {
     auto domainPortIndex = domainPortIndexAttr.getUInt();
-    auto DomainTypeID =
+    auto domainTypeID =
         circuitInfo.getDomainTypeID(moduleDomainInfo, domainPortIndex);
-    result[DomainTypeID] = domainPortIndexAttr;
+    result[domainTypeID] = domainPortIndexAttr;
   };
   return result;
 }
@@ -903,9 +914,8 @@ LogicalResult InferModuleDomains::getExportingPort(FModuleOp module,
   return success();
 }
 
-PortInsertions
-InferModuleDomains::generalizeModule(FModuleOp module,
-                                     PortInsertions &insertions) {
+void InferModuleDomains::generalizeModule(FModuleOp module) {
+  PortInsertions insertions;
   // If the port is hardware, we have to check the associated row of
   // domains. If any associated domain is a variable, we solve the variable
   // by generalizing the module with an additional input domain port. If any
@@ -990,7 +1000,7 @@ InferModuleDomains::generalizeModule(FModuleOp module,
     }
   }
 
-  // Put the ports in place.
+  // Put the domain ports in place.
   module.insertPorts(insertions);
 
   // Solve the variables.
@@ -1008,7 +1018,9 @@ InferModuleDomains::generalizeModule(FModuleOp module,
     setTermForDomain(port, allocate<ValueTerm>(value));
   }
 
-  return insertions;
+  // Record the insertions, so we can replay them on instances later.
+  auto &info = moduleUpdateInfoTable[module.getNameAttr()];
+  info.portInsertions = std::move(insertions);
 }
 
 LogicalResult
@@ -1067,37 +1079,15 @@ LogicalResult InferModuleDomains::updateOpDomainAssociations(InstanceOp op) {
   return success();
 }
 
-LogicalResult
-InferModuleDomains::updateInstances(InstanceGraphNode *node,
-                                    const PortInsertions &insertions) {
-  // for (auto *use : node->uses()) {
-  //   auto *op = use->getOperation();
-  //   if (auto inst = dyn_cast<InstanceOp>(op))
-  //     if (failed(updateInstance(inst, insertions)))
-  //       return failure();
-
-  //   if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-  //     if (failed(updateInstance(inst, insertions)))
-  //       return failure();
-
-  //   op->emitError("don't know how to update this instances");
-  //   return failure();
-  // }
-  return success();
+const ModuleUpdateInfo &
+InferModuleDomains::getModuleUpdateInfo(StringAttr name) const {
+  return moduleUpdateInfoTable.at(name);
 }
 
-// LogicalResult
-// InferModuleDomains::updateInstance(InstanceOp op,
-//                                    const PortInsertions &insertions) {
-//   op.cloneAndInsertPorts(insertions);
-// }
-
-// LogicalResult
-// InferModuleDomains::updateInstance(InstanceChoiceOp op,
-//                                    const PortInsertions &insertions) {
-//   /// Only update the instance choice op if we are the default.
-//   if (auto)
-// }
+const ModuleUpdateInfo &
+InferModuleDomains::getModuleUpdateInfo(FlatSymbolRefAttr ref) const {
+  return getModuleUpdateInfo(ref.getAttr());
+}
 
 LogicalResult InferModuleDomains::unifyAssociations(Operation *op, Value lhs,
                                                     Value rhs) {

@@ -2,7 +2,7 @@
 
 // Legal domain usage - no crossing.
 firrtl.circuit "LegalDomains" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @LegalDomains(
     in  %A: !firrtl.domain of @ClockDomain,
     in  %a: !firrtl.uint<1> domains [%A],
@@ -18,7 +18,7 @@ firrtl.circuit "LegalDomains" {
 
 // Domain inference through connections.
 firrtl.circuit "DomainInference" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @DomainInference(
     in %A: !firrtl.domain of @ClockDomain,
     in %a: !firrtl.uint<1> domains [%A],
@@ -40,7 +40,7 @@ firrtl.circuit "DomainInference" {
 
 // Unsafe domain cast
 firrtl.circuit "UnsafeDomainCast" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @UnsafeDomainCast(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
@@ -60,8 +60,8 @@ firrtl.circuit "UnsafeDomainCast" {
 
 // Domain sequence matching.
 firrtl.circuit "LegalSequences" {
-  firrtl.domain @ClockDomain {}
-  firrtl.domain @PowerDomain {}
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
   firrtl.module @LegalSequences(
     in  %C: !firrtl.domain of @ClockDomain,
     in  %P: !firrtl.domain of @PowerDomain,
@@ -76,8 +76,8 @@ firrtl.circuit "LegalSequences" {
 
 // Domain sequence order equivalence - should be legal
 firrtl.circuit "SequenceOrderEquivalence" {
-  firrtl.domain @ClockDomain {}
-  firrtl.domain @PowerDomain {}
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
   firrtl.module @SequenceOrderEquivalence(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @PowerDomain,
@@ -94,8 +94,8 @@ firrtl.circuit "SequenceOrderEquivalence" {
 
 // Domain sequence inference
 firrtl.circuit "SequenceInference" {
-  firrtl.domain @ClockDomain {}
-  firrtl.domain @PowerDomain {}
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
   firrtl.module @SequenceInference(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @PowerDomain,
@@ -116,7 +116,7 @@ firrtl.circuit "SequenceInference" {
 
 // Domain duplicate equivalence - should be legal.
 firrtl.circuit "DuplicateDomainEquivalence" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @DuplicateDomainEquivalence(
     in %A: !firrtl.domain of @ClockDomain,
     in %a: !firrtl.uint<1> domains [%A, %A],
@@ -131,8 +131,8 @@ firrtl.circuit "DuplicateDomainEquivalence" {
 
 // Unsafe domain cast with sequences
 firrtl.circuit "UnsafeSequenceCast" {
-  firrtl.domain @ClockDomain {}
-  firrtl.domain @PowerDomain {}
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
 
   firrtl.module @UnsafeSequenceCast(
     in %C1: !firrtl.domain of @ClockDomain,
@@ -150,7 +150,7 @@ firrtl.circuit "UnsafeSequenceCast" {
 
 //  Different port types domain inference.
 firrtl.circuit "DifferentPortTypes" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @DifferentPortTypes(
     in %A: !firrtl.domain of @ClockDomain,
     in %uint_input: !firrtl.uint<8> domains [%A],
@@ -169,7 +169,7 @@ firrtl.circuit "DifferentPortTypes" {
 
 // CHECK-LABEL: DomainInferenceThroughWires
 firrtl.circuit "DomainInferenceThroughWires" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @DomainInferenceThroughWires(
     in %A: !firrtl.domain of @ClockDomain,
     in %input: !firrtl.uint<1> domains [%A],
@@ -189,7 +189,7 @@ firrtl.circuit "DomainInferenceThroughWires" {
 
 // Register inference/
 firrtl.circuit "RegisterInference" {
-  firrtl.domain @ClockDomain {}
+  firrtl.domain @ClockDomain
   firrtl.module @RegisterInference(
     in  %A: !firrtl.domain of @ClockDomain,
     in  %clock: !firrtl.clock domains [%A],
