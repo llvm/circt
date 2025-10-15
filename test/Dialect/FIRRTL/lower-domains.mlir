@@ -229,3 +229,23 @@ firrtl.circuit "Foo" {
   ]
   firrtl.module @Foo() {}
 }
+
+// -----
+
+// Test that domain defines are deleted.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Bar(
+    in A : !firrtl.domain of @ClockDomain
+  )
+  // CHECK-LABEL: firrtl.module @Foo(
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain
+  ) {
+    %bar_A = firrtl.instance bar @Bar(
+      in A: !firrtl.domain of @ClockDomain
+    )
+    // CHECK-NOT: firrtl.domain.define
+    firrtl.domain.define %bar_A, %A
+  }
+}

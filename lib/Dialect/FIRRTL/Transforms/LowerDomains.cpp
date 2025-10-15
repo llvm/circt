@@ -211,9 +211,15 @@ private:
   /// Erase all users of domain type ports.
   LogicalResult eraseDomainUsers(Value value) {
     for (auto *user : llvm::make_early_inc_range(value.getUsers())) {
+      // Casts disappear by forwarding their source to destination.
       if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
         castOp.getResult().replaceAllUsesWith(castOp.getInput());
         castOp.erase();
+        continue;
+      }
+      // All other known users are deleted.
+      if (isa<DomainDefineOp>(user)) {
+        user->erase();
         continue;
       }
       return user->emitOpError()
