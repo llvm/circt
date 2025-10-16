@@ -4288,6 +4288,14 @@ LogicalResult PropAssignOp::verify() {
   return success();
 }
 
+template <typename T>
+static FlatSymbolRefAttr getDomainTypeNameOfResult(T op, size_t i) {
+  auto info = op.getDomainInfo();
+  if (info.empty())
+    return {};
+  return dyn_cast<FlatSymbolRefAttr>(info[i]);
+}
+
 static FlatSymbolRefAttr getDomainTypeName(Value value) {
   if (!isa<DomainType>(value.getType()))
     return {};
@@ -4307,13 +4315,10 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
 
   if (auto result = dyn_cast<OpResult>(value)) {
     auto *op = result.getDefiningOp();
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      auto info = instance.getDomainInfo();
-      if (info.empty())
-        return {};
-      auto attr = info[result.getResultNumber()];
-      return dyn_cast<FlatSymbolRefAttr>(attr);
-    }
+    if (auto instance = dyn_cast<InstanceOp>(op))
+      return getDomainTypeNameOfResult(instance, result.getResultNumber());
+    if (auto instance = dyn_cast<InstanceChoiceOp>(op))
+      return getDomainTypeNameOfResult(instance, result.getResultNumber());
     return {};
   }
 
