@@ -291,7 +291,7 @@ LogicalResult LowerModule::lowerModule() {
     auto port = cast<PortInfo>(ports[i]);
 
     // Mark domain type ports for removal.  Add information to `domainInfo`.
-    if (auto domain = dyn_cast<FlatSymbolRefAttr>(port.domains)) {
+    if (auto domain = dyn_cast_or_null<FlatSymbolRefAttr>(port.domains)) {
       eraseVector.set(i);
 
       // Instantiate a domain object with association information.
@@ -343,8 +343,8 @@ LogicalResult LowerModule::lowerModule() {
     // However, if there is no domain information, then annotations do not need
     // to be modified.  Early continue first, adding trackers otherwise.  Only
     // create one tracker for all associations.
-    ArrayAttr domainAttr = cast<ArrayAttr>(port.domains);
-    if (domainAttr.empty()) {
+    ArrayAttr domainAttr = cast_or_null<ArrayAttr>(port.domains);
+    if (!domainAttr || domainAttr.empty()) {
       portAnnotations.push_back(port.annotations.getArrayAttr());
       continue;
     }
