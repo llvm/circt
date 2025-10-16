@@ -230,11 +230,13 @@ private:
 /// Arrays have a compile time specified (static) size and an element type.
 class ArrayType : public Type {
 public:
-  ArrayType(const ID &id, const Type *elementType, uint64_t size)
-      : Type(id), elementType(elementType), size(size) {}
+  ArrayType(const ID &id, const Type *elementType, uint64_t size,
+            bool reverse = true)
+      : Type(id), elementType(elementType), size(size), reverse(reverse) {}
 
   const Type *getElementType() const { return elementType; }
   uint64_t getSize() const { return size; }
+  bool isReverse() const { return reverse; }
   std::ptrdiff_t getBitWidth() const override {
     std::ptrdiff_t elementSize = elementType->getBitWidth();
     if (elementSize < 0)
@@ -250,6 +252,10 @@ public:
 private:
   const Type *elementType;
   uint64_t size;
+  // 'reverse' controls whether array elements are reversed during
+  // serialization/deserialization (to match SystemVerilog/Python ordering
+  // expectations).
+  bool reverse;
 };
 
 } // namespace esi
