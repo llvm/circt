@@ -119,6 +119,11 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
@@ -131,6 +136,10 @@ def InstanceOp : HardwareDeclOp<"instance", [
 
     StringRef getPortName(size_t resultNo) {
       return getPortNameAttr(resultNo).getValue();
+    }
+
+    Location getPortLocation(size_t) {
+      return getLoc();
     }
 
     /// Hooks for port annotations.
@@ -209,6 +218,11 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
@@ -221,6 +235,10 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 
     StringRef getPortName(size_t resultNo) {
       return getPortNameAttr(resultNo).getValue();
+    }
+
+    Location getPortLocation(size_t resultNo) {
+      return getLoc();
     }
 
     /// Return the default target attribute.
