@@ -481,6 +481,11 @@ private:
 
   void emitPortDomainCrossingError(BlockArgument, size_t, Term *, Term *) const;
 
+  /// Emit an error when we fail to infer the concrete domain to drive to a
+  /// domain port.
+  template <typename T>
+  void emitDomainPortInferenceError(T op, size_t i) const;
+
   /// Information about the domains in a circuit.
   GlobalState &globals;
 
@@ -608,12 +613,18 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
   for (auto rhs : op->getOperands()) {
     if (!isa<FIRRTLBaseType>(rhs.getType()))
       continue;
+    if (auto *op = rhs.getDefiningOp();
+        op && op->hasTrait<OpTrait::ConstantLike>())
+      continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
     lhs = rhs;
   }
   for (auto rhs : op->getResults()) {
     if (!isa<FIRRTLBaseType>(rhs.getType()))
+      continue;
+    if (auto *op = rhs.getDefiningOp();
+        op && op->hasTrait<OpTrait::ConstantLike>())
       continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
@@ -623,17 +634,21 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
 }
 
 LogicalResult InferModuleDomains::processOp(InstanceOp op) {
-  const auto &update =
-      globals.moduleUpdateTable.at(op.getReferencedModuleNameAttr());
-  op = updateInstancePorts(op, update);
+  auto module = op.getReferencedModuleNameAttr();
+  auto lookup = globals.moduleUpdateTable.find(module);
+  if (lookup != globals.moduleUpdateTable.end())
+    op = updateInstancePorts(op, lookup->second);
+
   processInstancePorts(op);
   return success();
 }
 
 LogicalResult InferModuleDomains::processOp(InstanceChoiceOp op) {
-  const auto &update =
-      globals.moduleUpdateTable.at(op.getDefaultTargetAttr().getAttr());
-  op = updateInstancePorts(op, update);
+  auto module = op.getDefaultTargetAttr().getAttr();
+  auto lookup = globals.moduleUpdateTable.find(module);
+  if (lookup != globals.moduleUpdateTable.end())
+    op = updateInstancePorts(op, lookup->second);
+
   processInstancePorts(op);
   return success();
 }
@@ -782,8 +797,10 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
         auto *term = getTermForDomain(port);
         term = find(term);
         auto *val = dyn_cast<ValueTerm>(term);
-        if (!val)
-          return module.emitError() << "unable to infer output domain value";
+        if (!val) {
+          emitDomainPortInferenceError(module, i);
+          return failure();
+        }
 
         // If the output port is not driven, drive it.
         if (!driven) {
@@ -1058,7 +1075,8 @@ LogicalResult InferModuleDomains::updateInstanceDomainAssociations(T op) {
             auto value = val->value;
             DomainDefineOp::create(builder, loc, port, value);
           } else {
-            return op.emitError() << "unable to infer input domain value";
+            emitDomainPortInferenceError(op, i);
+            return failure();
           }
         }
       }
@@ -1282,6 +1300,26 @@ void InferModuleDomains::emitPortDomainCrossingError(BlockArgument port,
   auto &note2 = diag.attachNote();
   note2 << "2nd instance: ";
   render(note2, term2);
+}
+
+template <typename T>
+void InferModuleDomains::emitDomainPortInferenceError(T op, size_t i) const {
+  auto name = op.getPortName(i);
+  auto diag = emitError(op->getLoc());
+  auto info = op.getDomainInfo();
+  diag << "unable to infer value for domain port " << name;
+  for (size_t j = 0, e = op.getNumPorts(); j < e; ++j) {
+    if (auto assocs = dyn_cast<ArrayAttr>(info[j])) {
+      for (auto assoc : assocs) {
+        if (i == cast<IntegerAttr>(assoc).getValue()) {
+          auto name = op.getPortName(j);
+          auto loc = op.getPortLocation(j);
+          diag.attachNote(loc) << "associated with hardware port " << name;
+          break;
+        }
+      }
+    }
+  }
 }
 
 //===---------------------------------------------------------------------------
