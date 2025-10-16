@@ -276,6 +276,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       firrtl::createResolveTraces({opt.getOutputAnnotationFilename().str()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPI());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDomains());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClasses());
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
