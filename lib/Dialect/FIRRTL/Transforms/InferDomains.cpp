@@ -408,7 +408,9 @@ private:
   /// to fix up any child instance modules.
   LogicalResult updateDomainAssociationsInBody(FModuleOp);
   LogicalResult updateOpDomainAssociations(Operation *);
-  LogicalResult updateOpDomainAssociations(InstanceOp);
+  
+  template <typename T>
+  LogicalResult updateInstanceDomainAssociations(T op);
 
   /// Copy the domain associations from the module domain info attribute into a
   /// small vector.
@@ -591,6 +593,8 @@ LogicalResult InferModuleDomains::processOp(Operation *op) {
   LLVM_DEBUG(llvm::errs() << "process op: " << *op << "\n");
 
   if (auto instance = dyn_cast<InstanceOp>(op))
+    return processOp(instance);
+  if (auto instance = dyn_cast<InstanceChoiceOp>(op))
     return processOp(instance);
   if (auto cast = dyn_cast<UnsafeDomainCastOp>(op))
     return processOp(cast);
@@ -1018,12 +1022,15 @@ InferModuleDomains::updateDomainAssociationsInBody(FModuleOp module) {
 }
 
 LogicalResult InferModuleDomains::updateOpDomainAssociations(Operation *op) {
-  if (auto inst = dyn_cast<InstanceOp>(op))
-    return updateOpDomainAssociations(inst);
+  if (auto instance = dyn_cast<InstanceOp>(op))
+    return updateInstanceDomainAssociations(instance);
+  if (auto instance = dyn_cast<InstanceChoiceOp>(op))
+    return updateInstanceDomainAssociations(instance);
   return success();
 }
 
-LogicalResult InferModuleDomains::updateOpDomainAssociations(InstanceOp op) {
+template <typename T>
+LogicalResult InferModuleDomains::updateInstanceDomainAssociations(T op) {
   auto *context = op.getContext();
   OpBuilder builder(context);
   builder.setInsertionPointAfter(op);

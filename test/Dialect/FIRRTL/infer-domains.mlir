@@ -193,7 +193,7 @@ firrtl.circuit "RegisterInference" {
 // CHECK-LABEL: InstanceUpdate
 firrtl.circuit "InstanceUpdate" {
   firrtl.domain @ClockDomain
-  // CHECK: firrtl.module @Foo(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<1> domains [%ClockDomain])
+
   firrtl.module @Foo(in %i : !firrtl.uint<1>) {}
 
   // CHECK: firrtl.module @InstanceUpdate(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<1> domains [%ClockDomain]) {
@@ -204,5 +204,29 @@ firrtl.circuit "InstanceUpdate" {
   firrtl.module @InstanceUpdate(in %i : !firrtl.uint<1>) {
     %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<1>)
     firrtl.connect %foo_i, %i : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: InstanceChoiceUpdate
+firrtl.circuit "InstanceChoiceUpdate" {
+  firrtl.domain @ClockDomain
+
+  firrtl.option @Option {
+    firrtl.option_case @X
+    firrtl.option_case @Y
+  }
+
+  firrtl.module @Foo(in %i : !firrtl.uint<1>) {}
+  firrtl.module @Bar(in %i : !firrtl.uint<1>) {}
+  firrtl.module @Baz(in %i : !firrtl.uint<1>) {}
+
+  // CHECK: firrtl.module @InstanceChoiceUpdate(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<1> domains [%ClockDomain]) {
+  // CHECK:   %inst_ClockDomain, %inst_i = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar, @Y -> @Baz } (in ClockDomain: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [ClockDomain])
+  // CHECK:   firrtl.domain.define %inst_ClockDomain, %ClockDomain
+  // CHECK:   firrtl.connect %inst_i, %i : !firrtl.uint<1>
+  // CHECK: }
+  firrtl.module @InstanceChoiceUpdate(in %i : !firrtl.uint<1>) {
+    %inst_i = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar, @Y -> @Baz } (in i : !firrtl.uint<1>)
+    firrtl.connect %inst_i, %i : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
