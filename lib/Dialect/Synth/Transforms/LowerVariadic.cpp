@@ -13,10 +13,12 @@
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/Analysis/LongestPathAnalysis.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PriorityQueue.h"
@@ -139,12 +141,17 @@ static LogicalResult replaceWithBalancedTree(
 void LowerVariadicPass::runOnOperation() {
   // Topologically sort operations in graph regions to ensure operands are
   // defined before uses.
-  if (failed(synth::topologicallySortGraphRegionBlocks(
-          getOperation(), [](Value, Operation *op) -> bool {
+  if (!mlir::sortTopologically(
+          getOperation().getBodyBlock(), [](Value val, Operation *op) -> bool {
+            if (isa_and_nonnull<hw::HWDialect>(op->getDialect()))
+              return isa<hw::InstanceOp>(op);
             return !isa_and_nonnull<comb::CombDialect, synth::SynthDialect>(
                 op->getDialect());
-          })))
+          })) {
+    mlir::emitError(getOperation().getLoc())
+        << "Failed to topologically sort graph region blocks";
     return signalPassFailure();
+  }
 
   // Get longest path analysis if timing-aware lowering is enabled.
   synth::IncrementalLongestPathAnalysis *analysis = nullptr;
@@ -169,10 +176,14 @@ void LowerVariadicPass::runOnOperation() {
   mlir::IRRewriter rewriter(&getContext());
   rewriter.setListener(analysis);
 
-  auto result = moduleOp->walk([&](Operation *op) {
+  // FIXME: Currently only top-level operations are lowered due to the lack of
+  //        topological sorting in across nested regions.
+  for (auto &opRef :
+       llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOperations())) {
+    auto *op = &opRef;
     // Skip operations that don't need lowering or are already binary.
     if (!shouldLower(op) || op->getNumOperands() <= 2)
-      return WalkResult::advance();
+      continue;
 
     rewriter.setInsertionPoint(op);
 
@@ -190,8 +201,9 @@ void LowerVariadicPass::runOnOperation() {
                 op->getLoc(), lhs.getValue(), rhs.getValue(), lhs.isInverted(),
                 rhs.isInverted());
           });
-      return result.succeeded() ? WalkResult::advance()
-                                : WalkResult::interrupt();
+      if (failed(result))
+        return signalPassFailure();
+      continue;
     }
 
     // Handle commutative operations (and, or, xor, mul, add, etc.) using
@@ -211,13 +223,8 @@ void LowerVariadicPass::runOnOperation() {
             rewriter.insert(newOp);
             return newOp->getResult(0);
           });
-      return result.succeeded() ? WalkResult::advance()
-                                : WalkResult::interrupt();
+      if (failed(result))
+        return signalPassFailure();
     }
-
-    return WalkResult::advance();
-  });
-
-  if (result.wasInterrupted())
-    return signalPassFailure();
+  }
 }

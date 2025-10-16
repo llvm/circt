@@ -50,3 +50,14 @@ hw.module @Tree1(in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1, in %f: i
 
   hw.output %2 : i1
 }
+
+// COMMON-LABEL: hw.module @ChildRegion
+hw.module @ChildRegion(in %x: i4, in %y: i4, in %z: i4) {
+  // COMMON-NEXT: %[[TMP:.+]] = comb.or %x, %y : i4
+  // COMMON-NEXT: %[[OR:.+]] = comb.or %z, %[[TMP]] : i4
+  %0 = comb.or %x, %y, %z : i4
+  sv.initial {
+    // COMMON: comb.and %[[OR]], %y, %z : i4
+    %1 = comb.and %0, %y, %z : i4
+  }
+}
