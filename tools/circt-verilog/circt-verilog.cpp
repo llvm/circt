@@ -288,6 +288,12 @@ static CLOptions opts;
 /// Optimize and simplify the Moore dialect IR.
 static void populateMooreTransforms(PassManager &pm) {
   {
+    // Perform module-specific transformations.
+    auto &modulePM = pm.nest<moore::SVModuleOp>();
+    modulePM.addPass(moore::createMergeProceduresPass());
+  }
+
+  {
     // Perform an initial cleanup and preprocessing across all
     // modules/functions.
     auto &anyPM = pm.nestAny();
