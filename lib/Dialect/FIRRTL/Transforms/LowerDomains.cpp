@@ -255,6 +255,11 @@ private:
 };
 
 LogicalResult LowerModule::lowerModule() {
+  // Early exit if there is no domain information.  This _shouldn't_ be the case
+  // when this pass runs, but it avoids
+  if (op.getDomainInfo().empty())
+    return success();
+
   // Much of the lowering is conditioned on whether or not this module has a
   // body.  If it has a body, then we need to instantiate an object for each
   // domain port and hook up all the domain ports to annotations added to each
@@ -421,6 +426,10 @@ LogicalResult LowerModule::lowerModule() {
 }
 
 LogicalResult LowerModule::lowerInstances() {
+  // Early exit if there is no work to do.
+  if (eraseVector.none() && newPorts.empty())
+    return success();
+
   // TODO: There is nothing to do unless this instance is a module or external
   // module.  This mirros code in the `lowerModule` member function.  Figure out
   // a way to clean this up, possible by making `LowerModule` a true noop if
