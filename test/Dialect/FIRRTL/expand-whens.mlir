@@ -560,6 +560,17 @@ firrtl.module @refdefine(in %x : !firrtl.uint<1>, out %out : !firrtl.probe<uint<
   }
 }
 
+firrtl.domain @ClockDomain
+
+// CHECK-LABEL: @domaindefine
+// Note: There's nothing to check here, just that this doesn't error.
+firrtl.module @domaindefine(
+  in %A : !firrtl.domain of @ClockDomain,
+  out %B : !firrtl.domain of @ClockDomain
+) {
+  firrtl.domain.define %B, %A
+}
+
 // CHECK-LABEL: @WhenCForce
 firrtl.module @WhenCForce(in %c: !firrtl.uint<1>, in %clock : !firrtl.clock, in %x: !firrtl.uint<4>) {
   // CHECK-NOT: when

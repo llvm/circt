@@ -250,3 +250,11 @@ firrtl.module @Test() {
   %w = firrtl.wire : !firrtl.class<@Class()>
 }
 }
+
+// -----
+
+firrtl.circuit "DomainTypeUndriven" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{port "A" not fully initialized in "DomainTypeUndriven"}}
+  firrtl.module @DomainTypeUndriven(out %A: !firrtl.domain of @ClockDomain) {}
+}
