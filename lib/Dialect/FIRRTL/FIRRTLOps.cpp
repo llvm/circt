@@ -2756,11 +2756,16 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
   }
 
   OpBuilder builder(*this);
-  return InstanceOp::create(
+  auto clone = InstanceOp::create(
       builder, getLoc(), newPortTypes, getModuleName(), getName(),
       getNameKind(), newPortDirections, newPortNames, newDomainInfo,
       getAnnotations().getValue(), newPortAnnos, getLayers(), getLowerToBind(),
       getDoNotPrint(), getInnerSymAttr());
+
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    clone->setAttr("output_file", outputFile);
+
+  return clone;
 }
 
 InstanceOp InstanceOp::cloneWithInsertedPortsAndReplaceUses(
@@ -3239,13 +3244,18 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
   }
 
   OpBuilder builder(*this);
-  return InstanceChoiceOp::create(
+  auto clone = InstanceChoiceOp::create(
       builder, getLoc(), newPortTypes, getModuleNames(), getCaseNames(),
       getName(), getNameKind(),
       direction::packAttribute(context, newPortDirections),
       ArrayAttr::get(context, newPortNames),
       ArrayAttr::get(context, newDomainInfo), getAnnotationsAttr(),
       ArrayAttr::get(context, newPortAnnos), getLayers(), getInnerSymAttr());
+
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    clone->setAttr("output_file", outputFile);
+
+  return clone;
 }
 
 InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
