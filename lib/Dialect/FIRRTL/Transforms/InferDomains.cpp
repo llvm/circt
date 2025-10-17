@@ -1161,15 +1161,18 @@ RowTerm *InferModuleDomains::getDomainAssociationAsRow(Value value) {
   }
 
   // If the term is already a row, return it.
-  auto *row = dyn_cast<RowTerm>(term);
-  if (row)
+  if (auto *row = dyn_cast<RowTerm>(term))
     return row;
 
   // Otherwise, unify the term with a fresh row of domains.
-  row = allocateRow();
-  auto result = unify(row, term);
-  assert(result.succeeded());
-  return row;
+  if (auto *var = dyn_cast<VariableTerm>(term)) {
+    auto *row = allocateRow();
+    solve(var, row);
+    return row;
+  }
+
+  assert(false && "unhandled term type");
+  return nullptr;
 }
 
 Term *InferModuleDomains::getDomainAssociation(Value value) {
