@@ -6,7 +6,7 @@ firrtl.circuit "DomainCrossOnPort" {
   firrtl.module @DomainCrossOnPort(
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
-    // expected-error @below {{illegal ClockDomain crossing in port #2}}
+    // expected-error @below {{illegal "ClockDomain" crossing in port "p"}}
     // expected-note  @below {{1st instance: A}}
     // expected-note  @below {{2nd instance: B}}
     in %p: !firrtl.uint<1> domains [%A, %B]
@@ -97,3 +97,32 @@ firrtl.circuit "IncompleteDomainInfoForExtModule" {
     firrtl.matchingconnect %foo_i, %i : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Domain not exported like it should be.
+
+// -----
+
+// Domain exported multiple times. Which do we choose?
+
+firrtl.circuit "DoubleExportOfDomain" {
+  firrtl.domain @ClockDomain
+
+  firrtl.module @DoubleExportOfDomain(
+    // expected-note @below {{candidate association "DI"}}
+    in  %DI : !firrtl.domain of @ClockDomain,
+    // expected-note @below {{candidate association "DO"}}
+    out %DO : !firrtl.domain of @ClockDomain,
+    in  %i  : !firrtl.uint<1> domains [%DO],
+    // expected-error @below {{ambiguous "ClockDomain" association for port "o"}}
+    out %o  : !firrtl.uint<1> domains []
+  ) {
+    // DI and DO are aliases
+    firrtl.domain.define %DO, %DI
+
+    // o is on same domain as i
+    firrtl.matchingconnect %o, %i : !firrtl.uint<1>
+  }
+}
+

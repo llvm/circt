@@ -415,13 +415,6 @@ private:
   /// small vector.
   SmallVector<Attribute> copyPortDomainAssociations(ArrayAttr, size_t);
 
-  /// For a concrete domain value, get the unique aliasing port. When a hardware
-  /// port is associated to a domain, we must ensure that the domain is
-  /// available as a port of the module. Fails if the domain is not
-  /// exported by a port, or if the domain is exported by multiple ports.
-  LogicalResult getExportingPortIndex(FModuleOp, Value, size_t &);
-  LogicalResult getExportingPort(FModuleOp, Value, BlockArgument &);
-
   /// Add domain ports for any uninferred domains associated to hardware.
   /// Returns the inserted ports, which will be used later to generalize the
   /// instances of this module.
@@ -478,7 +471,8 @@ private:
   void render(Diagnostic &, Term *) const;
   void render(Diagnostic &, VariableIDTable &, Term *) const;
 
-  void emitPortDomainCrossingError(BlockArgument, size_t, Term *, Term *) const;
+  void emitPortDomainCrossingError(StringAttr, Location, DomainTypeID, Term *,
+                                   Term *) const;
 
   /// Emit an error when we fail to infer the concrete domain to drive to a
   /// domain port.
@@ -569,7 +563,10 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
       auto *term = getTermForDomain(domainValue);
       auto &slot = elements[domainTypeID];
       if (failed(unify(slot, term))) {
-        emitPortDomainCrossingError(port, domainTypeID, slot, term);
+        auto portName = module.getPortNameAttr(i);
+        auto portLoc = module.getPortLocation(i);
+        emitPortDomainCrossingError(portName, portLoc, domainTypeID, slot,
+                                    term);
         return failure();
       }
       elements[domainTypeID] = term;
@@ -738,7 +735,7 @@ LogicalResult InferModuleDomains::processInstancePorts(T op) {
         continue;
       auto domainDecl = circuitInfo.getDomain(domainTypeID);
       auto domainName = domainDecl.getNameAttr();
-      auto portName = op.getPortName(i);
+      auto portName = op.getPortNameAttr(i);
       op->emitOpError() << "missing " << domainName << " association for port "
                         << portName;
       return failure();
@@ -765,18 +762,14 @@ LogicalResult InferModuleDomains::updateModule(FModuleOp op) {
 
 void InferModuleDomains::initializeExportTable(FModuleOp module) {
   size_t numPorts = module.getNumPorts();
-  auto directions = module.getPortDirections();
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = module.getArgument(i);
     auto type = port.getType();
     if (!isa<DomainType>(type))
       continue;
-    auto direction = direction::get(directions[i]);
-    if (direction == Direction::Out) {
-      auto value = getUnderlyingDomain(port);
-      if (value)
-        exportTable[value].push_back(port);
-    }
+    auto value = getUnderlyingDomain(port);
+    if (value)
+      exportTable[value].push_back(port);
   }
 }
 
@@ -838,34 +831,39 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
       for (size_t domainTypeID = 0; domainTypeID < numDomains; ++domainTypeID) {
         if (associations[domainTypeID])
           continue;
-        auto domain = cast<ValueTerm>(find(row->elements[domainTypeID]))->value;
-        size_t domainPortIndex = 0;
-        if (auto arg = dyn_cast<BlockArgument>(domain)) {
-          if (arg.getOwner()->getParentOp() == module) {
-            domainPortIndex = arg.getArgNumber();
-          }
-        } else {
-          auto exports = exportTable.lookup(domain);
-          if (exports.empty()) {
-            auto diag =
-                module.emitOpError("Failed to infer domain information");
-            diag.attachNote(module.getPortLocation(i)) << "for port # " << i;
-            diag.attachNote() << "the domain is not exported";
-            return failure();
-          }
 
-          if (exports.size() > 1) {
-            auto diag =
-                module.emitOpError("Failed to infer domain information");
-            diag.attachNote(module.getPortLocation(i)) << "for port # " << i;
-            diag.attachNote() << "cannot choose between aliasing ports";
-            for (auto arg : exports) {
-              diag.attachNote(module.getPortLocation(arg.getArgNumber()))
-                  << "aliased here";
-            }
-            return failure();
-          }
+        auto domain = cast<ValueTerm>(find(row->elements[domainTypeID]))->value;
+        auto &exports = exportTable[domain];
+        if (exports.empty()) {
+          auto portName = module.getPortNameAttr(i);
+          auto portLoc = module.getPortLocation(i);
+          auto domainDecl = globals.circuitInfo.getDomain(domainTypeID);
+          auto domainName = domainDecl.getNameAttr();
+          auto diag = emitError(portLoc)
+                      << "private " << domainName << " association for port "
+                      << portName;
+          diag.attachNote(domain.getLoc()) << "associated domain: " << domain;
+          return failure();
         }
+
+        if (exports.size() > 1) {
+          auto portName = module.getPortNameAttr(i);
+          auto portLoc = module.getPortLocation(i);
+          auto domainDecl = globals.circuitInfo.getDomain(domainTypeID);
+          auto domainName = domainDecl.getNameAttr();
+          auto diag = emitError(portLoc)
+                      << "ambiguous " << domainName << " association for port "
+                      << portName;
+          for (auto arg : exports) {
+            auto name = module.getPortNameAttr(arg.getArgNumber());
+            auto loc = module.getPortLocation(arg.getArgNumber());
+            diag.attachNote(loc) << "candidate association " << name;
+          }
+          return failure();
+        }
+
+        auto argument = cast<BlockArgument>(exports[0]);
+        auto domainPortIndex = argument.getArgNumber();
         associations[domainTypeID] = IntegerAttr::get(
             IntegerType::get(context, 32, IntegerType::Unsigned),
             domainPortIndex);
@@ -901,37 +899,6 @@ InferModuleDomains::copyPortDomainAssociations(ArrayAttr moduleDomainInfo,
     result[domainTypeID] = domainPortIndexAttr;
   };
   return result;
-}
-
-LogicalResult InferModuleDomains::getExportingPortIndex(FModuleOp module,
-                                                        Value value,
-                                                        size_t &result) {
-  BlockArgument arg;
-  if (failed(getExportingPort(module, value, arg)))
-    return failure();
-
-  result = arg.getArgNumber();
-  return success();
-}
-
-LogicalResult InferModuleDomains::getExportingPort(FModuleOp module,
-                                                   Value value,
-                                                   BlockArgument &result) {
-  if (auto arg = dyn_cast<BlockArgument>(value)) {
-    if (arg.getOwner()->getParentOp() == module) {
-      result = arg;
-      return success();
-    }
-  }
-
-  auto exports = exportTable.lookup(value);
-  assert(!exports.empty());
-
-  if (exports.size() > 1)
-    return failure();
-
-  result = exports[0];
-  return success();
 }
 
 void InferModuleDomains::generalizeModule(FModuleOp module) {
@@ -1023,13 +990,15 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
   // Put the domain ports in place.
   module.insertPorts(insertions);
 
-  // Solve the variables.
+  // Solve the variables and record them as "self-exporting".
   for (auto [var, portIndex] : pendingSolutions) {
-    auto *solution = allocate<ValueTerm>(module.getArgument(portIndex));
+    auto port = module.getArgument(portIndex);
+    auto *solution = allocate<ValueTerm>(port);
     solve(var, solution);
+    exportTable[port].push_back(port);
   }
 
-  // Drive the exports.
+  // Drive the pending exports.
   auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
   for (auto [value, portIndex] : pendingExports) {
     auto port = module.getArgument(portIndex);
@@ -1298,18 +1267,18 @@ void InferModuleDomains::render(Diagnostic &out, VariableIDTable &idTable,
   }
 }
 
-void InferModuleDomains::emitPortDomainCrossingError(BlockArgument port,
+void InferModuleDomains::emitPortDomainCrossingError(StringAttr portName,
+                                                     Location portLoc,
                                                      size_t domainTypeID,
                                                      Term *term1,
                                                      Term *term2) const {
   VariableIDTable idTable;
 
-  auto portIndex = port.getArgNumber();
-  auto domainOp = globals.circuitInfo.getDomain(domainTypeID);
-  auto domainName = domainOp.getName();
+  auto domainDecl = globals.circuitInfo.getDomain(domainTypeID);
+  auto domainName = domainDecl.getNameAttr();
 
-  auto diag = emitError(port.getLoc());
-  diag << "illegal " << domainName << " crossing in port #" << portIndex;
+  auto diag = emitError(portLoc);
+  diag << "illegal " << domainName << " crossing in port " << portName;
 
   auto &note1 = diag.attachNote();
   note1 << "1st instance: ";
@@ -1322,7 +1291,7 @@ void InferModuleDomains::emitPortDomainCrossingError(BlockArgument port,
 
 template <typename T>
 void InferModuleDomains::emitDomainPortInferenceError(T op, size_t i) const {
-  auto name = op.getPortName(i);
+  auto name = op.getPortNameAttr(i);
   auto diag = emitError(op->getLoc());
   auto info = op.getDomainInfo();
   diag << "unable to infer value for domain port " << name;
@@ -1330,7 +1299,7 @@ void InferModuleDomains::emitDomainPortInferenceError(T op, size_t i) const {
     if (auto assocs = dyn_cast<ArrayAttr>(info[j])) {
       for (auto assoc : assocs) {
         if (i == cast<IntegerAttr>(assoc).getValue()) {
-          auto name = op.getPortName(j);
+          auto name = op.getPortNameAttr(j);
           auto loc = op.getPortLocation(j);
           diag.attachNote(loc) << "associated with hardware port " << name;
           break;
