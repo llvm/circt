@@ -996,8 +996,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
       return false;
     }
     auto wire = builder->create<WireOp>(
-        result.getType(),
-        (op.getName() + "_" + op.getPortName(index).getValue()).str());
+        result.getType(), (op.getName() + "_" + op.getPortName(index)).str());
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
@@ -1498,13 +1497,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     if (!peelType(srcType, fieldTypes, mode)) {
       newDirs.push_back(op.getPortDirection(i));
-      newNames.push_back(op.getPortName(i));
+      newNames.push_back(op.getPortNameAttr(i));
       newDomains.push_back(builder->getArrayAttr({}));
       resultTypes.push_back(srcType);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
       skip = false;
-      auto oldName = op.getPortNameStr(i);
+      auto oldName = op.getPortName(i);
       auto oldDir = op.getPortDirection(i);
       // Store the flat type for the new bundle type.
       for (const auto &field : fieldTypes) {

@@ -806,7 +806,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
         for (const auto &res : llvm::enumerate(mem.getResults())) {
           if (isa<RefType>(mem.getResult(res.index()).getType()))
             continue;
-          resultNames.push_back(mem.getPortName(res.index()));
+          resultNames.push_back(mem.getPortNameAttr(res.index()));
           resultTypes.push_back(res.value().getType());
           portAnnotations.push_back(mem.getPortAnnotation(res.index()));
           oldResults.push_back(res.value());

@@ -108,7 +108,7 @@ void LowerIntmodulesPass::runOnOperation() {
         }
         outputs.push_back(
             OutputInfo{inst.getResult(idx),
-                       BundleType::BundleElement(inst.getPortName(idx),
+                       BundleType::BundleElement(inst.getPortNameAttr(idx),
                                                  /*isFlip=*/false, ftype)});
       }
 
