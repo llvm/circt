@@ -49,6 +49,8 @@ struct ModuleLowering {
 /// Function lowering information.
 struct FunctionLowering {
   mlir::func::FuncOp op;
+  llvm::SmallVector<Value, 4> captures;
+  llvm::DenseMap<Value, unsigned> captureIndex;
 };
 
 /// Information about a loops continuation and exit blocks relevant while
@@ -110,6 +112,7 @@ struct Context {
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
+  LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
 
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);

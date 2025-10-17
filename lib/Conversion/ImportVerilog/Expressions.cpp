@@ -985,6 +985,55 @@ struct RvalueExprVisitor : public ExprVisitor {
       arguments.push_back(value);
     }
 
+    if (!lowering->captures.empty()) {
+      auto materializeCaptureAtCall = [&](Value cap) -> Value {
+        // Captures are expected to be moore::RefType.
+        auto refTy = dyn_cast<moore::RefType>(cap.getType());
+        if (!refTy) {
+          lowering->op.emitError(
+              "expected captured value to be moore::RefType");
+          return {};
+        }
+
+        // Expected case: the capture stems from a variable of any parent
+        // scope. We need to walk up, since definition might be a couple regions
+        // up.
+        Region *capRegion = [&]() -> Region * {
+          if (auto ba = dyn_cast<BlockArgument>(cap))
+            return ba.getOwner()->getParent();
+          if (auto *def = cap.getDefiningOp())
+            return def->getParentRegion();
+          return nullptr;
+        }();
+
+        Region *callRegion =
+            builder.getBlock() ? builder.getBlock()->getParent() : nullptr;
+
+        for (Region *r = callRegion; r; r = r->getParentRegion()) {
+          if (r == capRegion) {
+            // Safe to use the SSA value directly here.
+            return cap;
+          }
+        }
+
+        // Otherwise we can’t legally rematerialize this capture here.
+        lowering->op.emitError()
+            << "cannot materialize captured ref at call site; non-symbol "
+            << "source: "
+            << (cap.getDefiningOp()
+                    ? cap.getDefiningOp()->getName().getStringRef()
+                    : "<block-arg>");
+        return {};
+      };
+
+      for (Value cap : lowering->captures) {
+        Value mat = materializeCaptureAtCall(cap);
+        if (!mat)
+          return {};
+        arguments.push_back(mat);
+      }
+    }
+
     // Create the call.
     auto callOp =
         mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
