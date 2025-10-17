@@ -1330,3 +1330,12 @@ func.func @NonBlockingAssignment(%arg0: !moore.ref<i42>, %arg1: !moore.i42, %arg
   moore.delayed_nonblocking_assign %arg0, %arg1, %arg2 : i42
   return
 }
+
+// CHECK-LABEL: func.func @RealConstantOp
+func.func @RealConstantOp() {
+  // CHECK: [[REAL:%.+]] = arith.constant 1.234500e+00 : f64
+  %real = moore.real_constant 1.234500e+00
+  // CHECK: [[SHORTREAL:%.+]] = arith.constant 1.234500e+00 : f32
+  %shortreal = moore.shortreal_constant 1.234500e+00
+  return
+}
