@@ -136,11 +136,11 @@ struct FlattenMemoryPass
         // memory with the wire.  We will be reconstructing the original type
         // in the wire from the bitvector of the flattened memory.
         auto result = memOp.getResult(index);
-        auto wire = WireOp::create(builder, result.getType(),
-                                   (memOp.getName() + "_" +
-                                    memOp.getPortName(index).getValue())
-                                       .str())
-                        .getResult();
+        auto wire =
+            WireOp::create(
+                builder, result.getType(),
+                (memOp.getName() + "_" + memOp.getPortName(index)).str())
+                .getResult();
         result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);

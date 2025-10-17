@@ -386,7 +386,7 @@ struct MemToRegOfVecPass
       // simpler to delete the memOp.
       auto wire = WireOp::create(
           builder, result.getType(),
-          (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
+          (memOp.getName() + "_" + memOp.getPortName(index)).str(),
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());
       result = wire.getResult();

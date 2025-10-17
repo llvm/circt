@@ -2736,7 +2736,7 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
     }
 
     newPortDirections.push_back(getPortDirection(i));
-    newPortNames.push_back(getPortName(i));
+    newPortNames.push_back(getPortNameAttr(i));
     newPortTypes.push_back(getType(i));
     newPortAnnos.push_back(getPortAnnotation(i));
     newDomainInfo.push_back(getDomainInfo()[i]);
@@ -2892,7 +2892,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     base = "inst";
 
   for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
-    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+    setNameFn(getResult(i), (base + "_" + getPortName(i)).str());
   }
 }
 
@@ -3224,7 +3224,7 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
     }
 
     newPortDirections.push_back(getPortDirection(i));
-    newPortNames.push_back(getPortName(i));
+    newPortNames.push_back(getPortNameAttr(i));
     newPortTypes.push_back(getType(i));
     newPortAnnos.push_back(getPortAnnotations()[i]);
     newDomainInfo.push_back(getDomainInfo()[i]);
@@ -3353,7 +3353,7 @@ LogicalResult MemOp::verify() {
   FIRRTLType oldDataType;
 
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto portName = getPortName(i);
+    auto portName = getPortNameAttr(i);
 
     // Get a bundle type representing this port, stripping an outer
     // flip if it exists.  If this is not a bundle<> or
@@ -3463,10 +3463,10 @@ LogicalResult MemOp::verify() {
     // Error if the type of the current port was not the same as the
     // last port, but skip checking the first port.
     if (oldDataType && oldDataType != dataType) {
-      emitOpError() << "port " << getPortName(i)
-                    << " has a different type than port " << getPortName(i - 1)
-                    << " (expected " << oldDataType << ", but got " << dataType
-                    << ")";
+      emitOpError() << "port " << getPortNameAttr(i)
+                    << " has a different type than port "
+                    << getPortNameAttr(i - 1) << " (expected " << oldDataType
+                    << ", but got " << dataType << ")";
       return failure();
     }
 
@@ -3549,7 +3549,7 @@ SmallVector<MemOp::NamedPort> MemOp::getPorts() {
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     // Each port is a bundle.
     auto portType = type_cast<FIRRTLType>(getResult(i).getType());
-    result.push_back({getPortName(i), getMemPortKindFromType(portType)});
+    result.push_back({getPortNameAttr(i), getMemPortKindFromType(portType)});
   }
   return result;
 }
@@ -3606,7 +3606,7 @@ FIRRTLBaseType MemOp::getDataType() {
       .getElementType(dataFieldName);
 }
 
-StringAttr MemOp::getPortName(size_t resultNo) {
+StringAttr MemOp::getPortNameAttr(size_t resultNo) {
   return cast<StringAttr>(getPortNames()[resultNo]);
 }
 
@@ -3727,7 +3727,7 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     base = "mem";
 
   for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
-    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+    setNameFn(getResult(i), (base + "_" + getPortName(i)).str());
   }
 }
 

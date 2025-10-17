@@ -29,7 +29,7 @@ using llvm::StringRef;
 static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
   if (auto mem = dyn_cast<MemOp>(ref.getOp()))
     for (size_t p = 0, pe = mem.getPortNames().size(); p < pe; ++p)
-      if (mem.getPortNameStr(p) == field) {
+      if (mem.getPortName(p) == field) {
         ref = PortAnnoTarget(mem, p);
         return success();
       }
