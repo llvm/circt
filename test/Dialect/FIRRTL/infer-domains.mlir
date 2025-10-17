@@ -230,3 +230,21 @@ firrtl.circuit "InstanceChoiceUpdate" {
     firrtl.connect %inst_i, %i : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: ConstantInMultipleDomains
+firrtl.circuit "ConstantInMultipleDomains" {
+  firrtl.domain @ClockDomain
+
+  firrtl.extmodule @Foo(in A: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [A])
+
+  firrtl.module @ConstantInMultipleDomains(in %A: !firrtl.domain of @ClockDomain, in %B: !firrtl.domain of @ClockDomain) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %x_A, %x_i = firrtl.instance x @Foo(in A: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [A])
+    firrtl.domain.define %x_A, %A
+    firrtl.matchingconnect %x_i, %c0_ui1 : !firrtl.uint<1>
+    
+    %y_A, %y_i = firrtl.instance y @Foo(in A: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [A])
+    firrtl.domain.define %y_A, %B
+    firrtl.matchingconnect %y_i, %c0_ui1 : !firrtl.uint<1>
+  }
+}

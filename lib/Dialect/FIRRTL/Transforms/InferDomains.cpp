@@ -384,7 +384,6 @@ private:
   LogicalResult processOp(InstanceChoiceOp);
   LogicalResult processOp(UnsafeDomainCastOp);
   LogicalResult processOp(DomainDefineOp);
-  LogicalResult processOp(WhenOp);
 
   /// Apply the port changes of a module onto an instance-like op.
   template <typename T>
@@ -392,7 +391,7 @@ private:
 
   /// Record the domain associations of the ports of an instance-like op.
   template <typename T>
-  void processInstancePorts(T op);
+  LogicalResult processInstancePorts(T op);
 
   LogicalResult updateModule(FModuleOp);
 
@@ -408,7 +407,7 @@ private:
   /// to fix up any child instance modules.
   LogicalResult updateDomainAssociationsInBody(FModuleOp);
   LogicalResult updateOpDomainAssociations(Operation *);
-  
+
   template <typename T>
   LogicalResult updateInstanceDomainAssociations(T op);
 
@@ -638,9 +637,7 @@ LogicalResult InferModuleDomains::processOp(InstanceOp op) {
   auto lookup = globals.moduleUpdateTable.find(module);
   if (lookup != globals.moduleUpdateTable.end())
     op = updateInstancePorts(op, lookup->second);
-
-  processInstancePorts(op);
-  return success();
+  return processInstancePorts(op);
 }
 
 LogicalResult InferModuleDomains::processOp(InstanceChoiceOp op) {
@@ -648,9 +645,7 @@ LogicalResult InferModuleDomains::processOp(InstanceChoiceOp op) {
   auto lookup = globals.moduleUpdateTable.find(module);
   if (lookup != globals.moduleUpdateTable.end())
     op = updateInstancePorts(op, lookup->second);
-
-  processInstancePorts(op);
-  return success();
+  return processInstancePorts(op);
 }
 
 LogicalResult InferModuleDomains::processOp(UnsafeDomainCastOp op) {
@@ -674,12 +669,21 @@ LogicalResult InferModuleDomains::processOp(UnsafeDomainCastOp op) {
 LogicalResult InferModuleDomains::processOp(DomainDefineOp op) {
   auto src = op.getSrc();
   auto dst = op.getDest();
-  auto *term = getTermForDomain(src);
-  setTermForDomain(dst, term);
-  return success();
-}
+  auto *srcTerm = getTermForDomain(src);
+  auto *dstTerm = getTermForDomain(dst);
+  if (failed(unify(dstTerm, srcTerm))) {
+    VariableIDTable idTable;
+    auto diag = op->emitOpError("failed to propagate source to destination");
+    auto &note1 = diag.attachNote();
+    note1 << "destination has underlying value: ";
+    render(note1, idTable, dstTerm);
 
-LogicalResult InferModuleDomains::processOp(WhenOp op) { return failure(); }
+    auto &note2 = diag.attachNote(src.getLoc());
+    note2 << "source has underlying value: ";
+    render(note2, idTable, srcTerm);
+  }
+  return unify(dstTerm, srcTerm);
+}
 
 template <typename T>
 T InferModuleDomains::updateInstancePorts(T op,
@@ -691,7 +695,9 @@ T InferModuleDomains::updateInstancePorts(T op,
 }
 
 template <typename T>
-void InferModuleDomains::processInstancePorts(T op) {
+LogicalResult InferModuleDomains::processInstancePorts(T op) {
+  auto circuitInfo = globals.circuitInfo;
+  auto numDomainTypes = circuitInfo.getNumDomains();
   DenseMap<unsigned, unsigned> domainPortTypeIDTable;
   auto domainInfo = op.getDomainInfoAttr();
   for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
@@ -700,7 +706,7 @@ void InferModuleDomains::processInstancePorts(T op) {
     LLVM_DEBUG(llvm::errs() << "handling instance port: " << port << "\n");
 
     if (isa<DomainType>(port.getType())) {
-      auto typeID = globals.circuitInfo.getDomainTypeID(domainInfo, i);
+      auto typeID = circuitInfo.getDomainTypeID(domainInfo, i);
       domainPortTypeIDTable[i] = typeID;
       if (op.getPortDirection(i) == Direction::Out) {
         setTermForDomain(port, allocate<ValueTerm>(port));
@@ -714,7 +720,7 @@ void InferModuleDomains::processInstancePorts(T op) {
     // This is a port, which may have explicit domain information. Associate the
     // port with a row of domains, where each element is derived from the domain
     // associations recorded in the domain info attribute of the instance.
-    SmallVector<Term *> elements(globals.circuitInfo.getNumDomains());
+    SmallVector<Term *> elements(numDomainTypes);
     auto associations = getPortDomainAssociation(domainInfo, i);
     for (auto domainPortIndexAttr : associations) {
       auto domainPortIndex = domainPortIndexAttr.getUInt();
@@ -723,13 +729,25 @@ void InferModuleDomains::processInstancePorts(T op) {
       elements[typeID] = term;
     }
 
-    // Since we are processing bottom-up, we must have complete domain info
-    // for each port on the instance.
-    for (auto *element : elements)
-      assert(element && "must have complete domain information.");
+    // Confirm that we have complete domain information for the port. We can be
+    // missing information if, for example, this was an instance of an
+    // extmodule.
+    for (size_t domainTypeID = 0; domainTypeID < numDomainTypes;
+         ++domainTypeID) {
+      if (elements[domainTypeID])
+        continue;
+      auto domainDecl = circuitInfo.getDomain(domainTypeID);
+      auto domainName = domainDecl.getNameAttr();
+      auto portName = op.getPortName(i);
+      op->emitOpError() << "missing " << domainName << " association for port "
+                        << portName;
+      return failure();
+    }
 
     setDomainAssociation(port, allocateRow(elements));
   }
+
+  return success();
 }
 
 LogicalResult InferModuleDomains::updateModule(FModuleOp op) {

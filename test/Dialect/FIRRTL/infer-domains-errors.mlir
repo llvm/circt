@@ -85,3 +85,15 @@ firrtl.circuit "UnableToInferDomainOfPortDrivenByConstantExpr" {
 // -----
 
 // Incomplete extmodule domain information.
+
+firrtl.circuit "IncompleteDomainInfoForExtModule" {
+  firrtl.domain @ClockDomain
+
+  firrtl.extmodule @Foo(in i: !firrtl.uint<1>)
+
+  firrtl.module @IncompleteDomainInfoForExtModule(in %i: !firrtl.uint<1>) {
+    // expected-error @below {{'firrtl.instance' op missing "ClockDomain" association for port "i"}}
+    %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<1>)
+    firrtl.matchingconnect %foo_i, %i : !firrtl.uint<1>
+  }
+}
