@@ -471,13 +471,14 @@ private:
   void render(Diagnostic &, Term *) const;
   void render(Diagnostic &, VariableIDTable &, Term *) const;
 
-  void emitPortDomainCrossingError(StringAttr, Location, DomainTypeID, Term *,
+  template <typename T>
+  void emitPortDomainCrossingError(T, size_t, DomainTypeID, Term *,
                                    Term *) const;
 
   /// Emit an error when we fail to infer the concrete domain to drive to a
   /// domain port.
   template <typename T>
-  void emitDomainPortInferenceError(T op, size_t i) const;
+  void emitDomainPortInferenceError(T, size_t) const;
 
   /// Information about the domains in a circuit.
   GlobalState &globals;
@@ -563,10 +564,7 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
       auto *term = getTermForDomain(domainValue);
       auto &slot = elements[domainTypeID];
       if (failed(unify(slot, term))) {
-        auto portName = module.getPortNameAttr(i);
-        auto portLoc = module.getPortLocation(i);
-        emitPortDomainCrossingError(portName, portLoc, domainTypeID, slot,
-                                    term);
+        emitPortDomainCrossingError(module, i, domainTypeID, slot, term);
         return failure();
       }
       elements[domainTypeID] = term;
@@ -1267,13 +1265,15 @@ void InferModuleDomains::render(Diagnostic &out, VariableIDTable &idTable,
   }
 }
 
-void InferModuleDomains::emitPortDomainCrossingError(StringAttr portName,
-                                                     Location portLoc,
+template <typename T>
+void InferModuleDomains::emitPortDomainCrossingError(T op, size_t i,
                                                      size_t domainTypeID,
                                                      Term *term1,
                                                      Term *term2) const {
   VariableIDTable idTable;
 
+  auto portName = op.getPortNameAttr(i);
+  auto portLoc = op.getPortLocation(i);
   auto domainDecl = globals.circuitInfo.getDomain(domainTypeID);
   auto domainName = domainDecl.getNameAttr();
 
@@ -1282,11 +1282,11 @@ void InferModuleDomains::emitPortDomainCrossingError(StringAttr portName,
 
   auto &note1 = diag.attachNote();
   note1 << "1st instance: ";
-  render(note1, term1);
+  render(note1, idTable, term1);
 
   auto &note2 = diag.attachNote();
   note2 << "2nd instance: ";
-  render(note2, term2);
+  render(note2, idTable, term2);
 }
 
 template <typename T>
