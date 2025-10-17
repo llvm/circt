@@ -633,6 +633,35 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct RealConstantOpConv : public OpConversionPattern<RealLiteralOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(RealLiteralOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    llvm::APFloat apf = op.getValue();
+    Type outTy = rewriter.getF64Type();
+    auto attr = FloatAttr::get(outTy, apf);
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, attr);
+    return success();
+  }
+};
+
+struct ShortrealConstantOpConv
+    : public OpConversionPattern<ShortrealLiteralOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ShortrealLiteralOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    llvm::APFloat apf = op.getValue();
+    Type outTy = rewriter.getF32Type();
+    auto attr = FloatAttr::get(outTy, apf);
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, attr);
+    return success();
+  }
+};
+
 struct ConstantTimeOpConv : public OpConversionPattern<ConstantTimeOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1742,6 +1771,7 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<sim::SimDialect>();
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalDialect<verif::VerifDialect>();
+  target.addLegalDialect<arith::ArithDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
 
@@ -1770,6 +1800,16 @@ static void populateLegality(ConversionTarget &target,
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
     return IntegerType::get(type.getContext(), type.getWidth());
+  });
+
+  typeConverter.addConversion([&](RealType type) -> mlir::Type {
+    MLIRContext *ctx = type.getContext();
+    switch (type.getWidth()) {
+    case moore::RealWidth::f32:
+      return mlir::Float32Type::get(ctx);
+    case moore::RealWidth::f64:
+      return mlir::Float64Type::get(ctx);
+    }
   });
 
   typeConverter.addConversion(
@@ -1916,6 +1956,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
+    RealConstantOpConv,
+    ShortrealConstantOpConv,
     ConcatOpConversion,
     ReplicateOpConversion,
     ConstantTimeOpConv,

@@ -571,6 +571,23 @@ def StringConstantOp : MooreOp<"string_constant", [Pure]> {
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
+def ShortrealLiteralOp : MooreOp<"shortreal_constant", [Pure]> {
+  let summary = "Produce a constant shortreal value";
+  let description = [{
+    Produces a constant value of shortreal type.
+
+    Example:
+    ```mlir
+    %0 = moore.shortreal_constant 1.23
+    ```
+    The shortreal type has fixed-point(1.2) and exponent(2.0e10) formats and corresponds to IEEE 754 f32.
+    See IEEE 1800-2017 § 5.7.2 "Real literal constants".
+  }];
+  let arguments = (ins F32Attr:$value);
+  let results = (outs RealF32:$result);
+  let assemblyFormat = "$value attr-dict";
+}
+
 def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
   let summary = "Produce a constant real value";
   let description = [{
@@ -580,12 +597,12 @@ def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
     ```mlir
     %0 = moore.real_constant 1.23
     ```
-    The real type has fixed-point(1.2) and exponent(2.0e10) formats.
+    The real type has fixed-point(1.2) and exponent(2.0e10) formats and corresponds to IEEE 754 f64.
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
   let arguments = (ins F64Attr:$value);
-  let results = (outs RealType:$result);
-  let assemblyFormat = "$value attr-dict `:` type($result)";
+  let results = (outs RealF64:$result);
+  let assemblyFormat = "$value attr-dict";
 }
 
 //===----------------------------------------------------------------------===//

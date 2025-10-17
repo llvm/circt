@@ -1502,26 +1502,31 @@ Value Context::convertToBool(Value value) {
 Value Context::materializeSVReal(const slang::ConstantValue &svreal,
                                  const slang::ast::Type &astType,
                                  Location loc) {
-
-  mlir::FloatType fTy = mlir::Float64Type::get(getContext());
+  mlir::FloatType fTy;
   Type resultType;
   double val;
+
   if (const auto *floatType = astType.as_if<slang::ast::FloatingType>()) {
     if (floatType->floatKind == slang::ast::FloatingType::ShortReal) {
+      fTy = mlir::Float32Type::get(getContext());
       resultType = moore::RealType::getShortReal(getContext());
       val = svreal.shortReal().v;
-    } else if (floatType->floatKind == slang::ast::FloatingType::Real) {
+
+      mlir::FloatAttr attr = mlir::FloatAttr::get(fTy, val);
+      return moore::ShortrealLiteralOp::create(builder, loc, resultType, attr)
+          .getResult();
+    }
+    if (floatType->floatKind == slang::ast::FloatingType::Real) {
+      fTy = mlir::Float64Type::get(getContext());
       resultType = moore::RealType::getReal(getContext());
       val = svreal.real().v;
+
+      mlir::FloatAttr attr = mlir::FloatAttr::get(fTy, val);
+      return moore::RealLiteralOp::create(builder, loc, resultType, attr)
+          .getResult();
     }
   }
-
-  if (!resultType)
-    return {};
-
-  mlir::FloatAttr attr = mlir::FloatAttr::get(fTy, val);
-  return moore::RealLiteralOp::create(builder, loc, resultType, attr)
-      .getResult();
+  return {};
 }
 
 /// Materialize a Slang integer literal as a constant op.
