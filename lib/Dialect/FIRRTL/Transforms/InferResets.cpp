@@ -705,7 +705,7 @@ static bool getDeclName(Value value, SmallString<32> &string) {
         string += op.getName();
         string += ".";
         string +=
-            op.getPortName(cast<OpResult>(value).getResultNumber()).getValue();
+            op.getPortName(cast<OpResult>(value).getResultNumber());
         return true;
       })
       .Case<WireOp, NodeOp, RegOp, RegResetOp>([&](auto op) {

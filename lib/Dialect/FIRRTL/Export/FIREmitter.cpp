@@ -1126,7 +1126,7 @@ void Emitter::emitStatement(InstanceOp op) {
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(legalize(op.getPortName(i)));
+    portName.append(legalize(op.getPortNameAttr(i)));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }
@@ -1153,7 +1153,7 @@ void Emitter::emitStatement(InstanceChoiceOp op) {
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(legalize(op.getPortName(i)));
+    portName.append(legalize(op.getPortNameAttr(i)));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }

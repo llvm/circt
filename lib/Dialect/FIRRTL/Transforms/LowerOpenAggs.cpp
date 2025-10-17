@@ -547,7 +547,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
         // If not identity, mark this port for eventual removal.
         portsToErase.set(newIndex);
 
-        auto portName = op.getPortName(index);
+        auto portName = op.getPortNameAttr(index);
         auto portDirection = op.getPortDirection(index);
         auto portDomain = op.getPortDomain(index);
         auto loc = op.getLoc();

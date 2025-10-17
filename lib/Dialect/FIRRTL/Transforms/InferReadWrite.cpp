@@ -89,7 +89,7 @@ struct InferReadWritePass
         Attribute portAnno;
         portAnno = memOp.getPortAnnotation(portIt.index());
         if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
-          resultNames.push_back(memOp.getPortName(portIt.index()));
+          resultNames.push_back(memOp.getPortNameAttr(portIt.index()));
           resultTypes.push_back(memOp.getResult(portIt.index()).getType());
           portAnnotations.push_back(portAnno);
           continue;

@@ -1596,7 +1596,7 @@ fixupSymbolSensitiveOp(Operation *op, InstanceGraph &instanceGraph,
         continue;
       LLVM_DEBUG(llvm::dbgs()
                  << "- Updating instance port \"" << instOp.getInstanceName()
-                 << "." << instOp.getPortName(index).getValue() << "\" from "
+                 << "." << instOp.getPortName(index) << "\" from "
                  << oldType << " to " << newType << "\n");
 
       // If the type changed we transform it back to the old type with an
