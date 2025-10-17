@@ -22,7 +22,6 @@
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToDatapath.h"
 #include "circt/Conversion/CombToLLVM.h"
-#include "circt/Conversion/CombToMLIR.h"
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/CombToSynth.h"
 #include "circt/Conversion/ConvertToArcs.h"
