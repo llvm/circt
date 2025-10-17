@@ -717,7 +717,7 @@ struct Equivalence {
         } else {
           // Otherwise make sure that they are targeting the same operation.
           if (!bTarget.isOpOnly() ||
-              aTarget.getOp() != data.map.lookup(bTarget.getOp()))
+              data.map.lookupOrNull(aTarget.getOp()) != bTarget.getOp())
             return error();
         }
         if (aTarget.getField() != bTarget.getField())
