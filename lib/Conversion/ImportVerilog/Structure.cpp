@@ -1100,7 +1100,31 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     valueSymbols.insert(subroutine.returnValVar, returnVar);
   }
 
+  // Save previous callback
+  auto prevCb = rvalueReadCallback;
+  auto prevCbGuard =
+      llvm::make_scope_exit([&] { rvalueReadCallback = prevCb; });
+
+  // Capture this function's captured context directly
+  rvalueReadCallback = [lowering, prevCb](moore::ReadOp rop) {
+    if (prevCb)
+      prevCb(rop); // chain previous callback
+
+    mlir::Value ref = rop.getInput();
+    // Only capture refs defined outside this function’s region
+    if (!lowering->op.getBody().isAncestor(ref.getParentRegion())) {
+      auto [it, inserted] =
+          lowering->captureIndex.try_emplace(ref, lowering->captures.size());
+      if (inserted)
+        lowering->captures.push_back(ref);
+    }
+  };
+
   if (failed(convertStatement(subroutine.getBody())))
+    return failure();
+
+  // Plumb captures into the function as extra block arguments
+  if (failed(finalizeFunctionBodyCaptures(*lowering)))
     return failure();
 
   // If there was no explicit return statement provided by the user, insert a
@@ -1128,5 +1152,51 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
       var->erase();
     }
   }
+  return success();
+}
+
+LogicalResult
+Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
+  if (lowering.captures.empty())
+    return success();
+
+  MLIRContext *ctx = getContext();
+
+  // Build new input type list: existing inputs + capture ref types.
+  SmallVector<Type> newInputs(lowering.op.getFunctionType().getInputs().begin(),
+                              lowering.op.getFunctionType().getInputs().end());
+  for (Value cap : lowering.captures) {
+    // Expect captures to be refs.
+    Type capTy = cap.getType();
+    if (!isa<moore::RefType>(capTy)) {
+      return lowering.op.emitError(
+          "expected captured value to be a ref-like type");
+    }
+    newInputs.push_back(capTy);
+  }
+
+  // Results unchanged.
+  auto newFuncTy = FunctionType::get(
+      ctx, newInputs, lowering.op.getFunctionType().getResults());
+  lowering.op.setFunctionType(newFuncTy);
+
+  // Add the new block arguments to the entry block.
+  Block &entry = lowering.op.getBody().front();
+  SmallVector<Value> capArgs;
+  capArgs.reserve(lowering.captures.size());
+  for (Type t :
+       llvm::ArrayRef<Type>(newInputs).take_back(lowering.captures.size())) {
+    capArgs.push_back(entry.addArgument(t, lowering.op.getLoc()));
+  }
+
+  // Replace uses of each captured Value *inside the function body* with the new
+  // arg. Keep uses outside untouched (e.g., in callers).
+  for (auto [cap, idx] : lowering.captureIndex) {
+    Value arg = capArgs[idx];
+    cap.replaceUsesWithIf(arg, [&](OpOperand &use) {
+      return lowering.op->isProperAncestor(use.getOwner());
+    });
+  }
+
   return success();
 }

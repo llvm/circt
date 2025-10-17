@@ -3360,3 +3360,24 @@ function automatic shortreal testShortrealLiteral();
     // CHECK-NEXT: return [[TMP]] : !moore.f32
    return test;
 endfunction
+
+// CHECK: moore.module @testFunctionCapture() {
+module testFunctionCapture();
+
+    // CHECK: [[A:%.+]] = moore.variable : <l1>
+    logic a;
+
+    function logic testCapture;
+        return a;
+    endfunction
+
+    // CHECK: [[RETURNEDA:%.+]] = func.call @testCapture([[A]]) : (!moore.ref<l1>) -> !moore.l1
+    // CHECK: [[B:%.+]] = moore.variable [[RETURNEDA]] : <l1>
+    logic b = testCapture();
+
+    // These checks need to be here since testCapture gets moved to after the variable decl,
+    // and file check only checks forward.
+    // CHECK: func.func private @testCapture(%arg0: !moore.ref<l1>) -> !moore.l1 {
+    // CHECK: [[CAPTUREDA:%.+]] = moore.read %arg0 : <l1>
+    // CHECK: return [[CAPTUREDA]] : !moore.l1
+endmodule
