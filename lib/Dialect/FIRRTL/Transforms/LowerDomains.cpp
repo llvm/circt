@@ -59,6 +59,7 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
+using mlir::UnrealizedConversionCastOp;
 
 class LowerDomainsPass : public impl::LowerDomainsBase<LowerDomainsPass> {
   using Base::Base;
@@ -94,6 +95,10 @@ struct DomainInfo {
   /// The index of the output port that the ObjectOp will be connected to.  This
   /// port communicates back to the user information about the associations.
   unsigned outputPort;
+
+  /// A conversion cast that is used to temporarily replace the port while it is
+  /// being deleted.  If the port has no uses, then this will be empty.
+  UnrealizedConversionCastOp temp;
 
   /// A vector of minimal association info that will be hooked up to the
   /// associations of this ObjectOp.
@@ -185,6 +190,47 @@ private:
   ClassOut classOut;
 };
 
+/// Replace the value with a temporary 0-1 unrealized conversion.  Return the
+/// single conversion operation.  This is used to "stub out" the users of a
+/// module or instance port while it is being converted from a domain port to a
+/// class port.  This function lets us erase the port.  This function is
+/// intended to be used with `splice` to replace the 0-1 conversion with a 1-1
+/// conversion once the new port, of the new type, is available.
+static UnrealizedConversionCastOp stubOut(Value value) {
+  if (!value.hasNUsesOrMore(1))
+    return {};
+
+  OpBuilder builder(value.getUses().begin()->getOwner());
+  builder.setInsertionPointAfterValue(value);
+  auto temp = UnrealizedConversionCastOp::create(
+      builder, builder.getUnknownLoc(), {value.getType()}, {});
+  value.replaceAllUsesWith(temp.getResult(0));
+  return temp;
+}
+
+/// Replace a temporary 0-1 conversion cast with a 1-1 conversion cast.  Erase
+/// the old conversion.  Return the new conversion.  This function is used to
+/// hook up a module or instance port to an operation user of the old type.
+/// After all ports have been spliced, the splice-operation-splice can be
+/// replaced with a new operation that handles the new port types.
+static UnrealizedConversionCastOp splice(UnrealizedConversionCastOp temp,
+                                         Value value) {
+  if (!temp)
+    return {};
+
+  assert(temp && temp.getNumResults() == 1 && temp.getNumOperands() == 0);
+  assert(value);
+
+  auto oldValue = temp.getResult(0);
+
+  OpBuilder builder(temp);
+  auto splice = UnrealizedConversionCastOp::create(
+      builder, builder.getUnknownLoc(), {oldValue.getType()}, {value});
+  oldValue.replaceAllUsesWith(splice.getResult(0));
+  temp.erase();
+  return splice;
+}
+
 /// Class that is used to lower a module that may contain domain ports.  This is
 /// intended to be used by calling `lowerModule()` to lower the module.  This
 /// builds up state in the class which is then used when calling
@@ -208,26 +254,6 @@ public:
   LogicalResult lowerInstances();
 
 private:
-  /// Erase all users of domain type ports.
-  LogicalResult eraseDomainUsers(Value value) {
-    for (auto *user : llvm::make_early_inc_range(value.getUsers())) {
-      // Casts disappear by forwarding their source to destination.
-      if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
-        castOp.getResult().replaceAllUsesWith(castOp.getInput());
-        castOp.erase();
-        continue;
-      }
-      // All other known users are deleted.
-      if (isa<DomainDefineOp>(user)) {
-        user->erase();
-        continue;
-      }
-      return user->emitOpError()
-             << "has an unimplemented lowering in the LowerDomains pass.";
-    }
-    return success();
-  }
-
   /// The module this class is lowering
   FModuleLike op;
 
@@ -252,6 +278,10 @@ private:
   /// TODO: The mutation of this is _not_ thread safe.  This needs to be fixed
   /// if this pass is parallelized.
   InstanceGraph &instanceGraph;
+
+  // Information about a domain.  This is built up during the first iteration
+  // over the ports.  This needs to preserve insertion order.
+  llvm::MapVector<unsigned, DomainInfo> indexToDomain;
 };
 
 LogicalResult LowerModule::lowerModule() {
@@ -276,13 +306,12 @@ LogicalResult LowerModule::lowerModule() {
 
   auto *context = op.getContext();
 
-  // Information about a domain.  This is built up during the first iteration
-  // over the ports.  This needs to preserve insertion order.
-  llvm::MapVector<unsigned, DomainInfo> indexToDomain;
-
   // The new port annotations.  These will be set after all deletions and
   // insertions.
   SmallVector<Attribute> portAnnotations;
+
+  // Casts that need to be visited and cleaned up.
+  SmallVector<UnrealizedConversionCastOp> casts;
 
   // Iterate over the ports, staging domain ports for removal and recording the
   // associations of non-domain ports.  After this, domain ports will be deleted
@@ -302,6 +331,11 @@ LogicalResult LowerModule::lowerModule() {
       // Instantiate a domain object with association information.
       auto [classIn, classOut] = domainToClasses.at(domain.getAttr());
 
+      if (port.direction == Direction::In)
+        indexToDomain[i] = {{}, iIns, iIns + 1, {}};
+      else
+        indexToDomain[i] = {{}, std::nullopt, iIns, {}};
+
       if (body) {
         auto builder = ImplicitLocOpBuilder::atBlockEnd(port.loc, body);
         auto object = ObjectOp::create(
@@ -309,14 +343,8 @@ LogicalResult LowerModule::lowerModule() {
             StringAttr::get(context, Twine(port.name) + "_object"));
         instanceGraph.lookup(op)->addInstance(object,
                                               instanceGraph.lookup(classOut));
-        if (port.direction == Direction::In)
-          indexToDomain[i] = {object, iIns, iIns + 1};
-        else
-          indexToDomain[i] = {object, std::nullopt, iIns};
-
-        // Erase users of the domain in the module body.
-        if (failed(eraseDomainUsers(body->getArgument(i))))
-          return failure();
+        indexToDomain[i].op = object;
+        indexToDomain[i].temp = stubOut(body->getArgument(i));
       }
 
       // Add input and output property ports that encode the property inputs
@@ -338,10 +366,10 @@ LogicalResult LowerModule::lowerModule() {
       continue;
     }
 
-    // Record the mapping of the old port to the new port.  This can be used
-    // later to update instances.  This port will not be deleted, so
-    // post-increment both indices.
-    resultMap.emplace_back(iDel++, iIns++);
+    // This is a non-domain port and it will NOT be deleted.  Post-increment
+    // both indices.
+    iDel++;
+    iIns++;
 
     // If this port has domain associations, then we need to add port annotation
     // trackers.  These will be hooked up to the Object's associations later.
@@ -378,9 +406,17 @@ LogicalResult LowerModule::lowerModule() {
   // instantiated earlier.
   op.insertPorts(newPorts);
 
+  SmallVector<UnrealizedConversionCastOp> conversions;
+
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
-      auto [object, inputPort, outputPort, associations] = info;
+      auto [object, inputPort, outputPort, temp, associations] = info;
+      // Now that the ports have been updated and changed type, replace any 0-1
+      // conversion with a 1-1 conversions.
+      if (inputPort.has_value())
+        if (auto conversion = splice(temp, body->getArgument(*inputPort)))
+          conversions.push_back(conversion);
+
       OpBuilder builder(object);
       builder.setInsertionPointAfter(object);
       // Assign input domain info if needed.
@@ -411,16 +447,48 @@ LogicalResult LowerModule::lowerModule() {
       PropAssignOp::create(builder, object.getLoc(),
                            body->getArgument(outputPort), object);
     }
+
+    // Cleanup all the conversions.
+    DenseSet<Operation *> opsToErase;
+    for (auto conversion : conversions) {
+      assert(conversion.getNumOperands() == 1);
+      assert(conversion.getNumResults() == 1);
+
+      opsToErase.insert(conversion);
+      auto result = conversion.getResult(0);
+      auto source = conversion.getOperand(0);
+
+      for (auto *user : llvm::make_early_inc_range(result.getUsers())) {
+        if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
+          castOp.getResult().replaceAllUsesWith(castOp.getInput());
+          castOp.erase();
+          continue;
+        }
+
+        auto domainDefine = dyn_cast<DomainDefineOp>(user);
+        if (!domainDefine)
+          return user->emitOpError()
+                 << "has an unimplemented lowering in the LowerDomains pass.";
+
+        auto dest = cast<UnrealizedConversionCastOp>(
+            domainDefine.getDest().getDefiningOp());
+        assert(dest.getNumOperands() == 1);
+        assert(dest.getNumResults() == 1);
+        opsToErase.insert(dest);
+
+        OpBuilder builder(domainDefine);
+        PropAssignOp::create(builder, domainDefine.getLoc(), dest.getOperand(0),
+                             source);
+        domainDefine->erase();
+      }
+    }
+
+    for (auto *op : opsToErase)
+      op->erase();
   }
 
   // Set new port annotations.
   op.setPortAnnotationsAttr(ArrayAttr::get(context, portAnnotations));
-
-  LLVM_DEBUG({
-    llvm::dbgs() << "    portMap:\n";
-    for (auto [oldIndex, newIndex] : resultMap)
-      llvm::dbgs() << "      - " << oldIndex << ": " << newIndex << "\n";
-  });
 
   return success();
 }
@@ -448,13 +516,20 @@ LogicalResult LowerModule::lowerInstances() {
     LLVM_DEBUG(llvm::dbgs()
                << "      - " << instanceOp.getInstanceName() << "\n");
 
-    for (auto bit : eraseVector.set_bits())
-      if (failed(eraseDomainUsers(instanceOp.getResult(bit))))
-        return failure();
+    for (auto i : eraseVector.set_bits())
+      indexToDomain[i].temp = stubOut(instanceOp.getResult(i));
 
     auto erased = instanceOp.cloneWithErasedPortsAndReplaceUses(eraseVector);
     auto inserted = erased.cloneWithInsertedPortsAndReplaceUses(newPorts);
     instanceGraph.replaceInstance(instanceOp, inserted);
+
+    for (auto &[i, info] : indexToDomain) {
+      auto iIns = info.inputPort;
+      if (!iIns)
+        continue;
+
+      splice(info.temp, inserted.getResult(*iIns));
+    }
 
     instanceOp.erase();
     erased.erase();
@@ -579,5 +654,5 @@ void LowerDomainsPass::runOnOperation() {
   if (failed(lowerCircuit.lowerCircuit()))
     return signalPassFailure();
 
-  markAllAnalysesPreserved();
+  markAnalysesPreserved<InstanceGraph>();
 }

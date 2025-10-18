@@ -194,7 +194,43 @@ firrtl.circuit "Foo" {
       in A: !firrtl.domain of @ClockDomain,
       in a: !firrtl.uint<1> domains[A]
     )
+    // CHECK:        firrtl.propassign %bar_A, %A
+    firrtl.domain.define %bar_A, %A
     firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Check that multiple instances also work.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.module @Bar(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A]
+  ) {}
+  // CHECK-LABEL: firrtl.module @Foo(
+  firrtl.module @Foo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A]
+  ) {
+    %bar1_A, %bar1_a = firrtl.instance bar1 @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains[A]
+    )
+    // CHECK-NOT:    firrtl.domain.define
+    // CHECK:        firrtl.propassign %bar1_A, %A
+    firrtl.domain.define %bar1_A, %A
+    firrtl.matchingconnect %bar1_a, %a : !firrtl.uint<1>
+    %bar2_A, %bar2_a = firrtl.instance bar2 @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains[A]
+    )
+    // CHECK-NOT:    firrtl.domain.define
+    // CHECK:        firrtl.propassign %bar2_A, %A
+    // CHECK-NOT:    firrtl.domain.define
+    firrtl.domain.define %bar2_A, %A
+    firrtl.matchingconnect %bar2_a, %a : !firrtl.uint<1>
   }
 }
 
@@ -232,20 +268,20 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Test that domain defines are deleted.
+// Check that unsafe domain casts are dropped.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
-  firrtl.extmodule @Bar(
-    in A : !firrtl.domain of @ClockDomain
-  )
-  // CHECK-LABEL: firrtl.module @Foo(
+  // CHECK-LABEL: firrtl.module @Foo
   firrtl.module @Foo(
-    in %A : !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain of @ClockDomain,
+    out %b: !firrtl.uint<1> domains [%B]
   ) {
-    %bar_A = firrtl.instance bar @Bar(
-      in A: !firrtl.domain of @ClockDomain
-    )
-    // CHECK-NOT: firrtl.domain.define
-    firrtl.domain.define %bar_A, %A
+    // CHECK-NOT: firrtl.unsafe_domain_cast
+    // CHECK: firrtl.matchingconnect %b, %a
+    // CHECK-NOT: firrtl.unsafe_domain_cast
+    %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
