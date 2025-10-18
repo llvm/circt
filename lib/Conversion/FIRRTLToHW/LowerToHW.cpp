@@ -850,8 +850,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib) {
@@ -1177,6 +1176,21 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   AnnotationSet annos(oldModule);
   if (handleForceNameAnnos(oldModule, annos, loweringState))
     return {};
+
+  ArrayAttr files;
+  annos.removeAnnotations([&](Annotation anno) {
+    if (anno.isClass("circt.ModuleExternFilesAnno")) {
+      if (auto fileRefs = anno.getMember<ArrayAttr>("files")) {
+        files = fileRefs;
+      }
+      return true;
+    }
+    return false;
+  });
+
+  if (files) {
+    newModule->setAttr("files", files);
+  }
 
   loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
@@ -2895,8 +2909,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
