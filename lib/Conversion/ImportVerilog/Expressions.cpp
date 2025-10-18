@@ -998,7 +998,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       arguments.push_back(value);
     }
 
-    if (!lowering->captures.empty()) {
+    if (!lowering->isConverting && !lowering->captures.empty()) {
       auto materializeCaptureAtCall = [&](Value cap) -> Value {
         // Captures are expected to be moore::RefType.
         auto refTy = dyn_cast<moore::RefType>(cap.getType());
