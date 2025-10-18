@@ -414,7 +414,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
-                                        instOp.getPortNameStr(i));
+                                        instOp.getPortName(i));
       auto wire =
           firrtl::WireOp::create(builder, result.getType(), name,
                                  firrtl::NameKindEnum::DroppableName,
@@ -463,7 +463,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
     for (unsigned i = 0, e = memOp.getNumResults(); i != e; ++i) {
       auto result = memOp.getResult(i);
       auto name = builder.getStringAttr(Twine(memOp.getName()) + "_" +
-                                        memOp.getPortNameStr(i));
+                                        memOp.getPortName(i));
       auto wire =
           firrtl::WireOp::create(builder, result.getType(), name,
                                  firrtl::NameKindEnum::DroppableName,
@@ -1190,7 +1190,7 @@ struct EagerInliner : public OpReduction<InstanceOp> {
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
       auto name = rewriter.getStringAttr(Twine(instOp.getName()) + "_" +
-                                         instOp.getPortNameStr(i));
+                                         instOp.getPortName(i));
       auto wire = WireOp::create(rewriter, instOp.getLoc(), result.getType(),
                                  name, NameKindEnum::DroppableName,
                                  instOp.getPortAnnotation(i), StringAttr{})

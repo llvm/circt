@@ -138,7 +138,7 @@ struct FlattenMemoryPass
         auto result = memOp.getResult(index);
         auto wire = WireOp::create(builder, result.getType(),
                                    (memOp.getName() + "_" +
-                                    memOp.getPortName(index).getValue())
+                                    memOp.getPortName(index))
                                        .str())
                         .getResult();
         result.replaceAllUsesWith(wire);

@@ -119,17 +119,27 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
+    StringAttr getPortNameAttr(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    Location getPortLocation(size_t) {
+      return getLoc();
     }
 
     /// Hooks for port annotations.
@@ -208,15 +218,29 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
+    StringAttr getPortNameAttr(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    Location getPortLocation(size_t resultNo) {
+      return getLoc();
+    }
+
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
@@ -313,9 +337,10 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
     size_t getMaskBits();
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
+    StringAttr getPortNameAttr(size_t resultNo);
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
     }
 
     /// Return the port type for the specified result number.

@@ -85,6 +85,28 @@ struct PortInfo {
         annotations(annos), domains(domains) {}
 };
 
+inline bool operator==(const PortInfo &lhs, const PortInfo &rhs) {
+  if (lhs.name != rhs.name)
+    return false;
+  if (lhs.type != rhs.type)
+    return false;
+  if (lhs.direction != rhs.direction)
+    return false;
+  if (lhs.sym != rhs.sym)
+    return false;
+  if (lhs.loc != rhs.loc)
+    return false;
+  if (lhs.annotations != rhs.annotations)
+    return false;
+  if (lhs.domains != rhs.domains)
+    return false;
+  return true;
+}
+
+inline bool operator!=(const PortInfo &lhs, const PortInfo &rhs) {
+  return !(lhs == rhs);
+}
+
 enum class ConnectBehaviorKind {
   /// Classic FIRRTL connections: last connect 'wins' across paths;
   /// conditionally applied under 'when'.

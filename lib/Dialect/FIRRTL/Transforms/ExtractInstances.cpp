@@ -563,7 +563,7 @@ void ExtractInstancesPass::extractInstances() {
     for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
       // Assemble the new port name as "<prefix>_<name>", where the prefix is
       // provided by the extraction annotation.
-      auto name = inst.getPortNameStr(portIdx);
+      auto name = inst.getPortName(portIdx);
       auto nameAttr = StringAttr::get(
           &getContext(),
           prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
@@ -913,7 +913,7 @@ void ExtractInstancesPass::groupInstances() {
       StringRef prefix(instPrefixNamesPair[inst].first);
       unsigned portNum = inst.getNumResults();
       for (unsigned portIdx = 0; portIdx < portNum; ++portIdx) {
-        auto name = inst.getPortNameStr(portIdx);
+        auto name = inst.getPortName(portIdx);
         auto nameAttr = builder.getStringAttr(
             prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
         PortInfo port{nameAttr,

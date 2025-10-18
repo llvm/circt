@@ -1439,7 +1439,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
 
     // The path to the field is just this output's name.
     auto objectFieldPath = builder.getArrayAttr({FlatSymbolRefAttr::get(
-        firrtlInstance.getPortName(result.getResultNumber()))});
+        firrtlInstance.getPortNameAttr(result.getResultNumber()))});
 
     // Create the field access.
     auto objectField = ObjectFieldOp::create(
