@@ -51,6 +51,8 @@ struct FunctionLowering {
   mlir::func::FuncOp op;
   llvm::SmallVector<Value, 4> captures;
   llvm::DenseMap<Value, unsigned> captureIndex;
+  bool capturesFinalized = false;
+  bool isConverting = false;
 };
 
 /// Information about a loops continuation and exit blocks relevant while
