@@ -2,7 +2,7 @@
 
 // -----
 
-hw.module @verifyClocks(in %clk: i1, in %a: i1, in %b: i1) {
+hw.module @verifyClocks(in %clk: !seq.clock, in %a: i1, in %b: i1) {
   %n0 = ltl.not %a : i1
 
   // expected-error @below {{Nested clock or disable operations are not allowed for clock_assertlike operations.}}
@@ -12,7 +12,7 @@ hw.module @verifyClocks(in %clk: i1, in %a: i1, in %b: i1) {
 
 // -----
 
-hw.module @verifyClocks1(in %clk: i1, in %a: i1, in %b: i1) {
+hw.module @verifyClocks1(in %clk: !seq.clock, in %a: i1, in %b: i1) {
   %n0 = ltl.not %a : i1
 
   // expected-error @below {{Nested clock or disable operations are not allowed for clock_assertlike operations.}}
@@ -22,7 +22,7 @@ hw.module @verifyClocks1(in %clk: i1, in %a: i1, in %b: i1) {
 
 // -----
 
-hw.module @verifyClocks2(in %clk: i1, in %a: i1, in %b: i1) {
+hw.module @verifyClocks2(in %clk: !seq.clock, in %a: i1, in %b: i1) {
   %n0 = ltl.not %a : i1
 
   // expected-error @below {{Nested clock or disable operations are not allowed for clock_assertlike operations.}}
@@ -32,7 +32,7 @@ hw.module @verifyClocks2(in %clk: i1, in %a: i1, in %b: i1) {
 
 // -----
 
-hw.module @deeplynested(in %clk: i1, in %a: i1, in %b: i1) {
+hw.module @deeplynested(in %clk: !seq.clock, in %a: i1, in %b: i1) {
   %n0 = ltl.not %a : i1
   // expected-error @below {{Nested clock or disable operations are not allowed for clock_assertlike operations.}}
   %clocked = ltl.clock %n0, posedge %clk : !ltl.property
@@ -47,6 +47,6 @@ hw.module @deeplynested(in %clk: i1, in %a: i1, in %b: i1) {
 
 // -----
 
-hw.module @clockedarg(in %clocked: !ltl.property, in %a: i1, in %clk: i1) {
+hw.module @clockedarg(in %clocked: !ltl.property, in %a: i1, in %clk: !seq.clock) {
   verif.clocked_assert %clocked if %a, posedge %clk : !ltl.property
 }
