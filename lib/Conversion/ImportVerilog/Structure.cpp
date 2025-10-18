@@ -1058,6 +1058,12 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   auto *lowering = declareFunction(subroutine);
   if (!lowering)
     return failure();
+
+  // If function already has been finalized, or is already being converted
+  // (recursive/re-entrant calls) stop here.
+  if (lowering->capturesFinalized || lowering->isConverting)
+    return success();
+
   ValueSymbolScope scope(valueSymbols);
 
   // Create a function body block and populate it with block arguments.
@@ -1151,6 +1157,10 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     }
   };
 
+  lowering->isConverting = true;
+  auto convertingGuard =
+      llvm::make_scope_exit([&] { lowering->isConverting = false; });
+
   if (failed(convertStatement(subroutine.getBody())))
     return failure();
 
@@ -1183,6 +1193,8 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
       var->erase();
     }
   }
+
+  lowering->capturesFinalized = true;
   return success();
 }
 
