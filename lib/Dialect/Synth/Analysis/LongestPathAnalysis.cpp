@@ -730,7 +730,8 @@ private:
   std::unique_ptr<llvm::ImmutableListFactory<DebugPoint>> debugPointFactory;
 
   // A map from the value point to the longest paths.
-  DenseMap<std::pair<Value, size_t>, SmallVector<OpenPath>> cachedResults;
+  DenseMap<std::pair<Value, size_t>, std::unique_ptr<SmallVector<OpenPath>>>
+      cachedResults;
 
   // A map from the object to the longest paths.
   DenseMap<Object, SmallVector<OpenPath>> endPointResults;
@@ -775,7 +776,7 @@ ArrayRef<OpenPath> LocalVisitor::getCachedPaths(Value value,
   // If not found, then consider it to be a constant.
   if (it == cachedResults.end())
     return {};
-  return it->second;
+  return *it->second;
 }
 
 void LocalVisitor::putUnclosedResult(const Object &object, int64_t delay,
@@ -817,6 +818,10 @@ LogicalResult LocalVisitor::markRegEndPoint(Value endPoint, Value start,
 
   // Get paths for each bit, and record them.
   for (size_t i = 0, e = bitWidth; i < e; ++i) {
+    // Call getOrComputePaths to make sure the paths are computed for endPoint.
+    // This avoids a race condition.
+    if (failed(getOrComputePaths(endPoint, i)))
+      return failure();
     if (failed(record(i, start, i)))
       return failure();
   }
@@ -1104,6 +1109,10 @@ LogicalResult LocalVisitor::visit(mlir::BlockArgument arg, size_t bitPos,
 
 FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputePaths(Value value,
                                                               size_t bitPos) {
+
+  if (value.getDefiningOp<hw::ConstantOp>())
+    return ArrayRef<OpenPath>{};
+
   if (ec.contains({value, bitPos})) {
     auto leader = ec.findLeader({value, bitPos});
     // If this is not the leader, then use the leader.
@@ -1114,19 +1123,19 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputePaths(Value value,
 
   auto it = cachedResults.find({value, bitPos});
   if (it != cachedResults.end())
-    return ArrayRef<OpenPath>(it->second);
+    return ArrayRef<OpenPath>(*it->second);
 
-  SmallVector<OpenPath> results;
-  if (failed(visitValue(value, bitPos, results)))
+  auto results = std::make_unique<SmallVector<OpenPath>>();
+  if (failed(visitValue(value, bitPos, *results)))
     return {};
 
   // Unique the results.
-  filterPaths(results, ctx->doKeepOnlyMaxDelayPaths(), ctx->isLocalScope());
+  filterPaths(*results, ctx->doKeepOnlyMaxDelayPaths(), ctx->isLocalScope());
   LLVM_DEBUG({
     llvm::dbgs() << value << "[" << bitPos << "] "
-                 << "Found " << results.size() << " paths\n";
+                 << "Found " << results->size() << " paths\n";
     llvm::dbgs() << "====Paths:\n";
-    for (auto &path : results) {
+    for (auto &path : *results) {
       path.print(llvm::dbgs());
       llvm::dbgs() << "\n";
     }
@@ -1136,7 +1145,7 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputePaths(Value value,
   auto insertedResult =
       cachedResults.try_emplace({value, bitPos}, std::move(results));
   assert(insertedResult.second);
-  return ArrayRef<OpenPath>(insertedResult.first->second);
+  return ArrayRef<OpenPath>(*insertedResult.first->second);
 }
 
 LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
@@ -1294,7 +1303,7 @@ LogicalResult LocalVisitor::initializeAndRun() {
                                      op.getEnable());
             })
             .Case<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
-                  comb::MuxOp>([&](auto op) {
+                  comb::MuxOp, seq::FirMemReadOp>([&](auto op) {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
               for (size_t i = 0, e = getBitWidth(op); i < e; ++i)
