@@ -442,7 +442,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (expr.timingControl)
         if (failed(context.convertTimingControl(*expr.timingControl)))
           return {};
-      moore::BlockingAssignOp::create(builder, loc, lhs, rhs);
+      auto assignOp = moore::BlockingAssignOp::create(builder, loc, lhs, rhs);
+      if (context.variableAssignCallback)
+        context.variableAssignCallback(assignOp);
       return rhs;
     }
 
@@ -454,8 +456,10 @@ struct RvalueExprVisitor : public ExprVisitor {
             ctrl->expr, moore::TimeType::get(builder.getContext()));
         if (!delay)
           return {};
-        moore::DelayedNonBlockingAssignOp::create(builder, loc, lhs, rhs,
-                                                  delay);
+        auto assignOp = moore::DelayedNonBlockingAssignOp::create(
+            builder, loc, lhs, rhs, delay);
+        if (context.variableAssignCallback)
+          context.variableAssignCallback(assignOp);
         return rhs;
       }
 
@@ -466,7 +470,9 @@ struct RvalueExprVisitor : public ExprVisitor {
           << slang::ast::toString(expr.timingControl->kind);
       return {};
     }
-    moore::NonBlockingAssignOp::create(builder, loc, lhs, rhs);
+    auto assignOp = moore::NonBlockingAssignOp::create(builder, loc, lhs, rhs);
+    if (context.variableAssignCallback)
+      context.variableAssignCallback(assignOp);
     return rhs;
   }
 
@@ -499,7 +505,10 @@ struct RvalueExprVisitor : public ExprVisitor {
       postValue =
           isInc ? moore::AddOp::create(builder, loc, preValue, one).getResult()
                 : moore::SubOp::create(builder, loc, preValue, one).getResult();
-      moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+      auto assignOp =
+          moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+      if (context.variableAssignCallback)
+        context.variableAssignCallback(assignOp);
     }
     if (isPost)
       return preValue;

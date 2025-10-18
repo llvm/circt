@@ -282,6 +282,9 @@ struct Context {
   /// example to populate the list of observed signals in an implicit event
   /// control `@*`.
   std::function<void(moore::ReadOp)> rvalueReadCallback;
+  /// A listener called for every variable or net being assigned. This can be
+  /// used to collect all variables assigned in a task scope.
+  std::function<void(mlir::Operation *)> variableAssignCallback;
 
   /// The time scale currently in effect.
   slang::TimeScale timeScale;

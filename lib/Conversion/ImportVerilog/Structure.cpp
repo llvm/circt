@@ -1100,23 +1100,54 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     valueSymbols.insert(subroutine.returnValVar, returnVar);
   }
 
-  // Save previous callback
-  auto prevCb = rvalueReadCallback;
-  auto prevCbGuard =
-      llvm::make_scope_exit([&] { rvalueReadCallback = prevCb; });
+  // Save previous callbacks
+  auto prevRCb = rvalueReadCallback;
+  auto prevWCb = variableAssignCallback;
+  auto prevRCbGuard = llvm::make_scope_exit([&] {
+    rvalueReadCallback = prevRCb;
+    variableAssignCallback = prevWCb;
+  });
 
   // Capture this function's captured context directly
-  rvalueReadCallback = [lowering, prevCb](moore::ReadOp rop) {
-    if (prevCb)
-      prevCb(rop); // chain previous callback
+  rvalueReadCallback = [lowering, prevRCb](moore::ReadOp rop) {
+    if (prevRCb)
+      prevRCb(rop); // chain previous callback
 
     mlir::Value ref = rop.getInput();
+    // If we've already recorded this capture, skip.
+    if (lowering->captureIndex.count(ref))
+      return;
+
     // Only capture refs defined outside this function’s region
     if (!lowering->op.getBody().isAncestor(ref.getParentRegion())) {
       auto [it, inserted] =
           lowering->captureIndex.try_emplace(ref, lowering->captures.size());
       if (inserted)
         lowering->captures.push_back(ref);
+    }
+  };
+  // Capture this function's captured context directly
+  variableAssignCallback = [lowering, prevWCb](mlir::Operation *op) {
+    if (prevWCb)
+      prevWCb(op); // chain previous callback
+
+    mlir::Value dstRef =
+        llvm::TypeSwitch<mlir::Operation *, mlir::Value>(op)
+            .Case<moore::BlockingAssignOp, moore::NonBlockingAssignOp,
+                  moore::DelayedNonBlockingAssignOp>(
+                [](auto op) { return op.getDst(); })
+            .Default([](auto) -> mlir::Value { return {}; });
+
+    // If we've already recorded this capture, skip.
+    if (lowering->captureIndex.count(dstRef))
+      return;
+
+    // Only capture refs defined outside this function’s region
+    if (!lowering->op.getBody().isAncestor(dstRef.getParentRegion())) {
+      auto [it, inserted] =
+          lowering->captureIndex.try_emplace(dstRef, lowering->captures.size());
+      if (inserted)
+        lowering->captures.push_back(dstRef);
     }
   };
 
