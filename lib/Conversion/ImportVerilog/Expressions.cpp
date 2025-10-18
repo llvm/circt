@@ -962,6 +962,10 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!lowering)
       return {};
 
+    auto convertedFunction = context.convertFunction(*subroutine);
+    if (failed(convertedFunction))
+      return {};
+
     // Convert the call arguments. Input arguments are converted to an rvalue.
     // All other arguments are converted to lvalues and passed into the function
     // by reference.
@@ -985,7 +989,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       arguments.push_back(value);
     }
 
-    if (!lowering->captures.empty()) {
+    if (!lowering->isConverting && !lowering->captures.empty()) {
       auto materializeCaptureAtCall = [&](Value cap) -> Value {
         // Captures are expected to be moore::RefType.
         auto refTy = dyn_cast<moore::RefType>(cap.getType());
