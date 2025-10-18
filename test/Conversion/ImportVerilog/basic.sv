@@ -3404,9 +3404,32 @@ module testLHSTaskCapture();
 
 endmodule
 
-// CHECK: func.func private @testRecursive(%arg0: !moore.i32) -> !moore.i32 {
+// CHECK-LABEL: @testRecursive
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: -> !moore.i32
 function int testRecursive(input int n);
     if (n <= 1) return 1;
     // CHECK: [[REC:%.+]] = call @testRecursive({{.*}}) : (!moore.i32) -> !moore.i32
     return n * testRecursive(n - 1);
 endfunction
+
+// CHECK-LABEL: moore.module @testRecursiveCaptureFunction() {
+module testRecursiveCaptureFunction();
+  // CHECK: [[CAPTUREME:%.+]] = moore.variable : <i32>
+  int captureMe;
+  int r;
+  initial begin
+    // CHECK: func.call @fact({{.*}}, [[CAPTUREME]]) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
+    r = fact(5);
+  end
+
+  // CHECK: func.func private @fact(%arg0: !moore.i32, %arg1: !moore.ref<i32>) -> !moore.i32 {
+  function int fact(input int n);
+    // CHECK: [[CAPTUREDVALUE:%.*]] = moore.read %arg1 : <i32>
+    // CHECK: return [[CAPTUREDVALUE]] : !moore.i32
+    if (n <= 1) return captureMe;
+    // CHECK: [[REC_CALL:%.*]] = call @fact({{.*}}, %arg1) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
+    return n * fact(n - 1);
+  endfunction
+
+endmodule

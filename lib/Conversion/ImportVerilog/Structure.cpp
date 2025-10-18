@@ -1044,6 +1044,67 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   return lowering.get();
 }
 
+/// Special case handling for recursive functions with captures;
+/// this function fixes the in-body call of the recursive function with
+/// the captured arguments.
+static LogicalResult rewriteCallSitesToPassCaptures(mlir::func::FuncOp callee,
+                                                    ArrayRef<Value> captures) {
+  if (captures.empty())
+    return success();
+
+  mlir::ModuleOp module = callee->getParentOfType<mlir::ModuleOp>();
+  if (!module)
+    return callee.emitError("expected callee to be nested under ModuleOp");
+
+  auto usesOpt = mlir::SymbolTable::getSymbolUses(callee, module);
+  if (!usesOpt)
+    return callee.emitError("failed to compute symbol uses");
+
+  // Snapshot the relevant users before we mutate IR.
+  SmallVector<mlir::func::CallOp, 8> callSites;
+  callSites.reserve(std::distance(usesOpt->begin(), usesOpt->end()));
+  for (const mlir::SymbolTable::SymbolUse &use : *usesOpt) {
+    if (auto call = llvm::dyn_cast<mlir::func::CallOp>(use.getUser()))
+      callSites.push_back(call);
+  }
+  if (callSites.empty())
+    return success();
+
+  Block &entry = callee.getBody().front();
+  const unsigned numCaps = captures.size();
+  const unsigned numEntryArgs = entry.getNumArguments();
+  if (numEntryArgs < numCaps)
+    return callee.emitError("entry block has fewer args than captures");
+  const unsigned capArgStart = numEntryArgs - numCaps;
+
+  // Current (finalized) function type.
+  auto fTy = callee.getFunctionType();
+
+  for (auto call : callSites) {
+    SmallVector<Value> newOperands(call.getArgOperands().begin(),
+                                   call.getArgOperands().end());
+
+    const bool inSameFunc = callee->isProperAncestor(call);
+    if (inSameFunc) {
+      // Append the function’s *capture block arguments* in order.
+      for (unsigned i = 0; i < numCaps; ++i)
+        newOperands.push_back(entry.getArgument(capArgStart + i));
+    } else {
+      // External call site: pass the captured SSA values.
+      newOperands.append(captures.begin(), captures.end());
+    }
+
+    OpBuilder b(call);
+    auto flatRef = mlir::FlatSymbolRefAttr::get(callee);
+    auto newCall = b.create<mlir::func::CallOp>(call.getLoc(), fTy.getResults(),
+                                                flatRef, newOperands);
+    call->replaceAllUsesWith(newCall.getOperation());
+    call->erase();
+  }
+
+  return success();
+}
+
 /// Convert a function.
 LogicalResult
 Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
@@ -1166,6 +1227,11 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // Plumb captures into the function as extra block arguments
   if (failed(finalizeFunctionBodyCaptures(*lowering)))
+    return failure();
+
+  // For the special case of recursive functions, fix the call sites within the
+  // body
+  if (failed(rewriteCallSitesToPassCaptures(lowering->op, lowering->captures)))
     return failure();
 
   // If there was no explicit return statement provided by the user, insert a
