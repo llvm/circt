@@ -1109,6 +1109,10 @@ LogicalResult LocalVisitor::visit(mlir::BlockArgument arg, size_t bitPos,
 
 FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputePaths(Value value,
                                                               size_t bitPos) {
+
+  if (value.getDefiningOp<hw::ConstantOp>())
+    return ArrayRef<OpenPath>{};
+
   if (ec.contains({value, bitPos})) {
     auto leader = ec.findLeader({value, bitPos});
     // If this is not the leader, then use the leader.
@@ -1299,7 +1303,7 @@ LogicalResult LocalVisitor::initializeAndRun() {
                                      op.getEnable());
             })
             .Case<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
-                  comb::MuxOp>([&](auto op) {
+                  comb::MuxOp, seq::FirMemReadOp>([&](auto op) {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
               for (size_t i = 0, e = getBitWidth(op); i < e; ++i)
