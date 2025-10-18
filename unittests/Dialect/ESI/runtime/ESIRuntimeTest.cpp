@@ -519,4 +519,86 @@ TEST(ESITypesTest, BitWidthCalculations) {
   EXPECT_EQ(arrayType.getBitWidth(), 40)
       << "ArrayType of 5 uint8 elements should have bit width of 40 (8 * 5)";
 }
+
+// Test >64-bit unsigned integer (bytearray) serialization and deserialization
+TEST(ESITypesTest, WideUIntTypeSerialization) {
+  // Choose a width that's not a multiple of 64 and not byte-aligned edge case:
+  // 130 bits -> 17 bytes
+  const unsigned width = 130;
+  UIntType wideUInt("uint130", width);
+
+  // Create a deterministic 17-byte pattern
+  size_t byteSize = (width + 7) / 8; // expect 17
+  std::vector<uint8_t> value(byteSize);
+  for (size_t i = 0; i < byteSize; ++i)
+    value[i] = static_cast<uint8_t>((i * 13) & 0xFF);
+
+  std::any valueAny = std::any(value);
+  EXPECT_NO_THROW(wideUInt.ensureValid(valueAny));
+
+  // Wrong size (one byte missing)
+  std::vector<uint8_t> wrongSize(value.begin(), value.end() - 1);
+  EXPECT_THROW(wideUInt.ensureValid(std::any(wrongSize)), std::runtime_error);
+
+  // Supplying a native integer should fail for >64 bits
+  EXPECT_THROW(wideUInt.ensureValid(std::any(static_cast<uint64_t>(42))),
+               std::runtime_error);
+
+  // Serialize
+  MessageData serialized = wideUInt.serialize(valueAny);
+  EXPECT_EQ(serialized.getSize(), byteSize)
+      << "uint130 should serialize to 17 bytes";
+  for (size_t i = 0; i < byteSize; ++i)
+    EXPECT_EQ(serialized.getData()[i], value[i])
+        << "Byte mismatch at index " << i;
+
+  // Deserialize
+  auto [deserAny, remaining] = wideUInt.deserialize(serialized);
+  EXPECT_EQ(remaining.size(), 0UL) << "Deserialization should consume all data";
+  auto deserVec = std::any_cast<std::vector<uint8_t>>(deserAny);
+  EXPECT_EQ(deserVec.size(), byteSize);
+  EXPECT_TRUE(std::equal(deserVec.begin(), deserVec.end(), value.begin()))
+      << "Round-trip of uint130 bytearray failed";
+}
+
+// Test >64-bit signed integer (bytearray) serialization and deserialization
+TEST(ESITypesTest, WideSIntTypeSerialization) {
+  // Pick a width >64 and also odd: 129 bits -> 17 bytes; tests sign-type path
+  // which is same bytearray logic.
+  const unsigned width = 129;
+  SIntType wideSInt("sint129", width);
+
+  size_t byteSize = (width + 7) / 8; // expect 17
+  std::vector<uint8_t> value(byteSize);
+  for (size_t i = 0; i < byteSize; ++i)
+    value[i] = static_cast<uint8_t>((0xF0 ^ (i * 7)) & 0xFF);
+
+  std::any valueAny = std::any(value);
+  EXPECT_NO_THROW(wideSInt.ensureValid(valueAny));
+
+  // Wrong size (add an extra byte)
+  std::vector<uint8_t> wrongSize(value);
+  wrongSize.push_back(0xAA);
+  EXPECT_THROW(wideSInt.ensureValid(std::any(wrongSize)), std::runtime_error);
+
+  // Native integer should fail for >64 bits
+  EXPECT_THROW(wideSInt.ensureValid(std::any(static_cast<int64_t>(-1))),
+               std::runtime_error);
+
+  // Serialize
+  MessageData serialized = wideSInt.serialize(valueAny);
+  EXPECT_EQ(serialized.getSize(), byteSize)
+      << "sint129 should serialize to 17 bytes";
+  for (size_t i = 0; i < byteSize; ++i)
+    EXPECT_EQ(serialized.getData()[i], value[i])
+        << "Byte mismatch at index " << i;
+
+  // Deserialize
+  auto [deserAny, remaining] = wideSInt.deserialize(serialized);
+  EXPECT_EQ(remaining.size(), 0UL) << "Deserialization should consume all data";
+  auto deserVec = std::any_cast<std::vector<uint8_t>>(deserAny);
+  EXPECT_EQ(deserVec.size(), byteSize);
+  EXPECT_TRUE(std::equal(deserVec.begin(), deserVec.end(), value.begin()))
+      << "Round-trip of sint129 bytearray failed";
+}
 } // namespace
