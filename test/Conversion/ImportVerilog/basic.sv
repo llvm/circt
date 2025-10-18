@@ -3381,3 +3381,25 @@ module testFunctionCapture();
     // CHECK: [[CAPTUREDA:%.+]] = moore.read %arg0 : <l1>
     // CHECK: return [[CAPTUREDA]] : !moore.l1
 endmodule
+
+// CHECK: moore.module @testLHSTaskCapture() {
+module testLHSTaskCapture();
+
+    // CHECK: [[A:%.+]] = moore.variable : <l1>
+    logic a;
+
+    task testTaskCapture;
+        a = 0;
+    endtask
+
+    always @(posedge a) begin
+        // CHECK: func.call @testTaskCapture([[A]]) : (!moore.ref<l1>) -> ()
+        testTaskCapture;
+    end
+
+    // CHECK: func.func private @testTaskCapture(%arg0: !moore.ref<l1>) {
+    // CHECK: [[CONST:%.+]] = moore.constant 0 : l1
+    // CHECK: moore.blocking_assign %arg0, [[CONST]] : l1
+
+
+endmodule
