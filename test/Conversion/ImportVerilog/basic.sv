@@ -3403,3 +3403,10 @@ module testLHSTaskCapture();
 
 
 endmodule
+
+// CHECK: func.func private @testRecursive(%arg0: !moore.i32) -> !moore.i32 {
+function int testRecursive(input int n);
+    if (n <= 1) return 1;
+    // CHECK: [[REC:%.+]] = call @testRecursive({{.*}}) : (!moore.i32) -> !moore.i32
+    return n * testRecursive(n - 1);
+endfunction
