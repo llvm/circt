@@ -3475,3 +3475,13 @@ module partselect_index_neg_le;
   logic [1:0] res = c[s-:2];
 
 endmodule
+
+// CHECK-LABEL: func.func private @testStrLiteralReturn()
+// CHECK-SAME: -> !moore.string {
+function string testStrLiteralReturn;
+    // CHECK-NEXT: [[INT:%.+]] = moore.string_constant "\22A string literal\22" : i127
+    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[INT]] : i127
+    parameter string testStrLiteral = "A string literal";
+    // CHECK-NEXT: return [[STR]] : !moore.string
+    return testStrLiteral;
+endfunction // testStrLiteralReturn

@@ -1622,6 +1622,26 @@ Value Context::materializeSVReal(const slang::ConstantValue &svreal,
   return {};
 }
 
+/// Materialize a Slang string literal as a literal string constant op.
+Value Context::materializeString(const slang::ConstantValue &stringLiteral,
+                                 const slang::ast::Type &astType,
+                                 Location loc) {
+  slang::ConstantValue intVal = stringLiteral.convertToInt();
+  auto effectiveWidth = intVal.getEffectiveWidth();
+  if (!effectiveWidth)
+    return {};
+
+  auto intTy = moore::IntType::getInt(getContext(), effectiveWidth.value());
+
+  if (astType.isString()) {
+    auto immInt = moore::StringConstantOp::create(builder, loc, intTy,
+                                                  stringLiteral.toString())
+                      .getResult();
+    return moore::IntToStringOp::create(builder, loc, immInt).getResult();
+  }
+  return {};
+}
+
 /// Materialize a Slang integer literal as a constant op.
 Value Context::materializeSVInt(const slang::SVInt &svint,
                                 const slang::ast::Type &astType, Location loc) {
@@ -1704,6 +1724,8 @@ Value Context::materializeConstant(const slang::ConstantValue &constant,
     return materializeSVInt(constant.integer(), type, loc);
   if (constant.isReal() || constant.isShortReal())
     return materializeSVReal(constant, type, loc);
+  if (constant.isString())
+    return materializeString(constant, type, loc);
 
   return {};
 }

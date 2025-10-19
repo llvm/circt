@@ -751,6 +751,18 @@ def IntToRealOp : MooreOp<"int_to_real", [
   }];
 }
 
+def IntToStringOp : MooreOp<"int_to_string", [
+  Pure
+]> {
+  let summary = "Convert an integer to a string";
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs StringType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+
 //===----------------------------------------------------------------------===//
 // Resizing
 //===----------------------------------------------------------------------===//
