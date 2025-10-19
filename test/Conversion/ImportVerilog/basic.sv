@@ -3442,4 +3442,36 @@ module RealLiteral();
    // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.conversion [[REALCONSTANT]] : !moore.f64 -> !moore.f32
    // CHECK-NEXT: [[B:%.+]] = moore.variable [[SHORTREALCONSTANT]] : <f32>
    shortreal b = 0.5;
+
+endmodule
+
+// CHECK-LABEL: moore.module @partselect_index_pos_be() {
+module partselect_index_pos_be;
+
+  // Big-endian [1:4] => offset = 4 (positive), needs 3 bits
+  logic [1:4] c = 4'he;
+  logic [0:0] s = 1;
+
+  // CHECK: [[ZEXT:%.+]] = moore.zext {{.*}} : l1 -> l3
+  // CHECK-NEXT: [[MCONST:%.+]] = moore.constant -4 : l3
+  // CHECK-NEXT: [[SUB:%.+]] = moore.sub [[MCONST]], [[ZEXT]] : l3
+  // CHECK-NEXT: [[EXTR:%.+]] = moore.dyn_extract {{.*}} from [[SUB]] : l4, l3 -> l2
+  logic [1:0] res = c[s-:2];
+
+endmodule
+
+// CHECK-LABEL: moore.module @partselect_index_neg_le() {
+module partselect_index_neg_le;
+
+  // Little-endian [0:-3] => offset = -3 (negative)
+  // We expect a constant -3 typed wide enough (i3 is sufficient)
+  logic [0:-3] c = 4'h8;
+  logic [0:0] s = 1;
+
+  // CHECK: [[SEXT:%.+]] = moore.sext {{.*}} : l1 -> l3
+  // CHECK-NEXT: [[MCONST:%.+]] = moore.constant -3 : l3
+  // CHECK-NEXT: [[SUB:%.+]] = moore.sub [[SEXT]], [[MCONST]] : l3
+  // CHECK-NEXT: [[EXTR:%.+]] = moore.dyn_extract {{.*}} from [[SUB]] : l4, l3 -> l2
+  logic [1:0] res = c[s-:2];
+
 endmodule
