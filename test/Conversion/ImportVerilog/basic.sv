@@ -3431,5 +3431,15 @@ module testRecursiveCaptureFunction();
     // CHECK: [[REC_CALL:%.*]] = call @fact({{.*}}, %arg1) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
     return n * fact(n - 1);
   endfunction
+endmodule
 
+// CHECK-LABEL: moore.module @RealLiteral() {
+module RealLiteral();
+   // CHECK-NEXT:  [[REALCONSTANT:%.+]] = moore.real_constant 5.000000e-01
+   // CHECK-NEXT: [[A:%.+]] = moore.variable [[REALCONSTANT]] : <f64>
+   real a = 0.5;
+   // CHECK-NEXT: [[REALCONSTANT:%.+]] = moore.real_constant 5.000000e-01
+   // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.conversion [[REALCONSTANT]] : !moore.f64 -> !moore.f32
+   // CHECK-NEXT: [[B:%.+]] = moore.variable [[SHORTREALCONSTANT]] : <f32>
+   shortreal b = 0.5;
 endmodule
