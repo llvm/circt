@@ -1146,7 +1146,9 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   /// Handle real literals.
   Value visit(const slang::ast::RealLiteral &expr) {
-    return context.materializeSVReal(*expr.getConstant(), *expr.type, loc);
+    auto fTy = mlir::Float64Type::get(context.getContext());
+    auto attr = mlir::FloatAttr::get(fTy, expr.getValue());
+    return moore::RealLiteralOp::create(builder, loc, attr).getResult();
   }
 
   /// Helper function to convert RValues at creation of a new Struct, Array or
@@ -1564,30 +1566,43 @@ Value Context::convertToBool(Value value) {
 Value Context::materializeSVReal(const slang::ConstantValue &svreal,
                                  const slang::ast::Type &astType,
                                  Location loc) {
-  mlir::FloatType fTy;
-  Type resultType;
-  double val;
+  const auto *floatType = astType.as_if<slang::ast::FloatingType>();
+  if (!floatType)
+    return {}; // not a floating type at all
 
-  if (const auto *floatType = astType.as_if<slang::ast::FloatingType>()) {
-    if (floatType->floatKind == slang::ast::FloatingType::ShortReal) {
-      fTy = mlir::Float32Type::get(getContext());
-      resultType = moore::RealType::getShortReal(getContext());
-      val = svreal.shortReal().v;
-
-      mlir::FloatAttr attr = mlir::FloatAttr::get(fTy, val);
-      return moore::ShortrealLiteralOp::create(builder, loc, resultType, attr)
-          .getResult();
+  // Coerce the constant to the expected floating kind if needed.
+  // (Avoid calling .real()/.shortReal() unless the predicate is true.)
+  if (floatType->floatKind == slang::ast::FloatingType::ShortReal) {
+    slang::ConstantValue cv = svreal;
+    if (!cv.isShortReal()) {
+      // Slang will do a semantic conversion when possible.
+      cv = cv.convertToShortReal();
+      if (!cv.isShortReal())
+        return {}; // cannot represent as shortreal
     }
-    if (floatType->floatKind == slang::ast::FloatingType::Real) {
-      fTy = mlir::Float64Type::get(getContext());
-      resultType = moore::RealType::getReal(getContext());
-      val = svreal.real().v;
-
-      mlir::FloatAttr attr = mlir::FloatAttr::get(fTy, val);
-      return moore::RealLiteralOp::create(builder, loc, resultType, attr)
-          .getResult();
-    }
+    auto fTy = mlir::Float32Type::get(getContext());
+    auto resultType = moore::RealType::getShortReal(getContext());
+    float v = cv.shortReal().v; // safe now
+    auto attr = mlir::FloatAttr::get(fTy, v);
+    return moore::ShortrealLiteralOp::create(builder, loc, resultType, attr)
+        .getResult();
   }
+
+  if (floatType->floatKind == slang::ast::FloatingType::Real) {
+    slang::ConstantValue cv = svreal;
+    if (!cv.isReal()) {
+      cv = cv.convertToReal();
+      if (!cv.isReal())
+        return {}; // cannot represent as real
+    }
+    auto fTy = mlir::Float64Type::get(getContext());
+    auto resultType = moore::RealType::getReal(getContext());
+    double v = cv.real().v; // safe now
+    auto attr = mlir::FloatAttr::get(fTy, v);
+    return moore::RealLiteralOp::create(builder, loc, resultType, attr)
+        .getResult();
+  }
+
   return {};
 }
 
