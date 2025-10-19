@@ -35,15 +35,31 @@ static Value getSelectIndex(Context &context, Location loc, Value index,
                             const slang::ConstantRange &range) {
   auto &builder = context.builder;
   auto indexType = cast<moore::UnpackedType>(index.getType());
-  auto bw = std::max(llvm::Log2_32_Ceil(std::max(std::abs(range.lower()),
-                                                 std::abs(range.upper()))),
-                     indexType.getBitSize().value());
 
-  auto offset = range.isLittleEndian() ? range.lower() : range.upper();
-  bool isSigned = (offset < 0);
+  // Compute offset first so we know if it is negative.
+  auto lo = range.lower();
+  auto hi = range.upper();
+  auto offset = range.isLittleEndian() ? lo : hi;
+
+  // If any bound is negative we need a signed index type.
+  const bool needSigned = (lo < 0) || (hi < 0);
+
+  // Magnitude over full range, not just the chosen offset.
+  const uint64_t maxAbs = std::max<uint64_t>(std::abs(lo), std::abs(hi));
+
+  // Bits needed from the range:
+  //  - unsigned: ceil(log2(maxAbs + 1)) (ensure at least 1)
+  //  - signed:   ceil(log2(maxAbs)) + 1 sign bit (ensure at least 2 when neg)
+  unsigned want = needSigned
+                      ? (llvm::Log2_64_Ceil(std::max<uint64_t>(1, maxAbs)) + 1)
+                      : std::max<unsigned>(1, llvm::Log2_64_Ceil(maxAbs + 1));
+
+  // Keep at least as wide as the incoming index.
+  const unsigned bw = std::max<unsigned>(want, indexType.getBitSize().value());
+
   auto intType =
       moore::IntType::get(index.getContext(), bw, indexType.getDomain());
-  index = context.materializeConversion(intType, index, isSigned, loc);
+  index = context.materializeConversion(intType, index, needSigned, loc);
 
   if (offset == 0) {
     if (range.isLittleEndian())
@@ -53,7 +69,7 @@ static Value getSelectIndex(Context &context, Location loc, Value index,
   }
 
   auto offsetConst =
-      moore::ConstantOp::create(builder, loc, intType, offset, isSigned);
+      moore::ConstantOp::create(builder, loc, intType, offset, needSigned);
   if (range.isLittleEndian())
     return moore::SubOp::create(builder, loc, index, offsetConst);
   else
