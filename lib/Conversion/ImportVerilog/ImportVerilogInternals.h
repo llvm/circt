@@ -182,6 +182,10 @@ struct Context {
   Value materializeSVReal(const slang::ConstantValue &svreal,
                           const slang::ast::Type &type, Location loc);
 
+  /// Helper function to materialize a string as an SSA value.
+  Value materializeString(const slang::ConstantValue &string,
+                          const slang::ast::Type &astType, Location loc);
+
   /// Helper function to materialize an unpacked array of `SVInt`s as an SSA
   /// value.
   Value materializeFixedSizeUnpackedArrayType(
