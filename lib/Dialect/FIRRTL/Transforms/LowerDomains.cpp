@@ -285,10 +285,19 @@ private:
 };
 
 LogicalResult LowerModule::lowerModule() {
-  // Early exit if there is no domain information.  This _shouldn't_ be the case
-  // when this pass runs, but it avoids
-  if (op.getDomainInfo().empty())
-    return success();
+  // TOOD: Is there an early exit condition here?  It is not as simple as
+  // checking for domain ports as the module may have no domain ports, but have
+  // been modified by an earlier `lowerInstances()` call.
+
+  LLVM_DEBUG({
+    llvm::dbgs()
+        << "At start of lowerModule:\n"
+        << "------------------------------------------------------------"
+           "--------------------\n"
+        << *op << "\n"
+        << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+           "^^^^^^^^^^^^^^^^^^^^\n";
+  });
 
   // Much of the lowering is conditioned on whether or not this module has a
   // body.  If it has a body, then we need to instantiate an object for each
@@ -321,6 +330,7 @@ LogicalResult LowerModule::lowerModule() {
   //   2. iDel tracks the port index after deletion.
   //   3. iIns tracks the port index after insertion.
   auto ports = op.getPorts();
+  OpBuilder::InsertPoint insertPoint;
   for (unsigned i = 0, iDel = 0, iIns = 0, e = op.getNumPorts(); i != e; ++i) {
     auto port = cast<PortInfo>(ports[i]);
 
@@ -337,7 +347,15 @@ LogicalResult LowerModule::lowerModule() {
         indexToDomain[i] = {{}, std::nullopt, iIns, {}};
 
       if (body) {
-        auto builder = ImplicitLocOpBuilder::atBlockEnd(port.loc, body);
+        // Insert objects in-order at the top of the module's body.  These
+        // cannot be inserted at the end as they may have users.
+        ImplicitLocOpBuilder builder(port.loc, context);
+        if (insertPoint.isSet())
+          builder.restoreInsertionPoint(insertPoint);
+        else
+          builder.setInsertionPointToStart(body);
+
+        // Create the object, add information about it to domain info.
         auto object = ObjectOp::create(
             builder, classOut,
             StringAttr::get(context, Twine(port.name) + "_object"));
@@ -345,6 +363,9 @@ LogicalResult LowerModule::lowerModule() {
                                               instanceGraph.lookup(classOut));
         indexToDomain[i].op = object;
         indexToDomain[i].temp = stubOut(body->getArgument(i));
+
+        // Save the insertion point for the next go-around.
+        insertPoint = builder.saveInsertionPoint();
       }
 
       // Add input and output property ports that encode the property inputs
@@ -406,29 +427,39 @@ LogicalResult LowerModule::lowerModule() {
   // instantiated earlier.
   op.insertPorts(newPorts);
 
-  SmallVector<UnrealizedConversionCastOp> conversions;
+  LLVM_DEBUG({
+    llvm::dbgs()
+        << "After port modifications:\n"
+        << "------------------------------------------------------------"
+           "--------------------\n"
+        << *op << "\n"
+        << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+           "^^^^^^^^^^^^^^^^^^^^\n";
+  });
 
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
       auto [object, inputPort, outputPort, temp, associations] = info;
       // Now that the ports have been updated and changed type, replace any 0-1
       // conversion with a 1-1 conversions.
-      if (inputPort.has_value())
-        if (auto conversion = splice(temp, body->getArgument(*inputPort)))
-          conversions.push_back(conversion);
+      if (inputPort.has_value()) {
+        splice(temp, body->getArgument(*inputPort));
+      }
 
       OpBuilder builder(object);
       builder.setInsertionPointAfter(object);
       // Assign input domain info if needed.
-      //
-      // TODO: Change this to hook up to its connection once domain connects are
-      // available.
       if (inputPort) {
         auto subDomainInfoIn =
             ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
         PropAssignOp::create(builder, object.getLoc(), subDomainInfoIn,
                              body->getArgument(*inputPort));
+      } else {
+        auto subDomainInfoIn =
+            ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
+        splice(temp, subDomainInfoIn);
       }
+
       auto subAssociations =
           ObjectSubfieldOp::create(builder, object.getLoc(), object, 2);
       // Assign associations.
@@ -448,40 +479,62 @@ LogicalResult LowerModule::lowerModule() {
                            body->getArgument(outputPort), object);
     }
 
+    LLVM_DEBUG({
+      llvm::errs()
+          << "After splice:\n"
+          << "----------------------------------------------------------"
+             "----------------------\n"
+          << *op << "\n"
+          << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+             "^^^^^^^^^^^^^^^^^^^^^^\n";
+    });
+
     // Cleanup all the conversions.
     DenseSet<Operation *> opsToErase;
-    for (auto conversion : conversions) {
-      assert(conversion.getNumOperands() == 1);
-      assert(conversion.getNumResults() == 1);
-
-      opsToErase.insert(conversion);
-      auto result = conversion.getResult(0);
-      auto source = conversion.getOperand(0);
-
-      for (auto *user : llvm::make_early_inc_range(result.getUsers())) {
-        if (auto castOp = dyn_cast<UnsafeDomainCastOp>(user)) {
-          castOp.getResult().replaceAllUsesWith(castOp.getInput());
-          castOp.erase();
-          continue;
+    auto walkResult = op.walk([&](Operation *walkOp) {
+      // Handle UnsafeDomainCastOp.
+      if (auto castOp = dyn_cast<UnsafeDomainCastOp>(walkOp)) {
+        for (auto value : castOp.getDomains()) {
+          auto *conversion = value.getDefiningOp();
+          assert(isa<UnrealizedConversionCastOp>(conversion));
+          opsToErase.insert(conversion);
         }
 
-        auto domainDefine = dyn_cast<DomainDefineOp>(user);
-        if (!domainDefine)
-          return user->emitOpError()
-                 << "has an unimplemented lowering in the LowerDomains pass.";
-
-        auto dest = cast<UnrealizedConversionCastOp>(
-            domainDefine.getDest().getDefiningOp());
-        assert(dest.getNumOperands() == 1);
-        assert(dest.getNumResults() == 1);
-        opsToErase.insert(dest);
-
-        OpBuilder builder(domainDefine);
-        PropAssignOp::create(builder, domainDefine.getLoc(), dest.getOperand(0),
-                             source);
-        domainDefine->erase();
+        castOp.getResult().replaceAllUsesWith(castOp.getInput());
+        castOp.erase();
+        return WalkResult::advance();
       }
-    }
+
+      // Handle DomainDefineOp.
+      auto defineOp = dyn_cast<DomainDefineOp>(walkOp);
+      if (!defineOp)
+        return WalkResult::advance();
+
+      // Only visit domain define ops which have conversioncast source and
+      // destination.
+      auto src = dyn_cast<UnrealizedConversionCastOp>(
+          defineOp.getSrc().getDefiningOp());
+      auto dest = dyn_cast<UnrealizedConversionCastOp>(
+          defineOp.getDest().getDefiningOp());
+      if (!src || !dest)
+        return WalkResult::advance();
+      assert(src.getNumOperands() == 1);
+      assert(src.getNumResults() == 1);
+      assert(dest.getNumOperands() == 1);
+      assert(dest.getNumResults() == 1);
+
+      opsToErase.insert(src);
+      opsToErase.insert(dest);
+
+      OpBuilder builder(defineOp);
+      PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
+                           src.getOperand(0));
+      defineOp->erase();
+      return WalkResult::advance();
+    });
+
+    if (walkResult.wasInterrupted())
+      return failure();
 
     for (auto *op : opsToErase)
       op->erase();
@@ -524,11 +577,19 @@ LogicalResult LowerModule::lowerInstances() {
     instanceGraph.replaceInstance(instanceOp, inserted);
 
     for (auto &[i, info] : indexToDomain) {
-      auto iIns = info.inputPort;
-      if (!iIns)
+      // Handle input port.
+      if (info.inputPort) {
+        splice(info.temp, inserted.getResult(*info.inputPort));
         continue;
+      }
 
-      splice(info.temp, inserted.getResult(*iIns));
+      // Handle output port.
+      OpBuilder builder(inserted);
+      builder.setInsertionPointAfter(inserted);
+
+      auto subDomainInfoIn = ObjectSubfieldOp::create(
+          builder, inserted.getLoc(), inserted.getResult(info.outputPort), 1);
+      splice(info.temp, subDomainInfoIn);
     }
 
     instanceOp.erase();
