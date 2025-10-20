@@ -91,6 +91,9 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
     Option<"timingAware", "timing-aware", "bool", "true",
            "Lower operators with timing information">
   ];
+  let dependentDialects = [
+    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::synth::SynthDialect"
+  ];
 }
 
 def LowerWordToBits : Pass<"synth-lower-word-to-bits", "hw::HWModuleOp"> {
