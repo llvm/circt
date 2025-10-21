@@ -82,11 +82,6 @@ struct AssociationInfo {
 
 /// Track information about the lowering of a domain port.
 struct DomainInfo {
-  /// An instance of an object which will be used to track an instance of the
-  /// domain-lowered class (which is the identity of the domain) and all its
-  /// associations.
-  ObjectOp op;
-
   /// The index of the optional input port that will be hooked up to a field of
   /// the ObjectOp.  This port is an instance of the domain-lowered class.  If
   /// this is created due to an output domain port, then this is nullopt.
@@ -96,13 +91,35 @@ struct DomainInfo {
   /// port communicates back to the user information about the associations.
   unsigned outputPort;
 
+  /// An instance of an object which will be used to track an instance of the
+  /// domain-lowered class (which is the identity of the domain) and all its
+  /// associations.
+  ObjectOp op;
+
   /// A conversion cast that is used to temporarily replace the port while it is
-  /// being deleted.  If the port has no uses, then this will be empty.
+  /// being deleted.  If the port has no uses, then this will be empty.  Note:
+  /// this is used as a true temporary and may be overwritten.  During
+  /// `lowerModules()` this is used to store a module port temporary.  During
+  /// `lowerInstances()`, this stores an instance port temporary.
   UnrealizedConversionCastOp temp;
 
   /// A vector of minimal association info that will be hooked up to the
   /// associations of this ObjectOp.
-  SmallVector<AssociationInfo> associations{};
+  SmallVector<AssociationInfo> associations;
+
+  /// Return a DomainInfo for an input domain port.  This will have both an
+  /// input port at the current index and an output port at the next index.
+  /// Other members are default-initialized and will be set later.
+  static DomainInfo input(unsigned portIndex) {
+    return DomainInfo({portIndex, portIndex + 1, {}, {}, {}});
+  }
+
+  /// Return a DomainInfo for an output domain port.  This creates only an
+  /// output port at the current index.  Other members are default-initialized
+  /// and will be set later.
+  static DomainInfo output(unsigned portIndex) {
+    return DomainInfo({std::nullopt, portIndex, {}, {}, {}});
+  }
 };
 
 /// Struct of the two classes created from a domain, an input class (which is
@@ -200,7 +217,7 @@ static UnrealizedConversionCastOp stubOut(Value value) {
   if (!value.hasNUsesOrMore(1))
     return {};
 
-  OpBuilder builder(value.getUses().begin()->getOwner());
+  OpBuilder builder(value.getContext());
   builder.setInsertionPointAfterValue(value);
   auto temp = UnrealizedConversionCastOp::create(
       builder, builder.getUnknownLoc(), {value.getType()}, {});
@@ -213,12 +230,20 @@ static UnrealizedConversionCastOp stubOut(Value value) {
 /// hook up a module or instance port to an operation user of the old type.
 /// After all ports have been spliced, the splice-operation-splice can be
 /// replaced with a new operation that handles the new port types.
+///
+/// Assumptions:
+///
+///   1. `temp` is either null or a 0-1 conversion cast.
+///   2. If `temp` is non-null, then `value` is non-null.
 static UnrealizedConversionCastOp splice(UnrealizedConversionCastOp temp,
                                          Value value) {
   if (!temp)
     return {};
 
+  // This must be a 0-1 unrealized conversion.  Anything else is unexpected.
   assert(temp && temp.getNumResults() == 1 && temp.getNumOperands() == 0);
+
+  // Value must be non-null.
   assert(value);
 
   auto oldValue = temp.getResult(0);
@@ -289,16 +314,6 @@ LogicalResult LowerModule::lowerModule() {
   // checking for domain ports as the module may have no domain ports, but have
   // been modified by an earlier `lowerInstances()` call.
 
-  LLVM_DEBUG({
-    llvm::dbgs()
-        << "At start of lowerModule:\n"
-        << "------------------------------------------------------------"
-           "--------------------\n"
-        << *op << "\n"
-        << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-           "^^^^^^^^^^^^^^^^^^^^\n";
-  });
-
   // Much of the lowering is conditioned on whether or not this module has a
   // body.  If it has a body, then we need to instantiate an object for each
   // domain port and hook up all the domain ports to annotations added to each
@@ -319,9 +334,6 @@ LogicalResult LowerModule::lowerModule() {
   // insertions.
   SmallVector<Attribute> portAnnotations;
 
-  // Casts that need to be visited and cleaned up.
-  SmallVector<UnrealizedConversionCastOp> casts;
-
   // Iterate over the ports, staging domain ports for removal and recording the
   // associations of non-domain ports.  After this, domain ports will be deleted
   // and then class ports will be inserted.  This loop therefore needs to track
@@ -341,10 +353,9 @@ LogicalResult LowerModule::lowerModule() {
       // Instantiate a domain object with association information.
       auto [classIn, classOut] = domainToClasses.at(domain.getAttr());
 
-      if (port.direction == Direction::In)
-        indexToDomain[i] = {{}, iIns, iIns + 1, {}};
-      else
-        indexToDomain[i] = {{}, std::nullopt, iIns, {}};
+      indexToDomain[i] = port.direction == Direction::In
+                             ? DomainInfo::input(iIns)
+                             : DomainInfo::output(iIns);
 
       if (body) {
         // Insert objects in-order at the top of the module's body.  These
@@ -364,13 +375,16 @@ LogicalResult LowerModule::lowerModule() {
         indexToDomain[i].op = object;
         indexToDomain[i].temp = stubOut(body->getArgument(i));
 
-        // Save the insertion point for the next go-around.
+        // Save the insertion point for the next go-around.  This allows the
+        // objects to be inserted in port order as opposed to reverse port
+        // order.
         insertPoint = builder.saveInsertionPoint();
       }
 
       // Add input and output property ports that encode the property inputs
       // (which the user must provide for the domain) and the outputs that
-      // encode this information and the associations.
+      // encode this information and the associations.  Keep iIns up to date
+      // based on the number of ports added.
       if (port.direction == Direction::In) {
         newPorts.push_back({iDel, PortInfo(port.name, classIn.getInstanceType(),
                                            Direction::In)});
@@ -380,17 +394,19 @@ LogicalResult LowerModule::lowerModule() {
       newPorts.push_back(
           {iDel, PortInfo(StringAttr::get(context, Twine(port.name) + "_out"),
                           classOut.getInstanceType(), Direction::Out)});
-      portAnnotations.push_back(constants.getEmptyArrayAttr());
       ++iIns;
+
+      // Update annotations.
+      portAnnotations.push_back(constants.getEmptyArrayAttr());
 
       // Don't increment the iDel since we deleted one port.
       continue;
     }
 
-    // This is a non-domain port and it will NOT be deleted.  Post-increment
-    // both indices.
-    iDel++;
-    iIns++;
+    // This is a non-domain port.  It will NOT be deleted.  Increment both
+    // indices.
+    ++iDel;
+    ++iIns;
 
     // If this port has domain associations, then we need to add port annotation
     // trackers.  These will be hooked up to the Object's associations later.
@@ -427,19 +443,9 @@ LogicalResult LowerModule::lowerModule() {
   // instantiated earlier.
   op.insertPorts(newPorts);
 
-  LLVM_DEBUG({
-    llvm::dbgs()
-        << "After port modifications:\n"
-        << "------------------------------------------------------------"
-           "--------------------\n"
-        << *op << "\n"
-        << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-           "^^^^^^^^^^^^^^^^^^^^\n";
-  });
-
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
-      auto [object, inputPort, outputPort, temp, associations] = info;
+      auto [inputPort, outputPort, object, temp, associations] = info;
       // Now that the ports have been updated and changed type, replace any 0-1
       // conversion with a 1-1 conversions.
       if (inputPort.has_value()) {
@@ -479,25 +485,17 @@ LogicalResult LowerModule::lowerModule() {
                            body->getArgument(outputPort), object);
     }
 
-    LLVM_DEBUG({
-      llvm::errs()
-          << "After splice:\n"
-          << "----------------------------------------------------------"
-             "----------------------\n"
-          << *op << "\n"
-          << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-             "^^^^^^^^^^^^^^^^^^^^^^\n";
-    });
-
-    // Cleanup all the conversions.
-    DenseSet<Operation *> opsToErase;
+    // Cleanup all the conversions by visiting domain-using operations.  Delay
+    // deleting conversions until the module body is walked to avoid deleting
+    // conversions that have multiple uses.
+    DenseSet<Operation *> conversionsToErase;
     auto walkResult = op.walk([&](Operation *walkOp) {
       // Handle UnsafeDomainCastOp.
       if (auto castOp = dyn_cast<UnsafeDomainCastOp>(walkOp)) {
         for (auto value : castOp.getDomains()) {
           auto *conversion = value.getDefiningOp();
           assert(isa<UnrealizedConversionCastOp>(conversion));
-          opsToErase.insert(conversion);
+          conversionsToErase.insert(conversion);
         }
 
         castOp.getResult().replaceAllUsesWith(castOp.getInput());
@@ -505,7 +503,7 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
-      // Handle DomainDefineOp.
+      // Handle DomainDefineOp.  Skip all other operations.
       auto defineOp = dyn_cast<DomainDefineOp>(walkOp);
       if (!defineOp)
         return WalkResult::advance();
@@ -518,13 +516,11 @@ LogicalResult LowerModule::lowerModule() {
           defineOp.getDest().getDefiningOp());
       if (!src || !dest)
         return WalkResult::advance();
-      assert(src.getNumOperands() == 1);
-      assert(src.getNumResults() == 1);
-      assert(dest.getNumOperands() == 1);
-      assert(dest.getNumResults() == 1);
+      assert(src.getNumOperands() == 1 && src.getNumResults() == 1);
+      assert(dest.getNumOperands() == 1 && dest.getNumResults() == 1);
 
-      opsToErase.insert(src);
-      opsToErase.insert(dest);
+      conversionsToErase.insert(src);
+      conversionsToErase.insert(dest);
 
       OpBuilder builder(defineOp);
       PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
@@ -533,10 +529,12 @@ LogicalResult LowerModule::lowerModule() {
       return WalkResult::advance();
     });
 
-    if (walkResult.wasInterrupted())
-      return failure();
+    // The walk, as written cannot fail.  Defensively check in assert-enabled
+    // builds that this assumption isn't violated.
+    assert(!walkResult.wasInterrupted());
 
-    for (auto *op : opsToErase)
+    // Erase all the conversions.
+    for (auto *op : conversionsToErase)
       op->erase();
   }
 
@@ -577,19 +575,20 @@ LogicalResult LowerModule::lowerInstances() {
     instanceGraph.replaceInstance(instanceOp, inserted);
 
     for (auto &[i, info] : indexToDomain) {
-      // Handle input port.
+      Value splicedValue;
       if (info.inputPort) {
-        splice(info.temp, inserted.getResult(*info.inputPort));
-        continue;
+        // Handle input port.  Just hook it up.
+        splicedValue = inserted.getResult(*info.inputPort);
+      } else {
+        // Handle output port.  Splice in the output field that contains the
+        // domain object.  This requires creating an object subfield.
+        OpBuilder builder(inserted);
+        builder.setInsertionPointAfter(inserted);
+        splicedValue = ObjectSubfieldOp::create(
+            builder, inserted.getLoc(), inserted.getResult(info.outputPort), 1);
       }
 
-      // Handle output port.
-      OpBuilder builder(inserted);
-      builder.setInsertionPointAfter(inserted);
-
-      auto subDomainInfoIn = ObjectSubfieldOp::create(
-          builder, inserted.getLoc(), inserted.getResult(info.outputPort), 1);
-      splice(info.temp, subDomainInfoIn);
+      splice(info.temp, splicedValue);
     }
 
     instanceOp.erase();
