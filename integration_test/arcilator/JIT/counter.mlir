@@ -2,16 +2,16 @@
 // REQUIRES: arcilator-jit
 
 // CHECK: counter_value = 0
-// CHECK-NEXT: counter_value = 1
-// CHECK-NEXT: counter_value = 2
-// CHECK-NEXT: counter_value = 3
-// CHECK-NEXT: counter_value = 4
-// CHECK-NEXT: counter_value = 5
-// CHECK-NEXT: counter_value = 6
-// CHECK-NEXT: counter_value = 7
-// CHECK-NEXT: counter_value = 8
-// CHECK-NEXT: counter_value = 9
-// CHECK-NEXT: counter_value = a
+// CHECK-NEXT: counter_value = 01
+// CHECK-NEXT: counter_value = 02
+// CHECK-NEXT: counter_value = 03
+// CHECK-NEXT: counter_value = 04
+// CHECK-NEXT: counter_value = 05
+// CHECK-NEXT: counter_value = 06
+// CHECK-NEXT: counter_value = 07
+// CHECK-NEXT: counter_value = 08
+// CHECK-NEXT: counter_value = 09
+// CHECK-NEXT: counter_value = 0a
 
 hw.module @counter(in %clk: i1, out o: i8) {
   %seq_clk = seq.to_clock %clk
