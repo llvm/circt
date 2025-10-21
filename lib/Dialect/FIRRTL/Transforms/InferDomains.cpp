@@ -353,6 +353,67 @@ void solve(Term *lhs, Term *rhs) {
 } // namespace
 
 //====--------------------------------------------------------------------------
+// CheckModuleDomains
+//====--------------------------------------------------------------------------
+
+/// Check that a module has complete domain information.
+static LogicalResult checkModuleDomains(GlobalState &globals,
+                                        FModuleLike module) {
+  auto numDomains = globals.circuitInfo.getNumDomains();
+  auto domainInfo = module.getDomainInfoAttr();
+  DenseMap<unsigned, unsigned> typeIDTable;
+  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+    auto type = module.getPortType(i);
+
+    if (isa<DomainType>(type)) {
+      auto typeID = globals.circuitInfo.getDomainTypeID(domainInfo, i);
+      typeIDTable[i] = typeID;
+      continue;
+    }
+
+    if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
+      SmallVector<IntegerAttr> associations(numDomains);
+      auto domains = getPortDomainAssociation(domainInfo, i);
+      for (auto index : domains) {
+        auto typeID = typeIDTable[index.getUInt()];
+        auto &entry = associations[typeID];
+        if (entry && entry != index) {
+          auto domainName = globals.circuitInfo.getDomain(typeID).getNameAttr();
+          auto portName = module.getPortNameAttr(i);
+          auto diag = emitError(module.getPortLocation(i))
+                      << "ambiguous " << domainName << " association for port "
+                      << portName;
+
+          auto d1Loc = module.getPortLocation(entry.getUInt());
+          auto d1Name = module.getPortNameAttr(entry.getUInt());
+          diag.attachNote(d1Loc)
+              << "associated with " << domainName << " port " << d1Name;
+
+          auto d2Loc = module.getPortLocation(index.getUInt());
+          auto d2Name = module.getPortNameAttr(index.getUInt());
+          diag.attachNote(d2Loc)
+              << "associated with " << domainName << " port " << d2Name;
+        }
+        entry = index;
+      }
+
+      for (size_t typeID = 0; typeID < numDomains; ++typeID) {
+        auto association = associations[typeID];
+        if (!association) {
+          auto domainName = globals.circuitInfo.getDomain(typeID).getNameAttr();
+          auto portName = module.getPortNameAttr(i);
+          return emitError(module.getPortLocation(i))
+                 << "missing " << domainName << " association for port "
+                 << portName;
+        }
+      }
+    }
+  }
+
+  return success();
+}
+
+//====--------------------------------------------------------------------------
 // InferModuleDomains: Primary workhorse for inferring domains on modules.
 //====--------------------------------------------------------------------------
 
@@ -525,7 +586,7 @@ LogicalResult InferModuleDomains::operator()(FModuleOp module) {
 }
 
 LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
-  auto portDomainInfo = module.getDomainInfoAttr();
+  auto domainInfo = module.getDomainInfoAttr();
   auto numPorts = module.getNumPorts();
 
   // Process module ports - domain ports define explicit domains.
@@ -535,7 +596,7 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
 
     // This is a domain port.
     if (isa<DomainType>(port.getType())) {
-      auto typeID = globals.circuitInfo.getDomainTypeID(portDomainInfo, i);
+      auto typeID = globals.circuitInfo.getDomainTypeID(domainInfo, i);
       domainTypeIDTable[i] = typeID;
       if (module.getPortDirection(i) == Direction::In) {
         setTermForDomain(port, allocate<ValueTerm>(port));
@@ -544,7 +605,7 @@ LogicalResult InferModuleDomains::processPorts(FModuleOp module) {
     }
 
     // This is a port, which may have explicit domain information.
-    auto portDomains = getPortDomainAssociation(portDomainInfo, i);
+    auto portDomains = getPortDomainAssociation(domainInfo, i);
     if (portDomains.empty())
       continue;
 
@@ -1305,13 +1366,34 @@ void InferModuleDomains::emitDomainPortInferenceError(T op, size_t i) const {
   }
 }
 
+static LogicalResult inferModuleDomains(GlobalState &globals,
+                                        FModuleOp module) {
+  return InferModuleDomains::run(globals, module);
+}
+
 //===---------------------------------------------------------------------------
 // InferDomainsPass: Top-level pass implementation.
 //===---------------------------------------------------------------------------
 
+static LogicalResult runOnModuleLike(bool inferPublic, GlobalState &globals,
+                                     Operation *op) {
+  if (auto module = dyn_cast<FModuleOp>(op)) {
+    if (module.isPublic() && !inferPublic)
+      return checkModuleDomains(globals, module);
+    return inferModuleDomains(globals, module);
+  }
+
+  if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
+    return checkModuleDomains(globals, extModule);
+  }
+
+  return success();
+}
+
 namespace {
 struct InferDomainsPass
     : public circt::firrtl::impl::InferDomainsBase<InferDomainsPass> {
+  using InferDomainsBase::InferDomainsBase;
   void runOnOperation() override;
 };
 } // namespace
@@ -1320,16 +1402,11 @@ void InferDomainsPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n");
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
-
   GlobalState globals(circuit);
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : instanceGraph) {
     for (auto *node : llvm::post_order_ext(root, visited)) {
-      auto module = dyn_cast<FModuleOp>(node->getOperation());
-      if (!module)
-        continue;
-
-      if (failed(InferModuleDomains::run(globals, module))) {
+      if (failed(runOnModuleLike(inferPublic, globals, node->getModule()))) {
         signalPassFailure();
         return;
       }
