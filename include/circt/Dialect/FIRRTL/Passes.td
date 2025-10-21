@@ -920,6 +920,10 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
     E.g., this pass can be used to check for illegal clock-domain-crossings if
     clock domains are specified for signals in the design.
   }];
+  let options = [
+    Option<"inferPublic", "infer-public", "bool", "false",
+      "Infer domains on public modules.">
+  ];
 }
 
 def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {

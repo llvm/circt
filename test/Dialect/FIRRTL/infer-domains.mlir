@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{infer-public=true}))' %s | FileCheck %s
 
 // Legal domain usage - no crossing.
 firrtl.circuit "LegalDomains" {
@@ -246,5 +246,32 @@ firrtl.circuit "ConstantInMultipleDomains" {
     %y_A, %y_i = firrtl.instance y @Foo(in A: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [A])
     firrtl.domain.define %y_A, %B
     firrtl.matchingconnect %y_i, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Foo(
+    in ClockDomain : !firrtl.domain of @ClockDomain,
+    in i: !firrtl.uint<1> domains [ClockDomain],
+    out o : !firrtl.uint<1> domains [ClockDomain]
+  )
+
+  firrtl.module @Top(in %ClockDomain : !firrtl.domain of @ClockDomain ) {
+    %foo1_ClockDomain, %foo1_i, %foo1_o = firrtl.instance foo1 @Foo(
+      in ClockDomain : !firrtl.domain of @ClockDomain,
+      in i: !firrtl.uint<1> domains [ClockDomain],
+      out o : !firrtl.uint<1> domains [ClockDomain]
+    )
+
+    %foo2_ClockDomain, %foo2_i, %foo2_o = firrtl.instance foo2 @Foo(
+      in ClockDomain : !firrtl.domain of @ClockDomain,
+      in i: !firrtl.uint<1> domains [ClockDomain],
+      out o : !firrtl.uint<1> domains [ClockDomain]
+    )
+
+    firrtl.domain.define %foo1_ClockDomain, %ClockDomain
+    firrtl.matchingconnect %foo2_i, %foo1_o : !firrtl.uint<1>
+    firrtl.matchingconnect %foo1_i, %foo2_o : !firrtl.uint<1>
   }
 }
