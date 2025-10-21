@@ -92,7 +92,8 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
            "Lower operators with timing information">
   ];
   let dependentDialects = [
-    "circt::comb::CombDialect", "circt::hw::HWDialect", "circt::synth::SynthDialect"
+    "circt::comb::CombDialect", "circt::hw::HWDialect",
+    "circt::synth::SynthDialect"
   ];
 }
 
