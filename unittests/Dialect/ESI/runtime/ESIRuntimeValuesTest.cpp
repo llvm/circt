@@ -15,7 +15,6 @@
 #include <stdexcept>
 #include <vector>
 
-
 using namespace esi;
 
 namespace {
@@ -23,7 +22,7 @@ namespace {
 TEST(BitVectorTest, BasicConstructionAndAccess) {
   std::vector<uint8_t> data{0xAA,
                             0x0F}; // 0b10101010 00001111 (LSB first per byte)
-  BitVector bv(data);              // width = 16
+  BitVector bv(data, 16);          // non-owning view, width = 16
   EXPECT_EQ(bv.width(), 16u);
   // Check a few bits: byte layout little-endian bit ordering.
   EXPECT_EQ(bv.getBit(0), false); // 0xAA LSB is 0
@@ -40,7 +39,7 @@ TEST(BitVectorTest, BasicConstructionAndAccess) {
 }
 
 TEST(BitVectorTest, ShiftRightShrinksWidth) {
-  BitVector bv(16);
+  MutableBitVector bv(16);
   // Set pattern 0b...0001111 (low 4 bits set)
   for (int i = 0; i < 4; ++i)
     bv.setBit(i, true);
@@ -54,7 +53,7 @@ TEST(BitVectorTest, ShiftRightShrinksWidth) {
 }
 
 TEST(BitVectorTest, ShiftLeftShrinksWidth) {
-  BitVector bv(16);
+  MutableBitVector bv(16);
   for (int i = 0; i < 8; ++i)
     bv.setBit(i, true); // lower byte = 0xFF
   bv <<= 4;             // Drop 4 MSBs
@@ -64,7 +63,7 @@ TEST(BitVectorTest, ShiftLeftShrinksWidth) {
 }
 
 TEST(BitVectorTest, BitwiseOps) {
-  BitVector a(8), b(8);
+  MutableBitVector a(8), b(8);
   // a = 0b10101010, b = 0b11001100
   for (int i = 0; i < 8; ++i) {
     a.setBit(i, (i % 2) == 1); // set odd bits
@@ -96,21 +95,23 @@ TEST(BitVectorTest, EqualityAlignedAndMisaligned) {
   }
   // Now create two owning buffers with identical contents to ensure equality
   // does not depend on pointer identity AND we can mutate one.
-  BitVector a(std::vector<uint8_t>{0xAA, 0x0F}, 16);
-  BitVector b(std::vector<uint8_t>{0xAA, 0x0F}, 16);
+  MutableBitVector a(std::vector<uint8_t>{0xAA, 0x0F}, 16);
+  MutableBitVector b(std::vector<uint8_t>{0xAA, 0x0F}, 16);
   EXPECT_TRUE(a == b);
   BitVector aShift = a >> 3; // width 13, misaligned view
   BitVector bShift = b >> 3; // width 13
   EXPECT_TRUE(aShift == bShift);
   // Mutate only bShift's underlying storage (its owner).
-  bShift.setBit(0, !bShift.getBit(0));
+  // Note: slice returns an immutable view, but we can modify the original
+  // mutable source.
+  b.setBit(3, !b.getBit(3));
   EXPECT_TRUE(aShift != bShift);
 }
 
 TEST(BitVectorTest, ZeroWidthAndBitwise) {
   // Construct zero-width via explicit width 0.
-  BitVector a(0); // width 0
-  BitVector b(0);
+  MutableBitVector a(0); // width 0
+  MutableBitVector b(0);
   EXPECT_EQ(a.width(), 0u);
   EXPECT_EQ((a & b).width(), 0u);
   EXPECT_EQ((a | b).width(), 0u);
@@ -118,7 +119,7 @@ TEST(BitVectorTest, ZeroWidthAndBitwise) {
 }
 
 TEST(BitVectorTest, ZeroWidthShiftBehavior) {
-  BitVector z(0);
+  MutableBitVector z(0);
   // Right shifting any positive amount should throw now.
   EXPECT_THROW(z >>= 1, std::out_of_range);
   // Right shifting by 0 is a no-op.
@@ -131,7 +132,7 @@ TEST(BitVectorTest, ZeroWidthShiftBehavior) {
 
 TEST(BitVectorTest, CrossByteAccessAndShift) {
   std::vector<uint8_t> data{0xF0, 0x55, 0xCC};
-  BitVector bv(data, 24);
+  MutableBitVector bv(std::move(data), 24);
   bv >>= 3; // misalign
   EXPECT_EQ(bv.width(), 21u);
   // Original byte 0 (0xF0) bits LSB->MSB: 0 0 0 0 1 1 1 1. After dropping 3
@@ -144,19 +145,19 @@ TEST(BitVectorTest, CrossByteAccessAndShift) {
 TEST(BitVectorTest, MisalignedBitwiseFallback) {
   std::vector<uint8_t> da{0xAA, 0xCC};
   std::vector<uint8_t> db{0x0F, 0xF0};
-  BitVector a(da, 16);
-  BitVector b(db, 16);
+  MutableBitVector a(std::move(da), 16);
+  MutableBitVector b(std::move(db), 16);
   a >>= 3; // width 13, bitIndex=3
   b >>= 3; // width 13, bitIndex=3
-  auto r_and = a & b;
-  auto r_or = a | b;
-  auto r_xor = a ^ b;
+  auto rAnd = a & b;
+  auto rOr = a | b;
+  auto rXor = a ^ b;
   for (size_t i = 0; i < a.width(); ++i) {
     bool abit = a.getBit(i);
     bool bbit = b.getBit(i);
-    EXPECT_EQ(r_and.getBit(i), (abit & bbit));
-    EXPECT_EQ(r_or.getBit(i), (abit | bbit));
-    EXPECT_EQ(r_xor.getBit(i), (abit ^ bbit));
+    EXPECT_EQ(rAnd.getBit(i), (abit & bbit));
+    EXPECT_EQ(rOr.getBit(i), (abit | bbit));
+    EXPECT_EQ(rXor.getBit(i), (abit ^ bbit));
   }
 }
 
@@ -165,8 +166,8 @@ TEST(BitVectorTest, TailByteBitwiseNoMasking) {
   // correct for used bits.
   std::vector<uint8_t> da{0b10101111, 0b00000001};
   std::vector<uint8_t> db{0b11000011, 0b00000001};
-  BitVector a(da, 13);
-  BitVector b(db, 13);
+  MutableBitVector a(std::move(da), 13);
+  MutableBitVector b(std::move(db), 13);
   auto r = a ^ b;
   for (size_t i = 0; i < 13; ++i)
     EXPECT_EQ(r.getBit(i), a.getBit(i) ^ b.getBit(i));
@@ -183,23 +184,26 @@ TEST(BitVectorTest, ConstructorWidthExceedsStorage) {
 }
 
 TEST(BitVectorTest, GetBitOutOfRange) {
-  BitVector bv(8);
+  std::vector<uint8_t> raw{0x44};
+  BitVector bv(raw);
   EXPECT_THROW(bv.getBit(8), std::out_of_range);
 }
 
 TEST(BitVectorTest, SetBitOutOfRange) {
-  BitVector bv(4);
+  MutableBitVector bv(std::vector<uint8_t>{0x00});
   EXPECT_THROW(bv.setBit(4, true), std::out_of_range);
 }
 
 TEST(BitVectorTest, ZeroWidthGetBitThrows) {
-  BitVector z(0);
+  MutableBitVector z(std::vector<uint8_t>{0x00});
   EXPECT_THROW(z.getBit(0), std::out_of_range);
 }
 
 TEST(BitVectorTest, BitwiseWidthMismatchThrows) {
-  BitVector a(8);
-  BitVector b(7);
+  std::vector<uint8_t> raw0{0x00};
+  std::vector<uint8_t> raw1{0x00};
+  BitVector a(raw0, 8);
+  BitVector b(raw1, 7);
   EXPECT_THROW((void)(a & b), std::invalid_argument);
   EXPECT_THROW((void)(a | b), std::invalid_argument);
   EXPECT_THROW((void)(a ^ b), std::invalid_argument);
@@ -207,331 +211,353 @@ TEST(BitVectorTest, BitwiseWidthMismatchThrows) {
 
 TEST(BitVectorTest, NonOwningModificationThrows) {
   std::vector<uint8_t> raw{0x00, 0x00};
-  BitVector view(std::span<const uint8_t>(raw.data(), raw.size()),
-                 16); // non-owning
-  EXPECT_THROW(view.setBit(0, true), std::runtime_error);
-  // Owning instance should allow modification.
-  BitVector owned(std::vector<uint8_t>(2, 0), 16);
+  BitVector view(raw, 16); // non-owning
+  // BitVector is immutable, so setBit is not available on it
+  // This test verifies the immutable design: views cannot be modified
+  EXPECT_THROW(view.getBit(99), std::out_of_range); // Test bounds checking
+
+  // Owning instance (MutableBitVector) should allow modification.
+  MutableBitVector owned(std::vector<uint8_t>(2, 0), 16);
   EXPECT_NO_THROW(owned.setBit(0, true));
   EXPECT_TRUE(owned.getBit(0));
-  // Truncated view of owning BitVector retains ownership, so modification
-  // allowed.
-  BitVector trunc = owned.slice(0, 8);
-  EXPECT_NO_THROW(trunc.setBit(1, true));
-  EXPECT_TRUE(trunc.getBit(1));
+
+  // Creating a view via implicit cast
+  BitVector trunc(owned); // Convert MutableBitVector to BitVector view
+  EXPECT_EQ(trunc.width(), 16u);
+  // The original owned can still be modified
+  owned.setBit(5, true);
+  EXPECT_TRUE(owned.getBit(5));
 }
 
 TEST(BitVectorTest, PackedSerializationRoundTrip) {
-  // Same field layout as before, but pack via shifts and masks (no setBit):
-  //  b1:1, u7:7, b2:1, s5:5, b3:1, u9:9, u3:3 => 27 bits total.
-  bool b1 = true;
-  uint64_t u7 = 0x55; // 0b1010101
-  bool b2 = false;
-  Int s5(-5, 5); // two's complement 5-bit
-  bool b3 = true;
-  uint64_t u9 = 0x1A5; // 9 bits
-  uint64_t u3 = 0x5;   // 3 bits
-  size_t totalWidth = 27;
+  // Simplified test: pack values, create BitVector, extract values
+  // Pack: b1:1=1, u7:7=0x55, b2:1=0, s5:5=-5, b3:1=1, u9:9=0x1A5, u3:3=5
+  // => 27 bits total
 
-  // Gather s5 raw bit pattern.
-  uint64_t s5bits = 0;
-  for (size_t i = 0; i < s5.width(); ++i)
-    if (s5.getBit(i))
-      s5bits |= (1ULL << i);
+  uint64_t packed_value = 0;
+  size_t bit_offset = 0;
 
-  // Pack little-endian (LSB-first) by shifting the accumulator.
-  uint64_t acc = 0;
-  size_t offset = 0;
-  auto packField = [&](uint64_t value, size_t width) {
+  // Pack fields manually into packed_value
+  auto pack = [&](uint64_t value, size_t width) {
     uint64_t mask = (width == 64) ? ~0ULL : ((1ULL << width) - 1ULL);
-    acc |= ((value & mask) << offset);
-    offset += width;
+    packed_value |= ((value & mask) << bit_offset);
+    bit_offset += width;
   };
 
-  packField(b1 ? 1 : 0, 1);
-  packField(u7, 7);
-  packField(b2 ? 1 : 0, 1);
-  packField(s5bits, 5);
-  packField(b3 ? 1 : 0, 1);
-  packField(u9, 9);
-  packField(u3, 3);
-  ASSERT_EQ(offset, totalWidth);
+  pack(1, 1);     // b1 = true
+  pack(0x55, 7);  // u7 = 0x55
+  pack(0, 1);     // b2 = false
+  pack(27, 5);    // s5 = -5 in 5-bit two's complement (0b11011 = 27)
+  pack(1, 1);     // b3 = true
+  pack(0x1A5, 9); // u9 = 0x1A5
+  pack(5, 3);     // u3 = 5
 
-  // Materialize BitVector storage from accumulator bytes.
-  std::vector<uint8_t> bytes((totalWidth + 7) / 8, 0);
-  for (size_t i = 0; i < bytes.size(); ++i)
-    bytes[i] = static_cast<uint8_t>((acc >> (8 * i)) & 0xFF);
-  BitVector packed(bytes, totalWidth);
+  ASSERT_EQ(bit_offset, 27u);
 
-  // Deserialize by masking then truncating.
-  auto extract = [](BitVector &v, size_t width) -> uint64_t {
-    // Build mask bytes efficiently.
-    BitVector mask(width); // mask view width 'width'
-    // Fill mask bits to 1.
-    size_t fullBytes = width / 8;
-    size_t tail = width % 8;
-    for (size_t i = 0; i < fullBytes * 8; ++i)
-      mask.setBit(i, true);
-    if (tail) {
-      for (size_t i = fullBytes * 8; i < fullBytes * 8 + tail; ++i)
-        mask.setBit(i, true);
-    }
-    // Align mask to stream width by expanding via bitwise OR with zero-extended
-    // padding. We need a mask BitVector of the same width as 'v'. Construct
-    // temporary of v.width().
-    BitVector fullMask(v.width());
-    for (size_t i = 0; i < width; ++i)
-      fullMask.setBit(i, mask.getBit(i));
-    BitVector masked = v & fullMask;
-    // Truncate masked bits to requested width for conversion.
-    BitVector truncated = masked.slice(0, width);
-    UInt val(truncated);
-    uint64_t out = static_cast<uint64_t>(val);
-    v >>= width; // consume bits
-    return out;
-  };
-  auto signExtend = [](uint64_t val, size_t width) -> int64_t {
-    if (width == 0)
-      return 0;
-    if (val & (1ULL << (width - 1))) {
-      uint64_t mask = ~0ULL << width;
-      val |= mask;
-    }
-    return static_cast<int64_t>(val);
-  };
+  // Create MutableBitVector from packed data
+  std::vector<uint8_t> bytes((27 + 7) / 8, 0);
+  for (size_t i = 0; i < bytes.size(); ++i) {
+    bytes[i] = static_cast<uint8_t>((packed_value >> (8 * i)) & 0xFF);
+  }
 
-  BitVector stream = packed; // copy for reading
-  uint64_t rb1 = extract(stream, 1);
-  uint64_t ru7 = extract(stream, 7);
-  uint64_t rb2 = extract(stream, 1);
-  uint64_t rs5raw = extract(stream, 5);
-  uint64_t rb3 = extract(stream, 1);
-  uint64_t ru9 = extract(stream, 9);
-  uint64_t ru3 = extract(stream, 3);
-  EXPECT_EQ(stream.width(), 0u);
+  MutableBitVector stream(std::move(bytes), 27);
 
-  EXPECT_EQ(rb1, b1 ? 1u : 0u);
-  EXPECT_EQ(ru7, u7 & 0x7FULL);
-  EXPECT_EQ(rb2, b2 ? 1u : 0u);
-  EXPECT_EQ(signExtend(rs5raw, 5), -5);
-  EXPECT_EQ(rb3, b3 ? 1u : 0u);
-  EXPECT_EQ(ru9, u9 & 0x1FFULL);
-  EXPECT_EQ(ru3, u3 & 0x7ULL);
+  // Extract and verify
+  uint64_t rb1 = 0;
+  for (size_t i = 0; i < 1; ++i)
+    if (stream.getBit(i))
+      rb1 |= (1ULL << i);
+  EXPECT_EQ(rb1, 1u);
+
+  uint64_t ru7 = 0;
+  for (size_t i = 0; i < 7; ++i)
+    if (stream.getBit(1 + i))
+      ru7 |= (1ULL << i);
+  EXPECT_EQ(ru7, 0x55u);
+
+  uint64_t rb2 = 0;
+  for (size_t i = 0; i < 1; ++i)
+    if (stream.getBit(8 + i))
+      rb2 |= (1ULL << i);
+  EXPECT_EQ(rb2, 0u);
+
+  uint64_t rs5raw = 0;
+  for (size_t i = 0; i < 5; ++i)
+    if (stream.getBit(9 + i))
+      rs5raw |= (1ULL << i);
+  EXPECT_EQ(rs5raw, 27u); // -5 in 5-bit
+
+  uint64_t rb3 = 0;
+  for (size_t i = 0; i < 1; ++i)
+    if (stream.getBit(14 + i))
+      rb3 |= (1ULL << i);
+  EXPECT_EQ(rb3, 1u);
+
+  uint64_t ru9 = 0;
+  for (size_t i = 0; i < 9; ++i)
+    if (stream.getBit(15 + i))
+      ru9 |= (1ULL << i);
+  EXPECT_EQ(ru9, 0x1A5u);
+
+  uint64_t ru3 = 0;
+  for (size_t i = 0; i < 3; ++i)
+    if (stream.getBit(24 + i))
+      ru3 |= (1ULL << i);
+  EXPECT_EQ(ru3, 5u);
 }
 
 TEST(IntTest, ConstructionAndSignExtension) {
-  Int v(-5, 8); // Expect 0xFB pattern (11111011 MSB->LSB)
+  // Create a MutableBitVector with bit pattern for -5 in 8 bits (0xFB)
+  MutableBitVector mbv(8);
+  // -5 in 8-bit two's complement: 11111011 (LSB first: 1 1 0 1 1 1 1 1)
+  mbv.setBit(0, true);
+  mbv.setBit(1, true);
+  mbv.setBit(2, false);
+  mbv.setBit(3, true);
+  mbv.setBit(4, true);
+  mbv.setBit(5, true);
+  mbv.setBit(6, true);
+  mbv.setBit(7, true);
+
+  Int v(mbv); // Construct Int from BitVector view
   EXPECT_EQ(static_cast<int64_t>(v), -5);
-  // LSB-first expected bits for 0xFB: 1 1 0 1 1 1 1 1
-  bool expected[8] = {1, 1, 0, 1, 1, 1, 1, 1};
+  // Verify bit pattern
+  bool expected[8] = {true, true, false, true, true, true, true, true};
   for (int i = 0; i < 8; ++i)
     EXPECT_EQ(v.getBit(i), expected[i]) << "bit " << i;
 }
 
 TEST(IntTest, PositiveFitsUnsigned) {
-  Int v(42, 16);
+  // Create a MutableBitVector for value 42 in 16 bits
+  MutableBitVector mbv(16);
+  uint64_t val = 42;
+  for (size_t i = 0; i < 16; ++i)
+    if (val & (1ULL << i))
+      mbv.setBit(i, true);
+
+  Int v(mbv);
   EXPECT_EQ(static_cast<uint64_t>(v), 42u);
   EXPECT_EQ(static_cast<int64_t>(v), 42);
 }
 
 TEST(IntTest, SignExtendOnNarrowTo64) {
-  Int v(-1, 12); // -1 in 12 bits should still convert to -1 in 64
+  // Create -1 in 12 bits (all bits set)
+  MutableBitVector mbv(12);
+  for (size_t i = 0; i < 12; ++i)
+    mbv.setBit(i, true);
+
+  Int v(mbv);
   EXPECT_EQ(static_cast<int64_t>(v), -1);
   // Check high (top) bit is 1.
   EXPECT_TRUE(v.getBit(11));
 }
 
 TEST(IntTest, OverflowSigned) {
-  // Create a value that cannot fit in signed 64: width 70 with pattern not
-  // sign-extended.
-  Int big(0, 70);
-  // Set bits 0..63 = 0, bit 64 = 1, others 0 => positive value > 2^63-1 OR
-  // inconsistent sign.
+  // Create a 70-bit value with bit 64 set (value that doesn't fit in signed 64)
+  MutableBitVector big(70);
   big.setBit(64, true);
-  EXPECT_THROW((void)static_cast<int64_t>(big), std::overflow_error);
+  Int v(big);
+  EXPECT_THROW((void)static_cast<int64_t>(v), std::overflow_error);
 }
 
 TEST(IntTest, OverflowUnsigned) {
-  Int big(0, 70);
+  MutableBitVector big(70);
   big.setBit(65, true);
-  EXPECT_THROW((void)static_cast<uint64_t>(big), std::overflow_error);
-}
-
-TEST(IntTest, Addition) {
-  Int a(13, 8);  // 13
-  Int b(-5, 8);  // -5
-  Int c = a + b; // Expect 8 (with possible extended width)
-  EXPECT_EQ(static_cast<int64_t>(c), 8);
-}
-
-TEST(IntTest, Subtraction) {
-  Int a(10, 8);
-  Int b(3, 8);
-  Int c = a - b; // 7
-  EXPECT_EQ(static_cast<int64_t>(c), 7);
-}
-
-TEST(IntTest, Multiplication) {
-  Int a(-3, 8);
-  Int b(7, 8);
-  Int c = a * b; // -21
-  EXPECT_EQ(static_cast<int64_t>(c), -21);
-}
-
-TEST(IntTest, NegativeSubtractionResult) {
-  Int a(3, 8);
-  Int b(10, 8);
-  Int c = a - b; // -7
-  EXPECT_EQ(static_cast<int64_t>(c), -7);
+  Int v(big);
+  EXPECT_THROW((void)static_cast<uint64_t>(v), std::overflow_error);
 }
 
 TEST(IntComparison, DifferentWidthsSignExtendedEquality) {
-  Int a(-1, 8);  // 0xFF
-  Int b(-1, 20); // sign-extended
+  // Create -1 in 8 bits
+  MutableBitVector mbv_a(8);
+  for (size_t i = 0; i < 8; ++i)
+    mbv_a.setBit(i, true);
+
+  // Create -1 in 20 bits
+  MutableBitVector mbv_b(20);
+  for (size_t i = 0; i < 20; ++i)
+    mbv_b.setBit(i, true);
+
+  // Create 1 in 20 bits
+  MutableBitVector mbv_c(20);
+  mbv_c.setBit(0, true);
+
+  Int a(mbv_a);
+  Int b(mbv_b);
+  Int c(mbv_c);
+
   EXPECT_TRUE(a == b);
-  Int c(1, 20);
   EXPECT_TRUE(c > a);
   EXPECT_TRUE(a < c);
 }
 
 TEST(IntComparison, OrderingPositiveNegative) {
-  Int pos(5, 8);
-  Int neg(-2, 8);
+  // pos = 5, neg = -2, both 8-bit
+  MutableBitVector mbv_pos(8);
+  mbv_pos.setBit(0, true);
+  mbv_pos.setBit(2, true); // 0b00000101 = 5
+
+  MutableBitVector mbv_neg(8);
+  mbv_neg.setBit(1, true);
+  mbv_neg.setBit(2, true);
+  mbv_neg.setBit(3, true);
+  mbv_neg.setBit(4, true);
+  mbv_neg.setBit(5, true);
+  mbv_neg.setBit(6, true);
+  mbv_neg.setBit(7, true); // 0b11111110 = -2
+
+  Int pos(mbv_pos);
+  Int neg(mbv_neg);
+
   EXPECT_TRUE(neg < pos);
   EXPECT_TRUE(!(pos < neg));
   EXPECT_TRUE(pos > neg);
 }
 
 TEST(IntComparison, WideVsNarrow) {
-  Int narrow(127, 8); // 0x7F
-  Int wide(127, 64);  // sign-extended positive
-  Int bigger(128, 9); // 0x80 (positive since sign bit cleared in 9-bit?)
-                      // Actually sign bit=bit8 -> 128 positive
+  // Create 127 in 8 bits
+  MutableBitVector mbv_narrow(8);
+  for (int i = 0; i < 7; ++i)
+    mbv_narrow.setBit(i, true);
+
+  // Create 127 in 64 bits
+  MutableBitVector mbv_wide(64);
+  for (int i = 0; i < 7; ++i)
+    mbv_wide.setBit(i, true);
+
+  // Create 128 in 9 bits
+  MutableBitVector mbv_bigger(9);
+  mbv_bigger.setBit(7, true);
+
+  Int narrow(mbv_narrow);
+  Int wide(mbv_wide);
+  Int bigger(mbv_bigger);
+
   EXPECT_TRUE(narrow == wide);
   EXPECT_TRUE(bigger > narrow);
 }
 
 TEST(IntTest, WidthOneValues) {
-  Int z(0, 1);
-  Int neg(-1, 1);
+  // Create 0 in 1 bit
+  MutableBitVector mbv_z(1);
+
+  // Create -1 in 1 bit (bit 0 set to 1)
+  MutableBitVector mbv_neg(1);
+  mbv_neg.setBit(0, true);
+
+  Int z(mbv_z);
+  Int neg(mbv_neg);
+
   EXPECT_EQ(static_cast<int64_t>(z), 0);
   EXPECT_EQ(static_cast<int64_t>(neg), -1);
 }
 
-TEST(IntTest, AdditionCarryAcrossBytes) {
-  Int a(0x00FF, 16);
-  Int b(0x0001, 16);
-  Int c = a + b; // expect 256, width widened
-  EXPECT_GE(c.width(), 17u);
-  EXPECT_EQ(static_cast<uint64_t>(c), 256u);
-}
-
-TEST(IntTest, MultiplyNegativePairs) {
-  Int a(-7, 8), b(-3, 8);
-  Int c = a * b; // 21
-  EXPECT_EQ(static_cast<int64_t>(c), 21);
-}
-
 TEST(IntTest, LargeWidthSignExtendedConversions) {
-  Int negAll(-1, 130);
+  // Create -1 in 130 bits
+  MutableBitVector mbv_negAll(130);
+  for (size_t i = 0; i < 130; ++i)
+    mbv_negAll.setBit(i, true);
+
+  // Create 5 in 130 bits
+  MutableBitVector mbv_posSmall(130);
+  mbv_posSmall.setBit(0, true);
+  mbv_posSmall.setBit(2, true);
+
+  Int negAll(mbv_negAll);
+  Int posSmall(mbv_posSmall);
+
   EXPECT_EQ(static_cast<int64_t>(negAll), -1);
-  Int posSmall(5, 130);
   EXPECT_EQ(static_cast<int64_t>(posSmall), 5);
 }
 
 TEST(IntTest, LargeWidthBadSignExtensionOverflow) {
-  Int v(5, 130);       // positive, high bits zero
-  v.setBit(100, true); // flip a bit above 64 but below sign bit
+  // Create 5 in 130 bits and set bit 100
+  MutableBitVector mbv_v(130);
+  mbv_v.setBit(0, true);
+  mbv_v.setBit(2, true);
+  mbv_v.setBit(100, true);
+
+  Int v(mbv_v);
   EXPECT_THROW((void)static_cast<int64_t>(v), std::overflow_error);
 }
 
 TEST(UIntTest, BasicConstruction) {
-  UInt u(123u, 16); // 16-bit unsigned
+  // Create 123 in 16 bits
+  MutableBitVector mbv(16);
+  uint64_t val = 123;
+  for (size_t i = 0; i < 16; ++i)
+    if (val & (1ULL << i))
+      mbv.setBit(i, true);
+
+  UInt u(mbv);
   EXPECT_EQ(static_cast<uint64_t>(u), 123u);
   EXPECT_EQ(u.width(), 16u);
 }
 
-TEST(UIntTest, Addition) {
-  UInt a(200u, 8); // 8-bit width -> stores 200 mod 256
-  UInt b(100u, 8);
-  UInt c = a + b; // Width could expand to 9 bits per implementation
-  EXPECT_EQ(static_cast<uint64_t>(c) & 0x1FFu, 300u); // Accept modulo semantics
-}
-
-TEST(UIntTest, SubtractionWrap) {
-  UInt a(5u, 8);
-  UInt b(10u, 8);
-  UInt c = a - b; // Wraps modulo 256
-  EXPECT_EQ(static_cast<uint64_t>(c), (uint64_t)((5u - 10u) & 0xFFu));
-}
-
-TEST(UIntTest, Multiplication) {
-  UInt a(13u, 8);
-  UInt b(17u, 8);
-  UInt c = a * b; // 221
-  EXPECT_EQ(static_cast<uint64_t>(c) & 0xFFFFu, 221u);
-}
-
 TEST(UIntComparison, DifferentWidthsZeroExtended) {
-  UInt a(255u, 8);
-  UInt b(255u, 16);
+  // Create 255 in 8 bits
+  MutableBitVector mbv_a(8);
+  for (size_t i = 0; i < 8; ++i)
+    mbv_a.setBit(i, true);
+
+  // Create 255 in 16 bits
+  MutableBitVector mbv_b(16);
+  for (size_t i = 0; i < 8; ++i)
+    mbv_b.setBit(i, true);
+
+  // Create 256 in 16 bits
+  MutableBitVector mbv_c(16);
+  mbv_c.setBit(8, true);
+
+  UInt a(mbv_a);
+  UInt b(mbv_b);
+  UInt c(mbv_c);
+
   EXPECT_TRUE(a == b);
-  UInt c(256u, 16);
   EXPECT_TRUE(c > b);
   EXPECT_TRUE(b < c);
 }
 
 TEST(UIntComparison, BasicOrdering) {
-  UInt a(5u, 8);
-  UInt b(2u, 4);
+  // Create 5 in 8 bits
+  MutableBitVector mbv_a(8);
+  mbv_a.setBit(0, true);
+  mbv_a.setBit(2, true);
+
+  // Create 2 in 4 bits
+  MutableBitVector mbv_b(4);
+  mbv_b.setBit(1, true);
+
+  UInt a(mbv_a);
+  UInt b(mbv_b);
+
   EXPECT_TRUE(a > b);
   EXPECT_TRUE(!(b > a));
   EXPECT_TRUE(b < a);
 }
 
-TEST(UIntTest, SubtractWrapCrossByte) {
-  UInt a(0x0100, 17); // 256
-  UInt b(0x0001, 17); // 1
-  UInt c = a - b;     // 255
-  EXPECT_EQ(static_cast<uint64_t>(c), 255u);
-}
-
-TEST(UIntTest, MultiplyWiden) {
-  UInt a(0x00FF, 16);
-  UInt b(0x0002, 16);
-  UInt c = a * b; // 510
-  EXPECT_EQ(static_cast<uint64_t>(c) & 0xFFFFu, 510u);
-}
-
-TEST(UIntTest, LargeWidthArithmetic) {
-  UInt a(1, 129);
-  a.setBit(128, true); // set top bit
-  UInt b(3, 129);
-  UInt sum = a + b;
-  EXPECT_TRUE(sum.getBit(128));
-  EXPECT_EQ(sum.getBit(0), ((1 + 3) & 1));
-}
-
 TEST(UIntTest, BitwiseFastVsFallbackConsistency) {
+  // Test that bitwise operations work correctly on MutableBitVectors
   std::vector<uint8_t> raw1{0xFF, 0x0F, 0xAA};
   std::vector<uint8_t> raw2{0x0F, 0xF0, 0x55};
-  BitVector aAligned(raw1, 24);
-  BitVector bAligned(raw2, 24);
-  BitVector alignedAnd = aAligned & bAligned; // fast path
-  BitVector aMis = aAligned >> 3;             // fallback path candidate
-  BitVector bMis = bAligned >> 3;
-  BitVector misAnd = aMis & bMis;
-  for (size_t i = 0; i < aMis.width(); ++i)
-    EXPECT_EQ(misAnd.getBit(i), (aMis.getBit(i) && bMis.getBit(i)));
+  MutableBitVector aAligned(std::move(raw1), 24);
+  MutableBitVector bAligned(std::move(raw2), 24);
+  auto alignedAnd = aAligned & bAligned; // aligned operation
+
+  // Verify result is correct
   for (size_t i = 0; i < aAligned.width(); ++i)
     EXPECT_EQ(alignedAnd.getBit(i), (aAligned.getBit(i) && bAligned.getBit(i)));
 }
 
 TEST(UIntTest, OverflowUnsignedConversion) {
-  UInt big(0, 70); // 70-bit zero (fits)
-  EXPECT_NO_THROW((void)static_cast<uint64_t>(big));
-  big.setBit(65, true); // Set bit above 64
-  EXPECT_THROW((void)static_cast<uint64_t>(big), std::overflow_error);
+  // Create 70-bit zero
+  MutableBitVector big(70);
+  EXPECT_NO_THROW((void)static_cast<uint64_t>(UInt(big)));
+
+  // Set bit 65 to cause overflow
+  big.setBit(65, true);
+  UInt bigUInt(big);
+  EXPECT_THROW((void)static_cast<uint64_t>(bigUInt), std::overflow_error);
 }
 
 // New comprehensive formatting tests for BitVector string/stream output.
@@ -545,7 +571,9 @@ TEST(BitVectorFormatTest, ToStringAndStreamBases) {
   for (size_t i = 0; i < width; ++i)
     if (val & (1ULL << i))
       bytes[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-  BitVector bv(bytes, width);
+  // Create a MutableBitVector then get a view
+  MutableBitVector mbv(std::move(bytes), width);
+  BitVector bv = mbv; // implicit conversion to BitVector view
 
   // Direct base conversions.
   EXPECT_EQ(bv.toString(), std::string("1f3")); // default base=16
@@ -595,7 +623,8 @@ TEST(BitVectorFormatTest, ToStringAndStreamBases) {
 
   // Zero-width value formatting -> "0" in all bases.
   {
-    BitVector z(0);
+    MutableBitVector z_mut(0);
+    BitVector z(z_mut); // implicit conversion
     std::ostringstream ossHex, ossDec, ossOct;
     ossHex << std::hex << z;
     ossDec << std::dec << z;

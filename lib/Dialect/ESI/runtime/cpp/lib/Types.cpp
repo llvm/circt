@@ -34,11 +34,11 @@ void ChannelType::ensureValid(const std::any &obj) const {
   return inner->ensureValid(obj);
 }
 
-BitVector ChannelType::serialize(const std::any &obj) const {
+MutableBitVector ChannelType::serialize(const std::any &obj) const {
   return inner->serialize(obj);
 }
 
-std::any ChannelType::deserialize(BitVector &data) const {
+std::any ChannelType::deserialize(MutableBitVector &data) const {
   return inner->deserialize(data);
 }
 
@@ -56,23 +56,26 @@ void VoidType::ensureValid(const std::any &obj) const {
   }
 }
 
-BitVector VoidType::serialize(const std::any &obj) const {
-  ensureValid(obj);
-  // By convention, void is represented by a single byte of value 0.
-  BitVector bv(8);
-  return bv;
-}
-
-std::any VoidType::deserialize(BitVector &data) const {
+std::any VoidType::deserialize(MutableBitVector &data) const {
   if (data.width() < 8)
     throw std::runtime_error("void type cannot be represented by empty data");
   // Extract one byte and return the rest. Check that the byte is 0.
-  BitVector value = data & BitVector(std::vector<uint8_t>{0xFF}, 8);
-  if (value.getSpan()[0] != 0)
-    throw std::runtime_error("void type byte must be 0");
+  BitVector value = data.lsb(8);
+  // Manually check if any bit is set (instead of using std::ranges::any_of)
+  for (size_t i = 0; i < 8; ++i) {
+    if (value.getBit(i))
+      throw std::runtime_error("void type byte must be 0");
+  }
 
   data >>= 8; // consume one byte (value ignored)
   return std::any{};
+}
+
+MutableBitVector VoidType::serialize(const std::any &obj) const {
+  ensureValid(obj);
+  // By convention, void is represented by a single byte of value 0.
+  MutableBitVector bv(8);
+  return bv;
 }
 
 void BitsType::ensureValid(const std::any &obj) const {
@@ -80,21 +83,22 @@ void BitsType::ensureValid(const std::any &obj) const {
     auto data = std::any_cast<std::vector<uint8_t>>(obj);
     size_t expectedSize = (getWidth() + 7) / 8; // Round up to nearest byte
     if (data.size() != expectedSize) {
-      throw std::runtime_error(std::format(
-          "wrong size: expected {} bytes, got {}", expectedSize, data.size()));
+      throw std::runtime_error("wrong size: expected " +
+                               std::to_string(expectedSize) + " bytes, got " +
+                               std::to_string(data.size()));
     }
   } catch (const std::bad_any_cast &) {
     throw std::runtime_error("must be std::vector<uint8_t>");
   }
 }
 
-BitVector BitsType::serialize(const std::any &obj) const {
+MutableBitVector BitsType::serialize(const std::any &obj) const {
   ensureValid(obj);
   auto bytes = std::any_cast<std::vector<uint8_t>>(obj); // copy
-  return BitVector(std::move(bytes), getWidth());
+  return MutableBitVector(std::move(bytes), getWidth());
 }
 
-std::any BitsType::deserialize(BitVector &data) const {
+std::any BitsType::deserialize(MutableBitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error(std::format("Insufficient data for bits type. "
@@ -183,14 +187,14 @@ void SIntType::ensureValid(const std::any &obj) const {
   }
 }
 
-BitVector SIntType::serialize(const std::any &obj) const {
+MutableBitVector SIntType::serialize(const std::any &obj) const {
   // Expect esi::Int of correct width.
   try {
     const Int &ival = std::any_cast<const Int &>(obj);
     if (static_cast<uint64_t>(ival.width()) != getWidth())
       throw std::runtime_error("Int width mismatch for SIntType serialize");
-    // Copy bits into new BitVector (owning) of this width.
-    BitVector out(getWidth());
+    // Copy bits into new MutableBitVector (owning) of this width.
+    MutableBitVector out(getWidth());
     for (uint64_t i = 0; i < getWidth(); ++i)
       if (ival.getBit(i))
         out.setBit(i, true);
@@ -200,7 +204,7 @@ BitVector SIntType::serialize(const std::any &obj) const {
   }
 }
 
-std::any SIntType::deserialize(BitVector &data) const {
+std::any SIntType::deserialize(MutableBitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error("Insufficient data for sint type");
@@ -228,12 +232,12 @@ void UIntType::ensureValid(const std::any &obj) const {
   }
 }
 
-BitVector UIntType::serialize(const std::any &obj) const {
+MutableBitVector UIntType::serialize(const std::any &obj) const {
   try {
     const UInt &uval = std::any_cast<const UInt &>(obj);
     if (static_cast<uint64_t>(uval.width()) != getWidth())
       throw std::runtime_error("UInt width mismatch for UIntType serialize");
-    BitVector out(getWidth());
+    MutableBitVector out(getWidth());
     for (uint64_t i = 0; i < getWidth(); ++i)
       if (uval.getBit(i))
         out.setBit(i, true);
@@ -243,7 +247,7 @@ BitVector UIntType::serialize(const std::any &obj) const {
   }
 }
 
-std::any UIntType::deserialize(BitVector &data) const {
+std::any UIntType::deserialize(MutableBitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error("Insufficient data for uint type");
@@ -278,7 +282,7 @@ void StructType::ensureValid(const std::any &obj) const {
   }
 }
 
-BitVector StructType::serialize(const std::any &obj) const {
+MutableBitVector StructType::serialize(const std::any &obj) const {
   ensureValid(obj);
   auto structData = std::any_cast<std::map<std::string, std::any>>(obj);
   std::vector<BitVector> parts;
@@ -298,7 +302,7 @@ BitVector StructType::serialize(const std::any &obj) const {
     for (const auto &f : fields)
       handleField(f);
   }
-  BitVector out(totalWidth);
+  MutableBitVector out(totalWidth);
   uint64_t offset = 0;
   for (const auto &p : parts) {
     for (uint64_t i = 0; i < p.width(); ++i)
@@ -309,7 +313,7 @@ BitVector StructType::serialize(const std::any &obj) const {
   return out;
 }
 
-std::any StructType::deserialize(BitVector &data) const {
+std::any StructType::deserialize(MutableBitVector &data) const {
   std::map<std::string, std::any> result;
   auto consumeField = [&](const std::pair<std::string, const Type *> &f) {
     const auto &name = f.first;
@@ -349,7 +353,7 @@ void ArrayType::ensureValid(const std::any &obj) const {
   }
 }
 
-BitVector ArrayType::serialize(const std::any &obj) const {
+MutableBitVector ArrayType::serialize(const std::any &obj) const {
   ensureValid(obj);
   auto arrayData = std::any_cast<std::vector<std::any>>(obj);
   std::vector<BitVector> parts;
@@ -367,7 +371,7 @@ BitVector ArrayType::serialize(const std::any &obj) const {
     for (const auto &e : arrayData)
       pushElem(e);
   }
-  BitVector out(totalWidth);
+  MutableBitVector out(totalWidth);
   uint64_t offset = 0;
   for (const auto &p : parts) {
     for (uint64_t i = 0; i < p.width(); ++i)
@@ -378,7 +382,7 @@ BitVector ArrayType::serialize(const std::any &obj) const {
   return out;
 }
 
-std::any ArrayType::deserialize(BitVector &data) const {
+std::any ArrayType::deserialize(MutableBitVector &data) const {
   std::vector<std::any> result;
   result.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {

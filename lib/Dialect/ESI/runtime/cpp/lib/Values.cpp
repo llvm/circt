@@ -11,72 +11,8 @@
 
 using namespace esi;
 
-namespace {
-
-// Core add with carry. If signedMode=true, extend bits beyond operand width
-// with the operand's sign bit. If false, extend with zero.
-BitVector addCore(const BitVector &a, const BitVector &b, bool signedMode) {
-  size_t w = a.width() > b.width() ? a.width() : b.width();
-
-  // Concatenate another BitVector by shifting existing bits upward by the
-  // other's width and inserting the other's bits at the new LSB positions.
-  BitVector r(w + 1); // Provide one extra bit for carry / sign.
-  bool carry = false;
-  for (size_t i = 0; i < r.width(); ++i) {
-    bool abit;
-    bool bbit;
-    if (i < a.width())
-      abit = a.getBit(i);
-    else if (signedMode && a.width() > 0)
-      abit = a.getBit(a.width() - 1); // sign extend
-    else
-      abit = false;
-    if (i < b.width())
-      bbit = b.getBit(i);
-    else if (signedMode && b.width() > 0)
-      bbit = b.getBit(b.width() - 1);
-    else
-      bbit = false;
-    bool sum = abit ^ bbit ^ carry;
-    carry = (abit & bbit) | (abit & carry) | (bbit & carry);
-    r.setBit(i, sum);
-  }
-  return r;
-}
-
-// BitVector negate (two's complement) for signed widths.
-BitVector negateTwoComplement(const BitVector &v) {
-  // Fixed-width two's complement negate: invert and add one modulo width.
-  size_t w = v.width();
-  BitVector r(w);
-  bool carry = true; // adding one
-  for (size_t i = 0; i < w; ++i) {
-    bool bit = !v.getBit(i);
-    bool sum = bit ^ carry;
-    carry = bit & carry; // carry only if bit was 1 and carry was 1
-    r.setBit(i, sum);
-  }
-  return r; // overflow beyond width is discarded (mod 2^w).
-}
-
-// Unsigned multiply using simple shift-add algorithm.
-BitVector mulUnsigned(const BitVector &a, const BitVector &b) {
-  BitVector acc(a.width() + b.width());
-  for (size_t i = 0; i < b.width(); ++i) {
-    if (!b.getBit(i))
-      continue;
-    BitVector shifted(acc.width());
-    for (size_t j = 0; j < a.width(); ++j)
-      if (a.getBit(j) && (j + i) < shifted.width())
-        shifted.setBit(j + i, true);
-    acc = addCore(acc, shifted, false);
-  }
-  return acc;
-}
-} // namespace
-
 //===----------------------------------------------------------------------===//
-// BitVector implementation outline
+// BitVector implementation (immutable view)
 //===----------------------------------------------------------------------===//
 
 BitVector::BitVector(std::span<const byte> bytes, std::optional<size_t> width,
@@ -90,65 +26,15 @@ BitVector::BitVector(std::span<const byte> bytes, std::optional<size_t> width,
     throw std::invalid_argument("Width exceeds provided storage");
 }
 
-BitVector::BitVector(std::vector<byte> &&bytes, std::optional<size_t> width,
-                     uint8_t bitIndex)
-    : owner(std::move(bytes)), bitWidth(width ? *width : owner->size() * 8),
-      bitIndex(bitIndex) {
-  data = std::span<const byte>(owner->data(), owner->size());
-  if (bitIndex > 7)
-    throw std::invalid_argument("bitIndex must be <= 7");
-  size_t totalBitsAvail = data.size() * 8 - bitIndex;
-  if (bitWidth > totalBitsAvail)
-    throw std::invalid_argument("Width exceeds provided storage");
-}
-
-BitVector::BitVector(size_t width)
-    : owner(std::vector<byte>((width + 7) / 8, 0)), bitWidth(width),
-      bitIndex(0) {
-  data = std::span<const byte>(owner->data(), owner->size());
-}
-
 BitVector::BitVector(const BitVector &other)
-    : owner(other.owner), data(other.data), bitWidth(other.bitWidth),
-      bitIndex(other.bitIndex) {
-  if (owner)
-    data = std::span<const byte>(owner->data(), owner->size());
-}
-
-BitVector::BitVector(BitVector &&other) noexcept
-    : owner(std::move(other.owner)), data(other.data), bitWidth(other.bitWidth),
-      bitIndex(other.bitIndex) {
-  if (owner)
-    data = std::span<const byte>(owner->data(), owner->size());
-  other.data = {};
-  other.bitWidth = 0;
-  other.bitIndex = 0;
-}
+    : data(other.data), bitWidth(other.bitWidth), bitIndex(other.bitIndex) {}
 
 BitVector &BitVector::operator=(const BitVector &other) {
   if (this == &other)
     return *this;
-  owner = other.owner;
   data = other.data;
   bitWidth = other.bitWidth;
   bitIndex = other.bitIndex;
-  if (owner)
-    data = std::span<const byte>(owner->data(), owner->size());
-  return *this;
-}
-
-BitVector &BitVector::operator=(BitVector &&other) noexcept {
-  if (this == &other)
-    return *this;
-  owner = std::move(other.owner);
-  data = other.data;
-  bitWidth = other.bitWidth;
-  bitIndex = other.bitIndex;
-  if (owner)
-    data = std::span<const byte>(owner->data(), owner->size());
-  other.data = {};
-  other.bitWidth = 0;
-  other.bitIndex = 0;
   return *this;
 }
 
@@ -161,25 +47,7 @@ bool BitVector::getBit(size_t i) const {
   return (data[byteIdx] >> bitOff) & 0x1;
 }
 
-void BitVector::setBit(size_t i, bool v) {
-  if (i >= bitWidth)
-    throw std::out_of_range("Bit index out of range");
-  if (!owner)
-    throw std::runtime_error("Cannot modify non-owning BitVector");
-  size_t absoluteBit = bitIndex + i;
-  size_t byteIdx = absoluteBit / 8;
-  uint8_t bitOff = absoluteBit % 8;
-  uint8_t mask = static_cast<uint8_t>(1u << bitOff);
-  // Compute base offset of current data span within owner storage.
-  ptrdiff_t baseOffset = data.data() - owner->data();
-  byte &target = (*owner)[baseOffset + byteIdx];
-  if (v)
-    target |= mask;
-  else
-    target &= static_cast<uint8_t>(~mask);
-}
-
-BitVector &BitVector::operator>>=(size_t n) {
+BitVector BitVector::operator>>(size_t n) const {
   // Zero-width: any non-zero shift is invalid (cannot drop bits that don't
   // exist).
   if (bitWidth == 0) {
@@ -192,8 +60,154 @@ BitVector &BitVector::operator>>=(size_t n) {
     throw std::out_of_range("Right shift exceeds bit width");
   // Shifting by exactly the width yields an empty (zero-width) vector.
   if (n == bitWidth) {
+    BitVector empty;
+    return empty;
+  }
+
+  // Create a new view with adjusted bitIndex and width
+  BitVector result = *this;
+  result.bitWidth -= n;
+  result.bitIndex = static_cast<uint8_t>(result.bitIndex + n);
+  while (result.bitIndex >= 8) {
+    result.bitIndex -= 8;
+    if (result.data.size() == 0)
+      break;
+    result.data = result.data.subspan(1);
+  }
+  return result;
+}
+
+BitVector &BitVector::operator>>=(size_t n) {
+  *this = *this >> n;
+  return *this;
+}
+
+BitVector BitVector::slice(size_t offset, size_t sliceWidth) const {
+  if (offset > bitWidth || sliceWidth > bitWidth - offset)
+    throw std::invalid_argument("slice range exceeds current width");
+  // Return a new view with adjusted bitIndex
+  BitVector result;
+  result.bitWidth = sliceWidth;
+  result.bitIndex = static_cast<uint8_t>(bitIndex + (offset % 8));
+  size_t byteOffset = offset / 8;
+  result.data = data.subspan(byteOffset);
+  if (result.bitIndex >= 8) {
+    result.bitIndex -= 8;
+    result.data = result.data.subspan(1);
+  }
+  return result;
+}
+
+//===----------------------------------------------------------------------===//
+// MutableBitVector implementation
+//===----------------------------------------------------------------------===//
+
+MutableBitVector::MutableBitVector(size_t width) : owner((width + 7) / 8, 0) {
+  bitWidth = width;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+}
+
+MutableBitVector::MutableBitVector(std::vector<byte> &&bytes,
+                                   std::optional<size_t> width)
+    : owner(std::move(bytes)) {
+  bitWidth = width ? *width : owner.size() * 8;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  if (bitWidth > data.size() * 8)
+    throw std::invalid_argument("Width exceeds provided storage");
+}
+
+MutableBitVector::MutableBitVector(const MutableBitVector &other)
+    : BitVector(), owner(other.owner) {
+  bitWidth = other.bitWidth;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+}
+
+MutableBitVector::MutableBitVector(const BitVector &other)
+    : BitVector(), owner(std::vector<byte>((other.width() + 7) / 8, 0)) {
+  bitWidth = other.width();
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  // Copy bits from source
+  for (size_t i = 0; i < bitWidth; ++i)
+    if (other.getBit(i))
+      setBit(i, true);
+}
+
+MutableBitVector::MutableBitVector(MutableBitVector &&other) noexcept
+    : BitVector(), owner(std::move(other.owner)) {
+  bitWidth = other.bitWidth;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  other.data = {};
+  other.bitWidth = 0;
+  other.bitIndex = 0;
+}
+
+MutableBitVector::MutableBitVector(BitVector &&other) noexcept
+    : BitVector(), owner(std::vector<byte>((other.width() + 7) / 8, 0)) {
+  bitWidth = other.width();
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  // Copy bits from source
+  for (size_t i = 0; i < bitWidth; ++i)
+    if (other.getBit(i))
+      setBit(i, true);
+}
+
+MutableBitVector &MutableBitVector::operator=(const MutableBitVector &other) {
+  if (this == &other)
+    return *this;
+  owner = other.owner;
+  bitWidth = other.bitWidth;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  return *this;
+}
+
+MutableBitVector &
+MutableBitVector::operator=(MutableBitVector &&other) noexcept {
+  if (this == &other)
+    return *this;
+  owner = std::move(other.owner);
+  bitWidth = other.bitWidth;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  other.data = {};
+  other.bitWidth = 0;
+  other.bitIndex = 0;
+  return *this;
+}
+
+void MutableBitVector::setBit(size_t i, bool v) {
+  if (i >= bitWidth)
+    throw std::out_of_range("Bit index out of range");
+  size_t byteIdx = i / 8;
+  uint8_t bitOff = i % 8;
+  uint8_t mask = static_cast<uint8_t>(1u << bitOff);
+  byte &target = owner[byteIdx];
+  if (v)
+    target |= mask;
+  else
+    target &= static_cast<uint8_t>(~mask);
+}
+
+MutableBitVector &MutableBitVector::operator>>=(size_t n) {
+  // Zero-width: any non-zero shift is invalid (cannot drop bits that don't
+  // exist).
+  if (bitWidth == 0) {
+    if (n == 0)
+      return *this; // no-op
+    throw std::out_of_range("Right shift on zero-width MutableBitVector");
+  }
+  // Shifting by more than the current logical width is invalid.
+  if (n > bitWidth)
+    throw std::out_of_range("Right shift exceeds bit width");
+  // Shifting by exactly the width yields an empty (zero-width) vector.
+  if (n == bitWidth) {
     bitWidth = 0;
-    bitIndex = 0;
     return *this;
   }
   bitWidth -= n;
@@ -207,13 +221,7 @@ BitVector &BitVector::operator>>=(size_t n) {
   return *this;
 }
 
-BitVector BitVector::operator>>(size_t n) const {
-  BitVector tmp = *this;
-  tmp >>= n;
-  return tmp;
-}
-
-BitVector &BitVector::operator<<=(size_t n) {
+MutableBitVector &MutableBitVector::operator<<=(size_t n) {
   // Extend width by n bits, shifting existing bits upward by n and inserting
   // n zero bits at the least-significant positions.
   if (n == 0)
@@ -229,16 +237,114 @@ BitVector &BitVector::operator<<=(size_t n) {
       newStorage[newPos / 8] |= static_cast<byte>(1u << (newPos % 8));
     }
   owner = std::move(newStorage);
-  data = std::span<const byte>(owner->data(), owner->size());
+  data = std::span<const byte>(owner.data(), owner.size());
   bitWidth = newWidth;
   bitIndex = 0;
   return *this;
 }
 
-BitVector BitVector::operator<<(size_t n) const {
-  BitVector tmp = *this; // copy
-  tmp <<= n;             // will allocate new storage
-  return tmp;
+MutableBitVector &MutableBitVector::operator<<=(const MutableBitVector &other) {
+  // Concatenation: append bits from other (must create new owning storage)
+  size_t oldWidth = bitWidth;
+  size_t otherWidth = other.width();
+  size_t newWidth = oldWidth + otherWidth;
+  std::vector<byte> newStorage((newWidth + 7) / 8, 0);
+  // Copy this's bits
+  for (size_t i = 0; i < oldWidth; ++i)
+    if (getBit(i)) {
+      newStorage[i / 8] |= static_cast<byte>(1u << (i % 8));
+    }
+  // Copy other's bits offset by oldWidth
+  for (size_t i = 0; i < otherWidth; ++i)
+    if (other.getBit(i)) {
+      size_t newPos = i + oldWidth;
+      newStorage[newPos / 8] |= static_cast<byte>(1u << (newPos % 8));
+    }
+  owner = std::move(newStorage);
+  data = std::span<const byte>(owner.data(), owner.size());
+  bitWidth = newWidth;
+  bitIndex = 0;
+  return *this;
+}
+
+MutableBitVector MutableBitVector::bitwiseOp(const MutableBitVector &a,
+                                             const MutableBitVector &b,
+                                             BitwiseKind kind) {
+  if (a.bitWidth != b.bitWidth)
+    throw std::invalid_argument("Bitwise ops require equal widths");
+  size_t width = a.bitWidth;
+  MutableBitVector res(width);
+  if (width == 0)
+    return res;
+
+  // Fast path: byte-aligned, bitIndex is always 0 for MutableBitVector
+  auto *ra = a.data.data();
+  auto *rb = b.data.data();
+  // Cast away const on result storage (it is owned / mutable here).
+  auto *rr = const_cast<uint8_t *>(res.data.data());
+  size_t fullBytes = width / 8;
+  size_t tailBits = width % 8;
+  // Process complete bytes.
+  for (size_t i = 0; i < fullBytes; ++i) {
+    switch (kind) {
+    case BitwiseKind::And:
+      rr[i] = static_cast<uint8_t>(ra[i] & rb[i]);
+      break;
+    case BitwiseKind::Or:
+      rr[i] = static_cast<uint8_t>(ra[i] | rb[i]);
+      break;
+    case BitwiseKind::Xor:
+      rr[i] = static_cast<uint8_t>(ra[i] ^ rb[i]);
+      break;
+    }
+  }
+  if (tailBits) {
+    // Operate on entire last byte unmasked (high bits beyond width are
+    // unspecified).
+    switch (kind) {
+    case BitwiseKind::And:
+      rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] & rb[fullBytes]);
+      break;
+    case BitwiseKind::Or:
+      rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] | rb[fullBytes]);
+      break;
+    case BitwiseKind::Xor:
+      rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] ^ rb[fullBytes]);
+      break;
+    }
+  }
+  return res;
+}
+
+// Free function implementations for bitwise operators on BitVector
+MutableBitVector esi::operator&(const BitVector &a, const BitVector &b) {
+  if (a.width() != b.width())
+    throw std::invalid_argument("Bitwise ops require equal widths");
+  MutableBitVector result(a.width());
+  for (size_t i = 0; i < a.width(); ++i)
+    if (a.getBit(i) && b.getBit(i))
+      result.setBit(i, true);
+  return result;
+}
+
+MutableBitVector esi::operator|(const BitVector &a, const BitVector &b) {
+  if (a.width() != b.width())
+    throw std::invalid_argument("Bitwise ops require equal widths");
+  MutableBitVector result(a.width());
+  for (size_t i = 0; i < a.width(); ++i)
+    if (a.getBit(i) || b.getBit(i))
+      result.setBit(i, true);
+  return result;
+}
+
+MutableBitVector esi::operator^(const BitVector &a, const BitVector &b) {
+  if (a.width() != b.width())
+    throw std::invalid_argument("Bitwise ops require equal widths");
+  MutableBitVector result(a.width());
+  for (size_t i = 0; i < a.width(); ++i)
+    if (a.getBit(i) != b.getBit(i))
+      result.setBit(i, true);
+  return result;
 }
 
 // Helper: convert to hexadecimal / octal (power-of-two bases) without
@@ -382,118 +488,9 @@ bool BitVector::operator==(const BitVector &rhs) const {
   return true;
 }
 
-BitVector BitVector::slice(size_t offset, size_t sliceWidth) const {
-  if (offset > bitWidth || sliceWidth > bitWidth - offset)
-    throw std::invalid_argument("slice range exceeds current width");
-  BitVector out(sliceWidth);
-  if (sliceWidth == 0)
-    return out;
-  size_t startBit = bitIndex + offset;
-  bool aligned = (startBit % 8 == 0);
-  if (aligned) {
-    size_t byteStart = startBit / 8;
-    size_t bytesToCopy = (sliceWidth + 7) / 8;
-    // Direct byte copy.
-    std::memcpy(out.owner->data(), data.data() + byteStart, bytesToCopy);
-    // We intentionally do not clear high bits in the final byte (unspecified
-    // tail).
-    return out;
-  }
-  // Fallback per-bit extraction.
-  for (size_t i = 0; i < sliceWidth; ++i)
-    if (getBit(offset + i))
-      out.setBit(i, true);
-  return out;
-}
-
-BitVector BitVector::bitwiseOp(const BitVector &a, const BitVector &b,
-                               BitwiseKind kind) {
-  if (a.bitWidth != b.bitWidth)
-    throw std::invalid_argument("Bitwise ops require equal widths");
-  size_t width = a.bitWidth;
-  BitVector res(width);
-  if (width == 0)
-    return res;
-
-  // Fast path: byte-aligned, same bitIndex. We intentionally do NOT mask off
-  // high bits of a partial last byte; bits above logical width may contain
-  // arbitrary values and must not be relied upon by callers.
-  bool aligned = (a.bitIndex == 0) && (b.bitIndex == 0);
-  if (aligned) {
-    auto *ra = a.data.data();
-    auto *rb = b.data.data();
-    // Cast away const on result storage (it is owned / mutable here).
-    auto *rr = const_cast<uint8_t *>(res.data.data());
-    size_t fullBytes = width / 8;
-    size_t tailBits = width % 8;
-    // Process complete bytes.
-    for (size_t i = 0; i < fullBytes; ++i) {
-      switch (kind) {
-      case BitwiseKind::And:
-        rr[i] = static_cast<uint8_t>(ra[i] & rb[i]);
-        break;
-      case BitwiseKind::Or:
-        rr[i] = static_cast<uint8_t>(ra[i] | rb[i]);
-        break;
-      case BitwiseKind::Xor:
-        rr[i] = static_cast<uint8_t>(ra[i] ^ rb[i]);
-        break;
-      }
-    }
-    if (tailBits) {
-      // Operate on entire last byte unmasked (high bits beyond width are
-      // unspecified).
-      switch (kind) {
-      case BitwiseKind::And:
-        rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] & rb[fullBytes]);
-        break;
-      case BitwiseKind::Or:
-        rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] | rb[fullBytes]);
-        break;
-      case BitwiseKind::Xor:
-        rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] ^ rb[fullBytes]);
-        break;
-      }
-    }
-    return res;
-  }
-
-  // Fallback slow path: misaligned or differing bitIndex.
-  for (size_t i = 0; i < width; ++i) {
-    bool abit = a.getBit(i);
-    bool bbit = b.getBit(i);
-    bool out = false;
-    switch (kind) {
-    case BitwiseKind::And:
-      out = abit & bbit;
-      break;
-    case BitwiseKind::Or:
-      out = abit | bbit;
-      break;
-    case BitwiseKind::Xor:
-      out = abit ^ bbit;
-      break;
-    }
-    res.setBit(i, out);
-  }
-  return res;
-}
-
 //===----------------------------------------------------------------------===//
 // Int implementation
 //===----------------------------------------------------------------------===//
-
-void Int::assign(int64_t value) {
-  uint64_t pattern = static_cast<uint64_t>(value); // two's complement pattern
-  size_t limit = bitWidth < 64 ? bitWidth : 64;
-  for (size_t i = 0; i < limit; ++i)
-    setBit(i, (pattern >> i) & 1ULL);
-  if (bitWidth > 64) {
-    bool signBit = (pattern >> 63) & 1ULL;
-    for (size_t i = 64; i < bitWidth; ++i)
-      setBit(i, signBit);
-  }
-}
 
 int64_t Int::toSigned64() const {
   if (bitWidth == 0)
@@ -532,62 +529,9 @@ uint64_t Int::toUnsigned64() const {
   return u;
 }
 
-Int Int::add(const Int &a, const Int &b) { return Int(addCore(a, b, true)); }
-
-Int Int::negate(const Int &v) { return Int(negateTwoComplement(v)); }
-
-Int Int::multiply(const Int &a, const Int &b) {
-  if (a.bitWidth == 0 || b.bitWidth == 0)
-    return Int(0, 0);
-  bool aNeg = a.getBit(a.bitWidth - 1);
-  bool bNeg = b.getBit(b.bitWidth - 1);
-  BitVector absA =
-      aNeg ? negateTwoComplement(a) : static_cast<const BitVector &>(a);
-  BitVector absB =
-      bNeg ? negateTwoComplement(b) : static_cast<const BitVector &>(b);
-  BitVector prod = mulUnsigned(absA, absB);
-  if (aNeg ^ bNeg)
-    prod = negateTwoComplement(prod);
-  return Int(prod);
-}
-
-int Int::compare(const Int &a, const Int &b) {
-  size_t w = a.bitWidth > b.bitWidth ? a.bitWidth : b.bitWidth;
-  if (w == 0)
-    return 0;
-  auto getSE = [&](const Int &v, size_t i) -> bool {
-    if (i < v.bitWidth)
-      return v.getBit(i);
-    if (v.bitWidth == 0)
-      return false;
-    return v.getBit(v.bitWidth - 1);
-  };
-  bool signA = getSE(a, w - 1);
-  bool signB = getSE(b, w - 1);
-  if (signA != signB)
-    return signA ? -1 : 1; // 1 means negative (signA) < positive
-  // Same sign: unsigned lexicographic compare works for both positive and
-  // negative.
-  for (size_t idx = 0; idx < w; ++idx) {
-    size_t i = w - 1 - idx;
-    bool abit = getSE(a, i);
-    bool bbit = getSE(b, i);
-    if (abit != bbit)
-      return abit < bbit ? -1 : 1;
-  }
-  return 0;
-}
-
 //===----------------------------------------------------------------------===//
 // UInt implementation
 //===----------------------------------------------------------------------===//
-
-void UInt::assign(uint64_t value) {
-  for (size_t i = 0; i < bitWidth; ++i)
-    setBit(i, (value >> i) & 1ULL);
-  for (size_t i = 64; i < bitWidth; ++i)
-    setBit(i, false);
-}
 
 uint64_t UInt::toUnsigned64() const {
   if (bitWidth > 64) {
@@ -601,39 +545,4 @@ uint64_t UInt::toUnsigned64() const {
     if (getBit(i))
       u |= (1ULL << i);
   return u;
-}
-
-UInt UInt::add(const UInt &a, const UInt &b) {
-  return UInt(addCore(a, b, false));
-}
-
-UInt UInt::subtract(const UInt &a, const UInt &b) {
-  size_t w = a.bitWidth > b.bitWidth ? a.bitWidth : b.bitWidth;
-  UInt r(0, w);
-  bool borrow = false;
-  for (size_t i = 0; i < w; ++i) {
-    bool abit = (i < a.bitWidth) ? a.getBit(i) : false;
-    bool bbit = (i < b.bitWidth) ? b.getBit(i) : false;
-    bool diff = abit ^ bbit ^ borrow;
-    bool newBorrow = (!abit & (bbit | borrow)) | (bbit & borrow);
-    r.setBit(i, diff);
-    borrow = newBorrow;
-  }
-  return r; // Wrap semantics modulo 2^w.
-}
-
-UInt UInt::multiply(const UInt &a, const UInt &b) {
-  return UInt(mulUnsigned(a, b));
-}
-
-int UInt::compare(const UInt &a, const UInt &b) {
-  size_t w = a.bitWidth > b.bitWidth ? a.bitWidth : b.bitWidth;
-  for (size_t idx = 0; idx < w; ++idx) {
-    size_t i = w - 1 - idx;
-    bool abit = (i < a.bitWidth) ? a.getBit(i) : false;
-    bool bbit = (i < b.bitWidth) ? b.getBit(i) : false;
-    if (abit != bbit)
-      return abit < bbit ? -1 : 1;
-  }
-  return 0;
 }

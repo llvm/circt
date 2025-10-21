@@ -45,6 +45,7 @@ struct AppID {
   bool operator!=(const AppID &other) const { return !(*this == other); }
 };
 bool operator<(const AppID &a, const AppID &b);
+std::ostream &operator<<(std::ostream &os, const AppID &id);
 
 class AppIDPath : public std::vector<AppID> {
 public:
@@ -55,6 +56,7 @@ public:
   std::string toStr() const;
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
+std::ostream &operator<<(std::ostream &os, const AppIDPath &path);
 
 struct Constant {
   std::any value;
@@ -106,6 +108,8 @@ class MessageData {
 public:
   /// Adopts the data vector buffer.
   MessageData() = default;
+  MessageData(std::span<const uint8_t> data)
+      : data(data.data(), data.data() + data.size()) {}
   MessageData(std::vector<uint8_t> &data) : data(std::move(data)) {}
   MessageData(std::vector<uint8_t> &&data) : data(std::move(data)) {}
   MessageData(const uint8_t *data, size_t size) : data(data, data + size) {}
@@ -158,7 +162,6 @@ private:
 } // namespace esi
 
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
-std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
 //===----------------------------------------------------------------------===//
 // Functions which should be in the standard library.
