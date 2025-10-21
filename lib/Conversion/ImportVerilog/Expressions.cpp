@@ -526,13 +526,99 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (context.variableAssignCallback)
         context.variableAssignCallback(assignOp);
     }
+
     if (isPost)
       return preValue;
     return postValue;
   }
 
+  // Helper function to create pre and post increments and decrements.
+  Value createRealIncrement(Value arg, bool isInc, bool isPost) {
+    auto preValue = moore::ReadOp::create(builder, loc, arg);
+    Value postValue;
+
+    auto ty = preValue.getType();
+    moore::RealType realTy = llvm::dyn_cast<moore::RealType>(ty);
+    if (!realTy)
+      return {};
+    Value one;
+
+    if (realTy.getWidth() == moore::RealWidth::f32) {
+      llvm::APFloat f(llvm::APFloat::IEEEsingle(), "1.0");
+      one = moore::ShortrealLiteralOp::create(builder, loc, f).getResult();
+    } else if (realTy.getWidth() == moore::RealWidth::f64) {
+      llvm::APFloat f(llvm::APFloat::IEEEdouble(), "1.0");
+      one = moore::RealLiteralOp::create(builder, loc, f).getResult();
+    }
+
+    postValue =
+        isInc
+            ? moore::AddRealOp::create(builder, loc, preValue, one).getResult()
+            : moore::SubRealOp::create(builder, loc, preValue, one).getResult();
+    auto assignOp =
+        moore::BlockingAssignOp::create(builder, loc, arg, postValue);
+
+    if (context.variableAssignCallback)
+      context.variableAssignCallback(assignOp);
+
+    if (isPost)
+      return preValue;
+    return postValue;
+  }
+
+  Value visitRealUOp(const slang::ast::UnaryExpression &expr) {
+    Type opFTy = context.convertType(*expr.operand().type);
+
+    using slang::ast::UnaryOperator;
+    Value arg;
+    if (expr.op == UnaryOperator::Preincrement ||
+        expr.op == UnaryOperator::Predecrement ||
+        expr.op == UnaryOperator::Postincrement ||
+        expr.op == UnaryOperator::Postdecrement)
+      arg = context.convertLvalueExpression(expr.operand());
+    else
+      arg = context.convertRvalueExpression(expr.operand(), opFTy);
+    if (!arg)
+      return {};
+
+    switch (expr.op) {
+      // `+a` is simply `a`
+    case UnaryOperator::Plus:
+      return arg;
+    case UnaryOperator::Minus:
+      return moore::NegRealOp::create(builder, loc, arg);
+
+    case UnaryOperator::Preincrement:
+      return createRealIncrement(arg, true, false);
+    case UnaryOperator::Predecrement:
+      return createRealIncrement(arg, false, false);
+    case UnaryOperator::Postincrement:
+      return createRealIncrement(arg, true, true);
+    case UnaryOperator::Postdecrement:
+      return createRealIncrement(arg, false, true);
+
+    case UnaryOperator::LogicalNot:
+      arg = context.convertToBool(arg);
+      if (!arg)
+        return {};
+      return moore::NotOp::create(builder, loc, arg);
+
+    default:
+      mlir::emitError(loc) << "Unary operator " << slang::ast::toString(expr.op)
+                           << " not supported with real values!\n";
+      return {};
+    }
+  }
+
   // Handle unary operators.
   Value visit(const slang::ast::UnaryExpression &expr) {
+    // First check whether we need real or integral BOps
+    const auto *floatType =
+        expr.operand().type->as_if<slang::ast::FloatingType>();
+    // If op is real-typed, treat as real BOp.
+    if (floatType)
+      return visitRealUOp(expr);
+
     using slang::ast::UnaryOperator;
     Value arg;
     if (expr.op == UnaryOperator::Preincrement ||
@@ -596,6 +682,100 @@ struct RvalueExprVisitor : public ExprVisitor {
     return {};
   }
 
+  /// Handles logical operators (§11.4.7), assuming lhs/rhs are rvalues already.
+  Value buildLogicalBOp(slang::ast::BinaryOperator op, Value lhs, Value rhs,
+                        std::optional<Domain> domain = std::nullopt) {
+    using slang::ast::BinaryOperator;
+    // TODO: These should short-circuit; RHS should be in a separate block.
+
+    if (domain) {
+      lhs = context.convertToBool(lhs, domain.value());
+      rhs = context.convertToBool(rhs, domain.value());
+    } else {
+      lhs = context.convertToBool(lhs);
+      rhs = context.convertToBool(rhs);
+    }
+
+    if (!lhs || !rhs)
+      return {};
+
+    switch (op) {
+    case BinaryOperator::LogicalAnd:
+      return moore::AndOp::create(builder, loc, lhs, rhs);
+
+    case BinaryOperator::LogicalOr:
+      return moore::OrOp::create(builder, loc, lhs, rhs);
+
+    case BinaryOperator::LogicalImplication: {
+      // (lhs -> rhs) == (!lhs || rhs)
+      auto notLHS = moore::NotOp::create(builder, loc, lhs);
+      return moore::OrOp::create(builder, loc, notLHS, rhs);
+    }
+
+    case BinaryOperator::LogicalEquivalence: {
+      // (lhs <-> rhs) == (lhs && rhs) || (!lhs && !rhs)
+      auto notLHS = moore::NotOp::create(builder, loc, lhs);
+      auto notRHS = moore::NotOp::create(builder, loc, rhs);
+      auto both = moore::AndOp::create(builder, loc, lhs, rhs);
+      auto notBoth = moore::AndOp::create(builder, loc, notLHS, notRHS);
+      return moore::OrOp::create(builder, loc, both, notBoth);
+    }
+
+    default:
+      llvm_unreachable("not a logical BinaryOperator");
+    }
+  }
+
+  Value visitRealBOp(const slang::ast::BinaryExpression &expr) {
+    // Convert operands to the chosen target type.
+    auto lhs = context.convertRvalueExpression(expr.left());
+    if (!lhs)
+      return {};
+    auto rhs = context.convertRvalueExpression(expr.right());
+    if (!rhs)
+      return {};
+
+    using slang::ast::BinaryOperator;
+    switch (expr.op) {
+    case BinaryOperator::Add:
+      return moore::AddRealOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Subtract:
+      return moore::SubRealOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Multiply:
+      return moore::MulRealOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Divide:
+      return moore::DivRealOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Power:
+      return moore::PowRealOp::create(builder, loc, lhs, rhs);
+
+    case BinaryOperator::Equality:
+      return moore::EqRealOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Inequality:
+      return moore::NeRealOp::create(builder, loc, lhs, rhs);
+
+    case BinaryOperator::GreaterThan:
+      return moore::FgtOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::LessThan:
+      return moore::FltOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::GreaterThanEqual:
+      return moore::FgeOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::LessThanEqual:
+      return moore::FleOp::create(builder, loc, lhs, rhs);
+
+    case BinaryOperator::LogicalAnd:
+    case BinaryOperator::LogicalOr:
+    case BinaryOperator::LogicalImplication:
+    case BinaryOperator::LogicalEquivalence:
+      return buildLogicalBOp(expr.op, lhs, rhs);
+
+    default:
+      mlir::emitError(loc) << "Binary operator "
+                           << slang::ast::toString(expr.op)
+                           << " not supported with real valued operands!\n";
+      return {};
+    }
+  }
+
   // Helper function to convert two arguments to a simple bit vector type and
   // pass them into a binary op.
   template <class ConcreteOp>
@@ -611,6 +791,16 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle binary operators.
   Value visit(const slang::ast::BinaryExpression &expr) {
+    // First check whether we need real or integral BOps
+    const auto *rhsFloatType =
+        expr.right().type->as_if<slang::ast::FloatingType>();
+    const auto *lhsFloatType =
+        expr.left().type->as_if<slang::ast::FloatingType>();
+
+    // If either arg is real-typed, treat as real BOp.
+    if (rhsFloatType || lhsFloatType)
+      return visitRealBOp(expr);
+
     auto lhs = context.convertRvalueExpression(expr.left());
     if (!lhs)
       return {};
@@ -728,54 +918,11 @@ struct RvalueExprVisitor : public ExprVisitor {
       else
         return createBinary<moore::UltOp>(lhs, rhs);
 
-    // See IEEE 1800-2017 § 11.4.7 "Logical operators".
-    case BinaryOperator::LogicalAnd: {
-      // TODO: This should short-circuit. Put the RHS code into a separate
-      // block.
-      lhs = context.convertToBool(lhs, domain);
-      if (!lhs)
-        return {};
-      rhs = context.convertToBool(rhs, domain);
-      if (!rhs)
-        return {};
-      return moore::AndOp::create(builder, loc, lhs, rhs);
-    }
-    case BinaryOperator::LogicalOr: {
-      // TODO: This should short-circuit. Put the RHS code into a separate
-      // block.
-      lhs = context.convertToBool(lhs, domain);
-      if (!lhs)
-        return {};
-      rhs = context.convertToBool(rhs, domain);
-      if (!rhs)
-        return {};
-      return moore::OrOp::create(builder, loc, lhs, rhs);
-    }
-    case BinaryOperator::LogicalImplication: {
-      // `(lhs -> rhs)` equivalent to `(!lhs || rhs)`.
-      lhs = context.convertToBool(lhs, domain);
-      if (!lhs)
-        return {};
-      rhs = context.convertToBool(rhs, domain);
-      if (!rhs)
-        return {};
-      auto notLHS = moore::NotOp::create(builder, loc, lhs);
-      return moore::OrOp::create(builder, loc, notLHS, rhs);
-    }
-    case BinaryOperator::LogicalEquivalence: {
-      // `(lhs <-> rhs)` equivalent to `(lhs && rhs) || (!lhs && !rhs)`.
-      lhs = context.convertToBool(lhs, domain);
-      if (!lhs)
-        return {};
-      rhs = context.convertToBool(rhs, domain);
-      if (!rhs)
-        return {};
-      auto notLHS = moore::NotOp::create(builder, loc, lhs);
-      auto notRHS = moore::NotOp::create(builder, loc, rhs);
-      auto both = moore::AndOp::create(builder, loc, lhs, rhs);
-      auto notBoth = moore::AndOp::create(builder, loc, notLHS, notRHS);
-      return moore::OrOp::create(builder, loc, both, notBoth);
-    }
+    case BinaryOperator::LogicalAnd:
+    case BinaryOperator::LogicalOr:
+    case BinaryOperator::LogicalImplication:
+    case BinaryOperator::LogicalEquivalence:
+      return buildLogicalBOp(expr.op, lhs, rhs, domain);
 
     case BinaryOperator::LogicalShiftLeft:
       return createBinary<moore::ShlOp>(lhs, rhs);
