@@ -3485,3 +3485,199 @@ function string testStrLiteralReturn;
     // CHECK-NEXT: return [[STR]] : !moore.string
     return testStrLiteral;
 endfunction // testStrLiteralReturn
+
+// CHECK-LABEL: func.func private @testRealOps()
+function void testRealOps;
+    // CHECK-NEXT: [[A:%.+]] = moore.variable : <f64>
+    // CHECK-NEXT: [[B:%.+]] = moore.variable : <f64>
+    // CHECK-NEXT: [[RESR:%.+]] = moore.variable : <f64>
+    real a, b, resr;
+    // CHECK-NEXT: [[C:%.+]] = moore.variable : <f32>
+    // CHECK-NEXT: [[D:%.+]] = moore.variable : <f32>
+    // CHECK-NEXT: [[RESSR:%.+]] = moore.variable : <f32>
+    shortreal c, d, ressr;
+    // CHECK-NEXT: [[TEST:%.+]] = moore.variable : <i1>
+    bit        test;
+
+
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fadd [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a + b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fsub [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a - b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fmul [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a * b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fdiv [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a / b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fpow [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a ** b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.feq [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a == b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fne [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a != b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.flt [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a < b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fle [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a <= b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fgt [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a > b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fge [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a >= b);
+
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.real_constant 1.000000e+00
+    // CHECK-NEXT: [[ANEW:%.+]] = moore.fadd [[OP]], [[ONE]] : f64
+    a++;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.real_constant 1.000000e+00
+    // CHECK-NEXT: [[ANEW:%.+]] = moore.fsub [[OP]], [[ONE]] : f64
+    a--;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[ANEW:%.+]] = moore.fneg [[OP]] : f64
+    a = -a;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: moore.blocking_assign [[A]], [[OP]] : f64
+    a = +a;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[BOOL:%.+]] = moore.bool_cast [[OP]] : f64 -> i1
+    // CHECK-NEXT: [[NOT:%.+]] = moore.not [[BOOL]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[NOT]] : i1
+    test = !a;
+    // CHECK: [[RHS1:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f64 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f64 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.and [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = a && b;
+    // CHECK: [[RHS1:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f64 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f64 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.or [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = a || b;
+
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fadd [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c + d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fsub [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c - d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fmul [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c * d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fdiv [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c / d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fpow [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c ** d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.feq [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c == d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fne [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c != d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.flt [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c < d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fle [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c <= d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fgt [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c > d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fge [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c >= d);
+
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.shortreal_constant 1.000000e+00
+    // CHECK-NEXT: [[CNEW:%.+]] = moore.fadd [[OP]], [[ONE]] : f32
+    c++;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.shortreal_constant 1.000000e+00
+    // CHECK-NEXT: [[CNEW:%.+]] = moore.fsub [[OP]], [[ONE]] : f32
+    c--;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[CNEW:%.+]] = moore.fneg [[OP]] : f32
+    c = -c;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: moore.blocking_assign [[C]], [[OP]] : f32
+    c = +c;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[BOOL:%.+]] = moore.bool_cast [[OP]] : f32 -> i1
+    // CHECK-NEXT: [[NOT:%.+]] = moore.not [[BOOL]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[NOT]] : i1
+    test = !c;
+    // CHECK: [[RHS1:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f32 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f32 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.and [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = c && d;
+    // CHECK: [[RHS1:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f32 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f32 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.or [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = c || d;
+
+endfunction // testStrLiteralReturn

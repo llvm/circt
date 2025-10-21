@@ -580,7 +580,8 @@ def ShortrealLiteralOp : MooreOp<"shortreal_constant", [Pure]> {
     ```mlir
     %0 = moore.shortreal_constant 1.23
     ```
-    The shortreal type has fixed-point(1.2) and exponent(2.0e10) formats and corresponds to IEEE 754 f32.
+    The shortreal type has fixed-point(1.2) and exponent(2.0e10) formats and
+    corresponds to IEEE 754 f32.
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
   let arguments = (ins F32Attr:$value);
@@ -592,12 +593,13 @@ def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
   let summary = "Produce a constant real value";
   let description = [{
     Produces a constant value of real type.
-    
+
     Example:
     ```mlir
     %0 = moore.real_constant 1.23
     ```
-    The real type has fixed-point(1.2) and exponent(2.0e10) formats and corresponds to IEEE 754 f64.
+    The real type has fixed-point(1.2) and exponent(2.0e10) formats and
+    corresponds to IEEE 754 f64.
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
   let arguments = (ins F64Attr:$value);
@@ -856,6 +858,21 @@ def NegOp : MooreOp<"neg", [Pure, SameOperandsAndResultType]> {
   }];
   let arguments = (ins SimpleBitVectorType:$input);
   let results = (outs SimpleBitVectorType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def NegRealOp : MooreOp<"fneg", [Pure, SameOperandsAndResultType]> {
+  let summary = "Arithmetic negation";
+  let description = [{
+    Negate a real value.
+
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators" and § 11.3.1 "Operators
+    with real operands"
+  }];
+  let arguments = (ins RealType:$input);
+  let results = (outs RealType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
   }];
@@ -1384,6 +1401,113 @@ def ReplicateOp : MooreOp<"replicate", [
   let assemblyFormat = [{
     $value attr-dict `:` type($value) `->` type($result)
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// Real Binary Operations
+//===----------------------------------------------------------------------===//
+
+class BinaryRealOpBase<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [Pure, SameOperandsAndResultType]> {
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let description = [{
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators" and § 11.3.1 "Operators
+    with real operands"
+  }];
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($result)
+  }];
+}
+
+def AddRealOp : BinaryRealOpBase<"fadd"> {
+  let summary = "Addition; add two real operands.";
+}
+
+def SubRealOp : BinaryRealOpBase<"fsub"> {
+  let summary = [{Subtraction; subtract the RHS real operand from the LHS
+  real operand.}];
+}
+
+def DivRealOp : BinaryRealOpBase<"fdiv"> {
+  let summary = [{Division; Divide the LHS real operand by the LHS
+  real operand.}];
+}
+
+def MulRealOp : BinaryRealOpBase<"fmul"> {
+  let summary = [{Multiplication; Multiply the RHS real operand with the LHS
+  real operand.}];
+}
+
+def PowRealOp : BinaryRealOpBase<"fpow"> {
+  let summary = [{Power; Exponentiate the LHS real base with the RHS real
+  exponent.}];
+}
+
+class LogicalEqRealOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  Commutative,
+  SameTypeOperands,
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
+]> {
+  let description = [{
+    Compares the bits in the left- and right-hand side operand and returns a
+    single bit 0 or 1. If all corresponding bits in the left- and
+    right-hand side are equal, and all are 0 or 1, the two operands
+    are considered equal (`eq` returns 1, `ne` returns 0). If any bits are not
+    equal, but all are 0 or 1, the two operands are considered not equal (`eq`
+    returns 0, `ne` returns 1). `eq` corresponds to the `==` operator and `ne`
+    to the `!=` operator.
+
+    See IEEE 1800-2017 § 11.4.5 "Equality operators" and § 11.3.1 "Operators
+    with real operands".
+  }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];
+}
+
+def EqRealOp : LogicalEqRealOpBase<"feq"> { let summary = "Logical equality"; }
+def NeRealOp : LogicalEqRealOpBase<"fne"> { let summary = "Logical inequality"; }
+
+
+class RelationalRealOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  SameTypeOperands,
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
+]> {
+  let description = [{
+    Compares the left- and right-hand side operand and returns a single bit 0,
+    or 1 result. If all bits are 0 or 1, `flt`, `fle`, `fgt`, and
+    `fge` return whether the left-hand side is less than, less than or equal
+    to, greater than, or greater than or equal to the right-hand side,
+    respectively. `flt` corresponds to the `<` operator, `fle` to `<=`,
+    `fgt` to `>`, and `fge` to `>=`.
+
+    See IEEE 1800-2017 § 11.4.4 "Relational operators" and § 11.3.1 "Operators
+    with real operands".
+  }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];
+}
+
+
+def FltOp : RelationalRealOpBase<"flt"> {
+  let summary = "Real-valued less than comparison";
+}
+def FleOp : RelationalRealOpBase<"fle"> {
+  let summary = "Real-valued less than or equal comparison";
+}
+def FgtOp : RelationalRealOpBase<"fgt"> {
+  let summary = "Real-valued greater than comparison";
+}
+def FgeOp : RelationalRealOpBase<"fge"> {
+  let summary = "Real-valued greater than or equal comparison";
 }
 
 //===----------------------------------------------------------------------===//
