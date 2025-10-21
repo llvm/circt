@@ -1050,7 +1050,7 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
       formalParamNames.push_back(port.name);
 
       // Check if we have a 'containingModule' field.
-      if (port.name.strref().starts_with(kContainingModuleName))
+      if (port.name.strref().contains(kContainingModuleName))
         hasContainingModule = true;
     }
   }
@@ -1118,7 +1118,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       inputProperties.push_back({index, port.name, port.type, port.loc});
 
       // Check if we have a 'containingModule' field.
-      if (port.name.strref().starts_with(kContainingModuleName))
+      if (port.name.strref().contains(kContainingModuleName))
         hasContainingModule = true;
     }
 
@@ -1297,7 +1297,7 @@ static LogicalResult updateObjectInClass(
             opsToErase.push_back(propassign);
 
             // Check if we have a 'containingModule' field.
-            if (firrtlClassType.getElement(index).name.strref().starts_with(
+            if (firrtlClassType.getElement(index).name.strref().contains(
                     kContainingModuleName)) {
               assert(!containingModuleRef &&
                      "expected exactly one containingModule");
