@@ -492,7 +492,7 @@ LogicalResult LowerModule::lowerModule() {
     // are no users.  (See early exits in `stubOut` and `splice`.)
     //
     // Note: this cannot visit conversions directly as we don't have guarantees
-    // that there won't be other conversions flying around.  E.g., LowerClasses
+    // that there won't be other conversions flying around.  E.g., LowerDPI
     // leaves conversions that are cleaned up by LowerToHW.  (This is likely
     // wrong, but it doesn't cost us anything to do it this way.)
     DenseSet<Operation *> conversionsToErase;
