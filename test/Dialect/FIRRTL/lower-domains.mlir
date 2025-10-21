@@ -280,7 +280,7 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Check that multiple instances also work.
+// Check that multiple instances (port-to-instance) work.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.module @Bar(
@@ -309,6 +309,38 @@ firrtl.circuit "Foo" {
     // CHECK-NOT:    firrtl.domain.define
     firrtl.domain.define %bar2_A, %A
     firrtl.matchingconnect %bar2_a, %a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Check that fan-out from one instance to many domain ports works.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Bar(
+    out A: !firrtl.domain of @ClockDomain,
+    out a: !firrtl.uint<1> domains [A]
+  )
+  // CHECK-LABEL: firrtl.module @Foo(
+  firrtl.module @Foo(
+    out %A: !firrtl.domain of @ClockDomain,
+    out %a: !firrtl.uint<1> domains [%A],
+    out %B: !firrtl.domain of @ClockDomain,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %bar_A, %bar_a = firrtl.instance bar @Bar(
+      out A: !firrtl.domain of @ClockDomain,
+      out a: !firrtl.uint<1> domains[A]
+    )
+    firrtl.domain.define %A, %bar_A
+    firrtl.domain.define %B, %bar_A
+    firrtl.matchingconnect %a, %bar_a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %bar_a : !firrtl.uint<1>
+    // CHECK:      %[[A_domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
+    // CHECK:      %[[B_domainInfo_in:.+]] = firrtl.object.subfield %B_object[domainInfo_in]
+    // CHECK:      %[[bar_domainInfo_out:.+]] = firrtl.object.subfield %bar_A_out[domainInfo_out] :
+    // CHECK-NEXT: firrtl.propassign %[[A_domainInfo_in]], %[[bar_domainInfo_out]]
+    // CHECK-NEXT: firrtl.propassign %[[B_domainInfo_in]], %[[bar_domainInfo_out]]
   }
 }
 
