@@ -1,5 +1,5 @@
-// RUN: circt-opt %s --synth-lower-variadic | FileCheck %s --check-prefixes=COMMON,TIMING
-// RUN: circt-opt %s --synth-lower-variadic=timing-aware=false | FileCheck %s --check-prefixes=COMMON,NO-TIMING
+// RUN: circt-opt %s --synth-lower-variadic --split-input-file | FileCheck %s --check-prefixes=COMMON,TIMING
+// RUN: circt-opt %s --synth-lower-variadic=timing-aware=false --split-input-file | FileCheck %s --check-prefixes=COMMON,NO-TIMING
 // COMMON-LABEL: hw.module @Basic
 hw.module @Basic(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, out f: i2) {
   // COMMON-NEXT: %[[RES0:.+]] = synth.aig.and_inv not %a, %b : i2
@@ -60,4 +60,14 @@ hw.module @ChildRegion(in %x: i4, in %y: i4, in %z: i4) {
     // COMMON: comb.and %[[OR]], %y, %z : i4
     %1 = comb.and %0, %y, %z : i4
   }
+}
+
+// -----
+// Use a different file to check the dialect dependency.
+// COMMON-LABEL: hw.module @Issue9115
+hw.module @Issue9115(in %a : i16, in %b : i16, in %c : i16, in %d : i16, out product : i16) {
+  %0 = comb.mul %a, %b, %c : i16
+  // COMMON-NEXT: %[[TMP:.+]] = comb.mul %a, %b : i16
+  // COMMON-NEXT: comb.mul %c, %[[TMP]] : i16
+  hw.output %0 : i16
 }
