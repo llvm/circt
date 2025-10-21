@@ -104,8 +104,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4
 //CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
 //CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
 //CHECK-NEXT:    sv.always posedge %rw_clock_0 {
-//CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %rw_wmode_0, %true
-//CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
+//CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %rw_wmode_0
 //CHECK-NEXT:      sv.if %[[rwwcond]]  {
 //CHECK-NEXT:        %[[rwwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
 //CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
@@ -393,8 +392,7 @@ hw.module.generated @ReadWriteWithHighReadLatency, @FIRRTLMem(in %rw_addr: i4, i
 
 // Write port
 // CHECK: sv.always
-// CHECK: [[TMP:%.+]] = comb.and [[WMODE_1R]], %true
-// CHECK: [[WCOND:%.+]] comb.and [[EN_1R]], [[TMP]]
+// CHECK: [[WCOND:%.+]] comb.and [[EN_1R]], [[WMODE_1R]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
 
 // COMMON-LABEL: hw.module private @ReadWriteWithHighWriteLatency
@@ -442,8 +440,7 @@ hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(in %rw_addr: i4, 
 
 // Write port
 // CHECK: sv.always
-// CHECK: [[TMP:%.+]] = comb.and [[WRITE_WMODE_3R]], %true
-// CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[TMP]]
+// CHECK: [[WCOND:%.+]] comb.and [[WRITE_EN_3R]], [[WRITE_WMODE_3R]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[WRITE_ADDR_3R]]]
 
 emit.fragment @Fragment {}

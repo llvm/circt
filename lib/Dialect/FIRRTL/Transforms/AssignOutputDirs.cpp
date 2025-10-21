@@ -40,7 +40,7 @@ static void makeAbsolute(StringRef outputDir,
   auto sep = llvm::sys::path::get_separator();
   if (!moduleOutputDir.empty())
     assert(moduleOutputDir.ends_with(sep));
-  fs::make_absolute(outputDir, moduleOutputDir);
+  path::make_absolute(outputDir, moduleOutputDir);
   path::remove_dots(moduleOutputDir, true);
   moduleOutputDir += sep;
 }
