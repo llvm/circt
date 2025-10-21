@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains))' %s --verify-diagnostics --split-input-file
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{infer-public=true}))' %s --verify-diagnostics --split-input-file
 
 // Port annotated with same domain type twice.
 firrtl.circuit "DomainCrossOnPort" {
@@ -86,16 +86,28 @@ firrtl.circuit "UnableToInferDomainOfPortDrivenByConstantExpr" {
 
 // Incomplete extmodule domain information.
 
-firrtl.circuit "IncompleteDomainInfoForExtModule" {
+firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
 
-  firrtl.extmodule @Foo(in i: !firrtl.uint<1>)
+  // expected-error @below {{missing "ClockDomain" association for port "i"}}
+  firrtl.extmodule @Top(in i: !firrtl.uint<1>)
+}
 
-  firrtl.module @IncompleteDomainInfoForExtModule(in %i: !firrtl.uint<1>) {
-    // expected-error @below {{'firrtl.instance' op missing "ClockDomain" association for port "i"}}
-    %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<1>)
-    firrtl.matchingconnect %foo_i, %i : !firrtl.uint<1>
-  }
+// -----
+
+// Conflicting extmodule domain information.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+
+  firrtl.extmodule @Top(
+    // expected-note @below {{associated with "ClockDomain" port "D1"}}
+    in D1 : !firrtl.domain of @ClockDomain,
+    // expected-note @below {{associated with "ClockDomain" port "D2"}}
+    in D2 : !firrtl.domain of @ClockDomain,
+    // expected-error @below {{ambiguous "ClockDomain" association for port "i"}}
+    in i: !firrtl.uint<1> domains [D1, D2]
+  )
 }
 
 // -----
