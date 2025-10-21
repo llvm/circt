@@ -105,7 +105,7 @@ struct DomainInfo {
 
   /// A vector of minimal association info that will be hooked up to the
   /// associations of this ObjectOp.
-  SmallVector<AssociationInfo> associations;
+  SmallVector<AssociationInfo> associations{};
 
   /// Return a DomainInfo for an input domain port.  This will have both an
   /// input port at the current index and an output port at the next index.
