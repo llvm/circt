@@ -446,29 +446,27 @@ LogicalResult LowerModule::lowerModule() {
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
       auto [object, inputPort, outputPort, temp, associations] = info;
-      // Now that the ports have been updated and changed type, replace any 0-1
-      // conversion with a 1-1 conversions.
-      if (inputPort.has_value()) {
-        splice(temp, body->getArgument(*inputPort));
-      }
-
       OpBuilder builder(object);
       builder.setInsertionPointAfter(object);
-      // Assign input domain info if needed.
+      // Hook up domain ports.  If this was an input domain port, then drive the
+      // object's "domain in" port with the new input class port.  Splice
+      // references to the old port with the new port---users (e.g., domain
+      // defines) will be updated later.  If an output, then splice to the
+      // object's "domain in" port.  If this participates in domain defines,
+      // this will be hoked up later.
+      auto subDomainInfoIn =
+          ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
       if (inputPort) {
-        auto subDomainInfoIn =
-            ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
         PropAssignOp::create(builder, object.getLoc(), subDomainInfoIn,
                              body->getArgument(*inputPort));
+        splice(temp, body->getArgument(*inputPort));
       } else {
-        auto subDomainInfoIn =
-            ObjectSubfieldOp::create(builder, object.getLoc(), object, 0);
         splice(temp, subDomainInfoIn);
       }
 
+      // Hook up the "association in" port.
       auto subAssociations =
           ObjectSubfieldOp::create(builder, object.getLoc(), object, 2);
-      // Assign associations.
       SmallVector<Value> paths;
       for (auto [id, loc] : associations) {
         paths.push_back(PathOp::create(
@@ -480,16 +478,25 @@ LogicalResult LowerModule::lowerModule() {
           ListType::get(context, cast<PropertyType>(PathType::get(context))),
           paths);
       PropAssignOp::create(builder, object.getLoc(), subAssociations, list);
+
       // Connect the object to the output port.
       PropAssignOp::create(builder, object.getLoc(),
                            body->getArgument(outputPort), object);
     }
 
-    // Cleanup all the conversions by visiting domain-using operations.  Delay
-    // deleting conversions until the module body is walked to avoid deleting
-    // conversions that have multiple uses.
+    // Remove all domain users.  Delay deleting conversions until the module
+    // body is walked as it is possible that conversions have multiple users.
+    //
+    // This has the effect of removing all the conversions that we created.
+    // Note: this relies on the fact that we don't create conversions if there
+    // are no users.  (See early exits in `stubOut` and `splice`.)
+    //
+    // Note: this cannot visit conversions directly as we don't have guarantees
+    // that there won't be other conversions flying around.  E.g., LowerClasses
+    // leaves conversions that are cleaned up by LowerToHW.  (This is likely
+    // wrong, but it doesn't cost us anything to do it this way.)
     DenseSet<Operation *> conversionsToErase;
-    auto walkResult = op.walk([&](Operation *walkOp) {
+    auto walkResult = op.walk([&conversionsToErase](Operation *walkOp) {
       // Handle UnsafeDomainCastOp.
       if (auto castOp = dyn_cast<UnsafeDomainCastOp>(walkOp)) {
         for (auto value : castOp.getDomains()) {
