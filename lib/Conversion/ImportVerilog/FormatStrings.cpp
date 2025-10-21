@@ -149,8 +149,36 @@ struct FormatStringParser {
   /// Emit an integer value with the given format.
   LogicalResult emitInteger(const slang::ast::Expression &arg,
                             const FormatOptions &options, IntFormat format) {
-    auto value =
-        context.convertToSimpleBitVector(context.convertRvalueExpression(arg));
+
+    Type intTy = {};
+    Value val;
+    auto rVal = context.convertRvalueExpression(arg);
+
+    // An IEEE 754 float number is represented using a sign bit s, n mantissa,
+    // and m exponent bits, representing (-1)**s * 1.fraction * 2**(E-bias).
+    // This means that the largest finite value is (2-2**(-n) * 2**(2**m-1)),
+    // just slightly less than ((2**(2**(m)))-1).
+    // Since we need signed value representation, we need integers that can
+    // represent values between [-(2**(2**(m))) ... (2**(2**(m)))-1], which
+    // requires an m+1 bit signed integer.
+    if (auto realTy = dyn_cast<moore::RealType>(rVal.getType())) {
+      if (realTy.getWidth() == moore::RealWidth::f32) {
+        // A 32 Bit IEEE 754 float number needs at most 129 integer bits
+        // (signed).
+        intTy = moore::IntType::getInt(context.getContext(), 129);
+      } else if (realTy.getWidth() == moore::RealWidth::f64) {
+        // A 64 Bit IEEE 754 float number needs at most 1025 integer bits
+        // (signed).
+        intTy = moore::IntType::getInt(context.getContext(), 1025);
+      } else
+        return failure();
+
+      val = moore::RealToIntOp::create(builder, loc, intTy, rVal);
+    } else {
+      val = rVal;
+    }
+
+    auto value = context.convertToSimpleBitVector(val);
     if (!value)
       return failure();
 
