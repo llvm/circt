@@ -82,6 +82,11 @@ struct AssociationInfo {
 
 /// Track information about the lowering of a domain port.
 struct DomainInfo {
+  /// An instance of an object which will be used to track an instance of the
+  /// domain-lowered class (which is the identity of the domain) and all its
+  /// associations.
+  ObjectOp op;
+
   /// The index of the optional input port that will be hooked up to a field of
   /// the ObjectOp.  This port is an instance of the domain-lowered class.  If
   /// this is created due to an output domain port, then this is nullopt.
@@ -90,11 +95,6 @@ struct DomainInfo {
   /// The index of the output port that the ObjectOp will be connected to.  This
   /// port communicates back to the user information about the associations.
   unsigned outputPort;
-
-  /// An instance of an object which will be used to track an instance of the
-  /// domain-lowered class (which is the identity of the domain) and all its
-  /// associations.
-  ObjectOp op;
 
   /// A conversion cast that is used to temporarily replace the port while it is
   /// being deleted.  If the port has no uses, then this will be empty.  Note:
@@ -111,14 +111,14 @@ struct DomainInfo {
   /// input port at the current index and an output port at the next index.
   /// Other members are default-initialized and will be set later.
   static DomainInfo input(unsigned portIndex) {
-    return DomainInfo({portIndex, portIndex + 1, {}, {}, {}});
+    return DomainInfo({{}, portIndex, portIndex + 1, {}, {}});
   }
 
   /// Return a DomainInfo for an output domain port.  This creates only an
   /// output port at the current index.  Other members are default-initialized
   /// and will be set later.
   static DomainInfo output(unsigned portIndex) {
-    return DomainInfo({std::nullopt, portIndex, {}, {}, {}});
+    return DomainInfo({{}, std::nullopt, portIndex, {}, {}});
   }
 };
 
@@ -445,7 +445,7 @@ LogicalResult LowerModule::lowerModule() {
 
   if (body) {
     for (auto const &[_, info] : indexToDomain) {
-      auto [inputPort, outputPort, object, temp, associations] = info;
+      auto [object, inputPort, outputPort, temp, associations] = info;
       // Now that the ports have been updated and changed type, replace any 0-1
       // conversion with a 1-1 conversions.
       if (inputPort.has_value()) {
