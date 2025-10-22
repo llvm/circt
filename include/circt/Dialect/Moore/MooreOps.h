@@ -23,7 +23,6 @@
 #include "mlir/Interfaces/MemorySlotInterfaces.h"
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/Moore/MooreEnums.h.inc"
 // Clang format shouldn't reorder these headers.
 #include "circt/Dialect/Moore/Moore.h.inc"
 

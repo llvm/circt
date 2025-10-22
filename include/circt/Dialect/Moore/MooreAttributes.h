@@ -18,6 +18,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 
+#include "circt/Dialect/Moore/MooreEnums.h.inc"
 // Include generated attributes.
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/Moore/MooreAttributes.h.inc"
