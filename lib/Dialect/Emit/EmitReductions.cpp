@@ -32,7 +32,7 @@ struct EmitOpEraser : public Reduction {
   }
 
   uint64_t match(Operation *op) override {
-    if (!isa<emit::EmitDialect>(op->getDialect()))
+    if (!isa_and_nonnull<emit::EmitDialect>(op->getDialect()))
       return 0;
     if (innerSymUses.hasRef(op))
       return 0;
