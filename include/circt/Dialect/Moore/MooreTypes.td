@@ -52,6 +52,25 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
   let summary = "the SystemVerilog `event` type";
 }
 
+//===----------------------------------------------------------------------===//
+// ClassHandleType
+//===----------------------------------------------------------------------===//
+
+// !moore.class.object<@C>
+// Encodes a handle of class instance living on the program's heap,
+// whose dynamic layout begins with a vptr.
+// The parameter is the class symbol (e.g., @C).
+
+def ClassHandleType : MooreTypeDef<"ClassHandle", [], "moore::UnpackedType"> {
+  let mnemonic = "class.object";
+  let summary = "Class handle type";
+  let description = [{
+    Class handle type representing `!moore.class.object<@C>`. The parameter is a
+    SymbolRef to the class declaration symbol. The handle is opaque here.
+  }];
+  let parameters = (ins AttrParameter<"::mlir::SymbolRefAttr", "class symbol">:$classSym);
+  let assemblyFormat = "`<` $classSym `>`";
+}
 
 //===----------------------------------------------------------------------===//
 // TimeType
@@ -559,4 +578,6 @@ def UnionRefType : SpecificRefType<UnionType>;
 def UnpackedUnionRefType : SpecificRefType<UnpackedUnionType>;
 def AnyUnionRefType : SpecificRefType<AnyUnionType>;
 
+/// Class references.
+def ClassHandleRefType : SpecificRefType<ClassHandleType>;
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

@@ -17,6 +17,7 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/StringExtras.h"
 
 #include "circt/Dialect/Moore/MooreEnums.h.inc"
 // Include generated attributes.

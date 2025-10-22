@@ -328,37 +328,74 @@ struct ExprVisitor {
   /// Handle member accesses.
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = convertLvalueOrRvalueExpression(expr.value());
-    if (!type || !value)
+    if (!type)
       return {};
 
-    auto resultType =
-        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto *valueType = expr.value().type.get();
     auto memberName = builder.getStringAttr(expr.member.name);
 
     // Handle structs.
     if (valueType->isStruct()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::StructExtractRefOp::create(builder, loc, resultType,
                                                  memberName, value);
-      else
-        return moore::StructExtractOp::create(builder, loc, resultType,
-                                              memberName, value);
+      return moore::StructExtractOp::create(builder, loc, resultType,
+                                            memberName, value);
     }
 
     // Handle unions.
     if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::UnionExtractRefOp::create(builder, loc, resultType,
                                                 memberName, value);
-      else
-        return moore::UnionExtractOp::create(builder, loc, type, memberName,
-                                             value);
+      return moore::UnionExtractOp::create(builder, loc, type, memberName,
+                                           value);
+    }
+
+    // Handle classes.
+    if (valueType->isClass()) {
+      // Only build what we need: a ref<class> base for field_ref (no read).
+      Value instRef = context.convertLvalueExpression(expr.value());
+      if (!instRef)
+        return {};
+
+      auto instRefTy = dyn_cast<moore::RefType>(instRef.getType());
+      if (!instRefTy ||
+          !isa<moore::ClassHandleType>(instRefTy.getNestedType())) {
+        mlir::emitError(loc)
+            << "class member base must be !moore.ref<class.object<...>>, got "
+            << instRef.getType();
+        return {};
+      }
+
+      // @field and result type !moore.ref<T>.
+      auto fieldSym =
+          mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.member.name);
+      auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+
+      Value fieldRef = builder.create<moore::ClassFieldRefOp>(
+          loc, fieldRefTy, instRef, fieldSym);
+
+      return isLvalue ? fieldRef
+                      : moore::ReadOp::create(builder, loc, fieldRef);
     }
 
     mlir::emitError(loc, "expression of type ")
-        << value.getType() << " has no member fields";
+        << valueType->toString() << " has no member fields";
     return {};
   }
 };
@@ -437,6 +474,22 @@ struct RvalueExprVisitor : public ExprVisitor {
     return context.convertRvalueExpression(expr.operand(), type);
   }
 
+  Value visit(const slang::ast::NewClassExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto classTy = dyn_cast<moore::ClassHandleType>(type);
+    if (!classTy)
+      return {};
+
+    auto newOp = moore::ClassNewOp::create(builder, loc, classTy, {});
+    auto constructor = expr.constructorCall();
+    if (!constructor)
+      return newOp.getResult();
+
+    mlir::emitError(loc) << "New expression requires constructor call, which "
+                            "is not yet implemented!";
+    return {};
+  }
+
   // Handle blocking and non-blocking assignments.
   Value visit(const slang::ast::AssignmentExpression &expr) {
     auto lhs = context.convertLvalueExpression(expr.left());
@@ -451,8 +504,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!rhs)
       return {};
 
-    // If this is a blocking assignment, we can insert the delay/wait ops of the
-    // optional timing control directly in between computing the RHS and
+    // If this is a blocking assignment, we can insert the delay/wait ops of
+    // the optional timing control directly in between computing the RHS and
     // executing the assignment.
     if (!expr.isNonBlocking()) {
       if (expr.timingControl)
@@ -492,8 +545,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     return rhs;
   }
 
-  // Helper function to convert an argument to a simple bit vector type, pass it
-  // to a reduction op, and optionally invert the result.
+  // Helper function to convert an argument to a simple bit vector type, pass
+  // it to a reduction op, and optionally invert the result.
   template <class ConcreteOp>
   Value createReduction(Value arg, bool invert) {
     arg = context.convertToSimpleBitVector(arg);
@@ -510,8 +563,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto preValue = moore::ReadOp::create(builder, loc, arg);
     Value postValue;
     // Catch the special case where a signed 1 bit value (i1) is incremented,
-    // as +1 can not be expressed as a signed 1 bit value. For any 1-bit number
-    // negating is equivalent to incrementing.
+    // as +1 can not be expressed as a signed 1 bit value. For any 1-bit
+    // number negating is equivalent to incrementing.
     if (moore::isIntType(preValue.getType(), 1)) {
       postValue = moore::NotOp::create(builder, loc, preValue).getResult();
     } else {
@@ -682,7 +735,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     return {};
   }
 
-  /// Handles logical operators (§11.4.7), assuming lhs/rhs are rvalues already.
+  /// Handles logical operators (§11.4.7), assuming lhs/rhs are rvalues
+  /// already.
   Value buildLogicalBOp(slang::ast::BinaryOperator op, Value lhs, Value rhs,
                         std::optional<Domain> domain = std::nullopt) {
     using slang::ast::BinaryOperator;
@@ -960,19 +1014,20 @@ struct RvalueExprVisitor : public ExprVisitor {
   // Handle time literals.
   Value visit(const slang::ast::TimeLiteral &expr) {
     // The time literal is expressed in the current time scale. Determine the
-    // conversion factor to convert the literal from the current time scale into
-    // femtoseconds, and round the scaled value to femtoseconds.
+    // conversion factor to convert the literal from the current time scale
+    // into femtoseconds, and round the scaled value to femtoseconds.
     double scale = getTimeScaleInFemtoseconds(context);
     double value = std::round(expr.getValue() * scale);
     assert(value >= 0.0);
 
     // Check that the value does not exceed what we can represent in the IR.
     // Casting the maximum uint64 value to double changes its value from
-    // 18446744073709551615 to 18446744073709551616, which makes the comparison
-    // overestimate the largest number we can represent. To avoid this, round
-    // the maximum value down to the closest number that only has the front 53
-    // bits set. This matches the mantissa of a double, plus the implicit
-    // leading 1, ensuring that we can accurately represent the limit.
+    // 18446744073709551615 to 18446744073709551616, which makes the
+    // comparison overestimate the largest number we can represent. To avoid
+    // this, round the maximum value down to the closest number that only has
+    // the front 53 bits set. This matches the mantissa of a double, plus the
+    // implicit leading 1, ensuring that we can accurately represent the
+    // limit.
     static constexpr uint64_t limit =
         (std::numeric_limits<uint64_t>::max() >> 11) << 11;
     if (value > limit) {
@@ -1005,8 +1060,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     // Traverse open range list.
     for (const auto *listExpr : expr.rangeList()) {
       Value cond;
-      // The open range list on the right-hand side of the inside operator is a
-      // comma-separated list of expressions or ranges.
+      // The open range list on the right-hand side of the inside operator is
+      // a comma-separated list of expressions or ranges.
       if (const auto *openRange =
               listExpr->as_if<slang::ast::ValueRangeExpression>()) {
         // Handle ranges.
@@ -1070,8 +1125,8 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     // Handle condition.
     if (expr.conditions.size() > 1) {
-      mlir::emitError(loc)
-          << "unsupported conditional expression with more than one condition";
+      mlir::emitError(loc) << "unsupported conditional expression with more "
+                              "than one condition";
       return {};
     }
     const auto &cond = expr.conditions[0];
@@ -1139,14 +1194,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       return {};
 
     // Convert the call arguments. Input arguments are converted to an rvalue.
-    // All other arguments are converted to lvalues and passed into the function
-    // by reference.
+    // All other arguments are converted to lvalues and passed into the
+    // function by reference.
     SmallVector<Value> arguments;
     for (auto [callArg, declArg] :
          llvm::zip(expr.arguments(), subroutine->getArguments())) {
 
-      // Unpack the `<expr> = EmptyArgument` pattern emitted by Slang for output
-      // and inout arguments.
+      // Unpack the `<expr> = EmptyArgument` pattern emitted by Slang for
+      // output and inout arguments.
       auto *expr = callArg;
       if (const auto *assign = expr->as_if<slang::ast::AssignmentExpression>())
         expr = &assign->left();
@@ -1172,8 +1227,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         }
 
         // Expected case: the capture stems from a variable of any parent
-        // scope. We need to walk up, since definition might be a couple regions
-        // up.
+        // scope. We need to walk up, since definition might be a couple
+        // regions up.
         Region *capRegion = [&]() -> Region * {
           if (auto ba = dyn_cast<BlockArgument>(cap))
             return ba.getOwner()->getParent();
@@ -1262,8 +1317,8 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
-    // Call the conversion function with the appropriate arity. These return one
-    // of the following:
+    // Call the conversion function with the appropriate arity. These return
+    // one of the following:
     //
     // - `failure()` if the system call was recognized but some error occurred
     // - `Value{}` if the system call was not recognized
@@ -1284,14 +1339,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       break;
     }
 
-    // If we have recognized the system call but the conversion has encountered
-    // and already reported an error, simply return the usual null `Value` to
-    // indicate failure.
+    // If we have recognized the system call but the conversion has
+    // encountered and already reported an error, simply return the usual null
+    // `Value` to indicate failure.
     if (failed(result))
       return {};
 
-    // If we have recognized the system call and got a non-null `Value` result,
-    // return that.
+    // If we have recognized the system call and got a non-null `Value`
+    // result, return that.
     if (*result)
       return *result;
 

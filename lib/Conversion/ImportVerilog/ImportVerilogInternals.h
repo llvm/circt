@@ -55,6 +55,12 @@ struct FunctionLowering {
   bool isConverting = false;
 };
 
+// Class lowering information.
+struct ClassLowering {
+  circt::moore::ClassDeclOp op;
+  const slang::ast::ClassType *slangClassPtr;
+};
+
 /// Information about a loops continuation and exit blocks relevant while
 /// lowering the loop's body statements.
 struct LoopFrame {
@@ -111,8 +117,10 @@ struct Context {
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
+  LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
+  ClassLowering *declareClass(const slang::ast::ClassType &cls);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
 
@@ -251,6 +259,10 @@ struct Context {
   DenseMap<const slang::ast::SubroutineSymbol *,
            std::unique_ptr<FunctionLowering>>
       functions;
+
+  /// Classes that have already been converted.
+  DenseMap<const slang::ast::ClassType *, std::unique_ptr<ClassLowering>>
+      classes;
 
   /// A table of defined values, such as variables, that may be referred to by
   /// name in expressions. The expressions use this table to lookup the MLIR
