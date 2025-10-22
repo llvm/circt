@@ -141,3 +141,84 @@ OpFoldResult GoToRepeatOp::fold(FoldAdaptor adaptor) {
 OpFoldResult NonConsecutiveRepeatOp::fold(FoldAdaptor adaptor) {
   return RepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(), getInput());
 }
+
+//===----------------------------------------------------------------------===//
+// ClockedAndOp / ClockedOrOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClockedAndOp::canonicalize(ClockedAndOp op,
+                                         PatternRewriter &rewriter) {
+  if (op.getType() == rewriter.getI1Type()) {
+    rewriter.replaceOpWithNewOp<comb::AndOp>(op, op.getInputs(), true);
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult ClockedOrOp::canonicalize(ClockedOrOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getType() == rewriter.getI1Type()) {
+    rewriter.replaceOpWithNewOp<comb::OrOp>(op, op.getInputs(), true);
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult ClockedIntersectOp::canonicalize(ClockedIntersectOp op,
+                                               PatternRewriter &rewriter) {
+  if (op.getType() == rewriter.getI1Type()) {
+    rewriter.replaceOpWithNewOp<comb::AndOp>(op, op.getInputs(), true);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ClockedConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockedConcatOp::fold(FoldAdaptor adaptor) {
+  // concat(s) -> s
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
+  return {};
+}
+
+void ClockedConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                  MLIRContext *context) {
+  results.add<patterns::FlattenConcats>(results.getContext());
+}
+
+//===----------------------------------------------------------------------===//
+// ClockedRepeatLikeOps
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct ClockedRepeatLikeOp {
+  static OpFoldResult fold(uint64_t base, uint64_t more, Value input) {
+    // clocked_repeat(s, 1, 0) -> s
+    if (base == 1 && more == 0 && isa<ClockedSequenceType>(input.getType()))
+      return input;
+
+    return {};
+  }
+};
+} // namespace
+
+OpFoldResult ClockedRepeatOp::fold(FoldAdaptor adaptor) {
+  auto more = adaptor.getMore();
+  if (more.has_value())
+    return ClockedRepeatLikeOp::fold(adaptor.getBase(), *more, getInput());
+  return {};
+}
+
+OpFoldResult ClockedGoToRepeatOp::fold(FoldAdaptor adaptor) {
+  return ClockedRepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(),
+                                   getInput());
+}
+
+OpFoldResult ClockedNonConsecutiveRepeatOp::fold(FoldAdaptor adaptor) {
+  return ClockedRepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(),
+                                   getInput());
+}
