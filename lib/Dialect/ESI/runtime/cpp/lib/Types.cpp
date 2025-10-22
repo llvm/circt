@@ -38,7 +38,7 @@ MutableBitVector ChannelType::serialize(const std::any &obj) const {
   return inner->serialize(obj);
 }
 
-std::any ChannelType::deserialize(MutableBitVector &data) const {
+std::any ChannelType::deserialize(BitVector &data) const {
   return inner->deserialize(data);
 }
 
@@ -56,7 +56,7 @@ void VoidType::ensureValid(const std::any &obj) const {
   }
 }
 
-std::any VoidType::deserialize(MutableBitVector &data) const {
+std::any VoidType::deserialize(BitVector &data) const {
   if (data.width() < 8)
     throw std::runtime_error("void type cannot be represented by empty data");
   // Extract one byte and return the rest. Check that the byte is 0.
@@ -98,7 +98,7 @@ MutableBitVector BitsType::serialize(const std::any &obj) const {
   return MutableBitVector(std::move(bytes), getWidth());
 }
 
-std::any BitsType::deserialize(MutableBitVector &data) const {
+std::any BitsType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error(std::format("Insufficient data for bits type. "
@@ -204,11 +204,11 @@ MutableBitVector SIntType::serialize(const std::any &obj) const {
   }
 }
 
-std::any SIntType::deserialize(MutableBitVector &data) const {
+std::any SIntType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error("Insufficient data for sint type");
-  Int val(data.slice(0, w));
+  MutableInt val(data.slice(0, w));
   data >>= w;
   return std::any(val);
 }
@@ -247,11 +247,11 @@ MutableBitVector UIntType::serialize(const std::any &obj) const {
   }
 }
 
-std::any UIntType::deserialize(MutableBitVector &data) const {
+std::any UIntType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error("Insufficient data for uint type");
-  UInt val(data.slice(0, w));
+  MutableUInt val(data.slice(0, w));
   data >>= w;
   return std::any(val);
 }
@@ -313,7 +313,7 @@ MutableBitVector StructType::serialize(const std::any &obj) const {
   return out;
 }
 
-std::any StructType::deserialize(MutableBitVector &data) const {
+std::any StructType::deserialize(BitVector &data) const {
   std::map<std::string, std::any> result;
   auto consumeField = [&](const std::pair<std::string, const Type *> &f) {
     const auto &name = f.first;
@@ -382,7 +382,7 @@ MutableBitVector ArrayType::serialize(const std::any &obj) const {
   return out;
 }
 
-std::any ArrayType::deserialize(MutableBitVector &data) const {
+std::any ArrayType::deserialize(BitVector &data) const {
   std::vector<std::any> result;
   result.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {

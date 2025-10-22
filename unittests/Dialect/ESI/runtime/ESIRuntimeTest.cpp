@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Types.h"
+#include "esi/Values.h"
 #include "gtest/gtest.h"
 #include <any>
 #include <cstdint>
@@ -88,12 +89,12 @@ TEST(ESITypesTest, UIntTypeSerialization) {
 
   // Test valid uint value
   uint64_t uintValue = 0x1234;
-  std::any validUInt = std::any(uintValue);
+  std::any validUInt = std::any(MutableUInt(uintValue, 16));
   EXPECT_NO_THROW(uintType.ensureValid(validUInt));
 
   // Test out of range value
   uint64_t outOfRange = 0x10000; // Too big for 16-bit
-  std::any invalidUInt = std::any(outOfRange);
+  std::any invalidUInt = std::any(MutableUInt(outOfRange, 16));
   EXPECT_THROW(uintType.ensureValid(invalidUInt), std::runtime_error);
 
   // Test serialization (little-endian)
@@ -119,9 +120,9 @@ TEST(ESITypesTest, UIntTypeSerialization) {
   uint16_t mediumVal = 1000;
   uint32_t largeVal = 50000;
 
-  EXPECT_NO_THROW(uintType.ensureValid(std::any(smallVal)));
-  EXPECT_NO_THROW(uintType.ensureValid(std::any(mediumVal)));
-  EXPECT_NO_THROW(uintType.ensureValid(std::any(largeVal)));
+  EXPECT_NO_THROW(uintType.ensureValid(std::any(MutableUInt(smallVal, 16))));
+  EXPECT_NO_THROW(uintType.ensureValid(std::any(MutableUInt(mediumVal, 16))));
+  EXPECT_NO_THROW(uintType.ensureValid(std::any(MutableUInt(largeVal, 16))));
 }
 
 // Test SIntType serialization and deserialization
@@ -130,12 +131,12 @@ TEST(ESITypesTest, SIntTypeSerialization) {
 
   // Test valid positive sint value
   int64_t positiveValue = 0x1234;
-  std::any validSInt = std::any(positiveValue);
+  std::any validSInt = std::any(MutableInt(positiveValue, 16));
   EXPECT_NO_THROW(sintType.ensureValid(validSInt));
 
   // Test valid negative sint value
   int64_t negativeValue = -1000;
-  std::any validNegSInt = std::any(negativeValue);
+  std::any validNegSInt = std::any(MutableInt(negativeValue, 16));
   EXPECT_NO_THROW(sintType.ensureValid(validNegSInt));
 
   // Test serialization of positive value
@@ -180,9 +181,9 @@ TEST(ESITypesTest, SIntTypeSerialization) {
   int16_t mediumVal = -1000;
   int32_t largeVal = -30000;
 
-  EXPECT_NO_THROW(sintType.ensureValid(std::any(smallVal)));
-  EXPECT_NO_THROW(sintType.ensureValid(std::any(mediumVal)));
-  EXPECT_NO_THROW(sintType.ensureValid(std::any(largeVal)));
+  EXPECT_NO_THROW(sintType.ensureValid(std::any(MutableInt(smallVal, 16))));
+  EXPECT_NO_THROW(sintType.ensureValid(std::any(MutableInt(mediumVal, 16))));
+  EXPECT_NO_THROW(sintType.ensureValid(std::any(MutableInt(largeVal, 16))));
 }
 
 // Test SIntType sign extension logic comprehensively
@@ -193,7 +194,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test -1 (all bits set in 8-bit: 0xFF)
   int64_t minusOne = -1;
   MessageData serializedMinusOne(
-      sint8.serialize(std::any(minusOne)).takeStorage());
+      sint8.serialize(std::any(MutableInt(minusOne, 8))).takeStorage());
   EXPECT_EQ(serializedMinusOne.getSize(), 1UL)
       << "SIntType(8) serialization of -1 should produce 1 byte";
   EXPECT_EQ(serializedMinusOne.getData()[0], 0xFF)
@@ -208,7 +209,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test maximum negative value for 8-bit (-128 = 0x80)
   int64_t maxNeg8 = -128;
   MessageData serializedMaxNeg(
-      sint8.serialize(std::any(maxNeg8)).takeStorage());
+      sint8.serialize(std::any(MutableInt(maxNeg8, 8))).takeStorage());
   EXPECT_EQ(serializedMaxNeg.getSize(), 1UL)
       << "SIntType(8) serialization of -128 should produce 1 byte";
   EXPECT_EQ(serializedMaxNeg.getData()[0], 0x80)
@@ -223,7 +224,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test maximum positive value for 8-bit (127 = 0x7F)
   int64_t maxPos8 = 127;
   MessageData serializedMaxPos(
-      sint8.serialize(std::any(maxPos8)).takeStorage());
+      sint8.serialize(std::any(MutableInt(maxPos8, 8))).takeStorage());
   EXPECT_EQ(serializedMaxPos.getSize(), 1UL)
       << "SIntType(8) serialization of 127 should produce 1 byte";
   EXPECT_EQ(serializedMaxPos.getData()[0], 0x7F)
@@ -241,7 +242,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test -1 in 4-bit (0x0F in the lower nibble, should sign extend to all 1s)
   int64_t minus1w4bit = -1;
   MessageData serialized4bit(
-      sint4.serialize(std::any(minus1w4bit)).takeStorage());
+      sint4.serialize(std::any(MutableInt(minus1w4bit, 4))).takeStorage());
   EXPECT_EQ(serialized4bit.getSize(), 1UL)
       << "SIntType(4) serialization should produce 1 byte";
   EXPECT_EQ(serialized4bit.getData()[0] & 0x0F, 0x0F)
@@ -256,7 +257,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test maximum negative for 4-bit (-8 = 0x8 in 4 bits)
   int64_t maxNeg4 = -8;
   MessageData serializedMaxNeg4(
-      sint4.serialize(std::any(maxNeg4)).takeStorage());
+      sint4.serialize(std::any(MutableInt(maxNeg4, 4))).takeStorage());
   BitVector serializedMaxNeg4Bits(serializedMaxNeg4.getData());
   auto deserializedMaxNeg4 = sint4.deserialize(serializedMaxNeg4Bits);
   auto resultMaxNeg4 = std::any_cast<int8_t>(deserializedMaxNeg4);
@@ -266,7 +267,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test maximum positive for 4-bit (7 = 0x7 in 4 bits)
   int64_t maxPos4 = 7;
   MessageData serializedMaxPos4(
-      sint4.serialize(std::any(maxPos4)).takeStorage());
+      sint4.serialize(std::any(MutableInt(maxPos4, 4))).takeStorage());
   BitVector serializedMaxPos4Bits(serializedMaxPos4.getData());
   auto deserializedMaxPos4 = sint4.deserialize(serializedMaxPos4Bits);
   auto resultMaxPos4 = std::any_cast<int8_t>(deserializedMaxPos4);
@@ -279,7 +280,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test -1 in 12-bit (should be 0xFFF in lower 12 bits)
   int64_t minus1w12bit = -1;
   MessageData serialized12bit(
-      sint12.serialize(std::any(minus1w12bit)).takeStorage());
+      sint12.serialize(std::any(MutableInt(minus1w12bit, 12))).takeStorage());
   EXPECT_EQ(serialized12bit.getSize(), 2UL)
       << "SIntType(12) serialization should produce 2 bytes (12 bits = 2 "
          "bytes)";
@@ -297,7 +298,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test a value that requires sign extension: -100 in 12-bit
   int64_t neg100w12bit = -100;
   MessageData serializedNeg100(
-      sint12.serialize(std::any(neg100w12bit)).takeStorage());
+      sint12.serialize(std::any(MutableInt(neg100w12bit, 12))).takeStorage());
   BitVector serializedNeg100Bits(serializedNeg100.getData());
   auto deserializedNeg100 = sint12.deserialize(serializedNeg100Bits);
   auto resultNeg100 = std::any_cast<int16_t>(deserializedNeg100);
@@ -317,7 +318,7 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
 
     // Test maximum positive value
     MessageData serializedMax(
-        sintType.serialize(std::any(maxVal)).takeStorage());
+        sintType.serialize(std::any(MutableInt(maxVal, width))).takeStorage());
     BitVector serializedMaxBits(serializedMax.getData());
     auto deserializedMax = sintType.deserialize(serializedMaxBits);
 
@@ -342,7 +343,7 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
 
     // Test maximum negative value
     MessageData serializedMin(
-        sintType.serialize(std::any(minVal)).takeStorage());
+        sintType.serialize(std::any(MutableInt(minVal, width))).takeStorage());
     BitVector serializedMinBits(serializedMin.getData());
     auto deserializedMin = sintType.deserialize(serializedMinBits);
 
@@ -366,7 +367,9 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
 
     // Test -1 (all bits set case)
     MessageData serializedMinusOne(
-        sintType.serialize(std::any(static_cast<int64_t>(-1))).takeStorage());
+        sintType
+            .serialize(std::any(MutableInt(static_cast<int64_t>(-1), width)))
+            .takeStorage());
     BitVector serializedMinusOneBits(serializedMinusOne.getData());
     auto deserializedMinusOne = sintType.deserialize(serializedMinusOneBits);
 

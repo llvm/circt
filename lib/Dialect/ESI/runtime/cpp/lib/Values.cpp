@@ -8,6 +8,7 @@
 
 #include "esi/Values.h"
 #include <cstring>
+#include <format>
 
 using namespace esi;
 
@@ -136,17 +137,7 @@ MutableBitVector::MutableBitVector(const BitVector &other)
       setBit(i, true);
 }
 
-MutableBitVector::MutableBitVector(MutableBitVector &&other) noexcept
-    : BitVector(), owner(std::move(other.owner)) {
-  bitWidth = other.bitWidth;
-  bitIndex = 0;
-  data = std::span<const byte>(owner.data(), owner.size());
-  other.data = {};
-  other.bitWidth = 0;
-  other.bitIndex = 0;
-}
-
-MutableBitVector::MutableBitVector(BitVector &&other) noexcept
+MutableBitVector::MutableBitVector(BitVector &&other)
     : BitVector(), owner(std::vector<byte>((other.width() + 7) / 8, 0)) {
   bitWidth = other.width();
   bitIndex = 0;
@@ -155,6 +146,16 @@ MutableBitVector::MutableBitVector(BitVector &&other) noexcept
   for (size_t i = 0; i < bitWidth; ++i)
     if (other.getBit(i))
       setBit(i, true);
+}
+
+MutableBitVector::MutableBitVector(MutableBitVector &&other) noexcept
+    : BitVector(), owner(std::move(other.owner)) {
+  bitWidth = other.bitWidth;
+  bitIndex = 0;
+  data = std::span<const byte>(owner.data(), owner.size());
+  other.data = {};
+  other.bitWidth = 0;
+  other.bitIndex = 0;
 }
 
 MutableBitVector &MutableBitVector::operator=(const MutableBitVector &other) {
@@ -488,61 +489,25 @@ bool BitVector::operator==(const BitVector &rhs) const {
   return true;
 }
 
-//===----------------------------------------------------------------------===//
-// Int implementation
-//===----------------------------------------------------------------------===//
-
-int64_t Int::toSigned64() const {
-  if (bitWidth == 0)
-    return 0;
-  uint64_t u = 0;
-  size_t limit = bitWidth < 64 ? bitWidth : 64;
-  for (size_t i = 0; i < limit; ++i)
-    if (getBit(i))
-      u |= (1ULL << i);
-  bool signBit = getBit(bitWidth - 1);
-  if (bitWidth < 64) {
-    if (signBit) {
-      for (size_t i = bitWidth; i < 64; ++i)
-        u |= (1ULL << i);
-    }
-    return static_cast<int64_t>(u);
-  }
-  for (size_t i = 64; i < bitWidth; ++i) {
-    if (getBit(i) != signBit)
-      throw std::overflow_error("Int does not fit in int64_t");
-  }
-  return static_cast<int64_t>(u);
+MutableUInt::MutableUInt(uint64_t v, unsigned width)
+    : IntegerMixin<MutableUInt, MutableBitVector>(width) {
+  if (width > 0 && width < 64 && (v >> width) != 0)
+    throw std::overflow_error(
+        std::format("Value {} does not fit in {} bits", v, width));
+  for (size_t i = 0; i < width; ++i)
+    if ((v >> i) & 1)
+      setBit(i, true);
 }
 
-uint64_t Int::toUnsigned64() const {
-  if (bitWidth > 64) {
-    for (size_t i = 64; i < bitWidth; ++i)
-      if (getBit(i))
-        throw std::overflow_error("Int does not fit in uint64_t");
+MutableInt::MutableInt(int64_t v, unsigned width) : IntegerMixin<MutableInt, MutableBitVector>(width) {
+  if (width > 0 && width < 64) {
+    int64_t maxVal = (1LL << (width - 1)) - 1;
+    int64_t minVal = -(1LL << (width - 1));
+    if (v < minVal || v > maxVal)
+      throw std::overflow_error(
+          std::format("Value {} does not fit in {} bits", v, width));
   }
-  uint64_t u = 0;
-  size_t limit = bitWidth < 64 ? bitWidth : 64;
-  for (size_t i = 0; i < limit; ++i)
-    if (getBit(i))
-      u |= (1ULL << i);
-  return u;
-}
-
-//===----------------------------------------------------------------------===//
-// UInt implementation
-//===----------------------------------------------------------------------===//
-
-uint64_t UInt::toUnsigned64() const {
-  if (bitWidth > 64) {
-    for (size_t i = 64; i < bitWidth; ++i)
-      if (getBit(i))
-        throw std::overflow_error("UInt does not fit in uint64_t");
-  }
-  uint64_t u = 0;
-  size_t limit = bitWidth < 64 ? bitWidth : 64;
-  for (size_t i = 0; i < limit; ++i)
-    if (getBit(i))
-      u |= (1ULL << i);
-  return u;
+  for (size_t i = 0; i < width; ++i)
+    if ((v >> i) & 1)
+      setBit(i, true);
 }

@@ -195,7 +195,7 @@ public:
   MutableBitVector(MutableBitVector &&other) noexcept;
 
   // Move constructor from immutable BitVector: creates owning copy.
-  MutableBitVector(BitVector &&other) noexcept;
+  MutableBitVector(BitVector &&other);
 
   MutableBitVector &operator=(const MutableBitVector &other);
 
@@ -237,30 +237,69 @@ std::ostream &operator<<(std::ostream &os, const BitVector &bv);
 
 /// Signed arbitrary precision integer (two's complement) built atop
 /// BitVector.
-class Int : public BitVector {
+
+/// CRTP mixin to share integer helper API across signed/unsigned and
+/// mutable/immutable.
+/// Storage must be BitVector or MutableBitVector (or a compatible subclass).
+template <typename Derived, typename Storage>
+class IntegerMixin : public Storage {
 public:
-  Int() = default;
-  Int(const BitVector &bv) : BitVector(bv) {}
-  Int(BitVector &&bv) : BitVector(std::move(bv)) {}
+  using Storage::Storage;
+  IntegerMixin(const Storage &s) : Storage(s) {}
+  using byte = typename Storage::byte;
 
-  operator int64_t() const { return toSigned64(); }
-
-private:
-  int64_t toSigned64() const;
-  uint64_t toUnsigned64() const;
+  explicit operator int64_t() const { return toI64(); }
+  explicit operator uint64_t() const { return toUI64(); }
+  int64_t toI64() const {
+    if (this->bitWidth == 0)
+      return 0;
+    uint64_t u = 0;
+    size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
+    for (size_t i = 0; i < limit; ++i)
+      if (this->getBit(i))
+        u |= (1ULL << i);
+    bool signBit = this->getBit(this->bitWidth - 1);
+    if (this->bitWidth < 64) {
+      if (signBit) {
+        for (size_t i = this->bitWidth; i < 64; ++i)
+          u |= (1ULL << i);
+      }
+      return static_cast<int64_t>(u);
+    }
+    for (size_t i = 64; i < this->bitWidth; ++i) {
+      if (this->getBit(i) != signBit)
+        throw std::overflow_error("Int does not fit in int64_t");
+    }
+    return static_cast<int64_t>(u);
+  }
+  uint64_t toUI64() const {
+    if (this->bitWidth > 64) {
+      for (size_t i = 64; i < this->bitWidth; ++i)
+        if (this->getBit(i))
+          throw std::overflow_error("Int does not fit in uint64_t");
+    }
+    uint64_t u = 0;
+    size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
+    for (size_t i = 0; i < limit; ++i)
+      if (this->getBit(i))
+        u |= (1ULL << i);
+    return u;
+  }
 };
 
-/// Unsigned arbitrary precision integer built atop BitVector.
-class UInt : public BitVector {
+class Int : public IntegerMixin<Int, MutableBitVector> {
 public:
+  using IntegerMixin::IntegerMixin;
+  Int() = default;
+  Int(int64_t v, unsigned width = 64);
+};
+
+/// Mutable unsigned integer. Owns storage and supports mutation.
+class UInt : public IntegerMixin<UInt, MutableBitVector> {
+public:
+  using IntegerMixin::IntegerMixin;
   UInt() = default;
-  UInt(const BitVector &bv) : BitVector(bv) {}
-  UInt(BitVector &&bv) : BitVector(std::move(bv)) {}
-
-  operator uint64_t() const { return toUnsigned64(); }
-
-private:
-  uint64_t toUnsigned64() const;
+  UInt(uint64_t v, unsigned width = 64);
 };
 
 } // namespace esi

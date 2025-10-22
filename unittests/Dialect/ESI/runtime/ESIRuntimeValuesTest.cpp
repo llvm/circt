@@ -52,14 +52,24 @@ TEST(BitVectorTest, ShiftRightShrinksWidth) {
   EXPECT_THROW(bv >>= 20, std::out_of_range);
 }
 
-TEST(BitVectorTest, ShiftLeftShrinksWidth) {
+TEST(BitVectorTest, ShiftLeftIncreaseWidth) {
   MutableBitVector bv(16);
   for (int i = 0; i < 8; ++i)
     bv.setBit(i, true); // lower byte = 0xFF
-  bv <<= 4;             // Drop 4 MSBs
-  EXPECT_EQ(bv.width(), 12u);
-  // Highest remaining bit index is 11; bit 11 was original bit 11.
-  EXPECT_TRUE(bv.getBit(0));
+  bv <<= 4;             // Shift left by 4
+  EXPECT_EQ(bv.width(), 20u);
+
+  // New bits 0-3 should be 0.
+  for (int i = 0; i < 4; ++i)
+    EXPECT_FALSE(bv.getBit(i));
+
+  // Bits 4-11 should be original bits 0-7 (all 1).
+  for (int i = 4; i < 12; ++i)
+    EXPECT_TRUE(bv.getBit(i));
+
+  // Bits 12-19 should be 0.
+  for (int i = 12; i < 20; ++i)
+    EXPECT_FALSE(bv.getBit(i));
 }
 
 TEST(BitVectorTest, BitwiseOps) {
@@ -124,10 +134,9 @@ TEST(BitVectorTest, ZeroWidthShiftBehavior) {
   EXPECT_THROW(z >>= 1, std::out_of_range);
   // Right shifting by 0 is a no-op.
   EXPECT_NO_THROW(z >>= 0);
-  // Left shifting zero-width is permitted (remains zero width per
-  // implementation).
+  // Left shifting zero-width is permitted.
   EXPECT_NO_THROW(z <<= 5);
-  EXPECT_EQ(z.width(), 0u);
+  EXPECT_EQ(z.width(), 5u);
 }
 
 TEST(BitVectorTest, CrossByteAccessAndShift) {
@@ -190,12 +199,12 @@ TEST(BitVectorTest, GetBitOutOfRange) {
 }
 
 TEST(BitVectorTest, SetBitOutOfRange) {
-  MutableBitVector bv(std::vector<uint8_t>{0x00});
+  MutableBitVector bv(std::vector<uint8_t>{0x00}, 4);
   EXPECT_THROW(bv.setBit(4, true), std::out_of_range);
 }
 
 TEST(BitVectorTest, ZeroWidthGetBitThrows) {
-  MutableBitVector z(std::vector<uint8_t>{0x00});
+  MutableBitVector z(std::vector<uint8_t>{0x00}, 0);
   EXPECT_THROW(z.getBit(0), std::out_of_range);
 }
 
@@ -367,76 +376,6 @@ TEST(IntTest, OverflowUnsigned) {
   EXPECT_THROW((void)static_cast<uint64_t>(v), std::overflow_error);
 }
 
-TEST(IntComparison, DifferentWidthsSignExtendedEquality) {
-  // Create -1 in 8 bits
-  MutableBitVector mbv_a(8);
-  for (size_t i = 0; i < 8; ++i)
-    mbv_a.setBit(i, true);
-
-  // Create -1 in 20 bits
-  MutableBitVector mbv_b(20);
-  for (size_t i = 0; i < 20; ++i)
-    mbv_b.setBit(i, true);
-
-  // Create 1 in 20 bits
-  MutableBitVector mbv_c(20);
-  mbv_c.setBit(0, true);
-
-  Int a(mbv_a);
-  Int b(mbv_b);
-  Int c(mbv_c);
-
-  EXPECT_TRUE(a == b);
-  EXPECT_TRUE(c > a);
-  EXPECT_TRUE(a < c);
-}
-
-TEST(IntComparison, OrderingPositiveNegative) {
-  // pos = 5, neg = -2, both 8-bit
-  MutableBitVector mbv_pos(8);
-  mbv_pos.setBit(0, true);
-  mbv_pos.setBit(2, true); // 0b00000101 = 5
-
-  MutableBitVector mbv_neg(8);
-  mbv_neg.setBit(1, true);
-  mbv_neg.setBit(2, true);
-  mbv_neg.setBit(3, true);
-  mbv_neg.setBit(4, true);
-  mbv_neg.setBit(5, true);
-  mbv_neg.setBit(6, true);
-  mbv_neg.setBit(7, true); // 0b11111110 = -2
-
-  Int pos(mbv_pos);
-  Int neg(mbv_neg);
-
-  EXPECT_TRUE(neg < pos);
-  EXPECT_TRUE(!(pos < neg));
-  EXPECT_TRUE(pos > neg);
-}
-
-TEST(IntComparison, WideVsNarrow) {
-  // Create 127 in 8 bits
-  MutableBitVector mbv_narrow(8);
-  for (int i = 0; i < 7; ++i)
-    mbv_narrow.setBit(i, true);
-
-  // Create 127 in 64 bits
-  MutableBitVector mbv_wide(64);
-  for (int i = 0; i < 7; ++i)
-    mbv_wide.setBit(i, true);
-
-  // Create 128 in 9 bits
-  MutableBitVector mbv_bigger(9);
-  mbv_bigger.setBit(7, true);
-
-  Int narrow(mbv_narrow);
-  Int wide(mbv_wide);
-  Int bigger(mbv_bigger);
-
-  EXPECT_TRUE(narrow == wide);
-  EXPECT_TRUE(bigger > narrow);
-}
-
 TEST(IntTest, WidthOneValues) {
   // Create 0 in 1 bit
   MutableBitVector mbv_z(1);
@@ -492,48 +431,6 @@ TEST(UIntTest, BasicConstruction) {
   UInt u(mbv);
   EXPECT_EQ(static_cast<uint64_t>(u), 123u);
   EXPECT_EQ(u.width(), 16u);
-}
-
-TEST(UIntComparison, DifferentWidthsZeroExtended) {
-  // Create 255 in 8 bits
-  MutableBitVector mbv_a(8);
-  for (size_t i = 0; i < 8; ++i)
-    mbv_a.setBit(i, true);
-
-  // Create 255 in 16 bits
-  MutableBitVector mbv_b(16);
-  for (size_t i = 0; i < 8; ++i)
-    mbv_b.setBit(i, true);
-
-  // Create 256 in 16 bits
-  MutableBitVector mbv_c(16);
-  mbv_c.setBit(8, true);
-
-  UInt a(mbv_a);
-  UInt b(mbv_b);
-  UInt c(mbv_c);
-
-  EXPECT_TRUE(a == b);
-  EXPECT_TRUE(c > b);
-  EXPECT_TRUE(b < c);
-}
-
-TEST(UIntComparison, BasicOrdering) {
-  // Create 5 in 8 bits
-  MutableBitVector mbv_a(8);
-  mbv_a.setBit(0, true);
-  mbv_a.setBit(2, true);
-
-  // Create 2 in 4 bits
-  MutableBitVector mbv_b(4);
-  mbv_b.setBit(1, true);
-
-  UInt a(mbv_a);
-  UInt b(mbv_b);
-
-  EXPECT_TRUE(a > b);
-  EXPECT_TRUE(!(b > a));
-  EXPECT_TRUE(b < a);
 }
 
 TEST(UIntTest, BitwiseFastVsFallbackConsistency) {
