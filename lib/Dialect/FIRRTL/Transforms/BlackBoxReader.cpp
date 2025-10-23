@@ -86,10 +86,6 @@ struct BlackBoxReaderPass
                                    bool isCover = false);
 
 private:
-  /// A list of all files which will be included in the file list.  This is
-  /// subset of all emitted files.
-  SmallVector<emit::FileOp> fileListFiles;
-
   /// The target directory to output black boxes into. Can be changed
   /// through `firrtl.transforms.BlackBoxTargetDirAnno` annotations.
   StringRef targetDir;
@@ -104,10 +100,6 @@ private:
   InstanceGraph *instanceGraph;
   InstanceInfo *instanceInfo;
 
-  /// A cache of the modules which have been marked as DUT or a testbench.
-  /// This is used to determine the output directory.
-  DenseMap<Operation *, bool> dutModuleMap;
-
   /// An ordered map of Verilog filenames to the annotation-derived information
   /// that will be used to create this file.  Due to situations where multiple
   /// external modules may not deduplicate (e.g., they have different
@@ -116,7 +108,7 @@ private:
   /// appropriate annotation is found (e.g., which will cause the file to be
   /// written to the DUT directory and not the TestHarness directory), then this
   /// will map will be updated.
-  llvm::MapVector<StringAttr, AnnotationInfo> emittedFileMap;
+  llvm::MapVector<StringAttr, AnnotationInfo> filenameToAnnotationInfo;
 };
 } // end anonymous namespace
 
@@ -185,6 +177,9 @@ void BlackBoxReaderPass::runOnOperation() {
   auto bboxAnno =
       builder.getDictionaryAttr({{builder.getStringAttr("class"),
                                   builder.getStringAttr(blackBoxAnnoClass)}});
+  // Track which modules reference which files
+  DenseMap<Operation*, SmallVector<StringAttr>> verbatimExtmoduleToFile;
+
   for (auto extmoduleOp : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
     LLVM_DEBUG({
       llvm::dbgs().indent(2)
@@ -202,18 +197,22 @@ void BlackBoxReaderPass::runOnOperation() {
 
       LLVM_DEBUG(annotationInfo.print(llvm::dbgs().indent(6) << "- ", 8));
 
+      // Track that this module references this file
+      verbatimExtmoduleToFile[extmoduleOp].push_back(annotationInfo.name);
+
       // If we have seen a black box trying to create a blackbox with this
       // filename before, then compute the lowest commmon ancestor between the
       // two blackbox paths.  This is the same logic used in `AssignOutputDirs`.
       // However, this needs to incorporate filenames that are only available
       // _after_ output directories are assigned.
       auto [ptr, inserted] =
-          emittedFileMap.try_emplace(annotationInfo.name, annotationInfo);
+          filenameToAnnotationInfo.try_emplace(annotationInfo.name, annotationInfo);
       if (inserted) {
-        emittedFileMap[annotationInfo.name] = annotationInfo;
+        filenameToAnnotationInfo[annotationInfo.name] = annotationInfo;
       } else {
         auto &fileAttr = ptr->second.outputFileAttr;
         SmallString<64> directory(fileAttr.getDirectory());
+        SmallString<64> oldDir = directory;
         makeCommonPrefix(directory,
                          annotationInfo.outputFileAttr.getDirectory());
         fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
@@ -222,6 +221,7 @@ void BlackBoxReaderPass::runOnOperation() {
             fileAttr.getExcludeFromFilelist().getValue());
         // TODO: Check that the new text is the _exact same_ as the prior best.
       }
+
 
       foundBBoxAnno = true;
       return true;
@@ -234,41 +234,33 @@ void BlackBoxReaderPass::runOnOperation() {
     annotations.applyToOperation(extmoduleOp);
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "emittedFiles:\n");
-  Location loc = builder.getUnknownLoc();
-  for (auto &[verilogName, annotationInfo] : emittedFileMap) {
-    LLVM_DEBUG({
-      llvm::dbgs().indent(2) << "verilogName: " << verilogName << "\n";
-      llvm::dbgs().indent(2) << "annotationInfo:\n";
-      annotationInfo.print(llvm::dbgs().indent(4) << "- ", 6);
-    });
+  // Now create VerbatimBlackBoxAnno for each module with its referenced files
+  for (auto &[moduleOp, fileNames] : verbatimExtmoduleToFile) {
+    AnnotationSet annotations(moduleOp);
+    SmallVector<Attribute> verbatimFiles;
 
-    auto fileName = ns.newName("blackbox_" + verilogName.getValue());
+    for (StringAttr fileName : fileNames) {
+      // Look up the computed LCA output file information
+      auto &annotationInfo = filenameToAnnotationInfo[fileName];
+      auto fileDict = builder.getDictionaryAttr({
+        {builder.getStringAttr("name"), annotationInfo.name},
+        {builder.getStringAttr("content"), annotationInfo.inlineText},
+        {builder.getStringAttr("output_file"),
+         builder.getStringAttr(annotationInfo.outputFileAttr.getFilename().getValue())}
+      });
+      verbatimFiles.push_back(fileDict);
+    }
 
-    auto fileOp = emit::FileOp::create(
-        builder, loc, annotationInfo.outputFileAttr.getFilename(), fileName,
-        [&, text = annotationInfo.inlineText] {
-          emit::VerbatimOp::create(builder, loc, text);
-        });
-
-    if (!annotationInfo.outputFileAttr.getExcludeFromFilelist().getValue())
-      fileListFiles.push_back(fileOp);
-  }
-
-  // If we have emitted any files, generate a file list operation that
-  // documents the additional annotation-controlled file listing to be
-  // created.
-  if (!fileListFiles.empty()) {
-    // Output the file list in sorted order.
-    llvm::sort(fileListFiles.begin(), fileListFiles.end(),
-               [](emit::FileOp fileA, emit::FileOp fileB) {
-                 return fileA.getFileName() < fileB.getFileName();
-               });
-
-    // Create the file list contents by enumerating the symbols to the files.
-    SmallVector<Attribute> symbols;
-    for (emit::FileOp file : fileListFiles)
-      symbols.push_back(FlatSymbolRefAttr::get(file.getSymNameAttr()));
+    if (!verbatimFiles.empty()) {
+      auto verbatimAnno = builder.getDictionaryAttr({
+        {builder.getStringAttr("class"),
+         builder.getStringAttr(verbatimBlackBoxAnnoClass)},
+        {builder.getStringAttr("files"), builder.getArrayAttr(verbatimFiles)}
+      });
+      annotations.addAnnotations({verbatimAnno});
+      annotations.applyToOperation(moduleOp);
+      anythingChanged = true;
+    }
   }
 
   // If nothing has changed we can preserve the analysis.
@@ -277,8 +269,8 @@ void BlackBoxReaderPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph, InstanceInfo>();
 
   // Clean up.
-  emittedFileMap.clear();
-  fileListFiles.clear();
+  filenameToAnnotationInfo.clear();
+  verbatimExtmoduleToFile.clear();
 }
 
 /// Run on an operation-annotation pair. The annotation need not be a black box
