@@ -1726,12 +1726,19 @@ struct ForceDedup : public OpReduction<CircuitOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
+    modulesToErase.clear();
+    moduleSizes.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    nlaRemover.remove(op);
+    for (auto mod : modulesToErase)
+      mod->erase();
+  }
 
   /// Collect all MustDedup annotations and create matches for each dedup group.
   void matches(CircuitOp circuitOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    auto &symbolTable = symbols.getNearestSymbolTable(circuitOp);
     auto annotations = AnnotationSet(circuitOp);
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
       if (!anno.isClass(mustDedupAnnoClass))
@@ -1741,10 +1748,40 @@ struct ForceDedup : public OpReduction<CircuitOp> {
       if (!modulesAttr || modulesAttr.size() < 2)
         continue;
 
+      // Check that all modules have the same port signature. Malformed inputs
+      // may have modules listed in a MustDedup annotation that have distinct
+      // port types.
+      uint64_t totalSize = 0;
+      ArrayAttr portTypes;
+      DenseBoolArrayAttr portDirections;
+      bool allSame = true;
+      for (auto moduleName : modulesAttr.getAsRange<StringAttr>()) {
+        auto target = tokenizePath(moduleName);
+        if (!target) {
+          allSame = false;
+          break;
+        }
+        auto mod = symbolTable.lookup<FModuleLike>(target->module);
+        if (!mod) {
+          allSame = false;
+          break;
+        }
+        totalSize += moduleSizes.getModuleSize(mod, symbols);
+        if (!portTypes) {
+          portTypes = mod.getPortTypesAttr();
+          portDirections = mod.getPortDirectionsAttr();
+        } else if (portTypes != mod.getPortTypesAttr() ||
+                   portDirections != mod.getPortDirectionsAttr()) {
+          allSame = false;
+          break;
+        }
+      }
+      if (!allSame)
+        continue;
+
       // Each dedup group gets its own match with benefit proportional to group
       // size.
-      uint64_t benefit = modulesAttr.size();
-      addMatch(benefit, annoIdx);
+      addMatch(totalSize, annoIdx);
     }
   }
 
@@ -1808,6 +1845,7 @@ private:
                                hw::InnerSymbolTableCollection &innerSymTables) {
     auto *tableOp = SymbolTable::getNearestSymbolTable(circuitOp);
     auto &symbolTable = symbols.getSymbolTable(tableOp);
+    auto &symbolUserMap = symbols.getSymbolUserMap(tableOp);
     auto *context = circuitOp->getContext();
     auto innerRefs = hw::InnerRefNamespace{symbolTable, innerSymTables};
 
@@ -1828,14 +1866,20 @@ private:
     // Replace all instance references.
     auto canonicalName = canonicalModule.getModuleNameAttr();
     auto canonicalRef = FlatSymbolRefAttr::get(canonicalName);
-    circuitOp.walk([&](InstanceOp instOp) {
-      auto moduleName = instOp.getModuleNameAttr().getAttr();
-      if (llvm::is_contained(moduleNames, moduleName) &&
-          moduleName != canonicalName) {
+    for (auto moduleName : moduleNames) {
+      if (moduleName == canonicalName)
+        continue;
+      auto *symbolOp = symbolTable.lookup(moduleName);
+      if (!symbolOp)
+        continue;
+      for (auto *user : symbolUserMap.getUsers(symbolOp)) {
+        auto instOp = dyn_cast<InstanceOp>(user);
+        if (!instOp || instOp.getModuleNameAttr().getAttr() != moduleName)
+          continue;
         instOp.setModuleNameAttr(canonicalRef);
         instOp.setPortNamesAttr(canonicalModule.getPortNamesAttr());
       }
-    });
+    }
 
     // Update NLAs to reference the canonical module instead of modules being
     // removed using NLATable for better performance.
@@ -1873,12 +1917,14 @@ private:
     // Mark NLAs in modules to be removed.
     for (auto module : modulesToReplace) {
       nlaRemover.markNLAsInOperation(module);
-      module->erase();
+      modulesToErase.insert(module);
     }
   }
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+  SetVector<FModuleLike> modulesToErase;
+  ModuleSizeCache moduleSizes;
 };
 
 /// A reduction pattern that moves `MustDedup` annotations from a module onto
