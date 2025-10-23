@@ -1959,7 +1959,8 @@ SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
 
   for (unsigned i = 0, e = modTy.getNumPorts(); i < e; ++i) {
     Location loc = (i < locs.size()) ? locs[i] : unknownLoc;
-    DictionaryAttr portAttrs = (i < attrs.size()) ? cast<DictionaryAttr>(attrs[i]) : emptyDict;
+    DictionaryAttr portAttrs =
+        (i < attrs.size()) ? cast<DictionaryAttr>(attrs[i]) : emptyDict;
 
     retval.push_back({modTy.getPorts()[i],
                       modTy.isOutput(i) ? modTy.getOutputIdForPortId(i)
@@ -2014,9 +2015,7 @@ void SVVerbatimModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
   }
 }
 
-void SVVerbatimModuleOp::removeAllPortAttrs() {
-  removePerPortAttrsAttr();
-}
+void SVVerbatimModuleOp::removeAllPortAttrs() { removePerPortAttrsAttr(); }
 
 SmallVector<Location> SVVerbatimModuleOp::getAllPortLocs() {
   SmallVector<Location> locs;
@@ -2097,22 +2096,20 @@ void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
   printOptionalParameterList(p, *this, getParameters());
 
   Region emptyRegion;
-  hw::module_like_impl::printModuleSignatureNew(p, emptyRegion, getModuleType(),
-                                                getAllPortAttrs(), getAllPortLocs());
+  hw::module_like_impl::printModuleSignatureNew(
+      p, emptyRegion, getModuleType(), getAllPortAttrs(), getAllPortLocs());
 
   SmallVector<StringRef> omittedAttrs = {
-    SymbolTable::getSymbolAttrName(),
-    SymbolTable::getVisibilityAttrName(),
-    getModuleTypeAttrName().getValue(),
-    getPerPortAttrsAttrName().getValue(),
-    getPortLocsAttrName().getValue(),
-    getParametersAttrName().getValue()
-  };
+      SymbolTable::getSymbolAttrName(),   SymbolTable::getVisibilityAttrName(),
+      getModuleTypeAttrName().getValue(), getPerPortAttrsAttrName().getValue(),
+      getPortLocsAttrName().getValue(),   getParametersAttrName().getValue()};
 
-  mlir::function_interface_impl::printFunctionAttributes(p, *this, omittedAttrs);
+  mlir::function_interface_impl::printFunctionAttributes(p, *this,
+                                                         omittedAttrs);
 }
 
-ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
   using namespace mlir::function_interface_impl;
   auto builder = parser.getBuilder();
 
@@ -2132,7 +2129,8 @@ ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser, OperationState &resul
   // parse module-like op signature
   SmallVector<hw::module_like_impl::PortParse> ports;
   TypeAttr modType;
-  if (failed(hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
     return failure();
 
   if (failed(parser.parseOptionalAttrDict(result.attributes)))
@@ -2161,16 +2159,21 @@ ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser, OperationState &resul
 
   // parse verbatim content
   if (!result.attributes.get("content")) {
-    return parser.emitError(parser.getCurrentLocation(), "sv.verbatim.module requires 'content' attribute");
+    return parser.emitError(parser.getCurrentLocation(),
+                            "sv.verbatim.module requires 'content' attribute");
   }
 
   // parse output file
   auto outputFileAttr = result.attributes.get("output_file");
   if (!outputFileAttr) {
-    return parser.emitError(parser.getCurrentLocation(), "sv.verbatim.module requires 'output_file' attribute");
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "sv.verbatim.module requires 'output_file' attribute");
   }
   if (!isa<hw::OutputFileAttr>(outputFileAttr)) {
-    return parser.emitError(parser.getCurrentLocation(), "sv.verbatim.module 'output_file' attribute must be an OutputFileAttr");
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "sv.verbatim.module 'output_file' attribute must be an OutputFileAttr");
   }
 
   return success();
@@ -2204,14 +2207,16 @@ LogicalResult SVVerbatimModuleOp::verify() {
 
   if (auto attrs = getPerPortAttrs()) {
     if (attrs->size() != numPorts)
-      return emitOpError("port attributes array size (") << attrs->size()
-             << ") doesn't match number of ports (" << numPorts << ")";
+      return emitOpError("port attributes array size (")
+             << attrs->size() << ") doesn't match number of ports (" << numPorts
+             << ")";
   }
 
   if (auto locs = getPortLocs()) {
     if (locs->size() != numPorts)
-      return emitOpError("port locations array size (") << locs->size()
-             << ") doesn't match number of ports (" << numPorts << ")";
+      return emitOpError("port locations array size (")
+             << locs->size() << ") doesn't match number of ports (" << numPorts
+             << ")";
   }
 
   auto outputFileAttr = getOutputFile();

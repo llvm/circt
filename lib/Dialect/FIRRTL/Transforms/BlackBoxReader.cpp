@@ -178,7 +178,7 @@ void BlackBoxReaderPass::runOnOperation() {
       builder.getDictionaryAttr({{builder.getStringAttr("class"),
                                   builder.getStringAttr(blackBoxAnnoClass)}});
   // Track which modules reference which files
-  DenseMap<Operation*, SmallVector<StringAttr>> verbatimExtmoduleToFile;
+  DenseMap<Operation *, SmallVector<StringAttr>> verbatimExtmoduleToFile;
 
   for (auto extmoduleOp : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
     LLVM_DEBUG({
@@ -205,8 +205,8 @@ void BlackBoxReaderPass::runOnOperation() {
       // two blackbox paths.  This is the same logic used in `AssignOutputDirs`.
       // However, this needs to incorporate filenames that are only available
       // _after_ output directories are assigned.
-      auto [ptr, inserted] =
-          filenameToAnnotationInfo.try_emplace(annotationInfo.name, annotationInfo);
+      auto [ptr, inserted] = filenameToAnnotationInfo.try_emplace(
+          annotationInfo.name, annotationInfo);
       if (inserted) {
         filenameToAnnotationInfo[annotationInfo.name] = annotationInfo;
       } else {
@@ -221,7 +221,6 @@ void BlackBoxReaderPass::runOnOperation() {
             fileAttr.getExcludeFromFilelist().getValue());
         // TODO: Check that the new text is the _exact same_ as the prior best.
       }
-
 
       foundBBoxAnno = true;
       return true;
@@ -242,21 +241,21 @@ void BlackBoxReaderPass::runOnOperation() {
     for (StringAttr fileName : fileNames) {
       // Look up the computed LCA output file information
       auto &annotationInfo = filenameToAnnotationInfo[fileName];
-      auto fileDict = builder.getDictionaryAttr({
-        {builder.getStringAttr("name"), annotationInfo.name},
-        {builder.getStringAttr("content"), annotationInfo.inlineText},
-        {builder.getStringAttr("output_file"),
-         builder.getStringAttr(annotationInfo.outputFileAttr.getFilename().getValue())}
-      });
+      auto fileDict = builder.getDictionaryAttr(
+          {{builder.getStringAttr("name"), annotationInfo.name},
+           {builder.getStringAttr("content"), annotationInfo.inlineText},
+           {builder.getStringAttr("output_file"),
+            builder.getStringAttr(
+                annotationInfo.outputFileAttr.getFilename().getValue())}});
       verbatimFiles.push_back(fileDict);
     }
 
     if (!verbatimFiles.empty()) {
-      auto verbatimAnno = builder.getDictionaryAttr({
-        {builder.getStringAttr("class"),
-         builder.getStringAttr(verbatimBlackBoxAnnoClass)},
-        {builder.getStringAttr("files"), builder.getArrayAttr(verbatimFiles)}
-      });
+      auto verbatimAnno = builder.getDictionaryAttr(
+          {{builder.getStringAttr("class"),
+            builder.getStringAttr(verbatimBlackBoxAnnoClass)},
+           {builder.getStringAttr("files"),
+            builder.getArrayAttr(verbatimFiles)}});
       annotations.addAnnotations({verbatimAnno});
       annotations.applyToOperation(moduleOp);
       anythingChanged = true;

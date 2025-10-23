@@ -212,10 +212,10 @@ def ModportType : SVType<"Modport"> {
 // Verbatim module operation
 //===----------------------------------------------------------------------===//
 
-def SVVerbatimModuleOp : SVOp<"verbatim.module", [
-    DeclareOpInterfaceMethods<PortList>,
-    DeclareOpInterfaceMethods<HWModuleLike>,
-    Symbol, HasParent<"mlir::ModuleOp">]> {
+def SVVerbatimModuleOp
+    : SVOp<"verbatim.module", [DeclareOpInterfaceMethods<PortList>,
+                               DeclareOpInterfaceMethods<HWModuleLike>, Symbol,
+                               HasParent<"mlir::ModuleOp">]> {
   let summary = "Module with verbatim verilog content";
   let description = [{
     The `sv.verbatim.module` operation represents a module with verbatim content.
@@ -225,16 +225,13 @@ def SVVerbatimModuleOp : SVOp<"verbatim.module", [
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<ModuleType>:$module_type,
-                       StrAttr:$content,
-                       OutputFileAttr:$output_file,
-                       OptionalAttr<DictArrayAttr>:$per_port_attrs,
-                       OptionalAttr<LocationArrayAttr>:$port_locs,
-                       ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<SymbolRefArrayAttr>:$additional_files);
+      TypeAttrOf<ModuleType>:$module_type, StrAttr:$content,
+      OutputFileAttr:$output_file, OptionalAttr<DictArrayAttr>:$per_port_attrs,
+      OptionalAttr<LocationArrayAttr>:$port_locs,
+      ParamDeclArrayAttr:$parameters,
+      OptionalAttr<SymbolRefArrayAttr>:$additional_files);
 
   let hasCustomAssemblyFormat = 1;
-
 
   let extraClassDeclaration = [{
     StringAttr getNameAttr() {
