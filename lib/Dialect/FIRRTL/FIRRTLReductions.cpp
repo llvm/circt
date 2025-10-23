@@ -35,6 +35,7 @@ using namespace mlir;
 using namespace circt;
 using namespace firrtl;
 using llvm::MapVector;
+using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 
 //===----------------------------------------------------------------------===//
@@ -833,6 +834,69 @@ struct AnnotationRemover : public Reduction {
 
   std::string getName() const override { return "annotation-remover"; }
   NLARemover nlaRemover;
+};
+
+/// A reduction pattern that replaces ResetType with UInt<1> across an entire
+/// circuit. This walks all operations in the circuit and replaces ResetType in
+/// results, block arguments, and attributes.
+struct SimplifyResets : public OpReduction<CircuitOp> {
+  uint64_t match(CircuitOp circuit) override {
+    uint64_t numResets = 0;
+    AttrTypeWalker walker;
+    walker.addWalk([&](ResetType type) { ++numResets; });
+
+    circuit.walk([&](Operation *op) {
+      for (auto result : op->getResults())
+        walker.walk(result.getType());
+
+      for (auto &region : op->getRegions())
+        for (auto &block : region)
+          for (auto arg : block.getArguments())
+            walker.walk(arg.getType());
+
+      walker.walk(op->getAttrDictionary());
+    });
+
+    return numResets;
+  }
+
+  LogicalResult rewrite(CircuitOp circuit) override {
+    auto uint1Type = UIntType::get(circuit->getContext(), 1, false);
+    auto constUint1Type = UIntType::get(circuit->getContext(), 1, true);
+
+    AttrTypeReplacer replacer;
+    replacer.addReplacement([&](ResetType type) {
+      return type.isConst() ? constUint1Type : uint1Type;
+    });
+    replacer.recursivelyReplaceElementsIn(circuit, /*replaceAttrs=*/true,
+                                          /*replaceLocs=*/false,
+                                          /*replaceTypes=*/true);
+
+    // Remove annotations related to InferResets pass
+    circuit.walk([&](Operation *op) {
+      // Remove operation annotations
+      AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+        return anno.isClass(fullResetAnnoClass, excludeFromFullResetAnnoClass,
+                            fullAsyncResetAnnoClass,
+                            ignoreFullAsyncResetAnnoClass);
+      });
+
+      // Remove port annotations for module-like operations
+      if (auto module = dyn_cast<FModuleLike>(op)) {
+        AnnotationSet::removePortAnnotations(module, [&](unsigned portIdx,
+                                                         Annotation anno) {
+          return anno.isClass(fullResetAnnoClass, excludeFromFullResetAnnoClass,
+                              fullAsyncResetAnnoClass,
+                              ignoreFullAsyncResetAnnoClass);
+        });
+      }
+    });
+
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-simplify-resets"; }
+  bool acceptSizeIncrease() const override { return true; }
 };
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
@@ -1662,12 +1726,19 @@ struct ForceDedup : public OpReduction<CircuitOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
+    modulesToErase.clear();
+    moduleSizes.clear();
   }
-  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+  void afterReduction(mlir::ModuleOp op) override {
+    nlaRemover.remove(op);
+    for (auto mod : modulesToErase)
+      mod->erase();
+  }
 
   /// Collect all MustDedup annotations and create matches for each dedup group.
   void matches(CircuitOp circuitOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    auto &symbolTable = symbols.getNearestSymbolTable(circuitOp);
     auto annotations = AnnotationSet(circuitOp);
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
       if (!anno.isClass(mustDedupAnnoClass))
@@ -1677,10 +1748,40 @@ struct ForceDedup : public OpReduction<CircuitOp> {
       if (!modulesAttr || modulesAttr.size() < 2)
         continue;
 
+      // Check that all modules have the same port signature. Malformed inputs
+      // may have modules listed in a MustDedup annotation that have distinct
+      // port types.
+      uint64_t totalSize = 0;
+      ArrayAttr portTypes;
+      DenseBoolArrayAttr portDirections;
+      bool allSame = true;
+      for (auto moduleName : modulesAttr.getAsRange<StringAttr>()) {
+        auto target = tokenizePath(moduleName);
+        if (!target) {
+          allSame = false;
+          break;
+        }
+        auto mod = symbolTable.lookup<FModuleLike>(target->module);
+        if (!mod) {
+          allSame = false;
+          break;
+        }
+        totalSize += moduleSizes.getModuleSize(mod, symbols);
+        if (!portTypes) {
+          portTypes = mod.getPortTypesAttr();
+          portDirections = mod.getPortDirectionsAttr();
+        } else if (portTypes != mod.getPortTypesAttr() ||
+                   portDirections != mod.getPortDirectionsAttr()) {
+          allSame = false;
+          break;
+        }
+      }
+      if (!allSame)
+        continue;
+
       // Each dedup group gets its own match with benefit proportional to group
       // size.
-      uint64_t benefit = modulesAttr.size();
-      addMatch(benefit, annoIdx);
+      addMatch(totalSize, annoIdx);
     }
   }
 
@@ -1744,6 +1845,7 @@ private:
                                hw::InnerSymbolTableCollection &innerSymTables) {
     auto *tableOp = SymbolTable::getNearestSymbolTable(circuitOp);
     auto &symbolTable = symbols.getSymbolTable(tableOp);
+    auto &symbolUserMap = symbols.getSymbolUserMap(tableOp);
     auto *context = circuitOp->getContext();
     auto innerRefs = hw::InnerRefNamespace{symbolTable, innerSymTables};
 
@@ -1764,14 +1866,20 @@ private:
     // Replace all instance references.
     auto canonicalName = canonicalModule.getModuleNameAttr();
     auto canonicalRef = FlatSymbolRefAttr::get(canonicalName);
-    circuitOp.walk([&](InstanceOp instOp) {
-      auto moduleName = instOp.getModuleNameAttr().getAttr();
-      if (llvm::is_contained(moduleNames, moduleName) &&
-          moduleName != canonicalName) {
+    for (auto moduleName : moduleNames) {
+      if (moduleName == canonicalName)
+        continue;
+      auto *symbolOp = symbolTable.lookup(moduleName);
+      if (!symbolOp)
+        continue;
+      for (auto *user : symbolUserMap.getUsers(symbolOp)) {
+        auto instOp = dyn_cast<InstanceOp>(user);
+        if (!instOp || instOp.getModuleNameAttr().getAttr() != moduleName)
+          continue;
         instOp.setModuleNameAttr(canonicalRef);
         instOp.setPortNamesAttr(canonicalModule.getPortNamesAttr());
       }
-    });
+    }
 
     // Update NLAs to reference the canonical module instead of modules being
     // removed using NLATable for better performance.
@@ -1809,12 +1917,14 @@ private:
     // Mark NLAs in modules to be removed.
     for (auto module : modulesToReplace) {
       nlaRemover.markNLAsInOperation(module);
-      module->erase();
+      modulesToErase.insert(module);
     }
   }
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+  SetVector<FModuleLike> modulesToErase;
+  ModuleSizeCache moduleSizes;
 };
 
 /// A reduction pattern that moves `MustDedup` annotations from a module onto
@@ -1847,6 +1957,14 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
     auto annotations = AnnotationSet(circuitOp);
     uint64_t matchId = 0;
 
+    DenseSet<StringRef> modulesAlreadyInMustDedup;
+    for (auto [annoIdx, anno] : llvm::enumerate(annotations))
+      if (anno.isClass(mustDedupAnnoClass))
+        if (auto modulesAttr = anno.getMember<ArrayAttr>("modules"))
+          for (auto moduleRef : modulesAttr.getAsRange<StringAttr>())
+            if (auto target = tokenizePath(moduleRef))
+              modulesAlreadyInMustDedup.insert(target->module);
+
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
       if (!anno.isClass(mustDedupAnnoClass))
         continue;
@@ -1857,8 +1975,26 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
 
       // Process each group of corresponding instances
       processInstanceGroups(
-          circuitOp, modulesAttr,
-          [&](ArrayRef<FInstanceLike>) { addMatch(1, matchId++); });
+          circuitOp, modulesAttr, [&](ArrayRef<FInstanceLike> instanceGroup) {
+            matchId++;
+
+            // Make sure there are at least two distinct modules.
+            SmallDenseSet<StringAttr, 4> moduleTargets;
+            for (auto instOp : instanceGroup)
+              moduleTargets.insert(instOp.getReferencedModuleNameAttr());
+            if (moduleTargets.size() < 2)
+              return;
+
+            // Make sure none of the modules are not yet in a must dedup
+            // annotation.
+            if (llvm::any_of(instanceGroup, [&](FInstanceLike inst) {
+                  return modulesAlreadyInMustDedup.contains(
+                      inst.getReferencedModuleName());
+                }))
+              return;
+
+            addMatch(1, matchId - 1);
+          });
     }
   }
 
@@ -1881,14 +2017,11 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
         continue;
       }
 
-      // Track whether any matches were selected for this annotation
-      bool anyMatchSelected = false;
       processInstanceGroups(
           circuitOp, modulesAttr, [&](ArrayRef<FInstanceLike> instanceGroup) {
             // Check if this instance group was selected
             if (!llvm::is_contained(matches, matchId++))
               return;
-            anyMatchSelected = true;
 
             // Create the list of modules to put into this new annotation.
             SmallSetVector<StringAttr, 4> moduleTargets;
@@ -1898,8 +2031,6 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
               target.module = instOp.getReferencedModuleName();
               moduleTargets.insert(target.toStringAttr(context));
             }
-            if (moduleTargets.size() < 2)
-              return;
 
             // Create a new MustDedup annotation for this list of modules.
             SmallVector<NamedAttribute> newAnnoAttrs;
@@ -1916,13 +2047,8 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
             newAnnotations.emplace_back(newAnnoDict);
           });
 
-      // If any matches were selected, mark the original annotation for removal
-      // since we're replacing it with new MustDedup annotations on the child
-      // modules. Otherwise keep the original annotation around.
-      if (anyMatchSelected)
-        nlaRemover.markNLAsInAnnotation(anno.getAttr());
-      else
-        newAnnotations.push_back(anno);
+      // Keep the original annotation around.
+      newAnnotations.push_back(anno);
     }
 
     // Update circuit annotations
@@ -1967,6 +2093,8 @@ private:
     for (auto module : modules) {
       SmallDenseMap<StringAttr, unsigned> nameCounts;
       module.walk([&](FInstanceLike instOp) {
+        if (isa<ObjectOp>(instOp.getOperation()))
+          return;
         auto name = instOp.getInstanceNameAttr();
         auto &group = instanceGroups[name];
         if (nameCounts[name]++ > 1)
@@ -1999,10 +2127,11 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
-  patterns.add<AnnotationRemover, 33>();
-  patterns.add<ModuleSwapper, 32>();
-  patterns.add<ForceDedup, 31>();
-  patterns.add<MustDedupChildren, 30>();
+  patterns.add<SimplifyResets, 34>();
+  patterns.add<ForceDedup, 33>();
+  patterns.add<MustDedupChildren, 32>();
+  patterns.add<AnnotationRemover, 31>();
+  patterns.add<ModuleSwapper, 30>();
   patterns.add<PassReduction, 29>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
