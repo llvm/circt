@@ -43,9 +43,9 @@ struct AppID {
     return name == other.name && idx == other.idx;
   }
   bool operator!=(const AppID &other) const { return !(*this == other); }
+  friend std::ostream &operator<<(std::ostream &os, const AppID &id);
 };
 bool operator<(const AppID &a, const AppID &b);
-std::ostream &operator<<(std::ostream &os, const AppID &id);
 
 class AppIDPath : public std::vector<AppID> {
 public:
@@ -54,9 +54,9 @@ public:
   AppIDPath operator+(const AppIDPath &b) const;
   AppIDPath parent() const;
   std::string toStr() const;
+  friend std::ostream &operator<<(std::ostream &os, const AppIDPath &path);
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
-std::ostream &operator<<(std::ostream &os, const AppIDPath &path);
 
 struct Constant {
   std::any value;

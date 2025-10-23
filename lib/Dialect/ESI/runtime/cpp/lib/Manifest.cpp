@@ -756,7 +756,6 @@ bool operator<(const AppIDPath &a, const AppIDPath &b) {
       return a[i] < b[i];
   return false;
 }
-} // namespace esi
 
 std::ostream &operator<<(std::ostream &os, const AppID &id) {
   os << id.name;
@@ -772,3 +771,5 @@ std::ostream &operator<<(std::ostream &os, const AppIDPath &path) {
   }
   return os;
 }
+
+} // namespace esi
