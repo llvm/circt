@@ -35,6 +35,7 @@ using namespace mlir;
 using namespace circt;
 using namespace firrtl;
 using llvm::MapVector;
+using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
 
 //===----------------------------------------------------------------------===//
@@ -833,6 +834,69 @@ struct AnnotationRemover : public Reduction {
 
   std::string getName() const override { return "annotation-remover"; }
   NLARemover nlaRemover;
+};
+
+/// A reduction pattern that replaces ResetType with UInt<1> across an entire
+/// circuit. This walks all operations in the circuit and replaces ResetType in
+/// results, block arguments, and attributes.
+struct SimplifyResets : public OpReduction<CircuitOp> {
+  uint64_t match(CircuitOp circuit) override {
+    uint64_t numResets = 0;
+    AttrTypeWalker walker;
+    walker.addWalk([&](ResetType type) { ++numResets; });
+
+    circuit.walk([&](Operation *op) {
+      for (auto result : op->getResults())
+        walker.walk(result.getType());
+
+      for (auto &region : op->getRegions())
+        for (auto &block : region)
+          for (auto arg : block.getArguments())
+            walker.walk(arg.getType());
+
+      walker.walk(op->getAttrDictionary());
+    });
+
+    return numResets;
+  }
+
+  LogicalResult rewrite(CircuitOp circuit) override {
+    auto uint1Type = UIntType::get(circuit->getContext(), 1, false);
+    auto constUint1Type = UIntType::get(circuit->getContext(), 1, true);
+
+    AttrTypeReplacer replacer;
+    replacer.addReplacement([&](ResetType type) {
+      return type.isConst() ? constUint1Type : uint1Type;
+    });
+    replacer.recursivelyReplaceElementsIn(circuit, /*replaceAttrs=*/true,
+                                          /*replaceLocs=*/false,
+                                          /*replaceTypes=*/true);
+
+    // Remove annotations related to InferResets pass
+    circuit.walk([&](Operation *op) {
+      // Remove operation annotations
+      AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+        return anno.isClass(fullResetAnnoClass, excludeFromFullResetAnnoClass,
+                            fullAsyncResetAnnoClass,
+                            ignoreFullAsyncResetAnnoClass);
+      });
+
+      // Remove port annotations for module-like operations
+      if (auto module = dyn_cast<FModuleLike>(op)) {
+        AnnotationSet::removePortAnnotations(module, [&](unsigned portIdx,
+                                                         Annotation anno) {
+          return anno.isClass(fullResetAnnoClass, excludeFromFullResetAnnoClass,
+                              fullAsyncResetAnnoClass,
+                              ignoreFullAsyncResetAnnoClass);
+        });
+      }
+    });
+
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-simplify-resets"; }
+  bool acceptSizeIncrease() const override { return true; }
 };
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
@@ -1999,10 +2063,11 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
-  patterns.add<AnnotationRemover, 33>();
-  patterns.add<ModuleSwapper, 32>();
-  patterns.add<ForceDedup, 31>();
-  patterns.add<MustDedupChildren, 30>();
+  patterns.add<SimplifyResets, 34>();
+  patterns.add<ForceDedup, 33>();
+  patterns.add<MustDedupChildren, 32>();
+  patterns.add<AnnotationRemover, 31>();
+  patterns.add<ModuleSwapper, 30>();
   patterns.add<PassReduction, 29>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
