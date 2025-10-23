@@ -136,7 +136,8 @@ synthLongestPathAnalysisGetInternalPaths(SynthLongestPathAnalysis analysis,
 // Get external paths from module input ports to internal sequential elements.
 SynthLongestPathCollection
 synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
-    SynthLongestPathAnalysis analysis, MlirStringRef moduleName) {
+    SynthLongestPathAnalysis analysis, MlirStringRef moduleName,
+    bool dropNonCriticalPaths) {
   auto *wrapper = unwrap(analysis);
   auto *lpa = wrapper->analysis.get();
   auto moduleNameAttr = StringAttr::get(lpa->getContext(), unwrap(moduleName));
@@ -148,13 +149,16 @@ synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
     return {nullptr};
 
   collection->sortInDescendingOrder();
+  if (dropNonCriticalPaths)
+    collection->dropNonCriticalPaths(/*perEndPoint=*/false);
   return wrap(collection);
 }
 
 // Get external paths from internal sequential elements to module output ports.
 SynthLongestPathCollection
 synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
-    SynthLongestPathAnalysis analysis, MlirStringRef moduleName) {
+    SynthLongestPathAnalysis analysis, MlirStringRef moduleName,
+    bool dropNonCriticalPaths) {
   auto *wrapper = unwrap(analysis);
   auto *lpa = wrapper->analysis.get();
   auto moduleNameAttr = StringAttr::get(lpa->getContext(), unwrap(moduleName));
@@ -166,6 +170,8 @@ synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
     return {nullptr};
 
   collection->sortInDescendingOrder();
+  if (dropNonCriticalPaths)
+    collection->dropNonCriticalPaths(/*perEndPoint=*/true);
   return wrap(collection);
 }
 

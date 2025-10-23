@@ -77,42 +77,46 @@ void circt::python::populateDialectSynthSubmodule(nb::module_ &m) {
            })
       // Get external paths from module input ports to internal sequential
       // elements.
-      .def("get_paths_from_input_ports_to_internal",
-           [](SynthLongestPathAnalysis *self,
-              const std::string &moduleName) -> SynthLongestPathCollection {
-             MlirStringRef moduleNameRef =
-                 mlirStringRefCreateFromCString(moduleName.c_str());
+      .def(
+          "get_paths_from_input_ports_to_internal",
+          [](SynthLongestPathAnalysis *self, const std::string &moduleName,
+             bool dropNonCriticalPaths) -> SynthLongestPathCollection {
+            MlirStringRef moduleNameRef =
+                mlirStringRefCreateFromCString(moduleName.c_str());
 
-             auto collection = SynthLongestPathCollection(
-                 synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
-                     *self, moduleNameRef));
+            auto collection = SynthLongestPathCollection(
+                synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
+                    *self, moduleNameRef, dropNonCriticalPaths));
 
-             if (synthLongestPathCollectionIsNull(collection))
-               throw nb::value_error(
-                   "Failed to get paths from input ports to internal, see "
-                   "previous error(s).");
+            if (synthLongestPathCollectionIsNull(collection))
+              throw nb::value_error(
+                  "Failed to get paths from input ports to internal, see "
+                  "previous error(s).");
 
-             return collection;
-           })
+            return collection;
+          },
+          nb::arg("module_name"), nb::arg("drop_non_critical_paths") = true)
       // Get external paths from internal sequential elements to module output
       // ports.
-      .def("get_paths_from_internal_to_output_ports",
-           [](SynthLongestPathAnalysis *self,
-              const std::string &moduleName) -> SynthLongestPathCollection {
-             MlirStringRef moduleNameRef =
-                 mlirStringRefCreateFromCString(moduleName.c_str());
+      .def(
+          "get_paths_from_internal_to_output_ports",
+          [](SynthLongestPathAnalysis *self, const std::string &moduleName,
+             bool dropNonCriticalPaths) -> SynthLongestPathCollection {
+            MlirStringRef moduleNameRef =
+                mlirStringRefCreateFromCString(moduleName.c_str());
 
-             auto collection = SynthLongestPathCollection(
-                 synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
-                     *self, moduleNameRef));
+            auto collection = SynthLongestPathCollection(
+                synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
+                    *self, moduleNameRef, dropNonCriticalPaths));
 
-             if (synthLongestPathCollectionIsNull(collection))
-               throw nb::value_error(
-                   "Failed to get paths from internal to output ports, see "
-                   "previous error(s).");
+            if (synthLongestPathCollectionIsNull(collection))
+              throw nb::value_error(
+                  "Failed to get paths from internal to output ports, see "
+                  "previous error(s).");
 
-             return collection;
-           });
+            return collection;
+          },
+          nb::arg("module_name"), nb::arg("drop_non_critical_paths") = true);
 
   nb::class_<SynthLongestPathCollection>(m, "_LongestPathCollection")
       .def("__del__",

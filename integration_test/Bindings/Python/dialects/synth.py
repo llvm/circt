@@ -90,7 +90,7 @@ with Context() as ctx, Location.unknown():
     # CHECK-LABEL:      LongestPathAnalysis created successfully!
     print("LongestPathAnalysis created successfully!")
 
-    # CHECK:      Total paths: 128
+    # CHECK:      Total paths: 64
     # CHECK-NEXT: Max delay: 2
     # CHECK-NEXT: Min delay: 1
     # CHECK-NEXT: 50th percentile delay: 1
@@ -107,17 +107,17 @@ with Context() as ctx, Location.unknown():
     print("index 1 delay:", collection[1].delay)
     print("index -1 delay:", collection[-1].delay)
     # Check that len and get_size are the same
-    # CHECK-NEXT: 128 128
+    # CHECK-NEXT: 64 64
     print(len(collection), collection.collection.get_size())
 
     try:
-      print(collection[128])
+      print(collection[64])
     except IndexError:
       # CHECK-NEXT: IndexError correctly raised
       print("IndexError correctly raised")
 
     # Check that iterator works
-    # CHECK-NEXT: sum: 192
+    # CHECK-NEXT: sum: 96
     print("sum: ", sum(p.delay for p in collection))
 
     for p in collection[:2]:

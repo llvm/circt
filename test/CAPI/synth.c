@@ -150,11 +150,11 @@ void testLongestPathAnalysis(void) {
     // External paths.
     MlirStringRef childModule = mlirStringRefCreateFromCString("ch");
     SynthLongestPathCollection collection3 =
-        synthLongestPathAnalysisGetPathsFromInputPortsToInternal(analysis,
-                                                                 childModule);
+        synthLongestPathAnalysisGetPathsFromInputPortsToInternal(
+            analysis, childModule, true);
     SynthLongestPathCollection collection4 =
-        synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(analysis,
-                                                                  childModule);
+        synthLongestPathAnalysisGetPathsFromInternalToOutputPorts(
+            analysis, childModule, true);
     printf("Input-to-internal paths count: %zu\n",
            synthLongestPathCollectionGetSize(collection3));
     printf("Internal-to-output paths count: %zu\n",

@@ -330,8 +330,8 @@ public:
   void notifyOperationErased(Operation *op) override;
 };
 
-// A collection of longest paths. The data structure owns the paths, and used
-// for computing statistics and CAPI.
+// A sorted collection of longest paths. The data structure owns the paths, and
+// used for computing statistics and CAPI.
 class LongestPathCollection {
 public:
   LongestPathCollection(MLIRContext *ctx) : ctx(ctx){};
@@ -343,7 +343,7 @@ public:
   void sortInDescendingOrder();
 
   // Sort and drop all paths except the longest path per end point.
-  void sortAndDropNonCriticalPathsPerEndPoint();
+  void dropNonCriticalPaths(bool perEndPoint = true);
 
   // Merge another collection into this one.
   void merge(const LongestPathCollection &other);
