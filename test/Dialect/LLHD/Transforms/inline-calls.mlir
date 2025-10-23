@@ -49,7 +49,7 @@ func.func private @foo(%arg0: i42, %arg1: i42) -> (i42, i42) {
   cf.br ^bb1
 ^bb1:
   %0 = comb.add %arg0, %arg1 : i42
-  %1 = call @bar(%arg0) : (i42) -> i42
+  %1 = call @bar_wrapper(%arg0) : (i42) -> i42
   %2 = comb.mul %1, %arg1 : i42
   cf.br ^bb2
 ^bb2:
@@ -61,4 +61,10 @@ func.func private @bar(%arg0: i42) -> i42 {
   %0 = hw.constant 42 : i42
   %1 = comb.xor %arg0, %0 : i42
   return %1 : i42
+}
+
+// CHECK-DCE-NOT: @bar_wrapper
+func.func private @bar_wrapper(%arg0: i42) -> i42 {
+  %0 = call @bar(%arg0) : (i42) -> i42
+  return %0 : i42
 }
