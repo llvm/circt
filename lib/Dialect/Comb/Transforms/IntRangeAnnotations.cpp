@@ -8,14 +8,10 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/TypeSwitch.h"
-
-#include "mlir/Analysis/DataFlowFramework.h"
-
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
+#include "mlir/Analysis/DataFlowFramework.h"
+// #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 using namespace circt;
@@ -55,6 +51,7 @@ struct CombOpAnnotate : public OpRewritePattern<CombOpTy> {
 
   LogicalResult matchAndRewrite(CombOpTy op,
                                 PatternRewriter &rewriter) const override {
+    // Use upper_bit_trunc attribute to avoid confusion with IEEE overflow flags
     if (op->hasAttr("comb.upper_bit_trunc"))
       return failure();
 
@@ -70,10 +67,13 @@ struct CombOpAnnotate : public OpRewritePattern<CombOpTy> {
       return rewriter.notifyMatchFailure(op, "input without specified range");
 
     bool overflowed = false;
+    // overflowed = a.max op b.max > 2^(bitwidth)-1
     auto a = ranges[0].umax();
     auto b = ranges[1].umax();
 
-    // Only use the overflow flag - need to explicitly discard the result
+    // Only use the overflow flag - need to explicitly discard the result.
+    // Cannot use operators intervals since they will be truncated to the
+    // result's bitwidth.
     if (isa<comb::AddOp>(op))
       (void)a.uadd_ov(b, overflowed);
 
@@ -107,6 +107,7 @@ void CombOverflowAnnotatingPass::runOnOperation() {
     return signalPassFailure();
 
   RewritePatternSet patterns(ctx);
+  // TODO: determine how to support subtraction
   patterns.add<CombOpAnnotate<comb::AddOp>, CombOpAnnotate<comb::MulOp>>(
       patterns.getContext(), solver);
 
