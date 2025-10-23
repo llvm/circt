@@ -39,4 +39,53 @@ def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
     let constructor = "circt::moore::createLowerConcatRefPass()";
 }
 
+def MergeProcedures : Pass<"moore-merge-procedures", "moore::SVModuleOp"> {
+    let summary = "Merge multiple always_ff procedures";
+    let description = [{
+      Deduplicate mulitple moore.procedure ops that with identical wait_event
+      regions. This is a workaround to support verilog modules with multiple
+      always_ff regions. See b/449162932.
+
+      Example:
+      ```
+      module bug (
+          input logic wr_clk,
+          input logic wr_data,
+          output logic [1:0] mem
+      );
+        always_ff @(posedge (wr_clk)) begin
+            mem[0] <= wr_data;
+        end
+        always_ff @(posedge (wr_clk)) begin
+            mem[1] <= wr_data;
+        end
+      endmodule
+      ```
+
+      produces
+
+      ```
+      moore.module @bug(in %wr_clk : !moore.l1, in %wr_data : !moore.l1, out mem : !moore.l2) {
+        moore.procedure always_ff {
+          moore.wait_event {
+            %3 = moore.read %wr_clk_0 : <l1>
+            moore.detect_event posedge %3 : l1
+          }
+          ...
+        }
+        moore.procedure always_ff {
+          moore.wait_event {
+            %3 = moore.read %wr_clk_0 : <l1>
+            moore.detect_event posedge %3 : l1
+          }
+          ...
+          moore.return
+        }
+        ...
+      }
+      ```
+    }];
+    let constructor = "circt::moore::createMergeProceduresPass()";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREPASSES_TD
