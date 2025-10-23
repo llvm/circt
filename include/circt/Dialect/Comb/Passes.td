@@ -34,6 +34,15 @@ def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
   }];
 }
 
+def CombOverflowAnnotating : Pass<"comb-overflow-annotating"> {
+  let summary = "Annotate comb ops with overflow signal.";
+  let description = [{
+    Using integer range analysis, annotate comb ops which may overflow with
+    a signal that indicates whether the outputs truncates carry-out bits. This
+    is useful for downstream passes which need to handle overflow conditions.
+  }];
+}
+
 def BalanceMux : Pass<"comb-balance-mux"> {
   let summary = "Balance and optimize mux chains";
   let description = [{
