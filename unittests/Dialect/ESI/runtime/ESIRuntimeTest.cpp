@@ -412,6 +412,185 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
   }
 }
 
+// Test wide UIntType serialization and deserialization (>64 bits)
+TEST(ESITypesTest, WideUIntTypeSerialization) {
+  // Test 128-bit unsigned integer
+  UIntType uint128("uint128", 128);
+
+  // Test a specific 128-bit value: 0x123456789ABCDEF0FEDCBA9876543210
+  // This will be represented as a BitVector and serialized/deserialized
+  uint64_t lowPart = 0xFEDCBA9876543210ULL;
+  uint64_t highPart = 0x123456789ABCDEF0ULL;
+
+  // Construct the 128-bit value by creating bytes in little-endian order
+  std::vector<uint8_t> bytes(16, 0);
+  for (size_t i = 0; i < 8; ++i) {
+    bytes[i] = static_cast<uint8_t>((lowPart >> (8 * i)) & 0xFF);
+    bytes[i + 8] = static_cast<uint8_t>((highPart >> (8 * i)) & 0xFF);
+  }
+
+  // Create a UInt from the bytes.
+  std::any uint128Value = std::any(UInt(std::move(bytes)));
+
+  // Test validation
+  EXPECT_NO_THROW(uint128.ensureValid(uint128Value));
+
+  // Test serialization
+  MessageData serialized(uint128.serialize(uint128Value).takeStorage());
+  EXPECT_EQ(serialized.getSize(), 16UL)
+      << "UIntType(128) serialization should produce exactly 16 bytes";
+
+  // Verify byte values in little-endian order
+  for (size_t i = 0; i < 8; ++i) {
+    EXPECT_EQ(serialized.getData()[i],
+              static_cast<uint8_t>((lowPart >> (8 * i)) & 0xFF))
+        << "Low part byte " << i << " mismatch";
+    EXPECT_EQ(serialized.getData()[i + 8],
+              static_cast<uint8_t>((highPart >> (8 * i)) & 0xFF))
+        << "High part byte " << i << " mismatch";
+  }
+
+  // Test deserialization
+  BitVector serializedBits(serialized.getData());
+  auto deserialized = uint128.deserialize(serializedBits);
+  auto deserializedUInt = std::any_cast<UInt>(deserialized);
+  EXPECT_EQ(deserializedUInt.width(), 128u)
+      << "Deserialized UInt(128) should have width 128";
+  EXPECT_EQ(serializedBits.size(), 0UL)
+      << "UIntType(128) deserialization should consume all data";
+
+  // Test 80-bit value (non-power-of-2)
+  UIntType uint80("uint80", 80);
+  std::vector<uint8_t> bytes80(10, 0);
+  uint64_t val80 = 0x123456789ABCDEFULL;
+  for (size_t i = 0; i < 10; ++i) {
+    bytes80[i] = static_cast<uint8_t>((val80 >> (8 * i)) & 0xFF);
+  }
+
+  std::any uint80Value = std::any(UInt(std::move(bytes80), 80));
+
+  EXPECT_NO_THROW(uint80.ensureValid(uint80Value));
+
+  MessageData serialized80(uint80.serialize(uint80Value).takeStorage());
+  EXPECT_EQ(serialized80.getSize(), 10UL)
+      << "UIntType(80) serialization should produce exactly 10 bytes";
+
+  BitVector serialized80Bits(serialized80.getData());
+  auto deserialized80 = uint80.deserialize(serialized80Bits);
+  auto deserializedUInt80 = std::any_cast<UInt>(deserialized80);
+  EXPECT_EQ(deserializedUInt80.width(), 80u)
+      << "Deserialized UInt(80) should have width 80";
+  EXPECT_EQ(serialized80Bits.size(), 0UL)
+      << "UIntType(80) deserialization should consume all data";
+}
+
+// Test wide SIntType serialization and deserialization (>64 bits)
+TEST(ESITypesTest, WideSIntTypeSerialization) {
+  // Test 128-bit signed integer with positive value
+  SIntType sint128("sint128", 128);
+
+  // Create a positive 128-bit value: 0x123456789ABCDEF0 (upper bits 0)
+  std::vector<uint8_t> bytes(16, 0);
+  uint64_t val = 0x123456789ABCDEF0ULL;
+  for (size_t i = 0; i < 8; ++i) {
+    bytes[i] = static_cast<uint8_t>((val >> (8 * i)) & 0xFF);
+  }
+
+  std::any sint128Value = std::any(Int(std::move(bytes), 128));
+
+  // Test validation
+  EXPECT_NO_THROW(sint128.ensureValid(sint128Value));
+
+  // Test serialization
+  MessageData serialized(sint128.serialize(sint128Value).takeStorage());
+  EXPECT_EQ(serialized.getSize(), 16UL)
+      << "SIntType(128) serialization should produce exactly 16 bytes";
+
+  // Test deserialization
+  BitVector serializedBits(serialized.getData());
+  auto deserialized = sint128.deserialize(serializedBits);
+  auto deserializedSInt = std::any_cast<Int>(deserialized);
+  EXPECT_EQ(deserializedSInt.width(), 128u)
+      << "Deserialized SInt(128) should have width 128";
+  EXPECT_EQ(serializedBits.size(), 0UL)
+      << "SIntType(128) deserialization should consume all data";
+
+  // Test 128-bit signed integer with negative value: -1 (all bits set)
+  std::vector<uint8_t> bytesNegOne(16, 0xFF);
+  std::any sint128NegOne = std::any(Int(std::move(bytesNegOne), 128));
+
+  EXPECT_NO_THROW(sint128.ensureValid(sint128NegOne));
+
+  MessageData serializedNegOne(sint128.serialize(sint128NegOne).takeStorage());
+  EXPECT_EQ(serializedNegOne.getSize(), 16UL)
+      << "SIntType(128) serialization of -1 should produce 16 bytes";
+
+  // Verify all bytes are 0xFF
+  for (size_t i = 0; i < 16; ++i) {
+    EXPECT_EQ(serializedNegOne.getData()[i], 0xFF)
+        << "All bytes in -1 should be 0xFF";
+  }
+
+  // Test deserialization of -1
+  BitVector serializedNegOneBits(serializedNegOne.getData());
+  auto deserializedNegOne = sint128.deserialize(serializedNegOneBits);
+  auto deserializedSIntNegOne = std::any_cast<Int>(deserializedNegOne);
+  EXPECT_EQ(deserializedSIntNegOne.width(), 128u)
+      << "Deserialized SInt(128) of -1 should have width 128";
+
+  // Test 192-bit signed integer (3 bytes x 8 bits = 24 bytes x 8 bits)
+  SIntType sint192("sint192", 192);
+  std::vector<uint8_t> bytes192(24, 0);
+  // Set a pattern in the lower 16 bytes
+  uint64_t val192Low = 0xDEADBEEFCAFEBABEULL;
+  uint64_t val192Mid = 0x0123456789ABCDEFULL;
+  for (size_t i = 0; i < 8; ++i) {
+    bytes192[i] = static_cast<uint8_t>((val192Low >> (8 * i)) & 0xFF);
+    bytes192[i + 8] = static_cast<uint8_t>((val192Mid >> (8 * i)) & 0xFF);
+  }
+
+  std::any sint192Value = std::any(Int(std::move(bytes192), 192));
+
+  EXPECT_NO_THROW(sint192.ensureValid(sint192Value));
+
+  MessageData serialized192(sint192.serialize(sint192Value).takeStorage());
+  EXPECT_EQ(serialized192.getSize(), 24UL)
+      << "SIntType(192) serialization should produce exactly 24 bytes";
+
+  BitVector serialized192Bits(serialized192.getData());
+  auto deserialized192 = sint192.deserialize(serialized192Bits);
+  auto deserializedSInt192 = std::any_cast<Int>(deserialized192);
+  EXPECT_EQ(deserializedSInt192.width(), 192u)
+      << "Deserialized SInt(192) should have width 192";
+  EXPECT_EQ(serialized192Bits.size(), 0UL)
+      << "SIntType(192) deserialization should consume all data";
+
+  // Test 72-bit signed integer (non-byte-aligned, non-power-of-2)
+  SIntType sint72("sint72", 72);
+  std::vector<uint8_t> bytes72(9, 0);
+  uint64_t val72 = 0x0123456789ABCDEFULL;
+  for (size_t i = 0; i < 8; ++i) {
+    bytes72[i] = static_cast<uint8_t>((val72 >> (8 * i)) & 0xFF);
+  }
+  bytes72[8] = 0x01; // High byte with bit 72 representing sign bit position
+
+  std::any sint72Value = std::any(Int(std::move(bytes72), 72));
+
+  EXPECT_NO_THROW(sint72.ensureValid(sint72Value));
+
+  MessageData serialized72(sint72.serialize(sint72Value).takeStorage());
+  EXPECT_EQ(serialized72.getSize(), 9UL)
+      << "SIntType(72) serialization should produce exactly 9 bytes";
+
+  BitVector serialized72Bits(serialized72.getData());
+  auto deserialized72 = sint72.deserialize(serialized72Bits);
+  auto deserializedSInt72 = std::any_cast<Int>(deserialized72);
+  EXPECT_EQ(deserializedSInt72.width(), 72u)
+      << "Deserialized SInt(72) should have width 72";
+  EXPECT_EQ(serialized72Bits.size(), 0UL)
+      << "SIntType(72) deserialization should consume all data";
+}
+
 // Test StructType serialization and deserialization
 TEST(ESITypesTest, StructTypeSerialization) {
   // Create field types

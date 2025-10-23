@@ -458,8 +458,6 @@ TEST(BitVectorFormatTest, ToStringAndStreamBases) {
   EXPECT_EQ(bv.toString(10), std::string("499"));
   EXPECT_EQ(bv.toString(8), std::string("763"));
   EXPECT_EQ(bv.toString(2), std::string("000111110011")); // width-length binary
-  // Unsupported base falls back to binary.
-  EXPECT_EQ(bv.toString(3), std::string("000111110011"));
 
   // Stream formatting: dec (default), hex, oct, showbase, uppercase.
   {

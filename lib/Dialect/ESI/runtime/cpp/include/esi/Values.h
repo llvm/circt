@@ -36,11 +36,9 @@ namespace esi {
 class MutableBitVector;
 
 /// A lightweight, non-owning bit vector view backed by a byte array span.
-/// BitVector is immutable and provides read-only access to bits.
-/// It supports bit-level access and returns new views for operations.
-/// Bit 0 is the least-significant bit (LSB) of the first addressed bit in the
-/// underlying span. The first addressed bit may be offset into the first byte
-/// by `bitIndex` (0-7).
+/// BitVector is immutable wrt. modifying the underlying bits, and provides
+/// read-only access to bits. It supports bit-level access and returns new views
+/// for operations.
 class BitVector {
 public:
   using byte = uint8_t;
@@ -49,17 +47,14 @@ public:
   /// the span (size * 8). The BitVector does not take ownership.
   BitVector(std::span<const byte> bytes,
             std::optional<size_t> width = std::nullopt, uint8_t bitIndex = 0);
-
   BitVector() = default;
-
-  // Copy constructor.
   BitVector(const BitVector &other);
   BitVector &operator=(const BitVector &other);
 
   size_t width() const { return bitWidth; }
   size_t size() const { return width(); }
 
-  /// Return the i-th bit (0 = least-significant) as boolean.
+  /// Return the i-th bit (0 = LSB) as boolean.
   bool getBit(size_t i) const;
 
   /// Return a handle to the underlying span. Throws if the current bit index
@@ -71,7 +66,7 @@ public:
   }
 
   /// Logical right shift that drops the least-significant n bits by advancing
-  /// the start pointer / bitIndex and reducing width. Returns a new immutable
+  /// the byte/bit index and reducing width. Returns a new immutable
   /// view. Does not modify the underlying storage contents.
   BitVector operator>>(size_t n) const;
   BitVector &operator>>=(size_t n);
@@ -115,6 +110,9 @@ public:
     using reference = bool;
     using iterator_category = std::forward_iterator_tag;
 
+    /// Default constructor.
+    bit_iterator() = default;
+
     /// Construct an iterator at the given bit position.
     bit_iterator(const BitVector *bv, size_t pos = 0)
         : bitVector(bv), position(pos) {}
@@ -154,6 +152,16 @@ public:
       return bitVector == other.bitVector && position < other.position;
     }
 
+    /// Sentinel-compatible equality (for ranges support).
+    bool operator==(std::default_sentinel_t) const {
+      return bitVector == nullptr || position >= bitVector->bitWidth;
+    }
+
+    /// Sentinel-compatible inequality.
+    bool operator!=(std::default_sentinel_t sent) const {
+      return !(*this == sent);
+    }
+
   private:
     const BitVector *bitVector = nullptr;
     size_t position = 0;
@@ -173,7 +181,6 @@ protected:
 };
 
 /// A mutable bit vector that owns its underlying storage.
-/// MutableBitVector always has bitIndex == 0 since it owns the storage.
 /// It supports in-place modifications and mutable operations.
 class MutableBitVector : public BitVector {
 public:
@@ -216,8 +223,8 @@ public:
   /// storage.
   MutableBitVector &operator>>=(size_t n);
 
-  /// In-place logical left shift that drops the most-significant n bits (width
-  /// shrink).
+  /// In-place logical left shift shifts in n zero bits at LSB, shifting
+  /// existing bits upward.
   MutableBitVector &operator<<=(size_t n);
 
   /// In-place concatenate: appends bits from other to this.
@@ -238,6 +245,7 @@ private:
 
 std::ostream &operator<<(std::ostream &os, const BitVector &bv);
 
+// Arbitrary width signed integer type built on MutableBitVector.
 class Int : public MutableBitVector {
 public:
   using MutableBitVector::MutableBitVector;
@@ -260,41 +268,13 @@ private:
 
   // Convert the bitvector to a signed intN_t, throwing if the value doesn't
   // fit.
-  int64_t toI64() const {
-    if (this->bitWidth == 0)
-      return 0;
-    uint64_t u = 0;
-    size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
-    for (size_t i = 0; i < limit; ++i)
-      if (this->getBit(i))
-        u |= (1ULL << i);
-    bool signBit = this->getBit(this->bitWidth - 1);
-    if (this->bitWidth < 64) {
-      if (signBit) {
-        for (size_t i = this->bitWidth; i < 64; ++i)
-          u |= (1ULL << i);
-      }
-      return static_cast<int64_t>(u);
-    }
-    for (size_t i = 64; i < this->bitWidth; ++i) {
-      if (this->getBit(i) != signBit)
-        throw std::overflow_error("Int does not fit in int64_t");
-    }
-    return static_cast<int64_t>(u);
-  }
+  int64_t toI64() const;
 
   // Check if the given value fits in the specified bit width.
-  static void fits(int64_t v, unsigned n) {
-    if (n == 0 || n > 64)
-      throw std::invalid_argument(std::format("Invalid bit width: {}", n));
-    int64_t min = -(1LL << (n - 1));
-    int64_t max = (1LL << (n - 1)) - 1;
-    if (v < min || v > max)
-      throw std::overflow_error(
-          std::format("Value {} does not fit in int{}_t", v, n));
-  }
+  static void fits(int64_t v, unsigned n);
 };
 
+// Arbitrary width unsigned integer type built on MutableBitVector.
 class UInt : public MutableBitVector {
 public:
   using MutableBitVector::MutableBitVector;
@@ -306,28 +286,9 @@ public:
   operator uint8_t() const { return toUInt<uint8_t>(); }
 
 private:
-  uint64_t toUI64() const {
-    if (this->bitWidth > 64) {
-      for (size_t i = 64; i < this->bitWidth; ++i)
-        if (this->getBit(i))
-          throw std::overflow_error("Int does not fit in uint64_t");
-    }
-    uint64_t u = 0;
-    size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
-    for (size_t i = 0; i < limit; ++i)
-      if (this->getBit(i))
-        u |= (1ULL << i);
-    return u;
-  }
+  uint64_t toUI64() const;
 
-  static void fits(uint64_t v, unsigned n) {
-    if (n == 0 || n > 64)
-      throw std::invalid_argument(std::format("Invalid bit width: {}", n));
-    uint64_t max = (n == 64) ? UINT64_MAX : ((1ULL << n) - 1);
-    if (v > max)
-      throw std::overflow_error(
-          std::format("Value {} does not fit in uint{}_t", v, n));
-  }
+  static void fits(uint64_t v, unsigned n);
 
   template <typename T>
   T toUInt() const {

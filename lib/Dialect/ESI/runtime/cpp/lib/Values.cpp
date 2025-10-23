@@ -12,10 +12,6 @@
 
 using namespace esi;
 
-//===----------------------------------------------------------------------===//
-// BitVector implementation (immutable view)
-//===----------------------------------------------------------------------===//
-
 BitVector::BitVector(std::span<const byte> bytes, std::optional<size_t> width,
                      uint8_t bitIndex)
     : bitWidth(width ? *width : bytes.size() * 8), bitIndex(bitIndex) {
@@ -24,7 +20,9 @@ BitVector::BitVector(std::span<const byte> bytes, std::optional<size_t> width,
     throw std::invalid_argument("bitIndex must be <= 7");
   size_t totalBitsAvail = bytes.size() * 8 - bitIndex;
   if (bitWidth > totalBitsAvail)
-    throw std::invalid_argument("Width exceeds provided storage");
+    throw std::invalid_argument(
+        std::format("Width of {} bits exceeds provided storage of {} bits",
+                    bitWidth, totalBitsAvail));
 }
 
 BitVector::BitVector(const BitVector &other)
@@ -49,13 +47,6 @@ bool BitVector::getBit(size_t i) const {
 }
 
 BitVector BitVector::operator>>(size_t n) const {
-  // Zero-width: any non-zero shift is invalid (cannot drop bits that don't
-  // exist).
-  if (bitWidth == 0) {
-    if (n == 0)
-      return *this; // no-op
-    throw std::out_of_range("Right shift on zero-width BitVector");
-  }
   // Shifting by more than the current logical width is invalid.
   if (n > bitWidth)
     throw std::out_of_range("Right shift exceeds bit width");
@@ -68,13 +59,18 @@ BitVector BitVector::operator>>(size_t n) const {
   // Create a new view with adjusted bitIndex and width
   BitVector result = *this;
   result.bitWidth -= n;
-  result.bitIndex = static_cast<uint8_t>(result.bitIndex + n);
-  while (result.bitIndex >= 8) {
-    result.bitIndex -= 8;
-    if (result.data.size() == 0)
-      break;
-    result.data = result.data.subspan(1);
-  }
+
+  // Compute new bitIndex and byte offset
+  size_t totalBitOffset = bitIndex + n;
+  size_t byteOffset = totalBitOffset / 8;
+  result.bitIndex = static_cast<uint8_t>(totalBitOffset % 8);
+
+  // Skip the appropriate number of bytes
+  if (byteOffset > 0 && byteOffset < data.size())
+    result.data = data.subspan(byteOffset);
+  else if (byteOffset >= data.size())
+    result.data = data.subspan(data.size());
+
   return result;
 }
 
@@ -98,10 +94,6 @@ BitVector BitVector::slice(size_t offset, size_t sliceWidth) const {
   }
   return result;
 }
-
-//===----------------------------------------------------------------------===//
-// MutableBitVector implementation
-//===----------------------------------------------------------------------===//
 
 MutableBitVector::MutableBitVector(size_t width) : owner((width + 7) / 8, 0) {
   bitWidth = width;
@@ -196,13 +188,6 @@ void MutableBitVector::setBit(size_t i, bool v) {
 }
 
 MutableBitVector &MutableBitVector::operator>>=(size_t n) {
-  // Zero-width: any non-zero shift is invalid (cannot drop bits that don't
-  // exist).
-  if (bitWidth == 0) {
-    if (n == 0)
-      return *this; // no-op
-    throw std::out_of_range("Right shift on zero-width MutableBitVector");
-  }
   // Shifting by more than the current logical width is invalid.
   if (n > bitWidth)
     throw std::out_of_range("Right shift exceeds bit width");
@@ -268,7 +253,6 @@ MutableBitVector &MutableBitVector::operator<<=(const MutableBitVector &other) {
   return *this;
 }
 
-// Free function implementations for bitwise operators on BitVector
 MutableBitVector esi::operator&(const BitVector &a, const BitVector &b) {
   if (a.width() != b.width())
     throw std::invalid_argument("Bitwise & require equal widths");
@@ -393,7 +377,8 @@ std::string BitVector::toString(unsigned base) const {
   case 10:
     return toDecimalString(*this);
   default:
-    return toString(2);
+    throw std::invalid_argument(
+        std::format("Unsupported base '{}' for BitVector::toString", base));
   }
 }
 
@@ -434,10 +419,7 @@ std::ostream &esi::operator<<(std::ostream &os, const BitVector &bv) {
 bool BitVector::operator==(const BitVector &rhs) const {
   if (bitWidth != rhs.bitWidth)
     return false;
-  for (size_t i = 0; i < bitWidth; ++i)
-    if (getBit(i) != rhs.getBit(i))
-      return false;
-  return true;
+  return std::ranges::equal(*this, rhs);
 }
 
 UInt::UInt(uint64_t v, unsigned width) : MutableBitVector(width) {
@@ -466,10 +448,7 @@ MutableBitVector &MutableBitVector::operator&=(const MutableBitVector &other) {
   if (bitWidth != other.bitWidth)
     throw std::invalid_argument("Bitwise &= requires equal widths");
   for (size_t i = 0; i < bitWidth; ++i)
-    if (getBit(i) && other.getBit(i))
-      setBit(i, true);
-    else
-      setBit(i, false);
+    setBit(i, getBit(i) && other.getBit(i));
   return *this;
 }
 
@@ -477,10 +456,7 @@ MutableBitVector &MutableBitVector::operator|=(const MutableBitVector &other) {
   if (bitWidth < other.bitWidth)
     throw std::invalid_argument("Bitwise |= requires <= widths");
   for (size_t i = 0; i < other.bitWidth; ++i)
-    if (getBit(i) || other.getBit(i))
-      setBit(i, true);
-    else
-      setBit(i, false);
+    setBit(i, getBit(i) || other.getBit(i));
   return *this;
 }
 
@@ -488,10 +464,7 @@ MutableBitVector &MutableBitVector::operator^=(const MutableBitVector &other) {
   if (bitWidth != other.bitWidth)
     throw std::invalid_argument("Bitwise ^= requires equal widths");
   for (size_t i = 0; i < bitWidth; ++i)
-    if (getBit(i) != other.getBit(i))
-      setBit(i, true);
-    else
-      setBit(i, false);
+    setBit(i, getBit(i) != other.getBit(i));
   return *this;
 }
 MutableBitVector MutableBitVector::operator~() const {
@@ -519,4 +492,60 @@ MutableBitVector::operator^(const MutableBitVector &other) const {
   MutableBitVector result(static_cast<const BitVector &>(*this));
   result ^= other;
   return result;
+}
+
+int64_t Int::toI64() const {
+  if (this->bitWidth == 0)
+    return 0;
+  uint64_t u = 0;
+  size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
+  for (size_t i = 0; i < limit; ++i)
+    if (this->getBit(i))
+      u |= (1ULL << i);
+  bool signBit = this->getBit(this->bitWidth - 1);
+  if (this->bitWidth < 64) {
+    if (signBit) {
+      for (size_t i = this->bitWidth; i < 64; ++i)
+        u |= (1ULL << i);
+    }
+    return static_cast<int64_t>(u);
+  }
+  for (size_t i = 64; i < this->bitWidth; ++i) {
+    if (this->getBit(i) != signBit)
+      throw std::overflow_error("Int does not fit in int64_t");
+  }
+  return static_cast<int64_t>(u);
+}
+
+void Int::fits(int64_t v, unsigned n) {
+  if (n == 0 || n > 64)
+    throw std::invalid_argument(std::format("Invalid bit width: {}", n));
+  int64_t min = -(1LL << (n - 1));
+  int64_t max = (1LL << (n - 1)) - 1;
+  if (v < min || v > max)
+    throw std::overflow_error(
+        std::format("Value {} does not fit in int{}_t", v, n));
+}
+
+uint64_t UInt::toUI64() const {
+  if (this->bitWidth > 64) {
+    for (size_t i = 64; i < this->bitWidth; ++i)
+      if (this->getBit(i))
+        throw std::overflow_error("Int does not fit in uint64_t");
+  }
+  uint64_t u = 0;
+  size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
+  for (size_t i = 0; i < limit; ++i)
+    if (this->getBit(i))
+      u |= (1ULL << i);
+  return u;
+}
+
+void UInt::fits(uint64_t v, unsigned n) {
+  if (n == 0 || n > 64)
+    throw std::invalid_argument(std::format("Invalid bit width: {}", n));
+  uint64_t max = (n == 64) ? UINT64_MAX : ((1ULL << n) - 1);
+  if (v > max)
+    throw std::overflow_error(
+        std::format("Value {} does not fit in uint{}_t", v, n));
 }

@@ -61,13 +61,10 @@ std::any VoidType::deserialize(BitVector &data) const {
     throw std::runtime_error("void type cannot be represented by empty data");
   // Extract one byte and return the rest. Check that the byte is 0.
   BitVector value = data.lsb(8);
-  // Manually check if any bit is set (instead of using std::ranges::any_of)
-  for (size_t i = 0; i < 8; ++i) {
-    if (value.getBit(i))
-      throw std::runtime_error("void type byte must be 0");
-  }
+  if (std::ranges::any_of(value, [](auto b) { return b; }))
+    throw std::runtime_error("void type byte must be 0");
 
-  data >>= 8; // consume one byte (value ignored)
+  data >>= 8;
   return std::any{};
 }
 
@@ -105,14 +102,15 @@ std::any BitsType::deserialize(BitVector &data) const {
                                          " Expected {} bits, got {} bits",
                                          w, data.width()));
   BitVector view = data.slice(0, w);
-  // Materialize into byte vector sized to width. This can be done through
+  // Materialize into byte vector sized to width. This can be shortcut by just
   // casting the view to a mutable bit vector, and grabbing its storage.
   MutableBitVector viewCopy(view);
   data >>= w;
   return std::any(viewCopy.takeStorage());
 }
 
-// Helper function to extract signed integer-like values from std::any
+// Helper function to extract signed integer-like values from std::any.
+// We here support cstdint int's and esi::Int.
 static Int getIntLikeFromAny(const std::any &obj, unsigned widthHint) {
   const std::type_info &type = obj.type();
 
@@ -130,7 +128,8 @@ static Int getIntLikeFromAny(const std::any &obj, unsigned widthHint) {
   throw std::bad_any_cast();
 }
 
-// Helper function to extract unsigned integer-like values from std::any
+// Helper function to extract unsigned integer-like values from std::any.
+// We here support cstdint uint's and esi::UInt.
 static UInt getUIntLikeFromAny(const std::any &obj, unsigned widthHint) {
   const std::type_info &type = obj.type();
 
@@ -162,7 +161,7 @@ MutableBitVector SIntType::serialize(const std::any &obj) const {
   Int ival = getIntLikeFromAny(obj, getWidth());
   if (static_cast<uint64_t>(ival.width()) != getWidth())
     throw std::runtime_error("Int width mismatch for SIntType serialize");
-  // Copy bits into new MutableBitVector (owning) of this width.
+  // Move bits into MutableBitVector.
   return MutableBitVector(std::move(ival));
 }
 
@@ -253,8 +252,7 @@ std::any StructType::deserialize(BitVector &data) const {
   auto consumeField = [&](const std::pair<std::string, const Type *> &f) {
     const auto &name = f.first;
     const Type *ty = f.second;
-    std::any value = ty->deserialize(data);
-    result[name] = value;
+    result[name] = ty->deserialize(data);
   };
   if (isReverse()) {
     for (auto it = fields.rbegin(); it != fields.rend(); ++it)
