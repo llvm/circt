@@ -11,7 +11,6 @@
 #include <cstring>
 #include <format>
 
-
 using namespace esi;
 
 BitVector::BitVector(std::span<const byte> bytes, std::optional<size_t> width,
