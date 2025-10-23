@@ -1,12 +1,13 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg true --keep-best=0 --include must-dedup-children | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg true --include must-dedup-children | FileCheck %s
 
 // Test that MustDedup annotations are moved from parent modules to their child modules
 
 // CHECK: firrtl.circuit "Top" attributes {annotations = [
 // CHECK-DAG: {class = "firrtl.transforms.MustDeduplicateAnnotation", modules = ["~Top|ChildA", "~Top|ChildB"]}
 // CHECK-DAG: {class = "firrtl.transforms.MustDeduplicateAnnotation", modules = ["~Top|ChildC", "~Top|ChildD"]}
+// CHECK-DAG: {class = "firrtl.transforms.MustDeduplicateAnnotation", modules = ["~Top|ParentA", "~Top|ParentB"]}
 // CHECK: ]}
 
 firrtl.circuit "Top" attributes {annotations = [{
