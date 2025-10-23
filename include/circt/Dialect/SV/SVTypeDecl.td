@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
@@ -204,6 +206,53 @@ def ModportType : SVType<"Modport"> {
   let mnemonic = "modport";
   let parameters = (ins "::mlir::SymbolRefAttr":$modport);
   let assemblyFormat = "`<` $modport `>`";
+}
+
+//===----------------------------------------------------------------------===//
+// Verbatim module operation
+//===----------------------------------------------------------------------===//
+
+def SVVerbatimModuleOp : SVOp<"verbatim.module", [
+    DeclareOpInterfaceMethods<PortList>,
+    DeclareOpInterfaceMethods<HWModuleLike>,
+    Symbol, HasParent<"mlir::ModuleOp">]> {
+  let summary = "Module with verbatim verilog content";
+  let description = [{
+    The `sv.verbatim.module` operation represents a module with verbatim content.
+    It is a `HWModuleLike` (like `hw.module` and `hw.module.extern`).
+    To support verbatim content split accross multiple files, there is an optional
+    additional_files field which can reference additional emitted files.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<ModuleType>:$module_type,
+                       StrAttr:$content,
+                       OutputFileAttr:$output_file,
+                       OptionalAttr<DictArrayAttr>:$per_port_attrs,
+                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<SymbolRefArrayAttr>:$additional_files);
+
+  let hasCustomAssemblyFormat = 1;
+
+
+  let extraClassDeclaration = [{
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
+    Attribute getPortAttrs(size_t idx);
+    void setPortAttrs(size_t idx, Attribute attrs);
+    Location getPortLoc(size_t idx);
+    void setPortLoc(size_t idx, Location loc);
+  }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

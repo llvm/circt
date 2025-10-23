@@ -43,7 +43,7 @@ public:
             FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp, MacroRefOp,
             FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp, MacroErrorOp,
             // Type declarations.
-            InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
+            InterfaceOp, SVVerbatimModuleOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
             ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp, FuncOp,
             FuncDPIImportOp,
@@ -147,6 +147,7 @@ public:
 
   // Type declarations.
   HANDLE(InterfaceOp, Unhandled);
+  HANDLE(SVVerbatimModuleOp, Unhandled);
   HANDLE(InterfaceInstanceOp, Unhandled);
   HANDLE(InterfaceSignalOp, Unhandled);
   HANDLE(InterfaceModportOp, Unhandled);
