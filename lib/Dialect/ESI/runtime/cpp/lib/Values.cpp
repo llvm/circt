@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Values.h"
+#include <algorithm>
 #include <cstring>
 #include <format>
+
 
 using namespace esi;
 
