@@ -23,9 +23,15 @@ class LLVMTypeConverter;
 
 namespace circt {
 
+#define GEN_PASS_DECL_CONVERTCOMBTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+
 /// Get the Comb to LLVM conversion patterns.
 void populateCombToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
                                           RewritePatternSet &patterns);
+
+/// Create a Comb to LLVM conversion pass.
+std::unique_ptr<OperationPass<ModuleOp>> createConvertCombToLLVMPass();
 
 } // namespace circt
 
