@@ -130,6 +130,7 @@ public:
 
   /// Get the size of the data in bytes.
   size_t getSize() const { return data.size(); }
+  size_t size() const { return getSize(); }
 
   /// Returns true if this message contains no data.
   bool empty() const { return data.empty(); }

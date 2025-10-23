@@ -268,59 +268,10 @@ MutableBitVector &MutableBitVector::operator<<=(const MutableBitVector &other) {
   return *this;
 }
 
-MutableBitVector MutableBitVector::bitwiseOp(const MutableBitVector &a,
-                                             const MutableBitVector &b,
-                                             BitwiseKind kind) {
-  if (a.bitWidth != b.bitWidth)
-    throw std::invalid_argument("Bitwise ops require equal widths");
-  size_t width = a.bitWidth;
-  MutableBitVector res(width);
-  if (width == 0)
-    return res;
-
-  // Fast path: byte-aligned, bitIndex is always 0 for MutableBitVector
-  auto *ra = a.data.data();
-  auto *rb = b.data.data();
-  // Cast away const on result storage (it is owned / mutable here).
-  auto *rr = const_cast<uint8_t *>(res.data.data());
-  size_t fullBytes = width / 8;
-  size_t tailBits = width % 8;
-  // Process complete bytes.
-  for (size_t i = 0; i < fullBytes; ++i) {
-    switch (kind) {
-    case BitwiseKind::And:
-      rr[i] = static_cast<uint8_t>(ra[i] & rb[i]);
-      break;
-    case BitwiseKind::Or:
-      rr[i] = static_cast<uint8_t>(ra[i] | rb[i]);
-      break;
-    case BitwiseKind::Xor:
-      rr[i] = static_cast<uint8_t>(ra[i] ^ rb[i]);
-      break;
-    }
-  }
-  if (tailBits) {
-    // Operate on entire last byte unmasked (high bits beyond width are
-    // unspecified).
-    switch (kind) {
-    case BitwiseKind::And:
-      rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] & rb[fullBytes]);
-      break;
-    case BitwiseKind::Or:
-      rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] | rb[fullBytes]);
-      break;
-    case BitwiseKind::Xor:
-      rr[fullBytes] = static_cast<uint8_t>(ra[fullBytes] ^ rb[fullBytes]);
-      break;
-    }
-  }
-  return res;
-}
-
 // Free function implementations for bitwise operators on BitVector
 MutableBitVector esi::operator&(const BitVector &a, const BitVector &b) {
   if (a.width() != b.width())
-    throw std::invalid_argument("Bitwise ops require equal widths");
+    throw std::invalid_argument("Bitwise & require equal widths");
   MutableBitVector result(a.width());
   for (size_t i = 0; i < a.width(); ++i)
     if (a.getBit(i) && b.getBit(i))
@@ -489,8 +440,7 @@ bool BitVector::operator==(const BitVector &rhs) const {
   return true;
 }
 
-MutableUInt::MutableUInt(uint64_t v, unsigned width)
-    : IntegerMixin<MutableUInt, MutableBitVector>(width) {
+UInt::UInt(uint64_t v, unsigned width) : MutableBitVector(width) {
   if (width > 0 && width < 64 && (v >> width) != 0)
     throw std::overflow_error(
         std::format("Value {} does not fit in {} bits", v, width));
@@ -499,7 +449,7 @@ MutableUInt::MutableUInt(uint64_t v, unsigned width)
       setBit(i, true);
 }
 
-MutableInt::MutableInt(int64_t v, unsigned width) : IntegerMixin<MutableInt, MutableBitVector>(width) {
+Int::Int(int64_t v, unsigned width) : MutableBitVector(width) {
   if (width > 0 && width < 64) {
     int64_t maxVal = (1LL << (width - 1)) - 1;
     int64_t minVal = -(1LL << (width - 1));
@@ -510,4 +460,63 @@ MutableInt::MutableInt(int64_t v, unsigned width) : IntegerMixin<MutableInt, Mut
   for (size_t i = 0; i < width; ++i)
     if ((v >> i) & 1)
       setBit(i, true);
+}
+
+MutableBitVector &MutableBitVector::operator&=(const MutableBitVector &other) {
+  if (bitWidth != other.bitWidth)
+    throw std::invalid_argument("Bitwise &= requires equal widths");
+  for (size_t i = 0; i < bitWidth; ++i)
+    if (getBit(i) && other.getBit(i))
+      setBit(i, true);
+    else
+      setBit(i, false);
+  return *this;
+}
+
+MutableBitVector &MutableBitVector::operator|=(const MutableBitVector &other) {
+  if (bitWidth < other.bitWidth)
+    throw std::invalid_argument("Bitwise |= requires <= widths");
+  for (size_t i = 0; i < other.bitWidth; ++i)
+    if (getBit(i) || other.getBit(i))
+      setBit(i, true);
+    else
+      setBit(i, false);
+  return *this;
+}
+
+MutableBitVector &MutableBitVector::operator^=(const MutableBitVector &other) {
+  if (bitWidth != other.bitWidth)
+    throw std::invalid_argument("Bitwise ^= requires equal widths");
+  for (size_t i = 0; i < bitWidth; ++i)
+    if (getBit(i) != other.getBit(i))
+      setBit(i, true);
+    else
+      setBit(i, false);
+  return *this;
+}
+MutableBitVector MutableBitVector::operator~() const {
+  MutableBitVector res(bitWidth);
+  for (size_t i = 0; i < bitWidth; ++i)
+    res.setBit(i, !getBit(i));
+  return res;
+}
+MutableBitVector
+MutableBitVector::operator|(const MutableBitVector &other) const {
+  MutableBitVector result(static_cast<const BitVector &>(*this));
+  result |= other;
+  return result;
+}
+
+MutableBitVector
+MutableBitVector::operator&(const MutableBitVector &other) const {
+  MutableBitVector result(static_cast<const BitVector &>(*this));
+  result &= other;
+  return result;
+}
+
+MutableBitVector
+MutableBitVector::operator^(const MutableBitVector &other) const {
+  MutableBitVector result(static_cast<const BitVector &>(*this));
+  result ^= other;
+  return result;
 }

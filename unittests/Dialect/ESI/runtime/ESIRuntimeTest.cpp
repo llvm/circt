@@ -89,12 +89,12 @@ TEST(ESITypesTest, UIntTypeSerialization) {
 
   // Test valid uint value
   uint64_t uintValue = 0x1234;
-  std::any validUInt = std::any(MutableUInt(uintValue, 16));
+  std::any validUInt = std::any(uintValue);
   EXPECT_NO_THROW(uintType.ensureValid(validUInt));
 
   // Test out of range value
   uint64_t outOfRange = 0x10000; // Too big for 16-bit
-  std::any invalidUInt = std::any(MutableUInt(outOfRange, 16));
+  std::any invalidUInt = std::any(outOfRange);
   EXPECT_THROW(uintType.ensureValid(invalidUInt), std::runtime_error);
 
   // Test serialization (little-endian)
@@ -109,7 +109,8 @@ TEST(ESITypesTest, UIntTypeSerialization) {
   // Test deserialization
   BitVector serializedBits(serialized.getData());
   auto deserialized = uintType.deserialize(serializedBits);
-  auto deserializedUInt = std::any_cast<uint16_t>(deserialized);
+  auto deserializedUInt =
+      static_cast<uint16_t>(std::any_cast<UInt>(deserialized));
   EXPECT_EQ(deserializedUInt, 0x1234)
       << "UIntType deserialization should reconstruct original value 0x1234";
   EXPECT_EQ(serializedBits.size(), 0UL)
@@ -120,9 +121,9 @@ TEST(ESITypesTest, UIntTypeSerialization) {
   uint16_t mediumVal = 1000;
   uint32_t largeVal = 50000;
 
-  EXPECT_NO_THROW(uintType.ensureValid(std::any(MutableUInt(smallVal, 16))));
-  EXPECT_NO_THROW(uintType.ensureValid(std::any(MutableUInt(mediumVal, 16))));
-  EXPECT_NO_THROW(uintType.ensureValid(std::any(MutableUInt(largeVal, 16))));
+  EXPECT_NO_THROW(uintType.ensureValid(std::any(smallVal)));
+  EXPECT_NO_THROW(uintType.ensureValid(std::any(mediumVal)));
+  EXPECT_NO_THROW(uintType.ensureValid(std::any(largeVal)));
 }
 
 // Test SIntType serialization and deserialization
@@ -131,12 +132,12 @@ TEST(ESITypesTest, SIntTypeSerialization) {
 
   // Test valid positive sint value
   int64_t positiveValue = 0x1234;
-  std::any validSInt = std::any(MutableInt(positiveValue, 16));
+  std::any validSInt = std::any(positiveValue);
   EXPECT_NO_THROW(sintType.ensureValid(validSInt));
 
   // Test valid negative sint value
   int64_t negativeValue = -1000;
-  std::any validNegSInt = std::any(MutableInt(negativeValue, 16));
+  std::any validNegSInt = std::any(negativeValue);
   EXPECT_NO_THROW(sintType.ensureValid(validNegSInt));
 
   // Test serialization of positive value
@@ -151,7 +152,8 @@ TEST(ESITypesTest, SIntTypeSerialization) {
   // Test deserialization
   BitVector serializedBits(serialized.getData());
   auto deserialized = sintType.deserialize(serializedBits);
-  auto deserializedSInt = std::any_cast<int16_t>(deserialized);
+  auto deserializedSInt =
+      static_cast<int16_t>(std::any_cast<Int>(deserialized));
   EXPECT_EQ(deserializedSInt, 0x1234)
       << "SIntType deserialization should reconstruct original positive value";
   EXPECT_EQ(serializedBits.size(), 0UL)
@@ -171,7 +173,8 @@ TEST(ESITypesTest, SIntTypeSerialization) {
 
   BitVector negSerializedBits(negSerialized.getData());
   auto negDeserialized = sintType.deserialize(negSerializedBits);
-  auto deserializedNegSInt = std::any_cast<int16_t>(negDeserialized);
+  auto deserializedNegSInt =
+      static_cast<int16_t>(std::any_cast<Int>(negDeserialized));
   EXPECT_EQ(deserializedNegSInt, -1000)
       << "SIntType deserialization should reconstruct original negative value "
          "(-1000)";
@@ -181,9 +184,9 @@ TEST(ESITypesTest, SIntTypeSerialization) {
   int16_t mediumVal = -1000;
   int32_t largeVal = -30000;
 
-  EXPECT_NO_THROW(sintType.ensureValid(std::any(MutableInt(smallVal, 16))));
-  EXPECT_NO_THROW(sintType.ensureValid(std::any(MutableInt(mediumVal, 16))));
-  EXPECT_NO_THROW(sintType.ensureValid(std::any(MutableInt(largeVal, 16))));
+  EXPECT_NO_THROW(sintType.ensureValid(std::any(smallVal)));
+  EXPECT_NO_THROW(sintType.ensureValid(std::any(mediumVal)));
+  EXPECT_NO_THROW(sintType.ensureValid(std::any(largeVal)));
 }
 
 // Test SIntType sign extension logic comprehensively
@@ -194,7 +197,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test -1 (all bits set in 8-bit: 0xFF)
   int64_t minusOne = -1;
   MessageData serializedMinusOne(
-      sint8.serialize(std::any(MutableInt(minusOne, 8))).takeStorage());
+      sint8.serialize(std::any(minusOne)).takeStorage());
   EXPECT_EQ(serializedMinusOne.getSize(), 1UL)
       << "SIntType(8) serialization of -1 should produce 1 byte";
   EXPECT_EQ(serializedMinusOne.getData()[0], 0xFF)
@@ -202,14 +205,15 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   BitVector serializedMinusOneBits(serializedMinusOne.getData());
   auto deserializedMinusOne = sint8.deserialize(serializedMinusOneBits);
-  auto resultMinusOne = std::any_cast<int8_t>(deserializedMinusOne);
+  auto resultMinusOne =
+      static_cast<int8_t>(std::any_cast<Int>(deserializedMinusOne));
   EXPECT_EQ(resultMinusOne, -1)
       << "SIntType(8) deserialization of 0xFF should reconstruct -1";
 
   // Test maximum negative value for 8-bit (-128 = 0x80)
   int64_t maxNeg8 = -128;
   MessageData serializedMaxNeg(
-      sint8.serialize(std::any(MutableInt(maxNeg8, 8))).takeStorage());
+      sint8.serialize(std::any(maxNeg8)).takeStorage());
   EXPECT_EQ(serializedMaxNeg.getSize(), 1UL)
       << "SIntType(8) serialization of -128 should produce 1 byte";
   EXPECT_EQ(serializedMaxNeg.getData()[0], 0x80)
@@ -217,14 +221,15 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   BitVector serializedMaxNegBits(serializedMaxNeg.getData());
   auto deserializedMaxNeg = sint8.deserialize(serializedMaxNegBits);
-  auto resultMaxNeg = std::any_cast<int8_t>(deserializedMaxNeg);
+  auto resultMaxNeg =
+      static_cast<int8_t>(std::any_cast<Int>(deserializedMaxNeg));
   EXPECT_EQ(resultMaxNeg, -128) << "SIntType(8) deserialization should "
                                    "reconstruct maximum negative value (-128)";
 
   // Test maximum positive value for 8-bit (127 = 0x7F)
   int64_t maxPos8 = 127;
   MessageData serializedMaxPos(
-      sint8.serialize(std::any(MutableInt(maxPos8, 8))).takeStorage());
+      sint8.serialize(std::any(maxPos8)).takeStorage());
   EXPECT_EQ(serializedMaxPos.getSize(), 1UL)
       << "SIntType(8) serialization of 127 should produce 1 byte";
   EXPECT_EQ(serializedMaxPos.getData()[0], 0x7F)
@@ -232,7 +237,8 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   BitVector serializedMaxPosBits(serializedMaxPos.getData());
   auto deserializedMaxPos = sint8.deserialize(serializedMaxPosBits);
-  auto resultMaxPos = std::any_cast<int8_t>(deserializedMaxPos);
+  auto resultMaxPos =
+      static_cast<int8_t>(std::any_cast<Int>(deserializedMaxPos));
   EXPECT_EQ(resultMaxPos, 127) << "SIntType(8) deserialization should "
                                   "reconstruct maximum positive value (127)";
 
@@ -242,35 +248,38 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test -1 in 4-bit (0x0F in the lower nibble, should sign extend to all 1s)
   int64_t minus1w4bit = -1;
   MessageData serialized4bit(
-      sint4.serialize(std::any(MutableInt(minus1w4bit, 4))).takeStorage());
+      sint4.serialize(std::any(minus1w4bit)).takeStorage());
   EXPECT_EQ(serialized4bit.getSize(), 1UL)
       << "SIntType(4) serialization should produce 1 byte";
   EXPECT_EQ(serialized4bit.getData()[0] & 0x0F, 0x0F)
-      << "SIntType(4) serialization of -1 should have lower 4 bits set to 1111";
+      << "SIntType(4) serialization of -1 should have lower 4 bits set to "
+         "1111";
 
   BitVector serialized4bitBits(serialized4bit.getData());
   auto deserialized4bit = sint4.deserialize(serialized4bitBits);
-  auto result4bit = std::any_cast<int8_t>(deserialized4bit);
+  auto result4bit = static_cast<int8_t>(std::any_cast<Int>(deserialized4bit));
   EXPECT_EQ(result4bit, -1)
       << "SIntType(4) deserialization should sign-extend -1 correctly";
 
   // Test maximum negative for 4-bit (-8 = 0x8 in 4 bits)
   int64_t maxNeg4 = -8;
   MessageData serializedMaxNeg4(
-      sint4.serialize(std::any(MutableInt(maxNeg4, 4))).takeStorage());
+      sint4.serialize(std::any(maxNeg4)).takeStorage());
   BitVector serializedMaxNeg4Bits(serializedMaxNeg4.getData());
   auto deserializedMaxNeg4 = sint4.deserialize(serializedMaxNeg4Bits);
-  auto resultMaxNeg4 = std::any_cast<int8_t>(deserializedMaxNeg4);
+  auto resultMaxNeg4 =
+      static_cast<int8_t>(std::any_cast<Int>(deserializedMaxNeg4));
   EXPECT_EQ(resultMaxNeg4, -8)
       << "SIntType(4) should handle maximum negative value (-8) correctly";
 
   // Test maximum positive for 4-bit (7 = 0x7 in 4 bits)
   int64_t maxPos4 = 7;
   MessageData serializedMaxPos4(
-      sint4.serialize(std::any(MutableInt(maxPos4, 4))).takeStorage());
+      sint4.serialize(std::any(maxPos4)).takeStorage());
   BitVector serializedMaxPos4Bits(serializedMaxPos4.getData());
   auto deserializedMaxPos4 = sint4.deserialize(serializedMaxPos4Bits);
-  auto resultMaxPos4 = std::any_cast<int8_t>(deserializedMaxPos4);
+  auto resultMaxPos4 =
+      static_cast<int8_t>(std::any_cast<Int>(deserializedMaxPos4));
   EXPECT_EQ(resultMaxPos4, 7)
       << "SIntType(4) should handle maximum positive value (7) correctly";
 
@@ -280,7 +289,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
   // Test -1 in 12-bit (should be 0xFFF in lower 12 bits)
   int64_t minus1w12bit = -1;
   MessageData serialized12bit(
-      sint12.serialize(std::any(MutableInt(minus1w12bit, 12))).takeStorage());
+      sint12.serialize(std::any(minus1w12bit)).takeStorage());
   EXPECT_EQ(serialized12bit.getSize(), 2UL)
       << "SIntType(12) serialization should produce 2 bytes (12 bits = 2 "
          "bytes)";
@@ -291,17 +300,19 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   BitVector serialized12bitBits(serialized12bit.getData());
   auto deserialized12bit = sint12.deserialize(serialized12bitBits);
-  auto result12bit = std::any_cast<int16_t>(deserialized12bit);
+  auto result12bit =
+      static_cast<int16_t>(std::any_cast<Int>(deserialized12bit));
   EXPECT_EQ(result12bit, -1)
       << "SIntType(12) deserialization should sign-extend -1 correctly";
 
   // Test a value that requires sign extension: -100 in 12-bit
   int64_t neg100w12bit = -100;
   MessageData serializedNeg100(
-      sint12.serialize(std::any(MutableInt(neg100w12bit, 12))).takeStorage());
+      sint12.serialize(std::any(neg100w12bit)).takeStorage());
   BitVector serializedNeg100Bits(serializedNeg100.getData());
   auto deserializedNeg100 = sint12.deserialize(serializedNeg100Bits);
-  auto resultNeg100 = std::any_cast<int16_t>(deserializedNeg100);
+  auto resultNeg100 =
+      static_cast<int16_t>(std::any_cast<Int>(deserializedNeg100));
   EXPECT_EQ(resultNeg100, -100)
       << "SIntType(12) should correctly handle sign extension for -100";
 }
@@ -318,75 +329,83 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
 
     // Test maximum positive value
     MessageData serializedMax(
-        sintType.serialize(std::any(MutableInt(maxVal, width))).takeStorage());
+        sintType.serialize(std::any(maxVal)).takeStorage());
     BitVector serializedMaxBits(serializedMax.getData());
     auto deserializedMax = sintType.deserialize(serializedMaxBits);
 
     // Cast to appropriate type based on width
     if (width <= 8) {
-      auto resultMax = std::any_cast<int8_t>(deserializedMax);
+      auto resultMax = static_cast<int8_t>(std::any_cast<Int>(deserializedMax));
       EXPECT_EQ(resultMax, static_cast<int8_t>(maxVal))
           << "Failed for width " << width << " max value";
     } else if (width <= 16) {
-      auto resultMax = std::any_cast<int16_t>(deserializedMax);
+      auto resultMax =
+          static_cast<int16_t>(std::any_cast<Int>(deserializedMax));
       EXPECT_EQ(resultMax, static_cast<int16_t>(maxVal))
           << "Failed for width " << width << " max value";
     } else if (width <= 32) {
-      auto resultMax = std::any_cast<int32_t>(deserializedMax);
+      auto resultMax =
+          static_cast<int32_t>(std::any_cast<Int>(deserializedMax));
       EXPECT_EQ(resultMax, static_cast<int32_t>(maxVal))
           << "Failed for width " << width << " max value";
     } else {
-      auto resultMax = std::any_cast<int64_t>(deserializedMax);
+      auto resultMax =
+          static_cast<int64_t>(std::any_cast<Int>(deserializedMax));
       EXPECT_EQ(resultMax, maxVal)
           << "Failed for width " << width << " max value";
     }
 
     // Test maximum negative value
     MessageData serializedMin(
-        sintType.serialize(std::any(MutableInt(minVal, width))).takeStorage());
+        sintType.serialize(std::any(minVal)).takeStorage());
     BitVector serializedMinBits(serializedMin.getData());
     auto deserializedMin = sintType.deserialize(serializedMinBits);
 
     if (width <= 8) {
-      auto resultMin = std::any_cast<int8_t>(deserializedMin);
+      auto resultMin = static_cast<int8_t>(std::any_cast<Int>(deserializedMin));
       EXPECT_EQ(resultMin, static_cast<int8_t>(minVal))
           << "Failed for width " << width << " min value";
     } else if (width <= 16) {
-      auto resultMin = std::any_cast<int16_t>(deserializedMin);
+      auto resultMin =
+          static_cast<int16_t>(std::any_cast<Int>(deserializedMin));
       EXPECT_EQ(resultMin, static_cast<int16_t>(minVal))
           << "Failed for width " << width << " min value";
     } else if (width <= 32) {
-      auto resultMin = std::any_cast<int32_t>(deserializedMin);
+      auto resultMin =
+          static_cast<int32_t>(std::any_cast<Int>(deserializedMin));
       EXPECT_EQ(resultMin, static_cast<int32_t>(minVal))
           << "Failed for width " << width << " min value";
     } else {
-      auto resultMin = std::any_cast<int64_t>(deserializedMin);
+      auto resultMin =
+          static_cast<int64_t>(std::any_cast<Int>(deserializedMin));
       EXPECT_EQ(resultMin, minVal)
           << "Failed for width " << width << " min value";
     }
 
     // Test -1 (all bits set case)
     MessageData serializedMinusOne(
-        sintType
-            .serialize(std::any(MutableInt(static_cast<int64_t>(-1), width)))
-            .takeStorage());
+        sintType.serialize(std::any(static_cast<int64_t>(-1))).takeStorage());
     BitVector serializedMinusOneBits(serializedMinusOne.getData());
     auto deserializedMinusOne = sintType.deserialize(serializedMinusOneBits);
 
     if (width <= 8) {
-      auto resultMinusOne = std::any_cast<int8_t>(deserializedMinusOne);
+      auto resultMinusOne =
+          static_cast<int8_t>(std::any_cast<Int>(deserializedMinusOne));
       EXPECT_EQ(resultMinusOne, -1)
           << "Failed for width " << width << " value -1";
     } else if (width <= 16) {
-      auto resultMinusOne = std::any_cast<int16_t>(deserializedMinusOne);
+      auto resultMinusOne =
+          static_cast<int16_t>(std::any_cast<Int>(deserializedMinusOne));
       EXPECT_EQ(resultMinusOne, -1)
           << "Failed for width " << width << " value -1";
     } else if (width <= 32) {
-      auto resultMinusOne = std::any_cast<int32_t>(deserializedMinusOne);
+      auto resultMinusOne =
+          static_cast<int32_t>(std::any_cast<Int>(deserializedMinusOne));
       EXPECT_EQ(resultMinusOne, -1)
           << "Failed for width " << width << " value -1";
     } else {
-      auto resultMinusOne = std::any_cast<int64_t>(deserializedMinusOne);
+      auto resultMinusOne =
+          static_cast<int64_t>(std::any_cast<Int>(deserializedMinusOne));
       EXPECT_EQ(resultMinusOne, -1)
           << "Failed for width " << width << " value -1";
     }
@@ -444,24 +463,61 @@ TEST(ESITypesTest, StructTypeSerialization) {
       << "StructType deserialization should consume all data";
 
   // Verify field values
-  auto field1Val = std::any_cast<uint8_t>(deserializedStruct["field1"]);
-  auto field2Val = std::any_cast<int8_t>(deserializedStruct["field2"]);
+  auto field1Val =
+      static_cast<uint8_t>(std::any_cast<UInt>(deserializedStruct["field1"]));
+  auto field2Val =
+      static_cast<int8_t>(std::any_cast<Int>(deserializedStruct["field2"]));
   EXPECT_EQ(field1Val, 42) << "Deserialized field1 should have value 42";
   EXPECT_EQ(field2Val, -10) << "Deserialized field2 should have value -10";
 
-  // Test struct with non-byte aligned field. Should fail.
+  // Test struct with non-byte aligned field. Should succeed.
   auto oddUintType = std::make_unique<UIntType>("uint6", 6);
+  auto boolType = std::make_unique<BitsType>("bool", 1);
   StructType::FieldVector oddFields = {{"field1", uintType.get()},
-                                       {"field2", oddUintType.get()}};
-  StructType nonSerializeableStruct("oddStruct", oddFields);
+                                       {"bool1", boolType.get()},
+                                       {"field2", oddUintType.get()},
+                                       {"bool2", boolType.get()}};
+  StructType oddStruct("oddStruct", oddFields);
 
   std::map<std::string, std::any> oddStructValue = {
       {"field1", std::any(static_cast<uint64_t>(1))},
-      {"field2", std::any(static_cast<uint64_t>(2))}};
+      {"bool1", std::any(std::vector<uint8_t>{1})},
+      {"field2", std::any(static_cast<uint64_t>(2))},
+      {"bool2", std::any(std::vector<uint8_t>{0})},
+  };
 
-  std::any oddStructAny = std::any(oddStructValue);
-  EXPECT_THROW(nonSerializeableStruct.ensureValid(oddStructAny),
-               std::runtime_error);
+  std::any validOddStruct = std::any(oddStructValue);
+  EXPECT_NO_THROW(oddStruct.ensureValid(validOddStruct));
+  MessageData oddSerialized(oddStruct.serialize(validOddStruct).takeStorage());
+  // Expect 2 bytes (round up from 14 bits)
+  EXPECT_EQ(oddSerialized.size(), 2UL);
+
+  BitVector oddSerializedBits(oddSerialized.getData());
+  auto oddDeserialized = oddStruct.deserialize(oddSerializedBits);
+  auto deserializedOddStruct =
+      std::any_cast<std::map<std::string, std::any>>(oddDeserialized);
+  EXPECT_EQ(deserializedOddStruct.size(), 4UL)
+      << "Deserialized odd struct should contain exactly 4 fields";
+  EXPECT_EQ(oddSerializedBits.size(), 0UL)
+      << "Odd StructType deserialization should consume all data";
+  // Verify field values
+  auto oddField1Val = static_cast<uint8_t>(
+      std::any_cast<UInt>(deserializedOddStruct["field1"]));
+  auto bool1Val =
+      std::any_cast<std::vector<uint8_t>>(deserializedOddStruct["bool1"]);
+  auto oddField2Val = static_cast<uint8_t>(
+      std::any_cast<UInt>(deserializedOddStruct["field2"]));
+  auto bool2Val =
+      std::any_cast<std::vector<uint8_t>>(deserializedOddStruct["bool2"]);
+
+  EXPECT_EQ(oddField1Val, 1) << "Deserialized odd field1 should have value 1";
+  EXPECT_EQ(bool1Val.size(), 1ULL)
+      << "Deserialized odd bool1 should have size 1";
+  EXPECT_EQ(bool1Val[0], 1) << "Deserialized odd bool1 should have value true";
+  EXPECT_EQ(oddField2Val, 2) << "Deserialized odd field2 should have value 2";
+  EXPECT_EQ(bool2Val.size(), 1ULL)
+      << "Deserialized odd bool2 should have size 1";
+  EXPECT_EQ(bool2Val[0], 0) << "Deserialized odd bool2 should have value false";
 }
 
 // Test ArrayType serialization and deserialization
@@ -509,9 +565,9 @@ TEST(ESITypesTest, ArrayTypeSerialization) {
       << "ArrayType deserialization should consume all data";
 
   // Verify element values
-  auto elem0 = std::any_cast<uint8_t>(deserializedArray[0]);
-  auto elem1 = std::any_cast<uint8_t>(deserializedArray[1]);
-  auto elem2 = std::any_cast<uint8_t>(deserializedArray[2]);
+  auto elem0 = static_cast<uint8_t>(std::any_cast<UInt>(deserializedArray[0]));
+  auto elem1 = static_cast<uint8_t>(std::any_cast<UInt>(deserializedArray[1]));
+  auto elem2 = static_cast<uint8_t>(std::any_cast<UInt>(deserializedArray[2]));
   EXPECT_EQ(elem0, 10) << "First array element should have value 10";
   EXPECT_EQ(elem1, 20) << "Second array element should have value 20";
   EXPECT_EQ(elem2, 30) << "Third array element should have value 30";
@@ -541,7 +597,8 @@ TEST(ESITypesTest, BitWidthCalculations) {
                                     {"field2", sintType16.get()}};
   StructType structType("testStruct", fields);
   EXPECT_EQ(structType.getBitWidth(), 24)
-      << "StructType with uint8 + sint16 should have bit width of 24 (8 + 16)";
+      << "StructType with uint8 + sint16 should have bit width of 24 (8 + "
+         "16)";
 
   // Test array bit width
   ArrayType arrayType("uint8Array", uintType8.get(), 5);

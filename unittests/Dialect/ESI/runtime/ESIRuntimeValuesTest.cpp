@@ -336,19 +336,6 @@ TEST(IntTest, ConstructionAndSignExtension) {
     EXPECT_EQ(v.getBit(i), expected[i]) << "bit " << i;
 }
 
-TEST(IntTest, PositiveFitsUnsigned) {
-  // Create a MutableBitVector for value 42 in 16 bits
-  MutableBitVector mbv(16);
-  uint64_t val = 42;
-  for (size_t i = 0; i < 16; ++i)
-    if (val & (1ULL << i))
-      mbv.setBit(i, true);
-
-  Int v(mbv);
-  EXPECT_EQ(static_cast<uint64_t>(v), 42u);
-  EXPECT_EQ(static_cast<int64_t>(v), 42);
-}
-
 TEST(IntTest, SignExtendOnNarrowTo64) {
   // Create -1 in 12 bits (all bits set)
   MutableBitVector mbv(12);
@@ -367,13 +354,6 @@ TEST(IntTest, OverflowSigned) {
   big.setBit(64, true);
   Int v(big);
   EXPECT_THROW((void)static_cast<int64_t>(v), std::overflow_error);
-}
-
-TEST(IntTest, OverflowUnsigned) {
-  MutableBitVector big(70);
-  big.setBit(65, true);
-  Int v(big);
-  EXPECT_THROW((void)static_cast<uint64_t>(v), std::overflow_error);
 }
 
 TEST(IntTest, WidthOneValues) {

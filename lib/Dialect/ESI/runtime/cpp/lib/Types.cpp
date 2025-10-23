@@ -105,153 +105,98 @@ std::any BitsType::deserialize(BitVector &data) const {
                                          " Expected {} bits, got {} bits",
                                          w, data.width()));
   BitVector view = data.slice(0, w);
-  // Materialize into byte vector sized to width with fast path if aligned.
-  size_t byteCount = (w + 7) / 8;
-  std::vector<uint8_t> out(byteCount, 0);
-  bool fastPath = false;
-  if (w > 0) {
-    try {
-      auto span = view.getSpan(); // requires bitIndex==0
-      fastPath = true;
-      std::memcpy(out.data(), span.data(), byteCount);
-      if (w % 8 != 0) {
-        uint8_t mask = static_cast<uint8_t>((1u << (w % 8)) - 1u);
-        out[byteCount - 1] &= mask;
-      }
-    } catch (const std::runtime_error &) {
-      fastPath = false; // Fallback below
-    }
-  }
-  if (!fastPath) {
-    for (uint64_t i = 0; i < w; ++i)
-      if (view.getBit(i))
-        out[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-  }
+  // Materialize into byte vector sized to width. This can be done through
+  // casting the view to a mutable bit vector, and grabbing its storage.
+  MutableBitVector viewCopy(view);
   data >>= w;
-  return std::any(out);
+  return std::any(viewCopy.takeStorage());
 }
 
 // Helper function to extract signed integer-like values from std::any
-static int64_t getIntLikeFromAny(const std::any &obj) {
+static Int getIntLikeFromAny(const std::any &obj, unsigned widthHint) {
   const std::type_info &type = obj.type();
 
   if (type == typeid(int64_t))
-    return std::any_cast<int64_t>(obj);
+    return Int(std::any_cast<int64_t>(obj), widthHint);
   if (type == typeid(int32_t))
-    return static_cast<int64_t>(std::any_cast<int32_t>(obj));
+    return Int(static_cast<int64_t>(std::any_cast<int32_t>(obj)), widthHint);
   if (type == typeid(int16_t))
-    return static_cast<int64_t>(std::any_cast<int16_t>(obj));
+    return Int(static_cast<int64_t>(std::any_cast<int16_t>(obj)), widthHint);
   if (type == typeid(int8_t))
-    return static_cast<int64_t>(std::any_cast<int8_t>(obj));
+    return Int(static_cast<int64_t>(std::any_cast<int8_t>(obj)), widthHint);
+  if (type == typeid(esi::Int))
+    return std::any_cast<Int>(obj);
 
   throw std::bad_any_cast();
 }
 
 // Helper function to extract unsigned integer-like values from std::any
-static uint64_t getUIntLikeFromAny(const std::any &obj) {
+static UInt getUIntLikeFromAny(const std::any &obj, unsigned widthHint) {
   const std::type_info &type = obj.type();
 
   if (type == typeid(uint64_t))
-    return std::any_cast<uint64_t>(obj);
+    return UInt(std::any_cast<uint64_t>(obj), widthHint);
   if (type == typeid(uint32_t))
-    return static_cast<uint64_t>(std::any_cast<uint32_t>(obj));
+    return UInt(static_cast<uint64_t>(std::any_cast<uint32_t>(obj)), widthHint);
   if (type == typeid(uint16_t))
-    return static_cast<uint64_t>(std::any_cast<uint16_t>(obj));
+    return UInt(static_cast<uint64_t>(std::any_cast<uint16_t>(obj)), widthHint);
   if (type == typeid(uint8_t))
-    return static_cast<uint64_t>(std::any_cast<uint8_t>(obj));
+    return UInt(static_cast<uint64_t>(std::any_cast<uint8_t>(obj)), widthHint);
+  if (type == typeid(esi::UInt))
+    return std::any_cast<UInt>(obj);
 
   throw std::bad_any_cast();
 }
 
 void SIntType::ensureValid(const std::any &obj) const {
-  if (getWidth() > 64)
-    throw std::runtime_error("Width exceeds 64 bits");
-
-  int64_t minVal = -(1LL << (getWidth() - 1));
-  int64_t maxVal = (1LL << (getWidth() - 1)) - 1;
-  if (getWidth() == 64) {
-    // For 64-bit, we use the full range
-    minVal = INT64_MIN;
-    maxVal = INT64_MAX;
-  }
   try {
-    int64_t value = getIntLikeFromAny(obj);
-    if (value < minVal || value > maxVal) {
-      throw std::runtime_error(
-          std::format("value {} out of range for {}-bit signed integer", value,
-                      getWidth()));
-    }
-  } catch (const std::bad_any_cast &) {
-    throw std::runtime_error(
-        "must be a signed integer type (int8_t, int16_t, int32_t, or int64_t)");
+    Int value = getIntLikeFromAny(obj, getWidth());
+  } catch (const std::exception &e) {
+    throw std::runtime_error(std::format(
+        "Unable to convert provided object to a {}-bit wide Int: {}",
+        getWidth(), e.what()));
   }
 }
 
 MutableBitVector SIntType::serialize(const std::any &obj) const {
-  // Expect esi::Int of correct width.
-  try {
-    const Int &ival = std::any_cast<const Int &>(obj);
-    if (static_cast<uint64_t>(ival.width()) != getWidth())
-      throw std::runtime_error("Int width mismatch for SIntType serialize");
-    // Copy bits into new MutableBitVector (owning) of this width.
-    MutableBitVector out(getWidth());
-    for (uint64_t i = 0; i < getWidth(); ++i)
-      if (ival.getBit(i))
-        out.setBit(i, true);
-    return out;
-  } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("SIntType expects esi::Int for serialization");
-  }
+  Int ival = getIntLikeFromAny(obj, getWidth());
+  if (static_cast<uint64_t>(ival.width()) != getWidth())
+    throw std::runtime_error("Int width mismatch for SIntType serialize");
+  // Copy bits into new MutableBitVector (owning) of this width.
+  return MutableBitVector(std::move(ival));
 }
 
 std::any SIntType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error("Insufficient data for sint type");
-  MutableInt val(data.slice(0, w));
+  Int val(data.slice(0, w));
   data >>= w;
   return std::any(val);
 }
 
 void UIntType::ensureValid(const std::any &obj) const {
-  if (getWidth() > 64)
-    throw std::runtime_error("Width exceeds 64 bits");
-
-  uint64_t maxVal =
-      (getWidth() == 64) ? UINT64_MAX : ((1ULL << getWidth()) - 1);
   try {
-    uint64_t value = getUIntLikeFromAny(obj);
-    if (value > maxVal) {
-      throw std::runtime_error(
-          std::format("value {} out of range for {}-bit unsigned integer",
-                      value, getWidth()));
-    }
-  } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("must be an unsigned integer type (uint8_t, "
-                             "uint16_t, uint32_t, or uint64_t)");
+    UInt value = getUIntLikeFromAny(obj, getWidth());
+  } catch (const std::exception &e) {
+    throw std::runtime_error(std::format(
+        "Unable to convert provided object to a {}-bit wide UInt: {}",
+        getWidth(), e.what()));
   }
 }
 
 MutableBitVector UIntType::serialize(const std::any &obj) const {
-  try {
-    const UInt &uval = std::any_cast<const UInt &>(obj);
-    if (static_cast<uint64_t>(uval.width()) != getWidth())
-      throw std::runtime_error("UInt width mismatch for UIntType serialize");
-    MutableBitVector out(getWidth());
-    for (uint64_t i = 0; i < getWidth(); ++i)
-      if (uval.getBit(i))
-        out.setBit(i, true);
-    return out;
-  } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("UIntType expects esi::UInt for serialization");
-  }
+  UInt uval = getUIntLikeFromAny(obj, getWidth());
+  if (static_cast<uint64_t>(uval.width()) != getWidth())
+    throw std::runtime_error("UInt width mismatch for UIntType serialize");
+  return MutableBitVector(std::move(uval));
 }
 
 std::any UIntType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
     throw std::runtime_error("Insufficient data for uint type");
-  MutableUInt val(data.slice(0, w));
+  UInt val(data.slice(0, w));
   data >>= w;
   return std::any(val);
 }
@@ -285,30 +230,20 @@ void StructType::ensureValid(const std::any &obj) const {
 MutableBitVector StructType::serialize(const std::any &obj) const {
   ensureValid(obj);
   auto structData = std::any_cast<std::map<std::string, std::any>>(obj);
-  std::vector<BitVector> parts;
-  parts.reserve(fields.size());
-  uint64_t totalWidth = 0;
+  MutableBitVector out(0);
   auto handleField = [&](const std::pair<std::string, const Type *> &f) {
     const auto &name = f.first;
     const Type *ty = f.second;
-    BitVector bv = ty->serialize(structData.at(name));
-    totalWidth += bv.width();
-    parts.push_back(std::move(bv));
+    auto fieldData = ty->serialize(structData.at(name));
+    out <<= fieldData.width();
+    out |= fieldData;
   };
   if (isReverse()) {
-    for (auto it = fields.rbegin(); it != fields.rend(); ++it)
-      handleField(*it);
-  } else {
     for (const auto &f : fields)
       handleField(f);
-  }
-  MutableBitVector out(totalWidth);
-  uint64_t offset = 0;
-  for (const auto &p : parts) {
-    for (uint64_t i = 0; i < p.width(); ++i)
-      if (p.getBit(i))
-        out.setBit(offset + i, true);
-    offset += p.width();
+  } else {
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it)
+      handleField(*it);
   }
   return out;
 }
@@ -356,28 +291,18 @@ void ArrayType::ensureValid(const std::any &obj) const {
 MutableBitVector ArrayType::serialize(const std::any &obj) const {
   ensureValid(obj);
   auto arrayData = std::any_cast<std::vector<std::any>>(obj);
-  std::vector<BitVector> parts;
-  parts.reserve(arrayData.size());
-  uint64_t totalWidth = 0;
-  auto pushElem = [&](const std::any &elem) {
-    BitVector bv = elementType->serialize(elem);
-    totalWidth += bv.width();
-    parts.push_back(std::move(bv));
+  MutableBitVector out(0);
+  auto handleElem = [&](const std::any &elem) {
+    auto elemData = elementType->serialize(elem);
+    out <<= elemData.width();
+    out |= elemData;
   };
   if (isReverse()) {
-    for (auto it = arrayData.rbegin(); it != arrayData.rend(); ++it)
-      pushElem(*it);
-  } else {
     for (const auto &e : arrayData)
-      pushElem(e);
-  }
-  MutableBitVector out(totalWidth);
-  uint64_t offset = 0;
-  for (const auto &p : parts) {
-    for (uint64_t i = 0; i < p.width(); ++i)
-      if (p.getBit(i))
-        out.setBit(offset + i, true);
-    offset += p.width();
+      handleElem(e);
+  } else {
+    for (auto it = arrayData.rbegin(); it != arrayData.rend(); ++it)
+      handleElem(*it);
   }
   return out;
 }

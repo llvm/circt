@@ -22,6 +22,7 @@
 #define ESI_VALUES_H
 
 #include <cstdint>
+#include <format>
 #include <memory> // (may be removable later)
 #include <optional>
 #include <ostream>
@@ -222,34 +223,43 @@ public:
   /// In-place concatenate: appends bits from other to this.
   MutableBitVector &operator<<=(const MutableBitVector &other);
 
+  MutableBitVector &operator|=(const MutableBitVector &other);
+  MutableBitVector &operator&=(const MutableBitVector &other);
+  MutableBitVector &operator^=(const MutableBitVector &other);
+  MutableBitVector operator~() const;
+  MutableBitVector operator|(const MutableBitVector &other) const;
+  MutableBitVector operator&(const MutableBitVector &other) const;
+  MutableBitVector operator^(const MutableBitVector &other) const;
+
 private:
-  enum class BitwiseKind { And, Or, Xor };
-
-  static MutableBitVector bitwiseOp(const MutableBitVector &a,
-                                    const MutableBitVector &b,
-                                    BitwiseKind kind);
-
   // Storage owned by this MutableBitVector.
   std::vector<byte> owner;
 };
 
 std::ostream &operator<<(std::ostream &os, const BitVector &bv);
 
-/// Signed arbitrary precision integer (two's complement) built atop
-/// BitVector.
-
-/// CRTP mixin to share integer helper API across signed/unsigned and
-/// mutable/immutable.
-/// Storage must be BitVector or MutableBitVector (or a compatible subclass).
-template <typename Derived, typename Storage>
-class IntegerMixin : public Storage {
+class Int : public MutableBitVector {
 public:
-  using Storage::Storage;
-  IntegerMixin(const Storage &s) : Storage(s) {}
-  using byte = typename Storage::byte;
+  using MutableBitVector::MutableBitVector;
+  Int() = default;
+  Int(int64_t v, unsigned width = 64);
+  operator int64_t() const { return toI64(); }
+  operator int32_t() const { return toInt<int32_t>(); }
+  operator int16_t() const { return toInt<int16_t>(); }
+  operator int8_t() const { return toInt<int8_t>(); }
 
-  explicit operator int64_t() const { return toI64(); }
-  explicit operator uint64_t() const { return toUI64(); }
+private:
+  template <typename T>
+  T toInt() const {
+    static_assert(std::is_integral<T>::value && std::is_signed<T>::value,
+                  "T must be a signed integral type");
+    int64_t v = toI64();
+    fits(v, sizeof(T) * 8);
+    return static_cast<T>(v);
+  }
+
+  // Convert the bitvector to a signed intN_t, throwing if the value doesn't
+  // fit.
   int64_t toI64() const {
     if (this->bitWidth == 0)
       return 0;
@@ -272,6 +282,30 @@ public:
     }
     return static_cast<int64_t>(u);
   }
+
+  // Check if the given value fits in the specified bit width.
+  static void fits(int64_t v, unsigned n) {
+    if (n == 0 || n > 64)
+      throw std::invalid_argument(std::format("Invalid bit width: {}", n));
+    int64_t min = -(1LL << (n - 1));
+    int64_t max = (1LL << (n - 1)) - 1;
+    if (v < min || v > max)
+      throw std::overflow_error(
+          std::format("Value {} does not fit in int{}_t", v, n));
+  }
+};
+
+class UInt : public MutableBitVector {
+public:
+  using MutableBitVector::MutableBitVector;
+  UInt() = default;
+  UInt(uint64_t v, unsigned width = 64);
+  operator uint64_t() const { return toUI64(); }
+  operator uint32_t() const { return toUInt<uint32_t>(); }
+  operator uint16_t() const { return toUInt<uint16_t>(); }
+  operator uint8_t() const { return toUInt<uint8_t>(); }
+
+private:
   uint64_t toUI64() const {
     if (this->bitWidth > 64) {
       for (size_t i = 64; i < this->bitWidth; ++i)
@@ -285,21 +319,24 @@ public:
         u |= (1ULL << i);
     return u;
   }
-};
 
-class Int : public IntegerMixin<Int, MutableBitVector> {
-public:
-  using IntegerMixin::IntegerMixin;
-  Int() = default;
-  Int(int64_t v, unsigned width = 64);
-};
+  static void fits(uint64_t v, unsigned n) {
+    if (n == 0 || n > 64)
+      throw std::invalid_argument(std::format("Invalid bit width: {}", n));
+    uint64_t max = (n == 64) ? UINT64_MAX : ((1ULL << n) - 1);
+    if (v > max)
+      throw std::overflow_error(
+          std::format("Value {} does not fit in uint{}_t", v, n));
+  }
 
-/// Mutable unsigned integer. Owns storage and supports mutation.
-class UInt : public IntegerMixin<UInt, MutableBitVector> {
-public:
-  using IntegerMixin::IntegerMixin;
-  UInt() = default;
-  UInt(uint64_t v, unsigned width = 64);
+  template <typename T>
+  T toUInt() const {
+    static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
+                  "T must be an unsigned integral type");
+    uint64_t v = toUI64();
+    fits(v, sizeof(T) * 8);
+    return static_cast<T>(v);
+  }
 };
 
 } // namespace esi
