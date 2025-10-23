@@ -1957,6 +1957,14 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
     auto annotations = AnnotationSet(circuitOp);
     uint64_t matchId = 0;
 
+    DenseSet<StringRef> modulesAlreadyInMustDedup;
+    for (auto [annoIdx, anno] : llvm::enumerate(annotations))
+      if (anno.isClass(mustDedupAnnoClass))
+        if (auto modulesAttr = anno.getMember<ArrayAttr>("modules"))
+          for (auto moduleRef : modulesAttr.getAsRange<StringAttr>())
+            if (auto target = tokenizePath(moduleRef))
+              modulesAlreadyInMustDedup.insert(target->module);
+
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
       if (!anno.isClass(mustDedupAnnoClass))
         continue;
@@ -1967,8 +1975,26 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
 
       // Process each group of corresponding instances
       processInstanceGroups(
-          circuitOp, modulesAttr,
-          [&](ArrayRef<FInstanceLike>) { addMatch(1, matchId++); });
+          circuitOp, modulesAttr, [&](ArrayRef<FInstanceLike> instanceGroup) {
+            matchId++;
+
+            // Make sure there are at least two distinct modules.
+            SmallDenseSet<StringAttr, 4> moduleTargets;
+            for (auto instOp : instanceGroup)
+              moduleTargets.insert(instOp.getReferencedModuleNameAttr());
+            if (moduleTargets.size() < 2)
+              return;
+
+            // Make sure none of the modules are not yet in a must dedup
+            // annotation.
+            if (llvm::any_of(instanceGroup, [&](FInstanceLike inst) {
+                  return modulesAlreadyInMustDedup.contains(
+                      inst.getReferencedModuleName());
+                }))
+              return;
+
+            addMatch(1, matchId - 1);
+          });
     }
   }
 
@@ -1991,14 +2017,11 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
         continue;
       }
 
-      // Track whether any matches were selected for this annotation
-      bool anyMatchSelected = false;
       processInstanceGroups(
           circuitOp, modulesAttr, [&](ArrayRef<FInstanceLike> instanceGroup) {
             // Check if this instance group was selected
             if (!llvm::is_contained(matches, matchId++))
               return;
-            anyMatchSelected = true;
 
             // Create the list of modules to put into this new annotation.
             SmallSetVector<StringAttr, 4> moduleTargets;
@@ -2008,8 +2031,6 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
               target.module = instOp.getReferencedModuleName();
               moduleTargets.insert(target.toStringAttr(context));
             }
-            if (moduleTargets.size() < 2)
-              return;
 
             // Create a new MustDedup annotation for this list of modules.
             SmallVector<NamedAttribute> newAnnoAttrs;
@@ -2026,13 +2047,8 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
             newAnnotations.emplace_back(newAnnoDict);
           });
 
-      // If any matches were selected, mark the original annotation for removal
-      // since we're replacing it with new MustDedup annotations on the child
-      // modules. Otherwise keep the original annotation around.
-      if (anyMatchSelected)
-        nlaRemover.markNLAsInAnnotation(anno.getAttr());
-      else
-        newAnnotations.push_back(anno);
+      // Keep the original annotation around.
+      newAnnotations.push_back(anno);
     }
 
     // Update circuit annotations
