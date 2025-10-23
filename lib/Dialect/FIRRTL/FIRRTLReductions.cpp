@@ -2031,6 +2031,8 @@ private:
     for (auto module : modules) {
       SmallDenseMap<StringAttr, unsigned> nameCounts;
       module.walk([&](FInstanceLike instOp) {
+        if (isa<ObjectOp>(instOp.getOperation()))
+          return;
         auto name = instOp.getInstanceNameAttr();
         auto &group = instanceGroups[name];
         if (nameCounts[name]++ > 1)
