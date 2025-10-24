@@ -341,8 +341,10 @@ LogicalResult LowerModule::lowerModule() {
   //   1. i tracks the original port index.
   //   2. iDel tracks the port index after deletion.
   //   3. iIns tracks the port index after insertion.
-  auto ports = op.getPorts();
   OpBuilder::InsertPoint insertPoint;
+  if (body)
+    insertPoint = {body, body->begin()};
+  auto ports = op.getPorts();
   for (unsigned i = 0, iDel = 0, iIns = 0, e = op.getNumPorts(); i != e; ++i) {
     auto port = cast<PortInfo>(ports[i]);
 
@@ -361,10 +363,7 @@ LogicalResult LowerModule::lowerModule() {
         // Insert objects in-order at the top of the module's body.  These
         // cannot be inserted at the end as they may have users.
         ImplicitLocOpBuilder builder(port.loc, context);
-        if (insertPoint.isSet())
-          builder.restoreInsertionPoint(insertPoint);
-        else
-          builder.setInsertionPointToStart(body);
+        builder.restoreInsertionPoint(insertPoint);
 
         // Create the object, add information about it to domain info.
         auto object = ObjectOp::create(
