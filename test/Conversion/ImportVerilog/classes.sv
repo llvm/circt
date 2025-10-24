@@ -143,3 +143,23 @@ module testModule2 #();
     testModuleClass t;
 
 endmodule
+
+/// Check calls to new without explicit constructor
+
+// CHECK-LABEL: moore.module @testModule3() {
+// CHECK: [[T:%.*]] = moore.variable : <class<@"testModule3::testModuleClass">>
+// CHECK: moore.procedure initial {
+// CHECK:   [[NEW:%.*]] = moore.class.new : <@"testModule3::testModuleClass">
+// CHECK:   moore.blocking_assign [[T]], [[NEW]] : class<@"testModule3::testModuleClass">
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+
+module testModule3;
+    class testModuleClass;
+    endclass
+    testModuleClass t;
+    initial begin
+        t = new;
+    end
+endmodule
