@@ -1378,8 +1378,9 @@ LogicalResult ClassDeclOp::verify() {
   auto &block = body.front();
   for (mlir::Operation &op : block) {
 
-    // allow only property and method decls
-    if (llvm::isa<circt::moore::ClassPropertyDeclOp>(&op))
+    // allow only property and method decls and terminator
+    if (llvm::isa<circt::moore::ClassPropertyDeclOp,
+                  circt::moore::ClassMethodDeclOp>(&op))
       continue;
 
     return emitOpError()

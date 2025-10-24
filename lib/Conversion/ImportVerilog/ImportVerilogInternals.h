@@ -134,6 +134,9 @@ struct Context {
   getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
                                StringRef fieldName);
 
+  Value getImplicitThisRef() const {
+    return currentThisRef; // block arg added in declareFunction
+  }
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
@@ -316,6 +319,17 @@ struct Context {
 
   /// The time scale currently in effect.
   slang::TimeScale timeScale;
+
+private:
+  /// Helper function to extract the commonalities in lowering of functions and
+  /// methods
+  FunctionLowering *
+  declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
+                      mlir::StringRef qualifiedName,
+                      llvm::SmallVectorImpl<Type> &extraParams);
+  /// Variable to track the value of the current function's implicit `this`
+  /// reference
+  Value currentThisRef = {};
 };
 
 } // namespace ImportVerilog
