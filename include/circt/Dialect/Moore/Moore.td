@@ -17,5 +17,6 @@ include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
 include "circt/Dialect/Moore/MooreAttributes.td"
 include "circt/Dialect/Moore/MooreOps.td"
+include "circt/Dialect/Moore/MooreClasses.td"
 
 #endif // CIRCT_DIALECT_MOORE_MOORE

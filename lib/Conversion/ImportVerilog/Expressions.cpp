@@ -1559,6 +1559,22 @@ struct RvalueExprVisitor : public ExprVisitor {
     return context.convertAssertionExpression(expr.body, loc);
   }
 
+  Value visit(const slang::ast::NewClassExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto classTy = dyn_cast<moore::ClassHandleType>(type);
+    if (!classTy)
+      return {};
+
+    auto newOp = moore::ClassNewOp::create(builder, loc, classTy, {});
+    auto constructor = expr.constructorCall();
+    if (!constructor)
+      return newOp.getResult();
+
+    mlir::emitError(loc) << "New expression requires constructor call, which "
+                            "is not yet implemented!";
+    return {};
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
