@@ -55,6 +55,11 @@ struct FunctionLowering {
   bool isConverting = false;
 };
 
+// Class lowering information.
+struct ClassLowering {
+  circt::moore::ClassDeclOp op;
+};
+
 /// Information about a loops continuation and exit blocks relevant while
 /// lowering the loop's body statements.
 struct LoopFrame {
@@ -115,6 +120,8 @@ struct Context {
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
+  LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
+  ClassLowering *declareClass(const slang::ast::ClassType &cls);
 
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
@@ -252,6 +259,10 @@ struct Context {
            std::unique_ptr<FunctionLowering>>
       functions;
 
+  /// Classes that have already been converted.
+  DenseMap<const slang::ast::ClassType *, std::unique_ptr<ClassLowering>>
+      classes;
+
   /// A table of defined values, such as variables, that may be referred to by
   /// name in expressions. The expressions use this table to lookup the MLIR
   /// value that was created for a given declaration in the Slang AST node.
@@ -298,5 +309,4 @@ struct Context {
 
 } // namespace ImportVerilog
 } // namespace circt
-
 #endif // CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
