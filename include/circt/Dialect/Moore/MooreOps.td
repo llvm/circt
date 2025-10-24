@@ -2395,5 +2395,22 @@ def ClassDeclOp
   let hasVerifier = 1;
 }
 
+def ClassNewOp
+    : MooreOp<
+          "class.new", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let summary = "Allocate a new class instance";
+  let description = [{
+    Allocates a new instance of class @C. This op does not call the constructor.
+    The result is a non-null `!moore.class.object<@C>` handle.
+  }];
+
+  let arguments = (ins);
+  let results = (outs ClassHandleType:$result);
+
+  let assemblyFormat = [{
+     `:` type($result) attr-dict
+  }];
+  let hasVerifier = 1;
+}
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

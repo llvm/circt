@@ -1388,6 +1388,35 @@ LogicalResult ClassDeclOp::verify() {
   return mlir::success();
 }
 
+LogicalResult ClassNewOp::verify() {
+  // The result is constrained to ClassHandleType in ODS, so this cast should be
+  // safe.
+  auto handleTy = cast<ClassHandleType>(getResult().getType());
+  mlir::SymbolRefAttr classSym = handleTy.getClassSym();
+  if (!classSym)
+    return emitOpError("result type is missing a class symbol");
+
+  // Resolve the referenced symbol starting from the nearest symbol table.
+  mlir::Operation *sym =
+      mlir::SymbolTable::lookupNearestSymbolFrom(getOperation(), classSym);
+  if (!sym)
+    return emitOpError("referenced class symbol `")
+           << classSym << "` was not found";
+
+  if (!llvm::isa<ClassDeclOp>(sym))
+    return emitOpError("symbol `")
+           << classSym << "` does not name a `moore.class.classdecl`";
+
+  return mlir::success();
+}
+
+void ClassNewOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  // Always allocates heap memory.
+  effects.emplace_back(MemoryEffects::Allocate::get());
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
