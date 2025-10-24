@@ -48,6 +48,129 @@ using llvm::SmallDenseSet;
 
 namespace {
 
+/// Cache for identified structs and field GEP paths keyed by class symbol.
+struct ClassTypeCache {
+  struct ClassStructInfo {
+    LLVM::LLVMStructType classBody;
+
+    // field name -> GEP path inside ident (excluding the leading pointer index)
+    DenseMap<StringRef, SmallVector<unsigned, 2>> propertyPath;
+
+    // TODO: Add classVTable in here.
+    /// Record/overwrite the field path to a single property for a class.
+    void setFieldPath(StringRef propertyName, ArrayRef<unsigned> path) {
+      this->propertyPath[propertyName] =
+          llvm::SmallVector<unsigned, 2>(path.begin(), path.end());
+    }
+
+    /// Lookup the full GEP path for a (class, field).
+    std::optional<ArrayRef<unsigned>>
+    getFieldPath(StringRef propertySym) const {
+      if (auto prop = this->propertyPath.find(propertySym);
+          prop != this->propertyPath.end())
+        return ArrayRef<unsigned>(prop->second);
+      return std::nullopt;
+    }
+  };
+
+  /// Record the identified struct body for a class.
+  /// Implicitly finalizes the class to struct conversion.
+  void setClassInfo(SymbolRefAttr classSym, const ClassStructInfo &info) {
+    auto &dst = classToStructMap[classSym];
+    dst = info;
+  }
+
+  /// Lookup the identified struct body for a class.
+  std::optional<ClassStructInfo> getStructInfo(SymbolRefAttr classSym) const {
+    if (auto it = classToStructMap.find(classSym); it != classToStructMap.end())
+      return it->second;
+    return std::nullopt;
+  }
+
+private:
+  // Keyed by the SymbolRefAttr of the class.
+  // Kept private so all accesses are done with helpers which preserve
+  // invariants
+  DenseMap<Attribute, ClassStructInfo> classToStructMap;
+};
+
+/// Helper function to create an opaque LLVM Struct Type which corresponds
+/// to the sym
+static LLVM::LLVMStructType getOrCreateOpaqueStruct(MLIRContext *ctx,
+                                                    SymbolRefAttr className) {
+  return LLVM::LLVMStructType::getIdentified(ctx, className.getRootReference());
+}
+
+static LogicalResult resolveClassStructBody(ClassDeclOp op,
+                                            TypeConverter const &typeConverter,
+                                            ClassTypeCache &cache) {
+
+  auto classSym = SymbolRefAttr::get(op.getSymNameAttr());
+  auto structInfo = cache.getStructInfo(classSym);
+  if (structInfo)
+    // We already have a resolved class struct body.
+    return success();
+
+  // Otherwise we need to resolve.
+  ClassTypeCache::ClassStructInfo structBody;
+  SmallVector<Type> structBodyMembers;
+
+  // Base-first (prefix) layout for single inheritance.
+  unsigned derivedStartIdx = 0;
+
+  if (auto baseClass = op.getBaseAttr()) {
+
+    // Process base class' struct layout first
+    auto baseClassStruct = cache.getStructInfo(baseClass);
+    if (!baseClassStruct)
+      return op.emitOpError() << "Base class " << baseClass << " of "
+                              << classSym << " has not been converted.";
+
+    structBodyMembers.push_back(baseClassStruct->classBody);
+    derivedStartIdx = 1;
+
+    // Inherit base field paths with a leading 0.
+    for (auto &kv : baseClassStruct->propertyPath) {
+      SmallVector<unsigned, 2> path;
+      path.push_back(0); // into base subobject
+      path.append(kv.second.begin(), kv.second.end());
+      structBody.setFieldPath(kv.first, path);
+    }
+  }
+
+  // Properties in source order.
+  unsigned iterator = derivedStartIdx;
+  auto &block = op.getBody().front();
+  for (Operation &child : block) {
+    if (auto prop = dyn_cast<ClassPropertyDeclOp>(child)) {
+      Type mooreTy = prop.getPropertyType();
+      Type llvmTy = typeConverter.convertType(mooreTy);
+      if (!llvmTy)
+        return prop.emitOpError()
+               << "failed to convert property type " << mooreTy;
+
+      structBodyMembers.push_back(llvmTy);
+
+      // Derived field path: either {i} or {1+i} if base is present.
+      SmallVector<unsigned, 2> path{iterator};
+      structBody.setFieldPath(prop.getSymName(), path);
+      ++iterator;
+    }
+  }
+
+  // TODO: Handle vtable generation over ClassMethodDeclOp here.
+  auto llvmStructTy = getOrCreateOpaqueStruct(op.getContext(), classSym);
+  // Empty structs may be kept opaque
+  if (!structBodyMembers.empty() &&
+      failed(llvmStructTy.setBody(structBodyMembers, false)))
+    return op.emitOpError() << "Failed to set LLVM Struct body";
+
+  structBody.classBody = llvmStructTy;
+  cache.setClassInfo(classSym, structBody);
+
+  return success();
+}
+
 /// Returns the passed value if the integer width is already correct.
 /// Zero-extends if it is too narrow.
 /// Truncates if the integer is too wide and the truncated part is zero, if it
@@ -554,6 +677,26 @@ static Value createZeroValue(Type type, Location loc,
   Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
   return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
 }
+
+struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
+  ClassDeclOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                        ClassTypeCache &cache)
+      : OpConversionPattern<ClassDeclOp>(tc, ctx), cache(cache) {}
+
+  LogicalResult
+  matchAndRewrite(ClassDeclOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (failed(resolveClassStructBody(op, *typeConverter, cache)))
+      return failure();
+
+    // The declaration itself is a no-op
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache; // shared, owned by the pass
+};
 
 struct VariableOpConversion : public OpConversionPattern<VariableOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1864,6 +2007,11 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion(
       [](LLVM::LLVMPointerType t) -> std::optional<Type> { return t; });
 
+  // ClassHandleType  ->  !llvm.ptr
+  typeConverter.addConversion([&](ClassHandleType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
@@ -1924,7 +2072,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 }
 
 static void populateOpConversion(ConversionPatternSet &patterns,
-                                 TypeConverter &typeConverter) {
+                                 TypeConverter &typeConverter,
+                                 ClassTypeCache &classCache) {
+
+  patterns.add<ClassDeclOpConversion>(typeConverter, patterns.getContext(),
+                                      classCache);
+
   // clang-format off
   patterns.add<
     // Patterns of declaration operations.
@@ -2086,6 +2239,7 @@ std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
 void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
+  ClassTypeCache classCache;
 
   IRRewriter rewriter(module);
   (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
@@ -2097,7 +2251,7 @@ void MooreToCorePass::runOnOperation() {
   populateLegality(target, typeConverter);
 
   ConversionPatternSet patterns(&context, typeConverter);
-  populateOpConversion(patterns, typeConverter);
+  populateOpConversion(patterns, typeConverter, classCache);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();
