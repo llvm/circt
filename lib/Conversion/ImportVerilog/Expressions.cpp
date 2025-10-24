@@ -328,37 +328,81 @@ struct ExprVisitor {
   /// Handle member accesses.
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = convertLvalueOrRvalueExpression(expr.value());
-    if (!type || !value)
+    if (!type)
       return {};
 
-    auto resultType =
-        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto *valueType = expr.value().type.get();
     auto memberName = builder.getStringAttr(expr.member.name);
 
     // Handle structs.
     if (valueType->isStruct()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::StructExtractRefOp::create(builder, loc, resultType,
                                                  memberName, value);
-      else
-        return moore::StructExtractOp::create(builder, loc, resultType,
-                                              memberName, value);
+      return moore::StructExtractOp::create(builder, loc, resultType,
+                                            memberName, value);
     }
 
     // Handle unions.
     if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::UnionExtractRefOp::create(builder, loc, resultType,
                                                 memberName, value);
-      else
-        return moore::UnionExtractOp::create(builder, loc, type, memberName,
-                                             value);
+      return moore::UnionExtractOp::create(builder, loc, type, memberName,
+                                           value);
+    }
+
+    // Handle classes.
+    if (valueType->isClass()) {
+
+      auto valTy = context.convertType(*valueType);
+      if (!valTy)
+        return {};
+      auto targetTy = dyn_cast<moore::ClassHandleType>(valTy);
+
+      // We need to pick the closest ancestor that declares a property with the
+      // relevant name. System Verilog explicitly enforces lexical shadowing, as
+      // shown in IEEE 1800-2023 Section 8.14 "Overridden members".
+      auto upcastTargetTy =
+          context.getAncestorClassWithProperty(targetTy, expr.member.name);
+
+      // Convert the class handle to the required target type for property
+      // shadowing purposes.
+      Value baseVal =
+          context.convertRvalueExpression(expr.value(), upcastTargetTy);
+      if (!baseVal)
+        return {};
+
+      // @field and result type !moore.ref<T>.
+      auto fieldSym =
+          mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.member.name);
+      auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+
+      // Produce a ref to the class property from the (possibly upcast) handle.
+      Value fieldRef = moore::ClassPropertyRefOp::create(
+          builder, loc, fieldRefTy, baseVal, fieldSym);
+
+      // If we need an RValue, read the reference, otherwise return
+      return isLvalue ? fieldRef
+                      : moore::ReadOp::create(builder, loc, fieldRef);
     }
 
     mlir::emitError(loc, "expression of type ")
-        << value.getType() << " has no member fields";
+        << valueType->toString() << " has no member fields";
     return {};
   }
 };
@@ -2006,6 +2050,39 @@ static Value materializeSBVToPackedConversion(Context &context,
   return builder.createOrFold<moore::SBVToPackedOp>(loc, packedType, value);
 }
 
+/// Check whether the actual handle is a subclass of another handle type
+/// and return a properly upcast version if so.
+static mlir::Value maybeUpcastHandle(Context &context, mlir::Value actualHandle,
+                                     moore::ClassHandleType expectedHandleTy) {
+  auto loc = actualHandle.getLoc();
+
+  auto actualTy = actualHandle.getType();
+  auto actualHandleTy = dyn_cast<moore::ClassHandleType>(actualTy);
+  if (!actualHandleTy) {
+    mlir::emitError(loc) << "expected a !moore.class<...> value, got "
+                         << actualTy;
+    return {};
+  }
+
+  // Fast path: already the expected handle type.
+  if (actualHandleTy == expectedHandleTy)
+    return actualHandle;
+
+  if (!context.isClassDerivedFrom(actualHandleTy, expectedHandleTy)) {
+    mlir::emitError(loc)
+        << "receiver class " << actualHandleTy.getClassSym()
+        << " is not the same as, or derived from, expected base class "
+        << expectedHandleTy.getClassSym().getRootReference();
+    return {};
+  }
+
+  // Only implicit upcasting is allowed - down casting should never be implicit.
+  auto casted = moore::ClassUpcastOp::create(context.builder, loc,
+                                             expectedHandleTy, actualHandle)
+                    .getResult();
+  return casted;
+}
+
 Value Context::materializeConversion(Type type, Value value, bool isSigned,
                                      Location loc) {
   // Nothing to do if the types are already equal.
@@ -2091,6 +2168,10 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 
     return builder.createOrFold<moore::IntToRealOp>(loc, type, twoValInt);
   }
+
+  if (isa<moore::ClassHandleType>(type) &&
+      isa<moore::ClassHandleType>(value.getType()))
+    return maybeUpcastHandle(*this, value, cast<moore::ClassHandleType>(type));
 
   // TODO: Handle other conversions with dedicated ops.
   if (value.getType() != type)
@@ -2242,4 +2323,71 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
+}
+
+// Resolve any (possibly nested) SymbolRefAttr to an op from the root.
+static mlir::Operation *resolve(Context &context, mlir::SymbolRefAttr sym) {
+  return context.symbolTable.lookupNearestSymbolFrom(context.intoModuleOp, sym);
+}
+
+bool Context::isClassDerivedFrom(const moore::ClassHandleType &actualTy,
+                                 const moore::ClassHandleType &baseTy) {
+  if (!actualTy || !baseTy)
+    return false;
+
+  mlir::SymbolRefAttr actualSym = actualTy.getClassSym();
+  mlir::SymbolRefAttr baseSym = baseTy.getClassSym();
+
+  if (actualSym == baseSym)
+    return true;
+
+  auto *op = resolve(*this, actualSym);
+  auto decl = llvm::dyn_cast_or_null<moore::ClassDeclOp>(op);
+  // Walk up the inheritance chain via ClassDeclOp::$base (SymbolRefAttr).
+  while (decl) {
+    mlir::SymbolRefAttr curBase = decl.getBaseAttr();
+    if (!curBase)
+      break;
+    if (curBase == baseSym)
+      return true;
+    decl = llvm::dyn_cast_or_null<moore::ClassDeclOp>(resolve(*this, curBase));
+  }
+  return false;
+}
+
+moore::ClassHandleType
+Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
+                                      llvm::StringRef fieldName) {
+  if (!actualTy || fieldName.empty())
+    return {};
+
+  // Start at the actual class symbol.
+  mlir::SymbolRefAttr classSym = actualTy.getClassSym();
+
+  while (classSym) {
+    // Resolve the class declaration from the root symbol table owner.
+    auto *op = resolve(*this, classSym);
+    auto decl = llvm::dyn_cast_or_null<moore::ClassDeclOp>(op);
+    if (!decl)
+      break;
+
+    // Scan the class body for a property with the requested symbol name.
+    for (auto &block : decl.getBody()) {
+      for (auto &opInBlock : block) {
+        if (auto prop =
+                llvm::dyn_cast<moore::ClassPropertyDeclOp>(&opInBlock)) {
+          if (prop.getSymName() == fieldName) {
+            // Found a declaring ancestor: return its handle type.
+            return moore::ClassHandleType::get(actualTy.getContext(), classSym);
+          }
+        }
+      }
+    }
+
+    // Not found here—climb to the base class (if any) and continue.
+    classSym = decl.getBaseAttr(); // may be null; loop ends if so
+  }
+
+  // No ancestor declares that property.
+  return {};
 }

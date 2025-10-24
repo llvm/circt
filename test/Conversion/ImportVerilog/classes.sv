@@ -163,3 +163,105 @@ module testModule3;
         t = new;
     end
 endmodule
+
+/// Check property read access
+
+// CHECK-LABEL: moore.module @testModule4() {
+// CHECK: [[T:%.*]] = moore.variable : <class<@"testModule4::testModuleClass">>
+// CHECK: [[RESULT:%.+]] = moore.variable : <i32>
+// CHECK: moore.procedure initial {
+// CHECK:    [[NEW:%.*]] = moore.class.new : <@"testModule4::testModuleClass">
+// CHECK:    moore.blocking_assign [[T]], [[NEW]] : class<@"testModule4::testModuleClass">
+// CHECK:    [[CLASSHANDLE:%.+]] = moore.read [[T]] : <class<@"testModule4::testModuleClass">>
+// CHECK:    [[REF:%.+]] = moore.class.property_ref [[CLASSHANDLE]][@a] : <@"testModule4::testModuleClass"> -> <i32>
+// CHECK:    [[A:%.+]] = moore.read [[REF]]
+// CHECK:    moore.blocking_assign [[RESULT]], [[A]] : i32
+// CHECK:    moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+// CHECK: moore.class.classdecl @"testModule4::testModuleClass" {
+// CHECK-NEXT: moore.class.propertydecl @a : !moore.i32
+// CHECK: }
+
+module testModule4;
+    class testModuleClass;
+       int a;
+    endclass
+    testModuleClass t;
+    int result;
+    initial begin
+        t = new;
+        result = t.a;
+    end
+endmodule
+
+/// Check property write access
+
+// CHECK-LABEL: moore.module @testModule5() {
+// CHECK: [[T:%.*]] = moore.variable : <class<@"testModule5::testModuleClass">>
+// CHECK: [[RESULT:%.+]] = moore.variable : <i32>
+// CHECK: moore.procedure initial {
+// CHECK:    [[NEW:%.*]] = moore.class.new : <@"testModule5::testModuleClass">
+// CHECK:    moore.blocking_assign [[T]], [[NEW]] : class<@"testModule5::testModuleClass">
+// CHECK:    [[CLASSHANDLE:%.+]] = moore.read [[T]] : <class<@"testModule5::testModuleClass">>
+// CHECK:    [[REF:%.+]] = moore.class.property_ref [[CLASSHANDLE]][@a] : <@"testModule5::testModuleClass"> -> <i32>
+// CHECK:    [[RESR:%.+]] = moore.read [[RESULT]] : <i32>
+// CHECK:    moore.blocking_assign [[REF]], [[RESR]] : i32
+// CHECK:    moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+// CHECK: moore.class.classdecl @"testModule5::testModuleClass" {
+// CHECK-NEXT: moore.class.propertydecl @a : !moore.i32
+// CHECK: }
+
+module testModule5;
+    class testModuleClass;
+       int a;
+    endclass
+    testModuleClass t;
+    int result;
+    initial begin
+        t = new;
+        t.a = result;
+    end
+endmodule
+
+/// Check implicit upcast
+
+// CHECK-LABEL: moore.module @testModule6() {
+// CHECK: [[T:%.*]] = moore.variable : <class<@"testModule6::testModuleClass2">>
+// CHECK: [[RESULT:%.+]] = moore.variable : <i32>
+// CHECK: moore.procedure initial {
+// CHECK:    [[NEW:%.*]] = moore.class.new : <@"testModule6::testModuleClass2">
+// CHECK:    moore.blocking_assign [[T]], [[NEW]] : class<@"testModule6::testModuleClass2">
+// CHECK:    [[CLASSHANDLE:%.+]] = moore.read [[T]] : <class<@"testModule6::testModuleClass2">>
+// CHECK:    [[UPCAST:%.+]] = moore.class.upcast [[CLASSHANDLE]] : <@"testModule6::testModuleClass2"> to <@"testModule6::testModuleClass">
+// CHECK:    [[REF:%.+]] = moore.class.property_ref [[UPCAST]][@a] : <@"testModule6::testModuleClass"> -> <i32>
+// CHECK:    [[A:%.+]] = moore.read [[REF]]
+// CHECK:    moore.blocking_assign [[RESULT]], [[A]] : i32
+// CHECK:    moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+// CHECK: moore.class.classdecl @"testModule6::testModuleClass" {
+// CHECK-NEXT: moore.class.propertydecl @a : !moore.i32
+// CHECK: }
+
+module testModule6;
+    class testModuleClass;
+       int a;
+    endclass
+    class testModuleClass2 extends testModuleClass;
+    endclass
+    testModuleClass2 t;
+    int result;
+    initial begin
+        t = new;
+        result = t.a;
+    end
+endmodule

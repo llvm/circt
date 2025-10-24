@@ -2413,4 +2413,35 @@ def ClassNewOp
   let hasVerifier = 1;
 }
 
+
+def ClassPropertyRefOp
+    : MooreOp<"class.property_ref", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
+  let summary = "Get a !moore.ref to a class property";
+  let description = [{
+    Construct a reference to a class instance's property field. Translates
+    to a fixed offset from the the class handle into its data struct.
+  }];
+  let arguments = (ins ClassHandleType:$instance,
+      FlatSymbolRefAttr:$property);
+  let results = (outs RefType:$propertyRef);
+  let assemblyFormat = "$instance`[`$property`]` `:` type($instance) `->` "
+                       "type($propertyRef) attr-dict";
+}
+
+def ClassUpcastOp
+    : MooreOp<"class.upcast", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
+  let summary = "Upcast a derived handle to a base handle (zero-cost)";
+  let description = [{
+    Casts an instance of a class to one of its base classes.
+    The created instance points to the same underlying data struct as the original
+    instance, and modifying it will modify the spawning instance's data as well.
+  }];
+  let arguments = (ins ClassHandleType:$instance);
+  let results = (outs ClassHandleType:$result);
+  let assemblyFormat =
+      "$instance `:` type($instance) `to` type($result) attr-dict";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
