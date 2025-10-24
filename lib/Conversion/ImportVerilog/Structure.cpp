@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/symbols/ClassSymbols.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace circt;
@@ -52,6 +53,11 @@ struct BaseVisitor {
   // sake of name resolution, such as enum variant names.
   LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
     return success();
+  }
+
+  // Handle classes without parameters
+  LogicalResult visit(const slang::ast::ClassType &classdecl) {
+    return context.convertClassDeclaration(classdecl);
   }
 
   // Skip typedefs.
@@ -1306,6 +1312,207 @@ Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
       return lowering.op->isProperAncestor(use.getOwner());
     });
   }
+
+  return success();
+}
+
+namespace {
+
+/// Construct a fully qualified class name containing the instance hierarchy
+/// and the class name formatted as H1::H2::@C
+mlir::StringAttr fullyQualifiedClassName(Context &ctx,
+                                         const slang::ast::Type &ty) {
+  SmallString<64> name;
+  SmallVector<llvm::StringRef, 8> parts;
+
+  const slang::ast::Scope *scope = ty.getParentScope();
+  while (scope) {
+    const auto &sym = scope->asSymbol();
+    switch (sym.kind) {
+    case slang::ast::SymbolKind::Root:
+      scope = nullptr; // stop at $root
+      continue;
+    case slang::ast::SymbolKind::InstanceBody:
+    case slang::ast::SymbolKind::Instance:
+    case slang::ast::SymbolKind::Package:
+    case slang::ast::SymbolKind::ClassType:
+      if (!sym.name.empty())
+        parts.push_back(sym.name); // keep packages + outer classes
+      break;
+    default:
+      break;
+    }
+    scope = sym.getParentScope();
+  }
+
+  for (auto p : llvm::reverse(parts)) {
+    name += p;
+    name += "::";
+  }
+  name += ty.name; // class’s own name
+  return mlir::StringAttr::get(ctx.getContext(), name);
+}
+
+/// Helper function to construct the classes fully qualified base class name
+/// and the name of all implemented interface classes
+std::pair<mlir::SymbolRefAttr, mlir::ArrayAttr>
+buildBaseAndImplementsAttrs(Context &context,
+                            const slang::ast::ClassType &cls) {
+  mlir::MLIRContext *ctx = context.getContext();
+
+  // Base class (if any)
+  mlir::SymbolRefAttr base;
+  if (const auto *b = cls.getBaseClass())
+    base = mlir::SymbolRefAttr::get(fullyQualifiedClassName(context, *b));
+
+  // Implemented interfaces (if any)
+  SmallVector<mlir::Attribute> impls;
+  if (auto ifaces = cls.getDeclaredInterfaces(); !ifaces.empty()) {
+    impls.reserve(ifaces.size());
+    for (const auto *iface : ifaces)
+      impls.push_back(mlir::FlatSymbolRefAttr::get(
+          fullyQualifiedClassName(context, *iface)));
+  }
+
+  mlir::ArrayAttr implArr =
+      impls.empty() ? mlir::ArrayAttr() : mlir::ArrayAttr::get(ctx, impls);
+
+  return {base, implArr};
+}
+
+/// Visit a slang::ast::ClassType and populate the body of an existing
+/// moore::ClassDeclOp with field/method decls.
+struct ClassDeclVisitor {
+  Context &context;
+  OpBuilder &builder;
+  ClassLowering &classLowering;
+
+  ClassDeclVisitor(Context &ctx, ClassLowering &lowering)
+      : context(ctx), builder(ctx.builder), classLowering(lowering) {}
+
+  LogicalResult run(const slang::ast::ClassType &classAST) {
+    OpBuilder::InsertionGuard ig(builder);
+    Block *body = classLowering.op.getBody().empty()
+                      ? &classLowering.op.getBody().emplaceBlock()
+                      : &classLowering.op.getBody().front();
+    builder.setInsertionPointToEnd(body);
+
+    for (const auto &mem : classAST.members())
+      if (failed(mem.visit(*this)))
+        return failure();
+
+    return success();
+  }
+
+  // Properties: ClassPropertySymbol
+  LogicalResult visit(const slang::ast::ClassPropertySymbol &prop) {
+    auto loc = convertLocation(prop.location);
+    auto ty = context.convertType(prop.getType());
+    if (!ty)
+      return failure();
+
+    moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+    return success();
+  }
+
+  // Fully-fledged functions - SubroutineSymbol
+  LogicalResult visit(const slang::ast::SubroutineSymbol &fn) {
+    if (fn.flags & slang::ast::MethodFlags::BuiltIn) {
+      static bool remarkEmitted = false;
+      if (remarkEmitted)
+        return success();
+
+      mlir::emitRemark(classLowering.op.getLoc())
+          << "Class builtin functions (needed for randomization, constraints, "
+             "and covergroups) are not yet supported and will be dropped "
+             "during lowering.";
+      remarkEmitted = true;
+      return success();
+    }
+    return failure();
+  }
+
+  // Nested class definition, convert
+  LogicalResult visit(const slang::ast::ClassType &cls) {
+    return context.convertClassDeclaration(cls);
+  }
+
+  // Transparent members: ignore (inherited names pulled in by slang)
+  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Empty members: ignore
+  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
+    return success();
+  }
+
+  // Emit an error for all other members.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    Location loc = UnknownLoc::get(context.getContext());
+    if constexpr (requires { node.location; })
+      loc = convertLocation(node.location);
+    mlir::emitError(loc) << "unsupported construct in ClassType members: "
+                         << slang::ast::toString(node.kind);
+    return failure();
+  }
+
+private:
+  Location convertLocation(const slang::SourceLocation &sloc) {
+    return context.convertLocation(sloc);
+  }
+};
+} // namespace
+
+ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
+  // Check if there already is a declaration for this class.
+  auto &lowering = classes[&cls];
+  if (lowering) {
+    if (!lowering->op)
+      return {};
+    return lowering.get();
+  }
+
+  lowering = std::make_unique<ClassLowering>();
+  auto loc = convertLocation(cls.location);
+
+  // Pick an insertion point for this function according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(cls.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  auto symName = fullyQualifiedClassName(*this, cls);
+  auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
+
+  auto classDeclOp =
+      moore::ClassDeclOp::create(builder, loc, symName, base, impls);
+
+  SymbolTable::setSymbolVisibility(classDeclOp,
+                                   SymbolTable::Visibility::Public);
+  orderedRootOps.insert(it, {cls.location, classDeclOp});
+  lowering->op = classDeclOp;
+
+  symbolTable.insert(classDeclOp);
+  return lowering.get();
+}
+
+LogicalResult
+Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
+
+  // Keep track of local time scale.
+  auto prevTimeScale = timeScale;
+  timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
+  auto *lowering = declareClass(classdecl);
+  if (failed(ClassDeclVisitor(*this, *lowering).run(classdecl)))
+    return failure();
 
   return success();
 }

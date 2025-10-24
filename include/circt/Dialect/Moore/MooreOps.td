@@ -2354,4 +2354,46 @@ def AtanhBIOp : RealMathFunc<"atanh"> {
   let summary = "Arc-hyperbolic tangent";
 }
 
+//===----------------------------------------------------------------------===//
+// Classes
+//===----------------------------------------------------------------------===//
+
+def ClassPropertyDeclOp
+    : MooreOp<"class.propertydecl", [Symbol, HasParent<"ClassDeclOp">]> {
+  let summary = "Declare a class property";
+  let description = [{
+  Declares a property within a class declaration.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+
+  let results = (outs);
+  let assemblyFormat = [{
+     $sym_name `:` $type  attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    ::mlir::Type getPropertyType() { return getTypeAttr().getValue(); }
+  }];
+}
+
+def ClassDeclOp
+    : MooreOp<"class.classdecl", [Symbol, SymbolTable, IsolatedFromAbove,
+    NoTerminator, SingleBlock]> {
+  let summary = "Class declaration";
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      OptionalAttr<SymbolRefAttr>:$base,
+      OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = [{
+    $sym_name
+    (`extends` $base^)?
+    (`implements` $implementedInterfaces^)?
+    attr-dict-with-keyword $body
+  }];
+  let hasVerifier = 1;
+}
+
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
