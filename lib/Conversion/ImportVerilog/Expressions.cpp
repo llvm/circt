@@ -110,6 +110,48 @@ struct ExprVisitor {
       : context(context), loc(loc), builder(context.builder),
         isLvalue(isLvalue) {}
 
+  /// Check whether the actual handle is a subclass of another handle type
+  /// and return a properly upcast version if so.
+  mlir::Value maybeUpcastHandle(mlir::Value actualThisRef,
+                                moore::ClassHandleType expectedHandleTy,
+                                std::optional<Operation *> anchor) {
+
+    Operation *upcastAnchor;
+    if (anchor.has_value())
+      upcastAnchor = anchor.value();
+    else
+      upcastAnchor = builder.getInsertionBlock()->getParentOp();
+
+    auto actualTy = actualThisRef.getType();
+    auto actualRefTy = dyn_cast<moore::RefType>(actualTy);
+    if (!actualRefTy)
+      return {};
+
+    auto actualHandleTy =
+        dyn_cast<moore::ClassHandleType>(actualRefTy.getNestedType());
+    if (!actualHandleTy)
+      return {};
+    auto expectedClassSym = expectedHandleTy.getClassSym();
+
+    if (actualHandleTy == expectedHandleTy)
+      return actualThisRef;
+    // If the actual receiver class differs, insert an implicit upcast if legal.
+    // Require: actual is same-or-derived from expected base.
+    if (!actualHandleTy.isSameOrDerivedFrom(upcastAnchor, expectedClassSym)) {
+      mlir::emitError(loc)
+          << "receiver class " << actualHandleTy.getClassSym()
+          << " is not the same as, or derived from, expected base class "
+          << expectedClassSym.getRootReference();
+      return {};
+    }
+
+    // Upcast this ref
+    auto expectedRefTy = moore::RefType::get(expectedHandleTy);
+    return moore::ClassUpcastOp::create(builder, loc, expectedRefTy,
+                                        actualThisRef)
+        .getResult();
+  }
+
   /// Convert an expression either as an lvalue or rvalue, depending on whether
   /// this is an lvalue or rvalue visitor. This is useful for projections such
   /// as `a[i]`, where you want `a` as an lvalue if you want `a[i]` as an
@@ -328,37 +370,84 @@ struct ExprVisitor {
   /// Handle member accesses.
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = convertLvalueOrRvalueExpression(expr.value());
-    if (!type || !value)
+    if (!type)
       return {};
 
-    auto resultType =
-        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto *valueType = expr.value().type.get();
     auto memberName = builder.getStringAttr(expr.member.name);
 
     // Handle structs.
     if (valueType->isStruct()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::StructExtractRefOp::create(builder, loc, resultType,
                                                  memberName, value);
-      else
-        return moore::StructExtractOp::create(builder, loc, resultType,
-                                              memberName, value);
+      return moore::StructExtractOp::create(builder, loc, resultType,
+                                            memberName, value);
     }
 
     // Handle unions.
     if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::UnionExtractRefOp::create(builder, loc, resultType,
                                                 memberName, value);
-      else
-        return moore::UnionExtractOp::create(builder, loc, type, memberName,
-                                             value);
+      return moore::UnionExtractOp::create(builder, loc, type, memberName,
+                                           value);
+    }
+
+    // Handle classes.
+    if (valueType->isClass()) {
+      // Only build what we need: a ref<class> base for field_ref (no read).
+      Value instRef = context.convertLvalueExpression(expr.value());
+      if (!instRef)
+        return {};
+
+      auto instRefTy = dyn_cast<moore::RefType>(instRef.getType());
+      if (!instRefTy ||
+          !isa<moore::ClassHandleType>(instRefTy.getNestedType())) {
+        mlir::emitError(loc)
+            << "class member base must be !moore.ref<class.object<...>>, got "
+            << instRef.getType();
+        return {};
+      }
+
+      // @field and result type !moore.ref<T>.
+      auto fieldSym =
+          mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.member.name);
+      auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+
+      auto classHandleTy =
+          cast<moore::ClassHandleType>(instRefTy.getNestedType());
+
+      // We might need to upcast this handle as the field might be inherited.
+      Operation *anchor = builder.getBlock()->getParentOp();
+      auto targetClassHandle =
+          classHandleTy.ancestorWithProperty(anchor, expr.member.name);
+
+      auto upcastHandle = maybeUpcastHandle(instRef, targetClassHandle, anchor);
+
+      Value fieldRef = builder.create<moore::ClassPropertyRefOp>(
+          loc, fieldRefTy, upcastHandle, fieldSym);
+
+      return isLvalue ? fieldRef
+                      : moore::ReadOp::create(builder, loc, fieldRef);
     }
 
     mlir::emitError(loc, "expression of type ")
-        << value.getType() << " has no member fields";
+        << valueType->toString() << " has no member fields";
     return {};
   }
 };
@@ -392,6 +481,38 @@ struct RvalueExprVisitor : public ExprVisitor {
         value = readOp.getResult();
       }
       return value;
+    }
+
+    // We're reading a class property.
+    if (auto *const property =
+            expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
+      auto type = context.convertType(*expr.type);
+
+      // Get the scope's implicit this variable
+      mlir::Value instRef = context.getImplicitThisRef();
+      if (!instRef) {
+        mlir::emitError(loc) << "class property '" << property->name
+                             << "' referenced without an implicit 'this'";
+        return {};
+      }
+
+      auto fieldSym =
+          mlir::FlatSymbolRefAttr::get(builder.getContext(), property->name);
+      auto fieldTy = cast<moore::UnpackedType>(type);
+      auto fieldRefTy = moore::RefType::get(fieldTy);
+
+      auto classRefTy = cast<moore::RefType>(instRef.getType());
+      auto classTy = cast<moore::ClassHandleType>(classRefTy.getNestedType());
+
+      // In case the property is inherited, do a quick upcast here
+      Operation *anchor = builder.getInsertionBlock()->getParentOp();
+      auto targetClassHandle =
+          classTy.ancestorWithProperty(anchor, property->name);
+      auto upcastRef = maybeUpcastHandle(instRef, targetClassHandle, anchor);
+
+      Value fieldRef = builder.create<moore::ClassPropertyRefOp>(
+          loc, fieldRefTy, upcastRef, fieldSym);
+      return moore::ReadOp::create(builder, loc, fieldRef).getResult();
     }
 
     // Try to materialize constant values directly.
@@ -1111,12 +1232,6 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   /// Handle calls.
   Value visit(const slang::ast::CallExpression &expr) {
-    // Class method calls are currently not supported.
-    if (expr.thisClass()) {
-      mlir::emitError(loc, "unsupported class method call");
-      return {};
-    }
-
     // Try to materialize constant values directly.
     auto constant = context.evaluateConstant(expr);
     if (auto value = context.materializeConstant(constant, *expr.type, loc))
@@ -1127,9 +1242,97 @@ struct RvalueExprVisitor : public ExprVisitor {
         expr.subroutine);
   }
 
+  std::pair<mlir::Value, moore::ClassHandleType>
+  getMethodReceiverTypeHandle(const slang::ast::CallExpression &expr) {
+
+    moore::ClassHandleType handleTy;
+    mlir::Value thisRef;
+
+    // Qualified call: t.m(...), extract from thisClass.
+    if (const slang::ast::Expression *recvExpr = expr.thisClass()) {
+      thisRef = context.convertLvalueExpression(*recvExpr);
+      if (!thisRef)
+        return {};
+
+      auto refTy = dyn_cast<moore::RefType>(thisRef.getType());
+      handleTy = refTy ? dyn_cast<moore::ClassHandleType>(refTy.getNestedType())
+                       : nullptr;
+      if (!handleTy) {
+        mlir::emitError(loc)
+            << "receiver of method '" << expr.getSubroutineName()
+            << "' must be !moore.ref<class.object<...>>, got "
+            << thisRef.getType();
+        return {};
+      }
+    } else {
+      // Unqualified call inside a method body: try using implicit %this.
+      thisRef = context.getImplicitThisRef();
+      if (!thisRef) {
+        mlir::emitError(loc) << "method '" << expr.getSubroutineName()
+                             << "' called without an object";
+        return {};
+      }
+      auto refTy = dyn_cast<moore::RefType>(thisRef.getType());
+      handleTy = refTy ? dyn_cast<moore::ClassHandleType>(refTy.getNestedType())
+                       : nullptr;
+      if (!handleTy) {
+        mlir::emitError(loc)
+            << "implicit 'this' must be !moore.ref<class.object<...>>, got "
+            << thisRef.getType();
+        return {};
+      }
+    }
+    return {thisRef, handleTy};
+  }
+
+  /// Build either a class.vcall or class.call for a method call
+  mlir::Value buildMethodCall(const slang::ast::SubroutineSymbol *subroutine,
+                              FunctionLowering *lowering,
+                              moore::ClassHandleType actualHandleTy,
+                              mlir::Value actualThisRef,
+                              SmallVector<Value> &arguments,
+                              //! This does NOT include the implicit handle!
+                              SmallVector<Type> &resultTypes) {
+
+    // Get the expected receiver type from the lowered method
+    auto funcTy = lowering->op.getFunctionType();
+    auto expected0 = funcTy.getInput(0);
+    auto expectedRefTy = cast<moore::RefType>(expected0);
+    auto expectedHdlTy =
+        cast<moore::ClassHandleType>(expectedRefTy.getNestedType());
+
+    // Upcast the handle as necessary.
+    mlir::Value implicitThisRef =
+        maybeUpcastHandle(actualThisRef, expectedHdlTy, lowering->op);
+
+    // Build an argument list where the this reference is the first argument.
+    SmallVector<Value> explicitArguments;
+    explicitArguments.push_back(implicitThisRef);
+    explicitArguments.append(arguments.begin(), arguments.end());
+
+    // Method call: choose direct vs virtual.
+    const bool isVirtual =
+        (subroutine->flags & slang::ast::MethodFlags::Virtual) != 0;
+
+    if (!isVirtual) {
+      // Direct (non-virtual) call -> moore.class.call
+      auto calleeSym = mlir::SymbolRefAttr::get(context.getContext(),
+                                                lowering->op.getSymName());
+      auto callOp = moore::ClassCallOp::create(builder, loc, resultTypes,
+                                               calleeSym, explicitArguments);
+      return resultTypes.size() > 0 ? callOp.getResult(0) : Value{};
+    }
+
+    mlir::emitError(loc) << "Virtual methods are not yet supported!";
+    return {};
+  }
+
   /// Handle subroutine calls.
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::SubroutineSymbol *subroutine) {
+
+    const bool isMethod = (subroutine->thisVar != nullptr);
+
     auto *lowering = context.declareFunction(*subroutine);
     if (!lowering)
       return {};
@@ -1210,20 +1413,38 @@ struct RvalueExprVisitor : public ExprVisitor {
       }
     }
 
-    // Create the call.
-    auto callOp =
-        mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
+    // Determine result types from the declared/converted func op.
+    SmallVector<Type> resultTypes(
+        lowering->op.getFunctionType().getResults().begin(),
+        lowering->op.getFunctionType().getResults().end());
+
+    mlir::Value result;
+    if (isMethod) {
+      // Class functions -> moore.class.call or moore.class.vcall
+      mlir::Value thisRef;
+      moore::ClassHandleType tyHandle;
+      auto retP = getMethodReceiverTypeHandle(expr);
+      thisRef = retP.first;
+      tyHandle = retP.second;
+      result = buildMethodCall(subroutine, lowering, tyHandle, thisRef,
+                               arguments, resultTypes);
+    } else {
+      // Free function -> func.call
+      auto callOp =
+          mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
+      result = resultTypes.size() > 0 ? callOp.getResult(0) : Value{};
+    }
 
     // For calls to void functions we need to have a value to return from this
     // function. Create a dummy `unrealized_conversion_cast`, which will get
     // deleted again later on.
-    if (callOp.getNumResults() == 0)
+    if (resultTypes.size() == 0)
       return mlir::UnrealizedConversionCastOp::create(
                  builder, loc, moore::VoidType::get(context.getContext()),
                  ValueRange{})
           .getResult(0);
 
-    return callOp.getResult(0);
+    return result;
   }
 
   /// Handle system calls.
@@ -1557,6 +1778,22 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   Value visit(const slang::ast::AssertionInstanceExpression &expr) {
     return context.convertAssertionExpression(expr.body, loc);
+  }
+
+  Value visit(const slang::ast::NewClassExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto classTy = dyn_cast<moore::ClassHandleType>(type);
+    if (!classTy)
+      return {};
+
+    auto newOp = moore::ClassNewOp::create(builder, loc, classTy, {});
+    auto constructor = expr.constructorCall();
+    if (!constructor)
+      return newOp.getResult();
+
+    mlir::emitError(loc) << "New expression requires constructor call, which "
+                            "is not yet implemented!";
+    return {};
   }
 
   /// Emit an error for all other expressions.
