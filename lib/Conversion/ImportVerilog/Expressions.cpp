@@ -110,6 +110,48 @@ struct ExprVisitor {
       : context(context), loc(loc), builder(context.builder),
         isLvalue(isLvalue) {}
 
+  /// Check whether the actual handle is a subclass of another handle type
+  /// and return a properly upcast version if so.
+  mlir::Value maybeUpcastHandle(mlir::Value actualThisRef,
+                                moore::ClassHandleType expectedHandleTy,
+                                std::optional<Operation *> anchor) {
+
+    Operation *upcastAnchor;
+    if (anchor.has_value())
+      upcastAnchor = anchor.value();
+    else
+      upcastAnchor = builder.getInsertionBlock()->getParentOp();
+
+    auto actualTy = actualThisRef.getType();
+    auto actualRefTy = dyn_cast<moore::RefType>(actualTy);
+    if (!actualRefTy)
+      return {};
+
+    auto actualHandleTy =
+        dyn_cast<moore::ClassHandleType>(actualRefTy.getNestedType());
+    if (!actualHandleTy)
+      return {};
+    auto expectedClassSym = expectedHandleTy.getClassSym();
+
+    if (actualHandleTy == expectedHandleTy)
+      return actualThisRef;
+    // If the actual receiver class differs, insert an implicit upcast if legal.
+    // Require: actual is same-or-derived from expected base.
+    if (!actualHandleTy.isSameOrDerivedFrom(upcastAnchor, expectedClassSym)) {
+      mlir::emitError(loc)
+          << "receiver class " << actualHandleTy.getClassSym()
+          << " is not the same as, or derived from, expected base class "
+          << expectedClassSym.getRootReference();
+      return {};
+    }
+
+    // Upcast this ref
+    auto expectedRefTy = moore::RefType::get(expectedHandleTy);
+    return moore::ClassUpcastOp::create(builder, loc, expectedRefTy,
+                                        actualThisRef)
+        .getResult();
+  }
+
   /// Convert an expression either as an lvalue or rvalue, depending on whether
   /// this is an lvalue or rvalue visitor. This is useful for projections such
   /// as `a[i]`, where you want `a` as an lvalue if you want `a[i]` as an
@@ -328,37 +370,84 @@ struct ExprVisitor {
   /// Handle member accesses.
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = convertLvalueOrRvalueExpression(expr.value());
-    if (!type || !value)
+    if (!type)
       return {};
 
-    auto resultType =
-        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto *valueType = expr.value().type.get();
     auto memberName = builder.getStringAttr(expr.member.name);
 
     // Handle structs.
     if (valueType->isStruct()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::StructExtractRefOp::create(builder, loc, resultType,
                                                  memberName, value);
-      else
-        return moore::StructExtractOp::create(builder, loc, resultType,
-                                              memberName, value);
+      return moore::StructExtractOp::create(builder, loc, resultType,
+                                            memberName, value);
     }
 
     // Handle unions.
     if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
+      auto value = convertLvalueOrRvalueExpression(expr.value());
+      if (!value)
+        return {};
+
       if (isLvalue)
         return moore::UnionExtractRefOp::create(builder, loc, resultType,
                                                 memberName, value);
-      else
-        return moore::UnionExtractOp::create(builder, loc, type, memberName,
-                                             value);
+      return moore::UnionExtractOp::create(builder, loc, type, memberName,
+                                           value);
+    }
+
+    // Handle classes.
+    if (valueType->isClass()) {
+      // Only build what we need: a ref<class> base for field_ref (no read).
+      Value instRef = context.convertLvalueExpression(expr.value());
+      if (!instRef)
+        return {};
+
+      auto instRefTy = dyn_cast<moore::RefType>(instRef.getType());
+      if (!instRefTy ||
+          !isa<moore::ClassHandleType>(instRefTy.getNestedType())) {
+        mlir::emitError(loc)
+            << "class member base must be !moore.ref<class.object<...>>, got "
+            << instRef.getType();
+        return {};
+      }
+
+      // @field and result type !moore.ref<T>.
+      auto fieldSym =
+          mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.member.name);
+      auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+
+      auto classHandleTy =
+          cast<moore::ClassHandleType>(instRefTy.getNestedType());
+
+      // We might need to upcast this handle as the field might be inherited.
+      Operation *anchor = builder.getBlock()->getParentOp();
+      auto targetClassHandle =
+          classHandleTy.ancestorWithProperty(anchor, expr.member.name);
+
+      auto upcastHandle = maybeUpcastHandle(instRef, targetClassHandle, anchor);
+
+      Value fieldRef = builder.create<moore::ClassPropertyRefOp>(
+          loc, fieldRefTy, upcastHandle, fieldSym);
+
+      return isLvalue ? fieldRef
+                      : moore::ReadOp::create(builder, loc, fieldRef);
     }
 
     mlir::emitError(loc, "expression of type ")
-        << value.getType() << " has no member fields";
+        << valueType->toString() << " has no member fields";
     return {};
   }
 };
@@ -1557,6 +1646,22 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   Value visit(const slang::ast::AssertionInstanceExpression &expr) {
     return context.convertAssertionExpression(expr.body, loc);
+  }
+
+  Value visit(const slang::ast::NewClassExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto classTy = dyn_cast<moore::ClassHandleType>(type);
+    if (!classTy)
+      return {};
+
+    auto newOp = moore::ClassNewOp::create(builder, loc, classTy, {});
+    auto constructor = expr.constructorCall();
+    if (!constructor)
+      return newOp.getResult();
+
+    mlir::emitError(loc) << "New expression requires constructor call, which "
+                            "is not yet implemented!";
+    return {};
   }
 
   /// Emit an error for all other expressions.
