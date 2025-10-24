@@ -123,6 +123,17 @@ struct Context {
   LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
 
+  /// Checks whether one class (actualTy) is derived from another class
+  /// (baseTy). True if it's a subclass, false otherwise.
+  bool isClassDerivedFrom(const moore::ClassHandleType &actualTy,
+                          const moore::ClassHandleType &baseTy);
+
+  /// Tries to find the closest base class of actualTy that carries
+  /// a property with name fieldName.
+  moore::ClassHandleType
+  getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
+                               StringRef fieldName);
+
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
