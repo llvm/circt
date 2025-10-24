@@ -1367,6 +1367,28 @@ OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// Classes
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClassDeclOp::verify() {
+  mlir::Region &body = getBody();
+  if (body.empty())
+    return mlir::success();
+
+  auto &block = body.front();
+  for (mlir::Operation &op : block) {
+
+    // allow only property and method decls
+    if (llvm::isa<circt::moore::ClassPropertyDeclOp>(&op))
+      continue;
+
+    return emitOpError()
+           << "body may only contain 'moore.class.propertydecl' operations";
+  }
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
