@@ -11,8 +11,7 @@
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
-// #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Transforms/WalkPatternRewriteDriver.h"
 
 using namespace circt;
 using namespace circt::comb;
@@ -51,16 +50,16 @@ struct CombOpAnnotate : public OpRewritePattern<CombOpTy> {
 
   LogicalResult matchAndRewrite(CombOpTy op,
                                 PatternRewriter &rewriter) const override {
-    // Use upper_bit_trunc attribute to avoid confusion with IEEE overflow flags
-    if (op->hasAttr("comb.upper_bit_trunc"))
+    // Use LLVM nuw attribute to avoid confusion with IEEE overflow flags
+    if (op->hasAttr("comb.nuw"))
       return failure();
 
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
       return rewriter.notifyMatchFailure(
           op, "Only support binary operations with one result");
 
-    if (!isa<comb::AddOp>(op) && !isa<comb::MulOp>(op) && !isa<comb::SubOp>(op))
-      return rewriter.notifyMatchFailure(op, "unsupported comb op");
+    assert(isa<comb::AddOp>(op) || isa<comb::MulOp>(op) ||
+           isa<comb::SubOp>(op));
 
     SmallVector<ConstantIntRanges> ranges;
     if (failed(collectRanges(solver, op->getOperands(), ranges)))
@@ -80,8 +79,7 @@ struct CombOpAnnotate : public OpRewritePattern<CombOpTy> {
     if (isa<comb::MulOp>(op))
       (void)a.umul_ov(b, overflowed);
 
-    op->setAttr("comb.upper_bit_trunc",
-                BoolAttr::get(op->getContext(), overflowed));
+    op->setAttr("comb.nuw", BoolAttr::get(op->getContext(), overflowed));
     return success();
   }
 
@@ -111,6 +109,5 @@ void CombOverflowAnnotatingPass::runOnOperation() {
   patterns.add<CombOpAnnotate<comb::AddOp>, CombOpAnnotate<comb::MulOp>>(
       patterns.getContext(), solver);
 
-  if (failed(applyPatternsGreedily(op, std::move(patterns))))
-    signalPassFailure();
+  walkAndApplyPatterns(op, std::move(patterns));
 }

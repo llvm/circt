@@ -38,8 +38,9 @@ def CombOverflowAnnotating : Pass<"comb-overflow-annotating"> {
   let summary = "Annotate comb ops with overflow signal.";
   let description = [{
     Using integer range analysis, annotate comb ops which may overflow with
-    a signal that indicates whether the output truncates carry-out bits. This
-    is useful for downstream passes which need to handle overflow conditions.
+    LLVMs no unsigned wrap (nuw) signal that indicates whether the output
+    truncates carry-out bits. This is useful for downstream passes which need to
+    handle overflow conditions.
   }];
 }
 
