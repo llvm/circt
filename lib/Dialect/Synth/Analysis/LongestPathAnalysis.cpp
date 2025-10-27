@@ -2047,17 +2047,24 @@ void LongestPathCollection::sortInDescendingOrder() {
   });
 }
 
-void LongestPathCollection::sortAndDropNonCriticalPathsPerEndPoint() {
-  sortInDescendingOrder();
-  // Deduplicate paths by end-point, keeping only the worst-case delay per
-  // end-point. This gives us the critical delay for each end-point in the
-  // design
-  llvm::DenseSet<DataflowPath::EndPointType> seen;
-  for (size_t i = 0; i < paths.size(); ++i) {
-    if (seen.insert(paths[i].getEndPoint()).second)
-      paths[seen.size() - 1] = std::move(paths[i]);
+void LongestPathCollection::dropNonCriticalPaths(bool perEndPoint) {
+  // Deduplicate paths by start/end-point, keeping only the worst-case delay.
+  if (perEndPoint) {
+    llvm::DenseSet<DataflowPath::EndPointType> seen;
+    for (size_t i = 0; i < paths.size(); ++i) {
+      if (seen.insert(paths[i].getEndPoint()).second)
+        paths[seen.size() - 1] = std::move(paths[i]);
+    }
+
+    paths.resize(seen.size());
+  } else {
+    llvm::DenseSet<Object> seen;
+    for (size_t i = 0; i < paths.size(); ++i) {
+      if (seen.insert(paths[i].getStartPoint()).second)
+        paths[seen.size() - 1] = std::move(paths[i]);
+    }
+    paths.resize(seen.size());
   }
-  paths.resize(seen.size());
 }
 
 void LongestPathCollection::merge(const LongestPathCollection &other) {

@@ -94,7 +94,8 @@ LogicalResult PrintLongestPathAnalysisPass::printAnalysisResult(
   }
 
   size_t oldPathCount = collection.paths.size();
-  collection.sortAndDropNonCriticalPathsPerEndPoint();
+  collection.sortInDescendingOrder();
+  collection.dropNonCriticalPaths(/*perEndPoint=*/true);
   auto &longestPathForEachEndPoint = collection.paths;
 
   // Print analysis header

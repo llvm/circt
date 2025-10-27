@@ -104,6 +104,9 @@ MLIR_CAPI_EXPORTED void
 synthLongestPathCollectionMerge(SynthLongestPathCollection dest,
                                 SynthLongestPathCollection src);
 
+MLIR_CAPI_EXPORTED void synthLongestPathCollectionDropNonCriticalPaths(
+    SynthLongestPathCollection collection, bool perEndPoint);
+
 //===----------------------------------------------------------------------===//
 // DataflowPath API
 //===----------------------------------------------------------------------===//
