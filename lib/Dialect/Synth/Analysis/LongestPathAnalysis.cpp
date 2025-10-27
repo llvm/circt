@@ -2049,7 +2049,6 @@ void LongestPathCollection::sortInDescendingOrder() {
 
 void LongestPathCollection::dropNonCriticalPaths(bool perEndPoint) {
   // Deduplicate paths by start/end-point, keeping only the worst-case delay.
-  // This gives us the critical delay for each end-point in the design
   if (perEndPoint) {
     llvm::DenseSet<DataflowPath::EndPointType> seen;
     for (size_t i = 0; i < paths.size(); ++i) {
