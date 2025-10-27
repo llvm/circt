@@ -332,6 +332,17 @@ class LongestPathCollection:
     # Re-initialize to reflect the merged collection
     self.__init__(self.collection)
 
+  def drop_non_critical_paths(self, per_end_point: bool = True):
+    """
+        Drop all paths except the longest path per end point or start point.
+        Args:
+            per_end_point: Whether to keep only the longest path per end point
+                           (True) or per start point (False)
+    """
+    self.collection.drop_non_critical_paths(per_end_point)
+    # Re-initialize to reflect the dropped paths
+    self.__init__(self.collection)
+
 
 # ============================================================================
 # Main Analysis Interface

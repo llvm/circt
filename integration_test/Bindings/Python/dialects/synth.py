@@ -133,6 +133,15 @@ with Context() as ctx, Location.unknown():
     # CHECK: top:test_aig;child:test_child;a[0] 2
     print(collection.longest_path.to_flamegraph())
 
+    original_length = len(collection)
+    collection.drop_non_critical_paths(per_end_point=True)
+    after_per_end_point = len(collection)
+    collection.drop_non_critical_paths(per_end_point=False)
+    after_per_start_point = len(collection)
+    # CHECK-NEXT: drop_non_critical_paths: True True
+    print("drop_non_critical_paths:", original_length > after_per_end_point,
+          after_per_end_point > after_per_start_point)
+
     test_child = m.body.operations[0]
     body_block = test_child.regions[0].blocks[0]
     result0 = body_block.operations[0].results[0]

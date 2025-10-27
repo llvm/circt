@@ -342,8 +342,8 @@ public:
   // Sort the paths by delay in descending order.
   void sortInDescendingOrder();
 
-  // Sort and drop all paths except the longest path per end point.
-  void sortAndDropNonCriticalPathsPerEndPoint();
+  // Drop all paths except the longest path per end point or start point.
+  void dropNonCriticalPaths(bool perEndPoint = true);
 
   // Merge another collection into this one.
   void merge(const LongestPathCollection &other);

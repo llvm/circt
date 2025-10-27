@@ -203,6 +203,12 @@ void synthLongestPathCollectionMerge(SynthLongestPathCollection dest,
   destWrapper->merge(*srcWrapper);
 }
 
+void synthLongestPathCollectionDropNonCriticalPaths(
+    SynthLongestPathCollection collection, bool perEndPoint) {
+  auto *wrapper = unwrap(collection);
+  wrapper->dropNonCriticalPaths(perEndPoint);
+}
+
 //===----------------------------------------------------------------------===//
 // DataflowPath
 //===----------------------------------------------------------------------===//

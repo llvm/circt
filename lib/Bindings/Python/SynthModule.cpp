@@ -128,10 +128,15 @@ void circt::python::populateDialectSynthSubmodule(nb::module_ &m) {
               int pathIndex) -> SynthLongestPathDataflowPath {
              return synthLongestPathCollectionGetDataflowPath(self, pathIndex);
            })
-      .def("merge", [](SynthLongestPathCollection &self,
-                       SynthLongestPathCollection &src) {
-        synthLongestPathCollectionMerge(self, src);
-      });
+      .def("merge",
+           [](SynthLongestPathCollection &self,
+              SynthLongestPathCollection &src) {
+             synthLongestPathCollectionMerge(self, src);
+           })
+      .def("drop_non_critical_paths",
+           [](SynthLongestPathCollection &self, bool perEndPoint) {
+             synthLongestPathCollectionDropNonCriticalPaths(self, perEndPoint);
+           });
 
   nb::class_<SynthLongestPathDataflowPath>(m, "_LongestPathDataflowPath")
       .def_prop_ro("delay",
