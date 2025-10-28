@@ -495,6 +495,14 @@ moore.module @Variable() {
   %c42_fs = moore.constant_time 42 fs
   moore.variable %c42_fs : <!moore.time>
 
+  // CHECK: [[TMP:%.+]] = arith.constant {{0.*}} : f32
+  // CHECK: llhd.sig [[TMP]] : f32
+  moore.variable : <!moore.f32>
+
+  // CHECK: [[TMP:%.+]] = arith.constant {{0.*}} : f64
+  // CHECK: llhd.sig [[TMP]] : f64
+  moore.variable : <!moore.f64>
+
   // CHECK: hw.output
   moore.output
 }

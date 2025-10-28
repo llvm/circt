@@ -537,6 +537,12 @@ static Value createZeroValue(Type type, Location loc,
     return llhd::ConstantTimeOp::create(rewriter, loc, timeAttr);
   }
 
+  // Handle real values.
+  if (auto floatType = dyn_cast<FloatType>(type)) {
+    auto floatAttr = rewriter.getFloatAttr(floatType, 0.0);
+    return mlir::arith::ConstantOp::create(rewriter, loc, floatAttr);
+  }
+
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
   if (width == -1)
