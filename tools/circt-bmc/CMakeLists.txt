@@ -24,6 +24,7 @@ target_link_libraries(circt-bmc
   CIRCTSupport
   CIRCTVerif
   CIRCTVerifToSMT
+  CIRCTVerifTransforms
   LLVMSupport
   MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation

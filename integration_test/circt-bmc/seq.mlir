@@ -85,3 +85,28 @@ hw.module @Counter_with_firreg_sync_reset(in %clk: !seq.clock, in %rst: i1, out 
   hw.output %reg : i3
 }
 
+//  Check that verif.formal ops are ingested correctly
+//  RUN: circt-bmc %s -b 2 --module FormalOp --shared-libs=%libz3 | FileCheck %s --check-prefix=FORMAL2
+//  FORMAL2: Bound reached with no violations!
+//  RUN: circt-bmc %s -b 10 --module FormalOp --shared-libs=%libz3 | FileCheck %s --check-prefix=FORMAL10
+//  FORMAL10: Assertion can be violated!
+
+hw.module @CounterWithoutAssert(in %clk: !seq.clock, out count: i2) {
+  %init = seq.initial () {
+    %c0_i2 = hw.constant 0 : i2
+    seq.yield %c0_i2 : i2
+  } : () -> !seq.immutable<i2>
+  %c1_i2 = hw.constant 1 : i2
+  %regPlusOne = comb.add %reg, %c1_i2 : i2
+  %reg = seq.compreg %regPlusOne, %clk initial %init : i2
+  hw.output %reg : i2
+}
+
+verif.formal @FormalOp {} {
+  %symClk = verif.symbolic_value : !seq.clock
+  %count = hw.instance "counter" @CounterWithoutAssert(clk: %symClk: !seq.clock) -> (count: i2)
+  // Condition - count should never reach 3
+  %c3_i2 = hw.constant 3 : i2
+  %lt = comb.icmp ult %count, %c3_i2 : i2
+  verif.assert %lt : i1
+}
