@@ -585,15 +585,17 @@ struct RvalueExprVisitor : public ExprVisitor {
     moore::RealType realTy = llvm::dyn_cast<moore::RealType>(ty);
     if (!realTy)
       return {};
-    Value one;
 
+    FloatAttr oneAttr;
     if (realTy.getWidth() == moore::RealWidth::f32) {
-      llvm::APFloat f(llvm::APFloat::IEEEsingle(), "1.0");
-      one = moore::ShortrealLiteralOp::create(builder, loc, f).getResult();
+      oneAttr = builder.getFloatAttr(builder.getF32Type(), 1.0);
     } else if (realTy.getWidth() == moore::RealWidth::f64) {
-      llvm::APFloat f(llvm::APFloat::IEEEdouble(), "1.0");
-      one = moore::RealLiteralOp::create(builder, loc, f).getResult();
+      oneAttr = builder.getFloatAttr(builder.getF64Type(), 1.0);
+    } else {
+      mlir::emitError(loc) << "cannot construct increment for " << realTy;
+      return {};
     }
+    auto one = moore::ConstantRealOp::create(builder, loc, oneAttr);
 
     postValue =
         isInc
@@ -1348,14 +1350,14 @@ struct RvalueExprVisitor : public ExprVisitor {
   /// Handle string literals.
   Value visit(const slang::ast::StringLiteral &expr) {
     auto type = context.convertType(*expr.type);
-    return moore::StringConstantOp::create(builder, loc, type, expr.getValue());
+    return moore::ConstantStringOp::create(builder, loc, type, expr.getValue());
   }
 
   /// Handle real literals.
   Value visit(const slang::ast::RealLiteral &expr) {
     auto fTy = mlir::Float64Type::get(context.getContext());
     auto attr = mlir::FloatAttr::get(fTy, expr.getValue());
-    return moore::RealLiteralOp::create(builder, loc, attr).getResult();
+    return moore::ConstantRealOp::create(builder, loc, attr).getResult();
   }
 
   /// Helper function to convert RValues at creation of a new Struct, Array or
@@ -1790,43 +1792,21 @@ Value Context::materializeSVReal(const slang::ConstantValue &svreal,
                                  const slang::ast::Type &astType,
                                  Location loc) {
   const auto *floatType = astType.as_if<slang::ast::FloatingType>();
-  if (!floatType)
-    return {}; // not a floating type at all
+  assert(floatType);
 
-  // Coerce the constant to the expected floating kind if needed.
-  // (Avoid calling .real()/.shortReal() unless the predicate is true.)
-  if (floatType->floatKind == slang::ast::FloatingType::ShortReal) {
-    slang::ConstantValue cv = svreal;
-    if (!cv.isShortReal()) {
-      // Slang will do a semantic conversion when possible.
-      cv = cv.convertToShortReal();
-      if (!cv.isShortReal())
-        return {}; // cannot represent as shortreal
-    }
-    auto fTy = mlir::Float32Type::get(getContext());
-    auto resultType = moore::RealType::getShortReal(getContext());
-    float v = cv.shortReal().v; // safe now
-    auto attr = mlir::FloatAttr::get(fTy, v);
-    return moore::ShortrealLiteralOp::create(builder, loc, resultType, attr)
-        .getResult();
+  FloatAttr attr;
+  if (svreal.isShortReal() &&
+      floatType->floatKind == slang::ast::FloatingType::ShortReal) {
+    attr = FloatAttr::get(builder.getF32Type(), svreal.shortReal().v);
+  } else if (svreal.isReal() &&
+             floatType->floatKind == slang::ast::FloatingType::Real) {
+    attr = FloatAttr::get(builder.getF64Type(), svreal.real().v);
+  } else {
+    mlir::emitError(loc) << "invalid real constant";
+    return {};
   }
 
-  if (floatType->floatKind == slang::ast::FloatingType::Real) {
-    slang::ConstantValue cv = svreal;
-    if (!cv.isReal()) {
-      cv = cv.convertToReal();
-      if (!cv.isReal())
-        return {}; // cannot represent as real
-    }
-    auto fTy = mlir::Float64Type::get(getContext());
-    auto resultType = moore::RealType::getReal(getContext());
-    double v = cv.real().v; // safe now
-    auto attr = mlir::FloatAttr::get(fTy, v);
-    return moore::RealLiteralOp::create(builder, loc, resultType, attr)
-        .getResult();
-  }
-
-  return {};
+  return moore::ConstantRealOp::create(builder, loc, attr);
 }
 
 /// Materialize a Slang string literal as a literal string constant op.
@@ -1841,7 +1821,7 @@ Value Context::materializeString(const slang::ConstantValue &stringLiteral,
   auto intTy = moore::IntType::getInt(getContext(), effectiveWidth.value());
 
   if (astType.isString()) {
-    auto immInt = moore::StringConstantOp::create(builder, loc, intTy,
+    auto immInt = moore::ConstantStringOp::create(builder, loc, intTy,
                                                   stringLiteral.toString())
                       .getResult();
     return moore::IntToStringOp::create(builder, loc, immInt).getResult();

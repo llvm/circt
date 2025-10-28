@@ -168,13 +168,13 @@ module Basic;
   MyEnum ev1 = VariantA;
   MyEnum ev2 = VariantB;
 
-  // CHECK: [[STR_WELCOME:%.+]] = moore.string_constant "Welcome to Moore" : i128
+  // CHECK: [[STR_WELCOME:%.+]] = moore.constant_string "Welcome to Moore" : i128
   // CHECK: [[CONV_WELCOME:%.+]] = moore.conversion [[STR_WELCOME]] : !moore.i128 -> !moore.string
   // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
   string s = "Welcome to Moore";
 
   // CHECK: [[VAR_S1:%.+]] = moore.variable : <string>
-  // CHECK: [[STR_HELLO:%.+]] = moore.string_constant "Hello World" : i88
+  // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello World" : i88
   // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i88 -> !moore.string
   // CHECK: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
   string s1; 
@@ -755,11 +755,11 @@ module Expressions;
   bit [31:0] arr2 [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
-  // CHECK: [[STR_HELLO:%.+]] = moore.string_constant "Hello" : i40
+  // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello" : i40
   // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i40 -> !moore.string
   // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
   string s = "Hello";
-  // CHECK: [[STR_WORLD:%.+]] = moore.string_constant "World" : i40
+  // CHECK: [[STR_WORLD:%.+]] = moore.constant_string "World" : i40
   // CHECK: [[CONV_WORLD:%.+]] = moore.conversion [[STR_WORLD]] : !moore.i40 -> !moore.string
   // CHECK: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
   string s1 = "World";
@@ -3347,7 +3347,7 @@ endfunction
 
 // CHECK: func.func private @testRealLiteral() -> !moore.f64 {
 function automatic real testRealLiteral();
-   // CHECK: [[TMP:%.+]] = moore.real_constant 1.234500e+00
+   // CHECK: [[TMP:%.+]] = moore.constant_real 1.234500e+00 : f64
    localparam test = 1.2345;
     // CHECK-NEXT: return [[TMP]] : !moore.f64
    return test;
@@ -3355,7 +3355,7 @@ endfunction
 
 // CHECK: func.func private @testShortrealLiteral() -> !moore.f32 {
 function automatic shortreal testShortrealLiteral();
-   // CHECK: [[TMP:%.+]] = moore.shortreal_constant 1.234500e+00
+   // CHECK: [[TMP:%.+]] = moore.constant_real 1.234500e+00 : f32
    localparam test = shortreal'(1.2345);
     // CHECK-NEXT: return [[TMP]] : !moore.f32
    return test;
@@ -3435,10 +3435,10 @@ endmodule
 
 // CHECK-LABEL: moore.module @RealLiteral() {
 module RealLiteral();
-   // CHECK-NEXT:  [[REALCONSTANT:%.+]] = moore.real_constant 5.000000e-01
+   // CHECK-NEXT:  [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
    // CHECK-NEXT: [[A:%.+]] = moore.variable [[REALCONSTANT]] : <f64>
    real a = 0.5;
-   // CHECK-NEXT: [[REALCONSTANT:%.+]] = moore.real_constant 5.000000e-01
+   // CHECK-NEXT: [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
    // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.conversion [[REALCONSTANT]] : !moore.f64 -> !moore.f32
    // CHECK-NEXT: [[B:%.+]] = moore.variable [[SHORTREALCONSTANT]] : <f32>
    shortreal b = 0.5;
@@ -3479,7 +3479,7 @@ endmodule
 // CHECK-LABEL: func.func private @testStrLiteralReturn()
 // CHECK-SAME: -> !moore.string {
 function string testStrLiteralReturn;
-    // CHECK-NEXT: [[INT:%.+]] = moore.string_constant "\22A string literal\22" : i127
+    // CHECK-NEXT: [[INT:%.+]] = moore.constant_string "\22A string literal\22" : i127
     // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[INT]] : i127
     parameter string testStrLiteral = "A string literal";
     // CHECK-NEXT: return [[STR]] : !moore.string
@@ -3557,11 +3557,11 @@ function void testRealOps;
     test = (a >= b);
 
     // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
-    // CHECK-NEXT: [[ONE:%.+]] = moore.real_constant 1.000000e+00
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f64
     // CHECK-NEXT: [[ANEW:%.+]] = moore.fadd [[OP]], [[ONE]] : f64
     a++;
     // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
-    // CHECK-NEXT: [[ONE:%.+]] = moore.real_constant 1.000000e+00
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f64
     // CHECK-NEXT: [[ANEW:%.+]] = moore.fsub [[OP]], [[ONE]] : f64
     a--;
     // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
@@ -3647,11 +3647,11 @@ function void testRealOps;
     test = (c >= d);
 
     // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
-    // CHECK-NEXT: [[ONE:%.+]] = moore.shortreal_constant 1.000000e+00
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f32
     // CHECK-NEXT: [[CNEW:%.+]] = moore.fadd [[OP]], [[ONE]] : f32
     c++;
     // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
-    // CHECK-NEXT: [[ONE:%.+]] = moore.shortreal_constant 1.000000e+00
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f32
     // CHECK-NEXT: [[CNEW:%.+]] = moore.fsub [[OP]], [[ONE]] : f32
     c--;
     // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>

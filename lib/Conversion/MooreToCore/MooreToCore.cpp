@@ -633,31 +633,13 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
-struct RealConstantOpConv : public OpConversionPattern<RealLiteralOp> {
+struct ConstantRealOpConv : public OpConversionPattern<ConstantRealOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(RealLiteralOp op, OpAdaptor adaptor,
+  matchAndRewrite(ConstantRealOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::APFloat apf = op.getValue();
-    Type outTy = rewriter.getF64Type();
-    auto attr = FloatAttr::get(outTy, apf);
-    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, attr);
-    return success();
-  }
-};
-
-struct ShortrealConstantOpConv
-    : public OpConversionPattern<ShortrealLiteralOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ShortrealLiteralOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    llvm::APFloat apf = op.getValue();
-    Type outTy = rewriter.getF32Type();
-    auto attr = FloatAttr::get(outTy, apf);
-    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, attr);
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, op.getValueAttr());
     return success();
   }
 };
@@ -675,10 +657,10 @@ struct ConstantTimeOpConv : public OpConversionPattern<ConstantTimeOp> {
   }
 };
 
-struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
+struct ConstantStringOpConv : public OpConversionPattern<ConstantStringOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(moore::StringConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(moore::ConstantStringOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     const auto resultType =
         typeConverter->convertType(op.getResult().getType());
@@ -1956,8 +1938,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
-    RealConstantOpConv,
-    ShortrealConstantOpConv,
+    ConstantRealOpConv,
     ConcatOpConversion,
     ReplicateOpConversion,
     ConstantTimeOpConv,
@@ -1973,7 +1954,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ArrayCreateOpConversion,
     YieldOpConversion,
     OutputOpConversion,
-    StringConstantOpConv,
+    ConstantStringOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion,
