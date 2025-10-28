@@ -64,39 +64,3 @@ firrtl.circuit "PreserveLocation" {
 // CHECK-LOC: [[LOC]] = loc("someLoc":9001:1)
 #moduleLoc = loc("wrongLoc":42:1)
 #instLoc = loc("someLoc":9001:1)
-
-// Internal paths should be expanded
-firrtl.circuit "InternalPaths"  {
-  // CHECK: firrtl.extmodule private @BlackBox
-  // CHECK-SAME: out bundle_a: !firrtl.uint<32>, out bundle_b: !firrtl.uint<23>
-  // CHECK-SAME: out array_0: !firrtl.uint<1>, out array_1: !firrtl.uint<1>
-  // CHECK-SAME: out probe: !firrtl.probe<uint<32>>
-  // CHECK-SAME: internalPaths = [
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath<"some_probe">
-  // CHECK-SAME: ]
-  firrtl.extmodule private @BlackBox(
-    out bundle : !firrtl.bundle<a: uint<32>, b: uint<23>>,
-    out array : !firrtl.vector<uint<1>, 2>,
-    out probe : !firrtl.probe<uint<32>>
-  ) attributes {
-    convention = #firrtl<convention scalarized>,
-    internalPaths = [
-      #firrtl.internalpath,
-      #firrtl.internalpath,
-      #firrtl.internalpath<"some_probe">
-    ]
-  }
-
-  // CHECK-LABEL: @InternalPaths
-  firrtl.module @InternalPaths() {
-    %bundle, %array, %probe = firrtl.instance blackbox @BlackBox(
-      out bundle : !firrtl.bundle<a: uint<32>, b: uint<23>>,
-      out array : !firrtl.vector<uint<1>, 2>,
-      out probe : !firrtl.probe<uint<32>>
-    )
-  }
-}

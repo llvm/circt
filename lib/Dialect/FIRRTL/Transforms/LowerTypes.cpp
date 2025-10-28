@@ -81,13 +81,6 @@ struct FlatBundleFieldEntry {
                  << isOutput << ">}\n";
   }
 };
-
-/// Extended PortInfo including the (optional) internalPath attribute.
-struct PortInfoWithIP {
-  PortInfo pi;
-  std::optional<InternalPathAttr> internalPath;
-};
-
 } // end anonymous namespace
 
 /// Return fieldType or fieldType as same ref as type.
@@ -355,12 +348,12 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   void lowerModule(FModuleLike op);
 
   bool lowerArg(FModuleLike module, size_t argIndex, size_t argsRemoved,
-                SmallVectorImpl<PortInfoWithIP> &newArgs,
+                SmallVectorImpl<PortInfo> &newArgs,
                 SmallVectorImpl<Value> &lowering);
-  std::pair<Value, PortInfoWithIP>
-  addArg(Operation *module, unsigned insertPt, unsigned insertPtOffset,
-         FIRRTLType srcType, const FlatBundleFieldEntry &field,
-         PortInfoWithIP &oldArg, hw::InnerSymAttr newSym);
+  std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
+                                    unsigned insertPtOffset, FIRRTLType srcType,
+                                    const FlatBundleFieldEntry &field,
+                                    PortInfo &oldArg, hw::InnerSymAttr newSym);
 
   // Helpers to manage state.
   bool visitDecl(FExtModuleOp op);
@@ -776,58 +769,48 @@ void TypeLoweringVisitor::lowerModule(FModuleLike op) {
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
-std::pair<Value, PortInfoWithIP>
+std::pair<Value, PortInfo>
 TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
-                            const FlatBundleFieldEntry &field,
-                            PortInfoWithIP &oldArg, hw::InnerSymAttr newSym) {
+                            const FlatBundleFieldEntry &field, PortInfo &oldArg,
+                            hw::InnerSymAttr newSym) {
   Value newValue;
   FIRRTLType fieldType = mapLoweredType(srcType, field.type);
   if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
-    newValue = body->insertArgument(insertPt, fieldType, oldArg.pi.loc);
+    newValue = body->insertArgument(insertPt, fieldType, oldArg.loc);
   }
 
   // Save the name attribute for the new argument.
-  auto name = builder->getStringAttr(oldArg.pi.name.getValue() + field.suffix);
+  auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
   // Populate the new arg attributes.
   auto newAnnotations = filterAnnotations(
-      context, oldArg.pi.annotations.getArrayAttr(), srcType, field);
+      context, oldArg.annotations.getArrayAttr(), srcType, field);
   // Flip the direction if the field is an output.
-  auto direction = (Direction)((unsigned)oldArg.pi.direction ^ field.isOutput);
+  auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
   return std::make_pair(
-      newValue,
-      PortInfoWithIP{PortInfo{name, fieldType, direction, newSym, oldArg.pi.loc,
-                              AnnotationSet(newAnnotations), oldArg.pi.domains},
-                     oldArg.internalPath});
+      newValue, PortInfo{name, fieldType, direction, newSym, oldArg.loc,
+                         AnnotationSet(newAnnotations), oldArg.domains});
 }
 
 // Lower arguments with bundle type by flattening them.
 bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
                                    size_t argsRemoved,
-                                   SmallVectorImpl<PortInfoWithIP> &newArgs,
+                                   SmallVectorImpl<PortInfo> &newArgs,
                                    SmallVectorImpl<Value> &lowering) {
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = type_cast<FIRRTLType>(newArgs[argIndex].pi.type);
+  auto srcType = type_cast<FIRRTLType>(newArgs[argIndex].type);
   if (!peelType(srcType, fieldTypes, getPreservationModeForPorts(module)))
     return false;
 
-  // Ports with internalPath set cannot be lowered.
-  if (auto ip = newArgs[argIndex].internalPath; ip && ip->getPath()) {
-    ::mlir::emitError(newArgs[argIndex].pi.loc,
-                      "cannot lower port with internal path");
-    encounteredError = true;
-    return false;
-  }
-
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
-  if (failed(partitionSymbols(newArgs[argIndex].pi.sym, srcType, fieldSyms,
-                              newArgs[argIndex].pi.loc))) {
+  if (failed(partitionSymbols(newArgs[argIndex].sym, srcType, fieldSyms,
+                              newArgs[argIndex].loc))) {
     encounteredError = true;
     return false;
   }
@@ -1054,17 +1037,9 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Top level builder
   OpBuilder builder(context);
 
-  auto internalPaths = extModule.getInternalPaths();
-
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-  SmallVector<PortInfoWithIP> newArgs;
-  for (auto [idx, pi] : llvm::enumerate(extModule.getPorts())) {
-    std::optional<InternalPathAttr> internalPath;
-    if (internalPaths)
-      internalPath = cast<InternalPathAttr>(internalPaths->getValue()[idx]);
-    newArgs.push_back({pi, internalPath});
-  }
+  auto newArgs = extModule.getPorts();
 
   for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
        ++argIndex) {
@@ -1098,22 +1073,18 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<Attribute, 8> newArgLocations;
   SmallVector<Attribute, 8> newArgAnnotations;
   SmallVector<Attribute, 8> newArgDomains;
-  SmallVector<Attribute, 8> newInternalPaths;
 
-  auto emptyInternalPath = InternalPathAttr::get(context);
   for (auto &port : newArgs) {
-    newArgDirections.push_back(port.pi.direction);
-    newArgNames.push_back(port.pi.name);
-    newArgTypes.push_back(TypeAttr::get(port.pi.type));
-    newArgSyms.push_back(port.pi.sym);
-    newArgLocations.push_back(port.pi.loc);
-    newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
-    if (auto domains = port.pi.domains)
+    newArgDirections.push_back(port.direction);
+    newArgNames.push_back(port.name);
+    newArgTypes.push_back(TypeAttr::get(port.type));
+    newArgSyms.push_back(port.sym);
+    newArgLocations.push_back(port.loc);
+    newArgAnnotations.push_back(port.annotations.getArrayAttr());
+    if (auto domains = port.domains)
       newArgDomains.push_back(domains);
     else
       newArgDomains.push_back(cache.aEmpty);
-    if (internalPaths)
-      newInternalPaths.push_back(port.internalPath.value_or(emptyInternalPath));
   }
 
   newModuleAttrs.push_back(
@@ -1139,8 +1110,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   extModule->setAttrs(newModuleAttrs);
   FModuleLike::fixupPortSymsArray(newArgSyms, context);
   extModule.setPortSymbols(newArgSyms);
-  if (internalPaths)
-    extModule.setInternalPathsAttr(builder.getArrayAttr(newInternalPaths));
 
   return false;
 }
@@ -1156,9 +1125,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Lower the module block arguments.
   llvm::BitVector argsToRemove;
-  auto newArgs = llvm::map_to_vector(module.getPorts(), [](auto pi) {
-    return PortInfoWithIP{pi, std::nullopt};
-  });
+  auto newArgs = module.getPorts();
 
   size_t argsRemoved = 0;
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
@@ -1205,13 +1172,13 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   SmallVector<Attribute, 8> newArgAnnotations;
   SmallVector<Attribute> newPortDomains;
   for (auto &port : newArgs) {
-    newArgDirections.push_back(port.pi.direction);
-    newArgNames.push_back(port.pi.name);
-    newArgTypes.push_back(TypeAttr::get(port.pi.type));
-    newArgSyms.push_back(port.pi.sym);
-    newArgLocations.push_back(port.pi.loc);
-    newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
-    if (auto domains = port.pi.domains)
+    newArgDirections.push_back(port.direction);
+    newArgNames.push_back(port.name);
+    newArgTypes.push_back(TypeAttr::get(port.type));
+    newArgSyms.push_back(port.sym);
+    newArgLocations.push_back(port.loc);
+    newArgAnnotations.push_back(port.annotations.getArrayAttr());
+    if (auto domains = port.domains)
       newPortDomains.push_back(domains);
     else
       newPortDomains.push_back(cache.aEmpty);

@@ -182,28 +182,6 @@ def MemoryInitAttr : AttrDef<FIRRTLDialect, "MemoryInit"> {
  let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
 }
 
-/// An attribute holding internal path for ref-type ports.
-def InternalPathAttr : AttrDef<FIRRTLDialect, "InternalPath"> {
-  let summary = "Internal path for ref-type ports";
-  let mnemonic = "internalpath";
-  let parameters = (ins OptionalParameter<"::mlir::StringAttr">:$path);
-  let assemblyFormat = "(`<` $path^ `>`)?";
-  let builders = [
-     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$path), [{
-       return $_get(path.getContext(), path);
-     }]>,
-     AttrBuilder<(ins "::llvm::StringRef":$path), [{
-       return $_get($_ctxt, ::mlir::StringAttr::get($_ctxt, path));
-     }]>,
-     AttrBuilder<(ins), [{
-       return $_get($_ctxt, ::mlir::StringAttr());
-     }]>
-  ];
-}
-
-def InternalPathArrayAttr
-  : TypedArrayAttrBase<InternalPathAttr, "InternalPath array attribute">;
-
 //===----------------------------------------------------------------------===//
 // Miscellaneous attributes
 //===----------------------------------------------------------------------===//

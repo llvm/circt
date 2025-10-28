@@ -2188,23 +2188,6 @@ firrtl.circuit "ObjectFieldDoesntExist" {
 }
 
 // -----
-
-firrtl.circuit "WrongInternalPathCount" {
-  // expected-error @below {{module has inconsistent internal path array with 1 entries for 0 ports}}
-  firrtl.extmodule @WrongInternalPathCount() attributes { internalPaths = [ #firrtl.internalpath ] }
-}
-
-// -----
-
-firrtl.circuit "InternalPathForNonRefType" {
-  // expected-error @below {{module has internal path for non-ref-type port "in"}}
-  firrtl.extmodule @WrongInternalPathCount(
-    // expected-note @below {{this port}}
-    in in : !firrtl.uint<1>
-    ) attributes { internalPaths = [ #firrtl.internalpath<"x.y"> ] }
-}
-
-// -----
 // Try to read from an output object's input ports.
 
 firrtl.circuit "Top" {
