@@ -2087,7 +2087,7 @@ bool comb::foldMuxChainWithComparison(
 
   // Build the array_create and the array_get.
   auto fusedLoc = rewriter.getFusedLoc(locationsFound);
-  auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);
+  auto array = hw::ArrayCreateOp::create(rewriter, fusedLoc, table);
   replaceOpWithNewOpAndCopyNamehint<hw::ArrayGetOp>(rewriter, rootMux, array,
                                                     indexValue);
   return true;

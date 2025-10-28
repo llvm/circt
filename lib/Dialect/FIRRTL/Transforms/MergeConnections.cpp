@@ -244,9 +244,9 @@ bool MergeConnection::peelConnect(MatchingConnectOp connect) {
   // Emit strict connect if possible, fallback to normal connect.
   // Don't use emitConnect(), will split the connect apart.
   if (!parentBaseTy.hasUninferredWidth())
-    builder->create<MatchingConnectOp>(connect.getLoc(), parent, merged);
+    MatchingConnectOp::create(*builder, connect.getLoc(), parent, merged);
   else
-    builder->create<ConnectOp>(connect.getLoc(), parent, merged);
+    ConnectOp::create(*builder, connect.getLoc(), parent, merged);
 
   return true;
 }

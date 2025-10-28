@@ -472,8 +472,9 @@ private:
 
     // Compute 2*c for use in array construction
     Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
-    Value twoCWider = rewriter.create<comb::ConcatOp>(loc, ValueRange{c, zero});
-    Value twoC = rewriter.create<comb::ExtractOp>(loc, twoCWider, 0, rowWidth);
+    Value twoCWider =
+        comb::ConcatOp::create(rewriter, loc, ValueRange{c, zero});
+    Value twoC = comb::ExtractOp::create(rewriter, loc, twoCWider, 0, rowWidth);
 
     // AND Array Construction:
     // pp[i] = ( (carry[i] * (c<<1)) | (save[i] * c) ) << i

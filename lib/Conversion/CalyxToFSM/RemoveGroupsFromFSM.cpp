@@ -104,8 +104,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::modifyGroupOperations() {
     auto doneWire = doneWireIt->second;
 
     b->setInsertionPointToEnd(componentOp.getWiresOp().getBodyBlock());
-    b->create<calyx::AssignOp>(loc, doneWire.getIn(), groupDone.getSrc(),
-                               groupDone.getGuard());
+    calyx::AssignOp::create(*b, loc, doneWire.getIn(), groupDone.getSrc(),
+                            groupDone.getGuard());
 
     groupDone.erase();
   }
@@ -217,8 +217,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
 
     // Create a wire for the group done input.
     b->setInsertionPointToStart(&componentOp.getBody().front());
-    auto groupDoneWire = b->create<calyx::WireLibOp>(
-        componentOp.getLoc(), name.str() + "_done", b->getI1Type());
+    auto groupDoneWire = calyx::WireLibOp::create(
+        *b, componentOp.getLoc(), name.str() + "_done", b->getI1Type());
     fsmInputMap[inputIdx] = groupDoneWire.getOut();
     groupDoneWires[name] = groupDoneWire;
   }
@@ -264,10 +264,11 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
 
   // Instantiate the FSM.
   auto clkPort = componentOp.getClkPort();
-  auto clk = b->create<seq::ToClockOp>(clkPort.getLoc(), clkPort);
-  auto fsmInstance = b->create<fsm::HWInstanceOp>(
-      machineOp.getLoc(), machineOutputTypes, b->getStringAttr("controller"),
-      machineOp.getSymNameAttr(), fsmInputs, clk, componentOp.getResetPort());
+  auto clk = seq::ToClockOp::create(*b, clkPort.getLoc(), clkPort);
+  auto fsmInstance = fsm::HWInstanceOp::create(
+      *b, machineOp.getLoc(), machineOutputTypes,
+      b->getStringAttr("controller"), machineOp.getSymNameAttr(), fsmInputs,
+      clk, componentOp.getResetPort());
 
   // Record the FSM output group go signals.
   for (auto namedAttr : groupGoOutputsAttr.getValue()) {
@@ -278,8 +279,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
 
   // Assign FSM top level done to the component done.
   b->setInsertionPointToEnd(componentOp.getWiresOp().getBodyBlock());
-  b->create<calyx::AssignOp>(machineOp.getLoc(), componentOp.getDonePort(),
-                             fsmInstance.getResult(topLevelDoneAttr.getInt()));
+  calyx::AssignOp::create(*b, machineOp.getLoc(), componentOp.getDonePort(),
+                          fsmInstance.getResult(topLevelDoneAttr.getInt()));
 
   return success();
 }

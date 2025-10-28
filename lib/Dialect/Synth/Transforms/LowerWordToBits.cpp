@@ -304,7 +304,7 @@ LogicalResult BitBlaster::run() {
     if (shouldLowerOperation(op)) {
       OpBuilder builder(op);
       std::reverse(results.begin(), results.end());
-      auto concat = builder.create<comb::ConcatOp>(value.getLoc(), results);
+      auto concat = comb::ConcatOp::create(builder, value.getLoc(), results);
       value.replaceAllUsesWith(concat);
       op->erase();
     }
@@ -316,8 +316,8 @@ LogicalResult BitBlaster::run() {
 Value BitBlaster::getBoolConstant(bool value) {
   if (!constants[value]) {
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());
-    constants[value] = builder.create<hw::ConstantOp>(
-        builder.getUnknownLoc(), builder.getI1Type(), value);
+    constants[value] = hw::ConstantOp::create(builder, builder.getUnknownLoc(),
+                                              builder.getI1Type(), value);
   }
   return constants[value];
 }

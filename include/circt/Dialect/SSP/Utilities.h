@@ -437,35 +437,35 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
   ImplicitLocOpBuilder b(builder.getUnknownLoc(), builder);
 
   // Set up instance.
-  auto instOp = b.create<InstanceOp>(
-      builder.getStringAttr(ProblemT::name),
+  auto instOp = InstanceOp::create(
+      b, builder.getStringAttr(ProblemT::name),
       saveInstanceProperties<ProblemT, InstancePropertyTs...>(prob, b));
   if (auto instName = prob.getInstanceName())
     instOp.setSymNameAttr(instName);
 
   // Emit operator types.
   b.setInsertionPointToEnd(instOp.getBodyBlock());
-  auto libraryOp = b.create<OperatorLibraryOp>();
+  auto libraryOp = OperatorLibraryOp::create(b);
   if (auto libName = prob.getLibraryName())
     libraryOp.setSymNameAttr(libName);
   b.setInsertionPointToStart(libraryOp.getBodyBlock());
 
   for (auto opr : prob.getOperatorTypes())
-    b.create<OperatorTypeOp>(
-        opr.getAttr(),
+    OperatorTypeOp::create(
+        b, opr.getAttr(),
         saveOperatorTypeProperties<ProblemT, OperatorTypePropertyTs...>(
             prob, opr, b));
 
   // Emit resource types.
   b.setInsertionPointToEnd(instOp.getBodyBlock());
-  auto rsrcLibraryOp = b.create<ResourceLibraryOp>();
+  auto rsrcLibraryOp = ResourceLibraryOp::create(b);
   if (auto rsrcLibName = prob.getRsrcLibraryName())
     rsrcLibraryOp.setSymNameAttr(rsrcLibName);
   b.setInsertionPointToStart(rsrcLibraryOp.getBodyBlock());
 
   for (auto rsrc : prob.getResourceTypes())
-    b.create<ResourceTypeOp>(
-        rsrc.getAttr(),
+    ResourceTypeOp::create(
+        b, rsrc.getAttr(),
         saveResourceTypeProperties<ProblemT, ResourceTypePropertyTs...>(
             prob, rsrc, b));
 
@@ -490,7 +490,7 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
 
   // Construct operations and model their dependences.
   b.setInsertionPointToEnd(instOp.getBodyBlock());
-  auto graphOp = b.create<DependenceGraphOp>();
+  auto graphOp = DependenceGraphOp::create(b);
   b.setInsertionPointToStart(graphOp.getBodyBlock());
 
   BackedgeBuilder backedgeBuilder(b, b.getLoc());
@@ -534,8 +534,8 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
     // NB: sym_name, dependences and properties are optional attributes, so
     // passing potentially unitialized String/ArrayAttrs is intentional here.
     auto opOp =
-        b.create<OperationOp>(op->getNumResults(), v.get(op->getOperands()),
-                              opNames.lookup(op), dependences, properties);
+        OperationOp::create(b, op->getNumResults(), v.get(op->getOperands()),
+                            opNames.lookup(op), dependences, properties);
     v.set(op->getResults(), opOp->getResults());
   }
 

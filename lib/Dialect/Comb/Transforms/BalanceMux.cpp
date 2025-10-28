@@ -119,7 +119,7 @@ PriorityMuxReshape::matchAndRewrite(MuxOp op, PatternRewriter &rewriter) const {
     for (auto &cond : conditions) {
       cond = rewriter.createOrFold<comb::XorOp>(
           op.getLoc(), cond,
-          rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1)), true);
+          hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 1)), true);
     }
   }
 
@@ -234,7 +234,7 @@ Value PriorityMuxReshape::buildBalancedPriorityMux(
       rewriter.createOrFold<OrOp>(loc, conditions.take_front(mid), true);
 
   // Create mux that selects between left and right subtrees
-  return rewriter.create<MuxOp>(loc, combinedCond, leftTree, rightTree);
+  return MuxOp::create(rewriter, loc, combinedCond, leftTree, rightTree);
 }
 
 /// Pass that performs enhanced mux chain optimizations

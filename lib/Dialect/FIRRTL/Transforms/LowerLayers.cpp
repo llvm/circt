@@ -393,7 +393,7 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
   if (!layerBlock.getBody()->empty()) {
     OpBuilder builder(layerBlock);
     auto macroName = macroNames[layer];
-    auto ifDef = builder.create<sv::IfDefOp>(layerBlock.getLoc(), macroName);
+    auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
     ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
   }
   layerBlock.erase();

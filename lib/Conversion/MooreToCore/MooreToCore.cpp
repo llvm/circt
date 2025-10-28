@@ -1738,9 +1738,9 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
   }
 
   auto prefix =
-      rewriter.create<sim::FormatLiteralOp>(op.getLoc(), severityString);
-  auto message = rewriter.create<sim::FormatStringConcatOp>(
-      op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
+      sim::FormatLiteralOp::create(rewriter, op.getLoc(), severityString);
+  auto message = sim::FormatStringConcatOp::create(
+      rewriter, op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
   rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
   return success();
 }
