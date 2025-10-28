@@ -79,7 +79,9 @@ struct CombOpAnnotate : public OpRewritePattern<CombOpTy> {
     if (isa<comb::MulOp>(op))
       (void)a.umul_ov(b, overflowed);
 
-    op->setAttr("comb.nuw", BoolAttr::get(op->getContext(), overflowed));
+    if (!overflowed)
+      op->setAttr("comb.nuw", UnitAttr::get(op->getContext()));
+
     return success();
   }
 
