@@ -157,18 +157,18 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
       }
 
       // Concatenate elements to form this row
-      Value row = rewriter.create<hw::ArrayCreateOp>(loc, rowElements);
+      Value row = hw::ArrayCreateOp::create(rewriter, loc, rowElements);
       arrayRows.push_back(row);
     }
 
     // Create the 2D array by concatenating all rows
     // arrayRows[0] corresponds to injection at index 0
     // arrayRows[1] corresponds to injection at index 1, etc.
-    Value array2D = rewriter.create<hw::ArrayCreateOp>(loc, arrayRows);
+    Value array2D = hw::ArrayCreateOp::create(rewriter, loc, arrayRows);
 
     // Create array_get operation to select the row
     auto arrayGetOp =
-        rewriter.create<hw::ArrayGetOp>(loc, array2D, adaptor.getIndex());
+        hw::ArrayGetOp::create(rewriter, loc, array2D, adaptor.getIndex());
 
     rewriter.replaceOp(op, arrayGetOp);
     return success();

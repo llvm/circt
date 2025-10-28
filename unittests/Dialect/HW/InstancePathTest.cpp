@@ -70,15 +70,15 @@ TEST(InstancePathTest, AppendPrependConcatInstance) {
 
   auto builder =
       ImplicitLocOpBuilder::atBlockEnd(circuit.getLoc(), circuit.getBody());
-  auto dragon = builder.create<HWModuleOp>(StringAttr::get(&context, "Dragon"),
-                                           ArrayRef<PortInfo>{});
+  auto dragon = HWModuleOp::create(builder, StringAttr::get(&context, "Dragon"),
+                                   ArrayRef<PortInfo>{});
 
   builder.setInsertionPointToStart(dragon.getBodyBlock());
   auto breakfast =
-      builder.create<InstanceOp>(cat, "breakfast", ArrayRef<Value>{});
+      InstanceOp::create(builder, cat, "breakfast", ArrayRef<Value>{});
 
   builder.setInsertionPointToStart(top.getBodyBlock());
-  auto kitty = builder.create<InstanceOp>(cat, "kitty", ArrayRef<Value>{});
+  auto kitty = InstanceOp::create(builder, cat, "kitty", ArrayRef<Value>{});
 
   auto prepended = pathCache.prependInstance(
       breakfast, pathCache.prependInstance(kitty, empty));

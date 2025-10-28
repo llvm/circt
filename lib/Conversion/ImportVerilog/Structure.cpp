@@ -1102,8 +1102,8 @@ static LogicalResult rewriteCallSitesToPassCaptures(mlir::func::FuncOp callee,
 
     OpBuilder b(call);
     auto flatRef = mlir::FlatSymbolRefAttr::get(callee);
-    auto newCall = b.create<mlir::func::CallOp>(call.getLoc(), fTy.getResults(),
-                                                flatRef, newOperands);
+    auto newCall = mlir::func::CallOp::create(
+        b, call.getLoc(), fTy.getResults(), flatRef, newOperands);
     call->replaceAllUsesWith(newCall.getOperation());
     call->erase();
   }
