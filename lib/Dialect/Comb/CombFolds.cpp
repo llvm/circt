@@ -2651,7 +2651,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (foldMuxOfUniformArrays(op, rewriter))
     return success();
 
-  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
+  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(0))
   if (op.getTrueValue().getDefiningOp() &&
       op.getTrueValue().getDefiningOp() != op)
     if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
