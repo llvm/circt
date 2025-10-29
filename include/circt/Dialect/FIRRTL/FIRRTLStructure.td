@@ -192,11 +192,6 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
-    LowerAnnotations can add RefType ports to it. Each RefType port
-    must have a corresponding entry in the internalPaths attribute.
-    The internalPaths attribute is used to represent opaque internal paths
-    into the external module, to be used for generating XMRs. Each RefType
-    port must be removed by LowerXMR pass.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, OptionalAttr<StrAttr>:$defname,
       ParamDeclArrayAttr:$parameters, ConventionAttr:$convention,
@@ -206,7 +201,6 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       LayerArrayAttr:$knownLayers,
       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
       DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-      OptionalAttr<InternalPathArrayAttr>:$internalPaths,
       DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -217,7 +211,6 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       "ArrayAttr":$knownLayers, CArg<"StringRef", "StringRef()">:$defnamAttr,
       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
       CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
-      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths,
       CArg<"ArrayAttr", "ArrayAttr()">:$layers)>];
 
   let extraModuleClassDeclaration = [{
@@ -246,7 +239,6 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
            ArrayRefAttr:$portTypes,
            DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations,
            DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-           OptionalAttr<InternalPathArrayAttr>:$internalPaths,
            DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
       );
   let results = (outs);
@@ -259,7 +251,6 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
                       "StringRef":$intrinsicNameStr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                       CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths,
                       CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
   ];
 

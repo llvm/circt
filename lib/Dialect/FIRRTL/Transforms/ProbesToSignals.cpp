@@ -204,10 +204,6 @@ static Block *getBodyBlock(FModuleLike mod) {
 /// Visit a module, converting its ports and internals to use hardware signals
 /// instead of probes.
 LogicalResult ProbeVisitor::visit(FModuleLike mod) {
-  // If module has strings describing XMR suffixes for its ports, reject.
-  if (auto internalPaths = mod->getAttrOfType<ArrayAttr>("internalPaths"))
-    return mod.emitError("cannot convert module with internal path");
-
   // Ports -> new ports without probe-ness.
   // For all probe ports, insert non-probe duplex values to use
   // as their replacement while rewriting.  Only if has body.

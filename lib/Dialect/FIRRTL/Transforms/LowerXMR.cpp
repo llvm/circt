@@ -587,22 +587,11 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                                  InstanceGraph &instanceGraph) {
     Operation *mod = inst.getReferencedModule(instanceGraph);
     if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
-      // Extern modules can generate RefType ports, they have an attached
-      // attribute which specifies the internal path into the extern module.
-      // This string attribute will be used to generate the final xmr.
-      auto internalPaths = extRefMod.getInternalPaths();
       auto numPorts = inst.getNumResults();
       SmallString<128> circuitRefPrefix;
 
       /// Get the resolution string for this ref-type port.
       auto getPath = [&](size_t portNo) {
-        // If there's an internal path specified (with path), use that.
-        if (internalPaths)
-          if (auto path =
-                  cast<InternalPathAttr>(internalPaths->getValue()[portNo])
-                      .getPath())
-            return path;
-
         // Otherwise, we're using the ref ABI.  Generate the prefix string
         // and return the macro for the specified port.
         if (circuitRefPrefix.empty())

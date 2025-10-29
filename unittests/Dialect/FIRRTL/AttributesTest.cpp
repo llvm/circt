@@ -86,50 +86,6 @@ TEST_F(AttributeWalkTest, MemoryInitAttrWalk) {
   EXPECT_EQ(llvm::ArrayRef(visitedTypes), ArrayRef<Type>({}));
 }
 
-TEST_F(AttributeWalkTest, InternalPathAttrWalk) {
-  // Create an internal path attribute with a path
-  auto pathStringAttr = StringAttr::get(&context, "internal.path");
-  auto pathAttr = InternalPathAttr::get(&context, pathStringAttr);
-
-  SmallVector<Attribute> visitedAttrs;
-  SmallVector<Type> visitedTypes;
-  pathAttr.walk(
-      [&](Attribute attr) {
-        visitedAttrs.push_back(attr);
-        return WalkResult::advance();
-      },
-      [&](Type type) {
-        visitedTypes.push_back(type);
-        return WalkResult::advance();
-      });
-
-  // Verify the internal path attribute and path string are visited
-  EXPECT_EQ(llvm::ArrayRef(visitedAttrs),
-            ArrayRef<Attribute>({pathStringAttr, pathAttr}));
-  EXPECT_EQ(llvm::ArrayRef(visitedTypes), ArrayRef<Type>({}));
-}
-
-TEST_F(AttributeWalkTest, InternalPathAttrEmptyWalk) {
-  // Create an internal path attribute without a path
-  auto pathAttr = InternalPathAttr::get(&context);
-
-  SmallVector<Attribute> visitedAttrs;
-  SmallVector<Type> visitedTypes;
-  pathAttr.walk(
-      [&](Attribute attr) {
-        visitedAttrs.push_back(attr);
-        return WalkResult::advance();
-      },
-      [&](Type type) {
-        visitedTypes.push_back(type);
-        return WalkResult::advance();
-      });
-
-  // Should still visit the attribute itself
-  EXPECT_EQ(llvm::ArrayRef(visitedAttrs), ArrayRef<Attribute>({pathAttr}));
-  EXPECT_EQ(llvm::ArrayRef(visitedTypes), ArrayRef<Type>({}));
-}
-
 TEST_F(AttributeWalkTest, ParamDeclAttrWithoutValueWalk) {
   // Create a parameter declaration attribute without a value (type only)
   auto paramType = SIntType::get(&context, 32);
