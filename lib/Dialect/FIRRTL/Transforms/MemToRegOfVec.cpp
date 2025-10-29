@@ -337,35 +337,6 @@ struct MemToRegOfVecPass
     return false;
   }
 
-  void scatterMemTapAnno(RegOp op, ArrayAttr attr,
-                         ImplicitLocOpBuilder &builder) {
-    AnnotationSet annos(attr);
-    SmallVector<Attribute> regAnnotations;
-    auto vecType = type_cast<FVectorType>(op.getResult().getType());
-    for (auto anno : annos) {
-      if (anno.isClass(memTapSourceClass)) {
-        for (size_t i = 0, e = type_cast<FVectorType>(op.getResult().getType())
-                                   .getNumElements();
-             i != e; ++i) {
-          NamedAttrList newAnno;
-          newAnno.append("class", anno.getMember("class"));
-          newAnno.append("circt.fieldID",
-                         builder.getI64IntegerAttr(vecType.getFieldID(i)));
-          newAnno.append("id", anno.getMember("id"));
-          if (auto nla = anno.getMember("circt.nonlocal"))
-            newAnno.append("circt.nonlocal", nla);
-          newAnno.append(
-              "portID",
-              IntegerAttr::get(IntegerType::get(builder.getContext(), 64), i));
-
-          regAnnotations.push_back(builder.getDictionaryAttr(newAnno));
-        }
-      } else
-        regAnnotations.push_back(anno.getAttr());
-    }
-    op.setAnnotationsAttr(builder.getArrayAttr(regAnnotations));
-  }
-
   /// Generate the logic for implementing the memory using Registers.
   void generateMemory(MemOp memOp, FirMemory &firMem) {
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
@@ -404,7 +375,7 @@ struct MemToRegOfVecPass
 
         // Copy all the memory annotations.
         if (!memOp.getAnnotationsAttr().empty())
-          scatterMemTapAnno(regOfVec, memOp.getAnnotationsAttr(), builder);
+          regOfVec.setAnnotationsAttr(memOp.getAnnotationsAttr());
         if (innerSym)
           regOfVec.setInnerSymAttr(memOp.getInnerSymAttr());
       }
