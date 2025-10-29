@@ -544,7 +544,8 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   let builders = [
     OpBuilder<(ins "IntType":$type, "const FVInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
-    OpBuilder<(ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
+    OpBuilder<(
+      ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
   ];
 }
 
@@ -556,54 +557,45 @@ def ConstantTimeOp : MooreOp<"constant_time", [Pure, ConstantLike]> {
   let hasFolder = 1;
 }
 
-def StringConstantOp : MooreOp<"string_constant", [Pure]> {
-  let summary = "Produce a constant string value";
+def ConstantStringOp : MooreOp<"constant_string", [Pure]> {
+  let summary = "A constant integer value defined by a string of bytes";
   let description = [{
-    Produces a constant value of string type.
+    Defines a constant integer value based on the bytes of a string. The
+    resulting integer contains 8 bits for each byte in the string. The first,
+    left-most character is placed in the most significnat bits; the last,
+    right-most character is placed in the least significant bits.
 
-    Example:
-    ```mlir
-    %0 = moore.string "hello world"
-    ```
+    Constant strings are represented as integers since they have a known width
+    and bit-pattern, which is often used in SV to assign strings to parameters,
+    or store strings in bit vectors. In contrast, the `string` type is a dynamic
+    string with runtime-known length. To obtain a constant `string` value, the
+    resulting integer should be converted to a `string`.
+
+    See IEEE 1800-2017 § 5.9 "String literals".
   }];
   let arguments = (ins StrAttr:$value);
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
-def ShortrealLiteralOp : MooreOp<"shortreal_constant", [Pure]> {
-  let summary = "Produce a constant shortreal value";
-  let description = [{
-    Produces a constant value of shortreal type.
-
-    Example:
-    ```mlir
-    %0 = moore.shortreal_constant 1.23
-    ```
-    The shortreal type has fixed-point(1.2) and exponent(2.0e10) formats and
-    corresponds to IEEE 754 f32.
-    See IEEE 1800-2017 § 5.7.2 "Real literal constants".
-  }];
-  let arguments = (ins F32Attr:$value);
-  let results = (outs RealF32:$result);
-  let assemblyFormat = "$value attr-dict";
+def APFloatAttr : Attr<CPred<"isa<FloatAttr>($_self)">,
+                        "arbitrary float attribute"> {
+  let storageType = [{ mlir::FloatAttr }];
+  let returnType = [{ llvm::APFloat }];
 }
 
-def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
-  let summary = "Produce a constant real value";
+def ConstantRealOp : MooreOp<"constant_real", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  Pure,
+]> {
+  let summary = "A constant real value";
   let description = [{
-    Produces a constant value of real type.
+    Produces a constant value of a real type.
 
-    Example:
-    ```mlir
-    %0 = moore.real_constant 1.23
-    ```
-    The real type has fixed-point(1.2) and exponent(2.0e10) formats and
-    corresponds to IEEE 754 f64.
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
-  let arguments = (ins F64Attr:$value);
-  let results = (outs RealF64:$result);
+  let arguments = (ins APFloatAttr:$value);
+  let results = (outs RealType:$result);
   let assemblyFormat = "$value attr-dict";
 }
 

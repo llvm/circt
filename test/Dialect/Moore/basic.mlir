@@ -340,10 +340,10 @@ moore.module @Expressions(
   // CHECK: moore.struct_inject [[STRUCT1]], "a", [[B]] : struct<{a: i32, b: i32}>, i32
   moore.struct_inject %struct1, "a", %b : struct<{a: i32, b: i32}>, i32
 
-  // CHECK: moore.string_constant "Test" : i128
-  moore.string_constant "Test" : i128
-  // CHECK: moore.string_constant "" : i128
-  moore.string_constant "" : i128
+  // CHECK: moore.constant_string "Test" : i128
+  moore.constant_string "Test" : i128
+  // CHECK: moore.constant_string "" : i128
+  moore.constant_string "" : i128
   // CHECK: moore.string_cmp eq %s1, %s2 : string -> i1
   moore.string_cmp eq %s1, %s2 : string -> i1
   // CHECK: moore.string_cmp ne %s1, %s2 : string -> i1

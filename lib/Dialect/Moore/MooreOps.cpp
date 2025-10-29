@@ -643,6 +643,21 @@ OpFoldResult ConstantTimeOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantRealOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConstantRealOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  ConstantRealOp::Adaptor adaptor(operands, attrs, properties);
+  results.push_back(RealType::get(
+      context, static_cast<RealWidth>(
+                   adaptor.getValueAttr().getType().getIntOrFloatBitWidth())));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 

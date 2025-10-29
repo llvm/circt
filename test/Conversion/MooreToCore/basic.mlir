@@ -1115,25 +1115,23 @@ moore.module @Assert(in %cond : !moore.l1)  {
   }
 }
 
-// CHECK-LABEL: hw.module @StringConstant
-moore.module @StringConstant() {
-  moore.procedure initial {
-    // CHECK: hw.constant 1415934836 : i32
-    %str = moore.string_constant "Test" : i32
-    // CHECK: hw.constant 1415934836 : i36
-    %str1 = moore.string_constant "Test" : i36
-    // CHECK: hw.constant 116 : i8
-    %str2 = moore.string_constant "Test" : i8
-    // CHECK: hw.constant 0 : i7
-    %str_trunc = moore.string_constant "Test" : i7
-    // CHECK: hw.constant 29556 : i17
-    %str_trunc1 = moore.string_constant "Test" : i17
-    // CHECK: hw.constant 0 : i0
-    %str_empty = moore.string_constant "" : i0
-    // CHECK: hw.constant 0 : i8
-    %str_empty_zext = moore.string_constant "" : i8
-    moore.return
-  }
+// CHECK-LABEL: func.func @ConstantString
+func.func @ConstantString() {
+  // CHECK: hw.constant 1415934836 : i32
+  %str = moore.constant_string "Test" : i32
+  // CHECK: hw.constant 1415934836 : i36
+  %str1 = moore.constant_string "Test" : i36
+  // CHECK: hw.constant 116 : i8
+  %str2 = moore.constant_string "Test" : i8
+  // CHECK: hw.constant 0 : i7
+  %str_trunc = moore.constant_string "Test" : i7
+  // CHECK: hw.constant 29556 : i17
+  %str_trunc1 = moore.constant_string "Test" : i17
+  // CHECK: hw.constant 0 : i0
+  %str_empty = moore.constant_string "" : i0
+  // CHECK: hw.constant 0 : i8
+  %str_empty_zext = moore.constant_string "" : i8
+  return
 }
 
 // CHECK-LABEL: func.func @RecurciveConditional
@@ -1339,11 +1337,11 @@ func.func @NonBlockingAssignment(%arg0: !moore.ref<i42>, %arg1: !moore.i42, %arg
   return
 }
 
-// CHECK-LABEL: func.func @RealConstantOp
-func.func @RealConstantOp() {
-  // CHECK: [[REAL:%.+]] = arith.constant 1.234500e+00 : f64
-  %real = moore.real_constant 1.234500e+00
-  // CHECK: [[SHORTREAL:%.+]] = arith.constant 1.234500e+00 : f32
-  %shortreal = moore.shortreal_constant 1.234500e+00
+// CHECK-LABEL: func.func @ConstantReals
+func.func @ConstantReals() {
+  // CHECK: arith.constant 1.234500e+00 : f32
+  moore.constant_real 1.234500e+00 : f32
+  // CHECK: arith.constant 1.234500e+00 : f64
+  moore.constant_real 1.234500e+00 : f64
   return
 }
