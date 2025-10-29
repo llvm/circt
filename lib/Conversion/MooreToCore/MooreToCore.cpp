@@ -713,6 +713,73 @@ static Value createZeroValue(Type type, Location loc,
   return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
 }
 
+struct ClassPropertyRefOpConversion
+    : public OpConversionPattern<circt::moore::ClassPropertyRefOp> {
+  ClassPropertyRefOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                               ClassTypeCache &cache)
+      : OpConversionPattern(tc, ctx), cache(cache) {}
+
+  LogicalResult
+  matchAndRewrite(circt::moore::ClassPropertyRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    // Convert result type; we expect !llhd.ref<someT>.
+    Type dstTy = getTypeConverter()->convertType(op.getPropertyRef().getType());
+    auto dstRefTy = dyn_cast<llhd::RefType>(dstTy);
+    if (!dstRefTy)
+      return rewriter.notifyMatchFailure(op,
+                                         "result must lower to !llhd.ref<T>");
+    // Operand is a !llvm.ptr
+    Value instRef = adaptor.getInstance();
+    auto instRefTy = dyn_cast<LLVM::LLVMPointerType>(instRef.getType());
+    if (!instRefTy)
+      return rewriter.notifyMatchFailure(op, "instance must be !llvm.ptr");
+
+    // Resolve identified struct from cache.
+    auto classRefTy =
+        cast<circt::moore::ClassHandleType>(op.getInstance().getType());
+    SymbolRefAttr classSym = classRefTy.getClassSym();
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    if (failed(resolveClassStructBody(mod, classSym, *typeConverter, cache)))
+      return op.emitError()
+             << "Could not resolve class struct for " << classSym;
+
+    auto structInfo = cache.getStructInfo(classSym);
+    assert(structInfo && "class struct info must exist");
+    auto structTy = structInfo->classBody;
+
+    // Look up cached GEP path for the property.
+    auto propSym = op.getProperty();
+    auto pathOpt = structInfo->getFieldPath(propSym);
+    if (!pathOpt)
+      return op.emitError() << "no GEP path for property " << propSym;
+
+    auto i32Ty = IntegerType::get(ctx, 32);
+    SmallVector<Value> idxVals;
+    for (unsigned idx : *pathOpt)
+      idxVals.push_back(LLVM::ConstantOp::create(
+          rewriter, loc, i32Ty, rewriter.getI32IntegerAttr(idx)));
+
+    // GEP to the field (opaque ptr mode requires element type).
+    auto ptrTy = LLVM::LLVMPointerType::get(ctx);
+    auto gep =
+        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, instRef, idxVals);
+
+    // Wrap pointer back to !llhd.ref<someT>.
+    Value fieldRef = UnrealizedConversionCastOp::create(rewriter, loc, dstTy,
+                                                        gep.getResult())
+                         .getResult(0);
+
+    rewriter.replaceOp(op, fieldRef);
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache;
+};
+
 struct ClassUpcastOpConversion : public OpConversionPattern<ClassUpcastOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2183,6 +2250,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
                                       classCache);
   patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
                                      classCache);
+  patterns.add<ClassPropertyRefOpConversion>(typeConverter,
+                                             patterns.getContext(), classCache);
+
   // clang-format off
   patterns.add<
     ClassUpcastOpConversion,

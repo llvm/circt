@@ -102,3 +102,29 @@ moore.class.classdecl @F extends @C {
   moore.class.propertydecl @b : !moore.l32
   moore.class.propertydecl @c : !moore.l32
 }
+
+/// Check that property_ref lowers to GEP
+
+// CHECK-LABEL: func.func private @test_new6
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
+// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[CONSTIDX:%.+]] = llvm.mlir.constant(1 : i32) : i32
+// CHECK:   [[GEP:%.+]] = llvm.getelementptr [[PTR]][[[CONSTIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"G", (struct<"C", (i32, i32, i32)>, i32, i32, i32)>
+// CHECK:   [[CONV:%.+]] = builtin.unrealized_conversion_cast [[GEP]] : !llvm.ptr to !llhd.ref<i32>
+// CHECK:   return
+
+// CHECK-NOT: moore.class.new
+// CHECK-NOT: moore.class.upcast
+// CHECK-NOT: moore.class.property_ref
+// CHECK-NOT: moore.class.classdecl
+
+func.func private @test_new6() {
+  %h = moore.class.new : <@G>
+  %gep = moore.class.property_ref %h[@d] : <@G> -> <i32>
+  return
+}
+moore.class.classdecl @G extends @C {
+  moore.class.propertydecl @d : !moore.i32
+  moore.class.propertydecl @e : !moore.l32
+  moore.class.propertydecl @f : !moore.l32
+}
