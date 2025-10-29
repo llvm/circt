@@ -603,8 +603,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
-    // Grand Central Data Tap Annotations
-    {dataTapsClass, {noResolve, applyGCTDataTaps}},
     // Grand Central Mem Tap Annotations
     {memTapClass, {noResolve, applyGCTMemTaps}},
     // Miscellaneous Annotations
