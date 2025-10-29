@@ -22,6 +22,7 @@
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Tools/circt-bmc/Passes.h"
@@ -68,7 +69,8 @@ static cl::OptionCategory mainCategory("circt-bmc Options");
 
 static cl::opt<std::string>
     moduleName("module",
-               cl::desc("Specify a named module to verify properties over."),
+               cl::desc("Specify a named module (or verif.formal op) to verify "
+                        "properties over."),
                cl::value_desc("module name"), cl::cat(mainCategory));
 
 static cl::opt<int> clockBound(
@@ -186,6 +188,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
+  pm.addPass(verif::createLowerFormalToHWPass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
