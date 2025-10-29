@@ -2552,7 +2552,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (auto falseMux = op.getFalseValue().getDefiningOp<MuxOp>();
       falseMux && falseMux != op) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
-    if (op.getCond() == falseMux.getCond()) {
+    if (op.getCond() == falseMux.getCond() &&
+        falseMux.getFalseValue() != falseMux) {
       replaceOpWithNewOpAndCopyNamehint<MuxOp>(
           rewriter, op, op.getCond(), op.getTrueValue(),
           falseMux.getFalseValue(), op.getTwoStateAttr());
