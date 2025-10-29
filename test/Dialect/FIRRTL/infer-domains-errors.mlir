@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{infer-public=true}))' %s --verify-diagnostics --split-input-file
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=infer-all}))' %s --verify-diagnostics --split-input-file
 
 // Port annotated with same domain type twice.
 firrtl.circuit "DomainCrossOnPort" {
@@ -112,14 +112,10 @@ firrtl.circuit "Top" {
 
 // -----
 
-// Domain not exported like it should be.
-
-// -----
-
 // Domain exported multiple times. Which do we choose?
 
 firrtl.circuit "DoubleExportOfDomain" {
-  firrtl.domain @ClockDomain
+    firrtl.domain @ClockDomain
 
   firrtl.module @DoubleExportOfDomain(
     // expected-note @below {{candidate association "DI"}}
@@ -138,3 +134,55 @@ firrtl.circuit "DoubleExportOfDomain" {
   }
 }
 
+// -----
+
+// Domain exported multiple times, this time with one input and one output. Which do we choose?
+
+firrtl.circuit "DoubleExportOfDomain" {
+    firrtl.domain @ClockDomain
+
+  firrtl.module @DoubleExportOfDomain(
+    // expected-note @below {{candidate association "DI"}}
+    out  %DI : !firrtl.domain of @ClockDomain,
+    // expected-note @below {{candidate association "DO"}}
+    out %DO : !firrtl.domain of @ClockDomain,
+    in  %i  : !firrtl.uint<1> domains [%DO],
+    // expected-error @below {{ambiguous "ClockDomain" association for port "o"}}
+    out %o  : !firrtl.uint<1> domains []
+  ) {
+    // DI and DO are aliases
+    firrtl.domain.define %DO, %DI
+
+    // o is on same domain as i
+    firrtl.matchingconnect %o, %i : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// InstanceChoice: Each module has different domains inferred.
+
+firrtl.circuit "ConflictingInstanceChoiceDomains" {
+    firrtl.domain @ClockDomain
+
+  firrtl.option @Option {
+    firrtl.option_case @X
+    firrtl.option_case @Y
+  }
+
+  // Foo's "out" port takes on the domains of "in1".
+  firrtl.module @Foo(in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    firrtl.connect %out, %in1 : !firrtl.uint<1>
+  }
+
+  // Bar's "out" port takes on the domains of "in2".
+  firrtl.module @Bar(in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    firrtl.connect %out, %in2 : !firrtl.uint<1>
+  }
+
+  firrtl.module @ConflictingInstanceChoiceDomains(in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>) {
+    %inst_in1, %inst_in2, %inst_out = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Foo, @Y -> @Bar } (in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    firrtl.connect %inst_in1, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %inst_in2, %in2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
