@@ -80,3 +80,23 @@ moore.class.classdecl @E extends @C {
   moore.class.propertydecl @b : !moore.l32
   moore.class.propertydecl @c : !moore.l32
 }
+
+/// Check that upcast lowers to no-op
+
+// CHECK-LABEL: func.func private @test_new5
+// CHECK-SAME: (%arg0: !llvm.ptr) -> !llvm.ptr {
+// CHECK:   return %arg0 : !llvm.ptr
+
+// CHECK-NOT: moore.class.new
+// CHECK-NOT: moore.class.upcast
+// CHECK-NOT: moore.class.classdecl
+
+func.func private @test_new5(%arg0: !moore.class<@F>) -> !moore.class<@C> {
+  %upcast = moore.class.upcast %arg0 : <@F> to <@C>
+  return %upcast : !moore.class<@C>
+}
+moore.class.classdecl @F extends @C {
+  moore.class.propertydecl @a : !moore.i32
+  moore.class.propertydecl @b : !moore.l32
+  moore.class.propertydecl @c : !moore.l32
+}
