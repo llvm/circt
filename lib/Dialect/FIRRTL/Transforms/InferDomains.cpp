@@ -46,6 +46,16 @@ using InstanceRange = llvm::iterator_range<InstanceIterator>;
 using PortInsertions = SmallVector<std::pair<unsigned, PortInfo>>;
 
 //====--------------------------------------------------------------------------
+// Domain Inference mode helper.
+//====--------------------------------------------------------------------------
+
+template <typename T>
+static bool shouldInfer(T op, InferDomainsMode mode) {
+  return op.isPublic() ? shouldInferPublicModules(mode)
+                       : shouldInferPrivateModules(mode);
+}
+
+//====--------------------------------------------------------------------------
 // Helpers for working with module or instance domain info.
 //====--------------------------------------------------------------------------
 
@@ -1375,12 +1385,12 @@ static LogicalResult inferModuleDomains(GlobalState &globals,
 // InferDomainsPass: Top-level pass implementation.
 //===---------------------------------------------------------------------------
 
-static LogicalResult runOnModuleLike(bool inferPublic, GlobalState &globals,
-                                     Operation *op) {
+static LogicalResult runOnModuleLike(InferDomainsMode mode,
+                                     GlobalState &globals, Operation *op) {
   if (auto module = dyn_cast<FModuleOp>(op)) {
-    if (module.isPublic() && !inferPublic)
-      return checkModuleDomains(globals, module);
-    return inferModuleDomains(globals, module);
+    if (shouldInfer(module, mode))
+      return inferModuleDomains(globals, module);
+    return checkModuleDomains(globals, module);
   }
 
   if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
@@ -1406,7 +1416,7 @@ void InferDomainsPass::runOnOperation() {
   DenseSet<InstanceGraphNode *> visited;
   for (auto *root : instanceGraph) {
     for (auto *node : llvm::post_order_ext(root, visited)) {
-      if (failed(runOnModuleLike(inferPublic, globals, node->getModule()))) {
+      if (failed(runOnModuleLike(mode, globals, node->getModule()))) {
         signalPassFailure();
         return;
       }

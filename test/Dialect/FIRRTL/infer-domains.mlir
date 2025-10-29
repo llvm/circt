@@ -1,6 +1,7 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{infer-public=true}))' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=infer-all}))' %s | FileCheck %s
 
 // Legal domain usage - no crossing.
+// CHECK-LABEL: firrtl.circuit "LegalDomains"
 firrtl.circuit "LegalDomains" {
   firrtl.domain @ClockDomain
   firrtl.module @LegalDomains(
@@ -12,14 +13,15 @@ firrtl.circuit "LegalDomains" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "LegalDomains"
 
 // Domain inference through connections.
+// CHECK-LABEL: firrtl.circuit "DomainInference"
 firrtl.circuit "DomainInference" {
   firrtl.domain @ClockDomain
   firrtl.module @DomainInference(
     in %A: !firrtl.domain of @ClockDomain,
     in %a: !firrtl.uint<1> domains [%A],
+    // CHECK: out %c: !firrtl.uint<1> domains [%A]
     out %c: !firrtl.uint<1>
   ) {
     %b = firrtl.wire : !firrtl.uint<1>  // No explicit domain
@@ -31,10 +33,9 @@ firrtl.circuit "DomainInference" {
     firrtl.matchingconnect %c, %b : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "DomainInference"
-// CHECK: out %c: !firrtl.uint<1> domains [%A]
 
 // Unsafe domain cast
+// CHECK-LABEL: firrtl.circuit "UnsafeDomainCast"
 firrtl.circuit "UnsafeDomainCast" {
   firrtl.domain @ClockDomain
   firrtl.module @UnsafeDomainCast(
@@ -50,9 +51,9 @@ firrtl.circuit "UnsafeDomainCast" {
     firrtl.matchingconnect %c, %b : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "UnsafeDomainCast"
 
 // Domain sequence matching.
+// CHECK-LABEL: firrtl.circuit "LegalSequences"
 firrtl.circuit "LegalSequences" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
@@ -67,6 +68,7 @@ firrtl.circuit "LegalSequences" {
 }
 
 // Domain sequence order equivalence - should be legal
+// CHECK-LABEL: SequenceOrderEquivalence
 firrtl.circuit "SequenceOrderEquivalence" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
@@ -80,9 +82,9 @@ firrtl.circuit "SequenceOrderEquivalence" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
-// CHECK-LABEL: firrtl.circuit "SequenceOrderEquivalence"
 
 // Domain sequence inference
+// CHECK-LABEL: SequenceInference
 firrtl.circuit "SequenceInference" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
@@ -103,6 +105,7 @@ firrtl.circuit "SequenceInference" {
 }
 
 // Domain duplicate equivalence - should be legal.
+// CHECK-LABEL: DuplicateDomainEquivalence
 firrtl.circuit "DuplicateDomainEquivalence" {
   firrtl.domain @ClockDomain
   firrtl.module @DuplicateDomainEquivalence(
@@ -116,6 +119,7 @@ firrtl.circuit "DuplicateDomainEquivalence" {
 }
 
 // Unsafe domain cast with sequences
+// CHECK-LABEL: UnsafeSequenceCast
 firrtl.circuit "UnsafeSequenceCast" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
@@ -133,7 +137,6 @@ firrtl.circuit "UnsafeSequenceCast" {
 }
 
 //  Different port types domain inference.
-
 // CHECK-LABEL: DifferentPortTypes
 firrtl.circuit "DifferentPortTypes" {
   firrtl.domain @ClockDomain
@@ -150,7 +153,6 @@ firrtl.circuit "DifferentPortTypes" {
 }
 
 // Domain inference through wires.
-
 // CHECK-LABEL: DomainInferenceThroughWires
 firrtl.circuit "DomainInferenceThroughWires" {
   firrtl.domain @ClockDomain
@@ -169,7 +171,53 @@ firrtl.circuit "DomainInferenceThroughWires" {
   }
 }
 
-// Register inference.
+// Export: add output domain port for domain created internally.
+// CHECK-LABEL: ExportDomain
+firrtl.circuit "ExportDomain" {
+  firrtl.domain @ClockDomain
+
+  firrtl.extmodule @Foo(
+    out A: !firrtl.domain of @ClockDomain,
+    out o: !firrtl.uint<1> domains [A]
+  )
+
+  firrtl.module @ExportDomain(
+    // CHECK: out %ClockDomain: !firrtl.domain of @ClockDomain
+    // CHECK: out %o: !firrtl.uint<1> domains [%ClockDomain]
+    out %o: !firrtl.uint<1>
+  ) {
+    %foo_A, %foo_o = firrtl.instance foo @Foo(
+      out A: !firrtl.domain of @ClockDomain,
+      out o: !firrtl.uint<1> domains [A]
+    )
+    firrtl.matchingconnect %o, %foo_o : !firrtl.uint<1>
+    // CHECK: firrtl.domain.define %ClockDomain, %foo_A
+  }
+}
+
+// Export: Reuse already-exported domain.
+// CHECK-LABEL: ReuseExportedDomain
+firrtl.circuit "ReuseExportedDomain" {
+    firrtl.domain @ClockDomain
+
+  firrtl.extmodule @Foo(
+    out A: !firrtl.domain of @ClockDomain,
+    out o: !firrtl.uint<1> domains [A]
+  )
+
+  firrtl.module @ReuseExportedDomain(
+    out %A: !firrtl.domain of @ClockDomain,
+    // CHECK: out %o: !firrtl.uint<1> domains [%A]
+    out %o: !firrtl.uint<1>
+  ) {
+    %foo_A, %foo_o = firrtl.instance foo @Foo(
+      out A: !firrtl.domain of @ClockDomain,
+      out o: !firrtl.uint<1> domains [A]
+    )
+    firrtl.matchingconnect %o, %foo_o : !firrtl.uint<1>
+    firrtl.domain.define %A, %foo_A
+  }
+}
 
 // CHECK-LABEL: RegisterInference
 firrtl.circuit "RegisterInference" {
@@ -187,8 +235,6 @@ firrtl.circuit "RegisterInference" {
     firrtl.matchingconnect %q, %r : !firrtl.uint<1>
   }
 }
-
-// Update domain on instance.
 
 // CHECK-LABEL: InstanceUpdate
 firrtl.circuit "InstanceUpdate" {
