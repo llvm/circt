@@ -713,6 +713,29 @@ static Value createZeroValue(Type type, Location loc,
   return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
 }
 
+struct ClassUpcastOpConversion : public OpConversionPattern<ClassUpcastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClassUpcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Expect lowered types like !llvm.ptr
+    Type dstTy = getTypeConverter()->convertType(op.getResult().getType());
+    Type srcTy = adaptor.getInstance().getType();
+
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(op, "failed to convert result type");
+
+    // If the types are already identical (opaque pointer mode), just forward.
+    if (dstTy == srcTy && isa<LLVM::LLVMPointerType>(srcTy)) {
+      rewriter.replaceOp(op, adaptor.getInstance());
+      return success();
+    }
+    return rewriter.notifyMatchFailure(
+        op, "Upcast applied to non-opaque pointers!");
+  }
+};
+
 /// moore.class.new lowering: heap-allocate storage for the class object.
 struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
   ClassNewOpConversion(TypeConverter &tc, MLIRContext *ctx,
@@ -2162,6 +2185,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
                                      classCache);
   // clang-format off
   patterns.add<
+    ClassUpcastOpConversion,
     // Patterns of declaration operations.
     VariableOpConversion,
     NetOpConversion,

@@ -80,3 +80,25 @@ moore.class.classdecl @E extends @C {
   moore.class.propertydecl @b : !moore.l32
   moore.class.propertydecl @c : !moore.l32
 }
+
+/// Check that upcast lowers to no-op
+
+// CHECK-LABEL: func.func private @test_new5
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
+// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   return
+
+// CHECK-NOT: moore.class.new
+// CHECK-NOT: moore.class.upcast
+// CHECK-NOT: moore.class.classdecl
+
+func.func private @test_new5() {
+  %h = moore.class.new : <@F>
+  %upcast = moore.class.upcast %h : <@F> to <@C>
+  return
+}
+moore.class.classdecl @F extends @C {
+  moore.class.propertydecl @a : !moore.i32
+  moore.class.propertydecl @b : !moore.l32
+  moore.class.propertydecl @c : !moore.l32
+}
