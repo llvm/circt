@@ -438,37 +438,6 @@ struct RvalueExprVisitor : public ExprVisitor {
       return value;
     }
 
-    // We're reading a class property.
-    if (auto *const property =
-            expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
-      auto type = context.convertType(*expr.type);
-
-      // Get the scope's implicit this variable
-      mlir::Value instRef = context.getImplicitThisRef();
-      if (!instRef) {
-        mlir::emitError(loc) << "class property '" << property->name
-                             << "' referenced without an implicit 'this'";
-        return {};
-      }
-
-      auto fieldSym =
-          mlir::FlatSymbolRefAttr::get(builder.getContext(), property->name);
-      auto fieldTy = cast<moore::UnpackedType>(type);
-      auto fieldRefTy = moore::RefType::get(fieldTy);
-
-      moore::ClassHandleType classTy =
-          cast<moore::ClassHandleType>(instRef.getType());
-
-      auto targetClassHandle =
-          context.getAncestorClassWithProperty(classTy, property->name);
-      auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
-                                                     false, instRef.getLoc());
-
-      Value fieldRef = moore::ClassPropertyRefOp::create(
-          builder, loc, fieldRefTy, upcastRef, fieldSym);
-      return moore::ReadOp::create(builder, loc, fieldRef).getResult();
-    }
-
     // Try to materialize constant values directly.
     auto constant = context.evaluateConstant(expr);
     if (auto value = context.materializeConstant(constant, *expr.type, loc))
@@ -1188,6 +1157,12 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   /// Handle calls.
   Value visit(const slang::ast::CallExpression &expr) {
+    // Class method calls are currently not supported.
+    if (expr.thisClass()) {
+      mlir::emitError(loc, "unsupported class method call");
+      return {};
+    }
+
     // Try to materialize constant values directly.
     auto constant = context.evaluateConstant(expr);
     if (auto value = context.materializeConstant(constant, *expr.type, loc))
@@ -1198,77 +1173,9 @@ struct RvalueExprVisitor : public ExprVisitor {
         expr.subroutine);
   }
 
-  /// Get both the actual `this` argument of a method call and the required
-  /// class type.
-  std::pair<Value, moore::ClassHandleType>
-  getMethodReceiverTypeHandle(const slang::ast::CallExpression &expr) {
-
-    moore::ClassHandleType handleTy;
-    Value thisRef;
-
-    // Qualified call: t.m(...), extract from thisClass.
-    if (const slang::ast::Expression *recvExpr = expr.thisClass()) {
-      thisRef = context.convertRvalueExpression(*recvExpr);
-      if (!thisRef)
-        return {};
-    } else {
-      // Unqualified call inside a method body: try using implicit %this.
-      thisRef = context.getImplicitThisRef();
-      if (!thisRef) {
-        mlir::emitError(loc) << "method '" << expr.getSubroutineName()
-                             << "' called without an object";
-        return {};
-      }
-    }
-    handleTy = cast<moore::ClassHandleType>(thisRef.getType());
-    return {thisRef, handleTy};
-  }
-
-  /// Build a method call including implicit this argument.
-  mlir::func::CallOp
-  buildMethodCall(const slang::ast::SubroutineSymbol *subroutine,
-                  FunctionLowering *lowering,
-                  moore::ClassHandleType actualHandleTy, Value actualThisRef,
-                  SmallVector<Value> &arguments,
-                  SmallVector<Type> &resultTypes) {
-
-    // Get the expected receiver type from the lowered method
-    auto funcTy = lowering->op.getFunctionType();
-    auto expected0 = funcTy.getInput(0);
-    auto expectedHdlTy = cast<moore::ClassHandleType>(expected0);
-
-    // Upcast the handle as necessary.
-    auto implicitThisRef = context.materializeConversion(
-        expectedHdlTy, actualThisRef, false, actualThisRef.getLoc());
-
-    // Build an argument list where the this reference is the first argument.
-    SmallVector<Value> explicitArguments;
-    explicitArguments.reserve(arguments.size() + 1);
-    explicitArguments.push_back(implicitThisRef);
-    explicitArguments.append(arguments.begin(), arguments.end());
-
-    // Method call: choose direct vs virtual.
-    const bool isVirtual =
-        (subroutine->flags & slang::ast::MethodFlags::Virtual) != 0;
-
-    if (!isVirtual) {
-      // Direct (non-virtual) call -> moore.class.call
-      auto calleeSym =
-          SymbolRefAttr::get(context.getContext(), lowering->op.getSymName());
-      return mlir::func::CallOp::create(builder, loc, resultTypes, calleeSym,
-                                        explicitArguments);
-    }
-
-    mlir::emitError(loc) << "virtual method calls not supported";
-    return {};
-  }
-
   /// Handle subroutine calls.
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::SubroutineSymbol *subroutine) {
-
-    const bool isMethod = (subroutine->thisVar != nullptr);
-
     auto *lowering = context.declareFunction(*subroutine);
     if (!lowering)
       return {};
@@ -1349,34 +1256,20 @@ struct RvalueExprVisitor : public ExprVisitor {
       }
     }
 
-    // Determine result types from the declared/converted func op.
-    SmallVector<Type> resultTypes(
-        lowering->op.getFunctionType().getResults().begin(),
-        lowering->op.getFunctionType().getResults().end());
+    // Create the call.
+    auto callOp =
+        mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
 
-    mlir::func::CallOp callOp;
-    if (isMethod) {
-      // Class functions -> build func.call with implicit this argument
-      auto [thisRef, tyHandle] = getMethodReceiverTypeHandle(expr);
-      callOp = buildMethodCall(subroutine, lowering, tyHandle, thisRef,
-                               arguments, resultTypes);
-    } else {
-      // Free function -> func.call
-      callOp =
-          mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
-    }
-
-    auto result = resultTypes.size() > 0 ? callOp.getResult(0) : Value{};
     // For calls to void functions we need to have a value to return from this
     // function. Create a dummy `unrealized_conversion_cast`, which will get
     // deleted again later on.
-    if (resultTypes.size() == 0)
+    if (callOp.getNumResults() == 0)
       return mlir::UnrealizedConversionCastOp::create(
                  builder, loc, moore::VoidType::get(context.getContext()),
                  ValueRange{})
           .getResult(0);
 
-    return result;
+    return callOp.getResult(0);
   }
 
   /// Handle system calls.

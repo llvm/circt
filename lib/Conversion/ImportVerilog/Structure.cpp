@@ -979,6 +979,7 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
 /// This does not convert the function body.
 FunctionLowering *
 Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  using slang::ast::ArgumentDirection;
 
   // Check if there already is a declaration for this function.
   auto &lowering = functions[&subroutine];
@@ -987,65 +988,7 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
       return {};
     return lowering.get();
   }
-
-  if (!subroutine.thisVar) {
-
-    SmallString<64> name;
-    guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), name);
-    name += subroutine.name;
-
-    SmallVector<Type, 1> noThis = {};
-    return declareCallableImpl(subroutine, name, noThis);
-  }
-
-  auto loc = convertLocation(subroutine.location);
-
-  // Extract 'this' type and ensure it's a class.
-  const slang::ast::Type &thisTy = subroutine.thisVar->getType();
-  moore::ClassDeclOp ownerDecl;
-
-  if (auto *classTy = thisTy.as_if<slang::ast::ClassType>()) {
-    auto &ownerLowering = classes[classTy];
-    ownerDecl = ownerLowering->op;
-  } else {
-    mlir::emitError(loc) << "expected 'this' to be a class type, got "
-                         << thisTy.toString();
-    return {};
-  }
-
-  if (subroutine.flags.has(slang::ast::MethodFlags::Virtual)) {
-    mlir::emitError(loc) << "Virtual methods are not yet supported!";
-    return {};
-  }
-
-  // Build qualified name: @"Pkg::Class"::subroutine
-  SmallString<64> qualName;
-  qualName += ownerDecl.getSymName(); // already qualified
-  qualName += "::";
-  qualName += subroutine.name;
-
-  // %this : class<@C>
-  SmallVector<Type, 1> extraParams;
-  {
-    auto classSym = mlir::FlatSymbolRefAttr::get(ownerDecl.getSymNameAttr());
-    auto handleTy = moore::ClassHandleType::get(getContext(), classSym);
-    extraParams.push_back(handleTy);
-  }
-
-  auto *fLowering = declareCallableImpl(subroutine, qualName, extraParams);
-  return fLowering;
-}
-
-/// Convert a function and its arguments to a function declaration in the IR.
-/// This does not convert the function body.
-FunctionLowering *
-Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
-                             mlir::StringRef qualifiedName,
-                             llvm::SmallVectorImpl<Type> &extraParams) {
-  using slang::ast::ArgumentDirection;
-
-  std::unique_ptr<FunctionLowering> lowering =
-      std::make_unique<FunctionLowering>();
+  lowering = std::make_unique<FunctionLowering>();
   auto loc = convertLocation(subroutine.location);
 
   // Pick an insertion point for this function according to the source file
@@ -1057,9 +1000,14 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   else
     builder.setInsertionPoint(it->second);
 
+  // Class methods are currently not supported.
+  if (subroutine.thisVar) {
+    mlir::emitError(loc) << "unsupported class method";
+    return {};
+  }
+
   // Determine the function type.
   SmallVector<Type> inputTypes;
-  inputTypes.append(extraParams.begin(), extraParams.end());
   SmallVector<Type, 1> outputTypes;
 
   for (const auto *arg : subroutine.getArguments()) {
@@ -1083,9 +1031,14 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
 
   auto funcType = FunctionType::get(getContext(), inputTypes, outputTypes);
 
+  // Prefix the function name with the surrounding namespace to create somewhat
+  // sane names in the IR.
+  SmallString<64> funcName;
+  guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), funcName);
+  funcName += subroutine.name;
+
   // Create a function declaration.
-  auto funcOp =
-      mlir::func::FuncOp::create(builder, loc, qualifiedName, funcType);
+  auto funcOp = mlir::func::FuncOp::create(builder, loc, funcName, funcType);
   SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
   orderedRootOps.insert(it, {subroutine.location, funcOp});
   lowering->op = funcOp;
@@ -1093,9 +1046,8 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   // Add the function to the symbol table of the MLIR module, which uniquifies
   // its name.
   symbolTable.insert(funcOp);
-  functions[&subroutine] = std::move(lowering);
 
-  return functions[&subroutine].get();
+  return lowering.get();
 }
 
 /// Special case handling for recursive functions with captures;
@@ -1179,27 +1131,11 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   if (lowering->capturesFinalized || lowering->isConverting)
     return success();
 
-  const bool isMethod = (subroutine.thisVar != nullptr);
-
   ValueSymbolScope scope(valueSymbols);
 
   // Create a function body block and populate it with block arguments.
   SmallVector<moore::VariableOp> argVariables;
   auto &block = lowering->op.getBody().emplaceBlock();
-
-  // If this is a class method, the first input is %this :
-  // !moore.class<@C>
-  unsigned inputIdx = 0;
-  if (isMethod) {
-    auto thisLoc = convertLocation(subroutine.location);
-    auto thisType = lowering->op.getFunctionType().getInput(inputIdx++);
-    auto thisArg = block.addArgument(thisType, thisLoc);
-
-    // Bind `this` so NamedValue/MemberAccess can find it.
-    valueSymbols.insert(subroutine.thisVar, thisArg);
-  }
-
-  // Add user-defined block arguments
   for (auto [astArg, type] :
        llvm::zip(subroutine.getArguments(),
                  lowering->op.getFunctionType().getInputs())) {
@@ -1287,10 +1223,6 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
         lowering->captures.push_back(dstRef);
     }
   };
-
-  auto savedThis = currentThisRef;
-  currentThisRef = valueSymbols.lookup(subroutine.thisVar);
-  auto restoreThis = llvm::make_scope_exit([&] { currentThisRef = savedThis; });
 
   lowering->isConverting = true;
   auto convertingGuard =
@@ -1497,25 +1429,7 @@ struct ClassDeclVisitor {
       remarkEmitted = true;
       return success();
     }
-
-    auto loc = convertLocation(fn.location);
-    auto *lowering = context.declareFunction(fn);
-    if (!lowering)
-      return failure();
-
-    if (failed(context.convertFunction(fn)))
-      return failure();
-
-    if (!lowering->capturesFinalized)
-      return failure();
-
-    // Grab the finalized function type from the lowered func.op.
-    FunctionType fnTy = lowering->op.getFunctionType();
-
-    // Emit the method decl into the class body, preserving source order.
-    moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy);
-
-    return success();
+    return failure();
   }
 
   // Nested class definition, convert

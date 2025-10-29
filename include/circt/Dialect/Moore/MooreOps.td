@@ -20,7 +20,6 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
-include "mlir/Interfaces/CallInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -2367,20 +2366,6 @@ def ClassPropertyDeclOp
 
   let extraClassDeclaration = [{
     ::mlir::Type getPropertyType() { return getTypeAttr().getValue(); }
-  }];
-}
-
-
-def ClassMethodDeclOp
-    : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
-  let summary = "Declare a class method";
-
-  let arguments = (ins SymbolNameAttr:$sym_name,
-      TypeAttrOf<FunctionType>:$function_type);
-
-  let results = (outs);
-  let assemblyFormat = [{
-      $sym_name `:` $function_type  attr-dict
   }];
 }
 
