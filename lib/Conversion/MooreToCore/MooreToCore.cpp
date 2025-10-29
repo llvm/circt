@@ -60,7 +60,7 @@ struct ClassTypeCache {
     /// Record/overwrite the field path to a single property for a class.
     void setFieldPath(StringRef propertyName, ArrayRef<unsigned> path) {
       this->propertyPath[propertyName] =
-          llvm::SmallVector<unsigned, 2>(path.begin(), path.end());
+          SmallVector<unsigned, 2>(path.begin(), path.end());
     }
 
     /// Lookup the full GEP path for a (class, field).
@@ -94,6 +94,24 @@ private:
   DenseMap<Attribute, ClassStructInfo> classToStructMap;
 };
 
+/// Ensure we have `declare i8* @malloc(i64)` (opaque ptr prints as !llvm.ptr).
+static LLVM::LLVMFuncOp getOrCreateMalloc(ModuleOp mod, OpBuilder &b) {
+  if (auto f = mod.lookupSymbol<LLVM::LLVMFuncOp>("malloc"))
+    return f;
+
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToStart(mod.getBody());
+
+  auto i64Ty = IntegerType::get(mod.getContext(), 64);
+  auto ptrTy = LLVM::LLVMPointerType::get(mod.getContext()); // opaque pointer
+  auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {i64Ty}, false);
+
+  auto fn = LLVM::LLVMFuncOp::create(b, mod.getLoc(), "malloc", fnTy);
+  // Link this in from somewhere else.
+  fn.setLinkage(LLVM::Linkage::External);
+  return fn;
+}
+
 /// Helper function to create an opaque LLVM Struct Type which corresponds
 /// to the sym
 static LLVM::LLVMStructType getOrCreateOpaqueStruct(MLIRContext *ctx,
@@ -120,12 +138,15 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
 
   if (auto baseClass = op.getBaseAttr()) {
 
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    auto *opSym = mod.lookupSymbol(baseClass);
+    auto classDeclOp = cast<ClassDeclOp>(opSym);
+
+    if (failed(resolveClassStructBody(classDeclOp, typeConverter, cache)))
+      return failure();
+
     // Process base class' struct layout first
     auto baseClassStruct = cache.getStructInfo(baseClass);
-    if (!baseClassStruct)
-      return op.emitOpError() << "Base class " << baseClass << " of "
-                              << classSym << " has not been converted.";
-
     structBodyMembers.push_back(baseClassStruct->classBody);
     derivedStartIdx = 1;
 
@@ -169,6 +190,14 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
   cache.setClassInfo(classSym, structBody);
 
   return success();
+}
+
+/// Convenience overload that looks up ClassDeclOp
+static LogicalResult resolveClassStructBody(ModuleOp mod, SymbolRefAttr op,
+                                            TypeConverter const &typeConverter,
+                                            ClassTypeCache &cache) {
+  auto classDeclOp = cast<ClassDeclOp>(*mod.lookupSymbol(op));
+  return resolveClassStructBody(classDeclOp, typeConverter, cache);
 }
 
 /// Returns the passed value if the integer width is already correct.
@@ -678,6 +707,52 @@ static Value createZeroValue(Type type, Location loc,
   return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
 }
 
+/// moore.class.new lowering: heap-allocate storage for the class object.
+struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
+  ClassNewOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                       ClassTypeCache &cache)
+      : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache) {}
+
+  LogicalResult
+  matchAndRewrite(ClassNewOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    auto handleTy = cast<ClassHandleType>(op.getResult().getType());
+    auto sym = handleTy.getClassSym();
+
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+
+    if (failed(resolveClassStructBody(mod, sym, *typeConverter, cache)))
+      return op.emitError() << "Could not resolve class struct for " << sym;
+
+    auto structTy = cache.getStructInfo(sym)->classBody;
+
+    DataLayout dl(mod);
+    // DataLayout::getTypeSize gives a byte count for LLVM types.
+    uint64_t byteSize = dl.getTypeSize(structTy);
+    auto i64Ty = IntegerType::get(ctx, 64);
+    auto cSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
+                                          rewriter.getI64IntegerAttr(byteSize));
+
+    // Get or declare malloc and call it.
+    auto mallocFn = getOrCreateMalloc(mod, rewriter);
+    auto ptrTy = LLVM::LLVMPointerType::get(ctx); // opaque pointer result
+    auto call =
+        LLVM::CallOp::create(rewriter, loc, TypeRange{ptrTy},
+                             SymbolRefAttr::get(mallocFn), ValueRange{cSize});
+
+    // Replace the new op with the malloc pointer (no cast needed with opaque
+    // ptrs).
+    rewriter.replaceOp(op, call.getResult());
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache; // shared, owned by the pass
+};
+
 struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
   ClassDeclOpConversion(TypeConverter &tc, MLIRContext *ctx,
                         ClassTypeCache &cache)
@@ -686,9 +761,9 @@ struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
   LogicalResult
   matchAndRewrite(ClassDeclOp op, OpAdaptor,
                   ConversionPatternRewriter &rewriter) const override {
+
     if (failed(resolveClassStructBody(op, *typeConverter, cache)))
       return failure();
-
     // The declaration itself is a no-op
     rewriter.eraseOp(op);
     return success();
@@ -2077,7 +2152,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
   patterns.add<ClassDeclOpConversion>(typeConverter, patterns.getContext(),
                                       classCache);
-
+  patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
+                                     classCache);
   // clang-format off
   patterns.add<
     // Patterns of declaration operations.
