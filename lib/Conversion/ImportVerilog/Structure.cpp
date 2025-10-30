@@ -1247,27 +1247,34 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // Capture this function's captured context directly
   rvalueReadCallback = [lowering, prevRCb](moore::ReadOp rop) {
-    if (prevRCb)
-      prevRCb(rop); // chain previous callback
-
     mlir::Value ref = rop.getInput();
+
+    // Don't capture anything that's not a reference
+    mlir::Type ty = ref.getType();
+    if (!ty || !(isa<moore::RefType>(ty)))
+      return;
+
+    // Don't capture anything that's a local reference
+    mlir::Region *defReg = ref.getParentRegion();
+    if (defReg && lowering->op.getBody().isAncestor(defReg))
+      return;
+
     // If we've already recorded this capture, skip.
     if (lowering->captureIndex.count(ref))
       return;
 
     // Only capture refs defined outside this function’s region
-    if (!lowering->op.getBody().isAncestor(ref.getParentRegion())) {
-      auto [it, inserted] =
-          lowering->captureIndex.try_emplace(ref, lowering->captures.size());
-      if (inserted)
-        lowering->captures.push_back(ref);
+    auto [it, inserted] =
+        lowering->captureIndex.try_emplace(ref, lowering->captures.size());
+    if (inserted) {
+      lowering->captures.push_back(ref);
+      // Propagate over outer scope
+      if (prevRCb)
+        prevRCb(rop); // chain previous callback
     }
   };
   // Capture this function's captured context directly
   variableAssignCallback = [lowering, prevWCb](mlir::Operation *op) {
-    if (prevWCb)
-      prevWCb(op); // chain previous callback
-
     mlir::Value dstRef =
         llvm::TypeSwitch<mlir::Operation *, mlir::Value>(op)
             .Case<moore::BlockingAssignOp, moore::NonBlockingAssignOp,
@@ -1275,16 +1282,28 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
                 [](auto op) { return op.getDst(); })
             .Default([](auto) -> mlir::Value { return {}; });
 
+    // Don't capture anything that's not a reference
+    mlir::Type ty = dstRef.getType();
+    if (!ty || !(isa<moore::RefType>(ty)))
+      return;
+
+    // Don't capture anything that's a local reference
+    mlir::Region *defReg = dstRef.getParentRegion();
+    if (defReg && lowering->op.getBody().isAncestor(defReg))
+      return;
+
     // If we've already recorded this capture, skip.
     if (lowering->captureIndex.count(dstRef))
       return;
 
     // Only capture refs defined outside this function’s region
-    if (!lowering->op.getBody().isAncestor(dstRef.getParentRegion())) {
-      auto [it, inserted] =
-          lowering->captureIndex.try_emplace(dstRef, lowering->captures.size());
-      if (inserted)
-        lowering->captures.push_back(dstRef);
+    auto [it, inserted] =
+        lowering->captureIndex.try_emplace(dstRef, lowering->captures.size());
+    if (inserted) {
+      lowering->captures.push_back(dstRef);
+      // Propagate over outer scope
+      if (prevWCb)
+        prevWCb(op); // chain previous callback
     }
   };
 
@@ -1348,6 +1367,7 @@ Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
   // Build new input type list: existing inputs + capture ref types.
   SmallVector<Type> newInputs(lowering.op.getFunctionType().getInputs().begin(),
                               lowering.op.getFunctionType().getInputs().end());
+
   for (Value cap : lowering.captures) {
     // Expect captures to be refs.
     Type capTy = cap.getType();
