@@ -55,9 +55,17 @@ struct BaseVisitor {
     return success();
   }
 
-  // Handle classes without parameters
+  // Handle classes without parameters or specialized generic classes
   LogicalResult visit(const slang::ast::ClassType &classdecl) {
     return context.convertClassDeclaration(classdecl);
+  }
+
+  // GenericClassDefSymbol represents parameterized (template) classes, which
+  // per IEEE 1800-2023 §8.25 are abstract and not instantiable. Slang models
+  // concrete specializations as ClassType, so we skip GenericClassDefSymbol
+  // entirely.
+  LogicalResult visit(const slang::ast::GenericClassDefSymbol &) {
+    return success();
   }
 
   // Skip typedefs.
@@ -1479,10 +1487,12 @@ struct ClassDeclVisitor {
       : context(ctx), builder(ctx.builder), classLowering(lowering) {}
 
   LogicalResult run(const slang::ast::ClassType &classAST) {
+    if (!classLowering.op.getBody().empty())
+      return success();
+
     OpBuilder::InsertionGuard ig(builder);
-    Block *body = classLowering.op.getBody().empty()
-                      ? &classLowering.op.getBody().emplaceBlock()
-                      : &classLowering.op.getBody().front();
+
+    Block *body = &classLowering.op.getBody().emplaceBlock();
     builder.setInsertionPointToEnd(body);
 
     for (const auto &mem : classAST.members())
@@ -1502,6 +1512,10 @@ struct ClassDeclVisitor {
     moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
     return success();
   }
+
+  // Parameters in specialized classes hold no further information; slang
+  // already elaborates them in all relevant places.
+  LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
 
   // Fully-fledged functions - SubroutineSymbol
   LogicalResult visit(const slang::ast::SubroutineSymbol &fn) {
@@ -1561,6 +1575,11 @@ struct ClassDeclVisitor {
       return failure();
     }
     return visit(*externImpl);
+  }
+
+  // Nested class definition, skip
+  LogicalResult visit(const slang::ast::GenericClassDefSymbol &) {
+    return success();
   }
 
   // Nested class definition, convert
