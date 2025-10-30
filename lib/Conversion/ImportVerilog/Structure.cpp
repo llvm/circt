@@ -1189,10 +1189,9 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // If this is a class method, the first input is %this :
   // !moore.class<@C>
-  unsigned inputIdx = 0;
   if (isMethod) {
     auto thisLoc = convertLocation(subroutine.location);
-    auto thisType = lowering->op.getFunctionType().getInput(inputIdx++);
+    auto thisType = lowering->op.getFunctionType().getInput(0);
     auto thisArg = block.addArgument(thisType, thisLoc);
 
     // Bind `this` so NamedValue/MemberAccess can find it.
@@ -1200,16 +1199,17 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   }
 
   // Add user-defined block arguments
-  for (auto [astArg, type] :
-       llvm::zip(subroutine.getArguments(),
-                 lowering->op.getFunctionType().getInputs())) {
+  auto inputs = lowering->op.getFunctionType().getInputs();
+  auto astArgs = subroutine.getArguments();
+  auto valInputs = llvm::ArrayRef<Type>(inputs).drop_front(isMethod ? 1 : 0);
+
+  for (auto [astArg, type] : llvm::zip(astArgs, valInputs)) {
     auto loc = convertLocation(astArg->location);
     auto blockArg = block.addArgument(type, loc);
 
     if (isa<moore::RefType>(type)) {
       valueSymbols.insert(astArg, blockArg);
     } else {
-      // Convert the body of the function.
       OpBuilder::InsertionGuard g(builder);
       builder.setInsertionPointToEnd(&block);
 
@@ -1536,6 +1536,31 @@ struct ClassDeclVisitor {
     moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy);
 
     return success();
+  }
+
+  // A method prototype corresponds to the forward declaration of a concrete
+  // method, the forward declaration of a virtual method, or the defintion of an
+  // interface method meant to be implemented by classes implementing the
+  // interface class.
+  // In the first two cases, the best thing to do is to look up the actual
+  // implementation and translate it when reading the method prototype, so we
+  // can insert the MethodDeclOp in the correct order in the ClassDeclOp.
+  // The latter case requires support for virtual interface methods, which is
+  // currently not implemented. Since forward declarations of non-interface
+  // methods must be followed by an implementation within the same compilation
+  // unit, we can simply return a failure if we can't find a unique
+  // implementation until we implement support for interface methods.
+  LogicalResult visit(const slang::ast::MethodPrototypeSymbol &fn) {
+    const auto *externImpl = fn.getSubroutine();
+    // We needn't convert a forward declaration without a unique implementation.
+    if (!externImpl) {
+      mlir::emitError(convertLocation(fn.location))
+          << "Didn't find an implementation matching the forward declaration "
+             "of "
+          << fn.name;
+      return failure();
+    }
+    return visit(*externImpl);
   }
 
   // Nested class definition, convert
