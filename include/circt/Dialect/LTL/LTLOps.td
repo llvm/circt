@@ -62,8 +62,157 @@ def IntersectOp : AssocLTLOp<"intersect"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Clocking
+//===----------------------------------------------------------------------===//
+
+// Edge behavior enum for always block.  See SV Spec 9.4.2.
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge : I32EnumAttrCase<"Pos", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge : I32EnumAttrCase<"Neg", 1, "negedge">;
+/// AtEdge is syntactic sugar for AtPosEdge or AtNegEdge.
+def AtEdge : I32EnumAttrCase<"Both", 2, "edge">;
+
+def ClockEdgeAttr
+    : I32EnumAttr<"ClockEdge", "clock edge", [AtPosEdge, AtNegEdge, AtEdge]> {
+  let cppNamespace = "circt::ltl";
+}
+
+def ClockOp : LTLOp<"clock", [Pure, InferTypeOpInterface,
+                      DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+  let arguments = (ins 
+      LTLAnyPropertyType:$input, 
+      ClockEdgeAttr:$edge,
+      I1:$clock);
+  let results = (outs LTLSequenceOrPropertyType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock attr-dict `:` type($input)
+  }];
+
+  let summary = "Specify the clock for a property or sequence.";
+  let description = [{
+    Specifies the `$edge` on a given `$clock` to be the clock for an `$input`
+    property or sequence. All cycle delays in the `$input` implicitly refer to a
+    clock that advances the state to the next cycle. The `ltl.clock` operation
+    provides that clock. The clock applies to the entire property or sequence
+    expression tree below `$input`, up to any other nested `ltl.clock`
+    operations.
+
+    The operation returns a property if the `$input` is a property, and a
+    sequence otherwise.
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
+
+def CreateClockedSequenceOp : LTLOp<"create_clocked_sequence", [Pure]> {
+  let arguments = (ins 
+      LTLAnySequenceType:$input, 
+      ClockEdgeAttr:$edge,
+      I1:$clock);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock attr-dict `:` type($input)
+  }];
+
+  let summary = "Create an explicitly clocked sequence from input "
+                "sequences/booleans.";
+  let description = [{
+    Creates an explicitly clocked sequence by binding a single input sequence
+    or boolean value to a specific clock edge. This operation is fundamental to
+    the explicit clocking model, ensuring that all temporal operations have
+    well-defined clock semantics.
+  }];
+}
+
+def ClockedAndOp : LTLOp<"clocked_and", [Pure, Commutative]> {
+  let arguments = (ins 
+      Variadic<LTLClockedSequenceType>:$inputs,
+      ClockEdgeAttr:$edge, 
+      I1:$clock);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $edge $clock `,` $inputs attr-dict
+  }];
+  let hasCanonicalizeMethod = 1;
+
+  let summary = "A conjunction of explicitly clocked sequences with a specified clock domain.";
+  let description = [{
+    See `ltl.and` op. $edge and $clock specify the clock domain for the result.
+  }];
+}
+
+def ClockedOrOp : LTLOp<"clocked_or", [Pure, Commutative]> {
+  let arguments = (ins 
+      Variadic<LTLClockedSequenceType>:$inputs,
+      ClockEdgeAttr:$edge, 
+      I1:$clock);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $edge $clock `,` $inputs attr-dict
+  }];
+  let hasCanonicalizeMethod = 1;
+
+  let summary = "A disjunction of explicitly clocked sequences with a specified clock domain.";
+  let description = [{
+    See `ltl.or` op. $edge and $clock specify the clock domain for the result.
+  }];
+}
+
+def ClockedIntersectOp : LTLOp<"clocked_intersect", [Pure, Commutative]> {
+  let arguments = (ins
+    Variadic<LTLClockedSequenceType>:$inputs,
+    ClockEdgeAttr:$edge,
+    I1:$clock);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $edge $clock `,` $inputs attr-dict
+  }];
+  let hasCanonicalizeMethod = 1;
+
+  let summary = "Intersection of explicitly clocked sequences with a specified clock domain.";
+  let description = [{
+    See `ltl.intersect` op. $edge and $clock specify the clock domain for the result.
+  }];
+}
+
+def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
+  let arguments = (ins 
+      LTLAnySequenceType:$input,
+      ClockEdgeAttr:$edge, 
+      I1:$clock, 
+      I64Attr:$delay,
+      OptionalAttr<I64Attr>:$length);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $edge $clock `,` $input `,` $delay (`,` $length^)? attr-dict `:` type($input)
+  }];
+
+  let summary = "Create an explicitly clocked delay sequence from i1 or sequence.";
+  let description = [{
+    Creates a standalone "pure delay" sequence that is explicitly bound to a
+    specific clock. This sequence evaluates to true immediately and matches
+    after the specified number of clock ticks.
+
+    The `$input` must be an explicitly clocked sequence. The `$delay` specifies
+    the number of clock cycles to delay, and the optional `$length` specifies
+    the range of cycles during which the delay can match. Omitting `$length`
+    indicates an unbounded but finite delay.
+
+    Examples:
+    - `ltl.clocked_delay posedge %clk, %seq, 2, 0` creates a delay that matches
+      exactly 2 cycles after the current time on the positive edge of %clk.
+    - `ltl.clocked_delay posedge %clk, %seq, 2, 2` creates a delay that matches
+      2, 3, or 4 cycles after the current time.
+    - `ltl.clocked_delay posedge %clk, %seq, 2` creates an unbounded but finite
+      delay of 2 or more cycles.
+
+    This operation enables clean lowering of SVA expressions like `##1 b`
+  }];
+}
 
 def DelayOp : LTLOp<"delay", [Pure]> {
   let arguments = (ins
@@ -116,6 +265,24 @@ def PastOp : LTLOp<"past", [Pure]> {
   let summary = "Observe the sequence $delay cycles earlier.";
   let description = [{
       Semantically works like `ltl.delay %seq, -$delay, 0`
+  }];
+}
+
+def ClockedConcatOp : LTLOp<"clocked_concat", [Pure]> {
+  let arguments = (ins 
+    Variadic<LTLClockedSequenceType>:$inputs,
+    ClockEdgeAttr:$edge,
+    I1:$clock);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $edge $clock `,` $inputs attr-dict
+  }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+
+  let summary = "Concatenate explicitly clocked sequences with a specified clock domain.";
+  let description = [{
+    See `ltl.concat` op. $edge and $clock specify the clock domain for the result.
   }];
 }
 
@@ -178,6 +345,24 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
   }];
 }
 
+def ClockedRepeatOp : LTLOp<"clocked_repeat", [Pure]> {
+  let arguments = (ins
+    LTLClockedSequenceType:$input,
+    I64Attr:$base,
+    OptionalAttr<I64Attr>:$more);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base (`,` $more^)? attr-dict
+  }];
+  let hasFolder = 1;
+
+  let summary = "Repeats a clocked sequence by a number of times.";
+  let description = [{
+    See `ltl.repeat` op. The `$input` must be an explicitly clocked sequence.
+    The result is also an explicitly clocked sequence with the same clock domain of `$input`.
+  }];
+}
+
 def RepeatOp : LTLOp<"repeat", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
@@ -203,6 +388,25 @@ def RepeatOp : LTLOp<"repeat", [Pure]> {
   }];
 }
 
+def ClockedGoToRepeatOp : LTLOp<"clocked_goto_repeat", [Pure]> {
+  let arguments = (ins
+    LTLClockedSequenceType:$input,
+    I64Attr:$base,
+    I64Attr:$more);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict
+  }];
+
+  let hasFolder = 1;
+
+  let summary = "`goto`-style non-consecutively repeating clocked sequence.";
+  let description = [{
+    See `ltl.goto_repeat` op. The `$input` must be an explicitly clocked sequence.
+    The result is also an explicitly clocked sequence with the same clock domain of `$input`.
+  }];
+}
+
 def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
@@ -222,6 +426,25 @@ def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
     in the sequence has to match. The `$base` must be greater than or equal to zero 
     and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents 
     a matching observation of `ltl.goto_repeat %b, 1, 2`, but a !b b b !b !b b !b c doesn't.
+  }];
+}
+
+def ClockedNonConsecutiveRepeatOp : LTLOp<"clocked_non_consecutive_repeat", [Pure]> {
+  let arguments = (ins
+    LTLClockedSequenceType:$input,
+    I64Attr:$base,
+    I64Attr:$more);
+  let results = (outs LTLClockedSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict
+  }];
+
+  let hasFolder = 1;
+
+  let summary = "`goto`-style non-consecutively repeating sequence.";
+  let description = [{
+    See `ltl.non_consecutive_repeat` op. The `$input` must be an explicitly clocked sequence.
+    The result is also an explicitly clocked sequence with the same clock domain of `$input`.
   }];
 }
 
@@ -247,7 +470,6 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
     `ltl.non_consecutive_repeat %b, 1, 2`.
   }];
 }
-
 
 //===----------------------------------------------------------------------===//
 // Properties
@@ -319,47 +541,6 @@ def EventuallyOp : LTLOp<"eventually", [Pure]> {
     is strong: it requires that the `$input` holds after a *finite* number of
     cycles. The operator does *not* hold if the `$input` can't hold in the
     future.
-  }];
-}
-
-//===----------------------------------------------------------------------===//
-// Clocking
-//===----------------------------------------------------------------------===//
-
-// Edge behavior enum for always block.  See SV Spec 9.4.2.
-
-/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
-def AtPosEdge: I32EnumAttrCase<"Pos", 0, "posedge">;
-/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
-def AtNegEdge: I32EnumAttrCase<"Neg", 1, "negedge">;
-/// AtEdge is syntactic sugar for AtPosEdge or AtNegEdge.
-def AtEdge   : I32EnumAttrCase<"Both", 2, "edge">;
-
-def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
-                                [AtPosEdge, AtNegEdge, AtEdge]> {
-  let cppNamespace = "circt::ltl";
-}
-
-def ClockOp : LTLOp<"clock", [
-  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
-]> {
-  let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock);
-  let results = (outs LTLSequenceOrPropertyType:$result);
-  let assemblyFormat = [{
-    $input `,` $edge $clock attr-dict `:` type($input)
-  }];
-
-  let summary = "Specify the clock for a property or sequence.";
-  let description = [{
-    Specifies the `$edge` on a given `$clock` to be the clock for an `$input`
-    property or sequence. All cycle delays in the `$input` implicitly refer to a
-    clock that advances the state to the next cycle. The `ltl.clock` operation
-    provides that clock. The clock applies to the entire property or sequence
-    expression tree below `$input`, up to any other nested `ltl.clock`
-    operations.
-
-    The operation returns a property if the `$input` is a property, and a
-    sequence otherwise.
   }];
 }
 

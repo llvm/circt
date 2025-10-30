@@ -28,17 +28,41 @@ def LTLSequenceType : LTLTypeDef<"Sequence", "sequence"> {
   }];
 }
 
+def LTLClockedSequenceType : LTLTypeDef<"ClockedSequence", "clocked_sequence"> {
+  let summary = "LTL clocked sequence type";
+  let description = [{
+    The `ltl.clocked_sequence` type is the fundamental type for representing
+    temporal sequences in linear temporal logic, for example, *"on the rising
+    edge of clk, A is true two cycles after B is true"*.
+
+    This type intrinsically carries its clocking context, explicitly binding a
+    temporal sequence of events to a specific clock. Operations like ltl.concat,
+    ltl.and, and ltl.or operate on `ltl.clocked_sequence` operands, ensuring
+    all sequence operands share the same clock. This makes clock domains
+    explicit and type-checked, preventing errors and clarifying clock domains
+    for analysis passes.
+
+    Boolean inputs (`i1`) are implicitly lifted to a zero-length clocked
+    sequence. Operations that accept a clocked sequence as an operand will use
+    the `AnyClockedSequence` constraint, which also accepts `i1`.
+  }];
+}
+
 def LTLPropertyType : LTLTypeDef<"Property", "property"> {
   let summary = "LTL property type";
   let description = [{
-    The `ltl.property` type represents a verifiable property built from linear
-    temporal logic sequences and quantifiers, for example, *"if you see sequence
-    A, eventually you will see sequence B"*.
+    The `ltl.property` type represents a clock-agnostic, verifiable property
+    built from explicitly clocked sequences and quantifiers, for example, *"if
+    you see sequence A, eventually you will see sequence B"*.
 
-    Note that this type explicitly identifies a *property*. However, a boolean
-    value (`i1`) or a sequence (`ltl.sequence`) is also a valid property.
-    Operations that accept a property as an operand will use the `AnyProperty`
-    constraint, which also accepts `ltl.sequence` and `i1`.
+    This type is fundamentally clock-independent - it represents a quantified
+    statement about explicitly clocked sequences rather than being a clocked
+    entity itself. The "lifting" from clocked sequences to clock-agnostic
+    properties occurs via property operators like `ltl.implication`,
+    `ltl.always`, and `ltl.eventually`.
+
+    Properties can describe relationships between temporal patterns that may
+    exist in different clock domains, enabling cross-domain verification.
   }];
 }
 
