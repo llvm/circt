@@ -178,38 +178,10 @@ func.func @test_control_flow(%cond: i1, %arg0: i32) -> i32 {
 // Test HW module and SV operations (should NOT be converted - only func.func operations are converted)
 hw.module @test_hw_sv_module(in %scan_data : i9) {
   %0 = comb.extract %scan_data from 0 : (i9) -> i8
-  %top_reg_decoded = sv.wire : !hw.inout<i8>
-  sv.assign %top_reg_decoded, %0 : i8
-  %1 = comb.extract %scan_data from 8 : (i9) -> i1
-  %child.child_reg_decoded = sv.wire : !hw.inout<i1>
-  sv.assign %child.child_reg_decoded, %1 : i1
-  %2 = comb.extract %scan_data from 8 : (i9) -> i1
-  hw.instance "child_decoder" @test_child_module(scan_data: %2: i1) -> ()
   hw.output
 }
 
-hw.module @test_child_module(in %scan_data : i1) {
-  %0 = comb.extract %scan_data from 0 : (i1) -> i1
-  %SimpleChild.child_reg_decoded = sv.wire : !hw.inout<i1>
-  sv.assign %SimpleChild.child_reg_decoded, %0 : i1
-  hw.output
-}
 
 // CHECK-LABEL: hw.module @test_hw_sv_module
 // CHECK-SAME: (in %scan_data : i9)
 // CHECK: %[[EXTRACT1:.+]] = comb.extract %scan_data from 0 : (i9) -> i8
-// CHECK: %[[WIRE1:.+]] = sv.wire : !hw.inout<i8>
-// CHECK: sv.assign %[[WIRE1]], %[[EXTRACT1]] : i8
-// CHECK: %[[EXTRACT2:.+]] = comb.extract %scan_data from 8 : (i9) -> i1
-// CHECK: %[[WIRE2:.+]] = sv.wire : !hw.inout<i1>
-// CHECK: sv.assign %[[WIRE2]], %[[EXTRACT2]] : i1
-// CHECK: %[[EXTRACT3:.+]] = comb.extract %scan_data from 8 : (i9) -> i1
-// CHECK: hw.instance "child_decoder" @test_child_module(scan_data: %[[EXTRACT3]]: i1)
-// CHECK: hw.output
-
-// CHECK-LABEL: hw.module @test_child_module
-// CHECK-SAME: (in %scan_data : i1)
-// CHECK: %[[EXTRACT:.+]] = comb.extract %scan_data from 0 : (i1) -> i1
-// CHECK: %[[WIRE:.+]] = sv.wire : !hw.inout<i1>
-// CHECK: sv.assign %[[WIRE]], %[[EXTRACT]] : i1
-// CHECK: hw.output

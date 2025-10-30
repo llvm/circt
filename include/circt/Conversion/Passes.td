@@ -524,7 +524,6 @@ def ConvertToLLVM : Pass<"convert-to-llvm", "mlir::ModuleOp"> {
     both HW and Comb conversion patterns to provide a complete lowering
     from hardware description to LLVM IR.
   }];
-  let constructor = "circt::createConvertCombToLLVMPass()";
   let dependentDialects = [
     "mlir::LLVM::LLVMDialect",
     "mlir::arith::ArithDialect"

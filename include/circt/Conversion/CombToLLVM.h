@@ -31,7 +31,7 @@ void populateCombToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
                                           RewritePatternSet &patterns);
 
 /// Create a Comb to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> createConvertCombToLLVMPass();
+std::unique_ptr<OperationPass<ModuleOp>> createConvertToLLVMPass();
 
 } // namespace circt
 
