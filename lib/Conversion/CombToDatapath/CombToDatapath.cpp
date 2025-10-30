@@ -74,42 +74,6 @@ struct CombMulOpConversion : OpConversionPattern<MulOp> {
   }
 };
 
-template <typename OpTy>
-struct DatapathLowerVariadic : OpConversionPattern<OpTy> {
-  using OpConversionPattern<OpTy>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
-  LogicalResult
-  matchAndRewrite(OpTy op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto result = lowerFullyAssociativeOp(op, op.getOperands(), rewriter);
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-
-  static Value lowerFullyAssociativeOp(OpTy op, OperandRange operands,
-                                       ConversionPatternRewriter &rewriter) {
-    Value lhs, rhs;
-    switch (operands.size()) {
-    case 0:
-      llvm_unreachable("cannot be called with empty operand range");
-      break;
-    case 1:
-      return operands[0];
-    case 2:
-      lhs = operands[0];
-      rhs = operands[1];
-      return OpTy::create(rewriter, op.getLoc(), ValueRange{lhs, rhs}, true);
-    default:
-      auto firstHalf = operands.size() / 2;
-      lhs =
-          lowerFullyAssociativeOp(op, operands.take_front(firstHalf), rewriter);
-      rhs =
-          lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), rewriter);
-      return OpTy::create(rewriter, op.getLoc(), ValueRange{lhs, rhs}, true);
-    }
-  }
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -140,7 +104,6 @@ void ConvertCombToDatapathPass::runOnOperation() {
   // Permit 2-input adders (carry-propagate adders)
   target.addDynamicallyLegalOp<comb::AddOp>(
       [](comb::AddOp op) { return op.getNumOperands() <= 2; });
-  target.addIllegalOp<comb::MulOp>();
   // TODO: determine lowering of multi-input multipliers
   target.addDynamicallyLegalOp<comb::MulOp>(
       [](comb::MulOp op) { return op.getNumOperands() > 2; });
