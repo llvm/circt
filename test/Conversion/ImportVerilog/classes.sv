@@ -438,3 +438,74 @@ endclass
 function int testModuleClass::testFunction(int a);
     return a;
 endfunction
+
+/// Check that calls to new by classes with ctor call the ctor.
+
+// CHECK-LABEL:  moore.module @testModule10() {
+// CHECK:    moore.procedure initial {
+// CHECK:      [[NEW:%.+]] = moore.class.new : <@"testModule10::testModuleClass">
+// CHECK:      [[CONST:%.+]] = moore.constant 3 : i32
+// CHECK:      func.call @"testModule10::testModuleClass::new"([[NEW]], [[CONST]]) : (!moore.class<@"testModule10::testModuleClass">, !moore.i32) -> ()
+// CHECK:      [[VAR:%.+]] = moore.variable [[NEW]] : <class<@"testModule10::testModuleClass">>
+// CHECK:      moore.return
+// CHECK:    }
+// CHECK:    moore.output
+// CHECK:  }
+// CHECK:  moore.class.classdecl @"testModule10::testModuleClass" {
+// CHECK:    moore.class.propertydecl @a : !moore.i32
+// CHECK:    moore.class.methoddecl @new : (!moore.class<@"testModule10::testModuleClass">, !moore.i32) -> ()
+// CHECK:  }
+// CHECK:  func.func private @"testModule10::testModuleClass::new"(%arg0: !moore.class<@"testModule10::testModuleClass">, %arg1: !moore.i32) {
+// CHECK:    [[NEW:%.+]] = moore.variable %arg1 : <i32>
+// CHECK:    [[RNEW:%.+]] = moore.read [[NEW]] : <i32>
+// CHECK:    moore.blocking_assign [[NEW]], [[RNEW]] : i32
+// CHECK:    return
+// CHECK:  }
+
+module testModule10;
+
+    class testModuleClass;
+       int a;
+        function new(int a);
+           a = a;
+        endfunction
+    endclass // testModuleClass
+
+    initial begin
+       static testModuleClass t = new(3);
+    end
+
+endmodule
+
+/// Check that calls to new by classes with super ctor call the ctor.
+
+// CHECK-LABEL:  moore.class.classdecl @testModuleClass2 {
+// CHECK:    moore.class.propertydecl @a : !moore.i32
+// CHECK:    moore.class.methoddecl @new : (!moore.class<@testModuleClass2>, !moore.i32) -> ()
+// CHECK:  }
+// CHECK:  func.func private @"testModuleClass2::new"(%arg0: !moore.class<@testModuleClass2>, %arg1: !moore.i32) {
+// CHECK:    [[A:%.+]] = moore.class.property_ref %arg0[@a] : <@testModuleClass2> -> <i32>
+// CHECK:    moore.blocking_assign [[A]], %arg1 : i32
+// CHECK:    return
+// CHECK:  }
+// CHECK:  moore.class.classdecl @testModuleClass3 extends @testModuleClass2 {
+// CHECK:    moore.class.methoddecl @new : (!moore.class<@testModuleClass3>, !moore.i32) -> ()
+// CHECK:  }
+// CHECK:  func.func private @"testModuleClass3::new"(%arg0: !moore.class<@testModuleClass3>, %arg1: !moore.i32) {
+// CHECK:    [[UPCAST:%.+]] = moore.class.upcast %arg0 : <@testModuleClass3> to <@testModuleClass2>
+// CHECK:    call @"testModuleClass2::new"([[UPCAST]], %arg1) : (!moore.class<@testModuleClass2>, !moore.i32) -> ()
+// CHECK:    return
+// CHECK:  }
+
+class testModuleClass2;
+    int a;
+    function new(int a);
+        this.a = a;
+    endfunction
+endclass // testModuleClass
+
+class testModuleClass3 extends testModuleClass2;
+    function new(int a);
+        super.new(a);
+    endfunction
+endclass // testModuleClass

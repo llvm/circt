@@ -320,6 +320,10 @@ struct Context {
   /// The time scale currently in effect.
   slang::TimeScale timeScale;
 
+  /// Variable to track the value of the current function's implicit `this`
+  /// reference
+  Value currentThisRef = {};
+
 private:
   /// Helper function to extract the commonalities in lowering of functions and
   /// methods
@@ -327,9 +331,6 @@ private:
   declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
                       mlir::StringRef qualifiedName,
                       llvm::SmallVectorImpl<Type> &extraParams);
-  /// Variable to track the value of the current function's implicit `this`
-  /// reference
-  Value currentThisRef = {};
 };
 
 } // namespace ImportVerilog
