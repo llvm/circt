@@ -509,3 +509,35 @@ class testModuleClass3 extends testModuleClass2;
         super.new(a);
     endfunction
 endclass // testModuleClass
+
+/// Check specialized class decl lowering
+
+// CHECK-LABEL:  moore.module @testModuleParametrized() {
+// CHECK:    [[T:%.+]] = moore.variable : <class<@"testModuleParametrized::testModuleClass">>
+// CHECK:    [[T2:%.+]] = moore.variable : <class<@"testModuleParametrized::testModuleClass">>
+// CHECK:    [[T3:%.+]] = moore.variable : <class<@"testModuleParametrized::testModuleClass_0">>
+// CHECK:    moore.output
+// CHECK:  }
+// CHECK:  moore.class.classdecl @"testModuleParametrized::testModuleClass" {
+// CHECK:    moore.class.propertydecl @a : !moore.l32
+// CHECK:    moore.class.propertydecl @b : !moore.l4
+// CHECK:  }
+// CHECK:  moore.class.classdecl @"testModuleParametrized::testModuleClass_0" {
+// CHECK:    moore.class.propertydecl @a : !moore.l16
+// CHECK:    moore.class.propertydecl @b : !moore.l16
+// CHECK:  }
+
+module testModuleParametrized;
+
+    class testModuleClass #(
+        parameter int WIDTH=32,
+        parameter int Other=16
+    );
+       logic [WIDTH-1:0] a;
+       logic [Other-1:0] b;
+    endclass // testModuleClass
+
+   testModuleClass#(.WIDTH(32), .Other(4)) t;
+   testModuleClass#(.WIDTH(32), .Other(4)) t2;
+   testModuleClass#(.WIDTH(16)) t3;
+endmodule

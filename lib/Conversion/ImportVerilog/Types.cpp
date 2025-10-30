@@ -167,6 +167,8 @@ struct TypeVisitor {
   }
 
   Type visit(const slang::ast::ClassType &type) {
+    if (failed(context.convertClassDeclaration(type)))
+      return {};
     if (auto *lowering = context.declareClass(type)) {
       mlir::StringAttr symName = lowering->op.getSymNameAttr();
       mlir::FlatSymbolRefAttr symRef = mlir::FlatSymbolRefAttr::get(symName);
