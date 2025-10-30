@@ -86,14 +86,14 @@ hw.module @partial_product_zext(in %a : i3, in %b : i3, out pp0 : i6, out pp1 : 
   // CHECK-NEXT: %[[B0A:.+]] = comb.and %[[B03]], %[[A]] : i3
   // CHECK-NEXT: %[[PP0:.+]] = comb.concat %c0_i3, %[[B0A]] : i3, i3
   // CHECK-NEXT: %[[B13:.+]] = comb.replicate %[[B1]] : (i1) -> i3
-  // CHECK-NEXT: %[[B1B:.+]] = comb.and %[[B13]], %[[A]] : i3
-  // CHECK-NEXT: %[[B1B6:.+]] = comb.concat %c0_i3, %[[B1B]] : i3, i3
-  // CHECK-NEXT: %[[PP17:.+]] = comb.concat %[[B1B6]], %false : i6, i1
+  // CHECK-NEXT: %[[B1A:.+]] = comb.and %[[B13]], %[[A]] : i3
+  // CHECK-NEXT: %[[B1A6:.+]] = comb.concat %c0_i3, %[[B1A]] : i3, i3
+  // CHECK-NEXT: %[[PP17:.+]] = comb.concat %[[B1A6]], %false : i6, i1
   // CHECK-NEXT: %[[PP1:.+]] = comb.extract %[[PP17]] from 0 : (i7) -> i6
   // CHECK-NEXT: %[[B23:.+]] = comb.replicate %[[B2]] : (i1) -> i3
-  // CHECK-NEXT: %[[B2B:.+]] = comb.and %[[B23]], %[[A]] : i3
-  // CHECK-NEXT: %[[B2B8:.+]] = comb.concat %c0_i3, %[[B2B]] : i3, i3
-  // CHECK-NEXT: %[[PP28:.+]] = comb.concat %[[B2B8]], %c0_i2 : i6, i2
+  // CHECK-NEXT: %[[B2A:.+]] = comb.and %[[B23]], %[[A]] : i3
+  // CHECK-NEXT: %[[B2A8:.+]] = comb.concat %c0_i3, %[[B2A]] : i3, i3
+  // CHECK-NEXT: %[[PP28:.+]] = comb.concat %[[B2A8]], %c0_i2 : i6, i2
   // CHECK-NEXT: %[[PP2:.+]] = comb.extract %[[PP28]] from 0 : (i8) -> i6
   // CHECK-NEXT: hw.output %[[PP0]], %[[PP1]], %[[PP2]] : i6, i6, i6
   %c0_i3 = hw.constant 0 : i3
