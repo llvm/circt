@@ -421,3 +421,20 @@ module testModule9;
     end
 
 endmodule
+
+/// Check forward declarations
+
+// CHECK-LABEL:  moore.class.classdecl @testModuleClass {
+// CHECK:    moore.class.methoddecl @testFunction : (!moore.class<@testModuleClass>, !moore.i32) -> !moore.i32
+// CHECK:  }
+// CHECK:  func.func private @"testModuleClass::testFunction"(%arg0: !moore.class<@testModuleClass>, %arg1: !moore.i32) -> !moore.i32 {
+// CHECK:    return %arg1 : !moore.i32
+// CHECK:  }
+
+class testModuleClass;
+    extern function int testFunction(int a);
+endclass
+
+function int testModuleClass::testFunction(int a);
+    return a;
+endfunction
