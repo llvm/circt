@@ -10,6 +10,7 @@
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/syntax/AllSyntax.h"
+#include "llvm/ADT/ScopeExit.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -1712,19 +1713,76 @@ struct RvalueExprVisitor : public ExprVisitor {
     return context.convertAssertionExpression(expr.body, loc);
   }
 
+  // A new class expression can stand for one of two things:
+  // 1) A call to the `new` method (ctor) of a class made outside the scope of
+  // the class
+  // 2) A call to the `super.new` method, i.e. the constructor of the base
+  // class, within the scope of a class, more specifically, within the new
+  // method override of a class.
+  // In the first case we should emit an allocation and a call to the ctor if it
+  // exists (it's optional in System Verilog), in the second case we should emit
+  // a call to the parent's ctor (System Verilog only has single inheritance, so
+  // super is always unambiguous), but no allocation, as the child class' new
+  // invocation already allocated space for both its own and its parent's
+  // properties.
   Value visit(const slang::ast::NewClassExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto classTy = dyn_cast<moore::ClassHandleType>(type);
-    if (!classTy)
-      return {};
+    Value newObj;
 
-    auto newOp = moore::ClassNewOp::create(builder, loc, classTy, {});
-    auto constructor = expr.constructorCall();
+    // We are calling new from within a new function, and it's pointing to
+    // super. Check the implicit this ref to figure out the super class type.
+    // Do not allocate a new object.
+    if (!classTy && expr.isSuperClass) {
+      newObj = context.getImplicitThisRef();
+      if (!newObj || !newObj.getType() ||
+          !isa<moore::ClassHandleType>(newObj.getType())) {
+        mlir::emitError(loc) << "implicit this ref was not set while "
+                                "converting new class function";
+        return {};
+      }
+      auto thisType = cast<moore::ClassHandleType>(newObj.getType());
+      auto classDecl =
+          cast<moore::ClassDeclOp>(*context.symbolTable.lookupNearestSymbolFrom(
+              context.intoModuleOp, thisType.getClassSym()));
+      auto baseClassSym = classDecl.getBase();
+      classTy = circt::moore::ClassHandleType::get(context.getContext(),
+                                                   baseClassSym.value());
+    } else {
+      // We are calling from outside a class; allocate space for the object.
+      newObj = moore::ClassNewOp::create(builder, loc, classTy, {});
+    }
+
+    const auto *constructor = expr.constructorCall();
+    // If there's no ctor, we are done.
     if (!constructor)
-      return newOp.getResult();
+      return newObj;
 
-    mlir::emitError(loc) << "New expression requires constructor call, which "
-                            "is not yet implemented!";
+    if (const auto *callConstructor =
+            constructor->as_if<slang::ast::CallExpression>())
+      if (const auto *subroutine =
+              std::get_if<const slang::ast::SubroutineSymbol *>(
+                  &callConstructor->subroutine)) {
+        // Bit paranoid, but virtually free checks that new is a class method
+        // and the subroutine has already been converted.
+        if (!(*subroutine)->thisVar) {
+          mlir::emitError(loc) << "Expected subroutine called by new to use an "
+                                  "implicit this reference";
+          return {};
+        }
+        if (failed(context.convertFunction(**subroutine)))
+          return {};
+        // Pass the newObj as the implicit this argument of the ctor.
+        auto savedThis = context.currentThisRef;
+        context.currentThisRef = newObj;
+        auto restoreThis =
+            llvm::make_scope_exit([&] { context.currentThisRef = savedThis; });
+        // Emit a call to ctor
+        if (!visitCall(*callConstructor, *subroutine))
+          return {};
+        // Return new handle
+        return newObj;
+      }
     return {};
   }
 
