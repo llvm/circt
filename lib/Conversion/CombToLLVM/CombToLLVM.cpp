@@ -32,7 +32,7 @@ using namespace mlir;
 using namespace circt;
 
 namespace circt {
-#define GEN_PASS_DEF_CONVERTCOMBTOLLVM
+#define GEN_PASS_DEF_CONVERTTOLLVM
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
@@ -65,46 +65,11 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
 };
 
 //===----------------------------------------------------------------------===//
-// HW Structural Operation Conversion Patterns
-//===----------------------------------------------------------------------===//
-
-/// Convert a hw::OutputOp to an llvm.return.
-struct HWOutputOpConversion : public ConvertToLLVMPattern {
-  explicit HWOutputOpConversion(MLIRContext *ctx,
-                                LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(hw::OutputOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (operands.empty()) {
-      rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, ValueRange{});
-    } else if (operands.size() == 1) {
-      rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, operands[0]);
-    } else {
-      // Multiple outputs - pack into a struct
-      auto structType = LLVM::LLVMStructType::getLiteral(
-          rewriter.getContext(),
-          llvm::map_to_vector(operands, [](Value v) { return v.getType(); }));
-      Value structVal =
-          rewriter.create<LLVM::UndefOp>(op->getLoc(), structType);
-      for (auto [i, operand] : llvm::enumerate(operands)) {
-        structVal = rewriter.create<LLVM::InsertValueOp>(op->getLoc(),
-                                                         structVal, operand, i);
-      }
-      rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, structVal);
-    }
-    return success();
-  }
-};
-
-//===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
 struct CombToLLVMLoweringPass
-    : public circt::impl::ConvertCombToLLVMBase<CombToLLVMLoweringPass> {
+    : public circt::impl::ConvertToLLVMBase<CombToLLVMLoweringPass> {
   void runOnOperation() override;
 
 private:
@@ -123,14 +88,14 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Most Comb operations are handled by the Comb-to-Arith + Arith-to-LLVM
   // pipeline
   patterns.add<CombParityOpConversion>(patterns.getContext(), converter);
-
-  // Add HW structural operation patterns
-  patterns.add<HWOutputOpConversion>(patterns.getContext(), converter);
 }
 
 void CombToLLVMLoweringPass::runOnOperation() {
   // Iterate over all func.func operations in the module and convert them
-  getOperation().walk([&](func::FuncOp funcOp) { convertFuncOp(funcOp); });
+  for (auto funcOp :
+       llvm::make_early_inc_range(getOperation().getOps<func::FuncOp>())) {
+    convertFuncOp(funcOp);
+  }
 }
 
 void CombToLLVMLoweringPass::convertFuncOp(func::FuncOp funcOp) {

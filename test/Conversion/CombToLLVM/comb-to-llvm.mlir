@@ -1,4 +1,4 @@
-// RUN: circt-opt --convert-comb-to-llvm %s | FileCheck %s
+// RUN: circt-opt --convert-to-llvm %s | FileCheck %s
 
 // Test that Comb operations are converted to LLVM via the comprehensive conversion pipeline
 // This includes Comb->Arith->LLVM, Func->LLVM, and other dialect conversions

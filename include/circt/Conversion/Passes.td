@@ -517,7 +517,7 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
 // CombToLLVM
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToLLVM : Pass<"convert-comb-to-llvm", "mlir::ModuleOp"> {
+def ConvertToLLVM : Pass<"convert-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert Comb and HW to LLVM";
   let description = [{
     This pass translates Comb and HW operations to LLVM IR. It combines

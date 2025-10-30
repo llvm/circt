@@ -23,7 +23,7 @@ class LLVMTypeConverter;
 
 namespace circt {
 
-#define GEN_PASS_DECL_CONVERTCOMBTOLLVM
+#define GEN_PASS_DECL_CONVERTTOLLVM
 #include "circt/Conversion/Passes.h.inc"
 
 /// Get the Comb to LLVM conversion patterns.
