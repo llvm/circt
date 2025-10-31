@@ -1011,7 +1011,6 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
 /// This does not convert the function body.
 FunctionLowering *
 Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
-
   // Check if there already is a declaration for this function.
   auto &lowering = functions[&subroutine];
   if (lowering) {
@@ -1045,11 +1044,6 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
     return {};
   }
 
-  if (subroutine.flags.has(slang::ast::MethodFlags::Virtual)) {
-    mlir::emitError(loc) << "Virtual methods are not yet supported!";
-    return {};
-  }
-
   // Build qualified name: @"Pkg::Class"::subroutine
   SmallString<64> qualName;
   qualName += ownerDecl.getSymName(); // already qualified
@@ -1068,34 +1062,20 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   return fLowering;
 }
 
-/// Convert a function and its arguments to a function declaration in the IR.
-/// This does not convert the function body.
-FunctionLowering *
-Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
-                             mlir::StringRef qualifiedName,
-                             llvm::SmallVectorImpl<Type> &extraParams) {
+/// Helper function to generate the function signature from a SubroutineSymbol
+/// and optional extra arguments (used for %this argument)
+static FunctionType
+getFunctionSignature(Context &context,
+                     const slang::ast::SubroutineSymbol &subroutine,
+                     llvm::SmallVectorImpl<Type> &extraParams) {
   using slang::ast::ArgumentDirection;
 
-  std::unique_ptr<FunctionLowering> lowering =
-      std::make_unique<FunctionLowering>();
-  auto loc = convertLocation(subroutine.location);
-
-  // Pick an insertion point for this function according to the source file
-  // location.
-  OpBuilder::InsertionGuard g(builder);
-  auto it = orderedRootOps.upper_bound(subroutine.location);
-  if (it == orderedRootOps.end())
-    builder.setInsertionPointToEnd(intoModuleOp.getBody());
-  else
-    builder.setInsertionPoint(it->second);
-
-  // Determine the function type.
   SmallVector<Type> inputTypes;
   inputTypes.append(extraParams.begin(), extraParams.end());
   SmallVector<Type, 1> outputTypes;
 
   for (const auto *arg : subroutine.getArguments()) {
-    auto type = convertType(arg->getType());
+    auto type = context.convertType(arg->getType());
     if (!type)
       return {};
     if (arg->direction == ArgumentDirection::In) {
@@ -1107,17 +1087,41 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   }
 
   if (!subroutine.getReturnType().isVoid()) {
-    auto type = convertType(subroutine.getReturnType());
+    auto type = context.convertType(subroutine.getReturnType());
     if (!type)
       return {};
     outputTypes.push_back(type);
   }
 
-  auto funcType = FunctionType::get(getContext(), inputTypes, outputTypes);
+  auto funcType =
+      FunctionType::get(context.getContext(), inputTypes, outputTypes);
 
   // Create a function declaration.
-  auto funcOp =
-      mlir::func::FuncOp::create(builder, loc, qualifiedName, funcType);
+  return funcType;
+}
+
+/// Convert a function and its arguments to a function declaration in the IR.
+/// This does not convert the function body.
+FunctionLowering *
+Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
+                             mlir::StringRef qualifiedName,
+                             llvm::SmallVectorImpl<Type> &extraParams) {
+  auto loc = convertLocation(subroutine.location);
+  std::unique_ptr<FunctionLowering> lowering =
+      std::make_unique<FunctionLowering>();
+
+  // Pick an insertion point for this function according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(subroutine.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  auto funcTy = getFunctionSignature(*this, subroutine, extraParams);
+  auto funcOp = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
+
   SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
   orderedRootOps.insert(it, {subroutine.location, funcOp});
   lowering->op = funcOp;
@@ -1566,7 +1570,29 @@ struct ClassDeclVisitor {
       return success();
     }
 
+    const mlir::UnitAttr isVirtual =
+        (fn.flags & slang::ast::MethodFlags::Virtual)
+            ? UnitAttr::get(context.getContext())
+            : nullptr;
+
     auto loc = convertLocation(fn.location);
+    // Pure virtual functions regulate inheritance rules during parsing.
+    // They don't emit any code, so we don't need to convert them, we only need
+    // to register them for the purpose of stable VTable construction.
+    if (fn.flags & slang::ast::MethodFlags::Pure) {
+      // Add an extra %this argument.
+      SmallVector<Type, 1> extraParams;
+      auto classSym =
+          mlir::FlatSymbolRefAttr::get(classLowering.op.getSymNameAttr());
+      auto handleTy =
+          moore::ClassHandleType::get(context.getContext(), classSym);
+      extraParams.push_back(handleTy);
+
+      auto funcTy = getFunctionSignature(context, fn, extraParams);
+      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy);
+      return success();
+    }
+
     auto *lowering = context.declareFunction(fn);
     if (!lowering)
       return failure();
@@ -1577,9 +1603,12 @@ struct ClassDeclVisitor {
     if (!lowering->capturesFinalized)
       return failure();
 
+    // We only emit methoddecls for virtual methods.
+    if (!isVirtual)
+      return success();
+
     // Grab the finalized function type from the lowered func.op.
     FunctionType fnTy = lowering->op.getFunctionType();
-
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy);
 

@@ -289,7 +289,6 @@ endmodule
 
 // CHECK: moore.class.classdecl @"testModule7::testModuleClass" {
 // CHECK-NEXT: moore.class.propertydecl @a : !moore.i32
-// CHECK-NEXT: moore.class.methoddecl @returnA : (!moore.class<@"testModule7::testModuleClass">) -> !moore.i32
 // CHECK: }
 
 // CHECK: func.func private @"testModule7::testModuleClass::returnA"
@@ -335,7 +334,6 @@ endmodule
  // CHECK:    moore.class.propertydecl @a : !moore.i32
  // CHECK:  }
  // CHECK:  moore.class.classdecl @"testModule8::testModuleClass2" extends @"testModule8::testModuleClass" {
- // CHECK:    moore.class.methoddecl @returnA : (!moore.class<@"testModule8::testModuleClass2">) -> !moore.i32
  // CHECK:  }
  // CHECK:  func.func private @"testModule8::testModuleClass2::returnA"([[ARG:%.+]]: !moore.class<@"testModule8::testModuleClass2">) -> !moore.i32 {
  // CHECK:   [[UPCAST:%.+]] = moore.class.upcast [[ARG]] : <@"testModule8::testModuleClass2"> to <@"testModule8::testModuleClass">
@@ -382,7 +380,6 @@ endmodule
 // CHECK: }
 // CHECK: moore.class.classdecl @"testModule9::testModuleClass" {
 // CHECK:   moore.class.propertydecl @a : !moore.i32
-// CHECK:   moore.class.methoddecl @myReturn : (!moore.class<@"testModule9::testModuleClass">) -> !moore.i32
 // CHECK: }
 // CHECK: func.func private @"testModule9::testModuleClass::myReturn"([[this_ref:%.+]]: !moore.class<@"testModule9::testModuleClass">) -> !moore.i32 {
 // CHECK:   [[prop_ref:%.+]] = moore.class.property_ref [[this_ref]][@a] : <@"testModule9::testModuleClass"> -> <i32>
@@ -390,7 +387,6 @@ endmodule
 // CHECK:   return [[read_val]] : !moore.i32
 // CHECK: }
 // CHECK: moore.class.classdecl @"testModule9::testModuleClass2" extends @"testModule9::testModuleClass" {
-// CHECK:   moore.class.methoddecl @returnA : (!moore.class<@"testModule9::testModuleClass2">) -> !moore.i32
 // CHECK: }
 // CHECK: func.func private @"testModule9::testModuleClass2::returnA"([[this_ref2:%.+]]: !moore.class<@"testModule9::testModuleClass2">) -> !moore.i32 {
 // CHECK:   [[upcast_ref:%.+]] = moore.class.upcast [[this_ref2]] : <@"testModule9::testModuleClass2"> to <@"testModule9::testModuleClass">
@@ -425,7 +421,6 @@ endmodule
 /// Check forward declarations
 
 // CHECK-LABEL:  moore.class.classdecl @testModuleClass {
-// CHECK:    moore.class.methoddecl @testFunction : (!moore.class<@testModuleClass>, !moore.i32) -> !moore.i32
 // CHECK:  }
 // CHECK:  func.func private @"testModuleClass::testFunction"(%arg0: !moore.class<@testModuleClass>, %arg1: !moore.i32) -> !moore.i32 {
 // CHECK:    return %arg1 : !moore.i32
@@ -453,7 +448,6 @@ endfunction
 // CHECK:  }
 // CHECK:  moore.class.classdecl @"testModule10::testModuleClass" {
 // CHECK:    moore.class.propertydecl @a : !moore.i32
-// CHECK:    moore.class.methoddecl @new : (!moore.class<@"testModule10::testModuleClass">, !moore.i32) -> ()
 // CHECK:  }
 // CHECK:  func.func private @"testModule10::testModuleClass::new"(%arg0: !moore.class<@"testModule10::testModuleClass">, %arg1: !moore.i32) {
 // CHECK:    [[NEW:%.+]] = moore.variable %arg1 : <i32>
@@ -481,7 +475,6 @@ endmodule
 
 // CHECK-LABEL:  moore.class.classdecl @testModuleClass2 {
 // CHECK:    moore.class.propertydecl @a : !moore.i32
-// CHECK:    moore.class.methoddecl @new : (!moore.class<@testModuleClass2>, !moore.i32) -> ()
 // CHECK:  }
 // CHECK:  func.func private @"testModuleClass2::new"(%arg0: !moore.class<@testModuleClass2>, %arg1: !moore.i32) {
 // CHECK:    [[A:%.+]] = moore.class.property_ref %arg0[@a] : <@testModuleClass2> -> <i32>
@@ -489,7 +482,6 @@ endmodule
 // CHECK:    return
 // CHECK:  }
 // CHECK:  moore.class.classdecl @testModuleClass3 extends @testModuleClass2 {
-// CHECK:    moore.class.methoddecl @new : (!moore.class<@testModuleClass3>, !moore.i32) -> ()
 // CHECK:  }
 // CHECK:  func.func private @"testModuleClass3::new"(%arg0: !moore.class<@testModuleClass3>, %arg1: !moore.i32) {
 // CHECK:    [[UPCAST:%.+]] = moore.class.upcast %arg0 : <@testModuleClass3> to <@testModuleClass2>
@@ -562,7 +554,6 @@ endclass
 
 // CHECK-LABEL:  moore.class.classdecl @testLValueClass {
 // CHECK:    moore.class.propertydecl @a : !moore.i32
-// CHECK:    moore.class.methoddecl @adder : (!moore.class<@testLValueClass>) -> ()
 // CHECK:  }
 // CHECK:  func.func private @"testLValueClass::adder"(%arg0: !moore.class<@testLValueClass>) {
 // CHECK:    [[LVAL:%.+]] = moore.class.property_ref %arg0[@a] : <@testLValueClass> -> <i32>
@@ -592,3 +583,50 @@ class GenericBar #(int X=0, int Y=1, int Z=2); endclass
 localparam x=3, y=4, z=5;
 
 class SpecializedFoo extends GenericBar #(x,y,z); endclass
+
+/// Check virtual attribute of methoddecl
+
+// CHECK-LABEL: moore.class.classdecl @testClassVirtual {
+// CHECK-NEXT:    moore.class.methoddecl @testFun : (!moore.class<@testClassVirtual>) -> ()
+// CHECK:  }
+// CHECK:  func.func private @"testClassVirtual::testFun"(%arg0: !moore.class<@testClassVirtual>) {
+// CHECK:    return
+// CHECK:  }
+
+class testClassVirtual;
+   virtual function void testFun();
+   endfunction
+endclass
+
+/// Check virtual dispatch
+
+// CHECK-LABEL: func.func private @testVirtualDispatch
+// CHECK-SAME: (%arg0: !moore.class<@testClassVirtual>) {
+// CHECK-NEXT:    [[VMETH:%.+]] = moore.vtable.load_method %arg0 : @testFun of <@testClassVirtual> -> (!moore.class<@testClassVirtual>) -> ()
+// CHECK-NEXT:    call_indirect [[VMETH]](%arg0) : (!moore.class<@testClassVirtual>) -> ()
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+
+function void testVirtualDispatch (testClassVirtual t);
+    t.testFun();
+endfunction
+
+/// Check pure virtual forward declarations
+
+// CHECK-LABEL:  moore.class.classdecl @virtualFunctionClass {
+// CHECK:    moore.class.methoddecl @subroutine : (!moore.class<@virtualFunctionClass>)
+// CHECK:  }
+// CHECK:  moore.class.classdecl @realFunctionClass implements [@virtualFunctionClass] {
+// CHECK:    moore.class.methoddecl @subroutine : (!moore.class<@realFunctionClass>)
+// CHECK:  }
+// CHECK:  func.func private @"realFunctionClass::subroutine"(%arg0: !moore.class<@realFunctionClass>) {
+// CHECK:    return
+// CHECK:  }
+
+interface class virtualFunctionClass;
+pure virtual function void subroutine;
+endclass
+
+class realFunctionClass implements virtualFunctionClass;
+virtual function void subroutine; endfunction
+endclass

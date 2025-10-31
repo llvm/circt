@@ -1531,6 +1531,7 @@ ClassUpcastOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                        << dstTy.getClassSym()
                        << " (destination is not a base class)";
 }
+
 LogicalResult
 ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // The operand is constrained to ClassHandleType in ODS; unwrap it.
@@ -1580,6 +1581,58 @@ ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("result element type (")
            << resRefTy.getNestedType() << ") does not match field type ("
            << expectedElemTy << ")";
+
+  return success();
+}
+
+LogicalResult
+VTableLoadMethodOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *op = getOperation();
+
+  auto object = getObject();
+  auto implSym = object.getType().getClassSym();
+
+  // Check that classdecl of class handle exists
+  Operation *implOp = symbolTable.lookupNearestSymbolFrom(op, implSym);
+  if (!implOp)
+    return emitOpError() << "implementing class " << implSym << " not found";
+  auto implClass = cast<moore::ClassDeclOp>(implOp);
+
+  StringAttr methodName = getMethodSymAttr().getLeafReference();
+  if (!methodName || methodName.getValue().empty())
+    return emitOpError() << "empty method name";
+
+  moore::ClassDeclOp cursor = implClass;
+  Operation *methodDeclOp = nullptr;
+
+  // Find method in class decl or parents' class decl
+  while (cursor && !methodDeclOp) {
+    methodDeclOp = symbolTable.lookupSymbolIn(cursor, methodName);
+    if (methodDeclOp)
+      break;
+    SymbolRefAttr baseSym = cursor.getBaseAttr();
+    if (!baseSym)
+      break;
+    Operation *baseOp = symbolTable.lookupNearestSymbolFrom(op, baseSym);
+    cursor = baseOp ? cast<moore::ClassDeclOp>(baseOp) : moore::ClassDeclOp();
+  }
+
+  if (!methodDeclOp)
+    return emitOpError() << "no method `" << methodName << "` found in "
+                         << implClass.getSymName() << " or its bases";
+
+  // Make sure method decl is a ClassMethodDeclOp
+  auto methodDecl = dyn_cast<moore::ClassMethodDeclOp>(methodDeclOp);
+  if (!methodDecl)
+    return emitOpError() << "`" << methodName
+                         << "` is not a method declaration";
+
+  // Make sure method signature matches
+  auto resFnTy = cast<FunctionType>(getResult().getType());
+  auto declFnTy = cast<FunctionType>(methodDecl.getFunctionType());
+  if (resFnTy != declFnTy)
+    return emitOpError() << "result type " << resFnTy
+                         << " does not match method erased ABI " << declFnTy;
 
   return success();
 }

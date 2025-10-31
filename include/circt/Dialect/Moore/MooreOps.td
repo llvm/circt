@@ -2418,13 +2418,11 @@ def ClassPropertyDeclOp
 def ClassMethodDeclOp
     : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
   let summary = "Declare a class method";
-
   let arguments = (ins SymbolNameAttr:$sym_name,
       TypeAttrOf<FunctionType>:$function_type);
-
   let results = (outs);
   let assemblyFormat = [{
-      $sym_name `:` $function_type  attr-dict
+      $sym_name `:` $function_type attr-dict
   }];
 }
 
@@ -2493,6 +2491,29 @@ def ClassUpcastOp
   let results = (outs ClassHandleType:$result);
   let assemblyFormat =
       "$instance `:` type($instance) `to` type($result) attr-dict";
+}
+
+def VTableLoadMethodOp
+    : MooreOp<"vtable.load_method", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Load a virtual method entry from a vtable.";
+  let description = [{
+    Loads a virtual method function pointer from a vtable.
+    The verifier resolves the symbols in the symbol table and ensures that the
+    result function type matches the erased ABI.
+  }];
+
+  let arguments = (ins
+    ClassHandleType:$object,
+    SymbolRefAttr:$methodSym
+  );
+
+  let results = (outs
+      Type<CPred<"::llvm::isa<mlir::FunctionType>($_self)">>:$result
+  );
+
+  let assemblyFormat =
+    "$object `:` $methodSym `of` type($object) `->` type($result) attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
