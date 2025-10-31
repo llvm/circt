@@ -301,6 +301,7 @@ private:
     auto operands = op->getOperands();
     size_t sid = sortToLIDMap.at(width);
 
+    // No need to consider 0-operand case as it'll be rejected by the verifier
     // If there's only one operand, then we don't generate a BTOR2 instruction,
     // we just reuse the operand's existing LID
     if (operands.size() == 1) {
