@@ -2466,6 +2466,12 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   return moore::BitstoshortrealBIOp::create(builder, loc,
                                                             value);
                 })
+          .Case("len",
+                [&]() -> Value {
+                  if (isa<moore::StringType>(value.getType()))
+                    return moore::StringLenOp::create(builder, loc, value);
+                  return {};
+                })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
