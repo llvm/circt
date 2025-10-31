@@ -665,7 +665,7 @@ const std::vector<const Type *> &Manifest::getTypeTable() const {
 // Print a module info, including the extra metadata.
 std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   auto printAny = [&os](std::any a) {
-    if (auto *c = std::any_cast<Constant>(&a))
+    if (std::any_cast<Constant>(&a))
       a = std::any_cast<Constant>(a).value;
 
     const std::type_info &t = a.type();

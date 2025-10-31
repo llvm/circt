@@ -553,7 +553,9 @@ def TaggedWriteGearbox(input_bitwidth: int,
 
   if output_bitwidth % 8 != 0:
     raise ValueError("Output bitwidth must be a multiple of 8.")
-  input_pad_bits = 8 - (input_bitwidth % 8)
+  input_pad_bits = 0
+  if input_bitwidth % 8 != 0:
+    input_pad_bits = 8 - (input_bitwidth % 8)
   input_padded_bitwidth = input_bitwidth + input_pad_bits
 
   class TaggedWriteGearboxImpl(Module):
@@ -667,6 +669,57 @@ def TaggedWriteGearbox(input_bitwidth: int,
   return TaggedWriteGearboxImpl
 
 
+@modparams
+def EmitEveryN(message_type: Type, N: int) -> type['EmitEveryNImpl']:
+  """Emit (forward) one message for every N input messages. The emitted message
+  is the last one of the N received. N must be >= 1."""
+
+  if N < 1:
+    raise ValueError("N must be >= 1")
+
+  class EmitEveryNImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(message_type)
+    out = OutputChannel(message_type)
+
+    @generator
+    def build(ports):
+      ready_for_in = Wire(Bits(1))
+      in_data, in_valid = ports.in_.unwrap(ready_for_in)
+      xact = in_valid & ready_for_in
+
+      # Fast path: N == 1 -> pass-through.
+      if N == 1:
+        out_chan, out_ready = EmitEveryNImpl.out.type.wrap(in_data, in_valid)
+        ready_for_in.assign(out_ready)
+        ports.out = out_chan
+        return
+
+      counter_width = clog2(N)
+      increment = xact
+      clear = Wire(Bits(1))
+      counter = Counter(counter_width)(clk=ports.clk,
+                                       rst=ports.rst,
+                                       increment=increment,
+                                       clear=clear)
+
+      # Capture last message of the group.
+      last_msg = in_data.reg(ports.clk, ports.rst, ce=xact, name="last_msg")
+
+      hit_last = (counter.out == UInt(counter_width)(N - 1)) & xact
+      out_valid = ControlReg(ports.clk, ports.rst, [hit_last], [clear])
+
+      out_chan, out_ready = EmitEveryNImpl.out.type.wrap(last_msg, out_valid)
+      # Stall input while waiting for downstream to accept the aggregated output.
+      ready_for_in.assign(~(out_valid & ~out_ready))
+      clear.assign(out_valid & out_ready)  # Clear after successful emit.
+
+      ports.out = out_chan
+
+  return EmitEveryNImpl
+
+
 def HostMemWriteProcessor(
     write_width: int, hostmem_module,
     reqs: List[esi._OutputBundleSetter]) -> type["HostMemWriteProcessorImpl"]:
@@ -695,6 +748,9 @@ def HostMemWriteProcessor(
 
     @generator
     def build(ports):
+      clk = ports.clk
+      rst = ports.rst
+
       # If there's no write clients, just create a no-op write bundle
       if len(reqs) == 0:
         req, _ = Channel(hostmem_module.UpstreamWriteReq).wrap(
@@ -731,8 +787,8 @@ def HostMemWriteProcessor(
         # Pack up the bundle and assign the request channel.
         write_req_bundle_type = esi.HostMem.write_req_bundle_type(
             client_type.data)
-        bundle_sig, froms = write_req_bundle_type.pack(
-            ackTag=demuxed_acks.get_out(idx))
+        input_flit_ack = Wire(upstream_ack_tag.type)
+        bundle_sig, froms = write_req_bundle_type.pack(ackTag=input_flit_ack)
 
         gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth, write_width)
         gearbox_in_type = gearbox_mod.in_.type.inner_type
@@ -755,6 +811,13 @@ def HostMemWriteProcessor(
                 "data": m.data,
                 "valid_bytes": m.valid_bytes
             })))
+
+        # Count the number of acks received from hostmem for this client
+        # and only send one back to the client per input.
+        ack_every_n = EmitEveryN(upstream_ack_tag.type, gearbox_mod.num_chunks)(
+            clk=clk, rst=rst, in_=demuxed_acks.get_out(idx))
+        input_flit_ack.assign(ack_every_n.out)
+
         # Set the port for the client request.
         setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
 
