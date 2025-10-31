@@ -402,8 +402,17 @@ private:
         continue;
       }
 
+      if (i == 2) {
+        Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{ppRow, zeroFalse, encNegPrev});
+        Value ppAlign = rewriter.createOrFold<comb::ExtractOp>(
+            loc, withSignCorrection, 0, width);
+        partialProducts.push_back(ppAlign);
+        encNegPrev = encNeg;
+        continue;
+      }
+
       // Insert a sign-correction from the previous row
-      assert(i >= 2 && "Expected i to be at least 2 for sign correction");
       // {ppRow, 0, encNegPrev} << 2*(i-1)
       Value shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i - 2, 0));
       Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
