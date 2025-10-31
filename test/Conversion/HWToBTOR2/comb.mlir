@@ -58,7 +58,7 @@ module {
 
     // CHECK:   [[NID19:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
     // CHECK:   [[NID20:[0-9]+]] not [[NID3]] [[NID19]]
-    // CHECK:   [[NID15:[0-9]+]] bad [[NID20:[0-9]+]]
+    // CHECK:   [[NID21:[0-9]+]] bad [[NID20:[0-9]+]]
     sv.always posedge %0 {
       sv.if %true {
         sv.assert %5, immediate message "a + 1 should be greater than a"
