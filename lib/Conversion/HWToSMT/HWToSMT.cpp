@@ -72,12 +72,28 @@ struct HWModuleOpConversion : OpConversionPattern<HWModuleOp> {
 struct OutputOpConversion : OpConversionPattern<OutputOp> {
   using OpConversionPattern<OutputOp>::OpConversionPattern;
 
+  OutputOpConversion(TypeConverter &converter, MLIRContext *context,
+                     bool assertModuleOutputs)
+      : OpConversionPattern<OutputOp>::OpConversionPattern(converter, context),
+        assertModuleOutputs(assertModuleOutputs) {}
+
   LogicalResult
   matchAndRewrite(OutputOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (assertModuleOutputs) {
+      Location loc = op.getLoc();
+      for (auto output : adaptor.getOutputs()) {
+        Value constOutput =
+            mlir::smt::DeclareFunOp::create(rewriter, loc, output.getType());
+        Value eq = mlir::smt::EqOp::create(rewriter, loc, output, constOutput);
+        mlir::smt::AssertOp::create(rewriter, loc, eq);
+      }
+    }
     rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op, adaptor.getOutputs());
     return success();
   }
+
+  bool assertModuleOutputs;
 };
 
 /// Lower a hw::InstanceOp operation to func::CallOp.
@@ -211,6 +227,7 @@ struct ReplaceWithInput : OpConversionPattern<OpTy> {
 namespace {
 struct ConvertHWToSMTPass
     : public impl::ConvertHWToSMTBase<ConvertHWToSMTPass> {
+  using Base::Base;
   void runOnOperation() override;
 };
 } // namespace
@@ -251,23 +268,22 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   });
 
   // Convert a 'smt.bool'-typed value to a 'smt.bv<N>'-typed value
-  converter.addTargetMaterialization(
-      [&](OpBuilder &builder, mlir::smt::BitVectorType resultType,
-          ValueRange inputs, Location loc) -> Value {
-        if (inputs.size() != 1)
-          return Value();
+  converter.addTargetMaterialization([&](OpBuilder &builder,
+                                         mlir::smt::BitVectorType resultType,
+                                         ValueRange inputs,
+                                         Location loc) -> Value {
+    if (inputs.size() != 1)
+      return Value();
 
-        if (!isa<mlir::smt::BoolType>(inputs[0].getType()))
-          return Value();
+    if (!isa<mlir::smt::BoolType>(inputs[0].getType()))
+      return Value();
 
-        unsigned width = resultType.getWidth();
-        Value constZero =
-            mlir::smt::BVConstantOp::create(builder, loc, 0, width);
-        Value constOne =
-            mlir::smt::BVConstantOp::create(builder, loc, 1, width);
-        return mlir::smt::IteOp::create(builder, loc, inputs[0], constOne,
-                                        constZero);
-      });
+    unsigned width = resultType.getWidth();
+    Value constZero = mlir::smt::BVConstantOp::create(builder, loc, 0, width);
+    Value constOne = mlir::smt::BVConstantOp::create(builder, loc, 1, width);
+    return mlir::smt::IteOp::create(builder, loc, inputs[0], constOne,
+                                    constZero);
+  });
 
   // Convert an unrealized conversion cast from 'smt.bool' to i1
   // into a direct conversion from 'smt.bool' to 'smt.bv<1>'.
@@ -322,12 +338,15 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
 }
 
 void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,
-                                              RewritePatternSet &patterns) {
-  patterns.add<HWConstantOpConversion, HWModuleOpConversion, OutputOpConversion,
+                                              RewritePatternSet &patterns,
+                                              bool assertModuleOutputs) {
+  patterns.add<HWConstantOpConversion, HWModuleOpConversion,
                InstanceOpConversion, ReplaceWithInput<seq::ToClockOp>,
                ReplaceWithInput<seq::FromClockOp>, ArrayCreateOpConversion,
                ArrayGetOpConversion, ArrayInjectOpConversion>(
       converter, patterns.getContext());
+  patterns.add<OutputOpConversion>(converter, patterns.getContext(),
+                                   assertModuleOutputs);
 }
 
 void ConvertHWToSMTPass::runOnOperation() {
@@ -341,7 +360,7 @@ void ConvertHWToSMTPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
   populateHWToSMTTypeConverter(converter);
-  populateHWToSMTConversionPatterns(converter, patterns);
+  populateHWToSMTConversionPatterns(converter, patterns, assertModuleOutputs);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

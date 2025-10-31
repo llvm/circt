@@ -670,6 +670,12 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt"> {
 def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert HW ops and constants to SMT ops";
   let dependentDialects = ["mlir::smt::SMTDialect", "mlir::func::FuncDialect"];
+  let options = [
+    Option<"assertModuleOutputs", "assert-module-outputs", "bool",
+           /*default=*/"false",
+           "For each output of each hw.module operation, instantiate a"
+           "constant and assert its equivalence to the output.">,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
