@@ -274,9 +274,9 @@ private:
   // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
-    // TODO: adding support for most variadic ops shouldn't be too hard
     if (binop->getNumOperands() != 2) {
-      binop->emitError("variadic operations not are not currently supported");
+      binop->emitError(
+          "only the binary form of this operation is currently supported");
       return;
     }
 
@@ -294,6 +294,43 @@ private:
     // Build and return the string
     os << opLID << " " << inst << " " << sid << " " << op1LID << " " << op2LID
        << "\n";
+  }
+
+  // Expands a variadic operation into multiple binary operation instructions
+  void genVariadicOp(StringRef inst, Operation *op, size_t width) {
+    auto operands = op->getOperands();
+    size_t sid = sortToLIDMap.at(width);
+
+    if (operands.size() < 2) {
+      op->emitError("variadic operations with less than 2 operands are not "
+                    "currently supported");
+      return;
+    }
+
+    // TODO: this excludes concat, which requires special handling for result
+    // sorts
+    if (!op->hasTrait<mlir::OpTrait::SameOperandsAndResultType>()) {
+      op->emitError(
+          "variadic operations with differing operand and result types are "
+          "not currently supported");
+      return;
+    }
+
+    // Unroll variadic op into series of binary ops
+    // This will represent the previous operand in the chain:
+    auto prevOperandLID = getOpLID(operands[0]);
+
+    for (auto operand : operands.drop_front()) {
+      // Manually increment lid since we need multiple per op
+      auto thisLid = lid++;
+      auto thisOperandLID = getOpLID(operand);
+      os << thisLid << " " << inst << " " << sid << " " << prevOperandLID << " "
+         << thisOperandLID << "\n";
+      prevOperandLID = thisLid;
+    }
+
+    // Send lookups of the op's LID to the final binary op in the chain
+    opLIDMap[op] = prevOperandLID;
   }
 
   // Generates a slice instruction given an operand, the lowbit, and the width
@@ -658,7 +695,7 @@ public:
   // a single method.
   template <typename Op>
   void visitBinOp(Op op, StringRef inst) {
-    // Generete the sort
+    // Generate the sort
     int64_t w = requireSort(op.getType());
 
     // Start by extracting the operands
@@ -669,19 +706,28 @@ public:
     genBinOp(inst, op, op1, op2, w);
   }
 
+  template <typename Op>
+  void visitVariadicOp(Op op, StringRef inst) {
+    // Generate the sort
+    int64_t w = requireSort(op.getType());
+
+    // Generate the line
+    genVariadicOp(inst, op, w);
+  }
+
   // Visitors for the binary ops
-  void visitComb(comb::AddOp op) { visitBinOp(op, "add"); }
+  void visitComb(comb::AddOp op) { visitVariadicOp(op, "add"); }
   void visitComb(comb::SubOp op) { visitBinOp(op, "sub"); }
-  void visitComb(comb::MulOp op) { visitBinOp(op, "mul"); }
+  void visitComb(comb::MulOp op) { visitVariadicOp(op, "mul"); }
   void visitComb(comb::DivSOp op) { visitBinOp(op, "sdiv"); }
   void visitComb(comb::DivUOp op) { visitBinOp(op, "udiv"); }
   void visitComb(comb::ModSOp op) { visitBinOp(op, "smod"); }
   void visitComb(comb::ShlOp op) { visitBinOp(op, "sll"); }
   void visitComb(comb::ShrUOp op) { visitBinOp(op, "srl"); }
   void visitComb(comb::ShrSOp op) { visitBinOp(op, "sra"); }
-  void visitComb(comb::AndOp op) { visitBinOp(op, "and"); }
-  void visitComb(comb::OrOp op) { visitBinOp(op, "or"); }
-  void visitComb(comb::XorOp op) { visitBinOp(op, "xor"); }
+  void visitComb(comb::AndOp op) { visitVariadicOp(op, "and"); }
+  void visitComb(comb::OrOp op) { visitVariadicOp(op, "or"); }
+  void visitComb(comb::XorOp op) { visitVariadicOp(op, "xor"); }
   void visitComb(comb::ConcatOp op) { visitBinOp(op, "concat"); }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one
