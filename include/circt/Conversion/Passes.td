@@ -514,7 +514,7 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// CombToLLVM
+// ConvertToLLVM
 //===----------------------------------------------------------------------===//
 
 def ConvertToLLVM : Pass<"convert-to-llvm", "mlir::ModuleOp"> {

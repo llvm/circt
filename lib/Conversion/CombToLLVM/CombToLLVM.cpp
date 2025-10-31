@@ -12,9 +12,12 @@
 
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 using namespace circt;

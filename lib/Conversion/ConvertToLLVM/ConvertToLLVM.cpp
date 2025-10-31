@@ -34,23 +34,19 @@ using namespace circt;
 namespace circt {
 #define GEN_PASS_DEF_CONVERTTOLLVM
 #include "circt/Conversion/Passes.h.inc"
-} // namespace circt
 
-namespace {
+namespace impl {
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
-struct ConvertToLLVMPass
-    : public circt::impl::ConvertToLLVMBase<ConvertToLLVMPass> {
+struct ConvertToLLVMPass : public ConvertToLLVMBase<ConvertToLLVMPass> {
   void runOnOperation() override;
 
 private:
   void convertFuncOp(func::FuncOp funcOp);
 };
-
-} // namespace
 
 void ConvertToLLVMPass::runOnOperation() {
   // Iterate over all func.func operations in the module and convert them
@@ -108,7 +104,5 @@ void ConvertToLLVMPass::convertFuncOp(func::FuncOp funcOp) {
     signalPassFailure();
 }
 
-/// Create a Comb to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertToLLVMPass() {
-  return std::make_unique<ConvertToLLVMPass>();
-}
+} // namespace impl
+} // namespace circt
