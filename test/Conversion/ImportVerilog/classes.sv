@@ -541,3 +541,19 @@ module testModuleParametrized;
    testModuleClass#(.WIDTH(32), .Other(4)) t2;
    testModuleClass#(.WIDTH(16)) t3;
 endmodule
+
+/// A test for getting a PR merged that drops elaboration-time constant AST nodes
+
+// CHECK-LABEL:  moore.class.classdecl @testTypedClass extends @testClassType {
+// CHECK-NEXT: moore.class.propertydecl @a : !moore.l1
+// CHECK:  }
+
+class testClassType #(
+    parameter type t = logic
+);
+   typedef t bool;
+endclass
+
+class testTypedClass extends testClassType;
+   bool a;
+endclass
