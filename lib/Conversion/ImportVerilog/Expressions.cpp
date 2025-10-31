@@ -1240,7 +1240,7 @@ struct RvalueExprVisitor : public ExprVisitor {
   }
 
   /// Build a method call including implicit this argument.
-  mlir::func::CallOp
+  mlir::CallOpInterface
   buildMethodCall(const slang::ast::SubroutineSymbol *subroutine,
                   FunctionLowering *lowering,
                   moore::ClassHandleType actualHandleTy, Value actualThisRef,
@@ -1267,15 +1267,18 @@ struct RvalueExprVisitor : public ExprVisitor {
         (subroutine->flags & slang::ast::MethodFlags::Virtual) != 0;
 
     if (!isVirtual) {
+      auto calleeSym = lowering->op.getSymName();
       // Direct (non-virtual) call -> moore.class.call
-      auto calleeSym =
-          SymbolRefAttr::get(context.getContext(), lowering->op.getSymName());
       return mlir::func::CallOp::create(builder, loc, resultTypes, calleeSym,
                                         explicitArguments);
     }
 
-    mlir::emitError(loc) << "virtual method calls not supported";
-    return {};
+    auto funcName = subroutine->name;
+    auto method = moore::VTableLoadMethodOp::create(
+        builder, loc, funcTy, actualThisRef,
+        SymbolRefAttr::get(context.getContext(), funcName));
+    return mlir::func::CallIndirectOp::create(builder, loc, method,
+                                              explicitArguments);
   }
 
   /// Handle subroutine calls.
@@ -1287,7 +1290,6 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto *lowering = context.declareFunction(*subroutine);
     if (!lowering)
       return {};
-
     auto convertedFunction = context.convertFunction(*subroutine);
     if (failed(convertedFunction))
       return {};
@@ -1369,9 +1371,10 @@ struct RvalueExprVisitor : public ExprVisitor {
         lowering->op.getFunctionType().getResults().begin(),
         lowering->op.getFunctionType().getResults().end());
 
-    mlir::func::CallOp callOp;
+    mlir::CallOpInterface callOp;
     if (isMethod) {
-      // Class functions -> build func.call with implicit this argument
+      // Class functions -> build func.call / func.indirect_call with implicit
+      // this argument
       auto [thisRef, tyHandle] = getMethodReceiverTypeHandle(expr);
       callOp = buildMethodCall(subroutine, lowering, tyHandle, thisRef,
                                arguments, resultTypes);
@@ -1381,7 +1384,7 @@ struct RvalueExprVisitor : public ExprVisitor {
           mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
     }
 
-    auto result = resultTypes.size() > 0 ? callOp.getResult(0) : Value{};
+    auto result = resultTypes.size() > 0 ? callOp->getOpResult(0) : Value{};
     // For calls to void functions we need to have a value to return from this
     // function. Create a dummy `unrealized_conversion_cast`, which will get
     // deleted again later on.
