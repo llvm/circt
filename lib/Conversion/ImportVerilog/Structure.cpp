@@ -1517,6 +1517,16 @@ struct ClassDeclVisitor {
   // already elaborates them in all relevant places.
   LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
 
+  // Parameters in specialized classes hold no further information; slang
+  // already elaborates them in all relevant places.
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
+    return success();
+  }
+
+  // Type aliases in specialized classes hold no further information; slang
+  // already elaborates them in all relevant places.
+  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+
   // Fully-fledged functions - SubroutineSymbol
   LogicalResult visit(const slang::ast::SubroutineSymbol &fn) {
     if (fn.flags & slang::ast::MethodFlags::BuiltIn) {
