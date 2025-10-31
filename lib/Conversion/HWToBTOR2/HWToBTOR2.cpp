@@ -301,9 +301,14 @@ private:
     auto operands = op->getOperands();
     size_t sid = sortToLIDMap.at(width);
 
-    if (operands.size() < 2) {
-      op->emitError("variadic operations with less than 2 operands are not "
-                    "currently supported");
+    // If there's only one operand, then we don't generate a BTOR2 instruction,
+    // we just reuse the operand's existing LID
+    if (operands.size() == 1) {
+      auto existingLID = getOpLID(operands[0]);
+      // Check that we haven't somehow got a value that doesn't have a
+      // corresponding LID
+      assert(existingLID != noLID);
+      opLIDMap[op] = existingLID;
       return;
     }
 

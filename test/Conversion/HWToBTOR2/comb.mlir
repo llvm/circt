@@ -55,10 +55,14 @@ module {
     // CHECK:   [[NID18:[0-9]+]] and [[NID0]] [[NID17]] [[NID10]]
     %10 = comb.and %a, %3, %3 : i32
 
+    // Variadic ops with one operand should be forwarded to the operand's LID
+    // CHECK: [[NID19:[0-9]+]] and [[NID0]] 2 [[NID18]]
+    %11 = comb.and %10 : i32
+    %12 = comb.and %a, %11 : i32
 
-    // CHECK:   [[NID19:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
-    // CHECK:   [[NID20:[0-9]+]] not [[NID3]] [[NID19]]
-    // CHECK:   [[NID21:[0-9]+]] bad [[NID20:[0-9]+]]
+    // CHECK:   [[ASSERTNID1:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
+    // CHECK:   [[ASSERTNID2:[0-9]+]] not [[NID3]] [[ASSERTNID1]]
+    // CHECK:   [[ASSERTNID3:[0-9]+]] bad [[ASSERTNID2:[0-9]+]]
     sv.always posedge %0 {
       sv.if %true {
         sv.assert %5, immediate message "a + 1 should be greater than a"
