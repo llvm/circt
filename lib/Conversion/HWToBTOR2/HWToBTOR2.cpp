@@ -274,10 +274,9 @@ private:
   // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
-    // TODO: adding support for most variadic ops shouldn't be too hard
     if (binop->getNumOperands() != 2) {
-      binop->emitError("only the binary form of this operation is currently "
-                       "supported");
+      binop->emitError(
+          "only the binary form of this operation is currently supported");
       return;
     }
 
