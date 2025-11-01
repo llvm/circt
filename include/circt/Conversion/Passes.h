@@ -56,6 +56,10 @@
 
 namespace circt {
 
+// Generate pass declarations.
+#define GEN_PASS_DECL_CONVERTTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+
 // Generate the code for registering conversion passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Conversion/Passes.h.inc"
