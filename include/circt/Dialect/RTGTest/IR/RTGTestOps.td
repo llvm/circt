@@ -517,3 +517,21 @@ def RV32I_AND       : InstFormatROpBase<"and",  0b110011, 0b111, 0b0000000>;
 
 def RV32I_ECALLOp   : InstFormatIImmOpBase<"ecall", 0b1110011, 0b000000000000>;
 def RV32I_EBREAKOp  : InstFormatIImmOpBase<"ebreak", 0b1110011, 0b000000000001>;
+
+
+def ImplicitRegisterOp : RTGTestOp<"implicit_register", [RegisterAllocationOpInterface]> {
+  let arguments = (ins IntegerRegisterType:$reg);
+  let results = (outs IntegerRegisterType);
+
+  let extraClassDefinition = [{
+    void $cppClass::getReadRegisters(llvm::ArrayRef<RegisterAttrInterface> operands,
+                                    llvm::SmallVectorImpl<RegisterAttrInterface> &readRegisters) {
+      readRegisters.push_back(operands[0]);
+    }
+
+    void $cppClass::getWrittenRegisters(llvm::ArrayRef<RegisterAttrInterface> operands,
+                                       llvm::SmallVectorImpl<RegisterAttrInterface> &writtenRegisters) {
+      writtenRegisters.push_back(getResult());
+    }
+  }];
+}
