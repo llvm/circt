@@ -1,7 +1,7 @@
 // RUN: arcilator %s --run | FileCheck %s
 // REQUIRES: arcilator-jit
 
-// CHECK: result = 4
+// CHECK: result = {{0*}}4
 
 func.func @entry() {
   %four = arith.constant 4 : i32
