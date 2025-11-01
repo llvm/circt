@@ -1,4 +1,4 @@
-; RUN: firtool -split-input-file %s | FileCheck %s
+; RUN: firtool -split-input-file -strip-debug-info %s | FileCheck %s
 
 ; End-to-end tests of instance extraction.  This tests combinations of the
 ; `moveDut` behavior along with whether or not a grouping module is specified.
