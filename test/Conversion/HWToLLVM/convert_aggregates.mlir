@@ -151,13 +151,6 @@ func.func @convertConstArray(%arg0 : i1, %arg1 : i32) {
   // CHECK-NEXT: %[[VAL_3:.*]] = llvm.load %[[VAL_2]] : !llvm.ptr -> !llvm.array<2 x i32>
   %0 = hw.aggregate_constant [0 : i32, 1 : i32] : !hw.array<2xi32>
 
-  // COM: Test: when the array argument is already a load from a pointer,
-  // COM: then don't allocate on the stack again but take that pointer directly as a shortcut
-  // CHECK-NEXT: %[[VAL_5:.*]] = llvm.zext %arg0 : i1 to i2
-  // CHECK-NEXT: %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]][0, %[[VAL_5]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
-  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_6]] : !llvm.ptr -> i32
-  %1 = hw.array_get %0[%arg0] : !hw.array<2xi32>, i1
-
   // COM: Test: nested constant array can also converted to a constant global
   // CHECK: %[[VAL_7:.*]] = llvm.mlir.addressof @[[GLOB2]] : !llvm.ptr
   // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_7]] : !llvm.ptr -> !llvm.array<2 x array<2 x i32>>
@@ -236,4 +229,23 @@ func.func @nestedStructInject(%arg0: !hw.struct<a: i1, b: !hw.struct<c: i1>>, %a
   // CHECK-NEXT: llvm.insertvalue [[ARG1]], [[ARG0]][0] : !llvm.struct<(struct<(i1)>, i1)>
   %0 = hw.struct_inject %arg0["b"], %arg1 : !hw.struct<a: i1, b: !hw.struct<c: i1>>
   return
+}
+
+// CHECK-LABEL: @issue9171
+func.func @issue9171(%idx: i1) -> i32 {
+  // CHECK: [[ARRPTR:%.+]] = llvm.mlir.addressof
+  // CHECK: [[ARRVAL:%.+]] = llvm.load [[ARRPTR]]
+  %cst = hw.aggregate_constant [0 : i32, 1 : i32] : !hw.array<2xi32>
+
+  // COM: Until we do proper RAW dependency checking array_get cannot assume
+  // COM: the array's backing buffer to be immutable, so it has to rematerialize
+  // COM: [[ARRVAL]] on the stack and must not reuse [[ARRPTR]].
+
+  // CHECK: [[ALLOCA:%.+]] = llvm.alloca
+  // CHECK: llvm.store [[ARRVAL]], [[ALLOCA]]
+  // CHECK: [[VALPTR:%.+]] = llvm.getelementptr [[ALLOCA]]
+  // CHECK: [[RETVAL:%.+]] = llvm.load [[VALPTR]]
+  // CHECK: return [[RETVAL]]
+  %get = hw.array_get %cst[%idx] : !hw.array<2xi32>, i1
+  return %get : i32
 }
