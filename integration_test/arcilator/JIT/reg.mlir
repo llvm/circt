@@ -1,12 +1,12 @@
 // RUN: arcilator %s --run --jit-entry=main | FileCheck %s
 // REQUIRES: arcilator-jit
 
-// CHECK:      o1 = 2
-// CHECK-NEXT: o2 = 5
-// CHECK-NEXT: o1 = 3
-// CHECK-NEXT: o2 = 6
-// CHECK-NEXT: o1 = 4
-// CHECK-NEXT: o2 = 7
+// CHECK:      o1 = 02
+// CHECK-NEXT: o2 = 05
+// CHECK-NEXT: o1 = 03
+// CHECK-NEXT: o2 = 06
+// CHECK-NEXT: o1 = 04
+// CHECK-NEXT: o2 = 07
 
 func.func private @random() -> i32 {
   %0 = arith.constant 2 : i32
