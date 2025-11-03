@@ -1,9 +1,9 @@
-// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
 // REQUIRES: arcilator-jit
-// CHECK: divu = 00{{$}}
-// CHECK: divs = 00{{$}}
-// CHECK: modu = 00{{$}}
-// CHECK: mods = 00{{$}}
+// CHECK: divu = 00
+// CHECK: divs = 00
+// CHECK: modu = 00
+// CHECK: mods = 00
 
 hw.module @Baz(in %a: i8, in %b: i8, out divu: i8, out divs: i8, out modu: i8, out mods: i8) {
   %zero = hw.constant 0 : i8
