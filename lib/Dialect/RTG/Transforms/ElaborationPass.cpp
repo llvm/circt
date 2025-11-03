@@ -228,14 +228,33 @@ struct StorageKeyInfo {
 
 /// Storage object for an '!rtg.set<T>'.
 struct SetStorage {
+  static unsigned computeHash(const SetVector<ElaboratorValue> &set,
+                              Type type) {
+    llvm::hash_code setHash = 0;
+    for (auto el : set) {
+      // Just XOR all hashes because it's a commutative operation and
+      // `llvm::hash_combine_range` is not commutative.
+      // We don't want the order in which elements were added to influence the
+      // hash and thus the equivalence of sets.
+      setHash = setHash ^ llvm::hash_combine(el);
+    }
+    return llvm::hash_combine(type, setHash);
+  }
+
   SetStorage(SetVector<ElaboratorValue> &&set, Type type)
-      : hashcode(llvm::hash_combine(
-            type, llvm::hash_combine_range(set.begin(), set.end()))),
-        set(std::move(set)), type(type) {}
+      : hashcode(computeHash(set, type)), set(std::move(set)), type(type) {}
 
   bool isEqual(const SetStorage *other) const {
-    return hashcode == other->hashcode && set == other->set &&
-           type == other->type;
+    // Note: we are not using the `==` operator of `SetVector` because it
+    // takes the order in which elements were added into account (since it's a
+    // vector after all). We just use it as a convenient way to keep track of a
+    // deterministic order for re-materialization.
+    bool allContained = true;
+    for (auto el : set)
+      allContained &= other->set.contains(el);
+
+    return hashcode == other->hashcode && set.size() == other->set.size() &&
+           allContained && type == other->type;
   }
 
   // The cached hashcode to avoid repeated computations.
