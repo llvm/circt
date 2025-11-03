@@ -148,6 +148,11 @@ struct RootVisitor : public BaseVisitor {
     return context.convertFunction(subroutine);
   }
 
+  // Handle global variables.
+  LogicalResult visit(const slang::ast::VariableSymbol &var) {
+    return context.convertGlobalVariable(var);
+  }
+
   // Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
@@ -170,6 +175,11 @@ struct PackageVisitor : public BaseVisitor {
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
     return context.convertFunction(subroutine);
+  }
+
+  // Handle global variables.
+  LogicalResult visit(const slang::ast::VariableSymbol &var) {
+    return context.convertGlobalVariable(var);
   }
 
   /// Emit an error for all other members.
@@ -700,6 +710,20 @@ LogicalResult Context::convertCompilation() {
     if (failed(convertModuleBody(module)))
       return failure();
   }
+
+  // Convert the initializers of global variables.
+  for (auto *var : globalVariableWorklist) {
+    auto varOp = globalVariables.at(var);
+    auto &block = varOp.getInitRegion().emplaceBlock();
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(&block);
+    auto value =
+        convertRvalueExpression(*var->getInitializer(), varOp.getType());
+    if (!value)
+      return failure();
+    moore::YieldOp::create(builder, varOp.getLoc(), value);
+  }
+  globalVariableWorklist.clear();
 
   return success();
 }
@@ -1673,6 +1697,46 @@ Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
   auto *lowering = declareClass(classdecl);
   if (failed(ClassDeclVisitor(*this, *lowering).run(classdecl)))
     return failure();
+
+  return success();
+}
+
+/// Convert a variable to a `moore.global_variable` operation.
+LogicalResult
+Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
+  auto loc = convertLocation(var.location);
+
+  // Pick an insertion point for this variable according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(var.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  // Prefix the variable name with the surrounding namespace to create somewhat
+  // sane names in the IR.
+  SmallString<64> symName;
+  guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
+  symName += var.name;
+
+  // Determine the type of the variable.
+  auto type = convertType(var.getType());
+  if (!type)
+    return failure();
+
+  // Create the variable op itself.
+  auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
+                                               cast<moore::UnpackedType>(type));
+  orderedRootOps.insert({var.location, varOp});
+  globalVariables.insert({&var, varOp});
+
+  // If the variable has an initializer expression, remember it for later such
+  // that we can convert the initializers once we have seen all global
+  // variables.
+  if (var.getInitializer())
+    globalVariableWorklist.push_back(&var);
 
   return success();
 }

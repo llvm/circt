@@ -537,6 +537,54 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// GlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalVariableOp::verifyRegions() {
+  if (auto *block = getInitBlock()) {
+    auto &terminator = block->back();
+    if (!isa<YieldOp>(terminator))
+      return emitOpError() << "must have a 'moore.yield' terminator";
+  }
+  return success();
+}
+
+Block *GlobalVariableOp::getInitBlock() {
+  if (getInitRegion().empty())
+    return nullptr;
+  return &getInitRegion().front();
+}
+
+//===----------------------------------------------------------------------===//
+// GetGlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GetGlobalVariableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Resolve the target symbol.
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  // Check that the symbol is a global variable.
+  auto var = dyn_cast<GlobalVariableOp>(symbol);
+  if (!var)
+    return emitOpError() << "must reference a 'moore.global_variable', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  // Check that the types match.
+  auto expType = var.getType();
+  auto actType = getType().getNestedType();
+  if (expType != actType)
+    return emitOpError() << "returns a " << actType << " reference, but "
+                         << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -1027,22 +1075,21 @@ LogicalResult UnionExtractRefOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult YieldOp::verify() {
-  // Check that YieldOp's parent operation is ConditionalOp.
-  auto cond = dyn_cast<ConditionalOp>(*(*this).getParentOp());
-  if (!cond) {
-    emitOpError("must have a conditional parent");
-    return failure();
+  Type expType;
+  auto *parentOp = getOperation()->getParentOp();
+  if (auto cond = dyn_cast<ConditionalOp>(parentOp)) {
+    expType = cond.getType();
+  } else if (auto varOp = dyn_cast<GlobalVariableOp>(parentOp)) {
+    expType = varOp.getType();
+  } else {
+    llvm_unreachable("all in ParentOneOf handled");
   }
 
-  // Check that the operand matches the parent operation's result.
-  auto condType = cond.getType();
-  auto yieldType = getOperand().getType();
-  if (condType != yieldType) {
-    emitOpError("yield type must match conditional. Expected ")
-        << condType << ", but got " << yieldType << ".";
-    return failure();
+  auto actType = getOperand().getType();
+  if (expType != actType) {
+    return emitOpError() << "yields " << actType << ", but parent expects "
+                         << expType;
   }
-
   return success();
 }
 
