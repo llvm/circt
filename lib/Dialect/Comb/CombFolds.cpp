@@ -1699,14 +1699,13 @@ OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult DivUOp::canonicalize(DivUOp op, PatternRewriter &rewriter) {
-  if (isOpTriviallyRecursive(op))
+  if (isOpTriviallyRecursive(op) || !op.getTwoState())
     return failure();
-
   return convertDivUByPowerOfTwo(op, rewriter);
 }
 
 LogicalResult ModUOp::canonicalize(ModUOp op, PatternRewriter &rewriter) {
-  if (isOpTriviallyRecursive(op))
+  if (isOpTriviallyRecursive(op) || !op.getTwoState())
     return failure();
 
   return convertModUByPowerOfTwo(op, rewriter);

@@ -115,3 +115,13 @@ hw.module @pos_partial_product_do_nothing(in %a : i4, in %b : i4, in %c : i4, ou
   %2:4 = datapath.partial_product %0, %1 : (i4, i4) -> (i4, i4, i4, i4)
   hw.output %2#0, %2#1, %2#2, %2#3 : i4, i4, i4, i4
 }
+
+// CHECK-LABEL: @dont_introduce_compressor
+hw.module @dont_introduce_compressor(in %a : i4, in %b : i4, in %c: i4, out sum : i4) {
+  // CHECK-NOT: datapath.compress
+  // CHECK-NEXT: comb.add
+  // CHECK-NEXT: hw.output
+  %0:4 = datapath.partial_product %a, %b : (i4, i4) -> (i4, i4, i4, i4)
+  %1 = comb.add %a, %b, %c : i4
+  hw.output %1 : i4
+}
