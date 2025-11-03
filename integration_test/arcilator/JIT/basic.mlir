@@ -1,4 +1,4 @@
-// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
 // REQUIRES: arcilator-jit
 
 // CHECK: output = 05

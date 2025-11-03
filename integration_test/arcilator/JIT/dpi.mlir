@@ -1,6 +1,6 @@
 // RUN: split-file %s %t
 // RUN: %host_cc %t/shared_lib.c --shared -o %t/shared_lib.so
-// RUN: arcilator %t/dpi.mlir --run --jit-entry=main --shared-libs=%t/shared_lib.so | FileCheck %s
+// RUN: arcilator %t/dpi.mlir --run --jit-entry=main --shared-libs=%t/shared_lib.so | FileCheck --match-full-lines %s
 // REQUIRES: arcilator-jit
 
 

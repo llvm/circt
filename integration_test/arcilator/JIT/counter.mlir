@@ -1,7 +1,7 @@
-// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
 // REQUIRES: arcilator-jit
 
-// CHECK: counter_value = 0
+// CHECK:      counter_value = 00
 // CHECK-NEXT: counter_value = 01
 // CHECK-NEXT: counter_value = 02
 // CHECK-NEXT: counter_value = 03
