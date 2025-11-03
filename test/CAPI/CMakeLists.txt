@@ -108,6 +108,7 @@ target_link_libraries(circt-capi-synth-test
   PRIVATE
 
   MLIRCAPIIR
+  CIRCTCAPIComb
   CIRCTCAPIHW
   CIRCTCAPISeq
   CIRCTCAPISynth

@@ -836,9 +836,11 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
   // Any extmodule with these annotations should be excluded from the blackbox
   // list if it doesn't declare any additional libraries.
-  std::array<StringRef, 6> blackListedAnnos = {
-      blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
-      dataTapsBlackboxClass, memTapBlackboxClass};
+  std::array<StringRef, 3> blackListedAnnos = {
+      blackBoxAnnoClass,
+      blackBoxInlineAnnoClass,
+      blackBoxPathAnnoClass,
+  };
 
   auto *context = &getContext();
 

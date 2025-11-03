@@ -5343,8 +5343,6 @@ private:
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             unsigned indent);
   ParseResult parseParameterList(ArrayAttr &resultParameters);
-  ParseResult parseRefList(ArrayRef<PortInfo> portList,
-                           ArrayAttr &internalPathsResult);
 
   ParseResult skipToModuleEnd(unsigned indent);
 
@@ -5595,101 +5593,6 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
   return success();
 }
 
-/// ref-list ::= ref*
-/// ref ::= 'ref' static_reference 'is' StringLit NEWLIN
-ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
-                                           ArrayAttr &internalPathsResult) {
-  struct RefStatementInfo {
-    StringAttr refName;
-    InternalPathAttr resolvedPath;
-    SMLoc loc;
-  };
-
-  SmallVector<RefStatementInfo> refStatements;
-  SmallPtrSet<StringAttr, 8> seenNames;
-  SmallPtrSet<StringAttr, 8> seenRefs;
-
-  // Ref statements were added in 2.0.0 and removed in 4.0.0.
-  if (getToken().is(FIRToken::kw_ref) &&
-      (requireFeature({2, 0, 0}, "ref statements") ||
-       removedFeature({4, 0, 0}, "ref statements")))
-    return failure();
-
-  // Parse the ref statements.
-  while (consumeIf(FIRToken::kw_ref)) {
-    auto loc = getToken().getLoc();
-    // ref x is "a.b.c"
-    // Support "ref x.y is " once aggregate-of-ref supported.
-    StringAttr refName;
-    if (parseId(refName, "expected ref name"))
-      return failure();
-    if (consumeIf(FIRToken::period) || consumeIf(FIRToken::l_square))
-      return emitError(
-          loc, "ref statements for aggregate elements not yet supported");
-    if (parseToken(FIRToken::kw_is, "expected 'is' in ref statement"))
-      return failure();
-
-    if (!seenRefs.insert(refName).second)
-      return emitError(loc, "duplicate ref statement for '" + refName.strref() +
-                                "'");
-
-    auto kind = getToken().getKind();
-    if (kind != FIRToken::string)
-      return emitError(loc, "expected string in ref statement");
-    auto resolved = InternalPathAttr::get(
-        getContext(),
-        StringAttr::get(getContext(), getToken().getStringValue()));
-    consumeToken(FIRToken::string);
-
-    refStatements.push_back(RefStatementInfo{refName, resolved, loc});
-  }
-
-  // Build paths array.  One entry for each ref-type port, empty for others.
-  SmallVector<Attribute> internalPaths(portList.size(),
-                                       InternalPathAttr::get(getContext()));
-
-  llvm::SmallBitVector usedRefs(refStatements.size());
-  size_t matchedPaths = 0;
-  for (auto [idx, port] : llvm::enumerate(portList)) {
-    if (!type_isa<RefType>(port.type))
-      continue;
-
-    // Reject input reftype ports on extmodule's per spec,
-    // as well as on intmodule's which is not mentioned in spec.
-    if (!port.isOutput())
-      return mlir::emitError(
-          port.loc,
-          "references in ports must be output on extmodule and intmodule");
-    auto *refStmtIt =
-        llvm::find_if(refStatements, [pname = port.name](const auto &r) {
-          return r.refName == pname;
-        });
-    // Error if ref statements are present but none found for this port.
-    if (refStmtIt == refStatements.end()) {
-      if (!refStatements.empty())
-        return mlir::emitError(port.loc, "no ref statement found for ref port ")
-            .append(port.name);
-      continue;
-    }
-
-    usedRefs.set(std::distance(refStatements.begin(), refStmtIt));
-    internalPaths[idx] = refStmtIt->resolvedPath;
-    ++matchedPaths;
-  }
-
-  if (!refStatements.empty() && matchedPaths != refStatements.size()) {
-    assert(matchedPaths < refStatements.size());
-    assert(!usedRefs.all());
-    auto idx = usedRefs.find_first_unset();
-    assert(idx != -1);
-    return emitError(refStatements[idx].loc, "unused ref statement");
-  }
-
-  if (matchedPaths)
-    internalPathsResult = ArrayAttr::get(getContext(), internalPaths);
-  return success();
-}
-
 /// We're going to defer parsing this module, so just skip tokens until we
 /// get to the next module or the end of the file.
 ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
@@ -5885,8 +5788,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   }
 
   ArrayAttr parameters;
-  ArrayAttr internalPaths;
-  if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
+  if (parseParameterList(parameters))
     return failure();
 
   if (version >= FIRVersion({4, 0, 0})) {
@@ -5909,7 +5811,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   auto annotations = ArrayAttr::get(getContext(), {});
   auto extModuleOp = FExtModuleOp::create(
       builder, info.getLoc(), name, conventionAttr, portList, knownLayers,
-      defName, annotations, parameters, internalPaths, enabledLayers);
+      defName, annotations, parameters, enabledLayers);
   auto visibility = isMainModule ? SymbolTable::Visibility::Public
                                  : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(extModuleOp, visibility);
@@ -5939,14 +5841,13 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
     return failure();
 
   ArrayAttr parameters;
-  ArrayAttr internalPaths;
-  if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
+  if (parseParameterList(parameters))
     return failure();
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   auto builder = circuit.getBodyBuilder();
   FIntModuleOp::create(builder, info.getLoc(), name, portList, intName,
-                       annotations, parameters, internalPaths, enabledLayers)
+                       annotations, parameters, enabledLayers)
       .setPrivate();
   return success();
 }

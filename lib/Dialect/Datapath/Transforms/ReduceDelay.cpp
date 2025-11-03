@@ -57,8 +57,8 @@ struct FoldAddReplicate : public OpRewritePattern<comb::AddOp> {
       return failure();
 
     // Create a new CompressOp with all collected operands
-    auto newCompressOp = rewriter.create<datapath::CompressOp>(
-        addOp.getLoc(), newCompressOperands, 2);
+    auto newCompressOp = datapath::CompressOp::create(rewriter, addOp.getLoc(),
+                                                      newCompressOperands, 2);
 
     // Add the results of the CompressOp
     rewriter.replaceOpWithNewOp<comb::AddOp>(addOp, newCompressOp.getResults(),
@@ -112,13 +112,14 @@ struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
 
       // Pad with zeros to match number of operands
       // a ? b + c : d -> (a ? b : d) + (a ? c : 0)
-      auto zero = rewriter.create<hw::ConstantOp>(
-          addOp.getLoc(), rewriter.getIntegerAttr(addOp.getType(), 0));
+      auto zero =
+          hw::ConstantOp::create(rewriter, addOp.getLoc(),
+                                 rewriter.getIntegerAttr(addOp.getType(), 0));
       for (size_t i = 0; i < maxOperands; ++i) {
         auto tOp = i < trueValOperands.size() ? trueValOperands[i] : zero;
         auto fOp = i < falseValOperands.size() ? falseValOperands[i] : zero;
-        auto newMux = rewriter.create<comb::MuxOp>(
-            addOp.getLoc(), nestedMuxOp.getCond(), tOp, fOp);
+        auto newMux = comb::MuxOp::create(rewriter, addOp.getLoc(),
+                                          nestedMuxOp.getCond(), tOp, fOp);
         newCompressOperands.push_back(newMux.getResult());
       }
     }
@@ -128,8 +129,8 @@ struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
       return failure();
 
     // Create a new CompressOp with all collected operands
-    auto newCompressOp = rewriter.create<datapath::CompressOp>(
-        addOp.getLoc(), newCompressOperands, 2);
+    auto newCompressOp = datapath::CompressOp::create(rewriter, addOp.getLoc(),
+                                                      newCompressOperands, 2);
 
     // Add the results of the CompressOp
     rewriter.replaceOpWithNewOp<comb::AddOp>(addOp, newCompressOp.getResults(),

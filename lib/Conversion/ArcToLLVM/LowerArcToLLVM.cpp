@@ -34,6 +34,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "lower-arc-to-llvm"
 
@@ -534,25 +535,53 @@ struct SimEmitValueOpLowering
     if (!moduleOp)
       return failure();
 
-    // Cast the value to a size_t.
-    // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
-    // sizeof(size_t) on the target architecture.
-    Value toPrint = adaptor.getValue();
-    DataLayout layout = DataLayout::closest(op);
-    llvm::TypeSize sizeOfSizeT =
-        layout.getTypeSizeInBits(rewriter.getIndexType());
-    assert(!sizeOfSizeT.isScalable() &&
-           sizeOfSizeT.getFixedValue() <= std::numeric_limits<unsigned>::max());
-    bool truncated = false;
-    if (valueType.getWidth() > sizeOfSizeT) {
-      toPrint = LLVM::TruncOp::create(
-          rewriter, loc,
-          IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()), toPrint);
-      truncated = true;
-    } else if (valueType.getWidth() < sizeOfSizeT)
-      toPrint = LLVM::ZExtOp::create(
-          rewriter, loc,
-          IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()), toPrint);
+    SmallVector<Value> printfVariadicArgs;
+    SmallString<16> printfFormatStr;
+    int remainingBits = valueType.getWidth();
+    Value value = adaptor.getValue();
+
+    // Assumes the target platform uses 64bit for long long ints (%llx
+    // formatter).
+    constexpr llvm::StringRef intFormatter = "llx";
+    auto intType = IntegerType::get(getContext(), 64);
+    Value shiftValue = LLVM::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(valueType, intType.getWidth()));
+
+    if (valueType.getWidth() < intType.getWidth()) {
+      int width = llvm::divideCeil(valueType.getWidth(), 4);
+      printfFormatStr = llvm::formatv("%0{0}{1}", width, intFormatter);
+      printfVariadicArgs.push_back(
+          LLVM::ZExtOp::create(rewriter, loc, intType, value));
+    } else {
+      // Process the value in 64 bit chunks, starting from the least significant
+      // bits. Since we append chunks in low-to-high order, we reverse the
+      // vector to print them in the correct high-to-low order.
+      int otherChunkWidth = intType.getWidth() / 4;
+      int firstChunkWidth =
+          llvm::divideCeil(valueType.getWidth() % intType.getWidth(), 4);
+      if (firstChunkWidth == 0) { // print the full 64-bit hex or a subset.
+        firstChunkWidth = otherChunkWidth;
+      }
+
+      std::string firstChunkFormat =
+          llvm::formatv("%0{0}{1}", firstChunkWidth, intFormatter);
+      std::string otherChunkFormat =
+          llvm::formatv("%0{0}{1}", otherChunkWidth, intFormatter);
+
+      for (int i = 0; remainingBits > 0; ++i) {
+        // Append 64-bit chunks to the printf arguments, in low-to-high
+        // order. The integer is printed in hex format with zero padding.
+        printfVariadicArgs.push_back(
+            LLVM::TruncOp::create(rewriter, loc, intType, value));
+
+        // Zero-padded format specifier for fixed width, e.g. %01llx for 4 bits.
+        printfFormatStr.append(i == 0 ? firstChunkFormat : otherChunkFormat);
+
+        value =
+            LLVM::LShrOp::create(rewriter, loc, value, shiftValue).getResult();
+        remainingBits -= intType.getWidth();
+      }
+    }
 
     // Lookup of create printf function symbol.
     auto printfFunc = LLVM::lookupOrCreateFn(
@@ -563,7 +592,6 @@ struct SimEmitValueOpLowering
 
     // Insert the format string if not already available.
     SmallString<16> formatStrName{"_arc_sim_emit_"};
-    formatStrName.append(truncated ? "trunc_" : "full_");
     formatStrName.append(adaptor.getValueName());
     LLVM::GlobalOp formatStrGlobal;
     if (!(formatStrGlobal =
@@ -572,9 +600,8 @@ struct SimEmitValueOpLowering
 
       SmallString<16> formatStr = adaptor.getValueName();
       formatStr.append(" = ");
-      if (truncated)
-        formatStr.append("(truncated) ");
-      formatStr.append("%zx\n");
+      formatStr.append(printfFormatStr);
+      formatStr.append("\n");
       SmallVector<char> formatStrVec{formatStr.begin(), formatStr.end()};
       formatStrVec.push_back(0);
 
@@ -590,8 +617,14 @@ struct SimEmitValueOpLowering
 
     Value formatStrGlobalPtr =
         LLVM::AddressOfOp::create(rewriter, loc, formatStrGlobal);
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, printfFunc.value(), ValueRange{formatStrGlobalPtr, toPrint});
+
+    // Add the format string to the end, and reverse the vector to print them in
+    // the correct high-to-low order with the format string at the beginning.
+    printfVariadicArgs.push_back(formatStrGlobalPtr);
+    std::reverse(printfVariadicArgs.begin(), printfVariadicArgs.end());
+
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, printfFunc.value(),
+                                              printfVariadicArgs);
 
     return success();
   }

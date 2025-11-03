@@ -665,7 +665,7 @@ const std::vector<const Type *> &Manifest::getTypeTable() const {
 // Print a module info, including the extra metadata.
 std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   auto printAny = [&os](std::any a) {
-    if (auto *c = std::any_cast<Constant>(&a))
+    if (std::any_cast<Constant>(&a))
       a = std::any_cast<Constant>(a).value;
 
     const std::type_info &t = a.type();
@@ -756,7 +756,6 @@ bool operator<(const AppIDPath &a, const AppIDPath &b) {
       return a[i] < b[i];
   return false;
 }
-} // namespace esi
 
 std::ostream &operator<<(std::ostream &os, const AppID &id) {
   os << id.name;
@@ -772,3 +771,5 @@ std::ostream &operator<<(std::ostream &os, const AppIDPath &path) {
   }
   return os;
 }
+
+} // namespace esi

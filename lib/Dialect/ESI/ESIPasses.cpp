@@ -163,8 +163,8 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
   ports.push_back(
       {{xReady, getI1Type(), ModulePort::Direction::Input}, argn++});
 
-  stageMod = create<HWModuleExternOp>(
-      constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
+  stageMod = HWModuleExternOp::create(
+      *this, constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
       "ESI_PipelineStage", getStageParameterList({}));
   return stageMod;
 }
@@ -194,8 +194,8 @@ ESIHWBuilder::declareCosimEndpointToHostModule(Operation *symTable) {
       {{dataInReady, getI1Type(), ModulePort::Direction::Output}, 3},
       {{dataIn, dataInType, ModulePort::Direction::Input}, 4}};
 
-  declaredCosimEndpointToHostModule = create<HWModuleExternOp>(
-      constructUniqueSymbol(symTable, "Cosim_Endpoint_ToHost"), ports,
+  declaredCosimEndpointToHostModule = HWModuleExternOp::create(
+      *this, constructUniqueSymbol(symTable, "Cosim_Endpoint_ToHost"), ports,
       "Cosim_Endpoint_ToHost", ArrayAttr::get(getContext(), params));
   return *declaredCosimEndpointToHostModule;
 }
@@ -222,8 +222,8 @@ ESIHWBuilder::declareCosimEndpointFromHostModule(Operation *symTable) {
       {{dataOutReady, getI1Type(), ModulePort::Direction::Input}, 3},
       {{dataOut, dataInType, ModulePort::Direction::Output}, 4}};
 
-  declaredCosimEndpointFromHostModule = create<HWModuleExternOp>(
-      constructUniqueSymbol(symTable, "Cosim_Endpoint_FromHost"), ports,
+  declaredCosimEndpointFromHostModule = HWModuleExternOp::create(
+      *this, constructUniqueSymbol(symTable, "Cosim_Endpoint_FromHost"), ports,
       "Cosim_Endpoint_FromHost", ArrayAttr::get(getContext(), params));
   return *declaredCosimEndpointFromHostModule;
 }
@@ -241,20 +241,21 @@ InterfaceOp ESIHWBuilder::getOrConstructInterface(ChannelType t) {
 }
 
 InterfaceOp ESIHWBuilder::constructInterface(ChannelType chan) {
-  return create<InterfaceOp>(constructInterfaceName(chan).getValue(), [&]() {
-    create<InterfaceSignalOp>(validStr, getI1Type());
-    create<InterfaceSignalOp>(readyStr, getI1Type());
-    create<InterfaceSignalOp>(dataStr, chan.getInner());
-    llvm::SmallVector<StringRef> validDataStrs;
-    validDataStrs.push_back(validStr);
-    validDataStrs.push_back(dataStr);
-    create<InterfaceModportOp>(sinkStr,
-                               /*inputs=*/ArrayRef<StringRef>{readyStr},
-                               /*outputs=*/validDataStrs);
-    create<InterfaceModportOp>(sourceStr,
-                               /*inputs=*/validDataStrs,
-                               /*outputs=*/ArrayRef<StringRef>{readyStr});
-  });
+  return InterfaceOp::create(
+      *this, constructInterfaceName(chan).getValue(), [&]() {
+        InterfaceSignalOp::create(*this, validStr, getI1Type());
+        InterfaceSignalOp::create(*this, readyStr, getI1Type());
+        InterfaceSignalOp::create(*this, dataStr, chan.getInner());
+        llvm::SmallVector<StringRef> validDataStrs;
+        validDataStrs.push_back(validStr);
+        validDataStrs.push_back(dataStr);
+        InterfaceModportOp::create(*this, sinkStr,
+                                   /*inputs=*/ArrayRef<StringRef>{readyStr},
+                                   /*outputs=*/validDataStrs);
+        InterfaceModportOp::create(*this, sourceStr,
+                                   /*inputs=*/validDataStrs,
+                                   /*outputs=*/ArrayRef<StringRef>{readyStr});
+      });
 }
 
 Type ESIHWBuilder::getClockType() { return seq::ClockType::get(getContext()); }

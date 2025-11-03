@@ -10,6 +10,7 @@
  */
 
 #include "circt-c/Dialect/Synth.h"
+#include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/Seq.h"
 #include "mlir-c/BuiltinAttributes.h"
@@ -39,12 +40,17 @@ void testLongestPathAnalysis(void) {
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__synth__(), ctx);
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__hw__(), ctx);
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__seq__(), ctx);
+  mlirDialectHandleLoadDialect(mlirGetDialectHandle__comb__(), ctx);
 
   // clang-format off
   const char *moduleStr =
       "hw.module private @ch(in %c : !seq.clock, in %a: i2, out x: i2) {\n"
       "  %p = seq.compreg %q, %c : i2\n"
-      "  %q = synth.aig.and_inv %p, %p {sv.namehint = \"q\"}: i2\n"
+      "  %p0 = comb.extract %p from 0 : (i2) -> i1\n"
+      "  %p1 = comb.extract %p from 1 : (i2) -> i1\n"
+      "  %q0 = synth.aig.and_inv %p0, %p1  : i1\n"
+      "  %q1 = synth.aig.and_inv %p0, not %p1 : i1\n"
+      "  %q = comb.concat %q0, %q1 {sv.namehint = \"q\"} : i1, i1\n"
       "  hw.output %p: i2\n"
       "}\n"
       "hw.module private @top(in %c : !seq.clock, in %a: i2) {\n"
@@ -71,11 +77,11 @@ void testLongestPathAnalysis(void) {
 
     size_t pathCount = synthLongestPathCollectionGetSize(collection1);
     printf("Path count with elaboration: %zu\n", pathCount);
-    // CHECK: Path count with elaboration: 4
+    // CHECK: Path count with elaboration: 8
 
     pathCount = synthLongestPathCollectionGetSize(collection2);
     printf("Path count without elaboration: %zu\n", pathCount);
-    // CHECK: Path count without elaboration: 2
+    // CHECK: Path count without elaboration: 4
 
     // Test DataflowPath API
     if (pathCount > 0) {
@@ -101,8 +107,8 @@ void testLongestPathAnalysis(void) {
              startPointName.data, startPointBitPos);
       printf("EndPoint: %.*s[%zu]\n", (int)endPointName.length,
              endPointName.data, endPointBitPos);
-      // CHECK: StartPoint: p[[[BIT:[0-9]]]]
-      // CHECK: EndPoint: p[[[BIT]]]
+      // CHECK: StartPoint: p[{{[0-9]}}]
+      // CHECK: EndPoint: p[{{[0-9]}}]
 
       // Test instance path
       IgraphInstancePath startPointPath =
@@ -161,6 +167,19 @@ void testLongestPathAnalysis(void) {
            synthLongestPathCollectionGetSize(collection4));
     // CHECK: Input-to-internal paths count: 0
     // CHECK-NEXT: Internal-to-output paths count: 2
+
+    printf("Path count before drop: %zu\n",
+           synthLongestPathCollectionGetSize(collection1));
+    // CHECK: Path count before drop: 8
+    synthLongestPathCollectionDropNonCriticalPaths(collection1, true);
+    size_t pathCountAfterDrop = synthLongestPathCollectionGetSize(collection1);
+    printf("Path count after drop perEndPoint=true: %zu\n", pathCountAfterDrop);
+    // CHECK: Path count after drop perEndPoint=true: 4
+    synthLongestPathCollectionDropNonCriticalPaths(collection1, false);
+    pathCountAfterDrop = synthLongestPathCollectionGetSize(collection1);
+    printf("Path count after drop perEndPoint=false: %zu\n",
+           pathCountAfterDrop);
+    // CHECK: Path count after drop perEndPoint=false: 2
 
     // Cleanup
     synthLongestPathCollectionDestroy(collection1);

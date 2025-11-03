@@ -197,9 +197,9 @@ void LowerVariadicPass::runOnOperation() {
           },
           // Create binary AndInverterOp with inversion flags.
           [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
-            return rewriter.create<aig::AndInverterOp>(
-                op->getLoc(), lhs.getValue(), rhs.getValue(), lhs.isInverted(),
-                rhs.isInverted());
+            return aig::AndInverterOp::create(
+                rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
+                lhs.isInverted(), rhs.isInverted());
           });
       if (failed(result))
         return signalPassFailure();

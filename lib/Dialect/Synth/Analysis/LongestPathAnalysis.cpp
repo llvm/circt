@@ -519,7 +519,7 @@ public:
   OperationAnalyzer(Location loc)
       : ctx(nullptr, LongestPathAnalysisOptions(false, true, false)), loc(loc) {
     mlir::OpBuilder builder(loc->getContext());
-    moduleOp = builder.create<mlir::ModuleOp>(loc);
+    moduleOp = mlir::ModuleOp::create(builder, loc);
     emptyName = StringAttr::get(loc->getContext(), "");
   }
 
@@ -1407,7 +1407,7 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
   // Generate unique module name.
   auto moduleName = builder.getStringAttr("module_" + Twine(cache.size()));
   hw::HWModuleOp hwModule =
-      builder.create<hw::HWModuleOp>(op->getLoc(), moduleName, ports);
+      hw::HWModuleOp::create(builder, op->getLoc(), moduleName, ports);
 
   // Clone the operation inside the wrapper module
   builder.setInsertionPointToStart(hwModule.getBodyBlock());
@@ -1425,8 +1425,8 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
 
     // Insert bitcast if input port type differs from operand type
     if (input.getType() != cloned->getOperand(idx).getType())
-      input = builder.create<hw::BitcastOp>(
-          op->getLoc(), cloned->getOperand(idx).getType(), input);
+      input = hw::BitcastOp::create(builder, op->getLoc(),
+                                    cloned->getOperand(idx).getType(), input);
 
     cloned->setOperand(idx, input);
   }
@@ -1439,10 +1439,9 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
 
     // Insert bitcast if result type differs from output port type
     if (result.getType() != resultsTypes[idx])
-      result =
-          builder
-              .create<hw::BitcastOp>(op->getLoc(), resultsTypes[idx], result)
-              ->getResult(0);
+      result = hw::BitcastOp::create(builder, op->getLoc(), resultsTypes[idx],
+                                     result)
+                   ->getResult(0);
 
     outputs.push_back(result);
   }
@@ -2047,17 +2046,24 @@ void LongestPathCollection::sortInDescendingOrder() {
   });
 }
 
-void LongestPathCollection::sortAndDropNonCriticalPathsPerEndPoint() {
-  sortInDescendingOrder();
-  // Deduplicate paths by end-point, keeping only the worst-case delay per
-  // end-point. This gives us the critical delay for each end-point in the
-  // design
-  llvm::DenseSet<DataflowPath::EndPointType> seen;
-  for (size_t i = 0; i < paths.size(); ++i) {
-    if (seen.insert(paths[i].getEndPoint()).second)
-      paths[seen.size() - 1] = std::move(paths[i]);
+void LongestPathCollection::dropNonCriticalPaths(bool perEndPoint) {
+  // Deduplicate paths by start/end-point, keeping only the worst-case delay.
+  if (perEndPoint) {
+    llvm::DenseSet<DataflowPath::EndPointType> seen;
+    for (size_t i = 0; i < paths.size(); ++i) {
+      if (seen.insert(paths[i].getEndPoint()).second)
+        paths[seen.size() - 1] = std::move(paths[i]);
+    }
+
+    paths.resize(seen.size());
+  } else {
+    llvm::DenseSet<Object> seen;
+    for (size_t i = 0; i < paths.size(); ++i) {
+      if (seen.insert(paths[i].getStartPoint()).second)
+        paths[seen.size() - 1] = std::move(paths[i]);
+    }
+    paths.resize(seen.size());
   }
-  paths.resize(seen.size());
 }
 
 void LongestPathCollection::merge(const LongestPathCollection &other) {

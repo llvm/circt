@@ -382,3 +382,10 @@ module SampleValueBuiltins #() (
   stable_clk: assert property (@(posedge clk_i) clk_i |=> $stable(clk_i));
 
 endmodule
+
+// CHECK-LABEL: func.func private @StringBuiltins(
+// CHECK-SAME: [[STR:%.+]]: !moore.string
+function void StringBuiltins(string string_in);
+  // CHECK: [[LEN:%.+]] = moore.string.len [[STR]]
+  dummyA(string_in.len());
+endfunction

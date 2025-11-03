@@ -100,8 +100,9 @@ LogicalResult InlineCallsPass::runOnRegion(Region &region,
   // the inlined operations immediately after visiting the call.
   for (auto &block : region) {
     for (auto &op : block) {
-      // If this is an op after a call, pop that call off the call stack.
-      if (!inlineEndMarkers.empty() && inlineEndMarkers.back().first == &op) {
+      // Pop all calls that are followed by this op off the call stack.
+      while (!inlineEndMarkers.empty() &&
+             inlineEndMarkers.back().first == &op) {
         assert(inlineEndMarkers.back().second == callStack.back());
         LLVM_DEBUG(llvm::dbgs()
                    << "- Finished @"

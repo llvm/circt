@@ -76,8 +76,8 @@ struct GenericLUT : public CutRewritePattern {
     SmallVector<Value> lutInputs(cut.inputs.rbegin(), cut.inputs.rend());
 
     // Generate comb.truth table operation.
-    auto truthTableOp = rewriter.create<comb::TruthTableOp>(
-        cut.getRoot()->getLoc(), lutInputs, arrayAttr);
+    auto truthTableOp = comb::TruthTableOp::create(
+        rewriter, cut.getRoot()->getLoc(), lutInputs, arrayAttr);
 
     // Replace the root operation with the truth table operation
     return truthTableOp.getOperation();

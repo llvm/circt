@@ -603,20 +603,8 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
-    // Grand Central Data Tap Annotations
-    {dataTapsClass, {noResolve, applyGCTDataTaps}},
-    {dataTapsBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
-    {referenceKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {referenceKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {internalKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {internalKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {deletedKeyClass, {stdResolve, applyWithoutTarget<true>}},
-    {literalKeyClass, {stdResolve, applyWithoutTarget<true>}},
     // Grand Central Mem Tap Annotations
     {memTapClass, {noResolve, applyGCTMemTaps}},
-    {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {conventionAnnoClass, {stdResolve, applyConventionAnno}},
     {typeLoweringAnnoClass, {stdResolve, applyBodyTypeLoweringAnno}},

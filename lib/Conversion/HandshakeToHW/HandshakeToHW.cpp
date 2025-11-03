@@ -1826,9 +1826,9 @@ public:
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-      implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
-          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
-          portInfo);
+      implModule = hw::HWModuleExternOp::create(
+          submoduleBuilder, op.getLoc(),
+          submoduleBuilder.getStringAttr(getSubModuleName(op)), portInfo);
     }
 
     llvm::SmallVector<Value> operands = adaptor.getOperands();

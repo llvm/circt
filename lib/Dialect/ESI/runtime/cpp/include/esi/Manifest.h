@@ -65,8 +65,6 @@ private:
 
 } // namespace esi
 
-std::ostream &operator<<(std::ostream &os, const esi::AppID &id);
-std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
 
 #endif // ESI_MANIFEST_H

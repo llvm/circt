@@ -244,9 +244,9 @@ private:
 
   Value getSubWhatever(ImplicitLocOpBuilder *builder, Value val, size_t index) {
     if (BundleType bundle = type_dyn_cast<BundleType>(val.getType()))
-      return builder->create<SubfieldOp>(val, index);
+      return SubfieldOp::create(*builder, val, index);
     if (FVectorType fvector = type_dyn_cast<FVectorType>(val.getType()))
-      return builder->create<SubindexOp>(val, index);
+      return SubindexOp::create(*builder, val, index);
 
     llvm_unreachable("Unknown aggregate type");
     return nullptr;

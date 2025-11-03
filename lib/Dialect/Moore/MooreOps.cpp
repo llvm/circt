@@ -643,6 +643,21 @@ OpFoldResult ConstantTimeOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantRealOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConstantRealOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  ConstantRealOp::Adaptor adaptor(operands, attrs, properties);
+  results.push_back(RealType::get(
+      context, static_cast<RealWidth>(
+                   adaptor.getValueAttr().getType().getIntOrFloatBitWidth())));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
@@ -1364,6 +1379,162 @@ OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
     return FVIntegerAttr::get(getContext(),
                               lhs.getValue().sdiv(rhs.getValue()));
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Classes
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClassDeclOp::verify() {
+  mlir::Region &body = getBody();
+  if (body.empty())
+    return mlir::success();
+
+  auto &block = body.front();
+  for (mlir::Operation &op : block) {
+
+    // allow only property and method decls and terminator
+    if (llvm::isa<circt::moore::ClassPropertyDeclOp,
+                  circt::moore::ClassMethodDeclOp>(&op))
+      continue;
+
+    return emitOpError()
+           << "body may only contain 'moore.class.propertydecl' operations";
+  }
+  return mlir::success();
+}
+
+LogicalResult ClassNewOp::verify() {
+  // The result is constrained to ClassHandleType in ODS, so this cast should be
+  // safe.
+  auto handleTy = cast<ClassHandleType>(getResult().getType());
+  mlir::SymbolRefAttr classSym = handleTy.getClassSym();
+  if (!classSym)
+    return emitOpError("result type is missing a class symbol");
+
+  // Resolve the referenced symbol starting from the nearest symbol table.
+  mlir::Operation *sym =
+      mlir::SymbolTable::lookupNearestSymbolFrom(getOperation(), classSym);
+  if (!sym)
+    return emitOpError("referenced class symbol `")
+           << classSym << "` was not found";
+
+  if (!llvm::isa<ClassDeclOp>(sym))
+    return emitOpError("symbol `")
+           << classSym << "` does not name a `moore.class.classdecl`";
+
+  return mlir::success();
+}
+
+void ClassNewOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  // Always allocates heap memory.
+  effects.emplace_back(MemoryEffects::Allocate::get());
+}
+
+LogicalResult
+ClassUpcastOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // 1) Type checks.
+  auto srcTy = dyn_cast<ClassHandleType>(getOperand().getType());
+  if (!srcTy)
+    return emitOpError() << "operand must be !moore.class<...>; got "
+                         << getOperand().getType();
+
+  auto dstTy = dyn_cast<ClassHandleType>(getResult().getType());
+  if (!dstTy)
+    return emitOpError() << "result must be !moore.class<...>; got "
+                         << getResult().getType();
+
+  if (srcTy == dstTy)
+    return success();
+
+  auto *op = getOperation();
+
+  auto *srcDeclOp =
+      symbolTable.lookupNearestSymbolFrom(op, srcTy.getClassSym());
+  auto *dstDeclOp =
+      symbolTable.lookupNearestSymbolFrom(op, dstTy.getClassSym());
+  if (!srcDeclOp || !dstDeclOp)
+    return emitOpError() << "failed to resolve class symbol(s): src="
+                         << srcTy.getClassSym()
+                         << ", dst=" << dstTy.getClassSym();
+
+  auto srcDecl = dyn_cast<ClassDeclOp>(srcDeclOp);
+  auto dstDecl = dyn_cast<ClassDeclOp>(dstDeclOp);
+  if (!srcDecl || !dstDecl)
+    return emitOpError()
+           << "symbol(s) do not name `moore.class.classdecl` ops: src="
+           << srcTy.getClassSym() << ", dst=" << dstTy.getClassSym();
+
+  auto cur = srcDecl;
+  while (cur) {
+    if (cur == dstDecl)
+      return success(); // legal upcast: dst is src or an ancestor
+
+    auto baseSym = cur.getBaseAttr();
+    if (!baseSym)
+      break;
+
+    auto *baseOp = symbolTable.lookupNearestSymbolFrom(op, baseSym);
+    cur = llvm::dyn_cast_or_null<ClassDeclOp>(baseOp);
+  }
+
+  return emitOpError() << "cannot upcast from " << srcTy.getClassSym() << " to "
+                       << dstTy.getClassSym()
+                       << " (destination is not a base class)";
+}
+LogicalResult
+ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // The operand is constrained to ClassHandleType in ODS; unwrap it.
+  Type instTy = getInstance().getType();
+  auto handleTy = dyn_cast<moore::ClassHandleType>(instTy);
+  if (!handleTy)
+    return emitOpError() << "instance must be a !moore.class<@C> value, got "
+                         << instTy;
+
+  // Extract the referenced class symbol from the handle type.
+  SymbolRefAttr classSym = handleTy.getClassSym();
+  if (!classSym)
+    return emitOpError("instance type is missing a class symbol");
+
+  // Resolve the class symbol starting from the nearest symbol table.
+  Operation *clsSym =
+      symbolTable.lookupNearestSymbolFrom(getOperation(), classSym);
+  if (!clsSym)
+    return emitOpError("referenced class symbol `")
+           << classSym << "` was not found";
+  auto classDecl = dyn_cast<ClassDeclOp>(clsSym);
+  if (!classDecl)
+    return emitOpError("symbol `")
+           << classSym << "` does not name a `moore.class.classdecl`";
+
+  // Look up the field symbol inside the class declaration's symbol table.
+  FlatSymbolRefAttr fieldSym = getPropertyAttr();
+  if (!fieldSym)
+    return emitOpError("missing field symbol");
+
+  Operation *fldSym = symbolTable.lookupSymbolIn(classDecl, fieldSym.getAttr());
+  if (!fldSym)
+    return emitOpError("no field `") << fieldSym << "` in class " << classSym;
+
+  auto fieldDecl = dyn_cast<ClassPropertyDeclOp>(fldSym);
+  if (!fieldDecl)
+    return emitOpError("symbol `")
+           << fieldSym << "` is not a `moore.class.propertydecl`";
+
+  // Result must be !moore.ref<T> where T matches the field's declared type.
+  auto resRefTy = cast<RefType>(getPropertyRef().getType());
+  if (!resRefTy)
+    return emitOpError("result must be a !moore.ref<T>");
+
+  Type expectedElemTy = fieldDecl.getPropertyType();
+  if (resRefTy.getNestedType() != expectedElemTy)
+    return emitOpError("result element type (")
+           << resRefTy.getNestedType() << ") does not match field type ("
+           << expectedElemTy << ")";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

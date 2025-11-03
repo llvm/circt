@@ -155,6 +155,15 @@ private:
     // Keep a as a bitvector - multiply by each digit of b
     SmallVector<Value> bBits = extractBits(rewriter, b);
 
+    auto rowWidth = width;
+    auto knownBitsA = comb::computeKnownBits(a);
+    if (!knownBitsA.Zero.isZero()) {
+      if (knownBitsA.Zero.countLeadingOnes() > 1) {
+        rowWidth -= knownBitsA.Zero.countLeadingOnes();
+        a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
+      }
+    }
+
     SmallVector<Value> partialProducts;
     partialProducts.reserve(width);
     // AND Array Construction:
@@ -164,8 +173,15 @@ private:
 
     for (unsigned i = 0; i < op.getNumResults(); ++i) {
       auto repl =
-          rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], width);
+          rewriter.createOrFold<comb::ReplicateOp>(loc, bBits[i], rowWidth);
       auto ppRow = rewriter.createOrFold<comb::AndOp>(loc, repl, a);
+      if (rowWidth < width) {
+        auto padding = width - rowWidth;
+        auto zeroPad = hw::ConstantOp::create(rewriter, loc, APInt(padding, 0));
+        ppRow = rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{zeroPad, ppRow}); // Pad to full width
+      }
+
       if (i == 0) {
         partialProducts.push_back(ppRow);
         continue;
@@ -386,17 +402,24 @@ private:
         continue;
       }
 
+      if (i == 2) {
+        Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{ppRow, zeroFalse, encNegPrev});
+        Value ppAlign = rewriter.createOrFold<comb::ExtractOp>(
+            loc, withSignCorrection, 0, width);
+        partialProducts.push_back(ppAlign);
+        encNegPrev = encNeg;
+        continue;
+      }
+
       // Insert a sign-correction from the previous row
-      assert(i >= 2 && "Expected i to be at least 2 for sign correction");
       // {ppRow, 0, encNegPrev} << 2*(i-1)
+      Value shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i - 2, 0));
       Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
-          loc, ValueRange{ppRow, zeroFalse, encNegPrev});
-      Value ppAlignPre = rewriter.createOrFold<comb::ExtractOp>(
+          loc, ValueRange{ppRow, zeroFalse, encNegPrev, shiftBy});
+      Value ppAlign = rewriter.createOrFold<comb::ExtractOp>(
           loc, withSignCorrection, 0, width);
-      Value shiftBy =
-          hw::ConstantOp::create(rewriter, loc, APInt(width, i - 2));
-      Value ppAlign =
-          rewriter.createOrFold<comb::ShlOp>(loc, ppAlignPre, shiftBy);
+
       partialProducts.push_back(ppAlign);
       encNegPrev = encNeg;
 
@@ -472,8 +495,9 @@ private:
 
     // Compute 2*c for use in array construction
     Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
-    Value twoCWider = rewriter.create<comb::ConcatOp>(loc, ValueRange{c, zero});
-    Value twoC = rewriter.create<comb::ExtractOp>(loc, twoCWider, 0, rowWidth);
+    Value twoCWider =
+        comb::ConcatOp::create(rewriter, loc, ValueRange{c, zero});
+    Value twoC = comb::ExtractOp::create(rewriter, loc, twoCWider, 0, rowWidth);
 
     // AND Array Construction:
     // pp[i] = ( (carry[i] * (c<<1)) | (save[i] * c) ) << i

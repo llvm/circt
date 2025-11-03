@@ -811,6 +811,18 @@ rtg.test @testSuccessAndFailure(singleton = %none: index) {
   rtg.test.failure "Error Message"
 }
 
+// CHECK-LABEL: rtg.test @setEquivalence
+rtg.test @setEquivalence(singleton = %none: index) {
+  %idx1 = index.constant 1
+  %idx2 = index.constant 2
+  %set1 = rtg.set_create %idx1, %idx2 : index
+  %set2 = rtg.set_create %idx2, %idx1 : index
+  // CHECK: func.call @dummy11([[SET:%.+]])
+  // CHECK: func.call @dummy11([[SET]])
+  func.call @dummy11(%set1) : (!rtg.set<index>) -> ()
+  func.call @dummy11(%set2) : (!rtg.set<index>) -> ()
+}
+
 // -----
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {

@@ -41,7 +41,7 @@ TEST(EvaluatorTests, InstantiateInvalidClassName) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   Evaluator evaluator(mod);
 
@@ -65,11 +65,11 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto cls = ClassOp::create(builder, "MyClass", params);
   cls.getBody().emplaceBlock().addArgument(
       circt::om::OMIntegerType::get(&context), cls.getLoc());
 
@@ -98,11 +98,11 @@ TEST(EvaluatorTests, InstantiateNullParam) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto cls = ClassOp::create(builder, "MyClass", params);
   cls.getBody().emplaceBlock().addArgument(
       circt::om::OMIntegerType::get(&context), cls.getLoc());
 
@@ -129,11 +129,11 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
-  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto cls = ClassOp::create(builder, "MyClass", params);
   cls.getBody().emplaceBlock().addArgument(
       circt::om::OMIntegerType::get(&context), cls.getLoc());
 
@@ -162,14 +162,14 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass");
+  auto cls = ClassOp::create(builder, "MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
-                                ArrayAttr{});
+  ClassFieldsOp::create(builder, loc, llvm::ArrayRef<mlir::Value>(),
+                        ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -200,7 +200,7 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
@@ -240,22 +240,22 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto constantType = builder.getI32IntegerAttr(42);
-  auto cls = builder.create<ClassOp>(
-      "MyClass", builder.getStrArrayAttr({"field"}),
+  auto cls = ClassOp::create(
+      builder, "MyClass", builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), constantType),
 
       }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  auto constant = builder.create<ConstantOp>(
-      circt::om::IntegerAttr::get(&context, constantType));
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({constant}),
-                                ArrayAttr{});
+  auto constant = ConstantOp::create(
+      builder, circt::om::IntegerAttr::get(&context, constantType));
+  ClassFieldsOp::create(builder, loc, SmallVector<Value>({constant}),
+                        ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -284,7 +284,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
@@ -296,8 +296,8 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = builder.create<ClassOp>(
-      "MyClass", params, builder.getStrArrayAttr({"field"}),
+  auto cls = ClassOp::create(
+      builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 
@@ -305,8 +305,9 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
-  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}), ArrayAttr{});
+  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
+  ClassFieldsOp::create(builder, loc, SmallVector<Value>({object}),
+                        ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -344,7 +345,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
@@ -356,8 +357,8 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = builder.create<ClassOp>(
-      "MyClass", params, builder.getStrArrayAttr({"field"}),
+  auto cls = ClassOp::create(
+      builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 
@@ -365,12 +366,12 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
-  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
+  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
   auto field =
-      builder.create<ObjectFieldOp>(builder.getI32Type(), object,
-                                    builder.getArrayAttr(FlatSymbolRefAttr::get(
-                                        builder.getStringAttr("field"))));
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({field}), ArrayAttr{});
+      ObjectFieldOp::create(builder, builder.getI32Type(), object,
+                            builder.getArrayAttr(FlatSymbolRefAttr::get(
+                                builder.getStringAttr("field"))));
+  ClassFieldsOp::create(builder, loc, SmallVector<Value>({field}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -403,20 +404,20 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls = builder.create<ClassOp>("MyInnerClass");
+  auto innerCls = ClassOp::create(builder, "MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
-                                ArrayAttr{});
+  ClassFieldsOp::create(builder, loc, llvm::ArrayRef<mlir::Value>(),
+                        ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = builder.create<ClassOp>(
-      "MyClass", builder.getStrArrayAttr({"field1", "field2"}),
+  auto cls = ClassOp::create(
+      builder, "MyClass", builder.getStrArrayAttr({"field1", "field2"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field1"), innerType),
           NamedAttribute(builder.getStringAttr("field2"), innerType),
@@ -424,9 +425,9 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
       }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object, object}),
-                                ArrayAttr{});
+  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
+  ClassFieldsOp::create(builder, loc, SmallVector<Value>({object, object}),
+                        ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -474,29 +475,29 @@ TEST(EvaluatorTests, AnyCastObject) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls = builder.create<ClassOp>("MyInnerClass");
+  auto innerCls = ClassOp::create(builder, "MyInnerClass");
   auto &innerBody = innerCls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&innerBody);
-  builder.create<ClassFieldsOp>(loc, llvm::ArrayRef<mlir::Value>(),
-                                ArrayAttr{});
+  ClassFieldsOp::create(builder, loc, llvm::ArrayRef<mlir::Value>(),
+                        ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = builder.create<ClassOp>(
-      "MyClass", builder.getStrArrayAttr({"field"}),
+  auto cls = ClassOp::create(
+      builder, "MyClass", builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 
       }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  auto cast = builder.create<AnyCastOp>(object);
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({cast}), ArrayAttr{});
+  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
+  auto cast = AnyCastOp::create(builder, object);
+  ClassFieldsOp::create(builder, loc, SmallVector<Value>({cast}), ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -526,7 +527,7 @@ TEST(EvaluatorTests, AnyCastParam) {
 
   ImplicitLocOpBuilder builder(loc, &context);
 
-  auto mod = builder.create<ModuleOp>(loc);
+  auto mod = ModuleOp::create(builder, loc);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerCls = ClassOp::buildSimpleClassOp(
@@ -538,8 +539,8 @@ TEST(EvaluatorTests, AnyCastParam) {
   StringRef params[] = {"param"};
   auto innerType = TypeAttr::get(ClassType::get(
       builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = builder.create<ClassOp>(
-      "MyClass", params, builder.getStrArrayAttr({"field"}),
+  auto cls = ClassOp::create(
+      builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
           NamedAttribute(builder.getStringAttr("field"), innerType),
 
@@ -547,10 +548,11 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto &body = cls.getBody().emplaceBlock();
   body.addArguments({i64}, {builder.getLoc()});
   builder.setInsertionPointToStart(&body);
-  auto cast = builder.create<AnyCastOp>(body.getArgument(0));
+  auto cast = AnyCastOp::create(builder, body.getArgument(0));
   SmallVector<Value> objectParams = {cast};
-  auto object = builder.create<ObjectOp>(innerCls, objectParams);
-  builder.create<ClassFieldsOp>(loc, SmallVector<Value>({object}), ArrayAttr{});
+  auto object = ObjectOp::create(builder, innerCls, objectParams);
+  ClassFieldsOp::create(builder, loc, SmallVector<Value>({object}),
+                        ArrayAttr{});
 
   Evaluator evaluator(mod);
 

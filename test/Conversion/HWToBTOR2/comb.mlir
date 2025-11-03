@@ -51,9 +51,14 @@ module {
     // CHECK:   [[NID16:[0-9]+]] sgte [[NID3]] [[NID10]] 2
     %9 = comb.icmp bin sge %3, %a : i32
 
-    // CHECK:   [[NID13:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
-    // CHECK:   [[NID14:[0-9]+]] not [[NID3]] [[NID13]]
-    // CHECK:   [[NID15:[0-9]+]] bad [[NID14:[0-9]+]]
+    // CHECK:   [[NID17:[0-9]+]] and [[NID0]] 2 [[NID10]]
+    // CHECK:   [[NID18:[0-9]+]] and [[NID0]] [[NID17]] [[NID10]]
+    %10 = comb.and %a, %3, %3 : i32
+
+
+    // CHECK:   [[NID19:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
+    // CHECK:   [[NID20:[0-9]+]] not [[NID3]] [[NID19]]
+    // CHECK:   [[NID21:[0-9]+]] bad [[NID20:[0-9]+]]
     sv.always posedge %0 {
       sv.if %true {
         sv.assert %5, immediate message "a + 1 should be greater than a"

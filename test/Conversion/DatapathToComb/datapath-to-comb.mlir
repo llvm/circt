@@ -71,6 +71,38 @@ hw.module @partial_product_square(in %a : i3, out pp0 : i3, out pp1 : i3, out pp
   hw.output %0#0, %0#1, %0#2 : i3, i3, i3
 }
 
+// CHECK-LABEL: @partial_product_zext
+hw.module @partial_product_zext(in %a : i3, in %b : i3, out pp0 : i6, out pp1 : i6, out pp2 : i6) {
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %c0_i3 = hw.constant 0 : i3
+  // CHECK-NEXT: %[[AEXT:.+]] = comb.concat %c0_i3, %a : i3, i3
+  // CHECK-NEXT: %[[BEXT:.+]] = comb.concat %c0_i3, %b : i3, i3
+  // CHECK-NEXT: %[[B0:.+]] = comb.extract %[[BEXT]] from 0 : (i6) -> i1
+  // CHECK-NEXT: %[[B1:.+]] = comb.extract %[[BEXT]] from 1 : (i6) -> i1
+  // CHECK-NEXT: %[[B2:.+]] = comb.extract %[[BEXT]] from 2 : (i6) -> i1
+  // CHECK-NEXT: %[[A:.+]] = comb.extract %[[AEXT]] from 0 : (i6) -> i3
+  // CHECK-NEXT: %[[B03:.+]] = comb.replicate %[[B0]] : (i1) -> i3
+  // CHECK-NEXT: %[[B0A:.+]] = comb.and %[[B03]], %[[A]] : i3
+  // CHECK-NEXT: %[[PP0:.+]] = comb.concat %c0_i3, %[[B0A]] : i3, i3
+  // CHECK-NEXT: %[[B13:.+]] = comb.replicate %[[B1]] : (i1) -> i3
+  // CHECK-NEXT: %[[B1A:.+]] = comb.and %[[B13]], %[[A]] : i3
+  // CHECK-NEXT: %[[B1A6:.+]] = comb.concat %c0_i3, %[[B1A]] : i3, i3
+  // CHECK-NEXT: %[[PP17:.+]] = comb.concat %[[B1A6]], %false : i6, i1
+  // CHECK-NEXT: %[[PP1:.+]] = comb.extract %[[PP17]] from 0 : (i7) -> i6
+  // CHECK-NEXT: %[[B23:.+]] = comb.replicate %[[B2]] : (i1) -> i3
+  // CHECK-NEXT: %[[B2A:.+]] = comb.and %[[B23]], %[[A]] : i3
+  // CHECK-NEXT: %[[B2A8:.+]] = comb.concat %c0_i3, %[[B2A]] : i3, i3
+  // CHECK-NEXT: %[[PP28:.+]] = comb.concat %[[B2A8]], %c0_i2 : i6, i2
+  // CHECK-NEXT: %[[PP2:.+]] = comb.extract %[[PP28]] from 0 : (i8) -> i6
+  // CHECK-NEXT: hw.output %[[PP0]], %[[PP1]], %[[PP2]] : i6, i6, i6
+  %c0_i3 = hw.constant 0 : i3
+  %0 = comb.concat %c0_i3, %a : i3, i3
+  %1 = comb.concat %c0_i3, %b : i3, i3
+  %2:3 = datapath.partial_product %0, %1 : (i6, i6) -> (i6, i6, i6)
+  hw.output %2#0, %2#1, %2#2 : i6, i6, i6
+}
+
 // CHECK-LABEL: @partial_product_square_zext
 hw.module @partial_product_square_zext(in %a : i3, out pp0 : i6, out pp1 : i6, out pp2 : i6) {
   // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4

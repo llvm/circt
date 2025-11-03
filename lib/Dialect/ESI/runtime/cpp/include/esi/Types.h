@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "esi/Common.h"
+#include "esi/Values.h" // For BitVector / Int / UInt
 
 namespace esi {
 
@@ -39,18 +40,27 @@ public:
   ID getID() const { return id; }
   virtual std::ptrdiff_t getBitWidth() const { return -1; }
 
-  /// Serialize an object to MessageData. The object should be passed as a
-  /// std::any to provide type erasure. Returns a MessageData containing the
-  /// serialized representation.
-  virtual MessageData serialize(const std::any &obj) const {
+  /// Serialize an object to a MutableBitVector (LSB-first stream). The object
+  /// should be passed via std::any. Implementations append fields in the order
+  /// they are iterated (the first serialized field occupies the
+  /// least-significant bits of the result).
+  virtual MutableBitVector serialize(const std::any &obj) const {
     throw std::runtime_error("Serialization not implemented for type " + id);
   }
 
-  /// Deserialize from a span of bytes to an object. Returns the deserialized
-  /// object as a std::any and a span to the remaining bytes.
-  virtual std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const {
+  /// Deserialize from a BitVector stream (LSB-first). Implementations consume
+  /// bits from 'data' in-place (via logical right shifts) and return the
+  /// reconstructed value. Remaining bits stay in 'data'.
+  virtual std::any deserialize(BitVector &data) const {
     throw std::runtime_error("Deserialization not implemented for type " + id);
+  }
+
+  // Deserialize from a MessageData buffer. Maps the MessageData onto a
+  // MutableBitVector, and proceeds with regular MutableBitVector
+  // deserialization.
+  std::any deserialize(const MessageData &data) const {
+    auto bv = MutableBitVector(std::vector<uint8_t>(data.getData()));
+    return deserialize(bv);
   }
 
   /// Ensure that a std::any object is valid for this type. Throws
@@ -101,14 +111,14 @@ protected:
 /// carry one values of one type.
 class ChannelType : public Type {
 public:
+  using Type::deserialize;
   ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
   const Type *getInner() const { return inner; }
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 
 private:
   const Type *inner;
@@ -117,14 +127,14 @@ private:
 /// The "void" type is a special type which can be used to represent no type.
 class VoidType : public Type {
 public:
+  using Type::deserialize;
   VoidType(const ID &id) : Type(id) {}
   // 'void' is 1 bit by convention.
   std::ptrdiff_t getBitWidth() const override { return 1; };
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// The "any" type is a special type which can be used to represent any type, as
@@ -154,11 +164,11 @@ private:
 class BitsType : public BitVectorType {
 public:
   using BitVectorType::BitVectorType;
+  using Type::deserialize;
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// Integers are bit vectors which may be signed or unsigned and are interpreted
@@ -172,28 +182,29 @@ public:
 class SIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
+  using Type::deserialize;
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// Unsigned integer.
 class UIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
+  using Type::deserialize;
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// Structs are an ordered collection of fields, each with a name and a type.
 class StructType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;
+  using Type::deserialize;
 
   StructType(const ID &id, const FieldVector &fields, bool reverse = true)
       : Type(id), fields(fields), reverse(reverse) {}
@@ -211,9 +222,8 @@ public:
   }
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 
   // Returns whether this struct type should be reversed when
   // serializing/deserializing.
@@ -233,6 +243,7 @@ public:
   ArrayType(const ID &id, const Type *elementType, uint64_t size,
             bool reverse = true)
       : Type(id), elementType(elementType), size(size), reverse(reverse) {}
+  using Type::deserialize;
 
   const Type *getElementType() const { return elementType; }
   uint64_t getSize() const { return size; }
@@ -245,9 +256,8 @@ public:
   }
 
   void ensureValid(const std::any &obj) const override;
-  MessageData serialize(const std::any &obj) const override;
-  std::pair<std::any, std::span<const uint8_t>>
-  deserialize(std::span<const uint8_t> data) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 
 private:
   const Type *elementType;

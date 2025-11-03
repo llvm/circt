@@ -127,8 +127,9 @@ struct TechLibraryPattern : public CutRewritePattern {
     cut.getPermutatedInputs(npnClass, inputs);
 
     // TODO: Give a better name to the instance
-    auto instanceOp = builder.create<hw::InstanceOp>(
-        cut.getRoot()->getLoc(), module, "mapped", ArrayRef<Value>(inputs));
+    auto instanceOp =
+        hw::InstanceOp::create(builder, cut.getRoot()->getLoc(), module,
+                               "mapped", ArrayRef<Value>(inputs));
     return instanceOp.getOperation();
   }
 

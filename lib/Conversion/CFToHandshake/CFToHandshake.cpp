@@ -947,20 +947,21 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
 
   // Merge all of the controls in each partition
   rewriter->setInsertionPointToStart(loopHeader);
-  auto externalCtrlMerge = rewriter->create<ControlMergeOp>(loc, externalCtrls);
+  auto externalCtrlMerge =
+      ControlMergeOp::create(*rewriter, loc, externalCtrls);
 
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
   // must be followed by the loop exit network.
-  auto primingRegister =
-      rewriter->create<BufferOp>(loc, loopPrimingInput, 1, BufferTypeEnum::seq);
+  auto primingRegister = BufferOp::create(*rewriter, loc, loopPrimingInput, 1,
+                                          BufferTypeEnum::seq);
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 
   // The loop control mux will deterministically select between control entering
   // the loop from any external block or the single loop backedge.
-  auto loopCtrlMux = rewriter->create<MuxOp>(
-      loc, primingRegister.getResult(),
+  auto loopCtrlMux = MuxOp::create(
+      *rewriter, loc, primingRegister.getResult(),
       llvm::SmallVector<Value>{externalCtrlMerge.getResult(), loopCtrl});
 
   // Replace the existing control merge 'result' output with the loop control
@@ -999,14 +1000,13 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // loop latch, will then be selected between by a 3rd mux, based on the
   // priming register.
   for (MuxOp mux : muxesToReplace) {
-    auto externalDataMux = rewriter->create<MuxOp>(
-        loc, externalCtrlMerge.getIndex(), externalDataInputs[mux]);
+    auto externalDataMux = MuxOp::create(
+        *rewriter, loc, externalCtrlMerge.getIndex(), externalDataInputs[mux]);
 
     rewriter->replaceOp(
-        mux, rewriter
-                 ->create<MuxOp>(loc, primingRegister,
-                                 llvm::SmallVector<Value>{externalDataMux,
-                                                          loopDataInputs[mux]})
+        mux, MuxOp::create(
+                 *rewriter, loc, primingRegister,
+                 llvm::SmallVector<Value>{externalDataMux, loopDataInputs[mux]})
                  .getResult());
   }
 
@@ -1049,17 +1049,18 @@ void LoopNetworkRewriter::buildExitNetwork(
       // This goes against the convention, and we have to invert the condition
       // value before connecting it to the exit network.
       rewriter->setInsertionPoint(condBr);
-      condValue = rewriter->create<arith::XOrIOp>(
-          loc, condValue.getType(), condValue,
-          rewriter->create<arith::ConstantOp>(
-              loc, rewriter->getIntegerAttr(rewriter->getI1Type(), 1)));
+      condValue = arith::XOrIOp::create(
+          *rewriter, loc, condValue.getType(), condValue,
+          arith::ConstantOp::create(
+              *rewriter, loc,
+              rewriter->getIntegerAttr(rewriter->getI1Type(), 1)));
     }
     parityCorrectedConds.push_back(condValue);
   }
 
   // Merge all of the parity-corrected exit conditions and assign them
   // to the loop priming input.
-  auto exitMerge = rewriter->create<MergeOp>(loc, parityCorrectedConds);
+  auto exitMerge = MergeOp::create(*rewriter, loc, parityCorrectedConds);
   loopPrimingInput.setValue(exitMerge);
 }
 

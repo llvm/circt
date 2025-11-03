@@ -194,35 +194,6 @@ firrtl.circuit "WriteMask" attributes {annotations = [
   }
 }
 
-firrtl.circuit "MemTap" attributes {annotations = [
-  {class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}
-]} {
-  firrtl.module public @MemTap() attributes {annotations = [
-    {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
-  ]} {
-		%rf_MPORT, %rf_io_rdata_0_MPORT, %rf_io_rdata_1_MPORT = firrtl.mem sym @rf Undefined {
-      annotations = [
-        {class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64}
-      ],
-      depth = 4 : i64,
-      name = "rf",
-      portNames = ["MPORT", "io_rdata_0_MPORT", "io_rdata_1_MPORT"],
-      readLatency = 0 : i32,
-      writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>,
-        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>,
-        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>
-    // CHECK-LABEL: firrtl.module public @MemTap()
-    // CHECK:         %rf = firrtl.reg sym @rf %2
-    // CHECK-SAME:      [{circt.fieldID = 1 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 0 : i64}
-    // CHECK-SAME:       {circt.fieldID = 2 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 1 : i64},
-    // CHECK-SAME:       {circt.fieldID = 3 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 2 : i64},
-    // CHECK-SAME:       {circt.fieldID = 4 : i64, class = "sifive.enterprise.grandcentral.MemTapAnnotation.source", id = 11 : i64, portID = 3 : i64}]}
-    // CHECK-SAME:      : !firrtl.clock, !firrtl.vector<uint<32>, 4>
-	}
-
-}
-
 // Test the behavior of non-local annotations using either the old or new
 // format work correctly.
 //

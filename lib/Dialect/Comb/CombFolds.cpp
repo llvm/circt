@@ -2087,7 +2087,7 @@ bool comb::foldMuxChainWithComparison(
 
   // Build the array_create and the array_get.
   auto fusedLoc = rewriter.getFusedLoc(locationsFound);
-  auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);
+  auto array = hw::ArrayCreateOp::create(rewriter, fusedLoc, table);
   replaceOpWithNewOpAndCopyNamehint<hw::ArrayGetOp>(rewriter, rootMux, array,
                                                     indexValue);
   return true;
@@ -2552,7 +2552,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (auto falseMux = op.getFalseValue().getDefiningOp<MuxOp>();
       falseMux && falseMux != op) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
-    if (op.getCond() == falseMux.getCond()) {
+    if (op.getCond() == falseMux.getCond() &&
+        falseMux.getFalseValue() != falseMux) {
       replaceOpWithNewOpAndCopyNamehint<MuxOp>(
           rewriter, op, op.getCond(), op.getTrueValue(),
           falseMux.getFalseValue(), op.getTwoStateAttr());
@@ -2651,7 +2652,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (foldMuxOfUniformArrays(op, rewriter))
     return success();
 
-  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
+  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(0))
   if (op.getTrueValue().getDefiningOp() &&
       op.getTrueValue().getDefiningOp() != op)
     if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))

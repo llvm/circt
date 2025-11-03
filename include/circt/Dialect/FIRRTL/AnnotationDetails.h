@@ -101,35 +101,8 @@ constexpr const char *augmentedBundleTypeClass =
     "sifive.enterprise.grandcentral.AugmentedBundleType"; // not an annotation
 constexpr const char *augmentedVectorTypeClass =
     "sifive.enterprise.grandcentral.AugmentedVectorType"; // not an annotation
-constexpr const char *dataTapsClass =
-    "sifive.enterprise.grandcentral.DataTapsAnnotation";
-constexpr const char *dataTapsBlackboxClass =
-    "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"; // not in SFC
 constexpr const char *memTapClass =
     "sifive.enterprise.grandcentral.MemTapAnnotation";
-constexpr const char *memTapBlackboxClass =
-    "sifive.enterprise.grandcentral.MemTapAnnotation.blackbox"; // not in SFC
-constexpr const char *memTapPortClass =
-    "sifive.enterprise.grandcentral.MemTapAnnotation.port"; // not in SFC
-constexpr const char *memTapSourceClass =
-    "sifive.enterprise.grandcentral.MemTapAnnotation.source"; // not in SFC
-constexpr const char *deletedKeyClass =
-    "sifive.enterprise.grandcentral.DeletedDataTapKey";
-constexpr const char *literalKeyClass =
-    "sifive.enterprise.grandcentral.LiteralDataTapKey";
-constexpr const char *referenceKeyClass =
-    "sifive.enterprise.grandcentral.ReferenceDataTapKey";
-constexpr const char *referenceKeyPortClass =
-    "sifive.enterprise.grandcentral.ReferenceDataTapKey.port"; // not in SFC
-constexpr const char *referenceKeySourceClass =
-    "sifive.enterprise.grandcentral.ReferenceDataTapKey.source"; // not in SFC
-constexpr const char *internalKeyClass =
-    "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
-constexpr const char *internalKeyPortClass =
-    "sifive.enterprise.grandcentral.DataTapModuleSignalKey.port"; // not in SFC
-constexpr const char *internalKeySourceClass =
-    "sifive.enterprise.grandcentral.DataTapModuleSignalKey.source"; // not in
-                                                                    // SFC
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 constexpr const char *grandCentralHierarchyFileAnnoClass =

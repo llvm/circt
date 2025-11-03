@@ -20,6 +20,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -544,7 +545,8 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   let builders = [
     OpBuilder<(ins "IntType":$type, "const FVInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
-    OpBuilder<(ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
+    OpBuilder<(
+      ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
   ];
 }
 
@@ -556,54 +558,45 @@ def ConstantTimeOp : MooreOp<"constant_time", [Pure, ConstantLike]> {
   let hasFolder = 1;
 }
 
-def StringConstantOp : MooreOp<"string_constant", [Pure]> {
-  let summary = "Produce a constant string value";
+def ConstantStringOp : MooreOp<"constant_string", [Pure]> {
+  let summary = "A constant integer value defined by a string of bytes";
   let description = [{
-    Produces a constant value of string type.
+    Defines a constant integer value based on the bytes of a string. The
+    resulting integer contains 8 bits for each byte in the string. The first,
+    left-most character is placed in the most significnat bits; the last,
+    right-most character is placed in the least significant bits.
 
-    Example:
-    ```mlir
-    %0 = moore.string "hello world"
-    ```
+    Constant strings are represented as integers since they have a known width
+    and bit-pattern, which is often used in SV to assign strings to parameters,
+    or store strings in bit vectors. In contrast, the `string` type is a dynamic
+    string with runtime-known length. To obtain a constant `string` value, the
+    resulting integer should be converted to a `string`.
+
+    See IEEE 1800-2017 § 5.9 "String literals".
   }];
   let arguments = (ins StrAttr:$value);
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
-def ShortrealLiteralOp : MooreOp<"shortreal_constant", [Pure]> {
-  let summary = "Produce a constant shortreal value";
-  let description = [{
-    Produces a constant value of shortreal type.
-
-    Example:
-    ```mlir
-    %0 = moore.shortreal_constant 1.23
-    ```
-    The shortreal type has fixed-point(1.2) and exponent(2.0e10) formats and
-    corresponds to IEEE 754 f32.
-    See IEEE 1800-2017 § 5.7.2 "Real literal constants".
-  }];
-  let arguments = (ins F32Attr:$value);
-  let results = (outs RealF32:$result);
-  let assemblyFormat = "$value attr-dict";
+def APFloatAttr : Attr<CPred<"isa<FloatAttr>($_self)">,
+                        "arbitrary float attribute"> {
+  let storageType = [{ mlir::FloatAttr }];
+  let returnType = [{ llvm::APFloat }];
 }
 
-def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
-  let summary = "Produce a constant real value";
+def ConstantRealOp : MooreOp<"constant_real", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  Pure,
+]> {
+  let summary = "A constant real value";
   let description = [{
-    Produces a constant value of real type.
+    Produces a constant value of a real type.
 
-    Example:
-    ```mlir
-    %0 = moore.real_constant 1.23
-    ```
-    The real type has fixed-point(1.2) and exponent(2.0e10) formats and
-    corresponds to IEEE 754 f64.
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
-  let arguments = (ins F64Attr:$value);
-  let results = (outs RealF64:$result);
+  let arguments = (ins APFloatAttr:$value);
+  let results = (outs RealType:$result);
   let assemblyFormat = "$value attr-dict";
 }
 
@@ -2352,6 +2345,127 @@ def AcoshBIOp : RealMathFunc<"acosh"> {
 
 def AtanhBIOp : RealMathFunc<"atanh"> {
   let summary = "Arc-hyperbolic tangent";
+}
+
+//===----------------------------------------------------------------------===//
+// Classes
+//===----------------------------------------------------------------------===//
+
+def ClassPropertyDeclOp
+    : MooreOp<"class.propertydecl", [Symbol, HasParent<"ClassDeclOp">]> {
+  let summary = "Declare a class property";
+  let description = [{
+  Declares a property within a class declaration.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+
+  let results = (outs);
+  let assemblyFormat = [{
+     $sym_name `:` $type  attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    ::mlir::Type getPropertyType() { return getTypeAttr().getValue(); }
+  }];
+}
+
+
+def ClassMethodDeclOp
+    : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
+  let summary = "Declare a class method";
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      TypeAttrOf<FunctionType>:$function_type);
+
+  let results = (outs);
+  let assemblyFormat = [{
+      $sym_name `:` $function_type  attr-dict
+  }];
+}
+
+def ClassDeclOp
+    : MooreOp<"class.classdecl", [Symbol, SymbolTable, IsolatedFromAbove,
+    NoTerminator, SingleBlock]> {
+  let summary = "Class declaration";
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      OptionalAttr<SymbolRefAttr>:$base,
+      OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = [{
+    $sym_name
+    (`extends` $base^)?
+    (`implements` $implementedInterfaces^)?
+    attr-dict-with-keyword $body
+  }];
+  let hasVerifier = 1;
+}
+
+def ClassNewOp
+    : MooreOp<
+          "class.new", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let summary = "Allocate a new class instance";
+  let description = [{
+    Allocates a new instance of class @C. This op does not call the constructor.
+    The result is a non-null `!moore.class.object<@C>` handle.
+  }];
+
+  let arguments = (ins);
+  let results = (outs ClassHandleType:$result);
+
+  let assemblyFormat = [{
+     `:` type($result) attr-dict
+  }];
+  let hasVerifier = 1;
+}
+
+
+def ClassPropertyRefOp
+    : MooreOp<"class.property_ref", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
+  let summary = "Get a !moore.ref to a class property";
+  let description = [{
+    Construct a reference to a class instance's property field. Translates
+    to a fixed offset from the the class handle into its data struct.
+  }];
+  let arguments = (ins ClassHandleType:$instance,
+      FlatSymbolRefAttr:$property);
+  let results = (outs RefType:$propertyRef);
+  let assemblyFormat = "$instance`[`$property`]` `:` type($instance) `->` "
+                       "type($propertyRef) attr-dict";
+}
+
+def ClassUpcastOp
+    : MooreOp<"class.upcast", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
+  let summary = "Upcast a derived handle to a base handle (zero-cost)";
+  let description = [{
+    Casts an instance of a class to one of its base classes.
+    The created instance points to the same underlying data struct as the original
+    instance, and modifying it will modify the spawning instance's data as well.
+  }];
+  let arguments = (ins ClassHandleType:$instance);
+  let results = (outs ClassHandleType:$result);
+  let assemblyFormat =
+      "$instance `:` type($instance) `to` type($result) attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// String Builtins
+//===----------------------------------------------------------------------===//
+
+class StringBuiltin<string mnemonic, list<Trait> traits = []> :
+    MooreOp<"string." # mnemonic, traits>;
+
+def StringLenOp : StringBuiltin<"len"> {
+  let summary = "Get the length of a string";
+  let description = [{
+    Returns the number of characters in the given string.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$str attr-dict";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

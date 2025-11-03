@@ -1118,7 +1118,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     release_initial(rc2.rw)
 
   ; CHECK-LABEL: extmodule private @RefExtABI
-  ; CHECK-NOT: internalPaths
   extmodule RefExtABI :
     input in : UInt<1>
     output r : Probe<UInt<1>>
@@ -2015,25 +2014,20 @@ circuit Foo:
 
   ; CHECK-LABEL: extmodule private @RefExt(
   ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"in">]
   extmodule RefExt :
     input in : UInt<1>
     output r : Probe<UInt<1>>
-    ref r is "in"
 
   ; CHECK-LABEL: extmodule private @RefExtMore(
   ; CHECK-SAME:  in in: !firrtl.uint<1>
   ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out data: !firrtl.uint<3>
   ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
-  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]
   extmodule RefExtMore :
     input in : UInt<1>
     output r : Probe<UInt<1>>
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
-    ref r2 is "in"
-    ref r is "path.to.internal.signal"
 
   ; CHECK-LABEL: module @Foo(
   ; CHECK-SAME:    out %out: !firrtl.uint,
