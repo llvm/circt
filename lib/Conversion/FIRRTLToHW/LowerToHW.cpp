@@ -1160,20 +1160,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 
   // Check for verbatim black box annotation
   AnnotationSet annos(oldModule);
-  Annotation verbatimAnno;
-  bool isVerbatimSv = false;
-
-  for (auto anno : annos) {
-    if (anno.isClass(verbatimBlackBoxAnnoClass)) {
-      verbatimAnno = anno;
-      isVerbatimSv = true;
-      break;
-    }
-  }
+  Annotation verbatimAnno = annos.getAnnotation(verbatimBlackBoxAnnoClass);
 
   // Lower to sv.verbatim.module instead of hw.module.extern when the blackbox
   // has verbatim verilog content.
-  if (isVerbatimSv) {
+  if (verbatimAnno) {
     auto filesAttr = verbatimAnno.getMember<ArrayAttr>("files");
     if (!filesAttr || filesAttr.empty()) {
       oldModule->emitError("VerbatimBlackBoxAnno missing or empty files array");
