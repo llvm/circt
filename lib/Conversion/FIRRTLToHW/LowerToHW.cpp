@@ -1180,8 +1180,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     auto outputFile = firstFile.getAs<StringAttr>("output_file");
 
     if (!content || !outputFile) {
-      oldModule->emitError(
-          "VerbatimBlackBoxAnno file missing fields");
+      oldModule->emitError("VerbatimBlackBoxAnno file missing fields");
       return {};
     }
 
@@ -1205,8 +1204,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     auto primaryFileDict = cast<DictionaryAttr>(filesAttr[0]);
     auto primaryFileName = primaryFileDict.getAs<StringAttr>("name");
     if (!primaryFileName) {
-      oldModule->emitError(
-          "VerbatimBlackBoxAnno file missing name field");
+      oldModule->emitError("VerbatimBlackBoxAnno file missing name field");
       return {};
     }
     seenFiles.insert(primaryFileName.getValue());
@@ -1220,15 +1218,15 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       auto fileOutputFile = fileDict.getAs<StringAttr>("output_file");
 
       if (!(fileName && fileContent && fileOutputFile)) {
-          oldModule->emitError(
-              "VerbatimBlackBoxAnno file missing fields");
-          return {};
+        oldModule->emitError("VerbatimBlackBoxAnno file missing fields");
+        return {};
       }
 
       if (!seenFiles.contains(fileName.getValue())) {
         seenFiles.insert(fileName.getValue());
 
-        auto fileSymbolName = circuitNamespace.newName(fileName.getValue().str());
+        auto fileSymbolName =
+            circuitNamespace.newName(fileName.getValue().str());
         auto emitFile = builder.create<emit::FileOp>(
             oldModule.getLoc(), fileOutputFile.getValue(), fileSymbolName);
         builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
