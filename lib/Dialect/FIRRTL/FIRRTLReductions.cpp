@@ -2138,7 +2138,9 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
       true);
   patterns.add<PassReduction, 28>(getContext(),
                                   firrtl::createLowerCHIRRTLPass(), true, true);
-  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferWidths(),
+  // patterns.add<PassReduction, 27>(getContext(), firrtl::createInferWidths(),
+  //                                 true, true);
+  patterns.add<PassReduction, 27>(getContext(), firrtl::createInferWidths_new(),
                                   true, true);
   patterns.add<PassReduction, 26>(getContext(), firrtl::createInferResets(),
                                   true, true);
