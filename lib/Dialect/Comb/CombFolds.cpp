@@ -1697,6 +1697,21 @@ OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
     return {};
   return foldMod<ModSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
+
+LogicalResult DivUOp::canonicalize(DivUOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
+  return convertDivUByPowerOfTwo(op, rewriter);
+}
+
+LogicalResult ModUOp::canonicalize(ModUOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
+  return convertModUByPowerOfTwo(op, rewriter);
+}
+
 //===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
