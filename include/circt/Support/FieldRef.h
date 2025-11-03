@@ -25,6 +25,10 @@ namespace circt {
 ///
 /// This can be used as the key in a hashtable to store field specific
 /// information.
+
+// add as default(new)
+struct Zero;
+
 class FieldRef {
 public:
   /// Get a null FieldRef.
@@ -80,6 +84,11 @@ public:
 
   operator bool() const { return bool(value); }
 
+  struct Hash;
+
+  bool operator==(const Zero&) const; 
+  bool operator!=(const Zero&) const; 
+
 private:
   /// A pointer to the value which created this.
   Value value;
@@ -92,6 +101,12 @@ private:
 inline ::llvm::hash_code hash_value(const FieldRef &fieldRef) {
   return llvm::hash_combine(fieldRef.getValue(), fieldRef.getFieldID());
 }
+
+struct FieldRef::Hash {
+  size_t operator()(const FieldRef &ref) const {
+    return static_cast<size_t>(hash_value(ref));
+  }
+};
 
 } // namespace circt
 
