@@ -1178,7 +1178,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 
     if (!content || !outputFile) {
       oldModule->emitError(
-          "VerbatimBlackBoxAnno file missing content or output_file");
+          "VerbatimBlackBoxAnno file missing fields");
       return {};
     }
 
@@ -1201,9 +1201,12 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     // Add the primary file to the seen set
     auto primaryFileDict = cast<DictionaryAttr>(filesAttr[0]);
     auto primaryFileName = primaryFileDict.getAs<StringAttr>("name");
-    if (primaryFileName) {
-      seenFiles.insert(primaryFileName.getValue());
+    if (!primaryFileName) {
+      oldModule->emitError(
+          "VerbatimBlackBoxAnno file missing name field");
+      return {};
     }
+    seenFiles.insert(primaryFileName.getValue());
 
     // Create emit.file operations for additional files (these are usually
     // additional collateral such as headers or DPI files).
@@ -1213,8 +1216,13 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       auto fileContent = fileDict.getAs<StringAttr>("content");
       auto fileOutputFile = fileDict.getAs<StringAttr>("output_file");
 
-      if (fileName && fileContent && fileOutputFile &&
-          !seenFiles.contains(fileName.getValue())) {
+      if (!(fileName && fileContent && fileOutputFile)) {
+          oldModule->emitError(
+              "VerbatimBlackBoxAnno file missing fields");
+          return {};
+      }
+
+      if (!seenFiles.contains(fileName.getValue())) {
         seenFiles.insert(fileName.getValue());
 
         auto fileSymbolName = "blackbox_" + fileName.getValue().str();
