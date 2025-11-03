@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -1144,6 +1145,8 @@ hw::HWModuleLike
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
+  CircuitNamespace circuitNamespace(loweringState.circuitOp);
+
   // Lower ports
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
@@ -1225,7 +1228,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       if (!seenFiles.contains(fileName.getValue())) {
         seenFiles.insert(fileName.getValue());
 
-        auto fileSymbolName = "blackbox_" + fileName.getValue().str();
+        auto fileSymbolName = circuitNamespace.newName(fileName.getValue().str());
         auto emitFile = builder.create<emit::FileOp>(
             oldModule.getLoc(), fileOutputFile.getValue(), fileSymbolName);
         builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());

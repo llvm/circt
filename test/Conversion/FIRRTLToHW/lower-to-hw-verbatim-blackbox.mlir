@@ -49,10 +49,10 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     ]
   }
 
-  // CHECK: emit.file "header.vh" sym @blackbox_header.vh {
+  // CHECK: emit.file "header.vh" sym @header.vh {
   // CHECK-NEXT:   emit.verbatim "`define MACRO_VALUE 1'b1"
   // CHECK: sv.verbatim.module @MultiFileVerbatimBlackBox(
-  // CHECK-SAME: additional_files = [@blackbox_header.vh]
+  // CHECK-SAME: additional_files = [@header.vh]
 
   firrtl.extmodule @MultiFileVerbatimBlackBox(
     in clk: !firrtl.clock,
