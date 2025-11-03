@@ -1262,9 +1262,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     SymbolTable::setSymbolVisibility(
         verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
 
-    annos.removeAnnotations([](Annotation anno) {
-      return anno.isClass(verbatimBlackBoxAnnoClass);
-    });
+    annos.removeAnnotation(verbatimBlackBoxAnnoClass);
 
     if (handleForceNameAnnos(oldModule, annos, loweringState))
       return {};
