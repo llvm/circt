@@ -215,6 +215,7 @@ def ModportType : SVType<"Modport"> {
 def SVVerbatimModuleOp
     : SVOp<"verbatim.module", [DeclareOpInterfaceMethods<PortList>,
                                DeclareOpInterfaceMethods<HWModuleLike>, Symbol,
+                               DeclareOpInterfaceMethods<SymbolUserOpInterface>,
                                HasParent<"mlir::ModuleOp">]> {
   let summary = "Module with verbatim verilog content";
   let description = [{

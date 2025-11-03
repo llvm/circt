@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -2222,6 +2223,29 @@ LogicalResult SVVerbatimModuleOp::verify() {
   auto outputFileAttr = getOutputFile();
   if (!outputFileAttr || outputFileAttr.getFilename().getValue().empty())
     return emitOpError("output_file attribute cannot be empty");
+
+  return success();
+}
+
+LogicalResult
+SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (auto additionalFiles = getAdditionalFiles()) {
+    auto *symtable = SymbolTable::getNearestSymbolTable(*this);
+    if (!symtable)
+      return emitError("sv.verbatim.module must exist within a region "
+                       "which has a symbol table.");
+
+    for (auto fileRef : *additionalFiles) {
+      auto symbolRef = llvm::cast<SymbolRefAttr>(fileRef);
+      auto *referencedOp = symbolTable.lookupSymbolIn(symtable, symbolRef);
+      if (!referencedOp)
+        return emitError("Symbol not found: ") << symbolRef << ".";
+
+      if (!isa<circt::emit::FileOp>(referencedOp))
+        return emitError("Symbol ")
+               << symbolRef << " is not an emit.file operation.";
+    }
+  }
 
   return success();
 }
