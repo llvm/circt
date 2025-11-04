@@ -557,3 +557,26 @@ endclass
 class testTypedClass extends testClassType;
    bool a;
 endclass
+
+/// Check that LValues get generated for ClassProperty assignments
+
+// CHECK-LABEL:  moore.class.classdecl @testLValueClass {
+// CHECK:    moore.class.propertydecl @a : !moore.i32
+// CHECK:    moore.class.methoddecl @adder : (!moore.class<@testLValueClass>) -> ()
+// CHECK:  }
+// CHECK:  func.func private @"testLValueClass::adder"(%arg0: !moore.class<@testLValueClass>) {
+// CHECK:    [[LVAL:%.+]] = moore.class.property_ref %arg0[@a] : <@testLValueClass> -> <i32>
+// CHECK:    [[RLVAL:%.+]] = moore.class.property_ref %arg0[@a] : <@testLValueClass> -> <i32>
+// CHECK:    [[RVAL:%.+]] = moore.read [[RLVAL]] : <i32>
+// CHECK:    [[CONST:%.+]] = moore.constant 1 : i32
+// CHECK:    [[NEWVAL:%.+]] = moore.add [[RVAL]], [[CONST]] : i32
+// CHECK:    moore.blocking_assign [[LVAL]], [[NEWVAL]] : i32
+// CHECK:    return
+// CHECK:  }
+
+class testLValueClass;
+int a;
+function void adder;
+    a = a + 1;
+endfunction
+endclass

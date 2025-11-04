@@ -99,6 +99,37 @@ static uint64_t getTimeScaleInFemtoseconds(Context &context) {
   return scale;
 }
 
+static Value visitClassProperty(Context &context,
+                                const slang::ast::ClassPropertySymbol &expr) {
+  auto loc = context.convertLocation(expr.location);
+  auto builder = context.builder;
+
+  auto type = context.convertType(expr.getType());
+  // Get the scope's implicit this variable
+  mlir::Value instRef = context.getImplicitThisRef();
+  if (!instRef) {
+    mlir::emitError(loc) << "class property '" << expr.name
+                         << "' referenced without an implicit 'this'";
+    return {};
+  }
+
+  auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.name);
+  auto fieldTy = cast<moore::UnpackedType>(type);
+  auto fieldRefTy = moore::RefType::get(fieldTy);
+
+  moore::ClassHandleType classTy =
+      cast<moore::ClassHandleType>(instRef.getType());
+
+  auto targetClassHandle =
+      context.getAncestorClassWithProperty(classTy, expr.name);
+  auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
+                                                 false, instRef.getLoc());
+
+  Value fieldRef = moore::ClassPropertyRefOp::create(builder, loc, fieldRefTy,
+                                                     upcastRef, fieldSym);
+  return fieldRef;
+}
+
 namespace {
 /// A visitor handling expressions that can be lowered as lvalue and rvalue.
 struct ExprVisitor {
@@ -449,31 +480,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // We're reading a class property.
     if (auto *const property =
             expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
-      auto type = context.convertType(*expr.type);
-
-      // Get the scope's implicit this variable
-      mlir::Value instRef = context.getImplicitThisRef();
-      if (!instRef) {
-        mlir::emitError(loc) << "class property '" << property->name
-                             << "' referenced without an implicit 'this'";
-        return {};
-      }
-
-      auto fieldSym =
-          mlir::FlatSymbolRefAttr::get(builder.getContext(), property->name);
-      auto fieldTy = cast<moore::UnpackedType>(type);
-      auto fieldRefTy = moore::RefType::get(fieldTy);
-
-      moore::ClassHandleType classTy =
-          cast<moore::ClassHandleType>(instRef.getType());
-
-      auto targetClassHandle =
-          context.getAncestorClassWithProperty(classTy, property->name);
-      auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
-                                                     false, instRef.getLoc());
-
-      Value fieldRef = moore::ClassPropertyRefOp::create(
-          builder, loc, fieldRefTy, upcastRef, fieldSym);
+      auto fieldRef = visitClassProperty(context, *property);
       return moore::ReadOp::create(builder, loc, fieldRef).getResult();
     }
 
@@ -1827,6 +1834,11 @@ struct LvalueExprVisitor : public ExprVisitor {
     // Handle global variables.
     if (auto globalOp = context.globalVariables.lookup(&expr.symbol))
       return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+
+    if (auto *const property =
+            expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
+      return visitClassProperty(context, *property);
+    }
 
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
