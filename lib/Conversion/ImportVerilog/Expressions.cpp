@@ -429,6 +429,7 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
+    // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
       if (isa<moore::RefType>(value.getType())) {
         auto readOp = moore::ReadOp::create(builder, loc, value);
@@ -437,6 +438,12 @@ struct RvalueExprVisitor : public ExprVisitor {
         value = readOp.getResult();
       }
       return value;
+    }
+
+    // Handle global variables.
+    if (auto globalOp = context.globalVariables.lookup(&expr.symbol)) {
+      auto value = moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+      return moore::ReadOp::create(builder, loc, value);
     }
 
     // We're reading a class property.
@@ -1813,8 +1820,14 @@ struct LvalueExprVisitor : public ExprVisitor {
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
+    // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
+
+    // Handle global variables.
+    if (auto globalOp = context.globalVariables.lookup(&expr.symbol))
+      return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
@@ -1823,8 +1836,13 @@ struct LvalueExprVisitor : public ExprVisitor {
 
   // Handle hierarchical values, such as `Top.sub.var = x`.
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
+
+    // Handle global variables.
+    if (auto globalOp = context.globalVariables.lookup(&expr.symbol))
+      return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
 
     // Emit an error for those hierarchical values not recorded in the
     // `valueSymbols`.

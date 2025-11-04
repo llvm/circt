@@ -325,6 +325,50 @@ def ReadOp : MooreOp<"read", [
   }];
 }
 
+def GlobalVariableOp : MooreOp<"global_variable", [
+  IsolatedFromAbove,
+  NoRegionArguments,
+  SingleBlock,
+  Symbol,
+]> {
+  let summary = "A global variable declaration";
+  let description = [{
+    Defines a global or package variable.
+
+    See IEEE 1800-2017 § 6.8 "Variable declarations".
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<UnpackedType>:$type
+  );
+  let regions = (region MaxSizedRegion<1>:$initRegion);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` $type (`init` $initRegion^)?
+  }];
+  let hasRegionVerifier = 1;
+  let extraClassDeclaration = [{
+    Block *getInitBlock();
+  }];
+}
+
+def GetGlobalVariableOp : MooreOp<"get_global_variable", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  Pure,
+]> {
+  let summary = "Get a reference to a global variable";
+  let arguments = (ins FlatSymbolRefAttr:$global_name);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $global_name attr-dict `:` type($result)
+  }];
+  let builders = [
+    OpBuilder<(ins "moore::GlobalVariableOp":$global), [{
+      build($_builder, $_state,
+        RefType::get(global.getType()), global.getSymName());
+    }]>,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // Assignments
 //===----------------------------------------------------------------------===//
@@ -1778,7 +1822,7 @@ def ConditionalOp : MooreOp<"conditional",[
 def YieldOp : MooreOp<"yield", [
   Pure,
   Terminator,
-  HasParent<"ConditionalOp">
+  ParentOneOf<["ConditionalOp", "GlobalVariableOp"]>,
 ]> {
   let summary = "conditional yield and termination operation";
   let description = [{
