@@ -24,6 +24,7 @@
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/CombToSynth.h"
 #include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/ConvertToLLVM.h"
 #include "circt/Conversion/DCToHW.h"
 #include "circt/Conversion/DatapathToComb.h"
 #include "circt/Conversion/DatapathToSMT.h"
