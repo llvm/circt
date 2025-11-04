@@ -1671,8 +1671,18 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
     builder.setInsertionPoint(it->second);
 
   auto symName = fullyQualifiedClassName(*this, cls);
-  auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
 
+  // Force build of base here.
+  if (const auto *maybeBaseClass = cls.getBaseClass())
+    if (const auto *baseClass = maybeBaseClass->as_if<slang::ast::ClassType>())
+      if (!classes.contains(baseClass) &&
+          failed(convertClassDeclaration(*baseClass))) {
+        mlir::emitError(loc) << "Failed to convert base class "
+                             << baseClass->name << " of class " << cls.name;
+        return {};
+      }
+
+  auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
   auto classDeclOp =
       moore::ClassDeclOp::create(builder, loc, symName, base, impls);
 
@@ -1693,6 +1703,10 @@ Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
   timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
   auto timeScaleGuard =
       llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
+  // Check if there already is a declaration for this class.
+  if (classes.contains(&classdecl))
+    return success();
 
   auto *lowering = declareClass(classdecl);
   if (failed(ClassDeclVisitor(*this, *lowering).run(classdecl)))

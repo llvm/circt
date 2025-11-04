@@ -580,3 +580,15 @@ function void adder;
     a = a + 1;
 endfunction
 endclass
+
+/// Check that inheritance is enforced over specialized classes
+
+// CHECK-LABEL:  moore.class.classdecl @GenericBar {
+// CHECK:  }
+// CHECK:  moore.class.classdecl @SpecializedFoo extends @GenericBar {
+// CHECK:  }
+
+class GenericBar #(int X=0, int Y=1, int Z=2); endclass
+localparam x=3, y=4, z=5;
+
+class SpecializedFoo extends GenericBar #(x,y,z); endclass
