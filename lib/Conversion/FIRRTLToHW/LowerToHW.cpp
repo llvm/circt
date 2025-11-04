@@ -1257,7 +1257,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
         outputFileAttr, /*per_port_attrs=*/nullptr, /*port_locs=*/nullptr,
         parameters,
         additionalFiles.empty() ? nullptr
-                                : builder.getArrayAttr(additionalFiles));
+                                : builder.getArrayAttr(additionalFiles),
+        verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
 
     SymbolTable::setSymbolVisibility(
         verbatimModule, SymbolTable::getSymbolVisibility(oldModule));

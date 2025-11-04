@@ -230,7 +230,8 @@ def SVVerbatimModuleOp
       OutputFileAttr:$output_file, OptionalAttr<DictArrayAttr>:$per_port_attrs,
       OptionalAttr<LocationArrayAttr>:$port_locs,
       ParamDeclArrayAttr:$parameters,
-      OptionalAttr<SymbolRefArrayAttr>:$additional_files);
+      OptionalAttr<SymbolRefArrayAttr>:$additional_files,
+      OptionalAttr<StrAttr>:$verilogName);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -243,6 +244,12 @@ def SVVerbatimModuleOp
     StringRef getName() {
       return getNameAttr().getValue();
     }
+
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
+
+    StringAttr getVerilogModuleNameAttr();
 
     Attribute getPortAttrs(size_t idx);
     void setPortAttrs(size_t idx, Attribute attrs);

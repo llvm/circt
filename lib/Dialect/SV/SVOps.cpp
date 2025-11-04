@@ -2250,6 +2250,14 @@ SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+StringAttr SVVerbatimModuleOp::getVerilogModuleNameAttr() {
+  if (auto vName = getVerilogNameAttr()) {
+    return vName;
+  }
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
+}
+
 //===----------------------------------------------------------------------===//
 // BindInterfaceOp
 //===----------------------------------------------------------------------===//
