@@ -1227,10 +1227,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 
         auto fileSymbolName =
             circuitNamespace.newName(fileName.getValue().str());
-        auto emitFile = builder.create<emit::FileOp>(
-            oldModule.getLoc(), fileOutputFile.getValue(), fileSymbolName);
+        auto emitFile =
+            emit::FileOp::create(builder, oldModule.getLoc(),
+                                 fileOutputFile.getValue(), fileSymbolName);
         builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
-        builder.create<emit::VerbatimOp>(oldModule.getLoc(), fileContent);
+        emit::VerbatimOp::create(builder, oldModule.getLoc(), fileContent);
         builder.setInsertionPointAfter(emitFile);
 
         auto ext = llvm::sys::path::extension(fileName.getValue());
@@ -1252,10 +1253,10 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     if (!parameters)
       parameters = builder.getArrayAttr({});
 
-    auto verbatimModule = builder.create<sv::SVVerbatimModuleOp>(
-        oldModule.getLoc(), nameAttr, TypeAttr::get(moduleType), content,
-        outputFileAttr, /*per_port_attrs=*/nullptr, /*port_locs=*/nullptr,
-        parameters,
+    auto verbatimModule = sv::SVVerbatimModuleOp::create(
+        builder, oldModule.getLoc(), nameAttr, TypeAttr::get(moduleType),
+        content, outputFileAttr, /*per_port_attrs=*/nullptr,
+        /*port_locs=*/nullptr, parameters,
         additionalFiles.empty() ? nullptr
                                 : builder.getArrayAttr(additionalFiles),
         verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
