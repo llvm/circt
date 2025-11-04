@@ -86,8 +86,8 @@ public:
 
   struct Hash;
 
-  bool operator==(const Zero&) const; 
-  bool operator!=(const Zero&) const; 
+  bool operator==(const Zero &) const;
+  bool operator!=(const Zero &) const;
 
 private:
   /// A pointer to the value which created this.
