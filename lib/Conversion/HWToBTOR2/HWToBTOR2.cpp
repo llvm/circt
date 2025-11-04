@@ -274,12 +274,6 @@ private:
   // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
-    if (binop->getNumOperands() != 2) {
-      binop->emitError(
-          "only the binary form of this operation is currently supported");
-      return;
-    }
-
     // Set the LID for this operation
     size_t opLID = getOpLID(binop);
 
@@ -301,7 +295,11 @@ private:
     auto operands = op->getOperands();
     size_t sid = sortToLIDMap.at(width);
 
-    // No need to consider 0-operand case as it'll be rejected by the verifier
+    if (operands.size() == 0) {
+      op->emitError("variadic operations with no operands are not supported");
+      return;
+    }
+
     // If there's only one operand, then we don't generate a BTOR2 instruction,
     // we just reuse the operand's existing LID
     if (operands.size() == 1) {
@@ -313,25 +311,31 @@ private:
       return;
     }
 
-    // TODO: this excludes concat, which requires special handling for result
-    // sorts
-    if (!op->hasTrait<mlir::OpTrait::SameOperandsAndResultType>()) {
-      op->emitError(
-          "variadic operations with differing operand and result types are "
-          "not currently supported");
-      return;
-    }
+    // Special case for concat since intermediate results need different sorts
+    auto isConcat = isa<comb::ConcatOp>(op);
 
     // Unroll variadic op into series of binary ops
     // This will represent the previous operand in the chain:
     auto prevOperandLID = getOpLID(operands[0]);
 
+    // Track the current width so we can work out new types if this is a concat
+    auto currentWidth = operands[0].getType().getIntOrFloatBitWidth();
+
     for (auto operand : operands.drop_front()) {
       // Manually increment lid since we need multiple per op
+
+      if (isConcat) {
+        // For concat, the sort width increases with each operand
+        currentWidth += operand.getType().getIntOrFloatBitWidth();
+        // Ensure that the sort exists
+        genSort("bitvec", currentWidth);
+      }
+
       auto thisLid = lid++;
       auto thisOperandLID = getOpLID(operand);
-      os << thisLid << " " << inst << " " << sid << " " << prevOperandLID << " "
-         << thisOperandLID << "\n";
+      os << thisLid << " " << inst << " "
+         << (isConcat ? sortToLIDMap.at(currentWidth) : sid) << " "
+         << prevOperandLID << " " << thisOperandLID << "\n";
       prevOperandLID = thisLid;
     }
 
@@ -734,7 +738,7 @@ public:
   void visitComb(comb::AndOp op) { visitVariadicOp(op, "and"); }
   void visitComb(comb::OrOp op) { visitVariadicOp(op, "or"); }
   void visitComb(comb::XorOp op) { visitVariadicOp(op, "xor"); }
-  void visitComb(comb::ConcatOp op) { visitBinOp(op, "concat"); }
+  void visitComb(comb::ConcatOp op) { visitVariadicOp(op, "concat"); }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one
   // manner

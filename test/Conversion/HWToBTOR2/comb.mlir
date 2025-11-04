@@ -60,6 +60,12 @@ module {
     %11 = comb.and %10 : i32
     %12 = comb.and %a, %11 : i32
 
+    // CHECK: [[NID20:[0-9]+]] sort bitvec 96
+    // CHECK: [[NID21:[0-9]+]] sort bitvec 64
+    // CHECK: [[NID22:[0-9]+]] concat [[NID21]] 2 2
+    // CHECK: [[NID23:[0-9]+]] concat [[NID20]] [[NID22]] 2
+    %13 = comb.concat %a, %a, %a : i32, i32, i32
+
     // CHECK:   [[ASSERTNID1:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
     // CHECK:   [[ASSERTNID2:[0-9]+]] not [[NID3]] [[ASSERTNID1]]
     // CHECK:   [[ASSERTNID3:[0-9]+]] bad [[ASSERTNID2:[0-9]+]]
