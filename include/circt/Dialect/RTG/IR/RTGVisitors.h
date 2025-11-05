@@ -64,7 +64,7 @@ public:
             // Memory Blocks
             MemoryBlockDeclareOp,
             // Misc ops
-            CommentOp>([&](auto expr) -> ResultType {
+            CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -126,6 +126,7 @@ public:
   HANDLE(TupleCreateOp, Unhandled);
   HANDLE(TupleExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);
+  HANDLE(ConstraintOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);

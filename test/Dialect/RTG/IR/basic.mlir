@@ -258,3 +258,11 @@ rtg.test @testReportOps() {
   // CHECK-NEXT: rtg.test.failure "error message"
   rtg.test.failure "error message"
 }
+
+// CHECK-LABEL: rtg.test @testConstraints
+rtg.test @testConstraints() {
+  // CHECK-NEXT: [[V0:%.+]] = index.bool.constant true
+  // CHECK-NEXT: rtg.constraint [[V0]]
+  %0 = index.bool.constant 1
+  rtg.constraint %0
+}
