@@ -654,6 +654,24 @@ def CommentOp : RTGOp<"comment", []> {
   let assemblyFormat = "$comment attr-dict";
 }
 
+def ConstraintOp : RTGOp<"constraint", []> {
+  let summary = "enforce a constraint";
+  let description = [{
+    This operation enforces a constraint. This allows to specify additional
+    constraints on values after their construction. It should be avoided when
+    possible as these backward constraints are computationally more expensive.
+    
+    Constraints should be tried to be solved such that all of them evaluate to
+    'true'. If the constraint system turns out to be unsolvable, the compiler
+    should error out gracefully as early as possible (it might also error out
+    when the system is too expensive to solve).
+  }];
+
+  let arguments = (ins I1:$condition);
+
+  let assemblyFormat = "$condition attr-dict";
+}
+
 //===- ISA Register Handling Operations -----------------------------------===//
 
 def FixedRegisterOp : RTGOp<"fixed_reg", [
