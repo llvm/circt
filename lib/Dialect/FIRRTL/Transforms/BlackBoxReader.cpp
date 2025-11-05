@@ -28,6 +28,7 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -178,7 +179,7 @@ void BlackBoxReaderPass::runOnOperation() {
       builder.getDictionaryAttr({{builder.getStringAttr("class"),
                                   builder.getStringAttr(blackBoxAnnoClass)}});
   // Track which modules reference which files
-  DenseMap<Operation *, SmallVector<StringAttr>> verbatimExtmoduleToFile;
+  llvm::MapVector<Operation *, SmallVector<StringAttr>> verbatimExtmoduleToFile;
 
   for (auto extmoduleOp : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
     LLVM_DEBUG({
