@@ -722,7 +722,8 @@ rtg.test @memoryBlockTest(mem_block = %arg0: !rtg.isa.memory_block<32>) {
   %0 = rtg.isa.memory_alloc %arg0, %idx8, %idx4 : !rtg.isa.memory_block<32>
   func.call @dummy14(%0) : (!rtg.isa.memory<32>) -> ()
 
-  // CHECK-NEXT: func.call @dummy2([[IDX8]])
+  // CHECK-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32> 
+  // CHECK-NEXT: func.call @dummy2([[SIZE]])
   %1 = rtg.isa.memory_size %0 : !rtg.isa.memory<32> 
   func.call @dummy2(%1) : (index) -> ()
 
@@ -823,6 +824,14 @@ rtg.test @setEquivalence(singleton = %none: index) {
   func.call @dummy11(%set2) : (!rtg.set<index>) -> ()
 }
 
+// CHECK-LABEL: @untypedAttributes
+rtg.test @untypedAttributes(singleton = %none: index) {
+  // CHECK-NEXT: [[V0:%.+]] = rtgtest.constant_test index {value = [10 : index]}
+  %0 = rtgtest.constant_test index {value = [10 : index]}
+  // CHECK-NEXT: func.call @dummy2([[V0]])
+  func.call @dummy2(%0) : (index) -> ()
+}
+
 // -----
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
@@ -833,18 +842,6 @@ rtg.target @singletonTarget : !rtg.dict<singleton: index> {
 rtg.test @nestedRegionsNotSupported(singleton = %none: index) {
   // expected-error @below {{ops with nested regions must be elaborated away}}
   scf.execute_region { scf.yield }
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-rtg.test @untypedAttributes(singleton = %none: index) {
-  // expected-error @below {{only typed attributes supported for constant-like operations}}
-  %0 = rtgtest.constant_test index {value = [10 : index]}
 }
 
 // -----
