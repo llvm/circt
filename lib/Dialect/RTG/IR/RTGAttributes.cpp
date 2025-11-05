@@ -16,6 +16,104 @@ using namespace circt;
 using namespace rtg;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+namespace llvm {
+template <typename T>
+// NOLINTNEXTLINE(readability-identifier-naming)
+llvm::hash_code hash_value(const DenseSet<T> &set) {
+  // TODO: improve collision resistance
+  unsigned hash = 0;
+  for (auto element : set)
+    hash ^= element;
+  return hash;
+}
+} // namespace llvm
+
+//===----------------------------------------------------------------------===//
+// SetAttr
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SetAttr::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                rtg::SetType type, const DenseSet<TypedAttr> *elements) {
+
+  // check that all elements have the right type
+  // iterating over the set is fine here because the iteration order is not
+  // visible to the outside (it would not be fine to print the earliest invalid
+  // element)
+  if (!llvm::all_of(*elements, [&](auto element) {
+        return element.getType() == type.getElementType();
+      })) {
+    return emitError() << "all elements must be of the set element type "
+                       << type.getElementType();
+  }
+
+  return success();
+}
+
+Attribute SetAttr::parse(AsmParser &odsParser, Type odsType) {
+  DenseSet<TypedAttr> elements;
+  Type elementType;
+  if (odsParser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                        [&]() {
+                                          TypedAttr element;
+                                          if (odsParser.parseAttribute(element))
+                                            return failure();
+                                          elements.insert(element);
+                                          elementType = element.getType();
+                                          return success();
+                                        }))
+    return {};
+
+  auto setType = llvm::dyn_cast_or_null<SetType>(odsType);
+  if (odsType && !setType) {
+    odsParser.emitError(odsParser.getNameLoc())
+        << "type must be a an '!rtg.set' type";
+    return {};
+  }
+
+  if (!setType && elements.empty()) {
+    odsParser.emitError(odsParser.getNameLoc())
+        << "type must be explicitly provided: cannot infer set element type "
+           "from empty set";
+    return {};
+  }
+
+  if (!setType && !elements.empty())
+    setType = SetType::get(elementType);
+
+  return SetAttr::getChecked(
+      odsParser.getEncodedSourceLoc(odsParser.getNameLoc()),
+      odsParser.getContext(), setType, &elements);
+}
+
+void SetAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  // Sort elements lexicographically by their printed string representation
+  SmallVector<std::string> sortedElements;
+  for (auto element : *getElements()) {
+    std::string &elementStr = sortedElements.emplace_back();
+    llvm::raw_string_ostream elementOS(elementStr);
+    element.print(elementOS);
+  }
+  llvm::sort(sortedElements);
+  llvm::interleaveComma(sortedElements, odsPrinter);
+  odsPrinter << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// TupleAttr
+//===----------------------------------------------------------------------===//
+
+Type TupleAttr::getType() const {
+  SmallVector<Type> elementTypes(llvm::map_range(
+      getElements(), [](auto element) { return element.getType(); }));
+  return TupleType::get(getContext(), elementTypes);
+}
+
+//===----------------------------------------------------------------------===//
 // ImmediateAttr
 //===----------------------------------------------------------------------===//
 
