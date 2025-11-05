@@ -2225,17 +2225,10 @@ LogicalResult SVVerbatimModuleOp::verify() {
 LogicalResult
 SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (auto additionalFiles = getAdditionalFiles()) {
-    auto *symtable = SymbolTable::getNearestSymbolTable(*this);
-    if (!symtable)
-      return emitError("sv.verbatim.module must exist within a region "
-                       "which has a symbol table.");
-
     for (auto fileRef : *additionalFiles) {
       auto symbolRef = llvm::cast<SymbolRefAttr>(fileRef);
-      auto *referencedOp = symbolTable.lookupSymbolIn(symtable, symbolRef);
-      if (!referencedOp)
-        return emitError("Symbol not found: ") << symbolRef << ".";
-
+      auto *referencedOp =
+          symbolTable.lookupNearestSymbolFrom(getOperation(), symbolRef);
       if (!isa<circt::emit::FileOp>(referencedOp))
         return emitError("Symbol ")
                << symbolRef << " is not an emit.file operation.";
