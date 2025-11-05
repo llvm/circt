@@ -408,8 +408,8 @@ class BundlePort:
       return super().__new__(CallbackPort)
     if isinstance(cpp_port, cpp.MMIORegion):
       return super().__new__(MMIORegion)
-    if isinstance(cpp_port, cpp.Telemetry):
-      return super().__new__(TelemetryPort)
+    if isinstance(cpp_port, cpp.Metric):
+      return super().__new__(MetricPort)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -545,7 +545,7 @@ class CallbackPort(BundlePort):
     self.connected = True
 
 
-class TelemetryPort(BundlePort):
+class MetricPort(BundlePort):
   """Telemetry ports report an individual piece of information from the
   acceelerator. The method of accessing telemetry will likely change in the
   future."""

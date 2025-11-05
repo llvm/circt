@@ -86,13 +86,6 @@ public:
   /// Disconnect from the accelerator cleanly.
   virtual void disconnect();
 
-  // While building the design, keep around a std::map of active services
-  // indexed by the service name. When a new service is encountered during
-  // descent, add it to the table (perhaps overwriting one). Modifications to
-  // the table only apply to the current branch, so copy this and update it at
-  // each level of the tree.
-  using ServiceTable = std::map<std::string, services::Service *>;
-
   /// Return a pointer to the accelerator 'service' thread (or threads). If the
   /// thread(s) are not running, they will be started when this method is
   /// called. `std::thread` is used. If users don't want the runtime to spin up
