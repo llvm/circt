@@ -705,7 +705,7 @@ def VirtualRegisterOp : RTGOp<"virtual_reg", [
 
   // ArrayAttr of RegisterAttrInterfaces
   let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
-  let results = (outs RegisterTypeInterface:$result);
+  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
 
   let assemblyFormat = "$allowedRegs attr-dict";
 }
@@ -967,7 +967,7 @@ def MemoryBlockDeclareOp : RTGISAOp<"memory_block_declare", [
   }];
 
   let arguments = (ins APIntAttr:$baseAddress, APIntAttr:$endAddress);
-  let results = (outs MemoryBlockType:$result);
+  let results = (outs Res<MemoryBlockType, "", [MemAlloc]>:$result);
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -992,7 +992,7 @@ def MemoryAllocOp : RTGISAOp<"memory_alloc", [
                        Index:$size,
                        Index:$alignment);
 
-  let results = (outs MemoryType:$result);
+  let results = (outs Res<MemoryType, "", [MemAlloc]>:$result);
 
   let assemblyFormat = [{
     $memoryBlock `,` $size `,` $alignment
