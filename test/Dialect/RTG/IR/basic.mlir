@@ -15,6 +15,24 @@ rtg.test @constants() {
 
   // CHECK-NEXT: rtg.isa.space [[V0]]
   rtg.isa.space %1
+
+  // CHECK-NEXT: rtg.constant #rtg.set<> : !rtg.set<i32>
+  rtg.constant #rtg.set<> : !rtg.set<i32>
+
+  // Test that set elements are printed in lexicographic order
+  // CHECK-NEXT: rtg.constant #rtg.set<#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg> : !rtg.set<!rtgtest.ireg>
+  rtg.constant #rtg.set<#rtgtest.a1, #rtgtest.a0, #rtgtest.a2> : !rtg.set<!rtgtest.ireg>
+
+  // Test set type inference 
+  // CHECK-NEXT: rtg.constant #rtg.set<0 : i32, 1 : i32, 2 : i32> : !rtg.set<i32>
+  rtg.constant #rtg.set<1 : i32, 0 : i32, 2 : i32>
+
+  // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
+  rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
+
+  // Test set type inference 
+  // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
+  rtg.constant #rtg.tuple<0 : i32, 1 : index>
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
