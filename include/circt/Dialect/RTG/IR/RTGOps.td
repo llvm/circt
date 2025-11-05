@@ -210,11 +210,15 @@ class LabelDeclBase<string mnemonic,
 def LabelDeclOp : LabelDeclBase<"label_decl", [Pure]> {
   let summary = "declares a label for an instruction sequence";
   let results = (outs LabelType:$label);
+
+  let hasFolder = 1;
 }
 
 def LabelUniqueDeclOp : LabelDeclBase<"label_unique_decl", []> {
   let summary = "declares a unique label for an instruction sequence";
   let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
+
+  let hasFolder = 1;
 }
 
 def LabelVisibilityAttr : I32EnumAttr<"LabelVisibility",
