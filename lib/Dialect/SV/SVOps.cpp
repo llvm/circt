@@ -2159,23 +2159,21 @@ ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
     result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
 
   // parse verbatim content
-  if (!result.attributes.get("content")) {
+  if (!result.attributes.get("content"))
     return parser.emitError(parser.getCurrentLocation(),
                             "sv.verbatim.module requires 'content' attribute");
-  }
 
   // parse output file
   auto outputFileAttr = result.attributes.get("output_file");
-  if (!outputFileAttr) {
+  if (!outputFileAttr)
     return parser.emitError(
         parser.getCurrentLocation(),
         "sv.verbatim.module requires 'output_file' attribute");
-  }
-  if (!isa<hw::OutputFileAttr>(outputFileAttr)) {
+
+  if (!isa<hw::OutputFileAttr>(outputFileAttr))
     return parser.emitError(
         parser.getCurrentLocation(),
         "sv.verbatim.module 'output_file' attribute must be an OutputFileAttr");
-  }
 
   return success();
 }
@@ -2196,14 +2194,11 @@ void SVVerbatimModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
 }
 
 LogicalResult SVVerbatimModuleOp::verify() {
-  auto moduleType = getModuleType();
-  if (!moduleType)
-    return emitOpError("missing module type");
-
   // must have verbatim content
   if (getContent().empty())
     return emitOpError("missing or empty content attribute");
 
+  auto moduleType = getModuleType();
   auto numPorts = moduleType.getNumPorts();
 
   if (auto attrs = getPerPortAttrs()) {

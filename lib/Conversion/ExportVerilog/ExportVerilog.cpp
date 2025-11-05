@@ -196,8 +196,8 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   return TypeSwitch<Operation *, StringRef>(symOp)
       .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, FuncOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
-      .Case<sv::SVVerbatimModuleOp>(
-          [](sv::SVVerbatimModuleOp op) { return op.getVerilogModuleName(); })
+      .Case<SVVerbatimModuleOp>(
+          [](SVVerbatimModuleOp op) { return op.getVerilogModuleName(); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
