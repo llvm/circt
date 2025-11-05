@@ -988,6 +988,119 @@ OpFoldResult StringToLabelOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// SetCreateOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SetCreateOp::fold(FoldAdaptor adaptor) {
+  DenseSet<TypedAttr> elements;
+  for (auto attr : adaptor.getElements()) {
+    auto typedAttr = dyn_cast_or_null<TypedAttr>(attr);
+    if (!typedAttr)
+      return {};
+
+    elements.insert(typedAttr);
+  }
+
+  return SetAttr::get(getType(), &elements);
+}
+
+//===----------------------------------------------------------------------===//
+// SetSizeOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SetSizeOp::fold(FoldAdaptor adaptor) {
+  auto setAttr = dyn_cast_or_null<SetAttr>(adaptor.getSet());
+  if (!setAttr)
+    return {};
+
+  return IntegerAttr::get(IndexType::get(getContext()),
+                          setAttr.getElements()->size());
+}
+
+//===----------------------------------------------------------------------===//
+// SetUnionOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SetUnionOp::fold(FoldAdaptor adaptor) {
+  // Fast track to make sure we're not computing the union of all sets but the
+  // last of the variadic operands is NULL.
+  if (llvm::any_of(adaptor.getSets(), [&](Attribute attr) { return !attr; }))
+    return {};
+
+  DenseSet<TypedAttr> res;
+  for (auto set : adaptor.getSets()) {
+    auto setAttr = dyn_cast<SetAttr>(set);
+    if (!set)
+      return {};
+
+    for (auto element : *setAttr.getElements())
+      res.insert(element);
+  }
+
+  return SetAttr::get(getType(), &res);
+}
+
+//===----------------------------------------------------------------------===//
+// SetDifferenceOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SetDifferenceOp::fold(FoldAdaptor adaptor) {
+  auto original = dyn_cast_or_null<SetAttr>(adaptor.getOriginal());
+  auto diff = dyn_cast_or_null<SetAttr>(adaptor.getDiff());
+  if (!original || !diff)
+    return {};
+
+  DenseSet<TypedAttr> res(*original.getElements());
+  for (auto element : *diff.getElements())
+    res.erase(element);
+
+  return SetAttr::get(getType(), &res);
+}
+
+//===----------------------------------------------------------------------===//
+// SetCartesianProductOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SetCartesianProductOp::fold(FoldAdaptor adaptor) {
+  // Fast track to make sure we're not computing the product of all sets but the
+  // last of the variadic operands is NULL.
+  if (llvm::any_of(adaptor.getInputs(), [&](Attribute attr) { return !attr; }))
+    return {};
+
+  DenseSet<TypedAttr> res;
+  SmallVector<SmallVector<TypedAttr>> tuples;
+  tuples.push_back({});
+
+  for (auto input : adaptor.getInputs()) {
+    auto setAttr = dyn_cast<SetAttr>(input);
+    if (!setAttr)
+      return {};
+
+    DenseSet<TypedAttr> set(*setAttr.getElements());
+    if (set.empty()) {
+      DenseSet<TypedAttr> empty;
+      return SetAttr::get(getType(), &empty);
+    }
+
+    for (unsigned i = 0, e = tuples.size(); i < e; ++i) {
+      for (auto [k, el] : llvm::enumerate(set)) {
+        if (k == set.size() - 1) {
+          tuples[i].push_back(el);
+          continue;
+        }
+        tuples.push_back(tuples[i]);
+        tuples.back().push_back(el);
+      }
+    }
+  }
+
+  for (auto &tup : tuples)
+    res.insert(TupleAttr::get(getContext(), tup));
+
+  return SetAttr::get(getType(), &res);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
