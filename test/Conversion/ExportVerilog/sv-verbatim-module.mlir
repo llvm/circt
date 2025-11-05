@@ -1,16 +1,16 @@
 // RUN: circt-opt -export-verilog %s | FileCheck %s
 
-sv.verbatim.module @SimpleVerbatimModule(in %a : i1, out b : i1) {
+sv.verbatim.module @SimpleVerbatimModule(in %a : i1, out b : i1) attributes {
   content = "module SimpleVerbatimModule(\n  input  a,\n  output b\n);\n  // Simple verbatim content\n  assign b = a;\nendmodule",
   output_file = #hw.output_file<"simple.v">
 }
 
-sv.verbatim.module @ParameterizedVerbatimModule<WIDTH: i32 = 8>(in %data_in : !hw.int<#hw.param.decl.ref<"WIDTH">>, out data_out : !hw.int<#hw.param.decl.ref<"WIDTH">>) {
+sv.verbatim.module @ParameterizedVerbatimModule<WIDTH: i32 = 8>(in %data_in : !hw.int<#hw.param.decl.ref<"WIDTH">>, out data_out : !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {
   content = "module ParameterizedVerbatimModule #(\n  parameter WIDTH = 8\n) (\n  input  [WIDTH-1:0] data_in,\n  output [WIDTH-1:0] data_out\n);\n  // Parameterized verbatim content\n  assign data_out = data_in;\nendmodule",
   output_file = #hw.output_file<"param.v">
 }
 
-sv.verbatim.module @NoPortsVerbatimModule() {
+sv.verbatim.module @NoPortsVerbatimModule() attributes {
   content = "module NoPortsVerbatimModule();\n  // No ports verbatim content\n  initial begin\n    $display(\"Hello from verbatim module\");\n  end\nendmodule",
   output_file = #hw.output_file<"no_ports.v">
 }

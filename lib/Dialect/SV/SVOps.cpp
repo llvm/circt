@@ -2134,7 +2134,7 @@ ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
           hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
     return failure();
 
-  if (failed(parser.parseOptionalAttrDict(result.attributes)))
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
   result.addAttribute("module_type", modType);
