@@ -392,6 +392,7 @@ std::future<MessageData> TelemetryService::Metric::read() {
 uint64_t TelemetryService::Metric::readInt() {
   assert(offset.has_value() &&
          "Telemetry offset must be set. Checked in connect().");
+  assert(mmio && "TelemetryService: MMIO region not set");
   return mmio->read(*offset);
 }
 

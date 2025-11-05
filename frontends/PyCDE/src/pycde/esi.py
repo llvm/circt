@@ -4,7 +4,7 @@
 
 from .common import (AppID, Clock, Input, InputChannel, Output, OutputChannel,
                      _PyProxy, PortError, Reset)
-from .constructs import AssignableSignal, Mux, NamedWire, Wire
+from .constructs import AssignableSignal, Mux, Wire
 from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
@@ -932,7 +932,7 @@ Telemetry = _Telemetry()
 class TelemetryMMIO(ServiceImplementation):
   """An ESI service implementation which provides telemetry data through an MMIO
   region. Each client request is assigned a register in the MMIO space. When a
-  read request is recieved for the assigned address, it gets routed to the
+  read request is received for the assigned address, it gets routed to the
   assigned client. When a write request is received, it is discarded. The
   assignment table is stored in the manifest."""
 
