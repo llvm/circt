@@ -299,6 +299,7 @@ def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def SetSelectRandomOp : RTGOp<"set_select_random", [
@@ -332,6 +333,8 @@ def SetDifferenceOp : RTGOp<"set_difference", [
   let assemblyFormat = [{
     $original `,` $diff `:` qualified(type($output)) attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def SetUnionOp : RTGOp<"set_union", [
@@ -349,6 +352,8 @@ def SetUnionOp : RTGOp<"set_union", [
   let assemblyFormat = [{
     $sets `:` qualified(type($result)) attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def SetSizeOp : RTGOp<"set_size", [Pure]> {
@@ -360,6 +365,8 @@ def SetSizeOp : RTGOp<"set_size", [Pure]> {
   let assemblyFormat = [{
     $set `:` qualified(type($set)) attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def SetCartesianProductOp : RTGOp<"set_cartesian_product", [
@@ -391,6 +398,8 @@ def SetCartesianProductOp : RTGOp<"set_cartesian_product", [
   let results = (outs SetType:$result);
 
   let assemblyFormat = "$inputs `:` qualified(type($inputs)) attr-dict";
+
+  let hasFolder = 1;
 }
 
 def SetConvertToBagOp : RTGOp<"set_convert_to_bag", [
