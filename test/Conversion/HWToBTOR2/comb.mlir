@@ -66,6 +66,17 @@ module {
     // CHECK: [[NID23:[0-9]+]] concat [[NID20]] [[NID22]] 2
     %13 = comb.concat %a, %a, %a : i32, i32, i32
 
+    // CHECK: [[NID24:[0-9]+]] concat [[NID21]] 2 2
+    // CHECK: [[NID25:[0-9]+]] concat [[NID20]] [[NID24]] 2
+    // CHECK: [[NID26:[0-9]+]] sort bitvec 128
+    // CHECK: [[NID27:[0-9]+]] concat [[NID26]] [[NID25]] 2
+    %14 = comb.replicate %a : (i32) -> i128
+
+    // Make sure that replicating one time forwards to the original value
+    // CHECK: [[NID28:[0-9]+]] add [[NID0]] 2 2
+    %15 = comb.replicate %a : (i32) -> i32
+    %16 = comb.add %a, %15 : i32
+
     // CHECK:   [[ASSERTNID1:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
     // CHECK:   [[ASSERTNID2:[0-9]+]] not [[NID3]] [[ASSERTNID1]]
     // CHECK:   [[ASSERTNID3:[0-9]+]] bad [[ASSERTNID2:[0-9]+]]
