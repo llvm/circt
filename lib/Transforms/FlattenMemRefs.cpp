@@ -441,7 +441,7 @@ public:
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);
     mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
-                                                           patterns, target);
+                                                             patterns, target);
 
     if (applyPartialConversion(getOperation(), target, std::move(patterns))
             .failed()) {
