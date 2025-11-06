@@ -1493,6 +1493,10 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType) {
+      op.emitError("conversion result type is not currently supported");
+      return failure();
+    }
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
     if (inputBw == -1 || resultBw == -1)
