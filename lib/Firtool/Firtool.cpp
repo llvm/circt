@@ -49,9 +49,9 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
-  if (auto mode = toInferDomainsPassMode(opt.getDomainMode())) {
+  if (auto mode = toInferDomainsPassMode(opt.getDomainMode()))
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
-  }
+
   return success();
 }
 
