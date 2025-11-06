@@ -2512,4 +2512,25 @@ def StringLenOp : StringBuiltin<"len"> {
   let assemblyFormat = "$str attr-dict";
 }
 
+def StringToUpperOp : StringBuiltin<"toupper"> {
+  let summary = "Convert a string to uppercase";
+  let description = [{
+    Converts all characters in the given string to uppercase.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringToLowerOp : StringBuiltin<"tolower"> {
+  let summary = "Convert a string to lowercase";
+  let description = [{
+    Converts all characters in the given string to lowercase.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

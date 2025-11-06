@@ -8,6 +8,7 @@
 function void dummyA(int x); endfunction
 function void dummyB(real x); endfunction
 function void dummyC(shortreal x); endfunction
+function void dummyD(string x); endfunction
 
 // IEEE 1800-2017 § 20.2 "Simulation control system tasks"
 // CHECK-LABEL: func.func private @SimulationControlBuiltins(
@@ -388,4 +389,8 @@ endmodule
 function void StringBuiltins(string string_in);
   // CHECK: [[LEN:%.+]] = moore.string.len [[STR]]
   dummyA(string_in.len());
+  // CHECK: [[LEN:%.+]] = moore.string.toupper [[STR]]
+  dummyD(string_in.toupper());
+  // CHECK: [[LEN:%.+]] = moore.string.tolower [[STR]]
+  dummyD(string_in.tolower());
 endfunction
