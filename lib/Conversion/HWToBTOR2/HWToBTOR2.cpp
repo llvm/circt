@@ -364,7 +364,7 @@ private:
 
   /// Generates a chain of concats to represent a replicate op
   void genReplicateAsConcats(Operation *srcop, Value op0, size_t count,
-                             uint inputWidth) {
+                             unsigned int inputWidth) {
     auto currentWidth = inputWidth;
 
     auto prevOperandLID = getOpLID(op0);
