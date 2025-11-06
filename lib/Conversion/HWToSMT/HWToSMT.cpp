@@ -48,6 +48,12 @@ struct HWConstantOpConversion : OpConversionPattern<ConstantOp> {
 struct HWModuleOpConversion : OpConversionPattern<HWModuleOp> {
   using OpConversionPattern<HWModuleOp>::OpConversionPattern;
 
+  HWModuleOpConversion(TypeConverter &converter, MLIRContext *context,
+                       bool replaceWithSolver)
+      : OpConversionPattern<HWModuleOp>::OpConversionPattern(converter,
+                                                             context),
+        replaceWithSolver(replaceWithSolver) {}
+
   LogicalResult
   matchAndRewrite(HWModuleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -59,13 +65,35 @@ struct HWModuleOpConversion : OpConversionPattern<HWModuleOp> {
       return failure();
     if (failed(rewriter.convertRegionTypes(&op.getBody(), *typeConverter)))
       return failure();
+    auto loc = op.getLoc();
+    if (replaceWithSolver) {
+      // If we're exporting to SMTLIB we need to move the module into an
+      // smt.solver op (pre-pattern checks make sure we only have one module).
+      auto solverOp = mlir::smt::SolverOp::create(rewriter, loc, {}, {});
+      auto *solverBlock = rewriter.createBlock(&solverOp.getBodyRegion());
+      // Create a new symbolic value to replace each input
+      rewriter.setInsertionPointToStart(solverBlock);
+      SmallVector<Value> symVals;
+      for (auto inputType : inputTypes) {
+        auto symVal = mlir::smt::DeclareFunOp::create(rewriter, loc, inputType);
+        symVals.push_back(symVal);
+      }
+      // Inline module body into solver op and replace args with new symbolic
+      // values
+      rewriter.inlineBlockBefore(op.getBodyBlock(), solverBlock,
+                                 solverBlock->end(), symVals);
+      rewriter.eraseOp(op);
+      return success();
+    }
     auto funcOp = mlir::func::FuncOp::create(
-        rewriter, op.getLoc(), adaptor.getSymNameAttr(),
+        rewriter, loc, adaptor.getSymNameAttr(),
         rewriter.getFunctionType(inputTypes, resultTypes));
     rewriter.inlineRegionBefore(op.getBody(), funcOp.getBody(), funcOp.end());
     rewriter.eraseOp(op);
     return success();
   }
+
+  bool replaceWithSolver;
 };
 
 /// Lower a hw::OutputOp operation to func::ReturnOp.
@@ -88,6 +116,8 @@ struct OutputOpConversion : OpConversionPattern<OutputOp> {
         Value eq = mlir::smt::EqOp::create(rewriter, loc, output, constOutput);
         mlir::smt::AssertOp::create(rewriter, loc, eq);
       }
+      rewriter.replaceOpWithNewOp<mlir::smt::YieldOp>(op);
+      return success();
     }
     rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op, adaptor.getOutputs());
     return success();
@@ -339,17 +369,39 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
 
 void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns,
-                                              bool assertModuleOutputs) {
-  patterns.add<HWConstantOpConversion, HWModuleOpConversion,
-               InstanceOpConversion, ReplaceWithInput<seq::ToClockOp>,
+                                              bool forSMTLIBExport) {
+  patterns.add<HWConstantOpConversion, InstanceOpConversion,
+               ReplaceWithInput<seq::ToClockOp>,
                ReplaceWithInput<seq::FromClockOp>, ArrayCreateOpConversion,
                ArrayGetOpConversion, ArrayInjectOpConversion>(
       converter, patterns.getContext());
-  patterns.add<OutputOpConversion>(converter, patterns.getContext(),
-                                   assertModuleOutputs);
+  patterns.add<OutputOpConversion, HWModuleOpConversion>(
+      converter, patterns.getContext(), forSMTLIBExport);
 }
 
 void ConvertHWToSMTPass::runOnOperation() {
+  if (forSMTLIBExport) {
+    auto numModules = 0;
+    auto numInstances = 0;
+    getOperation().walk([&](Operation *op) {
+      if (isa<hw::HWModuleOp>(op))
+        numModules++;
+      if (isa<hw::InstanceOp>(op))
+        numInstances++;
+    });
+    // Error out if there is any module hierarchy or multiple modules
+    // Currently there's no need as this flag is intended for SMTLIB export and
+    // we can just flatten modules
+    if (numModules > 1) {
+      getOperation()->emitError("multiple hw.module operations are not "
+                                "supported with for-smtlib-export");
+    }
+    if (numInstances > 0) {
+      getOperation()->emitError("hw.instance operations are not supported "
+                                "with for-smtlib-export");
+    }
+  }
+
   ConversionTarget target(getContext());
   target.addIllegalDialect<hw::HWDialect>();
   target.addIllegalOp<seq::FromClockOp>();
@@ -360,7 +412,7 @@ void ConvertHWToSMTPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
   populateHWToSMTTypeConverter(converter);
-  populateHWToSMTConversionPatterns(converter, patterns, assertModuleOutputs);
+  populateHWToSMTConversionPatterns(converter, patterns, forSMTLIBExport);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
