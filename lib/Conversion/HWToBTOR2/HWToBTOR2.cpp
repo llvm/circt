@@ -362,6 +362,29 @@ private:
        << lowbit << "\n";
   }
 
+  /// Generates a chain of concats to represent a replicate op
+  void genReplicateAsConcats(Operation *srcop, Value op0, size_t count,
+                             uint inputWidth) {
+    auto currentWidth = inputWidth;
+
+    auto prevOperandLID = getOpLID(op0);
+    for (size_t i = 1; i < count; ++i) {
+      currentWidth += inputWidth;
+      // Ensure that the sort exists
+      genSort("bitvec", currentWidth);
+
+      auto thisLid = lid++;
+      os << thisLid << " "
+         << "concat"
+         << " " << sortToLIDMap.at(currentWidth) << " " << prevOperandLID << " "
+         << getOpLID(op0) << "\n";
+      prevOperandLID = thisLid;
+    }
+
+    // Link LID of final instruction to original operation
+    opLIDMap[srcop] = prevOperandLID;
+  }
+
   // Generates a constant declaration given a value, a width and a name
   void genUnaryOp(Operation *srcop, Operation *op0, StringRef inst,
                   size_t width) {
@@ -798,6 +821,16 @@ public:
 
     // Generate the ite instruction
     genIte(op, pred, tval, fval, w);
+  }
+
+  // Replicate ops are expanded as a series of concats
+  void visitComb(comb::ReplicateOp op) {
+    Value op0 = op.getOperand();
+    auto count = op.getMultiple();
+    auto inputWidth = op0.getType().getIntOrFloatBitWidth();
+
+    // Generate the concat chain
+    genReplicateAsConcats(op, op0, count, inputWidth);
   }
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
