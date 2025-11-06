@@ -106,9 +106,6 @@ public:
   size_t getNumDomains() const { return domainTable.size(); }
   DomainOp getDomain(DomainTypeID id) const { return domainTable[id]; }
 
-  DomainTypeID getDomainTypeID(DomainOp op) const {
-    return typeIDTable.at(op.getNameAttr());
-  }
 
   DomainTypeID getDomainTypeID(StringAttr name) const {
     return typeIDTable.at(name);
@@ -1407,18 +1404,14 @@ struct InferDomainsPass
 } // namespace
 
 void InferDomainsPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   GlobalState globals(circuit);
   DenseSet<InstanceGraphNode *> visited;
-  for (auto *root : instanceGraph) {
-    for (auto *node : llvm::post_order_ext(root, visited)) {
-      if (failed(runOnModuleLike(mode, globals, node->getModule()))) {
-        signalPassFailure();
-        return;
-      }
-    }
-  }
-  LLVM_DEBUG(debugFooter() << "\n");
+  auto result = instanceGraph.walkPostOrder([&](auto &node) {
+    return runOnModuleLike(mode, globals, node.getModule());
+  });
+  if (failed(result))
+    signalPassFailure();
 }
