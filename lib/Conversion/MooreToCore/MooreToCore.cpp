@@ -2045,7 +2045,7 @@ static void populateLegality(ConversionTarget &target,
                                UnrealizedConversionCastOp, hw::OutputOp,
                                hw::InstanceOp, debug::ArrayOp, debug::StructOp,
                                debug::VariableOp>(
-      [&](Operation *op) { return converter.isLegal(op); }); 
+      [&](Operation *op) { return converter.isLegal(op); });
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
                                scf::WhileOp, scf::ForallOp>([&](Operation *op) {
