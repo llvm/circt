@@ -102,7 +102,8 @@ using DomainTypeID = size_t;
 /// type ID, which in this pass is the canonical way to reference the type
 /// of a domain.
 namespace {
-struct CircuitDomainInfo {
+class CircuitDomainInfo {
+public:
   CircuitDomainInfo(CircuitOp circuit) { processCircuit(circuit); }
 
   ArrayRef<DomainOp> getDomains() const { return domainTable; }
@@ -302,6 +303,7 @@ Term *find(Term *x) {
 LogicalResult unify(Term *lhs, Term *rhs);
 
 LogicalResult unify(VariableTerm *x, Term *y) {
+  assert(!x->leader);
   x->leader = y;
   return success();
 }

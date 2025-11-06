@@ -15,7 +15,7 @@ firrtl.circuit "DomainCrossOnPort" {
 
 // -----
 
-// Illegal domain crossing - connect op.
+// Illegal domain crossing via connect op.
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
