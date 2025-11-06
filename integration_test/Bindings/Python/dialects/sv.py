@@ -37,11 +37,12 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
     verbatim = sv.VerbatimModuleOp(
         name="MyVerbatim",
         content=verbatim_content,
-        output_file=hw.OutputFileAttr.get_from_filename(ir.StringAttr.get("MyVerbatim.v"), False, False),
+        output_file=hw.OutputFileAttr.get_from_filename(
+            ir.StringAttr.get("MyVerbatim.v"), False, False),
         input_ports=[("clk", i1)],
         output_ports=[("out", i1)],
-        additional_files=ir.ArrayAttr.get([ir.FlatSymbolRefAttr.get("test_header")])
-    )
+        additional_files=ir.ArrayAttr.get(
+            [ir.FlatSymbolRefAttr.get("test_header")]))
 
     print(verbatim)
     # CHECK: "sv.verbatim.module"() <{additional_files = [@test_header], content = "module MyVerbatim(input clk, output reg out); always @(posedge clk) out <= ~out; endmodule", module_type = !hw.modty<input clk : i1, output out : i1>, output_file = #hw.output_file<"MyVerbatim.v">, parameters = [], per_port_attrs = [], sym_name = "MyVerbatim"}> : () -> ()
