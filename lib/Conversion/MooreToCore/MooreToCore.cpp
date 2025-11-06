@@ -20,6 +20,7 @@
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
@@ -1607,32 +1608,6 @@ struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   }
 };
 
-struct CondBranchOpConversion : public OpConversionPattern<cf::CondBranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(cf::CondBranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<cf::CondBranchOp>(
-        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
-        op.getTrueDest(), op.getFalseDest());
-    return success();
-  }
-};
-
-struct BranchOpConversion : public OpConversionPattern<cf::BranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(cf::BranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<cf::BranchOp>(op, op.getDest(),
-                                              adaptor.getDestOperands());
-    return success();
-  }
-};
-
 struct CallOpConversion : public OpConversionPattern<func::CallOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2066,11 +2041,11 @@ static void populateLegality(ConversionTarget &target,
 
   target.addLegalOp<debug::ScopeOp>();
 
-  target.addDynamicallyLegalOp<
-      cf::CondBranchOp, cf::BranchOp, scf::YieldOp, func::CallOp,
-      func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp, hw::InstanceOp,
-      debug::ArrayOp, debug::StructOp, debug::VariableOp>(
-      [&](Operation *op) { return converter.isLegal(op); });
+  target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
+                               UnrealizedConversionCastOp, hw::OutputOp,
+                               hw::InstanceOp, debug::ArrayOp, debug::StructOp,
+                               debug::VariableOp>(
+      [&](Operation* op) { return converter.isLegal(op); }); 
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
                                scf::WhileOp, scf::ForallOp>([&](Operation *op) {
@@ -2078,8 +2053,7 @@ static void populateLegality(ConversionTarget &target,
   });
 
   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
-    return converter.isSignatureLegal(op.getFunctionType()) &&
-           converter.isLegal(&op.getFunctionBody());
+    return converter.isSignatureLegal(op.getFunctionType());
   });
 
   target.addDynamicallyLegalOp<hw::HWModuleOp>([&](hw::HWModuleOp op) {
@@ -2340,10 +2314,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     AssignOpConversion<DelayedNonBlockingAssignOp>,
     AssignedVariableOpConversion,
 
-    // Patterns of branch operations.
-    CondBranchOpConversion,
-    BranchOpConversion,
-
     // Patterns of other operations outside Moore dialect.
     HWInstanceOpConversion,
     ReturnOpConversion,
@@ -2417,6 +2387,8 @@ void MooreToCorePass::runOnOperation() {
 
   ConversionPatternSet patterns(&context, typeConverter);
   populateOpConversion(patterns, typeConverter, classCache);
+  mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
+                                                           patterns, target);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();
