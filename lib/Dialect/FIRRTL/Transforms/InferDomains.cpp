@@ -38,8 +38,6 @@ namespace firrtl {
 using namespace circt;
 using namespace firrtl;
 
-using InstanceIterator = InstanceGraphNode::UseIterator;
-using InstanceRange = llvm::iterator_range<InstanceIterator>;
 using PortInsertions = SmallVector<std::pair<unsigned, PortInfo>>;
 
 //====--------------------------------------------------------------------------
