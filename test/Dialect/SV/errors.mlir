@@ -280,3 +280,16 @@ sv.func private @func() {
 
 // expected-error @below {{imported function must be a declaration but 'func' is defined}}
 sv.func.dpi.import @func
+
+// -----
+
+hw.module @NotAnEmitFile() {
+  hw.output
+}
+
+// expected-error @below {{Symbol @NotAnEmitFile is not an emit.file operation.}}
+sv.verbatim.module @TestVerbatimModule() attributes {
+  additional_files = [@NotAnEmitFile],
+  content = "module TestVerbatimModule();\nendmodule",
+  output_file = #hw.output_file<"test.v">
+}

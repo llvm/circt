@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import hw, sv
+from circt.dialects import hw, sv, emit
 
 from circt import ir
 
@@ -32,3 +32,17 @@ with ir.Context() as ctx, ir.Location.unknown() as loc:
     reg_op.attributes["sv.attributes"] = ir.ArrayAttr.get([sv_attr])
     print(reg_op)
     # CHECK: %reg1 = sv.reg  {sv.attributes = [#sv.attribute<"no_merge">]} : !hw.inout<i1>
+
+    verbatim_content = "module MyVerbatim(input clk, output reg out); always @(posedge clk) out <= ~out; endmodule"
+    verbatim = sv.VerbatimModuleOp(
+        name="MyVerbatim",
+        content=verbatim_content,
+        output_file=hw.OutputFileAttr.get_from_filename(
+            ir.StringAttr.get("MyVerbatim.v"), False, False),
+        input_ports=[("clk", i1)],
+        output_ports=[("out", i1)],
+        additional_files=ir.ArrayAttr.get(
+            [ir.FlatSymbolRefAttr.get("test_header")]))
+
+    print(verbatim)
+    # CHECK: "sv.verbatim.module"() <{additional_files = [@test_header], content = "module MyVerbatim(input clk, output reg out); always @(posedge clk) out <= ~out; endmodule", module_type = !hw.modty<input clk : i1, output out : i1>, output_file = #hw.output_file<"MyVerbatim.v">, parameters = [], per_port_attrs = [], sym_name = "MyVerbatim"}> : () -> ()

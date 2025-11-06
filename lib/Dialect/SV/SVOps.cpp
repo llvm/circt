@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -1942,6 +1944,306 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
                    StringAttr name) {
   auto ref = hw::InnerRefAttr::get(mod, name);
   odsState.addAttribute("instance", ref);
+}
+
+//===----------------------------------------------------------------------===//
+// SVVerbatimModuleOp
+//===----------------------------------------------------------------------===//
+
+SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
+  SmallVector<hw::PortInfo> retval;
+  auto modTy = getModuleType();
+  auto emptyDict = DictionaryAttr::get(getContext());
+  auto unknownLoc = UnknownLoc::get(getContext());
+  auto locs = getAllPortLocs();
+  auto attrs = getAllPortAttrs();
+
+  for (unsigned i = 0, e = modTy.getNumPorts(); i < e; ++i) {
+    Location loc = (i < locs.size()) ? locs[i] : unknownLoc;
+    DictionaryAttr portAttrs =
+        (i < attrs.size()) ? cast<DictionaryAttr>(attrs[i]) : emptyDict;
+
+    retval.push_back({modTy.getPorts()[i],
+                      modTy.isOutput(i) ? modTy.getOutputIdForPortId(i)
+                                        : modTy.getInputIdForPortId(i),
+                      portAttrs, loc});
+  }
+  return retval;
+}
+
+hw::ModuleType SVVerbatimModuleOp::getHWModuleType() {
+  return llvm::cast<hw::ModuleType>(getModuleTypeAttr().getValue());
+}
+
+size_t SVVerbatimModuleOp::getNumPorts() {
+  return getModuleType().getNumPorts();
+}
+
+size_t SVVerbatimModuleOp::getNumInputPorts() {
+  return getModuleType().getNumInputs();
+}
+
+size_t SVVerbatimModuleOp::getNumOutputPorts() {
+  return getModuleType().getNumOutputs();
+}
+
+hw::PortInfo SVVerbatimModuleOp::getPort(size_t idx) {
+  return getPortList()[idx];
+}
+
+size_t SVVerbatimModuleOp::getPortIdForInputId(size_t idx) {
+  return getModuleType().getPortIdForInputId(idx);
+}
+
+size_t SVVerbatimModuleOp::getPortIdForOutputId(size_t idx) {
+  return getModuleType().getPortIdForOutputId(idx);
+}
+
+ArrayRef<Attribute> SVVerbatimModuleOp::getAllPortAttrs() {
+  if (auto attrs = getPerPortAttrs())
+    return attrs->getValue();
+
+  // Return empty ArrayRef - callers should handle the empty case
+  return {};
+}
+
+void SVVerbatimModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  assert(attrs.empty() || attrs.size() == getNumPorts());
+  if (attrs.empty()) {
+    removePerPortAttrsAttr();
+  } else {
+    setPerPortAttrsAttr(ArrayAttr::get(getContext(), attrs));
+  }
+}
+
+void SVVerbatimModuleOp::removeAllPortAttrs() { removePerPortAttrsAttr(); }
+
+SmallVector<Location> SVVerbatimModuleOp::getAllPortLocs() {
+  SmallVector<Location> locs;
+  if (auto portLocs = getPortLocs()) {
+    locs.reserve(portLocs->size());
+    for (auto loc : *portLocs)
+      locs.push_back(cast<Location>(loc));
+  }
+  return locs;
+}
+
+void SVVerbatimModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  assert(locs.empty() || locs.size() == getNumPorts());
+  if (locs.empty()) {
+    removePortLocsAttr();
+  } else {
+    setPortLocsAttr(ArrayAttr::get(getContext(), locs));
+  }
+}
+
+void SVVerbatimModuleOp::setHWModuleType(hw::ModuleType type) {
+  setModuleTypeAttr(TypeAttr::get(type));
+  removePerPortAttrsAttr();
+  removePortLocsAttr();
+}
+
+Attribute SVVerbatimModuleOp::getPortAttrs(size_t idx) {
+  assert(idx < getNumPorts());
+  auto allAttrs = getAllPortAttrs();
+  if (idx < allAttrs.size())
+    return allAttrs[idx];
+  return DictionaryAttr::get(getContext());
+}
+
+void SVVerbatimModuleOp::setPortAttrs(size_t idx, Attribute attrs) {
+  assert(idx < getNumPorts());
+  auto allAttrs = getAllPortAttrs();
+  SmallVector<Attribute> newAttrs(allAttrs.begin(), allAttrs.end());
+  if (newAttrs.size() <= idx)
+    newAttrs.resize(getNumPorts(), DictionaryAttr::get(getContext()));
+  newAttrs[idx] = attrs;
+  setAllPortAttrs(newAttrs);
+}
+
+Location SVVerbatimModuleOp::getPortLoc(size_t idx) {
+  assert(idx < getNumPorts());
+  auto allLocs = getAllPortLocs();
+  if (idx < allLocs.size())
+    return allLocs[idx];
+  return UnknownLoc::get(getContext());
+}
+
+void SVVerbatimModuleOp::setPortLoc(size_t idx, Location loc) {
+  assert(idx < getNumPorts());
+  auto allLocs = getAllPortLocs();
+  SmallVector<Attribute> newLocs;
+  newLocs.reserve(getNumPorts());
+  for (size_t i = 0; i < getNumPorts(); ++i) {
+    if (i == idx)
+      newLocs.push_back(loc);
+    else if (i < allLocs.size())
+      newLocs.push_back(allLocs[i]);
+    else
+      newLocs.push_back(UnknownLoc::get(getContext()));
+  }
+  setAllPortLocsAttrs(newLocs);
+}
+
+void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
+
+  printOptionalParameterList(p, *this, getParameters());
+
+  Region emptyRegion;
+  hw::module_like_impl::printModuleSignatureNew(
+      p, emptyRegion, getModuleType(), getAllPortAttrs(), getAllPortLocs());
+
+  SmallVector<StringRef> omittedAttrs = {
+      SymbolTable::getSymbolAttrName(),   SymbolTable::getVisibilityAttrName(),
+      getModuleTypeAttrName().getValue(), getPerPortAttrsAttrName().getValue(),
+      getPortLocsAttrName().getValue(),   getParametersAttrName().getValue()};
+
+  mlir::function_interface_impl::printFunctionAttributes(p, *this,
+                                                         omittedAttrs);
+}
+
+ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  using namespace mlir::function_interface_impl;
+  auto builder = parser.getBuilder();
+
+  // parse optional visibility
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // parse optional parameters
+  ArrayAttr parameters;
+  if (parseOptionalParameterList(parser, parameters))
+    return failure();
+
+  // parse module-like op signature
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+    return failure();
+
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  result.addAttribute("module_type", modType);
+  result.addAttribute("parameters", parameters);
+
+  SmallVector<Attribute> portAttrs, portLocs;
+  for (auto &port : ports) {
+    if (port.attrs && !cast<DictionaryAttr>(port.attrs).empty())
+      portAttrs.push_back(port.attrs);
+    else
+      portAttrs.push_back(builder.getDictionaryAttr({}));
+
+    if (port.sourceLoc && !isa<UnknownLoc>(*port.sourceLoc))
+      portLocs.push_back(*port.sourceLoc);
+    else
+      portLocs.push_back(builder.getUnknownLoc());
+  }
+
+  if (!portAttrs.empty())
+    result.addAttribute("per_port_attrs", builder.getArrayAttr(portAttrs));
+  if (!portLocs.empty())
+    result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
+
+  // parse verbatim content
+  if (!result.attributes.get("content"))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "sv.verbatim.module requires 'content' attribute");
+
+  // parse output file
+  auto outputFileAttr = result.attributes.get("output_file");
+  if (!outputFileAttr)
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "sv.verbatim.module requires 'output_file' attribute");
+
+  if (!isa<hw::OutputFileAttr>(outputFileAttr))
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "sv.verbatim.module 'output_file' attribute must be an OutputFileAttr");
+
+  return success();
+}
+
+void SVVerbatimModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
+  auto moduleType = getModuleType();
+  assert(names.size() == moduleType.getNumPorts() &&
+         "Number of names must match number of ports");
+
+  SmallVector<hw::ModulePort> newPorts;
+  for (auto [i, port] : llvm::enumerate(moduleType.getPorts())) {
+    auto newName = cast<StringAttr>(names[i]);
+    newPorts.push_back({newName, port.type, port.dir});
+  }
+
+  auto newModuleType = hw::ModuleType::get(getContext(), newPorts);
+  setModuleTypeAttr(TypeAttr::get(newModuleType));
+}
+
+LogicalResult SVVerbatimModuleOp::verify() {
+  // must have verbatim content
+  if (getContent().empty())
+    return emitOpError("missing or empty content attribute");
+
+  auto moduleType = getModuleType();
+  auto numPorts = moduleType.getNumPorts();
+
+  if (auto attrs = getPerPortAttrs()) {
+    if (attrs->size() != numPorts)
+      return emitOpError("port attributes array size (")
+             << attrs->size() << ") doesn't match number of ports (" << numPorts
+             << ")";
+  }
+
+  if (auto locs = getPortLocs()) {
+    if (locs->size() != numPorts)
+      return emitOpError("port locations array size (")
+             << locs->size() << ") doesn't match number of ports (" << numPorts
+             << ")";
+  }
+
+  auto outputFileAttr = getOutputFile();
+  if (!outputFileAttr || outputFileAttr.getFilename().getValue().empty())
+    return emitOpError("output_file attribute cannot be empty");
+
+  return success();
+}
+
+LogicalResult
+SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (auto additionalFiles = getAdditionalFiles()) {
+    for (auto fileRef : *additionalFiles) {
+      auto symbolRef = llvm::cast<SymbolRefAttr>(fileRef);
+      auto *referencedOp =
+          symbolTable.lookupNearestSymbolFrom(getOperation(), symbolRef);
+      if (!isa<circt::emit::FileOp>(referencedOp))
+        return emitError("Symbol ")
+               << symbolRef << " is not an emit.file operation.";
+    }
+  }
+
+  return success();
+}
+
+StringAttr SVVerbatimModuleOp::getVerilogModuleNameAttr() {
+  if (auto vName = getVerilogNameAttr()) {
+    return vName;
+  }
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
 }
 
 //===----------------------------------------------------------------------===//
