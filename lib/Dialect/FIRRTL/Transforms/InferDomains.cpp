@@ -6,12 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass implements FIRRTL domain inference and checking with canonical
-// domain representation. Domain sequences are canonicalized by sorting and
-// removing duplicates, making domain order irrelevant and allowing duplicate
-// domains to be treated as equivalent. The result of this pass is either a
-// correctly domain-inferred circuit or pass failure if the circuit contains
-// illegal domain crossings.
+// InferDomains implements FIRRTL domain inference and checking. This pass is a
+// bottom-up transform acting on modules. For each module, we ensure there are
+// no domain crossings, and we make explicit the domain associations of ports.
 //
 //===----------------------------------------------------------------------===//
 
@@ -93,9 +90,10 @@ static bool isPort(FModuleOp module, Value value) {
 // Circuit-wide state.
 //====--------------------------------------------------------------------------
 
-/// Each declared domain in the circuit is assigned an index, based on the order
-/// in which it appears. Domain associations for hardware values are represented
-/// as a list of domains, sorted by the index of the domain type.
+/// Each domain type declared in the circuit is assigned a type-id, based on the
+/// order of declaration. Domain associations for hardware values are
+/// represented as a list, or row, of domains. The domains in a row are ordered
+/// according to their type's id.
 using DomainTypeID = size_t;
 
 /// Information about the domains in the circuit. Able to map domains to their
