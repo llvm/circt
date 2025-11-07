@@ -293,7 +293,7 @@ rtg.target @memoryBlockBaseAddressLargerThanEndAddress : !rtg.dict<> {
 // -----
 
 rtg.test @validate() {
-  %0 = rtg.fixed_reg #rtgtest.t0
+  %0 = rtg.constant #rtgtest.t0
   // expected-error @below {{result type must be a valid content type for the ref value}}
   %2 = rtg.validate %0, %0 : !rtgtest.ireg -> !rtgtest.ireg
 }

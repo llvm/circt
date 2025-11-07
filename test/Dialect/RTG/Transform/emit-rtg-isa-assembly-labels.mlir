@@ -3,8 +3,8 @@
 emit.file "" {
   // CHECK:    # Begin of test0
   rtg.comment "Begin of test0"
-  %rd = rtg.fixed_reg #rtgtest.ra
-  %rs = rtg.fixed_reg #rtgtest.s0
+  %rd = rtg.constant #rtgtest.ra
+  %rs = rtg.constant #rtgtest.s0
   %label = rtg.label_decl "label_name"
 
   // CHECK-NEXT:    la ra, label_name

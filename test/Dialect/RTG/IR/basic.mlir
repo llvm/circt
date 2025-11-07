@@ -241,9 +241,9 @@ rtg.test @template() template "temp_name" target @target { }
 
 // CHECK-LABEL: rtg.test @validation()
 rtg.test @validation() {
-  // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.t0
   // CHECK: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
-  %0 = rtg.fixed_reg #rtgtest.t0
+  %0 = rtg.constant #rtgtest.t0
   %1 = rtg.constant #rtg.isa.immediate<32, 0>
   // CHECK: rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>

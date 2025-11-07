@@ -46,18 +46,10 @@ void RTGTestDialect::initialize() {
 Operation *RTGTestDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
-  return TypeSwitch<Attribute, Operation *>(value)
-      .Case<CPUAttr>([&](auto attr) -> Operation * {
-        if (isa<CPUType>(type))
-          return rtg::ConstantOp::create(builder, loc, attr);
-        return nullptr;
-      })
-      .Case<rtg::RegisterAttrInterface>([&](auto attr) -> Operation * {
-        if (isa<rtg::RegisterTypeInterface>(type))
-          return rtg::FixedRegisterOp::create(builder, loc, attr);
-        return nullptr;
-      })
-      .Default([](auto attr) { return nullptr; });
+  if (auto attr = dyn_cast<TypedAttr>(value))
+    if (type == attr.getType())
+      return rtg::ConstantOp::create(builder, loc, attr);
+  return nullptr;
 }
 
 #include "circt/Dialect/RTGTest/IR/RTGTestEnums.cpp.inc"
