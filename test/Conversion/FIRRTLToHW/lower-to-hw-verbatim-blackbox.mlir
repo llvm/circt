@@ -84,6 +84,28 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     out out: !firrtl.uint<8>
   )
 
+
+  // CHECK: sv.verbatim.module @Bar<index: ui32>(inout %bus : i32, in %port_0_in_valid : i1, in %port_0_in_bits : i32, out port_0_out : i32)
+  firrtl.extmodule @Bar<index: ui32 = 3>(
+    out bus: !firrtl.analog<32>,
+    in port_0_in_valid: !firrtl.uint<1>,
+    in port_0_in_bits: !firrtl.uint<32>,
+    out port_0_out: !firrtl.uint<32>) attributes {
+      annotations = [
+        {
+          class = "circt.VerbatimBlackBoxAnno",
+          files = [
+            {
+                name = "AnalogBlackBox.v",
+                content = "\nmodule AnalogReaderBlackBox(\n  inout [31:0] bus,\n  output [31:0] out\n);\n  assign bus = 32'dz;\n  assign out = bus;\nendmodule\n\nmodule AnalogWriterBlackBox(\n  inout [31:0] bus,\n  input [31:0] in\n);\n  assign bus = in;\nendmodule\n\nmodule AnalogBlackBox #(\n  parameter index=0\n) (\n  inout [31:0] bus,\n  input port_0_in_valid,\n  input [31:0] port_0_in_bits,\n  output [31:0] port_0_out\n);\n  assign port_0_out = bus;\n  assign bus = (port_0_in_valid)? port_0_in_bits + index : 32'dZ;\nendmodule\n",
+                output_file = "AnalogBlackBox.v"
+            }
+          ]
+        }
+      ],
+      convention = #firrtl<convention scalarized>, defname = "AnalogBlackBox"
+    }
+
   // CHECK: hw.module @VerbatimBlackBoxTest(
   // CHECK-SAME: in %clk : !seq.clock, in %rst : i1, in %data : i8, out result : i1
 
@@ -124,5 +146,16 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     %combined1 = firrtl.and %simple_out, %param_bit : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %combined2 = firrtl.and %combined1, %multi_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %result, %combined2 : !firrtl.uint<1>, !firrtl.uint<1>
+
+    %c0_ui32 = firrtl.constant 0 : !firrtl.uint<32> {name = "dut_io_ports_0_out"}
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %Bar_bus, %Bar_port_0_in_valid, %Bar_port_0_in_bits, %Bar_port_0_out = firrtl.instance Bar @Bar(
+      out bus: !firrtl.analog<32>,
+      in port_0_in_valid: !firrtl.uint<1>,
+      in port_0_in_bits: !firrtl.uint<32>,
+      out port_0_out: !firrtl.uint<32>
+    )
+    firrtl.matchingconnect %Bar_port_0_in_valid, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %Bar_port_0_in_bits, %c0_ui32 : !firrtl.uint<32>
   }
 }
