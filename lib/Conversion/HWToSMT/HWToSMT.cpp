@@ -395,10 +395,12 @@ void ConvertHWToSMTPass::runOnOperation() {
     if (numModules > 1) {
       getOperation()->emitError("multiple hw.module operations are not "
                                 "supported with for-smtlib-export");
+      return;
     }
     if (numInstances > 0) {
       getOperation()->emitError("hw.instance operations are not supported "
                                 "with for-smtlib-export");
+      return;
     }
   }
 
