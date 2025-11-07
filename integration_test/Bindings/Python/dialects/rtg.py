@@ -114,70 +114,70 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   m = Module.create()
   with InsertionPoint(m.body):
-    # CHECK: rtg.fixed_reg #rtgtest.zero
-    rtg.FixedRegisterOp(rtgtest.RegZeroAttr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.ra
-    rtg.FixedRegisterOp(rtgtest.RegRaAttr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.sp
-    rtg.FixedRegisterOp(rtgtest.RegSpAttr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.gp
-    rtg.FixedRegisterOp(rtgtest.RegGpAttr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.tp
-    rtg.FixedRegisterOp(rtgtest.RegTpAttr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t0
-    rtg.FixedRegisterOp(rtgtest.RegT0Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t1
-    rtg.FixedRegisterOp(rtgtest.RegT1Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t2
-    rtg.FixedRegisterOp(rtgtest.RegT2Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s0
-    rtg.FixedRegisterOp(rtgtest.RegS0Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s1
-    rtg.FixedRegisterOp(rtgtest.RegS1Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a0
-    rtg.FixedRegisterOp(rtgtest.RegA0Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a1
-    rtg.FixedRegisterOp(rtgtest.RegA1Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a2
-    rtg.FixedRegisterOp(rtgtest.RegA2Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a3
-    rtg.FixedRegisterOp(rtgtest.RegA3Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a4
-    rtg.FixedRegisterOp(rtgtest.RegA4Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a5
-    rtg.FixedRegisterOp(rtgtest.RegA5Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a6
-    rtg.FixedRegisterOp(rtgtest.RegA6Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.a7
-    rtg.FixedRegisterOp(rtgtest.RegA7Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s2
-    rtg.FixedRegisterOp(rtgtest.RegS2Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s3
-    rtg.FixedRegisterOp(rtgtest.RegS3Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s4
-    rtg.FixedRegisterOp(rtgtest.RegS4Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s5
-    rtg.FixedRegisterOp(rtgtest.RegS5Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s6
-    rtg.FixedRegisterOp(rtgtest.RegS6Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s7
-    rtg.FixedRegisterOp(rtgtest.RegS7Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s8
-    rtg.FixedRegisterOp(rtgtest.RegS8Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s9
-    rtg.FixedRegisterOp(rtgtest.RegS9Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s10
-    rtg.FixedRegisterOp(rtgtest.RegS10Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.s11
-    rtg.FixedRegisterOp(rtgtest.RegS11Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t3
-    rtg.FixedRegisterOp(rtgtest.RegT3Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t4
-    rtg.FixedRegisterOp(rtgtest.RegT4Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t5
-    rtg.FixedRegisterOp(rtgtest.RegT5Attr.get())
-    # CHECK: rtg.fixed_reg #rtgtest.t6
-    rtg.FixedRegisterOp(rtgtest.RegT6Attr.get())
+    # CHECK: rtg.constant #rtgtest.zero
+    rtg.ConstantOp(rtgtest.RegZeroAttr.get())
+    # CHECK: rtg.constant #rtgtest.ra
+    rtg.ConstantOp(rtgtest.RegRaAttr.get())
+    # CHECK: rtg.constant #rtgtest.sp
+    rtg.ConstantOp(rtgtest.RegSpAttr.get())
+    # CHECK: rtg.constant #rtgtest.gp
+    rtg.ConstantOp(rtgtest.RegGpAttr.get())
+    # CHECK: rtg.constant #rtgtest.tp
+    rtg.ConstantOp(rtgtest.RegTpAttr.get())
+    # CHECK: rtg.constant #rtgtest.t0
+    rtg.ConstantOp(rtgtest.RegT0Attr.get())
+    # CHECK: rtg.constant #rtgtest.t1
+    rtg.ConstantOp(rtgtest.RegT1Attr.get())
+    # CHECK: rtg.constant #rtgtest.t2
+    rtg.ConstantOp(rtgtest.RegT2Attr.get())
+    # CHECK: rtg.constant #rtgtest.s0
+    rtg.ConstantOp(rtgtest.RegS0Attr.get())
+    # CHECK: rtg.constant #rtgtest.s1
+    rtg.ConstantOp(rtgtest.RegS1Attr.get())
+    # CHECK: rtg.constant #rtgtest.a0
+    rtg.ConstantOp(rtgtest.RegA0Attr.get())
+    # CHECK: rtg.constant #rtgtest.a1
+    rtg.ConstantOp(rtgtest.RegA1Attr.get())
+    # CHECK: rtg.constant #rtgtest.a2
+    rtg.ConstantOp(rtgtest.RegA2Attr.get())
+    # CHECK: rtg.constant #rtgtest.a3
+    rtg.ConstantOp(rtgtest.RegA3Attr.get())
+    # CHECK: rtg.constant #rtgtest.a4
+    rtg.ConstantOp(rtgtest.RegA4Attr.get())
+    # CHECK: rtg.constant #rtgtest.a5
+    rtg.ConstantOp(rtgtest.RegA5Attr.get())
+    # CHECK: rtg.constant #rtgtest.a6
+    rtg.ConstantOp(rtgtest.RegA6Attr.get())
+    # CHECK: rtg.constant #rtgtest.a7
+    rtg.ConstantOp(rtgtest.RegA7Attr.get())
+    # CHECK: rtg.constant #rtgtest.s2
+    rtg.ConstantOp(rtgtest.RegS2Attr.get())
+    # CHECK: rtg.constant #rtgtest.s3
+    rtg.ConstantOp(rtgtest.RegS3Attr.get())
+    # CHECK: rtg.constant #rtgtest.s4
+    rtg.ConstantOp(rtgtest.RegS4Attr.get())
+    # CHECK: rtg.constant #rtgtest.s5
+    rtg.ConstantOp(rtgtest.RegS5Attr.get())
+    # CHECK: rtg.constant #rtgtest.s6
+    rtg.ConstantOp(rtgtest.RegS6Attr.get())
+    # CHECK: rtg.constant #rtgtest.s7
+    rtg.ConstantOp(rtgtest.RegS7Attr.get())
+    # CHECK: rtg.constant #rtgtest.s8
+    rtg.ConstantOp(rtgtest.RegS8Attr.get())
+    # CHECK: rtg.constant #rtgtest.s9
+    rtg.ConstantOp(rtgtest.RegS9Attr.get())
+    # CHECK: rtg.constant #rtgtest.s10
+    rtg.ConstantOp(rtgtest.RegS10Attr.get())
+    # CHECK: rtg.constant #rtgtest.s11
+    rtg.ConstantOp(rtgtest.RegS11Attr.get())
+    # CHECK: rtg.constant #rtgtest.t3
+    rtg.ConstantOp(rtgtest.RegT3Attr.get())
+    # CHECK: rtg.constant #rtgtest.t4
+    rtg.ConstantOp(rtgtest.RegT4Attr.get())
+    # CHECK: rtg.constant #rtgtest.t5
+    rtg.ConstantOp(rtgtest.RegT5Attr.get())
+    # CHECK: rtg.constant #rtgtest.t6
+    rtg.ConstantOp(rtgtest.RegT6Attr.get())
 
   print(m)
 

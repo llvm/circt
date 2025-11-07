@@ -42,7 +42,7 @@ public:
             // Labels
             LabelDeclOp, LabelUniqueDeclOp, LabelOp,
             // Registers
-            FixedRegisterOp, VirtualRegisterOp,
+            VirtualRegisterOp,
             // RTG tests
             TestOp, TargetOp, YieldOp, ValidateOp, TestSuccessOp, TestFailureOp,
             // Integers
@@ -136,7 +136,6 @@ public:
   HANDLE(ValidateOp, Unhandled);
   HANDLE(TestSuccessOp, Unhandled);
   HANDLE(TestFailureOp, Unhandled);
-  HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);
   HANDLE(ConcatImmediateOp, Unhandled);

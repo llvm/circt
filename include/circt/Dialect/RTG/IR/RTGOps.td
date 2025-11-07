@@ -33,7 +33,8 @@ class RTGOp<string mnemonic, list<Trait> traits = []> :
 def ConstantOp : RTGOp<"constant", [
   Pure,
   ConstantLike,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "create an SSA value from an attribute";
 
@@ -677,25 +678,6 @@ def ConstraintOp : RTGOp<"constraint", []> {
 }
 
 //===- ISA Register Handling Operations -----------------------------------===//
-
-def FixedRegisterOp : RTGOp<"fixed_reg", [
-  Pure, ConstantLike,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-]> {
-  let summary = "returns a value representing a fixed register";
-  let description = [{
-    This operation creates a value representing the register given as the 'reg'
-    attribute. This is always a concrete ISA register.
-    The return type always matches the register attribute type.
-  }];
-
-  let arguments = (ins RegisterAttrInterface:$reg);
-  let results = (outs RegisterTypeInterface:$result);
-
-  let assemblyFormat = "$reg attr-dict";
-  let hasFolder = 1;
-}
 
 def VirtualRegisterOp : RTGOp<"virtual_reg", [
   DeclareOpInterfaceMethods<InferTypeOpInterface>,

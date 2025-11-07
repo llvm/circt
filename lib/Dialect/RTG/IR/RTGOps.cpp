@@ -37,6 +37,13 @@ ConstantOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) { return getValueAttr(); }
 
+void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  if (auto reg = dyn_cast<rtg::RegisterAttrInterface>(getValueAttr())) {
+    setNameFn(getResult(), reg.getRegisterAssembly());
+    return;
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // SequenceOp
 //===----------------------------------------------------------------------===//
@@ -415,25 +422,6 @@ LogicalResult TupleExtractOp::inferReturnTypes(
 
   inferredReturnTypes.push_back(tupleTy.getFieldTypes()[idx]);
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// FixedRegisterOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult FixedRegisterOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
-    SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(
-      properties.as<Properties *>()->getReg().getType());
-  return success();
-}
-
-OpFoldResult FixedRegisterOp::fold(FoldAdaptor adaptor) { return getRegAttr(); }
-
-void FixedRegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getReg().getRegisterAssembly());
 }
 
 //===----------------------------------------------------------------------===//

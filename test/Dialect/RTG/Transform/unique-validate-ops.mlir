@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: @validate
 rtg.test @validate() {
-  %0 = rtg.fixed_reg #rtgtest.t0
+  %0 = rtg.constant #rtgtest.t0
   %1 = rtg.constant #rtg.isa.immediate<32, 0>
 
   // CHECK: rtg.validate %{{.*}}, %{{.*}}, "validation_id_0"
