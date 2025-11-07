@@ -2505,6 +2505,14 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                     return moore::StringLenOp::create(builder, loc, value);
                   return {};
                 })
+          .Case("toupper",
+                [&]() -> Value {
+                  return moore::StringToUpperOp::create(builder, loc, value);
+                })
+          .Case("tolower",
+                [&]() -> Value {
+                  return moore::StringToLowerOp::create(builder, loc, value);
+                })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
