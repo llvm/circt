@@ -119,7 +119,7 @@ def ChannelDemuxN_HalfStage_ReadyBlocking(
         ("next_sel", Bits(next_sel_width)),
         ("data", data_type),
     ])
-    # Outputs remain channels of just the data_type.
+    # Outputs are channels of OutPayloadType, which includes both 'next_sel' and 'data' fields.
     for i in range(num_outs):
       locals()[f"output_{i}"] = Output(Channel(OutPayloadType))
 
@@ -236,7 +236,7 @@ def ChannelDemuxTree_HalfStage_ReadyBlocking(
 
       def payload_next(curr_msg: StructSignal) -> StructSignal:
         """Given current level payload, produce next level payload by
-                stripping off the top selection bits."""
+        stripping off the top selection bits."""
 
         next_sel_width = next_sel_width_calc(curr_msg.next_sel.type.width)
         curr_sel_width = curr_msg.next_sel.type.width
@@ -245,7 +245,7 @@ def ChannelDemuxTree_HalfStage_ReadyBlocking(
             new_sel_width,
             next_sel_width,
         )({
-            # Use `sel_width` of the MSB as the next level selection.
+            # Use the MSB bits of next_sel as the next level selection.
             "sel": (curr_msg.next_sel[next_sel_width:]
                     if curr_sel_width > 0 else Bits(0)(0)),
             "next_sel": (curr_msg.next_sel[:next_sel_width]
@@ -255,7 +255,7 @@ def ChannelDemuxTree_HalfStage_ReadyBlocking(
 
       current_channels: List[ChannelSignal] = [
           ports.inp.transform(lambda m: payload_type(0, root_sel_width)({
-              "sel": 0,
+              "sel": Bits(0)(0),
               "next_sel": m.sel,
               "data": m.data,
           }))
