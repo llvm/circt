@@ -7,10 +7,10 @@ from math import ceil
 
 from ..common import Clock, Input, InputChannel, Output, OutputChannel, Reset
 from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
-                          Reg, Wire)
+                          Wire)
 from .. import esi
 from ..module import Module, generator, modparams
-from ..signals import BitsSignal, BundleSignal, ChannelSignal, ClockSignal
+from ..signals import BitsSignal, ChannelSignal, StructSignal
 from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
                      ChannelDirection, StructType, Type, UInt)
