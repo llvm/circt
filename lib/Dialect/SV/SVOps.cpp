@@ -2246,29 +2246,7 @@ StringAttr SVVerbatimModuleOp::getVerilogModuleNameAttr() {
       ::mlir::SymbolTable::getSymbolAttrName());
 }
 
-SVVerbatimModuleOp SVVerbatimModuleOp::create(
-    OpBuilder &builder, Location location, StringAttr name,
-    ArrayRef<hw::PortInfo> ports, StringAttr content,
-    hw::OutputFileAttr outputFile, ArrayAttr perPortAttrs, ArrayAttr portLocs,
-    ArrayAttr parameters, ArrayAttr additionalFiles, StringAttr verilogName) {
 
-  SmallVector<hw::ModulePort> modulePorts;
-  for (const auto &port : ports) {
-    Type portType = port.type;
-    hw::ModulePort::Direction portDir = port.dir;
-    if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
-      portType = inoutType.getElementType();
-      portDir = hw::ModulePort::Direction::InOut;
-    }
-    modulePorts.push_back({port.name, portType, portDir});
-  }
-
-  auto moduleType = hw::ModuleType::get(builder.getContext(), modulePorts);
-
-  return create(builder, location, name, TypeAttr::get(moduleType), content,
-                outputFile, perPortAttrs, portLocs, parameters, additionalFiles,
-                verilogName);
-}
 
 //===----------------------------------------------------------------------===//
 // BindInterfaceOp
