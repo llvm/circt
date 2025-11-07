@@ -255,6 +255,13 @@ def SVVerbatimModuleOp
     void setPortAttrs(size_t idx, Attribute attrs);
     Location getPortLoc(size_t idx);
     void setPortLoc(size_t idx, Location loc);
+
+    static SVVerbatimModuleOp create(
+        OpBuilder &builder, Location location, StringAttr name,
+        ArrayRef<hw::PortInfo> ports, StringAttr content,
+        hw::OutputFileAttr outputFile, ArrayAttr perPortAttrs = {},
+        ArrayAttr portLocs = {}, ArrayAttr parameters = {},
+        ArrayAttr additionalFiles = {}, StringAttr verilogName = {});
   }];
 
   let hasVerifier = 1;
