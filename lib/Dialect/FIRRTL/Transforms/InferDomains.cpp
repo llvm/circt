@@ -106,7 +106,6 @@ public:
   size_t getNumDomains() const { return domainTable.size(); }
   DomainOp getDomain(DomainTypeID id) const { return domainTable[id]; }
 
-
   DomainTypeID getDomainTypeID(StringAttr name) const {
     return typeIDTable.at(name);
   }
@@ -361,9 +360,9 @@ void solve(Term *lhs, Term *rhs) {
 // CheckModuleDomains
 //====--------------------------------------------------------------------------
 
-/// Check that a module has complete domain information.
-static LogicalResult checkModuleDomains(GlobalState &globals,
-                                        FModuleLike module) {
+/// Check that a module has complete domain information for its ports.
+static LogicalResult checkPortDomains(GlobalState &globals,
+                                      FModuleLike module) {
   auto numDomains = globals.circuitInfo.getNumDomains();
   auto domainInfo = module.getDomainInfoAttr();
   DenseMap<unsigned, unsigned> typeIDTable;
@@ -416,6 +415,19 @@ static LogicalResult checkModuleDomains(GlobalState &globals,
   }
 
   return success();
+}
+
+static LogicalResult checkModuleDomains(GlobalState &globals,
+                                        FModuleOp module) {
+  if (failed(checkPortDomains(globals, module)))
+    return failure();
+
+  return success();
+}
+
+static LogicalResult checkModuleDomains(GlobalState &globals,
+                                        FExtModuleOp module) {
+  return checkPortDomains(globals, module);
 }
 
 //====--------------------------------------------------------------------------
