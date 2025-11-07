@@ -2246,8 +2246,6 @@ StringAttr SVVerbatimModuleOp::getVerilogModuleNameAttr() {
       ::mlir::SymbolTable::getSymbolAttrName());
 }
 
-
-
 //===----------------------------------------------------------------------===//
 // BindInterfaceOp
 //===----------------------------------------------------------------------===//
