@@ -84,6 +84,24 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     out out: !firrtl.uint<8>
   )
 
+
+  // CHECK: sv.verbatim.module @AnalogBlackBox(inout %bus : i32) attributes {content = "module AnalogBlackBox (inout [31:0] bus); endmodule", output_file = #hw.output_file<"AnalogBlackBox.v">, verilogName = "AnalogBlackBox"}
+  firrtl.extmodule @AnalogBlackBox(out bus: !firrtl.analog<32>) attributes {
+      annotations = [
+        {
+          class = "circt.VerbatimBlackBoxAnno",
+          files = [
+            {
+                name = "AnalogBlackBox.v",
+                content = "module AnalogBlackBox (inout [31:0] bus); endmodule",
+                output_file = "AnalogBlackBox.v"
+            }
+          ]
+        }
+      ],
+      convention = #firrtl<convention scalarized>, defname = "AnalogBlackBox"
+    }
+
   // CHECK: hw.module @VerbatimBlackBoxTest(
   // CHECK-SAME: in %clk : !seq.clock, in %rst : i1, in %data : i8, out result : i1
 
@@ -124,5 +142,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     %combined1 = firrtl.and %simple_out, %param_bit : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %combined2 = firrtl.and %combined1, %multi_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %result, %combined2 : !firrtl.uint<1>, !firrtl.uint<1>
+
+    %analog_bus = firrtl.instance analog @AnalogBlackBox(out bus: !firrtl.analog<32>)
   }
 }

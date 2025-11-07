@@ -235,6 +235,33 @@ def SVVerbatimModuleOp
 
   let hasCustomAssemblyFormat = 1;
 
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                   "ArrayRef<hw::PortInfo>":$ports,
+                   "StringAttr":$content,
+                   "hw::OutputFileAttr":$outputFile,
+                   CArg<"ArrayAttr", "{}">:$perPortAttrs,
+                   CArg<"ArrayAttr", "{}">:$portLocs,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$additionalFiles,
+                   CArg<"StringAttr", "{}">:$verilogName), [{
+      SmallVector<hw::ModulePort> modulePorts;
+      for (const auto &port : ports) {
+        Type portType = port.type;
+        hw::ModulePort::Direction portDir = port.dir;
+        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
+          portType = inoutType.getElementType();
+          portDir = hw::ModulePort::Direction::InOut;
+        }
+        modulePorts.push_back({port.name, portType, portDir});
+      }
+      auto moduleType = hw::ModuleType::get($_builder.getContext(), modulePorts);
+      build($_builder, $_state, name, TypeAttr::get(moduleType), content,
+            outputFile, perPortAttrs, portLocs, parameters, additionalFiles,
+            verilogName);
+    }]>
+  ];
+
   let extraClassDeclaration = [{
     StringAttr getNameAttr() {
       return (*this)->getAttrOfType<StringAttr>(
