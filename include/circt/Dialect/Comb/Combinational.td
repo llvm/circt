@@ -330,6 +330,7 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
   }];
 
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def ReverseOp : CombOp<"reverse", [
