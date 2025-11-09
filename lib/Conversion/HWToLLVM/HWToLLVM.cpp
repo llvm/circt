@@ -17,6 +17,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -79,6 +80,95 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
   return LLVM::ZExtOp::create(rewriter, loc, zextTy, value);
 }
 
+void ArraySpillCache::spillNonHWOps(OpBuilder &builder,
+                                    LLVMTypeConverter &converter,
+                                    Operation *containerOp) {
+  OpBuilder::InsertionGuard g(builder);
+  containerOp->walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
+      [&](Operation *op) {
+        // Spill Block arguments
+        for (auto &region : op->getRegions()) {
+          for (auto &block : region.getBlocks()) {
+            builder.setInsertionPointToStart(&block);
+            for (auto &arg : block.getArguments()) {
+              if (isa<hw::ArrayType>(arg.getType()))
+                spillHWArrayValue(builder, arg.getLoc(), converter, arg,
+                                  /*replaceUses*/ true);
+            }
+          }
+        }
+
+        // Spill Op Results
+        for (auto result : op->getResults()) {
+          if (isa<hw::ArrayType>(result.getType())) {
+            builder.setInsertionPointAfter(op);
+            spillHWArrayValue(builder, op->getLoc(), converter, result,
+                              /*replaceUses*/ true);
+          }
+        }
+      });
+}
+
+void ArraySpillCache::map(Value arrayValue, Value bufferPtr) {
+  assert(llvm::isa<LLVM::LLVMArrayType>(arrayValue.getType()) &&
+         "Key is not an LLVM array.");
+  assert(llvm::isa<LLVM::LLVMPointerType>(bufferPtr.getType()) &&
+         "Value is not a pointer.");
+  auto insert = spillMap.insert({arrayValue, bufferPtr});
+  (void)insert;
+  assert(insert.second && "Key already mapped");
+}
+
+Value ArraySpillCache::lookup(Value arrayValue) {
+  assert(isa<LLVM::LLVMArrayType>(arrayValue.getType()) ||
+         isa<hw::ArrayType>(arrayValue.getType()) && "Not an array value");
+  while (isa<LLVM::LLVMArrayType>(arrayValue.getType()) ||
+         isa<hw::ArrayType>(arrayValue.getType())) {
+    if (isa<LLVM::LLVMArrayType>(arrayValue.getType())) {
+      auto mapVal = spillMap.lookup(arrayValue);
+      if (mapVal)
+        return mapVal;
+    }
+    if (auto castOp = arrayValue.getDefiningOp<UnrealizedConversionCastOp>())
+      arrayValue = castOp.getOperand(0);
+    else
+      break;
+  }
+  return {};
+}
+
+Value ArraySpillCache::spillLLVMArrayValue(OpBuilder &builder, Location loc,
+                                           Value llvmArray) {
+  assert(isa<LLVM::LLVMArrayType>(llvmArray.getType()) &&
+         "Expected an LLVM array");
+  auto oneC = LLVM::ConstantOp::create(builder, loc, builder.getI32Type(),
+                                       builder.getI32IntegerAttr(1));
+  auto spillBuffer = LLVM::AllocaOp::create(
+      builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
+      llvmArray.getType(), oneC,
+      /*alignment=*/4);
+  LLVM::StoreOp::create(builder, loc, llvmArray, spillBuffer);
+  auto loadOp =
+      LLVM::LoadOp::create(builder, loc, llvmArray.getType(), spillBuffer);
+  map(loadOp.getResult(), spillBuffer);
+  return loadOp.getResult();
+}
+
+Value ArraySpillCache::spillHWArrayValue(OpBuilder &builder, Location loc,
+                                         LLVMTypeConverter &converter,
+                                         Value hwArray, bool replaceUses) {
+  assert(isa<hw::ArrayType>(hwArray.getType()) && "Expected an HW array");
+  auto targetType = converter.convertType(hwArray.getType());
+  auto hwToLLVMCast =
+      UnrealizedConversionCastOp::create(builder, loc, targetType, hwArray);
+  auto spilled = spillLLVMArrayValue(builder, loc, hwToLLVMCast.getResult(0));
+  auto llvmToHWCast = UnrealizedConversionCastOp::create(
+      builder, loc, hwArray.getType(), spilled);
+  if (replaceUses)
+    hwArray.replaceAllUsesExcept(llvmToHWCast.getResult(0), hwToLLVMCast);
+  return llvmToHWCast.getResult(0);
+}
+
 //===----------------------------------------------------------------------===//
 // Extraction operation conversions
 //===----------------------------------------------------------------------===//
@@ -115,6 +205,7 @@ struct StructExplodeOpConversion
 } // namespace
 
 namespace {
+
 /// Convert a StructExtractOp to LLVM dialect.
 /// Pattern: struct_extract(input, fieldname) =>
 ///   extractvalue(input, fieldname_to_index(fieldname))
@@ -201,24 +292,53 @@ struct ArrayInjectOpConversion
 } // namespace
 
 namespace {
+template <typename SourceOp>
+struct HWArrayOpToLLVMPattern : public ConvertOpToLLVMPattern<SourceOp> {
+
+  using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
+  HWArrayOpToLLVMPattern(LLVMTypeConverter &converter,
+                         ArraySpillCache &spillCache)
+      : ConvertOpToLLVMPattern<SourceOp>(converter), spillCache(spillCache) {}
+
+  ArraySpillCache &spillCache;
+};
+
+} // namespace
+
+namespace {
 /// Convert an ArrayGetOp to the LLVM dialect.
 /// Pattern: array_get(input, index) =>
 ///   load(gep(store(input, alloca), zext(index)))
-struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
-  using ConvertOpToLLVMPattern<hw::ArrayGetOp>::ConvertOpToLLVMPattern;
+struct ArrayGetOpConversion : public HWArrayOpToLLVMPattern<hw::ArrayGetOp> {
+  using HWArrayOpToLLVMPattern<hw::ArrayGetOp>::HWArrayOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto oneC = LLVM::ConstantOp::create(
-        rewriter, op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
-        rewriter.getI32IntegerAttr(1));
-    Value arrPtr = LLVM::AllocaOp::create(
-        rewriter, op->getLoc(),
-        LLVM::LLVMPointerType::get(rewriter.getContext()),
-        adaptor.getInput().getType(), oneC,
-        /*alignment=*/4);
-    LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
+
+    Value arrPtr = spillCache.lookup(adaptor.getInput());
+
+    /*
+    if (arrPtr) {
+      llvm::dbgs() << ">>> Reused spilled array\n";
+    } else {
+      llvm::dbgs() << ">>> Should have been spilled: " << op << "\n DefOp: \n";
+      adaptor.getInput().getDefiningOp()->dumpPretty();
+      assert(false && "Should have been spilled");
+    }
+    */
+
+    if (!arrPtr) {
+      auto oneC = LLVM::ConstantOp::create(
+          rewriter, op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
+          rewriter.getI32IntegerAttr(1));
+      arrPtr = LLVM::AllocaOp::create(
+          rewriter, op->getLoc(),
+          LLVM::LLVMPointerType::get(rewriter.getContext()),
+          adaptor.getInput().getType(), oneC,
+          /*alignment=*/4);
+      LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
+    }
 
     auto arrTy = typeConverter->convertType(op.getInput().getType());
     auto elemTy = typeConverter->convertType(op.getResult().getType());
@@ -466,9 +586,10 @@ public:
       LLVMTypeConverter &typeConverter,
       DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp>
           &constAggregateGlobalsMap,
-      Namespace &globals)
+      Namespace &globals, ArraySpillCache &spillCache)
       : ConvertOpToLLVMPattern(typeConverter),
-        constAggregateGlobalsMap(constAggregateGlobalsMap), globals(globals) {}
+        constAggregateGlobalsMap(constAggregateGlobalsMap), globals(globals),
+        spillCache(spillCache) {}
 
   LogicalResult
   matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor,
@@ -478,6 +599,7 @@ private:
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp>
       &constAggregateGlobalsMap;
   Namespace &globals;
+  ArraySpillCache &spillCache;
 };
 } // namespace
 
@@ -661,7 +783,10 @@ LogicalResult AggregateConstantOpConversion::matchAndRewrite(
   // Get the global array address and load it to return an array value.
   auto addr = LLVM::AddressOfOp::create(rewriter, op->getLoc(),
                                         constAggregateGlobalsMap[typeAttrPair]);
-  rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, llvmTy, addr);
+  auto newOp = rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, llvmTy, addr);
+
+  if (llvm::isa<hw::ArrayType>(aggregateType))
+    spillCache.map(newOp.getResult(), addr);
 
   return success();
 }
@@ -703,7 +828,8 @@ void circt::populateHWToLLVMConversionPatterns(
     LLVMTypeConverter &converter, RewritePatternSet &patterns,
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp>
-        &constAggregateGlobalsMap) {
+        &constAggregateGlobalsMap,
+    ArraySpillCache &spillCache) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
@@ -711,16 +837,17 @@ void circt::populateHWToLLVMConversionPatterns(
   patterns.add<HWDynamicArrayCreateOpConversion, HWStructCreateOpConversion>(
       converter);
   patterns.add<AggregateConstantOpConversion>(
-      converter, constAggregateGlobalsMap, globals);
+      converter, constAggregateGlobalsMap, globals, spillCache);
 
   // Bitwise conversion patterns.
   patterns.add<BitcastOpConversion>(converter);
 
   // Extraction operation conversion patterns.
-  patterns.add<ArrayInjectOpConversion, ArrayGetOpConversion,
-               ArraySliceOpConversion, ArrayConcatOpConversion,
-               StructExplodeOpConversion, StructExtractOpConversion,
-               StructInjectOpConversion>(converter);
+  patterns.add<ArrayInjectOpConversion, ArraySliceOpConversion,
+               ArrayConcatOpConversion, StructExplodeOpConversion,
+               StructExtractOpConversion, StructInjectOpConversion>(converter);
+
+  patterns.add<ArrayGetOpConversion>(converter, spillCache);
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
@@ -732,6 +859,7 @@ void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
 
 void HWToLLVMLoweringPass::runOnOperation() {
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
+  ArraySpillCache spillCache;
   Namespace globals;
   SymbolCache cache;
   cache.addDefinitions(getOperation());
@@ -746,7 +874,7 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   // Setup the conversion.
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap);
+                                     constAggregateGlobalsMap, spillCache);
 
   // Apply the partial conversion.
   ConversionConfig config;

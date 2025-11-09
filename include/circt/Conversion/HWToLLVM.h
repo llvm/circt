@@ -42,6 +42,22 @@ struct HWToLLVMEndianessConverter {
                                          StringRef fieldName);
 };
 
+struct ArraySpillCache {
+  void spillNonHWOps(mlir::OpBuilder &builder,
+                     mlir::LLVMTypeConverter &converter,
+                     Operation *containerOp);
+  void map(mlir::Value arrayValue, mlir::Value bufferPtr);
+  Value lookup(Value arrayValue);
+  Value spillLLVMArrayValue(OpBuilder &builder, Location loc, Value llvmArray);
+  Value spillHWArrayValue(OpBuilder &builder, Location loc,
+                          mlir::LLVMTypeConverter &converter, Value hwArray,
+                          bool replaceUses);
+
+private:
+  // Map LLVM Array values to pointers to constant (!) buffers
+  llvm::DenseMap<Value, Value> spillMap;
+};
+
 /// Get the HW to LLVM type conversions.
 void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
@@ -50,7 +66,8 @@ void populateHWToLLVMConversionPatterns(
     mlir::LLVMTypeConverter &converter, RewritePatternSet &patterns,
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, mlir::LLVM::GlobalOp>
-        &constAggregateGlobalsMap);
+        &constAggregateGlobalsMap,
+    ArraySpillCache &spillCache);
 
 /// Create an HW to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertHWToLLVMPass();
