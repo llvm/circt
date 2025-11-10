@@ -213,7 +213,6 @@ void BlackBoxReaderPass::runOnOperation() {
       } else {
         auto &fileAttr = ptr->second.outputFileAttr;
         SmallString<64> directory(fileAttr.getDirectory());
-        SmallString<64> oldDir = directory;
         makeCommonPrefix(directory,
                          annotationInfo.outputFileAttr.getDirectory());
         fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
