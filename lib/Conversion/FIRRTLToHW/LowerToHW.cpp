@@ -41,6 +41,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/Path.h"
+#include <unordered_map>
 
 #define DEBUG_TYPE "lower-to-hw"
 
@@ -373,6 +374,22 @@ struct CircuitLoweringState {
                        });
   }
 
+  /// Check if a verbatim module with the given output file already exists.
+  /// Returns the existing module if found, nullptr otherwise.
+  sv::SVVerbatimModuleOp getExistingVerbatimModule(StringRef outputFile) {
+    std::lock_guard<std::mutex> lock(verbatimModulesMutex);
+    std::string outputFileStr = outputFile.str();
+    auto it = verbatimModulesByOutputFile.find(outputFileStr);
+    return it != verbatimModulesByOutputFile.end() ? it->second : nullptr;
+  }
+
+  void registerVerbatimModule(StringRef outputFile,
+                              sv::SVVerbatimModuleOp module) {
+    std::lock_guard<std::mutex> lock(verbatimModulesMutex);
+    std::string outputFileStr = outputFile.str();
+    verbatimModulesByOutputFile[outputFileStr] = module;
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   friend struct FIRRTLLowering;
@@ -521,6 +538,11 @@ private:
   };
 
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
+
+  /// Track verbatim modules by their output file to avoid duplicates
+  std::unordered_map<std::string, sv::SVVerbatimModuleOp>
+      verbatimModulesByOutputFile;
+  std::mutex verbatimModulesMutex;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -1246,16 +1268,26 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     if (!parameters)
       parameters = builder.getArrayAttr({});
 
-    auto verbatimModule = sv::SVVerbatimModuleOp::create(
-        builder, oldModule.getLoc(), nameAttr, ports, content, outputFileAttr,
-        /*per_port_attrs=*/nullptr,
-        /*port_locs=*/nullptr, parameters,
-        additionalFiles.empty() ? nullptr
-                                : builder.getArrayAttr(additionalFiles),
-        verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
+    // Check if a verbatim module already exists for this file,
+    // otherwise create a new one.
+    auto verbatimModule =
+        loweringState.getExistingVerbatimModule(outputFile.getValue());
 
-    SymbolTable::setSymbolVisibility(
-        verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
+    if (!verbatimModule) {
+      verbatimModule = sv::SVVerbatimModuleOp::create(
+          builder, oldModule.getLoc(), nameAttr, ports, content, outputFileAttr,
+          /*per_port_attrs=*/nullptr,
+          /*port_locs=*/nullptr, parameters,
+          additionalFiles.empty() ? nullptr
+                                  : builder.getArrayAttr(additionalFiles),
+          verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
+
+      SymbolTable::setSymbolVisibility(
+          verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
+
+      loweringState.registerVerbatimModule(outputFile.getValue(),
+                                           verbatimModule);
+    }
 
     annos.removeAnnotation(verbatimBlackBoxAnnoClass);
 
