@@ -1176,7 +1176,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                         loweringState)))
     return {};
 
-  StringRef verilogName;
+  StringRef verilogName = oldModule.getSymName();
   if (auto defName = oldModule.getDefname())
     verilogName = defName.value();
 
@@ -1280,7 +1280,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
           /*port_locs=*/nullptr, parameters,
           additionalFiles.empty() ? nullptr
                                   : builder.getArrayAttr(additionalFiles),
-          verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
+          builder.getStringAttr(verilogName));
 
       SymbolTable::setSymbolVisibility(
           verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
