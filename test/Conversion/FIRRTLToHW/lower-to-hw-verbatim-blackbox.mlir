@@ -5,7 +5,7 @@
 
 firrtl.circuit "VerbatimBlackBoxTest" {
 
-  // CHECK: sv.verbatim.module @SimpleVerbatimBlackBox(
+  // CHECK-LABEL: sv.verbatim.module @SimpleVerbatimBlackBox(
   // CHECK-SAME: content = {{.*}}module SimpleVerbatimBlackBox{{.*}}
 
   firrtl.extmodule @SimpleVerbatimBlackBox(
@@ -27,7 +27,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     ]
   }
 
-  // CHECK: sv.verbatim.module @ParameterizedVerbatimBlackBox<
+  // CHECK-LABEL: sv.verbatim.module @ParameterizedVerbatimBlackBox<
   // CHECK-SAME: WIDTH: i32
   // CHECK-SAME: content = {{.*}}module ParameterizedVerbatimBlackBox{{.*}}
 
@@ -49,7 +49,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     ]
   }
 
-  // CHECK: emit.file "header.vh" sym @header.vh {
+  // CHECK-LABEL: emit.file "header.vh" sym @header.vh {
   // CHECK-NEXT:   emit.verbatim "`define MACRO_VALUE 1'b1"
   // CHECK: sv.verbatim.module @MultiFileVerbatimBlackBox(
   // CHECK-SAME: additional_files = [@header.vh]
@@ -77,7 +77,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     ]
   }
 
-  // CHECK: hw.module.extern @RegularExtModule(in %data : i8, out out : i8)
+  // CHECK-LABEL: hw.module.extern @RegularExtModule(in %data : i8, out out : i8)
 
   firrtl.extmodule @RegularExtModule(
     in data: !firrtl.uint<8>,
@@ -85,7 +85,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
   )
 
 
-  // CHECK: sv.verbatim.module @AnalogBlackBox(inout %bus : i32) attributes {content = "module AnalogBlackBox (inout [31:0] bus); endmodule", output_file = #hw.output_file<"AnalogBlackBox.v">, verilogName = "AnalogBlackBox"}
+  // CHECK-LABEL: sv.verbatim.module @AnalogBlackBox(inout %bus : i32) attributes {content = "module AnalogBlackBox (inout [31:0] bus); endmodule", output_file = #hw.output_file<"AnalogBlackBox.v">, verilogName = "AnalogBlackBox"}
   firrtl.extmodule @AnalogBlackBox(out bus: !firrtl.analog<32>) attributes {
       annotations = [
         {
@@ -102,7 +102,47 @@ firrtl.circuit "VerbatimBlackBoxTest" {
       convention = #firrtl<convention scalarized>, defname = "AnalogBlackBox"
     }
 
-  // CHECK: hw.module @VerbatimBlackBoxTest(
+  // CHECK-LABEL: sv.verbatim.module @DuplicatedBlackBox1(
+  // CHECK-SAME: content = {{.*}}module DuplicatedBlackBox{{.*}}
+  firrtl.extmodule @DuplicatedBlackBox1(
+    in clk: !firrtl.clock,
+    out out: !firrtl.uint<1>
+  ) attributes {
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            name = "DuplicatedBlackBox.v",
+            content = "module DuplicatedBlackBox(); endmodule",
+            output_file = "DuplicatedBlackBox.v"
+          }
+        ]
+      }
+    ]
+  }
+
+  // CHECK-NOT: sv.verbatim.module @DuplicatedBlackBox2(
+
+  firrtl.extmodule @DuplicatedBlackBox2(
+    in clk: !firrtl.clock,
+    out out: !firrtl.uint<1>
+  ) attributes {
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            name = "DuplicatedBlackBox.v",
+            content = "module DuplicatedBlackBox(); endmodule",
+            output_file = "DuplicatedBlackBox.v"
+          }
+        ]
+      }
+    ]
+  }
+
+  // CHECK-LABEL: hw.module @VerbatimBlackBoxTest(
   // CHECK-SAME: in %clk : !seq.clock, in %rst : i1, in %data : i8, out result : i1
 
   firrtl.module @VerbatimBlackBoxTest(
@@ -144,5 +184,19 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     firrtl.connect %result, %combined2 : !firrtl.uint<1>, !firrtl.uint<1>
 
     %analog_bus = firrtl.instance analog @AnalogBlackBox(out bus: !firrtl.analog<32>)
+
+    // CHECK: hw.instance "dup1" @DuplicatedBlackBox1
+    %dup1_clk, %dup1_out = firrtl.instance dup1 @DuplicatedBlackBox1(
+      in clk: !firrtl.clock,
+      out out: !firrtl.uint<1>
+    )
+    firrtl.connect %dup1_clk, %clk : !firrtl.clock, !firrtl.clock
+
+    // CHECK: hw.instance "dup2" @DuplicatedBlackBox1
+    %dup2_clk, %dup2_out = firrtl.instance dup2 @DuplicatedBlackBox2(
+      in clk: !firrtl.clock,
+      out out: !firrtl.uint<1>
+    )
+    firrtl.connect %dup2_clk, %clk : !firrtl.clock, !firrtl.clock
   }
 }
