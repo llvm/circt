@@ -374,20 +374,20 @@ struct CircuitLoweringState {
                        });
   }
 
-  /// Check if a verbatim module with the given output file already exists.
+  /// Check if a verbatim module with the given verilog name already exists.
   /// Returns the existing module if found, nullptr otherwise.
-  sv::SVVerbatimModuleOp getExistingVerbatimModule(StringRef outputFile) {
+  sv::SVVerbatimModuleOp getExistingVerbatimModule(StringRef verilogName) {
     std::lock_guard<std::mutex> lock(verbatimModulesMutex);
-    std::string outputFileStr = outputFile.str();
-    auto it = verbatimModulesByOutputFile.find(outputFileStr);
-    return it != verbatimModulesByOutputFile.end() ? it->second : nullptr;
+    std::string verilogNameStr = verilogName.str();
+    auto it = verbatimModulesByVerilogName.find(verilogNameStr);
+    return it != verbatimModulesByVerilogName.end() ? it->second : nullptr;
   }
 
-  void registerVerbatimModule(StringRef outputFile,
+  void registerVerbatimModule(StringRef verilogName,
                               sv::SVVerbatimModuleOp module) {
     std::lock_guard<std::mutex> lock(verbatimModulesMutex);
-    std::string outputFileStr = outputFile.str();
-    verbatimModulesByOutputFile[outputFileStr] = module;
+    std::string verilogNameStr = verilogName.str();
+    verbatimModulesByVerilogName[verilogNameStr] = module;
   }
 
 private:
@@ -539,9 +539,9 @@ private:
 
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 
-  /// Track verbatim modules by their output file to avoid duplicates
+  /// Track verbatim modules by their verilog name to avoid duplicates
   std::unordered_map<std::string, sv::SVVerbatimModuleOp>
-      verbatimModulesByOutputFile;
+      verbatimModulesByVerilogName;
   std::mutex verbatimModulesMutex;
 };
 
@@ -1268,10 +1268,10 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     if (!parameters)
       parameters = builder.getArrayAttr({});
 
-    // Check if a verbatim module already exists for this file,
+    // Check if a verbatim module already exists for this verilog name,
     // otherwise create a new one.
     auto verbatimModule =
-        loweringState.getExistingVerbatimModule(outputFile.getValue());
+        loweringState.getExistingVerbatimModule(verilogName);
 
     if (!verbatimModule) {
       verbatimModule = sv::SVVerbatimModuleOp::create(
@@ -1285,7 +1285,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       SymbolTable::setSymbolVisibility(
           verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
 
-      loweringState.registerVerbatimModule(outputFile.getValue(),
+      loweringState.registerVerbatimModule(verilogName, verbatimModule);
                                            verbatimModule);
     }
 
