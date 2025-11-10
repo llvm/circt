@@ -245,17 +245,7 @@ def SVVerbatimModuleOp
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayAttr", "{}">:$additionalFiles,
                    CArg<"StringAttr", "{}">:$verilogName), [{
-      SmallVector<hw::ModulePort> modulePorts;
-      for (const auto &port : ports) {
-        Type portType = port.type;
-        hw::ModulePort::Direction portDir = port.dir;
-        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
-          portType = inoutType.getElementType();
-          portDir = hw::ModulePort::Direction::InOut;
-        }
-        modulePorts.push_back({port.name, portType, portDir});
-      }
-      auto moduleType = hw::ModuleType::get($_builder.getContext(), modulePorts);
+      auto moduleType = getModuleTypeFromPorts($_builder.getContext(), ports);
       build($_builder, $_state, name, TypeAttr::get(moduleType), content,
             outputFile, perPortAttrs, portLocs, parameters, additionalFiles,
             verilogName);
@@ -277,6 +267,9 @@ def SVVerbatimModuleOp
     }
 
     StringAttr getVerilogModuleNameAttr();
+
+    static hw::ModuleType getModuleTypeFromPorts(mlir::MLIRContext * context,
+                                                 ArrayRef<hw::PortInfo> ports);
 
     Attribute getPortAttrs(size_t idx);
     void setPortAttrs(size_t idx, Attribute attrs);

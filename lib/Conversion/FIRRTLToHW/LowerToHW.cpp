@@ -540,8 +540,7 @@ private:
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 
   /// Track verbatim modules by their defname/module name to avoid duplicates
-  std::unordered_map<std::string, sv::SVVerbatimModuleOp>
-      verbatimModulesByKey;
+  std::unordered_map<std::string, sv::SVVerbatimModuleOp> verbatimModulesByKey;
   std::mutex verbatimModulesMutex;
 };
 
@@ -1268,11 +1267,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     if (!parameters)
       parameters = builder.getArrayAttr({});
 
-    // Check if a verbatim module already exists for this module name, otherwise create
-    // a new one.
-    StringRef moduleName = verilogName.empty() ? oldModule.getName() : verilogName;
-    auto verbatimModule =
-        loweringState.getExistingVerbatimModule(moduleName);
+    // Check if a verbatim module already exists for this module name, otherwise
+    // create a new one.
+    StringRef moduleName =
+        verilogName.empty() ? oldModule.getName() : verilogName;
+    auto verbatimModule = loweringState.getExistingVerbatimModule(moduleName);
 
     if (!verbatimModule) {
       verbatimModule = sv::SVVerbatimModuleOp::create(
@@ -1289,17 +1288,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       loweringState.registerVerbatimModule(moduleName, verbatimModule);
     } else {
       auto existingModuleType = verbatimModule.getHWModuleType();
-      SmallVector<hw::ModulePort> newPorts;
-      for (const auto &port : ports) {
-        Type portType = port.type;
-        hw::ModulePort::Direction portDir = port.dir;
-        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
-          portType = inoutType.getElementType();
-          portDir = hw::ModulePort::Direction::InOut;
-        }
-        newPorts.push_back({port.name, portType, portDir});
-      }
-      auto newModuleType = hw::ModuleType::get(builder.getContext(), newPorts);
+      auto newModuleType = sv::SVVerbatimModuleOp::getModuleTypeFromPorts(
+          builder.getContext(), ports);
 
       if (existingModuleType != newModuleType) {
         oldModule.emitError()

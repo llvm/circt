@@ -2246,6 +2246,22 @@ StringAttr SVVerbatimModuleOp::getVerilogModuleNameAttr() {
       ::mlir::SymbolTable::getSymbolAttrName());
 }
 
+hw::ModuleType
+SVVerbatimModuleOp::getModuleTypeFromPorts(mlir::MLIRContext *context,
+                                           ArrayRef<hw::PortInfo> ports) {
+  SmallVector<hw::ModulePort> modulePorts;
+  for (const auto &port : ports) {
+    Type portType = port.type;
+    hw::ModulePort::Direction portDir = port.dir;
+    if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
+      portType = inoutType.getElementType();
+      portDir = hw::ModulePort::Direction::InOut;
+    }
+    modulePorts.push_back({port.name, portType, portDir});
+  }
+  return hw::ModuleType::get(context, modulePorts);
+}
+
 //===----------------------------------------------------------------------===//
 // BindInterfaceOp
 //===----------------------------------------------------------------------===//
