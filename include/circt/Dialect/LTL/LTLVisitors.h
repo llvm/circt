@@ -23,7 +23,11 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AndOp, OrOp, DelayOp, ConcatOp, RepeatOp, NotOp,
                        ImplicationOp, UntilOp, EventuallyOp, ClockOp,
-                       IntersectOp, NonConsecutiveRepeatOp, GoToRepeatOp>(
+                       ClockedAndOp, ClockedOrOp, ClockedIntersectOp,
+                       CreateClockedSequenceOp, ClockedDelayOp, ClockedConcatOp,
+                       IntersectOp, ClockedNonConsecutiveRepeatOp,
+                       ClockedGoToRepeatOp, ClockedRepeatOp,
+                       NonConsecutiveRepeatOp, GoToRepeatOp>(
             [&](auto op) -> ResultType {
               return thisCast->visitLTL(op, args...);
             })
@@ -62,6 +66,15 @@ public:
   HANDLE(IntersectOp, Unhandled);
   HANDLE(NonConsecutiveRepeatOp, Unhandled);
   HANDLE(GoToRepeatOp, Unhandled);
+  HANDLE(ClockedAndOp, Unhandled);
+  HANDLE(ClockedConcatOp, Unhandled);
+  HANDLE(ClockedDelayOp, Unhandled);
+  HANDLE(ClockedGoToRepeatOp, Unhandled);
+  HANDLE(ClockedIntersectOp, Unhandled);
+  HANDLE(ClockedNonConsecutiveRepeatOp, Unhandled);
+  HANDLE(ClockedOrOp, Unhandled);
+  HANDLE(ClockedRepeatOp, Unhandled);
+  HANDLE(CreateClockedSequenceOp, Unhandled);
 #undef HANDLE
 };
 
