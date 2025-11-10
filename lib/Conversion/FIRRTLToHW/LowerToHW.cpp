@@ -376,18 +376,18 @@ struct CircuitLoweringState {
 
   /// Check if a verbatim module with the given verilog name already exists.
   /// Returns the existing module if found, nullptr otherwise.
-  sv::SVVerbatimModuleOp getExistingVerbatimModule(StringRef verilogName) {
+  sv::SVVerbatimModuleOp getExistingVerbatimModule(StringRef moduleName) {
     std::lock_guard<std::mutex> lock(verbatimModulesMutex);
-    std::string verilogNameStr = verilogName.str();
-    auto it = verbatimModulesByVerilogName.find(verilogNameStr);
-    return it != verbatimModulesByVerilogName.end() ? it->second : nullptr;
+    std::string moduleKeyStr = moduleName.str();
+    auto it = verbatimModulesByKey.find(moduleKeyStr);
+    return it != verbatimModulesByKey.end() ? it->second : nullptr;
   }
 
-  void registerVerbatimModule(StringRef verilogName,
+  void registerVerbatimModule(StringRef moduleName,
                               sv::SVVerbatimModuleOp module) {
     std::lock_guard<std::mutex> lock(verbatimModulesMutex);
-    std::string verilogNameStr = verilogName.str();
-    verbatimModulesByVerilogName[verilogNameStr] = module;
+    std::string moduleKeyStr = moduleName.str();
+    verbatimModulesByKey[moduleKeyStr] = module;
   }
 
 private:
@@ -539,9 +539,9 @@ private:
 
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 
-  /// Track verbatim modules by their verilog name to avoid duplicates
+  /// Track verbatim modules by their defname/module name to avoid duplicates
   std::unordered_map<std::string, sv::SVVerbatimModuleOp>
-      verbatimModulesByVerilogName;
+      verbatimModulesByKey;
   std::mutex verbatimModulesMutex;
 };
 
@@ -1176,7 +1176,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                         loweringState)))
     return {};
 
-  StringRef verilogName = oldModule.getSymName();
+  StringRef verilogName;
   if (auto defName = oldModule.getDefname())
     verilogName = defName.value();
 
@@ -1268,10 +1268,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     if (!parameters)
       parameters = builder.getArrayAttr({});
 
-    // Check if a verbatim module already exists for this verilog name,
-    // otherwise create a new one.
+    // Check if a verbatim module already exists for this module name, otherwise create
+    // a new one.
+    StringRef moduleName = verilogName.empty() ? oldModule.getName() : verilogName;
     auto verbatimModule =
-        loweringState.getExistingVerbatimModule(verilogName);
+        loweringState.getExistingVerbatimModule(moduleName);
 
     if (!verbatimModule) {
       verbatimModule = sv::SVVerbatimModuleOp::create(
@@ -1280,13 +1281,34 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
           /*port_locs=*/nullptr, parameters,
           additionalFiles.empty() ? nullptr
                                   : builder.getArrayAttr(additionalFiles),
-          builder.getStringAttr(verilogName));
+          verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
 
       SymbolTable::setSymbolVisibility(
           verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
 
-      loweringState.registerVerbatimModule(verilogName, verbatimModule);
-                                           verbatimModule);
+      loweringState.registerVerbatimModule(moduleName, verbatimModule);
+    } else {
+      auto existingModuleType = verbatimModule.getHWModuleType();
+      SmallVector<hw::ModulePort> newPorts;
+      for (const auto &port : ports) {
+        Type portType = port.type;
+        hw::ModulePort::Direction portDir = port.dir;
+        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
+          portType = inoutType.getElementType();
+          portDir = hw::ModulePort::Direction::InOut;
+        }
+        newPorts.push_back({port.name, portType, portDir});
+      }
+      auto newModuleType = hw::ModuleType::get(builder.getContext(), newPorts);
+
+      if (existingModuleType != newModuleType) {
+        oldModule.emitError()
+            << "module signature mismatch for output file '"
+            << outputFile.getValue() << "': existing module '"
+            << verbatimModule.getSymName() << "' has different ports than '"
+            << oldModule.getName() << "'";
+        return {};
+      }
     }
 
     annos.removeAnnotation(verbatimBlackBoxAnnoClass);

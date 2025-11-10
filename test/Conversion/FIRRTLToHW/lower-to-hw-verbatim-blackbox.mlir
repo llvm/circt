@@ -108,6 +108,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     in clk: !firrtl.clock,
     out out: !firrtl.uint<1>
   ) attributes {
+    defname = "DuplicatedBlackBox",
     annotations = [
       {
         class = "circt.VerbatimBlackBoxAnno",
@@ -123,11 +124,11 @@ firrtl.circuit "VerbatimBlackBoxTest" {
   }
 
   // CHECK-NOT: sv.verbatim.module @DuplicatedBlackBox2(
-
   firrtl.extmodule @DuplicatedBlackBox2(
     in clk: !firrtl.clock,
     out out: !firrtl.uint<1>
   ) attributes {
+    defname = "DuplicatedBlackBox",
     annotations = [
       {
         class = "circt.VerbatimBlackBoxAnno",
