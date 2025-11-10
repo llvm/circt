@@ -413,6 +413,8 @@ void circt::populateVerilogToMoorePipeline(OpPassManager &pm) {
     anyPM.addPass(mlir::createCanonicalizerPass());
   }
 
+  pm.addPass(moore::createVTablesPass());
+
   // Remove unused symbols.
   pm.addPass(mlir::createSymbolDCEPass());
 
