@@ -587,7 +587,7 @@ class SpecializedFoo extends GenericBar #(x,y,z); endclass
 /// Check virtual attribute of methoddecl
 
 // CHECK-LABEL: moore.class.classdecl @testClassVirtual {
-// CHECK-NEXT:    moore.class.methoddecl @testFun : (!moore.class<@testClassVirtual>) -> ()
+// CHECK-NEXT:    moore.class.methoddecl @testFun -> @"testClassVirtual::testFun" : (!moore.class<@testClassVirtual>) -> ()
 // CHECK:  }
 // CHECK:  func.func private @"testClassVirtual::testFun"(%arg0: !moore.class<@testClassVirtual>) {
 // CHECK:    return
@@ -617,7 +617,7 @@ endfunction
 // CHECK:    moore.class.methoddecl @subroutine : (!moore.class<@virtualFunctionClass>)
 // CHECK:  }
 // CHECK:  moore.class.classdecl @realFunctionClass implements [@virtualFunctionClass] {
-// CHECK:    moore.class.methoddecl @subroutine : (!moore.class<@realFunctionClass>)
+// CHECK:    moore.class.methoddecl @subroutine -> @"realFunctionClass::subroutine" : (!moore.class<@realFunctionClass>)
 // CHECK:  }
 // CHECK:  func.func private @"realFunctionClass::subroutine"(%arg0: !moore.class<@realFunctionClass>) {
 // CHECK:    return
