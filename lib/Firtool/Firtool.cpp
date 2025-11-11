@@ -89,8 +89,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createLowerMatches());
 
   // Width inference creates canonicalization opportunities.
-  // pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths_new());
+  if (opt.shouldUseNewInferWidths()) {
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths_new());
+  } else {
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
+  }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
       {/*replSeqMem=*/opt.shouldReplaceSequentialMemories(),
@@ -558,6 +561,11 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> useNewInferWidths{
+      "use-new-infer-widths",
+      llvm::cl::desc("Use experimental new InferWidths pass"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> dedupClasses{
       "dedup-classes",
       llvm::cl::desc(
@@ -805,7 +813,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
-      disableOptimization(false), vbToBV(false), noDedup(false),
+      disableOptimization(false), vbToBV(false), noDedup(false), useNewInferWidths(false),
       dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
       noViews(false), disableAggressiveMergeConnections(false),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
@@ -840,6 +848,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableOptimization = clOptions->disableOptimization;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
+  useNewInferWidths = clOptions->useNewInferWidths;
   dedupClasses = clOptions->dedupClasses;
   companionMode = clOptions->companionMode;
   noViews = clOptions->noViews;

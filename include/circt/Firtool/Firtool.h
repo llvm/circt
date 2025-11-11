@@ -96,6 +96,7 @@ public:
   bool shouldDisableLayerSink() const { return disableLayerSink; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
+  bool shouldUseNewInferWidths() const { return useNewInferWidths; }
   bool shouldDedup() const { return !noDedup; }
   bool shouldDedupClasses() const { return dedupClasses; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
@@ -416,6 +417,7 @@ private:
   bool disableOptimization;
   bool vbToBV;
   bool noDedup;
+  bool useNewInferWidths;
   bool dedupClasses;
   firrtl::CompanionMode companionMode;
   bool noViews;
