@@ -92,4 +92,38 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
+def HWInliner : Pass<"hw-inliner", "mlir::ModuleOp"> {
+  let summary = "Inline private HW modules";
+  let description = [{
+    This pass aggressively inlines private HW modules into their instantiation
+    sites based on heuristics. The pass will inline modules that are:
+    - Empty (only contain hw.output)
+    - Have no outputs
+    - Have only one use
+    - Are small (less than 8 operations)
+    - Do not contain state (seq.firreg operations)
+
+    The pass operates in post-order on the instance graph to ensure that
+    nested modules are processed before their parents. It also handles
+    hierarchical path operations and inner symbol renaming.
+  }];
+  let statistics = [
+    Statistic<"numInlined", "modules-inlined", "Number of modules that were inlined">
+  ];
+  let options = [
+    Option<"inlineEmpty", "inline-empty", "bool", "true",
+           "Inline modules that are empty (only contain hw.output)">,
+    Option<"inlineNoOutputs", "inline-no-outputs", "bool", "true",
+           "Inline modules that have no output ports">,
+    Option<"inlineSingleUse", "inline-single-use", "bool", "true",
+           "Inline modules that have only one use">,
+    Option<"inlineSmall", "inline-small", "bool", "true",
+           "Inline modules that are small (fewer than smallThreshold operations)">,
+    Option<"smallThreshold", "small-threshold", "unsigned", "8",
+           "Maximum number of operations for a module to be considered small">,
+    Option<"inlineWithState", "inline-with-state", "bool", "false",
+           "Allow inlining of modules that contain state (seq.firreg operations)">
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
