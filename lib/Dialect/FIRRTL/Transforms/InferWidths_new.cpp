@@ -25,11 +25,9 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/floyd_warshall_shortest.hpp>
-#include <boost/graph/strong_components.hpp>
-#include <iomanip>
-#include <iostream>
+#include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 
 #define DEBUG_TYPE "infer-widths-new"
 
@@ -42,7 +40,6 @@ namespace firrtl {
 
 namespace circt {
 
-// 定义Zero结构体
 struct Zero {
   bool operator==(const Zero &) const { return true; }
   bool operator==(const FieldRef &) const { return false; }
@@ -53,7 +50,6 @@ struct Zero {
   }
 };
 
-// 实现FieldRef的operator== !=
 bool FieldRef::operator==(const Zero &) const { return false; }
 bool FieldRef::operator!=(const Zero &) const { return true; }
 } // namespace circt
@@ -129,15 +125,12 @@ private:
 public:
   Term(nat val, const FieldRef &var) : coe_(val), var_(var) {}
 
-  // 访问
   nat coe() const { return coe_; }
   const FieldRef &var() const { return var_; }
 
-  // 修改器
   void setCoe(nat newCoe) { coe_ = newCoe; }
   void setVar(const FieldRef &newVar) { var_ = newVar; }
 
-  // 重载相等
   bool operator==(const Term &other) const {
     return (coe_ == other.coe_) && (var_ == other.var_);
   }
@@ -159,39 +152,30 @@ public:
   Terms(std::initializer_list<Term> init) : terms_(init) {}
   Terms(const std::list<Term> &terms) : terms_(terms) {}
 
-  // 迭代器支持
   auto begin() const { return terms_.begin(); }
   auto end() const { return terms_.end(); }
   auto begin() { return terms_.begin(); }
   auto end() { return terms_.end(); }
 
-  // 访问元素
   const std::list<Term> &get_terms() const { return terms_; }
   size_t size() const { return terms_.size(); }
   bool empty() const { return terms_.empty(); }
 
-  // 添加项
   void push_front(const Term &term) { terms_.push_front(term); }
   void push_back(const Term &term) { terms_.push_back(term); }
 
-  // 比较操作（顺序相关）
   bool operator==(const Terms &other) const { return terms_ == other.terms_; }
-
   bool operator!=(const Terms &other) const { return !(*this == other); }
 
-  // 合并单个项
   Terms combine_term(const Term &term) const {
-    Terms result = *this; // 创建当前项的副本
-    // 查找具有相同变量的项
+    Terms result = *this; 
     auto it =
         std::find_if(result.terms_.begin(), result.terms_.end(),
                      [&](const Term &t) { return t.var() == term.var(); });
 
     if (it == result.terms_.end()) {
-      // 未找到
       result.push_front(term);
     } else {
-      // 找到，替换
       Term combined(term.coe() + it->coe(), term.var());
       result.terms_.erase(it);
       result.push_front(combined);
@@ -199,7 +183,6 @@ public:
     return result;
   }
 
-  // 合并另一组项
   Terms combine_terms(const Terms &other) const {
     Terms result = *this;
     for (const auto &term : other.terms_) {
@@ -208,7 +191,6 @@ public:
     return result;
   }
 
-  // 合并项并处理常数
   static std::tuple<Terms, Terms, int>
   combine_terms(const Terms &terms1, const Terms &terms2, int cst1, int cst2) {
     Terms result = terms1.combine_terms(terms2);
@@ -216,7 +198,6 @@ public:
     return {result, Terms(), new_cst};
   }
 
-  // 求值
   long long evaluate(const Valuation &v) const {
     long long result = 0;
     for (const auto &term : terms_) {
@@ -227,26 +208,24 @@ public:
     return result;
   }
 
-  // 查找系数大于1项
   std::optional<FieldRef> findVarWithCoeGreaterThanOne() const {
     for (const auto &term : terms_) {
       if (term.coe() > 1) {
-        return term.var(); // 返回找到的变量
+        return term.var(); 
       }
     }
-    return std::nullopt; // 未找到符合条件的项
+    return std::nullopt; 
   }
 
-  // 查找多于2项
   std::optional<std::pair<FieldRef, FieldRef>> findFirstTwoVars() const {
     if (terms_.size() < 2) {
-      return std::nullopt; // 不足两个元素
+      return std::nullopt; 
     }
 
     auto it = terms_.begin();
-    const FieldRef &firstVar = it->var(); // 第一个元素的变量
+    const FieldRef &firstVar = it->var();
     ++it;
-    const FieldRef &secondVar = it->var(); // 第二个元素的变量
+    const FieldRef &secondVar = it->var(); 
 
     return std::make_pair(firstVar, secondVar);
   }
@@ -266,7 +245,6 @@ public:
   }
 };
 
-// Constraint1类定义
 class Constraint1 {
 private:
   FieldRef lhs_var1_;
@@ -275,19 +253,16 @@ private:
   std::optional<FieldRef> rhs_power_;
 
 public:
-  // 构造函数
   Constraint1(FieldRef lhs_var, int rhs_const, Terms rhs_terms,
               std::optional<FieldRef> rhs_power)
       : lhs_var1_(lhs_var), rhs_const1_(rhs_const), rhs_terms1_(rhs_terms),
         rhs_power_(rhs_power) {}
 
-  // 访问器
   const FieldRef &lhs_var1() const { return lhs_var1_; }
   int rhs_const1() const { return rhs_const1_; }
   const Terms &rhs_terms1() const { return rhs_terms1_; }
   const std::optional<FieldRef> &rhs_power() const { return rhs_power_; }
 
-  // 修改器
   void set_lhs_var1(const FieldRef &var) { lhs_var1_ = var; }
   void set_rhs_const1(int constant) { rhs_const1_ = constant; }
   void set_rhs_terms1(const Terms &terms) { rhs_terms1_ = terms; }
@@ -295,20 +270,16 @@ public:
     rhs_power_ = terms;
   }
 
-  // 相等比较
   bool operator==(const Constraint1 &other) const {
     return (lhs_var1_ == other.lhs_var1_) &&
            (rhs_const1_ == other.rhs_const1_) &&
            (rhs_terms1_ == other.rhs_terms1_) &&
            (rhs_power_ == other.rhs_power_);
   }
-
   bool operator!=(const Constraint1 &other) const { return !(*this == other); }
 
-  // 检查约束是否满足
   bool satisfies(const Valuation &v) const;
 
-  // 计算右侧幂项的值
   long long power_value(const Valuation &v) const {
     if (rhs_power_.has_value()) {
       FieldRef pv_power(rhs_power_.value());
@@ -331,25 +302,16 @@ public:
       os << " + 2 ^ [" << c.rhs_power().value().getValue()
          << " (fieldID: " << c.rhs_power().value().getFieldID() << ")]";
     }
-
-    os << "\nlhs is defined at : " << c.lhs_var1().getValue().getLoc() << "\n";
-    for (const auto &term : c.rhs_terms1()) {
-      os << "rhs is defined at : " << term.var().getValue().getLoc() << "\n";
-    }
-
     return os;
   }
 };
 
 bool Constraint1::satisfies(const Valuation &v) const {
-  // 查找左侧变量值
   auto lhs_it = v.find(lhs_var1_);
   if (lhs_it == v.end()) {
-    return false; // 左侧变量未定义
+    return false; 
   }
   long long lhs_value = lhs_it->second;
-
-  // 计算右侧值
   long long linear_value = rhs_terms1_.evaluate(v);
   long long power_val = power_value(v);
   long long rhs_total = linear_value + power_val + rhs_const1_;
@@ -357,7 +319,6 @@ bool Constraint1::satisfies(const Valuation &v) const {
   return lhs_value >= rhs_total;
 }
 
-// Constraint_Min类定义
 class Constraint_Min {
 private:
   FieldRef lhs_;
@@ -367,25 +328,21 @@ private:
   std::optional<FieldRef> fr2_;
 
 public:
-  // 构造函数
   Constraint_Min(FieldRef lhs, int const1, int const2,
                  std::optional<FieldRef> fr1, std::optional<FieldRef> fr2)
       : lhs_(lhs), const1_(const1), const2_(const2), fr1_(fr1), fr2_(fr2) {}
 
-  // 访问器
   const FieldRef &lhs() const { return lhs_; }
   int const1() const { return const1_; }
   int const2() const { return const2_; }
   const std::optional<FieldRef> &fr1() const { return fr1_; }
   const std::optional<FieldRef> &fr2() const { return fr2_; }
 
-  // 修改器
   void set_lhs_(const FieldRef &var) { lhs_ = var; }
   void set_const1(int constant) { const1_ = constant; }
   void set_fr1(const std::optional<FieldRef> &fr) { fr1_ = fr; }
   void set_fr2(const std::optional<FieldRef> &fr) { fr2_ = fr; }
 
-  // 相等比较
   bool operator==(const Constraint_Min &other) const {
     return (lhs_ == other.lhs_) && (const1_ == other.const1_) &&
            (const2_ == other.const2_) && (fr1_ == other.fr1_) &&
@@ -412,51 +369,33 @@ public:
     }
     os << ")\n";
 
-    os << "\nlhs is defined at : " << c.lhs().getValue().getLoc() << "\n";
-    if (c.fr1().has_value()) {
-      os << "fr1 is defined at : " << c.fr1().value().getValue().getLoc()
-         << "\n";
-    }
-    if (c.fr2().has_value()) {
-      os << "fr2 is defined at : " << c.fr2().value().getValue().getLoc()
-         << "\n";
-    }
-
     return os;
   }
 };
 
-// 第二种约束类型
 class Constraint2 {
 private:
   nat lhs_const2_;
   Terms rhs_terms2_;
 
 public:
-  // 构造函数
   Constraint2(nat lhs_const = 0, Terms rhs_terms = Terms())
       : lhs_const2_(lhs_const), rhs_terms2_(rhs_terms) {}
 
-  // 访问器
   nat lhs_const2() const { return lhs_const2_; }
   const Terms &rhs_terms2() const { return rhs_terms2_; }
 
-  // 修改器
   void set_lhs_const2(nat constant) { lhs_const2_ = constant; }
   void set_rhs_terms2(const Terms &terms) { rhs_terms2_ = terms; }
 
-  // 相等比较
   bool operator==(const Constraint2 &other) const {
     return (lhs_const2_ == other.lhs_const2_) &&
            (rhs_terms2_ == other.rhs_terms2_);
   }
-
   bool operator!=(const Constraint2 &other) const { return !(*this == other); }
 
-  // 检查约束是否满足
   bool satisfies(const Valuation &v) const;
 
-  // 打印输出
   friend llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                        const Constraint2 &c) {
     os << c.lhs_const2_ << " >= " << c.rhs_terms2_;
@@ -469,110 +408,199 @@ bool Constraint2::satisfies(const Valuation &v) const {
   return static_cast<long long>(lhs_const2_) >= rhs_value;
 }
 
+using FieldRef_with_default = std::variant<Zero, FieldRef>;
+
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const FieldRef_with_default& node) {
+    if (std::holds_alternative<Zero>(node)) {
+        os << "Zero";
+    } else {
+        auto& pv = std::get<FieldRef>(node);
+        os << "FieldRef[" << pv.getValue() << " (fieldID: " << pv.getFieldID() << ")]";
+    }
+    return os;
+}
+
+struct FieldRef_wd_Hash {
+    size_t operator()(const FieldRef_with_default& node) const {
+        if (std::holds_alternative<Zero>(node)) {
+            return 0; 
+        } else {
+            auto& pv = std::get<FieldRef>(node);
+            return static_cast<size_t>(hash_value(pv));
+        }
+    }
+};
+
+struct Node {
+    FieldRef_with_default field;
+    std::vector<Node*> successors;
+    
+    Node(Zero z) : field(z) {}
+    Node(Value value, unsigned id) : field(FieldRef{value, id}) {}
+    Node(const FieldRef_with_default& fr) : field(fr) {}
+    
+    void addSuccessor(Node* node) {
+        successors.push_back(node);
+    }
+};
+
+struct FieldRefGraph {
+    std::deque<Node> nodes;
+    std::unordered_map<FieldRef_with_default, Node*, FieldRef_wd_Hash> nodeMap;
+    
+    Node* addNode_wd(Zero z) {
+        FieldRef_with_default key = z;
+        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+            return it->second;
+        }
+ 
+        nodes.emplace_back(z);
+        Node* newNode = &nodes.back();
+        nodeMap[key] = std::move(newNode);
+        return newNode;
+    }
+    
+    Node* addNode_wd(Value value, unsigned id) {
+        FieldRef_with_default key = FieldRef{value, id};
+        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+            return it->second;
+        }
+        
+        nodes.emplace_back(value, id);
+        Node* newNode = &nodes.back();
+        nodeMap[key] = std::move(newNode);
+
+        Node* root = addNode_wd(Zero{});
+        root->addSuccessor(newNode);
+
+        return newNode;
+    }
+
+    Node* addNode_wd(FieldRef key) {
+        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+            return it->second;
+        }
+        
+        nodes.emplace_back(key);
+        Node* newNode = &nodes.back();
+        nodeMap[key] = std::move(newNode);
+
+        Node* root = addNode_wd(Zero{});
+        root->addSuccessor(newNode);
+
+        return newNode;
+    }
+
+    Node* addNode(FieldRef key) {
+        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+            return it->second;
+        }
+        
+        nodes.emplace_back(key);
+        Node* newNode = &nodes.back();
+        nodeMap[key] = std::move(newNode);
+        return newNode;
+    }
+    
+    Node* getEntryNode() {
+      Node* root = addNode_wd(Zero{});
+      return root;
+    }
+
+  FieldRefGraph() = default;
+
+  FieldRefGraph(const FieldRefGraph& other) {
+    std::unordered_map<const Node*, Node*> oldToNewMap;
+
+    for (const Node& oldNode : other.nodes) {
+        nodes.emplace_back(oldNode.field); 
+        Node* newNode = &nodes.back();
+        oldToNewMap[&oldNode] = newNode;
+        nodeMap[newNode->field] = &nodes.back();
+    }
+
+    for (const Node& oldNode : other.nodes) {
+        Node* newNode = oldToNewMap[&oldNode];
+        for (Node* oldSuccessor : oldNode.successors) {
+            auto it = oldToNewMap.find(oldSuccessor);
+            if (it != oldToNewMap.end()) {
+                newNode->successors.push_back(it->second);
+            }
+        }
+    }
+  }
+};
+
+namespace llvm {
+    template <> struct GraphTraits<FieldRefGraph*> {
+        using NodeRef = Node*; 
+        using ChildIteratorType = std::vector<Node*>::iterator;  
+        
+        static NodeRef getEntryNode(FieldRefGraph* G) {
+            return G->getEntryNode();
+        }
+        
+        static ChildIteratorType child_begin(NodeRef node) {
+            return node->successors.begin();
+        }
+        
+        static ChildIteratorType child_end(NodeRef node) {
+            return node->successors.end();
+        }
+        
+        static NodeRef nodes_begin(FieldRefGraph* G) {
+            return G->nodes.empty() ? nullptr : &G->nodes[0];
+        }
+        
+        static NodeRef nodes_end(FieldRefGraph* G) {
+            return G->nodes.empty() ? nullptr : &G->nodes[0] + G->nodes.size();
+        }
+        
+    };
+}
+
 //===----------------------------------------------------------------------===//
 // Constraint Solver
 //===----------------------------------------------------------------------===//
 
-struct SCCResult {
-  int total_components = 0;
-  std::vector<int> component_ids;
-  std::vector<std::vector<FieldRef>> components;
-  std::vector<int> topological_order;
-};
-
-// 定义图类型
-using DependencyGraph =
-    boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, FieldRef>;
-
 class ConstraintSolver {
 private:
-  // 待求解约束集合
+
   std::unordered_map<FieldRef, std::vector<Constraint1>, FieldRef::Hash>
       constraints_;
 
-  // 当前解（变量名 → 值）
   Valuation solution_ = {};
-  // 依赖关系图
-  DependencyGraph dependency_graph_;
 
-  // 顶点映射（变量名 → 顶点描述符）
-  std::unordered_map<FieldRef,
-                     boost::graph_traits<DependencyGraph>::vertex_descriptor,
-                     FieldRef::Hash>
-      vertex_map_;
+  FieldRefGraph graph_;
 
 public:
   explicit ConstraintSolver(
       std::unordered_map<FieldRef, std::vector<Constraint1>, FieldRef::Hash>
-          &constraints,
-      DependencyGraph &dependency_graph,
-      std::unordered_map<
-          FieldRef, boost::graph_traits<DependencyGraph>::vertex_descriptor,
-          FieldRef::Hash> &vertex_map)
-      : constraints_(constraints), dependency_graph_(dependency_graph),
-        vertex_map_(vertex_map) {}
+          &constraints, FieldRefGraph &graph)
+      : constraints_(constraints), graph_(graph) {}
 
-  // 获取或添加顶点
-  boost::graph_traits<DependencyGraph>::vertex_descriptor
-  get_or_add_vertex(const FieldRef &var) {
-    auto it = vertex_map_.find(var);
-    if (it != vertex_map_.end()) {
-      return it->second;
-    } else {
-      auto vertex = boost::add_vertex(var, dependency_graph_);
-      vertex_map_[var] = vertex;
-      return vertex;
-    }
-  }
-
-  // 构建依赖关系图
-  // void buildDependencyGraph(const Constraint1& c) {
-  //     FieldRef lhs = c.lhs_var1();
-  //     auto lhs_vertex = get_or_add_vertex(lhs);
-
-  //     // 遍历右侧项
-  //     for (const auto& term : c.rhs_terms1()) {
-  //         FieldRef rhs_var = term.var();
-  //         auto rhs_vertex = get_or_add_vertex(rhs_var);
-  //         boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
-  //     }
-
-  //     // 遍历幂项
-  //     if (c.rhs_power().has_value()) {
-  //         FieldRef rhs_var = c.rhs_power().value();
-  //         auto rhs_vertex = get_or_add_vertex(rhs_var);
-  //         boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
-  //     }
-  // }
-
-  // 添加约束同时画图
   void addConstraint(const Constraint1 &c) {
     auto &vec = constraints_[c.lhs_var1()];
     vec.push_back(c);
 
-    // 直接添加边
     FieldRef lhs = c.lhs_var1();
-    auto lhs_vertex = get_or_add_vertex(lhs);
+    Node* lhs_node = graph_.addNode_wd(lhs);
 
-    // 遍历右侧项
     for (const auto &term : c.rhs_terms1()) {
       FieldRef rhs_var = term.var();
-      auto rhs_vertex = get_or_add_vertex(rhs_var);
-      boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
+      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      lhs_node->addSuccessor(rhs_node);
     }
 
-    // 遍历幂项
     if (c.rhs_power().has_value()) {
       FieldRef rhs_var = c.rhs_power().value();
-      auto rhs_vertex = get_or_add_vertex(rhs_var);
-      boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
+      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      lhs_node->addSuccessor(rhs_node);
     }
   }
 
-  // 获取依赖图（只读）
-  const DependencyGraph &dependencyGraph() const { return dependency_graph_; }
+  FieldRefGraph &fieldRefGraph() { return graph_; }
 
-  // 获取约束列表
   std::vector<Constraint1> constraints() const {
     std::vector<Constraint1> result;
     for (const auto &[_, constraints_vec] : constraints_) {
@@ -587,83 +615,10 @@ public:
     return constraints_;
   }
 
-  // 计算强连通分量
-  SCCResult computeSCC();
-
-  // 打印SCC结果
-  void printSCCResult(const SCCResult &result);
-
-  // 求解
   LogicalResult solve();
 
-  // 获取解
   const Valuation &solution() const { return solution_; }
 };
-
-// 计算强连通分量
-SCCResult ConstraintSolver::computeSCC() {
-  SCCResult result;
-  const size_t num_vertices = boost::num_vertices(dependency_graph_);
-
-  if (num_vertices == 0) {
-    return result;
-  }
-
-  result.component_ids.resize(num_vertices, -1);
-
-  result.total_components = boost::strong_components(
-      dependency_graph_,
-      boost::make_iterator_property_map(
-          result.component_ids.begin(),
-          boost::get(boost::vertex_index, dependency_graph_)));
-
-  result.components.resize(result.total_components);
-  for (size_t i = 0; i < num_vertices; ++i) {
-    auto vd = boost::vertex(i, dependency_graph_);
-    const FieldRef &pv = dependency_graph_[vd];
-    int comp_id = result.component_ids[i];
-    if (comp_id >= 0 && comp_id < result.total_components) {
-      result.components[comp_id].push_back(pv);
-    }
-  }
-
-  result.topological_order.resize(result.total_components);
-  for (int i = 0, j = result.total_components - 1; i < result.total_components;
-       ++i, --j) {
-    result.topological_order[i] = j;
-  }
-
-  return result;
-}
-
-// 打印SCC结果
-void ConstraintSolver::printSCCResult(const SCCResult &result) {
-  LLVM_DEBUG(llvm::dbgs() << "\nStrongly Connected Components Analysis\n");
-  LLVM_DEBUG(llvm::dbgs() << "=====================================\n");
-  LLVM_DEBUG(llvm::dbgs() << "Total SCCs found: " << result.total_components
-                          << "\n\n");
-
-  for (size_t i = 0; i < result.topological_order.size(); ++i) {
-    int comp_id = result.topological_order[i];
-    const auto &component = result.components[comp_id];
-
-    LLVM_DEBUG(llvm::dbgs() << "Component #" << comp_id
-                            << " (topological position: " << i + 1 << ")\n");
-    LLVM_DEBUG(llvm::dbgs() << "Size: " << component.size() << " variables\n");
-    LLVM_DEBUG(llvm::dbgs() << "Variables: ");
-
-    for (size_t j = 0; j < component.size(); ++j) {
-      FieldRef temp_var(component[j]);
-      LLVM_DEBUG(llvm::dbgs() << temp_var.getValue().getLoc());
-      if (j < component.size() - 1) {
-        LLVM_DEBUG(llvm::dbgs() << ", ");
-      }
-    }
-
-    LLVM_DEBUG(llvm::dbgs() << "\n\n");
-  }
-  LLVM_DEBUG(llvm::dbgs() << "=====================================\n");
-}
 
 bool is_simple_cycle(const std::vector<Constraint1> &cs) {
   return std::all_of(cs.begin(), cs.end(), [](const Constraint1 &c) {
@@ -672,33 +627,27 @@ bool is_simple_cycle(const std::vector<Constraint1> &cs) {
       return false;
     }
 
-    // 处理空列表情况
     if (terms.empty()) {
       return true;
     }
 
-    // 检查首位元素（系数必须为1）且后续无其他元素
     auto it = terms.begin();
-    if (it->coe() != 1) { // 首位系数必须为1
+    if (it->coe() != 1) { 
       return false;
     }
 
-    // 验证后续无其他元素
     return std::next(it) == terms.end();
   });
 }
 
-// 过滤函数实现
 std::vector<Constraint1>
 filterConstraints(const std::vector<FieldRef> &targetVars,
                   const std::vector<Constraint1> &constraints) {
-  // 创建哈希集合用于快速查找
   std::unordered_set<FieldRef, FieldRef::Hash> targetSet(targetVars.begin(),
                                                          targetVars.end());
 
   std::vector<Constraint1> result;
   for (const auto &constraint : constraints) {
-    // 检查当前约束的lhs是否在目标集合中
     if (targetSet.find(constraint.lhs_var1()) != targetSet.end()) {
       result.push_back(constraint);
     }
@@ -718,7 +667,6 @@ std::vector<Constraint1> filterConstraints(
   return result;
 }
 
-// 移除已求解变量（对应Coq中的remove_solved）
 std::pair<Terms, long long> remove_solved(const Valuation &values,
                                           const Terms &terms) {
   Terms new_terms;
@@ -727,11 +675,9 @@ std::pair<Terms, long long> remove_solved(const Valuation &values,
   for (const Term &term : terms.get_terms()) {
     auto it = values.find(term.var());
     if (it != values.end()) {
-      // 变量已求解，计算贡献值并累加到常数
       unsigned int val = it->second;
       total_constant += static_cast<long long>(term.coe()) * val;
     } else {
-      // 变量未求解，保留项
       new_terms.push_back(term);
     }
   }
@@ -739,39 +685,32 @@ std::pair<Terms, long long> remove_solved(const Valuation &values,
   return {new_terms, total_constant};
 }
 
-// 处理单个约束（对应Coq中的remove_solved_c）
 Constraint1 remove_solved_c(const Valuation &values, const Constraint1 &c) {
-  // 处理右侧项
   auto [new_terms, term_constant] = remove_solved(values, c.rhs_terms1());
-
-  // 处理幂项
   if (c.rhs_power().has_value()) {
     auto it = values.find(c.rhs_power().value());
     if (it != values.end()) {
-      // 幂项变量已求解
       long long power_value = c.power_value(values);
       return Constraint1(
           c.lhs_var1(),
           c.rhs_const1() + static_cast<int>(term_constant + power_value),
           new_terms,
-          std::nullopt // 幂项被移除
+          std::nullopt 
       );
     } else {
       return Constraint1(c.lhs_var1(),
                          c.rhs_const1() + static_cast<int>(term_constant),
                          new_terms,
-                         c.rhs_power() // 保留原幂项
+                         c.rhs_power() 
       );
     }
   } else {
-    // 不含幂项的情况
     return Constraint1(c.lhs_var1(),
                        c.rhs_const1() + static_cast<int>(term_constant),
                        new_terms, c.rhs_power());
   }
 }
 
-// 处理约束列表（对应Coq中的remove_solveds）
 std::vector<Constraint1> remove_solveds(const Valuation &values,
                                         const std::vector<Constraint1> &cs) {
   std::vector<Constraint1> result;
@@ -787,17 +726,14 @@ std::vector<Constraint1> remove_solveds(const Valuation &values,
 std::optional<Valuation> merge_solution(const std::vector<FieldRef> &tbsolved,
                                         const Valuation &initial,
                                         const Valuation &solution_of_tbsolved) {
-  Valuation result = initial; // 从初始赋值开始
+  Valuation result = initial; 
 
-  // 遍历所有待求解变量
   for (const FieldRef &var : tbsolved) {
-    // 在解决方案中查找当前变量
     auto it = solution_of_tbsolved.find(var);
     if (it == solution_of_tbsolved.end()) {
-      return std::nullopt; // 变量未求解，返回空
+      return std::nullopt; 
     }
 
-    // 添加变量到结果集
     result[var] = it->second;
   }
 
@@ -806,14 +742,134 @@ std::optional<Valuation> merge_solution(const std::vector<FieldRef> &tbsolved,
 
 Valuation bab(const std::vector<Constraint1> &constraints,
               const std::vector<FieldRef> &tbsolved);
-Valuation my_floyd(const std::vector<Constraint1> &constraints);
+
+std::vector<FieldRef> extractFieldRefs(const std::vector<Node*>& nodes) {
+    std::vector<FieldRef> result;
+    for (Node* node : nodes) {
+        if (!node) continue;
+        
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, FieldRef>) {
+                result.push_back(arg);  
+            }
+        }, node->field);
+    }
+    return result;
+}
+
+const int INF = 1e9;
+Valuation floyd(const std::vector<Constraint1> &constraints, const std::vector<FieldRef> &tbsolved) {
+  std::unordered_map<FieldRef_with_default, int, FieldRef_wd_Hash> var_to_index;
+
+  int next_index = 0;
+  for (const auto& var : tbsolved) 
+    var_to_index[var] = next_index++;
+  var_to_index[Zero{}] = next_index;
+
+  LLVM_DEBUG(llvm::dbgs() << "floyd邻接矩阵标号:\n");
+  for (const auto &[var, index] : var_to_index) 
+    LLVM_DEBUG(llvm::dbgs() << var << " : " << index << "\n");
+    
+  // 初始化邻接矩阵（用INT_MAX表示无连接）
+  int n = var_to_index.size();
+  std::vector<std::vector<int>> graph(n, std::vector<int>(n, INF));
+    
+  // 填充邻接矩阵
+  for (const auto& constraint : constraints) {
+    FieldRef_with_default source = constraint.lhs_var1();
+    FieldRef_with_default target;
+    if (constraint.rhs_terms1().empty()) 
+      // 右侧没有项，指向Zero节点
+      target = Zero{};
+    else 
+      // 指向右侧第一个项的变量
+      target = constraint.rhs_terms1().begin()->var();
+
+    int i = var_to_index[source];
+    int j = var_to_index[target];
+    int weight = -constraint.rhs_const1();  // x >= y + c  =>  edge: x -> y with weight -c
+    // 保留权重最小值（对应最严格约束）
+    if (weight < graph[i][j]) 
+      graph[i][j] = weight;
+  }
+      
+  LLVM_DEBUG(llvm::dbgs() << "初始邻接矩阵:\n");
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+      if (graph[i][j] == INF) LLVM_DEBUG(llvm::dbgs() << "  INF  ");
+      else LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
+    }
+    LLVM_DEBUG(llvm::dbgs() << "\n");
+  }
+
+  // 开始floyd算法
+  // 三重循环动态规划
+  for (int k = 0; k < n; k++) {
+    for (int i = 0; i < n; i++) {
+      for (int j = 0; j < n; j++) {
+        // 跳过无穷大路径避免溢出
+        if (graph[i][k] < INF && graph[k][j] < INF) {
+          graph[i][j] = std::min(graph[i][j], graph[i][k] + graph[k][j]);
+        }
+      }
+    }
+  }
+
+  // 检测负权环
+  for (int i = 0; i < n; i++) {
+    if (graph[i][i] < 0) {
+      LLVM_DEBUG(llvm::dbgs() << "发现负权环！无法计算有效最短路径" << "\n");
+    }
+  }
+
+  // 打印所有最短路径
+  LLVM_DEBUG(llvm::dbgs() << "最短路径矩阵:\n");
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+      if (graph[i][j] == INF) LLVM_DEBUG(llvm::dbgs() << "  INF  ");
+      else LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
+    }
+  LLVM_DEBUG(llvm::dbgs() << "\n");
+  }
+
+  Valuation valuation;
+  for (int i = 0; i < n-1; i++) {
+    FieldRef source = tbsolved[i];
+    int min_distance = 0;
+    for (int j = 0; j < n; j++) {
+      int d = graph[i][j];
+      // 更新最短路径值
+      if (d < min_distance) {
+        min_distance = d;
+      }
+    }
+    // 将结果存入valuation
+    valuation[source] = -min_distance;
+  }
+
+  LLVM_DEBUG(llvm::dbgs() << "floyd算法结果:\n");
+  for (const auto &[var, value] : valuation) 
+    LLVM_DEBUG(llvm::dbgs() << var_to_index[var] << " : " << value << "\n");
+
+  return valuation;
+}
 
 LogicalResult ConstraintSolver::solve() {
-  SCCResult result = computeSCC();
+  //SCCResult result = computeSCC();
   // solver.printSCCResult(result);
 
-  for (size_t i = 0; i < result.topological_order.size(); ++i) {
-    const auto &component = result.components[i];
+  for (auto sccIter = llvm::scc_begin(&graph_); sccIter != llvm::scc_end(&graph_); ++sccIter) {
+    const auto& node_list = *sccIter;
+    LLVM_DEBUG(llvm::dbgs() << "SCC (size " << node_list.size() << "): ");
+    for (Node* node : node_list) 
+      LLVM_DEBUG(llvm::dbgs() << node->field << "; ");
+    LLVM_DEBUG(llvm::dbgs() << "\n");
+
+  //for (size_t i = 0; i < result.topological_order.size(); ++i) {
+    //const auto &component = result.components[i];
+    std::vector<FieldRef> component = extractFieldRefs(node_list);
+    if (component.empty()) { continue; }
     std::vector<Constraint1> tbsolved_cs1;
     tbsolved_cs1 = filterConstraints(component, constraints_);
     auto cs1 = remove_solveds(solution_, tbsolved_cs1);
@@ -829,7 +885,7 @@ LogicalResult ConstraintSolver::solve() {
       }
       ns = {{component[0], init}};
     } else if (is_simple_cycle(tbsolved_cs1)) {
-      ns = my_floyd(cs1);
+      ns = floyd(cs1, component);
     } else {
       ns = bab(cs1, component);
     }
@@ -855,12 +911,14 @@ private:
       constraints_;
 
   // 依赖关系图
-  DependencyGraph dependency_graph_;
+  //DependencyGraph dependency_graph_;
+  FieldRefGraph graph_;
+
   // 顶点映射（变量名 → 顶点描述符）
-  std::unordered_map<FieldRef,
-                     boost::graph_traits<DependencyGraph>::vertex_descriptor,
-                     FieldRef::Hash>
-      vertex_map_;
+  // std::unordered_map<FieldRef,
+  //                    boost::graph_traits<DependencyGraph>::vertex_descriptor,
+  //                    FieldRef::Hash>
+  //     vertex_map_;
 
   /// The fully inferred modules that were skipped entirely.
   SmallPtrSet<Operation *, 16> skippedModules;
@@ -888,17 +946,17 @@ public:
   }
 
   // 获取或添加顶点
-  boost::graph_traits<DependencyGraph>::vertex_descriptor
-  get_or_add_vertex(const FieldRef &var) {
-    auto it = vertex_map_.find(var);
-    if (it != vertex_map_.end()) {
-      return it->second;
-    } else {
-      auto vertex = boost::add_vertex(var, dependency_graph_);
-      vertex_map_[var] = vertex;
-      return vertex;
-    }
-  }
+  // boost::graph_traits<DependencyGraph>::vertex_descriptor
+  // get_or_add_vertex(const FieldRef &var) {
+  //   auto it = vertex_map_.find(var);
+  //   if (it != vertex_map_.end()) {
+  //     return it->second;
+  //   } else {
+  //     auto vertex = boost::add_vertex(var, dependency_graph_);
+  //     vertex_map_[var] = vertex;
+  //     return vertex;
+  //   }
+  // }
 
   // 添加约束
   void addConstraint(const Constraint_Min &constraint) {
@@ -911,31 +969,37 @@ public:
 
     // 直接添加边
     FieldRef lhs = c.lhs_var1();
-    auto lhs_vertex = get_or_add_vertex(lhs);
+    //auto lhs_vertex = get_or_add_vertex(lhs);
+    Node* lhs_node = graph_.addNode_wd(lhs);
 
     // 遍历右侧项
     for (const auto &term : c.rhs_terms1()) {
       FieldRef rhs_var = term.var();
-      auto rhs_vertex = get_or_add_vertex(rhs_var);
-      boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
+      //auto rhs_vertex = get_or_add_vertex(rhs_var);
+      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      //boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
+      lhs_node->addSuccessor(rhs_node);
     }
 
     // 遍历幂项
     if (c.rhs_power().has_value()) {
       FieldRef rhs_var = c.rhs_power().value();
-      auto rhs_vertex = get_or_add_vertex(rhs_var);
-      boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
+      //auto rhs_vertex = get_or_add_vertex(rhs_var);
+      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      //boost::add_edge(lhs_vertex, rhs_vertex, dependency_graph_);
+      lhs_node->addSuccessor(rhs_node);
     }
   }
 
   // 获取依赖图（只读）
-  const DependencyGraph &dependencyGraph() const { return dependency_graph_; }
-  const std::unordered_map<
-      FieldRef, boost::graph_traits<DependencyGraph>::vertex_descriptor,
-      FieldRef::Hash> &
-  vertex_map() const {
-    return vertex_map_;
-  }
+  //const DependencyGraph &dependencyGraph() const { return dependency_graph_; }
+  FieldRefGraph &fieldRefGraph() { return graph_; }
+  // const std::unordered_map<
+  //     FieldRef, boost::graph_traits<DependencyGraph>::vertex_descriptor,
+  //     FieldRef::Hash> &
+  // vertex_map() const {
+  //   return vertex_map_;
+  // }
 
   // 获取约束列表
   const std::vector<Constraint_Min> &constraints_min() const {
@@ -1008,6 +1072,25 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
     if (result.wasInterrupted())
       return failure();
   }
+  
+  /*auto it = llvm::GraphTraits<FieldRefGraph*>::nodes_begin(&graph_);
+  auto end = llvm::GraphTraits<FieldRefGraph*>::nodes_end(&graph_);
+  for (; it != end; ++it) {
+    llvm::errs() << it->field << "的后继: \n";
+    for (Node* child : it->successors)
+      llvm::errs() << "  " << child->field << "; \n";
+  }
+  llvm::errs() << "\n";
+
+  // 使用 SCC 迭代器分解强连通分量
+  llvm::errs() << "FieldRef Graph SCC Decomposition:\n";
+  for (auto sccIter = llvm::scc_begin(&graph_); sccIter != llvm::scc_end(&graph_); ++sccIter) {
+    const auto& component = *sccIter;
+    llvm::errs() << "SCC (size " << component.size() << "): ";
+    for (Node* node : component) 
+      llvm::errs() << node->field << "; ";
+    llvm::errs() << "\n";
+  }*/
 
   return success();
 }
@@ -2049,7 +2132,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
 //===----------------------------------------------------------------------===//
 // floyd
 //===----------------------------------------------------------------------===//
-
+/*
 // 节点类型
 using Node = std::variant<Zero, FieldRef>;
 
@@ -2273,14 +2356,14 @@ Valuation my_floyd(const std::vector<Constraint1> &constraints) {
   }
 
   return valuation;
-}
+}*/
 
 //===----------------------------------------------------------------------===//
 // upper_bound
 //===----------------------------------------------------------------------===//
 
 // DFS访问器类 (记录前驱并在找到终点时终止)
-template <typename DependencyGraph>
+/*template <typename DependencyGraph>
 class dfs_visitor : public boost::default_dfs_visitor {
 public:
   dfs_visitor(
@@ -2407,7 +2490,54 @@ buildDependencyGraph(const std::vector<Constraint1> &constraints_) {
     }
   }
   return result;
-}
+}*/
+
+std::vector<Node*> findPathBetween(Node* start, Node* end) {
+        if (!start || !end) return {};
+        if (start == end) return {start};  // 相同节点
+
+        // DFS数据结构
+        struct StackFrame {
+            Node* node;
+            size_t nextChildIndex;
+        };
+        std::stack<StackFrame> stack;
+        std::unordered_set<Node*> visited;
+        std::vector<Node*> path;
+
+        // 初始化
+        stack.push({start, 0});
+        path.push_back(start);
+        visited.insert(start);
+
+        while (!stack.empty()) {
+            auto& current = stack.top();
+            
+            // 到达目标节点
+            if (current.node == end) {
+                return path;
+            }
+
+            // 处理子节点
+            if (current.nextChildIndex < current.node->successors.size()) {
+                Node* nextChild = current.node->successors[current.nextChildIndex];
+                current.nextChildIndex++;
+                
+                if (!visited.count(nextChild)) {
+                    visited.insert(nextChild);
+                    path.push_back(nextChild);
+                    stack.push({nextChild, 0});
+                }
+            } 
+            // 回溯
+            else {
+                stack.pop();
+                path.pop_back();
+            }
+        }
+        
+        return {}; // 未找到路径
+    }
 
 static bool termsContains(const Terms &terms, const FieldRef &var) {
   for (const auto &term : terms) {
@@ -2580,33 +2710,47 @@ std::optional<int> compute_ub(const Constraint1 &c) {
 std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
                                   const Constraint1 &c,
                                   const std::vector<Constraint1> &constraints,
-                                  const DependencyGraphResult &result) {
+                                  //const DependencyGraphResult &result,
+                                  FieldRefGraph &graph_) {
   // c : lhs >= coe * var + ... + cst c
   // 找 x >= ? * lhs + ... 和 var >= ? * x + ...
   LLVM_DEBUG(llvm::dbgs() << "Solving [" << x.getValue()
                           << " (fieldID: " << x.getFieldID() << ")]\n");
-  auto find_vertex = [&](const FieldRef &p)
-      -> std::optional<decltype(result.g)::vertex_descriptor> {
-    if (auto it = result.vertex_map_.find(p); it != result.vertex_map_.end()) {
-      return it->second;
-    }
-    return std::nullopt;
-  };
+  // auto find_vertex = [&](const FieldRef &p)
+  //     -> std::optional<decltype(result.g)::vertex_descriptor> {
+  //   if (auto it = result.vertex_map_.find(p); it != result.vertex_map_.end()) {
+  //     return it->second;
+  //   }
+  //   return std::nullopt;
+  // };
 
   // 顶点描述符
-  auto var_vertex = find_vertex(var);
-  auto x_vertex = find_vertex(x);
-  auto lhs_vertex = find_vertex(c.lhs_var1());
+  // auto var_vertex = find_vertex(var);
+  // auto x_vertex = find_vertex(x);
+  // auto lhs_vertex = find_vertex(c.lhs_var1());
 
-  // 检查所有顶点是否存在
-  if (!var_vertex || !x_vertex || !lhs_vertex) {
+  // // 检查所有顶点是否存在
+  // if (!var_vertex || !x_vertex || !lhs_vertex) {
+  //   return std::nullopt;
+  // }
+
+  // std::vector<FieldRef> path1 =
+  //     find_path(result.g, var_vertex.value(), x_vertex.value());
+  // std::vector<FieldRef> path0 =
+  //     find_path(result.g, x_vertex.value(), lhs_vertex.value());
+
+  Node* var_node = graph_.addNode(var);
+  Node* x_node = graph_.addNode(x);
+  Node* lhs_node = graph_.addNode(c.lhs_var1());
+
+  if (!var_node || !x_node || !lhs_node) {
     return std::nullopt;
   }
 
-  std::vector<FieldRef> path1 =
-      find_path(result.g, var_vertex.value(), x_vertex.value());
-  std::vector<FieldRef> path0 =
-      find_path(result.g, x_vertex.value(), lhs_vertex.value());
+  std::vector<Node*> node_list1 = findPathBetween(var_node, x_node);
+  std::vector<Node*> node_list0 = findPathBetween(x_node, lhs_node);
+  std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
+  std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
 
   if (path0.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
@@ -2661,7 +2805,7 @@ std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
   if (ConResult.has_value()) {
     LLVM_DEBUG(llvm::dbgs() << "成功获取约束: " << ConResult.value() << "\n");
   } else {
-    std::cerr << "错误：无法获取约束\n";
+    LLVM_DEBUG(llvm::dbgs() << "错误：无法获取约束\n");
   }
 
   // 求出上界
@@ -2676,11 +2820,12 @@ std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
 Valuation solve_ubs_case1(const std::vector<FieldRef> &tbsolved,
                           const FieldRef &var, const Constraint1 &c,
                           const std::vector<Constraint1> &constraints,
-                          const DependencyGraphResult &result) {
+                          //const DependencyGraphResult &result,
+                          FieldRefGraph &graph_) {
   Valuation v;
   for (const FieldRef &x : tbsolved) {
     // 求解当前变量
-    auto ub = solve_ub_case1(x, var, c, constraints, result);
+    auto ub = solve_ub_case1(x, var, c, constraints, graph_);
     if (ub.has_value()) {
       v[x] = ub.value();
       LLVM_DEBUG(llvm::dbgs() << "成功求解"
@@ -2699,37 +2844,64 @@ Valuation solve_ubs_case1(const std::vector<FieldRef> &tbsolved,
 std::optional<int> solve_ub_case2(const FieldRef &x, const FieldRef &var1,
                                   const FieldRef &var2, const Constraint1 &c,
                                   const std::vector<Constraint1> &constraints,
-                                  const DependencyGraphResult &result) {
+                                  //const DependencyGraphResult &result,
+                                  FieldRefGraph &graph_) {
   // c : lhs >= coe0 * var0 + coe1 * var1 + ... + cst c
   // 找 x >= ? * lhs + ... 和 var0 >= ? * x + ... 和 var1 >= ? * x + ...
+
+  // auto it = llvm::GraphTraits<FieldRefGraph*>::nodes_begin(&graph_);
+  // auto end = llvm::GraphTraits<FieldRefGraph*>::nodes_end(&graph_);
+  // for (; it != end; ++it) {
+  //   llvm::errs() << it->field << "的后继: \n";
+  //   for (Node* child : it->successors)
+  //     llvm::errs() << "  " << child->field << "; \n";
+  // }
+  // llvm::errs() << "\n";
+
   LLVM_DEBUG(llvm::dbgs() << "Solving " << x.getValue()
                           << " (fieldID: " << x.getFieldID() << ")]\n");
 
-  auto find_vertex = [&](const FieldRef &p)
-      -> std::optional<decltype(result.g)::vertex_descriptor> {
-    if (auto it = result.vertex_map_.find(p); it != result.vertex_map_.end()) {
-      return it->second;
-    }
-    return std::nullopt;
-  };
+  // auto find_vertex = [&](const FieldRef &p)
+  //     -> std::optional<decltype(result.g)::vertex_descriptor> {
+  //   if (auto it = result.vertex_map_.find(p); it != result.vertex_map_.end()) {
+  //     return it->second;
+  //   }
+  //   return std::nullopt;
+  // };
 
-  // 顶点描述符
-  auto var1_vertex = find_vertex(var1);
-  auto var2_vertex = find_vertex(var2);
-  auto x_vertex = find_vertex(x);
-  auto lhs_vertex = find_vertex(c.lhs_var1());
+  // // 顶点描述符
+  // auto var1_vertex = find_vertex(var1);
+  // auto var2_vertex = find_vertex(var2);
+  // auto x_vertex = find_vertex(x);
+  // auto lhs_vertex = find_vertex(c.lhs_var1());
 
-  // 检查所有顶点是否存在
-  if (!var1_vertex || !var2_vertex || !x_vertex || !lhs_vertex) {
+  // // 检查所有顶点是否存在
+  // if (!var1_vertex || !var2_vertex || !x_vertex || !lhs_vertex) {
+  //   return std::nullopt;
+  // }
+
+  // std::vector<FieldRef> path2 =
+  //     find_path(result.g, var2_vertex.value(), x_vertex.value());
+  // std::vector<FieldRef> path1 =
+  //     find_path(result.g, var1_vertex.value(), x_vertex.value());
+  // std::vector<FieldRef> path0 =
+  //     find_path(result.g, x_vertex.value(), lhs_vertex.value());
+
+  Node* var1_node = graph_.addNode(var1);
+  Node* var2_node = graph_.addNode(var2);
+  Node* x_node = graph_.addNode(x);
+  Node* lhs_node = graph_.addNode(c.lhs_var1());
+
+  if (!var1_node || !var2_node || !x_node || !lhs_node) {
     return std::nullopt;
   }
 
-  std::vector<FieldRef> path2 =
-      find_path(result.g, var2_vertex.value(), x_vertex.value());
-  std::vector<FieldRef> path1 =
-      find_path(result.g, var1_vertex.value(), x_vertex.value());
-  std::vector<FieldRef> path0 =
-      find_path(result.g, x_vertex.value(), lhs_vertex.value());
+  std::vector<Node*> node_list2 = findPathBetween(var2_node,x_node);
+  std::vector<Node*> node_list1 = findPathBetween(var1_node, x_node);
+  std::vector<Node*> node_list0 = findPathBetween(x_node, lhs_node);
+  std::vector<FieldRef> path2 = extractFieldRefs(node_list2);
+  std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
+  std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
 
   if (path0.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
@@ -2823,11 +2995,13 @@ Valuation solve_ubs_case2(const std::vector<FieldRef> &tbsolved,
                           const FieldRef &var1, const FieldRef &var2,
                           const Constraint1 &c,
                           const std::vector<Constraint1> &constraints,
-                          const DependencyGraphResult &result) {
+                          //const DependencyGraphResult &result,
+                          FieldRefGraph &graph_) {
+
   Valuation v;
   for (const FieldRef &x : tbsolved) {
     // 求解当前变量
-    auto ub = solve_ub_case2(x, var1, var2, c, constraints, result);
+    auto ub = solve_ub_case2(x, var1, var2, c, constraints, graph_);
     if (ub.has_value()) {
       v[x] = ub.value();
       LLVM_DEBUG(llvm::dbgs() << "成功求解"
@@ -2906,7 +3080,19 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
 
   auto relaxed_constraints = relax_all_powers(constraints);
   auto processed_constraints = remove_only_const(relaxed_constraints);
-  DependencyGraphResult result = buildDependencyGraph(processed_constraints);
+  //DependencyGraphResult result = buildDependencyGraph(processed_constraints);
+  FieldRefGraph graph_;
+  for (const auto &c : constraints) {
+    FieldRef lhs = c.lhs_var1();
+    Node* lhs_node = graph_.addNode(lhs);
+
+    // 遍历右侧项
+    for (const auto &term : c.rhs_terms1()) {
+      FieldRef rhs_var = term.var();
+      Node* rhs_node = graph_.addNode(rhs_var);
+      lhs_node->addSuccessor(rhs_node);
+    }
+  }
 
   auto c = findCWithCoeGreaterThanOne(processed_constraints);
   if (c.has_value()) {
@@ -2915,14 +3101,14 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
     auto var = c.value().rhs_terms1().findVarWithCoeGreaterThanOne();
     if (var.has_value()) {
       Valuation ubs = solve_ubs_case1(tbsolved, var.value(), c.value(),
-                                      processed_constraints, result);
+                                      processed_constraints, graph_);
       for (const auto &[pv, value] : ubs) {
         LLVM_DEBUG(llvm::dbgs() << "[" << pv.getValue() << " (fieldID: "
                                 << pv.getFieldID() << ")] : " << value << "\n");
       }
       return ubs;
     } else {
-      std::cerr << "没有系数大于1的项\n";
+      LLVM_DEBUG(llvm::dbgs() << "没有系数大于1的项\n");
       return std::nullopt;
     };
   } else {
@@ -2934,7 +3120,7 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
       if (var.has_value()) {
         Valuation ubs =
             solve_ubs_case2(tbsolved, var.value().first, var.value().second,
-                            c.value(), processed_constraints, result);
+                            c.value(), processed_constraints, graph_);
         for (const auto &[pv, value] : ubs) {
           LLVM_DEBUG(llvm::dbgs()
                      << "[" << pv.getValue() << " (fieldID: " << pv.getFieldID()
@@ -2942,11 +3128,11 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
         }
         return ubs;
       } else {
-        std::cerr << "没有两项\n";
+        LLVM_DEBUG(llvm::dbgs() << "没有两项\n");
         return std::nullopt;
       };
     } else {
-      std::cerr << "都～没有\n";
+      LLVM_DEBUG(llvm::dbgs() << "都～没有\n");
       return std::nullopt;
     }
   };
@@ -3330,11 +3516,30 @@ LogicalResult InferenceMapping::solve() {
 
   // 分别求解conjunction
   for (auto cs : flatten_min) {
-    ConstraintSolver solver(constraints_, dependency_graph_, vertex_map_);
+    ConstraintSolver solver(constraints_, /*dependency_graph_, vertex_map_,*/ graph_);
     // 依次把cs添加，并画到图中
     for (auto c : cs) {
+      //llvm::errs() << c << "\n";
       solver.addConstraint(c);
     }
+
+  /*auto it = llvm::GraphTraits<FieldRefGraph*>::nodes_begin(&solver.fieldRefGraph());
+  auto end = llvm::GraphTraits<FieldRefGraph*>::nodes_end(&solver.fieldRefGraph());
+  for (; it != end; ++it) {
+    llvm::errs() << it->field << "的后继: \n";
+    for (Node* child : it->successors)
+      llvm::errs() << "  " << child->field << "; \n";
+  }
+
+  // 使用 SCC 迭代器分解强连通分量
+  llvm::errs() << "FieldRef Graph SCC Decomposition:\n";
+  for (auto sccIter = llvm::scc_begin(&solver.fieldRefGraph()); sccIter != llvm::scc_end(&solver.fieldRefGraph()); ++sccIter) {
+    const auto& component = *sccIter;
+    llvm::errs() << "SCC (size " << component.size() << "): ";
+    for (Node* node : component) 
+      llvm::errs() << node->field << "; ";
+    llvm::errs() << "\n";
+  }*/
 
     auto solve_result = solver.solve();
     if (failed(solve_result)) {
@@ -3610,41 +3815,25 @@ class InferWidthsPass_new
 void InferWidthsPass_new::runOnOperation() {
   InferenceMapping mapping(getAnalysis<SymbolTable>(),
                            getAnalysis<hw::InnerSymbolTableCollection>());
-  auto start = std::chrono::high_resolution_clock::now();
   if (failed(mapping.map(getOperation())))
     return signalPassFailure();
 
-  auto cs_time = std::chrono::high_resolution_clock::now();
   // fast path if no inferrable widths are around
   if (mapping.areAllModulesSkipped())
     return markAllAnalysesPreserved();
 
-  auto solve_time = std::chrono::high_resolution_clock::now();
   // Solve the constraints.
   if (failed(mapping.solve()))
     return signalPassFailure();
 
-  auto update_time = std::chrono::high_resolution_clock::now();
   // Update the types with the inferred widths.
   if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
     return signalPassFailure();
 
-  auto end = std::chrono::high_resolution_clock::now();
   LLVM_DEBUG(llvm::dbgs() << "最终解:\n");
   for (const auto &[pv, value] : mapping.final_solution()) {
     LLVM_DEBUG(llvm::dbgs() //<< "[" << pv.getValue() << " (fieldID: " <<
                             //pv.getFieldID() << ")] : \n"
                << pv.getValue().getLoc() << " : " << value << "\n");
   }
-
-  auto cs_duration =
-      std::chrono::duration_cast<std::chrono::microseconds>(cs_time - start);
-  auto solve_duration = std::chrono::duration_cast<std::chrono::microseconds>(
-      update_time - solve_time);
-  auto update_duration =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - update_time);
-  // std::cout << "generate constraint time : " << cs_duration.count() / 1000.0
-  // << " ms\n"; std::cout << "solve time : " << solve_duration.count() / 1000.0
-  // << " ms\n"; std::cout << "update time : " << update_duration.count() /
-  // 1000.0 << " ms\n";
 }
