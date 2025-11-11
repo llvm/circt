@@ -109,6 +109,6 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
     out-of-bounds access.
   }];
   let dependentDialects = ["comb::CombDialect"];
-
+}
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD
