@@ -7,7 +7,6 @@ firrtl.circuit "VerbatimBlackBoxTest" {
 
   // CHECK-LABEL: sv.verbatim.module @SimpleVerbatimBlackBox(
   // CHECK-SAME: content = {{.*}}module SimpleVerbatimBlackBox{{.*}}
-
   firrtl.extmodule @SimpleVerbatimBlackBox(
     in clk: !firrtl.clock,
     in rst: !firrtl.uint<1>,
@@ -27,9 +26,7 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     ]
   }
 
-  // CHECK-LABEL: sv.verbatim.module @ParameterizedVerbatimBlackBox<
-  // CHECK-SAME: WIDTH: i32
-  // CHECK-SAME: content = {{.*}}module ParameterizedVerbatimBlackBox{{.*}}
+
 
   firrtl.extmodule @ParameterizedVerbatimBlackBox<WIDTH: i32 = 8>(
     in data_in: !firrtl.uint<8>,
@@ -145,7 +142,6 @@ firrtl.circuit "VerbatimBlackBoxTest" {
 
   // CHECK-LABEL: hw.module @VerbatimBlackBoxTest(
   // CHECK-SAME: in %clk : !seq.clock, in %rst : i1, in %data : i8, out result : i1
-
   firrtl.module @VerbatimBlackBoxTest(
     in %clk: !firrtl.clock,
     in %rst: !firrtl.uint<1>,

@@ -76,3 +76,48 @@ firrtl.circuit "zero_width_mem" {
     %7 = firrtl.subfield %tmp41_w0[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
   }
 }
+
+// -----
+
+// COM: Verbatim black boxes cannot share output files
+firrtl.circuit "VerbatimModuleDuplicateFiles" {
+  // expected-error @+1 {{File 'SharedVerilog.v' is emitted by both 'SharedFoo' and 'SharedBar'. Each verbatim module must emit a unique output file containing exactly one module definition.}}
+  firrtl.extmodule @SharedFoo(
+    out data: !firrtl.uint<8>
+  ) attributes {
+    defname = "SharedFoo",
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            name = "SharedVerilog.v",
+            content = "module SharedFoo(); endmodule; module SharedBar(); endmodule",
+            output_file = "SharedVerilog.v"
+          }
+        ]
+      }
+    ]
+  }
+
+  firrtl.extmodule @SharedBar(
+    out data_a: !firrtl.uint<8>,
+    out data_b: !firrtl.uint<8>
+  ) attributes {
+    defname = "SharedBar",
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            name = "SharedVerilog.v",
+            content = "module SharedFoo(); endmodule; module SharedBar(); endmodule",
+            output_file = "SharedVerilog.v"
+          }
+        ]
+      }
+    ]
+  }
+
+  firrtl.module @VerbatimModuleDuplicateFiles() {}
+}
