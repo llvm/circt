@@ -1184,6 +1184,13 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       return {};
     }
 
+    // Create module type from ports
+    SmallVector<hw::ModulePort> modulePorts;
+    for (const auto &port : ports) {
+      modulePorts.push_back({port.name, port.type, port.dir});
+    }
+    auto moduleType = hw::ModuleType::get(builder.getContext(), modulePorts);
+
     // Create output file attribute
     auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
         builder.getContext(), outputFile.getValue());
@@ -1247,8 +1254,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       parameters = builder.getArrayAttr({});
 
     auto verbatimModule = sv::SVVerbatimModuleOp::create(
-        builder, oldModule.getLoc(), nameAttr, ports, content, outputFileAttr,
-        /*per_port_attrs=*/nullptr,
+        builder, oldModule.getLoc(), nameAttr, TypeAttr::get(moduleType),
+        content, outputFileAttr, /*per_port_attrs=*/nullptr,
         /*port_locs=*/nullptr, parameters,
         additionalFiles.empty() ? nullptr
                                 : builder.getArrayAttr(additionalFiles),
