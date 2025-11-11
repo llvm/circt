@@ -1,19 +1,4 @@
-// RUN: circt-opt %s --hw-inliner | FileCheck %s
-
-// Test basic inlining of a small private module
-// CHECK-LABEL: hw.module @InlineSmall
-hw.module @InlineSmall(in %x: i4, out y: i4) {
-  // CHECK-NOT: hw.instance
-  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x
-  // CHECK-NEXT: hw.output %[[V0]]
-  %0 = hw.instance "small" @SmallModule(a: %x: i4) -> (b: i4)
-  hw.output %0 : i4
-}
-// CHECK-NOT: hw.module private @SmallModule
-hw.module private @SmallModule(in %a: i4, out b: i4) {
-  %0 = comb.add %a, %a : i4
-  hw.output %0 : i4
-}
+// RUN: circt-opt %s --hw-flatten-modules | FileCheck %s
 
 // Test inlining of an empty module
 // CHECK-LABEL: hw.module @InlineEmpty
@@ -71,26 +56,11 @@ hw.module private @SingleUseModule(in %a: i4, out b: i4) {
   hw.output %0 : i4
 }
 
-// Test that modules with multiple uses and state are not inlined
-// CHECK-LABEL: hw.module @DontInlineMultiUseWithState
-hw.module @DontInlineMultiUseWithState(in %clk: !seq.clock, in %x: i4, out y: i4, out z: i4) {
-  // CHECK-NEXT: hw.instance "inst1" @ModuleWithState
-  // CHECK-NEXT: hw.instance "inst2" @ModuleWithState
-  %0 = hw.instance "inst1" @ModuleWithState(clk: %clk: !seq.clock, a: %x: i4) -> (b: i4)
-  %1 = hw.instance "inst2" @ModuleWithState(clk: %clk: !seq.clock, a: %x: i4) -> (b: i4)
-  hw.output %0, %1 : i4, i4
-}
-// CHECK: hw.module private @ModuleWithState
-hw.module private @ModuleWithState(in %clk: !seq.clock, in %a: i4, out b: i4) {
-  %0 = seq.firreg %a clock %clk : i4
-  hw.output %0 : i4
-}
-
 // Test name prefixing during inlining
 // CHECK-LABEL: hw.module @InlineWithNames
 hw.module @InlineWithNames(in %x: i4, out y: i4) {
   // CHECK-NOT: hw.instance
-  // CHECK-NEXT: %[[C:.+]] = hw.constant 1 : i4 {name = "named.const_val"}
+  // CHECK-NEXT: %[[C:.+]] = hw.constant 1 : i4 {name = "named/const_val"}
   // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %[[C]]
   // CHECK-NEXT: hw.output %[[V0]]
   %0 = hw.instance "named" @ModuleWithNames(a: %x: i4) -> (b: i4)
@@ -103,33 +73,24 @@ hw.module private @ModuleWithNames(in %a: i4, out b: i4) {
   hw.output %0 : i4
 }
 
-// Test inlining with multiple operations
-// CHECK-LABEL: hw.module @InlineMultiOp
-hw.module @InlineMultiOp(in %x: i4, in %y: i4, out z: i4) {
-  // CHECK-NOT: hw.instance
-  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %y
-  // CHECK-NEXT: %[[V1:.+]] = comb.mul %[[V0]], %x
-  // CHECK-NEXT: %[[V2:.+]] = comb.xor %[[V1]], %y
-  // CHECK-NEXT: hw.output %[[V2]]
-  %0 = hw.instance "multi" @MultiOpModule(a: %x: i4, b: %y: i4) -> (c: i4)
-  hw.output %0 : i4
-}
-// CHECK-NOT: hw.module private @MultiOpModule
-hw.module private @MultiOpModule(in %a: i4, in %b: i4, out c: i4) {
-  %0 = comb.add %a, %b : i4
-  %1 = comb.mul %0, %a : i4
-  %2 = comb.xor %1, %b : i4
-  hw.output %2 : i4
-}
-
-// Test that large modules with state are not inlined
+// Test that large modules with state are inlined by default
 // CHECK-LABEL: hw.module @DontInlineLargeWithState
 hw.module @DontInlineLargeWithState(in %clk: !seq.clock, in %x: i4, out y: i4) {
-  // CHECK-NEXT: hw.instance "large" @LargeModuleWithState
+  // CHECK-NOT: hw.instance
+  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x
+  // CHECK-NEXT: %[[V1:.+]] = comb.mul %[[V0]], %x
+  // CHECK-NEXT: %[[V2:.+]] = comb.xor %[[V1]], %x
+  // CHECK-NEXT: %[[V3:.+]] = comb.or %[[V2]], %x
+  // CHECK-NEXT: %[[V4:.+]] = comb.and %[[V3]], %x
+  // CHECK-NEXT: %[[V5:.+]] = comb.add %[[V4]], %x
+  // CHECK-NEXT: %[[V6:.+]] = comb.mul %[[V5]], %x
+  // CHECK-NEXT: %[[V7:.+]] = comb.xor %[[V6]], %x
+  // CHECK-NEXT: %[[REG:.+]] = seq.firreg %[[V7]] clock %clk
+  // CHECK-NEXT: hw.output %[[REG]]
   %0 = hw.instance "large" @LargeModuleWithState(clk: %clk: !seq.clock, a: %x: i4) -> (b: i4)
   hw.output %0 : i4
 }
-// CHECK: hw.module private @LargeModuleWithState
+// CHECK-NOT: hw.module private @LargeModuleWithState
 hw.module private @LargeModuleWithState(in %clk: !seq.clock, in %a: i4, out b: i4) {
   %0 = comb.add %a, %a : i4
   %1 = comb.mul %0, %a : i4
@@ -165,23 +126,6 @@ hw.module private @InnerModule(in %x: i4, out y: i4) {
   hw.output %1 : i4
 }
 
-// Test that small modules without state are inlined even with multiple uses
-// CHECK-LABEL: hw.module @InlineSmallMultiUse
-hw.module @InlineSmallMultiUse(in %x: i4, in %y: i4, out a: i4, out b: i4) {
-  // CHECK-NOT: hw.instance
-  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x
-  // CHECK-NEXT: %[[V1:.+]] = comb.add %y, %y
-  // CHECK-NEXT: hw.output %[[V0]], %[[V1]]
-  %0 = hw.instance "inst1" @TinyModule(in: %x: i4) -> (out: i4)
-  %1 = hw.instance "inst2" @TinyModule(in: %y: i4) -> (out: i4)
-  hw.output %0, %1 : i4, i4
-}
-// CHECK-NOT: hw.module private @TinyModule
-hw.module private @TinyModule(in %in: i4, out out: i4) {
-  %0 = comb.add %in, %in : i4
-  hw.output %0 : i4
-}
-
 // Test multiple outputs
 // CHECK-LABEL: hw.module @InlineMultiOutput
 hw.module @InlineMultiOutput(in %x: i4, out y: i4, out z: i4) {
@@ -197,5 +141,121 @@ hw.module private @MultiOutputModule(in %a: i4, out b: i4, out c: i4) {
   %0 = comb.add %a, %a : i4
   %1 = comb.mul %a, %a : i4
   hw.output %0, %1 : i4, i4
+}
+
+// Test inner symbol renaming with multiple instances
+// CHECK-LABEL: hw.module @InlineMultiInstanceInnerSym
+hw.module @InlineMultiInstanceInnerSym(in %x: i4, in %y: i4, out a: i4, out b: i4) {
+  // CHECK-NOT: hw.instance
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @wire_sym{{(_[0-9]+)?}}
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @wire_sym{{(_[0-9]+)?}}
+  // CHECK: hw.output
+  %0 = hw.instance "inst1" @ModuleWithSym(a: %x: i4) -> (b: i4)
+  %1 = hw.instance "inst2" @ModuleWithSym(a: %y: i4) -> (b: i4)
+  hw.output %0, %1 : i4, i4
+}
+// CHECK-NOT: hw.module private @ModuleWithSym
+hw.module private @ModuleWithSym(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  %1 = hw.wire %0 sym @wire_sym : i4
+  hw.output %1 : i4
+}
+
+// Test inner symbol renaming with multiple symbols in same module
+// CHECK-LABEL: hw.module @InlineMultipleInnerSyms
+hw.module @InlineMultipleInnerSyms(in %x: i4, in %y: i4, out a: i4, out b: i4) {
+  // CHECK-NOT: hw.instance
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @wire1{{(_[0-9]+)?}}
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @wire2{{(_[0-9]+)?}}
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @wire1{{(_[0-9]+)?}}
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @wire2{{(_[0-9]+)?}}
+  // CHECK: hw.output
+  %0 = hw.instance "inst1" @ModuleWithMultipleSyms(a: %x: i4) -> (b: i4)
+  %1 = hw.instance "inst2" @ModuleWithMultipleSyms(a: %y: i4) -> (b: i4)
+  hw.output %0, %1 : i4, i4
+}
+// CHECK-NOT: hw.module private @ModuleWithMultipleSyms
+hw.module private @ModuleWithMultipleSyms(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  %1 = hw.wire %0 sym @wire1 : i4
+  %2 = comb.mul %1, %a : i4
+  %3 = hw.wire %2 sym @wire2 : i4
+  hw.output %3 : i4
+}
+
+// Test InnerRefAttr updating with single instance
+// CHECK-LABEL: hw.module @InlineWithInnerRef
+hw.module @InlineWithInnerRef(in %x: i4, out y: i4) {
+  // CHECK-NOT: hw.instance
+  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x
+  // CHECK-NEXT: %[[W0:.+]] = hw.wire %[[V0]] sym @[[SYM:wire_op]]
+  // CHECK-NEXT: sv.verbatim "ref to {{[{][{]}}0{{[}][}]}}" {symbols = [#hw.innerNameRef<@InlineWithInnerRef::@[[SYM]]>]}
+  // CHECK-NEXT: hw.output %[[W0]]
+  %0 = hw.instance "myinst" @ChildWithRef(a: %x: i4) -> (b: i4)
+  hw.output %0 : i4
+}
+// CHECK-NOT: hw.module private @ChildWithRef
+hw.module private @ChildWithRef(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  %1 = hw.wire %0 sym @wire_op : i4
+  sv.verbatim "ref to {{0}}" {symbols = [#hw.innerNameRef<@ChildWithRef::@wire_op>]}
+  hw.output %1 : i4
+}
+
+// Test InnerRefAttr updating with multiple instances
+// CHECK-LABEL: hw.module @InlineMultiInstanceInnerRef
+hw.module @InlineMultiInstanceInnerRef(in %x: i4, in %y: i4, out a: i4, out b: i4) {
+  // CHECK-NOT: hw.instance
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @[[SYM1:wire_op(_[0-9]+)?]]
+  // CHECK-DAG: sv.verbatim "ref to {{[{][{]}}0{{[}][}]}}" {symbols = [#hw.innerNameRef<@InlineMultiInstanceInnerRef::@[[SYM1]]>]}
+  // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @[[SYM2:wire_op(_[0-9]+)?]]
+  // CHECK-DAG: sv.verbatim "ref to {{[{][{]}}0{{[}][}]}}" {symbols = [#hw.innerNameRef<@InlineMultiInstanceInnerRef::@[[SYM2]]>]}
+  // CHECK: hw.output
+  %0 = hw.instance "inst1" @ChildWithRefMulti(a: %x: i4) -> (b: i4)
+  %1 = hw.instance "inst2" @ChildWithRefMulti(a: %y: i4) -> (b: i4)
+  hw.output %0, %1 : i4, i4
+}
+// CHECK-NOT: hw.module private @ChildWithRefMulti
+hw.module private @ChildWithRefMulti(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  %1 = hw.wire %0 sym @wire_op : i4
+  sv.verbatim "ref to {{0}}" {symbols = [#hw.innerNameRef<@ChildWithRefMulti::@wire_op>]}
+  hw.output %1 : i4
+}
+
+// Test HierPath updating when inlining
+// CHECK: hw.hierpath private @HierPathTest [@InlineWithHierPath::@[[WIRE_SYM:wire_sym]]]
+hw.hierpath private @HierPathTest [@InlineWithHierPath::@inst, @ChildWithHierPath::@wire_sym]
+
+// CHECK-LABEL: hw.module @InlineWithHierPath
+hw.module @InlineWithHierPath(in %x: i4, out y: i4) {
+  // CHECK-NOT: hw.instance
+  // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x
+  // CHECK-NEXT: %[[W0:.+]] = hw.wire %[[V0]] sym @[[WIRE_SYM]]
+  // CHECK-NEXT: hw.output %[[W0]]
+  %0 = hw.instance "inst" sym @inst @ChildWithHierPath(a: %x: i4) -> (b: i4)
+  hw.output %0 : i4
+}
+// CHECK-NOT: hw.module private @ChildWithHierPath
+hw.module private @ChildWithHierPath(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  %1 = hw.wire %0 sym @wire_sym : i4
+  hw.output %1 : i4
+}
+
+// Test that modules targeted by module NLAs are not inlined
+// CHECK: hw.hierpath private @ModuleNLA [@DontInlineModuleNLA]
+hw.hierpath private @ModuleNLA [@DontInlineModuleNLA]
+
+// CHECK-LABEL: hw.module @DontInlineModuleNLAParent
+hw.module @DontInlineModuleNLAParent(in %x: i4, out y: i4) {
+  // CHECK-NEXT: hw.instance "inst" @DontInlineModuleNLA
+  %0 = hw.instance "inst" @DontInlineModuleNLA(a: %x: i4) -> (b: i4)
+  hw.output %0 : i4
+}
+// CHECK: hw.module private @DontInlineModuleNLA
+hw.module private @DontInlineModuleNLA(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  hw.output %0 : i4
 }
 

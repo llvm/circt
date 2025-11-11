@@ -1,8 +1,8 @@
-// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-inliner{inline-single-use=false inline-small=false inline-empty=false inline-no-outputs=false})' | FileCheck %s --check-prefix=NONE
-// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-inliner{inline-single-use=true inline-small=false inline-empty=false inline-no-outputs=false})' | FileCheck %s --check-prefix=SINGLE
-// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-inliner{inline-single-use=false inline-small=true inline-empty=false inline-no-outputs=false})' | FileCheck %s --check-prefix=SMALL
-// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-inliner{small-threshold=3 inline-single-use=false})' | FileCheck %s --check-prefix=THRESHOLD
-// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-inliner{inline-with-state=true})' | FileCheck %s --check-prefix=STATE
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{inline-all=false inline-single-use=false inline-small=false inline-empty=false inline-no-outputs=false})' | FileCheck %s --check-prefix=NONE
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{inline-all=false inline-single-use=true inline-small=false inline-empty=false inline-no-outputs=false})' | FileCheck %s --check-prefix=SINGLE
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{inline-all=false inline-single-use=false inline-small=true inline-empty=false inline-no-outputs=false})' | FileCheck %s --check-prefix=SMALL
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{inline-all=false small-threshold=3 inline-single-use=false})' | FileCheck %s --check-prefix=THRESHOLD
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{inline-with-state=true})' | FileCheck %s --check-prefix=STATE
 
 // Test that all inlining heuristics can be controlled via command line options
 
