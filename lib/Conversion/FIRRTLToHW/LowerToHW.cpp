@@ -38,10 +38,10 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/Path.h"
-#include <unordered_map>
 
 #define DEBUG_TYPE "lower-to-hw"
 
@@ -377,17 +377,15 @@ struct CircuitLoweringState {
   /// Check if a verbatim module with the given verilog name already exists.
   /// Returns the existing module if found, nullptr otherwise.
   sv::SVVerbatimModuleOp getExistingVerbatimModule(StringRef moduleName) {
-    std::lock_guard<std::mutex> lock(verbatimModulesMutex);
-    std::string moduleKeyStr = moduleName.str();
-    auto it = verbatimModulesByKey.find(moduleKeyStr);
+    llvm::sys::SmartScopedLock<true> lock(verbatimModulesMutex);
+    auto it = verbatimModulesByKey.find(moduleName);
     return it != verbatimModulesByKey.end() ? it->second : nullptr;
   }
 
   void registerVerbatimModule(StringRef moduleName,
-                              sv::SVVerbatimModuleOp module) {
-    std::lock_guard<std::mutex> lock(verbatimModulesMutex);
-    std::string moduleKeyStr = moduleName.str();
-    verbatimModulesByKey[moduleKeyStr] = module;
+                              sv::SVVerbatimModuleOp verbatimOp) {
+    llvm::sys::SmartScopedLock<true> lock(verbatimModulesMutex);
+    verbatimModulesByKey[moduleName] = verbatimOp;
   }
 
 private:
@@ -540,8 +538,8 @@ private:
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 
   /// Track verbatim modules by their defname/module name to avoid duplicates
-  std::unordered_map<std::string, sv::SVVerbatimModuleOp> verbatimModulesByKey;
-  std::mutex verbatimModulesMutex;
+  llvm::DenseMap<StringRef, sv::SVVerbatimModuleOp> verbatimModulesByKey;
+  llvm::sys::SmartMutex<true> verbatimModulesMutex;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(

@@ -26,8 +26,9 @@ firrtl.circuit "VerbatimBlackBoxTest" {
     ]
   }
 
-
-
+  // CHECK: sv.verbatim.module @ParameterizedVerbatimBlackBox<
+  // CHECK-SAME: WIDTH: i32
+  // CHECK-SAME: content = {{.*}}module ParameterizedVerbatimBlackBox{{.*}}
   firrtl.extmodule @ParameterizedVerbatimBlackBox<WIDTH: i32 = 8>(
     in data_in: !firrtl.uint<8>,
     out data_out: !firrtl.uint<8>
@@ -50,7 +51,6 @@ firrtl.circuit "VerbatimBlackBoxTest" {
   // CHECK-NEXT:   emit.verbatim "`define MACRO_VALUE 1'b1"
   // CHECK: sv.verbatim.module @MultiFileVerbatimBlackBox(
   // CHECK-SAME: additional_files = [@header.vh]
-
   firrtl.extmodule @MultiFileVerbatimBlackBox(
     in clk: !firrtl.clock,
     out out: !firrtl.uint<1>
@@ -75,7 +75,6 @@ firrtl.circuit "VerbatimBlackBoxTest" {
   }
 
   // CHECK-LABEL: hw.module.extern @RegularExtModule(in %data : i8, out out : i8)
-
   firrtl.extmodule @RegularExtModule(
     in data: !firrtl.uint<8>,
     out out: !firrtl.uint<8>
