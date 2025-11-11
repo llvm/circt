@@ -2219,6 +2219,29 @@ LogicalResult SVVerbatimModuleOp::verify() {
   if (!outputFileAttr || outputFileAttr.getFilename().getValue().empty())
     return emitOpError("output_file attribute cannot be empty");
 
+  // Check for duplicate output files among other sv.verbatim.module operations
+  auto parentOp = (*this)->getParentOp();
+  if (parentOp) {
+    StringRef thisOutputFile = outputFileAttr.getFilename().getValue();
+    StringRef thisModuleName = getSymName();
+    for (auto &op : parentOp->getRegion(0).getOps()) {
+      if (auto otherVerbatimModule = dyn_cast<SVVerbatimModuleOp>(op)) {
+        if (otherVerbatimModule.getOperation() == this->getOperation())
+          continue;
+        auto otherOutputFileAttr = otherVerbatimModule.getOutputFile();
+        if (otherOutputFileAttr &&
+            otherOutputFileAttr.getFilename().getValue() == thisOutputFile) {
+          StringRef otherModuleName = otherVerbatimModule.getSymName();
+          return emitOpError("File '")
+                 << thisOutputFile << "' is emitted by both '" << thisModuleName
+                 << "' and '" << otherModuleName
+                 << "'. Each verbatim module must emit a unique output file "
+                    "containing exactly one module definition.";
+        }
+      }
+    }
+  }
+
   return success();
 }
 
