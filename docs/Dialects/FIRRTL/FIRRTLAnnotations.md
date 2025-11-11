@@ -305,40 +305,6 @@ Example:
 }
 ```
 
-### VerbatimBlackBoxAnno
-
-| Property   | Type   | Description                          |
-| ---------- | ------ | -------------                        |
-| class      | string | `circt.VerbatimBlackBoxAnno`         |
-| target     | string | An ExtModule name target             |
-| files      | array  | Array of file objects                |
-
-Specifies verbatim black box source code with one or more files. Each file
-object in the `files` array contains:
-
-- `name`: The user-specified name of the file
-- `content`: The literal source code content
-- `output_file`: The resolved output path for the content
-
-This annotation is used internally by CIRCT to represent partially lowered
-FIRRTL extmodules with verbatim content.
-
-Example:
-
-```json
-{
-  "class": "circt.VerbatimBlackBoxAnno",
-  "target": "~Foo|MyBlackBox",
-  "files": [
-    {
-      "name": "MyBlackBox.v",
-      "content": "module MyBlackBox(\n  input clk,\n  output out\n);\n  assign out = clk;\nendmodule",
-      "output_file": "blackbox.v"
-    }
-  ]
-}
-```
-
 ### Convention
 
 | Property   | Type   | Description                             |

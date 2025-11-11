@@ -21,7 +21,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -40,7 +39,6 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
-#include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "lower-to-hw"
 
@@ -595,8 +593,9 @@ private:
                             CircuitLoweringState &loweringState);
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
-  hw::HWModuleLike lowerExtModule(FExtModuleOp oldModule, Block *topLevelModule,
-                                  CircuitLoweringState &loweringState);
+  hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
+                                      Block *topLevelModule,
+                                      CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
@@ -1141,13 +1140,11 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
   return failed;
 }
 
-hw::HWModuleLike
+hw::HWModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
-  CircuitNamespace circuitNamespace(loweringState.circuitOp);
-
-  // Lower ports
+  // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
@@ -1158,116 +1155,12 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.getDefname())
     verilogName = defName.value();
 
+  // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-
-  // Check for verbatim black box annotation
-  AnnotationSet annos(oldModule);
-  Annotation verbatimAnno = annos.getAnnotation(verbatimBlackBoxAnnoClass);
-
-  // Lower to sv.verbatim.module instead of hw.module.extern when the blackbox
-  // has verbatim verilog content.
-  if (verbatimAnno) {
-    auto filesAttr = verbatimAnno.getMember<ArrayAttr>("files");
-    if (!filesAttr || filesAttr.empty()) {
-      oldModule->emitError("VerbatimBlackBoxAnno missing or empty files array");
-      return {};
-    }
-
-    // Get the first file for the main content
-    auto firstFile = cast<DictionaryAttr>(filesAttr[0]);
-    auto content = firstFile.getAs<StringAttr>("content");
-    auto outputFile = firstFile.getAs<StringAttr>("output_file");
-
-    if (!content || !outputFile) {
-      oldModule->emitError("VerbatimBlackBoxAnno file missing fields");
-      return {};
-    }
-
-    // Create output file attribute
-    auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
-        builder.getContext(), outputFile.getValue());
-
-    // Create emit.file operations for additional files, deduplicating by
-    // filename
-    SmallVector<Attribute> additionalFiles;
-    llvm::StringSet<> seenFiles;
-
-    // Add the primary file to the seen set
-    auto primaryFileDict = cast<DictionaryAttr>(filesAttr[0]);
-    auto primaryFileName = primaryFileDict.getAs<StringAttr>("name");
-    if (!primaryFileName) {
-      oldModule->emitError("VerbatimBlackBoxAnno file missing name field");
-      return {};
-    }
-    seenFiles.insert(primaryFileName.getValue());
-
-    // Create emit.file operations for additional files (these are usually
-    // additional collateral such as headers or DPI files).
-    for (size_t i = 1; i < filesAttr.size(); ++i) {
-      auto fileDict = cast<DictionaryAttr>(filesAttr[i]);
-      auto fileName = fileDict.getAs<StringAttr>("name");
-      auto fileContent = fileDict.getAs<StringAttr>("content");
-      auto fileOutputFile = fileDict.getAs<StringAttr>("output_file");
-
-      if (!(fileName && fileContent && fileOutputFile)) {
-        oldModule->emitError("VerbatimBlackBoxAnno file missing fields");
-        return {};
-      }
-
-      if (!seenFiles.contains(fileName.getValue())) {
-        seenFiles.insert(fileName.getValue());
-
-        auto fileSymbolName =
-            circuitNamespace.newName(fileName.getValue().str());
-        auto emitFile =
-            emit::FileOp::create(builder, oldModule.getLoc(),
-                                 fileOutputFile.getValue(), fileSymbolName);
-        builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
-        emit::VerbatimOp::create(builder, oldModule.getLoc(), fileContent);
-        builder.setInsertionPointAfter(emitFile);
-
-        auto ext = llvm::sys::path::extension(fileName.getValue());
-        bool excludeFromFileList =
-            (ext == ".h" || ext == ".vh" || ext == ".svh");
-        auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
-            builder.getContext(), fileOutputFile.getValue(),
-            excludeFromFileList);
-        emitFile->setAttr("output_file", outputFileAttr);
-
-        // Reference this file in additional_files
-        additionalFiles.push_back(
-            FlatSymbolRefAttr::get(builder.getContext(), fileSymbolName));
-      }
-    }
-
-    // Get module parameters
-    auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
-    if (!parameters)
-      parameters = builder.getArrayAttr({});
-
-    auto verbatimModule = sv::SVVerbatimModuleOp::create(
-        builder, oldModule.getLoc(), nameAttr, ports, content, outputFileAttr,
-        /*per_port_attrs=*/nullptr,
-        /*port_locs=*/nullptr, parameters,
-        additionalFiles.empty() ? nullptr
-                                : builder.getArrayAttr(additionalFiles),
-        verilogName.empty() ? nullptr : builder.getStringAttr(verilogName));
-
-    SymbolTable::setSymbolVisibility(
-        verbatimModule, SymbolTable::getSymbolVisibility(oldModule));
-
-    annos.removeAnnotation(verbatimBlackBoxAnnoClass);
-
-    if (handleForceNameAnnos(oldModule, annos, loweringState))
-      return {};
-
-    loweringState.processRemainingAnnotations(oldModule, annos);
-
-    return verbatimModule;
-  }
-
-  // Original logic for non-verbatim modules
+  // Map over parameters if present.  Drop all values as we do so, so there are
+  // no known default values in the extmodule.  This ensures that the
+  // hw.instance will print all the parameters when generating verilog.
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   auto newModule = hw::HWModuleExternOp::create(
       builder, oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
@@ -1281,6 +1174,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
+  AnnotationSet annos(oldModule);
   if (handleForceNameAnnos(oldModule, annos, loweringState))
     return {};
 
