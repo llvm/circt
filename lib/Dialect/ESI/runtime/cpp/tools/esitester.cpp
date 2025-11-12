@@ -815,10 +815,9 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
   double bytesPerSec =
-      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
+      (double)xferCount * (width / 8.0) / (double)duration.count();
   uint64_t cycles = cyclePort->readInt();
-  double bytesPerCycle =
-      (double)xferCount * (width / 8.0) * 1e6 / (double)cycles;
+  double bytesPerCycle = (double)xferCount * (width / 8.0) / (double)cycles;
   std::cout << "[WRITE] Hostmem bandwidth (" << std::to_string(width)
             << "): " << formatBandwidth(bytesPerSec) << " "
             << std::to_string(xferCount) << " flits in "
@@ -878,21 +877,23 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   cmdMMIO->write(0x18, xferCount);
   cmdMMIO->write(0x20, 1);
 
+  bool timeout = true;
   for (int wait = 0; wait < 100000; ++wait) {
     uint64_t respNow = respPort->readInt();
-    if (respNow == xferCount)
+    if (respNow == xferCount) {
+      timeout = false;
       break;
-    if (wait == 9999)
-      throw std::runtime_error("hostmem read bandwidth timeout");
+    }
     std::this_thread::sleep_for(std::chrono::microseconds(50));
   }
+  if (timeout)
+    throw std::runtime_error("hostmem read bandwidth timeout");
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
   double bytesPerSec =
-      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
+      (double)xferCount * (width / 8.0) / (double)duration.count();
   uint64_t cycles = cycleCntPort->readInt();
-  double bytesPerCycle =
-      (double)xferCount * (width / 8.0) * 1e6 / (double)cycles;
+  double bytesPerCycle = (double)xferCount * (width / 8.0) / (double)cycles;
   std::cout << "[ READ] Hostmem bandwidth (" << width
             << "): " << formatBandwidth(bytesPerSec) << ", " << xferCount
             << " flits in " << duration.count() << " us, " << cycles

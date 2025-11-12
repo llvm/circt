@@ -204,7 +204,7 @@ class LoopbackInOutAdd(Module):
 def MMIOAdd(add_amt: int) -> Type[Module]:
 
   class MMIOAdd(Module):
-    """Exposes an MMIO address space whereing MMIO reads return the <address
+    """Exposes an MMIO address space wherein MMIO reads return the <address
         offset into its space> + add_amt."""
 
     metadata = Metadata(
