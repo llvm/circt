@@ -517,7 +517,7 @@ static LogicalResult processBuffer(
           return failure();
         }
 
-	// TODO: This should probably be checking if DLTI is set on module.
+        // TODO: This should probably be checking if DLTI is set on module.
         unsigned width = type.isIndex() ? 64 : type.getIntOrFloatBitWidth();
         APInt apVal(width, 0);
         if (StringRef(val).getAsInteger(0, apVal)) {
