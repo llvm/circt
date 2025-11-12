@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-hw-to-llvm --reconcile-unrealized-casts | FileCheck %s
+// RUN: circt-opt %s --convert-hw-to-llvm=spill-arrays-early=false --reconcile-unrealized-casts | FileCheck %s
 
 // CHECK-LABEL: @convertBitcast
 func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo: i32, bar: i32>) {
