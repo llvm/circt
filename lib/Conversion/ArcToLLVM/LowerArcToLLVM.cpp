@@ -761,13 +761,13 @@ void LowerArcToLLVMPass::runOnOperation() {
   // CIRCT patterns.
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
   populateHWToLLVMTypeConversions(converter);
-  ArraySpillCache spillCache;
+  std::optional<ArraySpillCache> spillCacheOpt = ArraySpillCache();
   {
     OpBuilder spillBuilder(getOperation());
-    spillCache.spillNonHWOps(spillBuilder, converter, getOperation());
+    spillCacheOpt->spillNonHWOps(spillBuilder, converter, getOperation());
   }
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap, spillCache);
+                                     constAggregateGlobalsMap, spillCacheOpt);
 
   populateCombToArithConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);

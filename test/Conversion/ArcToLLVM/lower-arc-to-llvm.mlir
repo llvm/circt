@@ -233,8 +233,8 @@ func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>
 // See https://github.com/llvm/circt/pull/8871.
 // CHECK-LABEL: llvm.func @DontCrashOnI0(
 func.func @DontCrashOnI0(%arg0: i1, %arg1: !hw.array<1xi42>) -> i42 {
-  // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(0 : i0) : i0
   // CHECK: [[STACK:%.+]] = llvm.alloca {{%.+}} x !llvm.array<1 x i42>
+  // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(0 : i0) : i0
   // CHECK: [[ZEXT:%.+]] = llvm.zext [[ZERO]] : i0 to i1
   // CHECK: [[GEP:%.+]] = llvm.getelementptr [[STACK]][0, [[ZEXT]]] :
   // CHECK: [[RESULT:%.+]] = llvm.load [[GEP]] : !llvm.ptr -> i42

@@ -509,7 +509,10 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
   let description = [{
     This pass translates HW to LLVM.
   }];
-  let constructor = "circt::createConvertHWToLLVMPass()";
+  let options = [Option<
+      "spillArraysEarly", "spill-arrays-early", "bool", "true",
+      "If true, array values will me materialized on the stack at the"
+      "point of definition. This can reduce redundant stack allocations.">];
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
 

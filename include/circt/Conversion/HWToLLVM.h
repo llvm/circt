@@ -67,10 +67,7 @@ void populateHWToLLVMConversionPatterns(
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, mlir::LLVM::GlobalOp>
         &constAggregateGlobalsMap,
-    ArraySpillCache &spillCache);
-
-/// Create an HW to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> createConvertHWToLLVMPass();
+    std::optional<ArraySpillCache> &spillCacheOpt);
 
 } // namespace circt
 
