@@ -815,7 +815,7 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
   double bytesPerSec =
-      (double)xferCount * (width / 8.0) / (double)duration.count();
+      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
   uint64_t cycles = cyclePort->readInt();
   double bytesPerCycle = (double)xferCount * (width / 8.0) / (double)cycles;
   std::cout << "[WRITE] Hostmem bandwidth (" << std::to_string(width)
@@ -891,7 +891,7 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
   double bytesPerSec =
-      (double)xferCount * (width / 8.0) / (double)duration.count();
+      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
   uint64_t cycles = cycleCntPort->readInt();
   double bytesPerCycle = (double)xferCount * (width / 8.0) / (double)cycles;
   std::cout << "[ READ] Hostmem bandwidth (" << width
