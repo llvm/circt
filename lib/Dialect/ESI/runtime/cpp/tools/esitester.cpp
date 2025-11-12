@@ -823,7 +823,7 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
             << "): " << formatBandwidth(bytesPerSec) << " "
             << std::to_string(xferCount) << " flits in "
             << std::to_string(duration.count()) << " us, "
-            << std::to_string(cycles) << " cycles" << ", " << bytesPerCycle
+            << std::to_string(cycles) << " cycles, " << bytesPerCycle
             << " bytes/cycle" << std::endl;
 }
 
