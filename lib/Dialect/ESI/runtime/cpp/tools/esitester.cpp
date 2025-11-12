@@ -24,48 +24,142 @@
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
+#include <atomic>
 #include <chrono>
+#include <future>
 #include <iostream>
 #include <map>
+#include <random>
+#include <sstream>
 #include <stdexcept>
+#include <vector>
 
 using namespace esi;
 
-static void registerCallbacks(AcceleratorConnection *, Accelerator *);
-static void hostmemTest(AcceleratorConnection *, Accelerator *, bool read,
-                        bool write);
-static void dmaTest(AcceleratorConnection *, Accelerator *, bool read,
-                    bool write);
+// Forward declarations of test functions.
+static void callbackTest(AcceleratorConnection *, Accelerator *,
+                         uint32_t iterations);
+static void hostmemTest(AcceleratorConnection *, Accelerator *,
+                        const std::vector<uint32_t> &widths, bool write,
+                        bool read);
+static void hostmemBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
+                                 uint32_t xferCount,
+                                 const std::vector<uint32_t> &widths, bool read,
+                                 bool write);
+static void dmaTest(AcceleratorConnection *, Accelerator *,
+                    const std::vector<uint32_t> &widths, bool read, bool write);
 static void bandwidthTest(AcceleratorConnection *, Accelerator *,
-                          uint32_t xferCount,
-                          const std::vector<uint32_t> &widths, bool read,
-                          bool write);
+                          const std::vector<uint32_t> &widths,
+                          uint32_t xferCount, bool read, bool write);
+static void loopbackAddTest(AcceleratorConnection *, Accelerator *,
+                            uint32_t iterations, bool pipeline);
+static void aggregateHostmemBandwidthTest(AcceleratorConnection *,
+                                          Accelerator *, uint32_t width,
+                                          uint32_t xferCount, bool read,
+                                          bool write);
+
+// Default widths and default widths string for CLI help text.
+constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
+static std::string defaultWidthsStr() {
+  std::string s;
+  for (size_t i = 0; i < defaultWidths.size(); ++i) {
+    s += std::to_string(defaultWidths[i]);
+    if (i + 1 < defaultWidths.size())
+      s += ",";
+  }
+  return s;
+}
+
+// Helper to format bandwidth with appropriate units.
+static std::string formatBandwidth(double bytesPerSec) {
+  const char *unit = "B/s";
+  double value = bytesPerSec;
+  if (bytesPerSec >= 1e9) {
+    unit = "GB/s";
+    value = bytesPerSec / 1e9;
+  } else if (bytesPerSec >= 1e6) {
+    unit = "MB/s";
+    value = bytesPerSec / 1e6;
+  } else if (bytesPerSec >= 1e3) {
+    unit = "KB/s";
+    value = bytesPerSec / 1e3;
+  }
+  std::ostringstream oss;
+  oss.setf(std::ios::fixed);
+  oss.precision(2);
+  oss << value << " " << unit;
+  return oss.str();
+}
+
+// Human-readable size from bytes.
+static std::string humanBytes(uint64_t bytes) {
+  const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+  double v = (double)bytes;
+  int u = 0;
+  while (v >= 1024.0 && u < 4) {
+    v /= 1024.0;
+    ++u;
+  }
+  std::ostringstream oss;
+  oss.setf(std::ios::fixed);
+  oss.precision(u == 0 ? 0 : 2);
+  oss << v << " " << units[u];
+  return oss.str();
+}
+
+// Human-readable time from microseconds.
+static std::string humanTimeUS(uint64_t us) {
+  if (us < 1000)
+    return std::to_string(us) + " us";
+  double ms = us / 1000.0;
+  if (ms < 1000.0) {
+    std::ostringstream oss;
+    oss.setf(std::ios::fixed);
+    oss.precision(ms < 10.0 ? 2 : (ms < 100.0 ? 1 : 0));
+    oss << ms << " ms";
+    return oss.str();
+  }
+  double sec = ms / 1000.0;
+  std::ostringstream oss;
+  oss.setf(std::ios::fixed);
+  oss.precision(sec < 10.0 ? 3 : 2);
+  oss << sec << " s";
+  return oss.str();
+}
 
 int main(int argc, const char *argv[]) {
   CliParser cli("esitester");
   cli.description("Test an ESI system running the ESI tester image.");
   cli.require_subcommand(1);
 
-  CLI::App *loopSub = cli.add_subcommand("loop", "Loop indefinitely");
-
-  CLI::App *waitSub =
-      cli.add_subcommand("wait", "Wait for a certain number of seconds");
-  uint32_t waitTime = 1;
-  waitSub->add_option("-t,--time", waitTime, "Number of seconds to wait");
+  CLI::App *callback_test =
+      cli.add_subcommand("callback", "initiate callback test");
+  uint32_t cb_iters = 1;
+  callback_test->add_option("-i,--iters", cb_iters,
+                            "Number of iterations to run");
 
   CLI::App *hostmemtestSub =
       cli.add_subcommand("hostmem", "Run the host memory test");
   bool hmRead = false;
   bool hmWrite = false;
+  std::vector<uint32_t> hostmemWidths(defaultWidths.begin(),
+                                      defaultWidths.end());
   hostmemtestSub->add_flag("-w,--write", hmWrite,
                            "Enable host memory write test");
   hostmemtestSub->add_flag("-r,--read", hmRead, "Enable host memory read test");
+  hostmemtestSub->add_option(
+      "--widths", hostmemWidths,
+      "Hostmem test widths (default: " + defaultWidthsStr() + ")");
 
   CLI::App *dmatestSub = cli.add_subcommand("dma", "Run the DMA test");
   bool dmaRead = false;
   bool dmaWrite = false;
+  std::vector<uint32_t> dmaWidths(defaultWidths.begin(), defaultWidths.end());
   dmatestSub->add_flag("-w,--write", dmaWrite, "Enable dma write test");
   dmatestSub->add_flag("-r,--read", dmaRead, "Enable dma read test");
+  dmatestSub->add_option("--widths", dmaWidths,
+                         "DMA test widths (default: " + defaultWidthsStr() +
+                             ")");
 
   CLI::App *bandwidthSub =
       cli.add_subcommand("bandwidth", "Run the bandwidth test");
@@ -74,13 +168,53 @@ int main(int argc, const char *argv[]) {
                            "Number of transfers to perform");
   bool bandwidthRead = false;
   bool bandwidthWrite = false;
-  std::vector<uint32_t> widths = {32, 64, 128, 256, 384, 504, 512};
-  bandwidthSub->add_option("--widths", widths,
-                           "Width of the transfers to perform (default: 32, "
-                           "64, 128, 256, 384, 504, 512)");
+  std::vector<uint32_t> bandwidthWidths(defaultWidths.begin(),
+                                        defaultWidths.end());
+  bandwidthSub->add_option("--widths", bandwidthWidths,
+                           "Width of the transfers to perform (default: " +
+                               defaultWidthsStr() + ")");
   bandwidthSub->add_flag("-w,--write", bandwidthWrite,
                          "Enable bandwidth write");
   bandwidthSub->add_flag("-r,--read", bandwidthRead, "Enable bandwidth read");
+
+  CLI::App *hostmembwSub =
+      cli.add_subcommand("hostmembw", "Run the host memory bandwidth test");
+  uint32_t hmBwCount = 1000;
+  bool hmBwRead = false;
+  bool hmBwWrite = false;
+  std::vector<uint32_t> hmBwWidths(defaultWidths.begin(), defaultWidths.end());
+  hostmembwSub->add_option("-c,--count", hmBwCount,
+                           "Number of hostmem transfers");
+  hostmembwSub->add_option(
+      "--widths", hmBwWidths,
+      "Hostmem bandwidth widths (default: " + defaultWidthsStr() + ")");
+  hostmembwSub->add_flag("-w,--write", hmBwWrite,
+                         "Measure hostmem write bandwidth");
+  hostmembwSub->add_flag("-r,--read", hmBwRead,
+                         "Measure hostmem read bandwidth");
+
+  CLI::App *loopbackSub =
+      cli.add_subcommand("loopback", "Test LoopbackInOutAdd function service");
+  uint32_t loopbackIters = 10;
+  bool loopbackPipeline = false;
+  loopbackSub->add_option("-i,--iters", loopbackIters,
+                          "Number of function invocations (default 10)");
+  loopbackSub->add_flag("-p,--pipeline", loopbackPipeline,
+                        "Pipeline all calls then collect results");
+
+  CLI::App *aggBwSub = cli.add_subcommand(
+      "aggbandwidth",
+      "Aggregate hostmem bandwidth across four units (readmem*, writemem*)");
+  uint32_t aggWidth = 512;
+  uint32_t aggCount = 1000;
+  bool aggRead = false;
+  bool aggWrite = false;
+  aggBwSub->add_option(
+      "--width", aggWidth,
+      "Bit width (default 512; other widths ignored if absent)");
+  aggBwSub->add_option("-c,--count", aggCount, "Flits per unit (default 1000)");
+  aggBwSub->add_flag("-r,--read", aggRead, "Include read units");
+  aggBwSub->add_flag("-w,--write", aggWrite, "Include write units");
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -88,195 +222,296 @@ int main(int argc, const char *argv[]) {
     return 0;
 
   Context &ctxt = cli.getContext();
+  std::unique_ptr<AcceleratorConnection> acc = cli.connect();
   try {
-    std::unique_ptr<AcceleratorConnection> acc = cli.connect();
     const auto &info = *acc->getService<services::SysInfo>();
+    ctxt.getLogger().info("esitester", "Connected to accelerator.");
     Manifest manifest(ctxt, info.getJsonManifest());
     Accelerator *accel = manifest.buildAccelerator(*acc);
+    ctxt.getLogger().info("esitester", "Built accelerator.");
     acc->getServiceThread()->addPoll(*accel);
 
-    if (*loopSub) {
-      registerCallbacks(acc.get(), accel);
-      while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-    } else if (*waitSub) {
-      registerCallbacks(acc.get(), accel);
-      std::this_thread::sleep_for(std::chrono::seconds(waitTime));
+    if (*callback_test) {
+      callbackTest(acc.get(), accel, cb_iters);
     } else if (*hostmemtestSub) {
-      hostmemTest(acc.get(), accel, hmRead, hmWrite);
+      hostmemTest(acc.get(), accel, hostmemWidths, hmWrite, hmRead);
+    } else if (*loopbackSub) {
+      loopbackAddTest(acc.get(), accel, loopbackIters, loopbackPipeline);
     } else if (*dmatestSub) {
-      dmaTest(acc.get(), accel, dmaRead, dmaWrite);
+      dmaTest(acc.get(), accel, dmaWidths, dmaRead, dmaWrite);
     } else if (*bandwidthSub) {
-      bandwidthTest(acc.get(), accel, xferCount, widths, bandwidthRead,
+      bandwidthTest(acc.get(), accel, bandwidthWidths, xferCount, bandwidthRead,
                     bandwidthWrite);
+    } else if (*hostmembwSub) {
+      hostmemBandwidthTest(acc.get(), accel, hmBwCount, hmBwWidths, hmBwRead,
+                           hmBwWrite);
+    } else if (*aggBwSub) {
+      aggregateHostmemBandwidthTest(acc.get(), accel, aggWidth, aggCount,
+                                    aggRead, aggWrite);
     }
 
     acc->disconnect();
-    std::cout << "Exiting successfully\n";
-    return 0;
   } catch (std::exception &e) {
     ctxt.getLogger().error("esitester", e.what());
+    acc->disconnect();
     return -1;
   }
+  std::cout << "Exiting successfully\n";
+  return 0;
 }
 
-void registerCallbacks(AcceleratorConnection *conn, Accelerator *accel) {
-  auto ports = accel->getPorts();
-  auto f = ports.find(AppID("PrintfExample"));
-  if (f != ports.end()) {
-    auto callPort = f->second.getAs<services::CallService::Callback>();
-    if (callPort)
-      callPort->connect(
-          [conn](const MessageData &data) -> MessageData {
-            conn->getLogger().debug(
-                [&](std::string &subsystem, std::string &msg,
-                    std::unique_ptr<std::map<std::string, std::any>> &details) {
-                  subsystem = "ESITESTER";
-                  msg = "Received PrintfExample message";
-                  details = std::make_unique<std::map<std::string, std::any>>();
-                  details->emplace("data", data);
-                });
-            std::cout << "PrintfExample: " << *data.as<uint32_t>() << std::endl;
-            return MessageData();
-          },
-          true);
-    else
-      std::cerr << "PrintfExample port is not a CallService::Callback"
-                << std::endl;
-  } else {
-    std::cerr << "No PrintfExample port found" << std::endl;
-  }
-}
+static void callbackTest(AcceleratorConnection *conn, Accelerator *accel,
+                         uint32_t iterations) {
+  auto cb_test = accel->getChildren().find(AppID("cb_test"));
+  if (cb_test == accel->getChildren().end())
+    throw std::runtime_error("No cb_test child found in accelerator");
+  auto &ports = cb_test->second->getPorts();
+  auto cmd_port = ports.find(AppID("cmd"));
+  if (cmd_port == ports.end())
+    throw std::runtime_error("No cmd port found in cb_test child");
+  auto *cmdMMIO = cmd_port->second.getAs<services::MMIO::MMIORegion>();
+  if (!cmdMMIO)
+    throw std::runtime_error("cb_test cmd port is not MMIO");
 
-/// Initiate a test read.
-void hostmemTest(Accelerator *acc,
-                 esi::services::HostMem::HostMemRegion &region, uint32_t width,
-                 void *devicePtr, bool read, bool write) {
-  std::cout << "Running hostmem test with width " << width << std::endl;
-  uint64_t *dataPtr = static_cast<uint64_t *>(region.getPtr());
+  auto f = ports.find(AppID("cb"));
+  if (f == ports.end())
+    throw std::runtime_error("No cb port found in accelerator");
 
-  if (read) {
-    auto readMemChildIter = acc->getChildren().find(AppID("readmem", width));
-    if (readMemChildIter == acc->getChildren().end())
-      throw std::runtime_error("hostmem test failed. No readmem child found");
-    auto &readMemPorts = readMemChildIter->second->getPorts();
-    auto readMemPortIter = readMemPorts.find(AppID("ReadMem"));
-    if (readMemPortIter == readMemPorts.end())
-      throw std::runtime_error("hostmem test failed. No ReadMem port found");
-    auto *readMem = readMemPortIter->second.getAs<services::MMIO::MMIORegion>();
-    if (!readMem)
-      throw std::runtime_error("hostmem test failed. ReadMem port is not MMIO");
+  auto *callPort = f->second.getAs<services::CallService::Callback>();
+  if (!callPort)
+    throw std::runtime_error("cb port is not a CallService::Callback");
 
-    for (size_t i = 0; i < 8; ++i) {
-      dataPtr[0] = 0x12345678 << i;
-      dataPtr[1] = 0xDEADBEEF << i;
-      region.flush();
-      readMem->write(8, reinterpret_cast<uint64_t>(devicePtr));
+  std::atomic<uint32_t> callbackCount = 0;
+  callPort->connect(
+      [conn, &callbackCount](const MessageData &data) mutable -> MessageData {
+        callbackCount.fetch_add(1);
+        conn->getLogger().debug(
+            [&](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+              subsystem = "ESITESTER";
+              msg = "Received callback";
+              details = std::make_unique<std::map<std::string, std::any>>();
+              details->emplace("data", data);
+            });
+        std::cout << "callback: " << *data.as<uint64_t>() << std::endl;
+        return MessageData();
+      },
+      true);
 
-      // Wait for the accelerator to read the correct value. Timeout and fail
-      // after 10ms.
-      uint64_t val = 0;
-      uint64_t expected = dataPtr[0];
-      if (width < 64)
-        expected &= ((1ull << width) - 1);
-      for (int i = 0; i < 100; ++i) {
-        val = readMem->read(0);
-        if (val == expected)
-          break;
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
-      }
-
-      if (val != expected)
-        throw std::runtime_error("hostmem read test failed. Expected " +
-                                 esi::toHex(expected) + ", got " +
-                                 esi::toHex(val));
-    }
-  }
-
-  // Initiate a test write.
-  if (write) {
-    assert(width % 8 == 0);
-    auto check = [&](bool print) {
-      bool ret = true;
-      for (size_t i = 0; i < 8; ++i) {
-        if (print)
-          std::cout << "dataPtr[" << i << "] = 0x" << esi::toHex(dataPtr[i])
-                    << std::endl;
-        if (i < (width + 63) / 64 && dataPtr[i] == 0xFFFFFFFFFFFFFFFFull)
-          ret = false;
-      }
-      return ret;
-    };
-
-    auto writeMemChildIter = acc->getChildren().find(AppID("writemem", width));
-    if (writeMemChildIter == acc->getChildren().end())
-      throw std::runtime_error("hostmem test failed. No writemem child found");
-    auto &writeMemPorts = writeMemChildIter->second->getPorts();
-    auto writeMemPortIter = writeMemPorts.find(AppID("WriteMem"));
-    if (writeMemPortIter == writeMemPorts.end())
-      throw std::runtime_error("hostmem test failed. No WriteMem port found");
-    auto *writeMem =
-        writeMemPortIter->second.getAs<services::MMIO::MMIORegion>();
-    if (!writeMem)
-      throw std::runtime_error(
-          "hostmem test failed. WriteMem port is not MMIO");
-
-    for (size_t i = 0, e = 8; i < e; ++i)
-      dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
-    region.flush();
-
-    auto telemetryPortIter = writeMemPorts.find(AppID("timesWritten"));
-    if (telemetryPortIter == writeMemPorts.end())
-      throw std::runtime_error("hostmem test failed. No telemetry child found");
-    services::TelemetryService::Metric *telemetry =
-        telemetryPortIter->second.getAs<services::TelemetryService::Metric>();
-    telemetry->connect();
-    uint64_t writeCount = telemetry->readInt();
-    std::cout << "Write count: " << writeCount << std::endl;
-
-    // Command the accelerator to write to 'devicePtr', the pointer which the
-    // device should use for 'dataPtr'.
-    writeMem->write(0, reinterpret_cast<uint64_t>(devicePtr));
-    // Wait for the accelerator to write. Timeout and fail after 10ms.
-    for (int i = 0; i < 100; ++i) {
-      if (check(false))
+  for (uint32_t i = 0; i < iterations; ++i) {
+    conn->getLogger().info("esitester", "Issuing callback command iteration " +
+                                            std::to_string(i) + "/" +
+                                            std::to_string(iterations));
+    cmdMMIO->write(0x10, i); // Command the callback
+    // Wait up to 1 second for the callback to be invoked.
+    for (uint32_t wait = 0; wait < 1000; ++wait) {
+      if (callbackCount.load() > i)
         break;
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    if (!check(true))
-      throw std::runtime_error("hostmem write test failed");
-
-    writeCount = *telemetry->read().get().as<uint64_t>();
-    std::cout << "Write count: " << writeCount << std::endl;
-
-    // Check that the accelerator didn't write too far.
-    size_t widthInBytes = width / 8;
-    uint8_t *dataPtr8 = reinterpret_cast<uint8_t *>(region.getPtr());
-    for (size_t i = widthInBytes; i < 64; ++i) {
-      std::cout << "endcheck dataPtr8[" << i << "] = 0x"
-                << esi::toHex(dataPtr8[i]) << std::endl;
-      if (dataPtr8[i] != 0xFF)
-        throw std::runtime_error(
-            "hostmem write test failed -- write went too far");
-    }
+    if (callbackCount.load() <= i)
+      throw std::runtime_error("Callback test failed. No callback received");
   }
 }
 
-void hostmemTest(AcceleratorConnection *conn, Accelerator *acc, bool read,
-                 bool write) {
+/// Test the hostmem write functionality.
+static void hostmemWriteTest(Accelerator *acc,
+                             esi::services::HostMem::HostMemRegion &region,
+                             uint32_t width) {
+  std::cout << "Running hostmem WRITE test with width " << width << std::endl;
+  uint64_t *dataPtr = static_cast<uint64_t *>(region.getPtr());
+  auto check = [&](bool print) {
+    bool ret = true;
+    for (size_t i = 0; i < 9; ++i) {
+      if (print)
+        printf("[write] dataPtr[%zu] = 0x%016lx\n", i, dataPtr[i]);
+      if (i < (width + 63) / 64 && dataPtr[i] == 0xFFFFFFFFFFFFFFFFull)
+        ret = false;
+    }
+    return ret;
+  };
+
+  auto writeMemChildIter = acc->getChildren().find(AppID("writemem", width));
+  if (writeMemChildIter == acc->getChildren().end())
+    throw std::runtime_error(
+        "hostmem write test failed. No writemem child found");
+  auto &writeMemPorts = writeMemChildIter->second->getPorts();
+
+  auto cmdPortIter = writeMemPorts.find(AppID("cmd", width));
+  if (cmdPortIter == writeMemPorts.end())
+    throw std::runtime_error(
+        "hostmem write test failed. No (cmd,width) MMIO port");
+  auto *cmdMMIO = cmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+  if (!cmdMMIO)
+    throw std::runtime_error(
+        "hostmem write test failed. (cmd,width) port not MMIO");
+
+  auto issuedPortIter = writeMemPorts.find(AppID("addrCmdIssued"));
+  if (issuedPortIter == writeMemPorts.end())
+    throw std::runtime_error(
+        "hostmem write test failed. addrCmdIssued missing");
+  auto *addrCmdIssuedPort =
+      issuedPortIter->second.getAs<services::TelemetryService::Metric>();
+  if (!addrCmdIssuedPort)
+    throw std::runtime_error(
+        "hostmem write test failed. addrCmdIssued not telemetry");
+  addrCmdIssuedPort->connect();
+
+  auto responsesPortIter = writeMemPorts.find(AppID("addrCmdResponses"));
+  if (responsesPortIter == writeMemPorts.end())
+    throw std::runtime_error(
+        "hostmem write test failed. addrCmdResponses missing");
+  auto *addrCmdResponsesPort =
+      responsesPortIter->second.getAs<services::TelemetryService::Metric>();
+  if (!addrCmdResponsesPort)
+    throw std::runtime_error(
+        "hostmem write test failed. addrCmdResponses not telemetry");
+  addrCmdResponsesPort->connect();
+
+  for (size_t i = 0, e = 9; i < e; ++i)
+    dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
+  region.flush();
+  cmdMMIO->write(0x10, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+  cmdMMIO->write(0x18, 1);
+  cmdMMIO->write(0x20, 1);
+  bool done = false;
+  for (int i = 0; i < 100; ++i) {
+    auto issued = addrCmdIssuedPort->readInt();
+    auto responses = addrCmdResponsesPort->readInt();
+    if (issued == 1 && responses == 1) {
+      done = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  if (!done) {
+    check(true);
+    throw std::runtime_error("hostmem write test (" + std::to_string(width) +
+                             " bits) timeout waiting for completion");
+  }
+  if (!check(true))
+    throw std::runtime_error("hostmem write test failed (" +
+                             std::to_string(width) + " bits)");
+}
+
+static void hostmemReadTest(Accelerator *acc,
+                            esi::services::HostMem::HostMemRegion &region,
+                            uint32_t width) {
+  std::cout << "Running hostmem READ test with width " << width << std::endl;
+  auto readMemChildIter = acc->getChildren().find(AppID("readmem", width));
+  if (readMemChildIter == acc->getChildren().end())
+    throw std::runtime_error(
+        "hostmem read test failed. No readmem child found");
+
+  auto &readMemPorts = readMemChildIter->second->getPorts();
+  auto addrCmdPortIter = readMemPorts.find(AppID("cmd", width));
+  if (addrCmdPortIter == readMemPorts.end())
+    throw std::runtime_error(
+        "hostmem read test failed. No AddressCommand MMIO port");
+  auto *addrCmdMMIO =
+      addrCmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+  if (!addrCmdMMIO)
+    throw std::runtime_error(
+        "hostmem read test failed. AddressCommand port not MMIO");
+
+  auto lastReadPortIter = readMemPorts.find(AppID("lastReadLSB"));
+  if (lastReadPortIter == readMemPorts.end())
+    throw std::runtime_error("hostmem read test failed. lastReadLSB missing");
+  auto *lastReadPort =
+      lastReadPortIter->second.getAs<services::TelemetryService::Metric>();
+  if (!lastReadPort)
+    throw std::runtime_error(
+        "hostmem read test failed. lastReadLSB not telemetry");
+  lastReadPort->connect();
+
+  auto issuedPortIter = readMemPorts.find(AppID("addrCmdIssued"));
+  if (issuedPortIter == readMemPorts.end())
+    throw std::runtime_error("hostmem read test failed. addrCmdIssued missing");
+  auto *addrCmdIssuedPort =
+      issuedPortIter->second.getAs<services::TelemetryService::Metric>();
+  if (!addrCmdIssuedPort)
+    throw std::runtime_error(
+        "hostmem read test failed. addrCmdIssued not telemetry");
+  addrCmdIssuedPort->connect();
+
+  auto responsesPortIter = readMemPorts.find(AppID("addrCmdResponses"));
+  if (responsesPortIter == readMemPorts.end())
+    throw std::runtime_error(
+        "hostmem read test failed. addrCmdResponses missing");
+  auto *addrCmdResponsesPort =
+      responsesPortIter->second.getAs<services::TelemetryService::Metric>();
+  if (!addrCmdResponsesPort)
+    throw std::runtime_error(
+        "hostmem read test failed. addrCmdResponses not telemetry");
+  addrCmdResponsesPort->connect();
+
+  for (size_t i = 0; i < 8; ++i) {
+    auto *dataPtr = static_cast<uint64_t *>(region.getPtr());
+    dataPtr[0] = 0x12345678ull << i;
+    dataPtr[1] = 0xDEADBEEFull << i;
+    region.flush();
+    addrCmdMMIO->write(0x10, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+    addrCmdMMIO->write(0x18, 1);
+    addrCmdMMIO->write(0x20, 1);
+    bool done = false;
+    for (int waitLoop = 0; waitLoop < 100; ++waitLoop) {
+      auto issued = addrCmdIssuedPort->readInt();
+      auto responses = addrCmdResponsesPort->readInt();
+      if (issued == 1 && responses == 1) {
+        done = true;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (!done)
+      throw std::runtime_error("hostmem read (" + std::to_string(width) +
+                               " bits) timeout waiting for completion");
+    uint64_t captured = lastReadPort->readInt();
+    uint64_t expected = dataPtr[0];
+    if (width < 64)
+      expected &= ((1ull << width) - 1);
+    if (captured != expected)
+      throw std::runtime_error("hostmem read test (" + std::to_string(width) +
+                               " bits) failed. Expected " +
+                               esi::toHex(expected) + ", got " +
+                               esi::toHex(captured));
+  }
+}
+
+static void hostmemTest(AcceleratorConnection *conn, Accelerator *acc,
+                        const std::vector<uint32_t> &widths, bool write,
+                        bool read) {
   // Enable the host memory service.
   auto hostmem = conn->getService<services::HostMem>();
   hostmem->start();
-  auto scratchRegion = hostmem->allocate(/*size(bytes)=*/512, /*memOpts=*/{});
+  auto scratchRegion = hostmem->allocate(/*size(bytes)=*/1024 * 1024,
+                                         /*memOpts=*/{.writeable = true});
   uint64_t *dataPtr = static_cast<uint64_t *>(scratchRegion->getPtr());
+  conn->getLogger().info("esitester",
+                         "Running host memory test with region size " +
+                             std::to_string(scratchRegion->getSize()) +
+                             " bytes at 0x" + toHex(dataPtr));
   for (size_t i = 0; i < scratchRegion->getSize() / 8; ++i)
     dataPtr[i] = 0;
   scratchRegion->flush();
 
-  for (size_t width : {32, 64, 128, 256, 384, 504, 512, 513})
-    hostmemTest(acc, *scratchRegion, width, scratchRegion->getDevicePtr(), read,
-                write);
+  bool passed = true;
+  for (size_t width : widths) {
+    try {
+      if (write)
+        hostmemWriteTest(acc, *scratchRegion, width);
+      if (read)
+        hostmemReadTest(acc, *scratchRegion, width);
+    } catch (std::exception &e) {
+      conn->getLogger().error("esitester", "Hostmem test failed for width " +
+                                               std::to_string(width) + ": " +
+                                               e.what());
+      passed = false;
+    }
+  }
+  if (!passed)
+    throw std::runtime_error("Hostmem test failed");
+  std::cout << "Hostmem test passed" << std::endl;
 }
 
 static void dmaReadTest(AcceleratorConnection *conn, Accelerator *acc,
@@ -285,17 +520,17 @@ static void dmaReadTest(AcceleratorConnection *conn, Accelerator *acc,
   logger.info("esitester",
               "== Running DMA read test with width " + std::to_string(width));
   AppIDPath lastPath;
-  BundlePort *toHostMMIOPort = acc->resolvePort(
-      {AppID("tohostdmatest", width), AppID("ToHostDMATest")}, lastPath);
+  BundlePort *toHostMMIOPort =
+      acc->resolvePort({AppID("tohostdma", width), AppID("cmd")}, lastPath);
   if (!toHostMMIOPort)
-    throw std::runtime_error("dma read test failed. No tohostdmatest[" +
+    throw std::runtime_error("dma read test failed. No tohostdma[" +
                              std::to_string(width) + "] found");
   auto *toHostMMIO = toHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!toHostMMIO)
     throw std::runtime_error("dma read test failed. MMIO port is not MMIO");
   lastPath.clear();
   BundlePort *outPortBundle =
-      acc->resolvePort({AppID("tohostdmatest", width), AppID("out")}, lastPath);
+      acc->resolvePort({AppID("tohostdma", width), AppID("out")}, lastPath);
   ReadChannelPort &outPort = outPortBundle->getRawRead("data");
   outPort.connect();
 
@@ -315,28 +550,28 @@ static void dmaReadTest(AcceleratorConnection *conn, Accelerator *acc,
                  "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex());
   }
   outPort.disconnect();
-  logger.info("esitester", "==   DMA read test complete");
+  std::cout << "  DMA read test for " << width << " bits passed" << std::endl;
 }
 
 static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
                          size_t width) {
   Logger &logger = conn->getLogger();
   logger.info("esitester",
-              "== Running DMA write test with width " + std::to_string(width));
+              "Running DMA write test with width " + std::to_string(width));
   AppIDPath lastPath;
-  BundlePort *fromHostMMIOPort = acc->resolvePort(
-      {AppID("fromhostdmatest", width), AppID("FromHostDMATest")}, lastPath);
+  BundlePort *fromHostMMIOPort =
+      acc->resolvePort({AppID("fromhostdma", width), AppID("cmd")}, lastPath);
   if (!fromHostMMIOPort)
     throw std::runtime_error("dma read test for " + toString(width) +
-                             " bits failed. No fromhostdmatest[" +
+                             " bits failed. No fromhostdma[" +
                              std::to_string(width) + "] found");
   auto *fromHostMMIO = fromHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!fromHostMMIO)
     throw std::runtime_error("dma write test for " + toString(width) +
                              " bits failed. MMIO port is not MMIO");
   lastPath.clear();
-  BundlePort *outPortBundle = acc->resolvePort(
-      {AppID("fromhostdmatest", width), AppID("in")}, lastPath);
+  BundlePort *outPortBundle =
+      acc->resolvePort({AppID("fromhostdma", width), AppID("in")}, lastPath);
   if (!outPortBundle)
     throw std::runtime_error("dma write test for " + toString(width) +
                              " bits failed. No out port found");
@@ -375,49 +610,54 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   }
   writePort.disconnect();
   delete[] data;
-  logger.info("esitester",
-              "==   DMA write test for " + toString(width) + " bits complete");
+  std::cout << "  DMA write test for " << width << " bits passed" << std::endl;
 }
 
-static void dmaTest(AcceleratorConnection *conn, Accelerator *acc, bool read,
+static void dmaTest(AcceleratorConnection *conn, Accelerator *acc,
+                    const std::vector<uint32_t> &widths, bool read,
                     bool write) {
   bool success = true;
   if (write)
-    for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+    for (size_t width : widths)
       try {
         dmaWriteTest(conn, acc, width);
       } catch (std::exception &e) {
         success = false;
         std::cerr << "DMA write test for " << width
-                  << "bits failed: " << e.what() << std::endl;
+                  << " bits failed: " << e.what() << std::endl;
       }
   if (read)
-    for (size_t width : {32, 64, 128, 256, 384, 504, 512})
+    for (size_t width : widths)
       dmaReadTest(conn, acc, width);
   if (!success)
     throw std::runtime_error("DMA test failed");
+  std::cout << "DMA test passed" << std::endl;
 }
+
+//
+// DMA bandwidth test
+//
 
 static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
                               size_t width, size_t xferCount) {
 
   AppIDPath lastPath;
-  BundlePort *toHostMMIOPort = acc->resolvePort(
-      {AppID("tohostdmatest", width), AppID("ToHostDMATest")}, lastPath);
+  BundlePort *toHostMMIOPort =
+      acc->resolvePort({AppID("tohostdma", width), AppID("cmd")}, lastPath);
   if (!toHostMMIOPort)
-    throw std::runtime_error("bandwidth test failed. No tohostdmatest[" +
+    throw std::runtime_error("bandwidth test failed. No tohostdma[" +
                              std::to_string(width) + "] found");
   auto *toHostMMIO = toHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!toHostMMIO)
     throw std::runtime_error("bandwidth test failed. MMIO port is not MMIO");
   lastPath.clear();
   BundlePort *outPortBundle =
-      acc->resolvePort({AppID("tohostdmatest", width), AppID("out")}, lastPath);
+      acc->resolvePort({AppID("tohostdma", width), AppID("out")}, lastPath);
   ReadChannelPort &outPort = outPortBundle->getRawRead("data");
   outPort.connect();
 
   Logger &logger = conn->getLogger();
-  logger.info("esitester", "Starting bandwidth test read with " +
+  logger.info("esitester", "Starting read bandwidth test with " +
                                std::to_string(xferCount) + " x " +
                                std::to_string(width) + " bit transfers");
   MessageData data;
@@ -434,37 +674,35 @@ static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
   }
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
+  double bytesPerSec =
+      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
   logger.info("esitester",
               "  Bandwidth test: " + std::to_string(xferCount) + " x " +
                   std::to_string(width) + " bit transfers in " +
                   std::to_string(duration.count()) + " microseconds");
-  logger.info("esitester",
-              "    bandwidth: " +
-                  std::to_string((xferCount * (width / 8) * 1000000) /
-                                 duration.count() / 1024) +
-                  " kbytes/sec");
+  logger.info("esitester", "    bandwidth: " + formatBandwidth(bytesPerSec));
 }
 
 static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
                                size_t width, size_t xferCount) {
 
   AppIDPath lastPath;
-  BundlePort *fromHostMMIOPort = acc->resolvePort(
-      {AppID("fromhostdmatest", width), AppID("FromHostDMATest")}, lastPath);
+  BundlePort *fromHostMMIOPort =
+      acc->resolvePort({AppID("fromhostdma", width), AppID("cmd")}, lastPath);
   if (!fromHostMMIOPort)
-    throw std::runtime_error("bandwidth test failed. No tohostdmatest[" +
+    throw std::runtime_error("bandwidth test failed. No fromhostdma[" +
                              std::to_string(width) + "] found");
   auto *fromHostMMIO = fromHostMMIOPort->getAs<services::MMIO::MMIORegion>();
   if (!fromHostMMIO)
     throw std::runtime_error("bandwidth test failed. MMIO port is not MMIO");
   lastPath.clear();
-  BundlePort *inPortBundle = acc->resolvePort(
-      {AppID("fromhostdmatest", width), AppID("in")}, lastPath);
+  BundlePort *inPortBundle =
+      acc->resolvePort({AppID("fromhostdma", width), AppID("in")}, lastPath);
   WriteChannelPort &outPort = inPortBundle->getRawWrite("data");
   outPort.connect();
 
   Logger &logger = conn->getLogger();
-  logger.info("esitester", "Starting bandwidth write read with " +
+  logger.info("esitester", "Starting write bandwidth test with " +
                                std::to_string(xferCount) + " x " +
                                std::to_string(width) + " bit transfers");
   std::vector<uint8_t> dataVec(width / 8);
@@ -484,25 +722,468 @@ static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   }
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::high_resolution_clock::now() - start);
+  double bytesPerSec =
+      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
   logger.info("esitester",
               "  Bandwidth test: " + std::to_string(xferCount) + " x " +
                   std::to_string(width) + " bit transfers in " +
                   std::to_string(duration.count()) + " microseconds");
-  logger.info("esitester",
-              "    bandwidth: " +
-                  std::to_string((xferCount * (width / 8) * 1000000) /
-                                 duration.count() / 1024) +
-                  " kbytes/sec");
+  logger.info("esitester", "    bandwidth: " + formatBandwidth(bytesPerSec));
 }
 
 static void bandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
-                          uint32_t xferCount,
-                          const std::vector<uint32_t> &widths, bool read,
-                          bool write) {
+                          const std::vector<uint32_t> &widths,
+                          uint32_t xferCount, bool read, bool write) {
   if (read)
-    for (size_t width : widths)
-      bandwidthReadTest(conn, acc, width, xferCount);
+    for (uint32_t w : widths)
+      bandwidthReadTest(conn, acc, w, xferCount);
   if (write)
-    for (size_t width : widths)
-      bandwidthWriteTest(conn, acc, width, xferCount);
+    for (uint32_t w : widths)
+      bandwidthWriteTest(conn, acc, w, xferCount);
+}
+
+//
+// Hostmem bandwidth test
+//
+
+static void
+hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
+                          esi::services::HostMem::HostMemRegion &region,
+                          uint32_t width, uint32_t xferCount) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting hostmem WRITE bandwidth test: " +
+                               std::to_string(xferCount) + " x " +
+                               std::to_string(width) + " bits");
+
+  auto writeMemChildIter = acc->getChildren().find(AppID("writemem", width));
+  if (writeMemChildIter == acc->getChildren().end())
+    throw std::runtime_error("hostmem write bandwidth: writemem child missing");
+  auto &writeMemPorts = writeMemChildIter->second->getPorts();
+
+  auto cmdPortIter = writeMemPorts.find(AppID("cmd", width));
+  if (cmdPortIter == writeMemPorts.end())
+    throw std::runtime_error("hostmem write bandwidth: cmd MMIO missing");
+  auto *cmdMMIO = cmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+  if (!cmdMMIO)
+    throw std::runtime_error("hostmem write bandwidth: cmd not MMIO");
+
+  auto issuedIter = writeMemPorts.find(AppID("addrCmdIssued"));
+  auto respIter = writeMemPorts.find(AppID("addrCmdResponses"));
+  auto cycleCount = writeMemPorts.find(AppID("addrCmdCycles"));
+  if (issuedIter == writeMemPorts.end() || respIter == writeMemPorts.end() ||
+      cycleCount == writeMemPorts.end())
+    throw std::runtime_error("hostmem write bandwidth: telemetry missing");
+  auto *issuedPort =
+      issuedIter->second.getAs<services::TelemetryService::Metric>();
+  auto *respPort = respIter->second.getAs<services::TelemetryService::Metric>();
+  auto *cyclePort =
+      cycleCount->second.getAs<services::TelemetryService::Metric>();
+  if (!issuedPort || !respPort || !cyclePort)
+    throw std::runtime_error(
+        "hostmem write bandwidth: telemetry type mismatch");
+
+  issuedPort->connect();
+  respPort->connect();
+  cyclePort->connect();
+
+  // Initialize pattern (optional).
+  uint64_t *dataPtr = static_cast<uint64_t *>(region.getPtr());
+  size_t words = region.getSize() / 8;
+  for (size_t i = 0; i < words; ++i)
+    dataPtr[i] = i + 0xA5A50000;
+  region.flush();
+
+  auto start = std::chrono::high_resolution_clock::now();
+  // Fire off xferCount write commands (one flit each).
+  uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
+  cmdMMIO->write(0x10, devPtr);    // address
+  cmdMMIO->write(0x18, xferCount); // flits
+  cmdMMIO->write(0x20, 1);         // start
+
+  // Wait for responses counter to reach target.
+  bool completed = false;
+  for (int wait = 0; wait < 100000; ++wait) {
+    uint64_t respNow = respPort->readInt();
+    if (respNow == xferCount) {
+      completed = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
+  }
+  if (!completed)
+    throw std::runtime_error("hostmem write bandwidth timeout");
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::high_resolution_clock::now() - start);
+  double bytesPerSec =
+      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
+  uint64_t cycles = cyclePort->readInt();
+  double bytesPerCycle =
+      (double)xferCount * (width / 8.0) * 1e6 / (double)cycles;
+  std::cout << "[WRITE] Hostmem bandwidth (" << std::to_string(width)
+            << "): " << formatBandwidth(bytesPerSec) << " "
+            << std::to_string(xferCount) << " flits in "
+            << std::to_string(duration.count()) << " us, "
+            << std::to_string(cycles) << " cycles" << ", " << bytesPerCycle
+            << " bytes/cycle" << std::endl;
+}
+
+static void
+hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
+                         esi::services::HostMem::HostMemRegion &region,
+                         uint32_t width, uint32_t xferCount) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting hostmem READ bandwidth test: " +
+                               std::to_string(xferCount) + " x " +
+                               std::to_string(width) + " bits");
+
+  auto readMemChildIter = acc->getChildren().find(AppID("readmem", width));
+  if (readMemChildIter == acc->getChildren().end())
+    throw std::runtime_error("hostmem read bandwidth: readmem child missing");
+  auto &readMemPorts = readMemChildIter->second->getPorts();
+
+  auto cmdPortIter = readMemPorts.find(AppID("cmd", width));
+  if (cmdPortIter == readMemPorts.end())
+    throw std::runtime_error("hostmem read bandwidth: cmd MMIO missing");
+  auto *cmdMMIO = cmdPortIter->second.getAs<services::MMIO::MMIORegion>();
+  if (!cmdMMIO)
+    throw std::runtime_error("hostmem read bandwidth: cmd not MMIO");
+
+  auto issuedIter = readMemPorts.find(AppID("addrCmdIssued"));
+  auto respIter = readMemPorts.find(AppID("addrCmdResponses"));
+  auto cyclePort = readMemPorts.find(AppID("addrCmdCycles"));
+  if (issuedIter == readMemPorts.end() || respIter == readMemPorts.end() ||
+      cyclePort == readMemPorts.end())
+    throw std::runtime_error("hostmem read bandwidth: telemetry missing");
+  auto *issuedPort =
+      issuedIter->second.getAs<services::TelemetryService::Metric>();
+  auto *respPort = respIter->second.getAs<services::TelemetryService::Metric>();
+  auto *cycleCntPort =
+      cyclePort->second.getAs<services::TelemetryService::Metric>();
+  if (!issuedPort || !respPort || !cycleCntPort)
+    throw std::runtime_error("hostmem read bandwidth: telemetry type mismatch");
+  issuedPort->connect();
+  respPort->connect();
+  cycleCntPort->connect();
+
+  // Prepare memory pattern (optional).
+  uint64_t *dataPtr = static_cast<uint64_t *>(region.getPtr());
+  size_t words64 = region.getSize() / 8;
+  for (size_t i = 0; i < words64; ++i)
+    dataPtr[i] = 0xCAFEBABE0000ull + i;
+  region.flush();
+  uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
+  auto start = std::chrono::high_resolution_clock::now();
+
+  cmdMMIO->write(0x10, devPtr);
+  cmdMMIO->write(0x18, xferCount);
+  cmdMMIO->write(0x20, 1);
+
+  for (int wait = 0; wait < 100000; ++wait) {
+    uint64_t respNow = respPort->readInt();
+    if (respNow == xferCount)
+      break;
+    if (wait == 9999)
+      throw std::runtime_error("hostmem read bandwidth timeout");
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
+  }
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::high_resolution_clock::now() - start);
+  double bytesPerSec =
+      (double)xferCount * (width / 8.0) * 1e6 / (double)duration.count();
+  uint64_t cycles = cycleCntPort->readInt();
+  double bytesPerCycle =
+      (double)xferCount * (width / 8.0) * 1e6 / (double)cycles;
+  std::cout << "[ READ] Hostmem bandwidth (" << width
+            << "): " << formatBandwidth(bytesPerSec) << ", " << xferCount
+            << " flits in " << duration.count() << " us, " << cycles
+            << " cycles, " << bytesPerCycle << " bytes/cycle" << std::endl;
+}
+
+static void hostmemBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
+                                 uint32_t xferCount,
+                                 const std::vector<uint32_t> &widths, bool read,
+                                 bool write) {
+  auto hostmemSvc = conn->getService<services::HostMem>();
+  hostmemSvc->start();
+  auto region = hostmemSvc->allocate(/*size(bytes)=*/1024 * 1024 * 1024,
+                                     /*memOpts=*/{.writeable = true});
+  for (uint32_t w : widths) {
+    if (write)
+      hostmemWriteBandwidthTest(conn, acc, *region, w, xferCount);
+    if (read)
+      hostmemReadBandwidthTest(conn, acc, *region, w, xferCount);
+  }
+}
+
+static void loopbackAddTest(AcceleratorConnection *conn, Accelerator *accel,
+                            uint32_t iterations, bool pipeline) {
+  Logger &logger = conn->getLogger();
+  auto loopbackChild = accel->getChildren().find(AppID("loopback"));
+  if (loopbackChild == accel->getChildren().end())
+    throw std::runtime_error("Loopback test: no 'loopback' child");
+  auto &ports = loopbackChild->second->getPorts();
+  auto addIter = ports.find(AppID("add"));
+  if (addIter == ports.end())
+    throw std::runtime_error("Loopback test: no 'add' port");
+
+  // Use FuncService::Func instead of raw channels.
+  auto *funcPort = addIter->second.getAs<services::FuncService::Function>();
+  if (!funcPort)
+    throw std::runtime_error(
+        "Loopback test: 'add' port not a FuncService::Function");
+  funcPort->connect();
+  if (iterations == 0) {
+    logger.info("esitester", "Loopback add test: 0 iterations (skipped)");
+    return;
+  }
+  std::mt19937_64 rng(0xC0FFEE);
+  std::uniform_int_distribution<uint32_t> dist(0, (1u << 24) - 1);
+
+  if (!pipeline) {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (uint32_t i = 0; i < iterations; ++i) {
+      uint32_t argVal = dist(rng);
+      uint32_t expected = (argVal + 11) & 0xFFFF;
+      uint8_t argBytes[3] = {
+          static_cast<uint8_t>(argVal & 0xFF),
+          static_cast<uint8_t>((argVal >> 8) & 0xFF),
+          static_cast<uint8_t>((argVal >> 16) & 0xFF),
+      };
+      MessageData argMsg(argBytes, 3);
+      MessageData resMsg = funcPort->call(argMsg).get();
+      uint16_t got = *resMsg.as<uint16_t>();
+      std::cout << "[loopback] i=" << i << " arg=0x" << esi::toHex(argVal)
+                << " got=0x" << esi::toHex(got) << " exp=0x"
+                << esi::toHex(expected) << std::endl;
+      if (got != expected)
+        throw std::runtime_error("Loopback mismatch (non-pipelined)");
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                  .count();
+    double callsPerSec = (double)iterations * 1e6 / (double)us;
+    logger.info("esitester", "Loopback add test passed (non-pipelined, " +
+                                 std::to_string(iterations) + " calls, " +
+                                 std::to_string(us) + " us, " +
+                                 std::to_string(callsPerSec) + " calls/s)");
+  } else {
+    // Pipelined mode: launch all calls first, then collect.
+    std::vector<std::future<MessageData>> futures;
+    futures.reserve(iterations);
+    std::vector<uint32_t> expectedVals;
+    expectedVals.reserve(iterations);
+
+    auto issueStart = std::chrono::high_resolution_clock::now();
+    for (uint32_t i = 0; i < iterations; ++i) {
+      uint32_t argVal = dist(rng);
+      uint32_t expected = (argVal + 11) & 0xFFFF;
+      uint8_t argBytes[3] = {
+          static_cast<uint8_t>(argVal & 0xFF),
+          static_cast<uint8_t>((argVal >> 8) & 0xFF),
+          static_cast<uint8_t>((argVal >> 16) & 0xFF),
+      };
+      futures.emplace_back(funcPort->call(MessageData(argBytes, 3)));
+      expectedVals.emplace_back(expected);
+    }
+    auto issueEnd = std::chrono::high_resolution_clock::now();
+
+    for (uint32_t i = 0; i < iterations; ++i) {
+      MessageData resMsg = futures[i].get();
+      uint16_t got = *resMsg.as<uint16_t>();
+      uint16_t exp = (uint16_t)expectedVals[i];
+      std::cout << "[loopback-pipelined] i=" << i << " got=0x"
+                << esi::toHex(got) << " exp=0x" << esi::toHex(exp) << std::endl;
+      if (got != exp)
+        throw std::runtime_error("Loopback mismatch (pipelined) idx=" +
+                                 std::to_string(i));
+    }
+    auto collectEnd = std::chrono::high_resolution_clock::now();
+
+    auto issueUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                       issueEnd - issueStart)
+                       .count();
+    auto totalUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                       collectEnd - issueStart)
+                       .count();
+
+    double issueRate = (double)iterations * 1e6 / (double)issueUs;
+    double completionRate = (double)iterations * 1e6 / (double)totalUs;
+
+    logger.info("esitester", "Loopback add test passed (pipelined). Issued " +
+                                 std::to_string(iterations) + " in " +
+                                 std::to_string(issueUs) + " us (" +
+                                 std::to_string(issueRate) +
+                                 " calls/s), total " + std::to_string(totalUs) +
+                                 " us (" + std::to_string(completionRate) +
+                                 " calls/s effective)");
+  }
+}
+
+static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
+                                          Accelerator *acc, uint32_t width,
+                                          uint32_t xferCount, bool read,
+                                          bool write) {
+  Logger &logger = conn->getLogger();
+  if (!read && !write) {
+    std::cout << "aggbandwidth: nothing to do (enable --read and/or --write)\n";
+    return;
+  }
+  logger.info(
+      "esitester",
+      "Aggregate hostmem bandwidth start width=" + std::to_string(width) +
+          " count=" + std::to_string(xferCount) +
+          " read=" + (read ? "Y" : "N") + " write=" + (write ? "Y" : "N"));
+
+  auto hostmemSvc = conn->getService<services::HostMem>();
+  hostmemSvc->start();
+
+  struct Unit {
+    std::string prefix;
+    bool isRead = false;
+    bool isWrite = false;
+    std::unique_ptr<esi::services::HostMem::HostMemRegion> region;
+    services::TelemetryService::Metric *resp = nullptr;
+    services::TelemetryService::Metric *cycles = nullptr;
+    services::MMIO::MMIORegion *cmd = nullptr;
+    bool launched = false;
+    bool done = false;
+    uint64_t bytes = 0;
+    uint64_t duration_us = 0;
+    uint64_t cycleCount = 0;
+    std::chrono::high_resolution_clock::time_point start;
+  };
+  std::vector<Unit> units;
+  const std::vector<std::string> readPrefixes = {"readmem", "readmem_0",
+                                                 "readmem_1", "readmem_2"};
+  const std::vector<std::string> writePrefixes = {"writemem", "writemem_0",
+                                                  "writemem_1", "writemem_2"};
+
+  auto addUnits = [&](const std::vector<std::string> &pref, bool doRead,
+                      bool doWrite) {
+    for (auto &p : pref) {
+      AppID id(p, width);
+      auto childIt = acc->getChildren().find(id);
+      if (childIt == acc->getChildren().end())
+        continue; // silently skip missing variants
+      auto &ports = childIt->second->getPorts();
+      auto cmdIt = ports.find(AppID("cmd", width));
+      auto respIt = ports.find(AppID("addrCmdResponses"));
+      auto cycIt = ports.find(AppID("addrCmdCycles"));
+      if (cmdIt == ports.end() || respIt == ports.end() || cycIt == ports.end())
+        continue;
+      auto *cmd = cmdIt->second.getAs<services::MMIO::MMIORegion>();
+      auto *resp = respIt->second.getAs<services::TelemetryService::Metric>();
+      auto *cyc = cycIt->second.getAs<services::TelemetryService::Metric>();
+      if (!cmd || !resp || !cyc)
+        continue;
+      resp->connect();
+      cyc->connect();
+      Unit u;
+      u.prefix = p;
+      u.isRead = doRead;
+      u.isWrite = doWrite;
+      u.region = hostmemSvc->allocate(1024 * 1024 * 1024, {.writeable = true});
+      // Init pattern.
+      uint64_t *ptr = static_cast<uint64_t *>(u.region->getPtr());
+      size_t words = u.region->getSize() / 8;
+      for (size_t i = 0; i < words; ++i)
+        ptr[i] =
+            (p[0] == 'w' ? (0xA5A500000000ull + i) : (0xCAFEBABE0000ull + i));
+      u.region->flush();
+      u.cmd = cmd;
+      u.resp = resp;
+      u.cycles = cyc;
+      u.bytes = uint64_t(xferCount) * (width / 8);
+      units.emplace_back(std::move(u));
+    }
+  };
+  if (read)
+    addUnits(readPrefixes, true, false);
+  if (write)
+    addUnits(writePrefixes, false, true);
+  if (units.empty()) {
+    std::cout << "aggbandwidth: no matching units present for width " << width
+              << "\n";
+    return;
+  }
+
+  auto wallStart = std::chrono::high_resolution_clock::now();
+  // Launch sequentially.
+  for (auto &u : units) {
+    uint64_t devPtr = reinterpret_cast<uint64_t>(u.region->getDevicePtr());
+    u.cmd->write(0x10, devPtr);
+    u.cmd->write(0x18, xferCount);
+    u.cmd->write(0x20, 1);
+    u.start = std::chrono::high_resolution_clock::now();
+    u.launched = true;
+  }
+
+  // Poll all until complete.
+  const uint64_t timeoutLoops = 200000; // ~10s at 50us sleep
+  uint64_t loops = 0;
+  while (true) {
+    bool allDone = true;
+    for (auto &u : units) {
+      if (u.done)
+        continue;
+      if (u.resp->readInt() == xferCount) {
+        auto end = std::chrono::high_resolution_clock::now();
+        u.duration_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - u.start)
+                .count();
+        u.cycleCount = u.cycles->readInt();
+        u.done = true;
+      } else {
+        allDone = false;
+      }
+    }
+    if (allDone)
+      break;
+    if (++loops >= timeoutLoops)
+      throw std::runtime_error("aggbandwidth: timeout");
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
+  }
+  auto wallUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - wallStart)
+                    .count();
+
+  uint64_t totalBytes = 0;
+  uint64_t totalReadBytes = 0;
+  uint64_t totalWriteBytes = 0;
+  for (auto &u : units) {
+    totalBytes += u.bytes;
+    if (u.isRead)
+      totalReadBytes += u.bytes;
+    if (u.isWrite)
+      totalWriteBytes += u.bytes;
+    double unitBps = (double)u.bytes * 1e6 / (double)u.duration_us;
+    std::cout << "[agg-unit] " << u.prefix << "[" << width << "] "
+              << (u.isRead ? "READ" : (u.isWrite ? "WRITE" : "UNK"))
+              << " bytes=" << humanBytes(u.bytes) << " (" << u.bytes << " B)"
+              << " time=" << humanTimeUS(u.duration_us) << " (" << u.duration_us
+              << " us) cycles=" << u.cycleCount
+              << " throughput=" << formatBandwidth(unitBps) << std::endl;
+  }
+  // Compute aggregate bandwidths as total size / total wall time (not sum of
+  // unit throughputs).
+  double aggReadBps =
+      totalReadBytes ? (double)totalReadBytes * 1e6 / (double)wallUs : 0.0;
+  double aggWriteBps =
+      totalWriteBytes ? (double)totalWriteBytes * 1e6 / (double)wallUs : 0.0;
+  double aggCombinedBps =
+      totalBytes ? (double)totalBytes * 1e6 / (double)wallUs : 0.0;
+
+  std::cout << "[agg-total] units=" << units.size()
+            << " read_bytes=" << humanBytes(totalReadBytes) << " ("
+            << totalReadBytes << " B)"
+            << " read_bw=" << formatBandwidth(aggReadBps)
+            << " write_bytes=" << humanBytes(totalWriteBytes) << " ("
+            << totalWriteBytes << " B)"
+            << " write_bw=" << formatBandwidth(aggWriteBps)
+            << " combined_bytes=" << humanBytes(totalBytes) << " ("
+            << totalBytes << " B)"
+            << " combined_bw=" << formatBandwidth(aggCombinedBps)
+            << " wall_time=" << humanTimeUS(wallUs) << " (" << wallUs << " us)"
+            << std::endl;
+  logger.info("esitester", "Aggregate hostmem bandwidth test complete");
 }
