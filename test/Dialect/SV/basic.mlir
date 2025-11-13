@@ -446,3 +446,22 @@ hw.module @test_fflush(in %a : i32) {
     sv.fflush fd %a
   }
 }
+
+emit.file "test_header.vh" sym @test_header {
+  emit.verbatim "`define TEST_MACRO 1'b1"
+}
+
+// CHECK-LABEL: sv.verbatim.source @VerbatimTestModule.v
+// CHECK-SAME:    <WIDTH: i32 = 8>
+// CHECK-SAME:    attributes {
+// CHECK-SAME:      additional_files = [@test_header],
+// CHECK-SAME:      content = "module VerbatimTestModule(); endmodule",
+// CHECK-SAME:      output_file = #hw.output_file<"VerbatimTestModule.v">,
+// CHECK-SAME:      verilogName = "VerbatimTestModule"
+// CHECK-SAME:    }
+sv.verbatim.source @VerbatimTestModule.v<WIDTH: i32 = 8> attributes {
+    content = "module VerbatimTestModule(); endmodule",
+    output_file = #hw.output_file<"VerbatimTestModule.v">,
+    additional_files = [@test_header],
+    verilogName = "VerbatimTestModule"
+}

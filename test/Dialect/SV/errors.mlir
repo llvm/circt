@@ -280,3 +280,28 @@ sv.func private @func() {
 
 // expected-error @below {{imported function must be a declaration but 'func' is defined}}
 sv.func.dpi.import @func
+
+// -----
+
+hw.module @RandomModule() {
+  hw.output
+}
+
+// expected-error @below {{references RandomModule, which is not an emit.file}}
+sv.verbatim.source @TestVerbatimModule.v attributes {
+  content = "module TestVerbatimModule();\nendmodule",
+  output_file = #hw.output_file<"TestVerbatimModule.v">,
+  additional_files = [@RandomModule],
+  verilogName = "TestVerbatimModule"
+}
+
+// -----
+
+hw.module @RandomModule() {
+  hw.output
+}
+
+// expected-error @below {{references RandomModule, which is not an sv.verbatim.source}}
+hw.module.extern @TestVerbatimModule() attributes {
+  source = @RandomModule
+}
