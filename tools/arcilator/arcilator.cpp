@@ -428,6 +428,7 @@ static LogicalResult processBuffer(
 #ifdef ARCILATOR_ENABLE_JIT
   // Handle JIT execution.
   if (outputFormat == OutputRunJIT) {
+    auto tsJit = ts.nest("JIT");
     if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd) {
       llvm::errs() << "full pipeline must be run for JIT execution\n";
       return failure();
@@ -480,6 +481,7 @@ static LogicalResult processBuffer(
     engineOptions.transformer = transformer;
     engineOptions.sharedLibPaths = sharedLibraries;
 
+    auto tsCompile = tsJit.nest("Compile");
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
     if (!executionEngine) {
@@ -500,7 +502,9 @@ static LogicalResult processBuffer(
           });
       return failure();
     }
+    tsCompile.stop();
 
+    auto tsExecute = tsJit.nest("Execute");
     void (*simulationFunc)(void **) = *expectedFunc;
 
     for (unsigned i = 0, e = jitArgs.size(); i < e; i += numArgs) {
