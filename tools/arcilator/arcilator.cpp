@@ -456,10 +456,16 @@ static LogicalResult processBuffer(
                      << " arguments (not a multiple)\n";
         return failure();
       }
+      if (jitArgs.empty()) {
+        llvm::errs() << "entry point '" << jitEntryPoint
+                     << "' must have no arguments\n";
+        return failure();
+      }
     } else if (!jitArgs.empty()) {
       llvm::errs() << "entry point '" << jitEntryPoint
                    << "' has no arguments, but provided " << jitArgs.size()
                    << "arguments\n";
+      return failure();
     }
 
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
