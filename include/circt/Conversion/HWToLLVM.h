@@ -47,7 +47,7 @@ struct HWToLLVMEndianessConverter {
 struct HWToLLVMArraySpillCache {
   /// Spill HW array values produced by 'foreign' dialects on the stack.
   /// The converter is used to map HW array types to the corresponding
-  /// LLVM array types.
+  /// LLVM array types. Should be called before dialect conversion.
   void spillNonHWOps(mlir::OpBuilder &builder,
                      mlir::LLVMTypeConverter &converter,
                      Operation *containerOp);
@@ -74,6 +74,8 @@ private:
 void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
 /// Get the HW to LLVM conversion patterns.
+/// Note: The spill cache may only be used when conversion
+///       pattern rollback is disabled.
 void populateHWToLLVMConversionPatterns(
     mlir::LLVMTypeConverter &converter, RewritePatternSet &patterns,
     Namespace &globals,
