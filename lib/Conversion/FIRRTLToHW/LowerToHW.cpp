@@ -383,10 +383,24 @@ struct CircuitLoweringState {
 
   /// Register an sv.verbatim.source op containing the SV implementation for
   /// some extmodule(s).
-  void registerVerbatimSource(StringRef fileName, FExtModuleOp extModule,
+  void registerVerbatimSource(StringRef fileName,
                               sv::SVVerbatimSourceOp verbatimOp) {
     llvm::sys::SmartScopedLock<true> lock(verbatimSourcesMutex);
     verbatimSourcesByFileName[fileName] = verbatimOp;
+  }
+
+  /// Get the emit.file op for a filename, if it exists.
+  emit::FileOp getEmitFileForFile(StringRef fileName) {
+    llvm::sys::SmartScopedLock<true> lock(emitFilesMutex);
+    auto it = emitFilesByFileName.find(fileName);
+    return it != emitFilesByFileName.end() ? it->second : nullptr;
+  }
+
+  /// Register an emit.file op containing the some verbatim collateral
+  /// required by some extmodule(s).
+  void registerEmitFile(StringRef fileName, emit::FileOp fileOp) {
+    llvm::sys::SmartScopedLock<true> lock(emitFilesMutex);
+    emitFilesByFileName[fileName] = fileOp;
   }
 
 private:
@@ -538,9 +552,13 @@ private:
 
   RecordTypeAlias typeAliases = RecordTypeAlias(circuitOp);
 
-  /// Track verbatim sources by their defname/module name to avoid duplicates
+  // sv.verbatim.sources for primary sources for verbatim extmodules
   llvm::StringMap<sv::SVVerbatimSourceOp> verbatimSourcesByFileName;
   llvm::sys::SmartMutex<true> verbatimSourcesMutex;
+
+  // emit.files for additional sources for verbatim extmodules
+  llvm::StringMap<emit::FileOp> emitFilesByFileName;
+  llvm::sys::SmartMutex<true> emitFilesMutex;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -1217,14 +1235,11 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
   auto primaryFileName = llvm::sys::path::filename(primaryOutputFile);
   auto verbatimSource = loweringState.getVerbatimSourceForFile(primaryFileName);
 
-  // Create emit.file operations for additional files, deduplicating by
-  // filename
+  // Get emit.file operations for additional files
   SmallVector<Attribute> additionalFiles;
 
   // Create emit.file operations for additional files (these are usually
   // additional collateral such as headers or DPI files).
-  //
-  // TODO: do we need to deduplicate additional files?
   for (size_t i = 1; i < filesAttr.size(); ++i) {
     auto file = cast<DictionaryAttr>(filesAttr[i]);
     auto content = file.getAs<StringAttr>("content");
@@ -1236,22 +1251,27 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
       return {};
     }
 
-    auto fileSymbolName = circuitNamespace.newName(fileName);
-    auto emitFile = emit::FileOp::create(builder, oldModule.getLoc(),
-                                         outputFile.getValue(), fileSymbolName);
-    builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
-    emit::VerbatimOp::create(builder, oldModule.getLoc(), content);
-    builder.setInsertionPointAfter(emitFile);
+    // Check if there is already an op for this file
+    auto emitFile = loweringState.getEmitFileForFile(fileName);
 
-    auto ext = llvm::sys::path::extension(outputFile.getValue());
-    bool excludeFromFileList = (ext == ".h" || ext == ".vh" || ext == ".svh");
-    auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
-        builder.getContext(), outputFile.getValue(), excludeFromFileList);
-    emitFile->setAttr("output_file", outputFileAttr);
+    if (!emitFile) {
+      auto fileSymbolName = circuitNamespace.newName(fileName);
+      emitFile = emit::FileOp::create(builder, oldModule.getLoc(),
+                                      outputFile.getValue(), fileSymbolName);
+      builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
+      emit::VerbatimOp::create(builder, oldModule.getLoc(), content);
+      builder.setInsertionPointAfter(emitFile);
+      loweringState.registerEmitFile(fileName, emitFile);
+
+      auto ext = llvm::sys::path::extension(outputFile.getValue());
+      bool excludeFromFileList = (ext == ".h" || ext == ".vh" || ext == ".svh");
+      auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
+          builder.getContext(), outputFile.getValue(), excludeFromFileList);
+      emitFile->setAttr("output_file", outputFileAttr);
+    }
 
     // Reference this file in additional_files
-    additionalFiles.push_back(
-        FlatSymbolRefAttr::get(builder.getContext(), fileSymbolName));
+    additionalFiles.push_back(FlatSymbolRefAttr::get(emitFile));
   }
 
   // Get module parameters
@@ -1271,8 +1291,7 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
     SymbolTable::setSymbolVisibility(
         verbatimSource, SymbolTable::getSymbolVisibility(oldModule));
 
-    loweringState.registerVerbatimSource(primaryFileName, oldModule,
-                                         verbatimSource);
+    loweringState.registerVerbatimSource(primaryFileName, verbatimSource);
   }
 
   return verbatimSource;

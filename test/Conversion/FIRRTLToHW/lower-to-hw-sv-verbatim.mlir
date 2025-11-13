@@ -2,6 +2,7 @@
 
 firrtl.circuit "SVVerbatimTest" {
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Simplest case; a single FIRRTL extmodule should lower to a
   // sv.verbatim.module + sv.verbatim.source.
 
@@ -36,6 +37,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Duplicated extmodule definitions to the same output file. This can
   // happen when generators produce definitions of an inline black box
   // under each of multiple deduping scopes.
@@ -98,6 +100,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Two unique parametrizations of a verbatim extmodule should share an
   // sv.verbatim.source, but each have sv.verbatim.module with the actual
   // port interfaces.
@@ -157,6 +160,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Verbatim extmodule with multiple files should reference those files through
   // the "additional_files" attribute.
 
@@ -197,6 +201,85 @@ firrtl.circuit "SVVerbatimTest" {
       }
     ]
   }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Check that two independent modules depending on the same auxillary file
+  // results in two separate sv.verbatim.source ops but only one shared emit.file.
+
+  // CHECK-LABEL: emit.file "Lib.v" sym @Lib.v
+  // CHECK-NOT:   emit.file
+  //
+  // CHECK:       sv.verbatim.source @NeedsLibFoo.v
+  // CHECK-SAME:    attributes {
+  // CHECK-SAME:      additional_files = [@Lib.v]
+  // CHECK-SAME:      content = "module NeedsLibFoo(); endmodule"
+  // CHECK-SAME:      output_file = #hw.output_file<"NeedsLibFoo.v">
+  // CHECK-SAME:    }
+  //
+  // CHECK:       sv.verbatim.module @NeedsLibFoo
+  // CHECK-SAME:    (out out : i1)
+  // CHECK-SAME:    attributes {
+  // CHECK-SAME:      source = @NeedsLibFoo.v
+  // CHECK-SAME:    }
+  // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
+  firrtl.extmodule @NeedsLibFoo(
+    out out: !firrtl.uint<1>
+  ) attributes {
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            content = "module NeedsLibFoo(); endmodule",
+            output_file = "NeedsLibFoo.v"
+          },
+          {
+            content = "module Lib(); endmodule",
+            output_file = "Lib.v"
+          }
+        ]
+      }
+    ]
+  }
+
+  // CHECK:       sv.verbatim.source @NeedsLibBar.v
+  // CHECK-SAME:    attributes {
+  // CHECK-SAME:      additional_files = [@Lib.v]
+  // CHECK-SAME:      content = "module NeedsLibBar(); endmodule"
+  // CHECK-SAME:      output_file = #hw.output_file<"NeedsLibBar.v">
+  // CHECK-SAME:    }
+  // CHECK-NOT:   sv.verbatim.source
+  //
+  // CHECK:       sv.verbatim.module @NeedsLibBar
+  // CHECK-SAME:    (out out : i1)
+  // CHECK-SAME:    attributes {
+  // CHECK-SAME:      source = @NeedsLibBar.v
+  // CHECK-SAME:    }
+  // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
+  firrtl.extmodule @NeedsLibBar(
+    out out: !firrtl.uint<1>
+  ) attributes {
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            content = "module NeedsLibBar(); endmodule",
+            output_file = "NeedsLibBar.v"
+          },
+          {
+            content = "module Lib(); endmodule",
+            output_file = "Lib.v"
+          }
+        ]
+      }
+    ]
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Check that analog ports are handled correctly.
 
   // CHECK-LABEL: sv.verbatim.source @AnalogBlackBox.v
   // CHECK-SAME:    attributes {
