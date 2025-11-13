@@ -262,9 +262,9 @@ def SVVerbatimModuleOp
                                HasParent<"mlir::ModuleOp">]> {
   let summary = "Verbatim verilog module";
   let description = [{
-    The "sv.verbatim.module" operation represents a verbatim verilog module
-    with explicit ports and parameters. It references an "sv.verbatim.source"
-    operation that contains the actual verilog source code.
+    The "sv.verbatim.module" operation represents a the module interface of a
+    verbatim verilog module. It references an "sv.verbatim.source" operation
+    that contains the actual verilog source code.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name,
@@ -315,15 +315,11 @@ def SVVerbatimModuleOp
       return getNameAttr().getValue();
     }
 
-    /// Return the name to use for the Verilog module. This is typically the
-    /// symbol, but can be overridden with the verilogName attribute.
     StringRef getVerilogModuleName() {
       return getVerilogModuleNameAttr().getValue();
     }
 
     StringAttr getVerilogModuleNameAttr();
-
-
   }];
 
   let hasVerifier = 1;

@@ -23,6 +23,9 @@ firrtl.circuit "test_mod" attributes {annotations = [
   }
 
   // VERILOG-FOO-LABEL: module ExtInline(); endmodule
+  // This "//" is checking that file info is not printed.
+  // VERILOG-FOO-NOT:     //
+  // VERILOG-FOO-NOT:   module ExtInline(); endmodule
   // VERILOG-HDR-LABEL: `define SOME_MACRO
   // VERILOG-HDR-NOT:   `define SOME_MACRO
   firrtl.extmodule @ExtInline() attributes {annotations = [

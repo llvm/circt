@@ -21,11 +21,11 @@ sv.verbatim.source @ParameterizedVerbatimModule.v<WIDTH: i32> attributes {
   verilogName = "ParameterizedVerbatimModule"
 }
 
-hw.module.extern @ParameterizedVerbatimModule<WIDTH: i32 = 8>(out out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {
+sv.verbatim.module @ParameterizedVerbatimModule<WIDTH: i32 = 8>(out out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {
   source = @ParameterizedVerbatimModule.v
 }
 
-hw.module.extern @ParameterizedVerbatimModule_1<WIDTH: i32 = 32>(out out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {
+sv.verbatim.module @ParameterizedVerbatimModule_1<WIDTH: i32 = 32>(out out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {
   source = @ParameterizedVerbatimModule.v
 }
 

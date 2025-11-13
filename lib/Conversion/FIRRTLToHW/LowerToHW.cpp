@@ -616,7 +616,7 @@ private:
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
   sv::SVVerbatimSourceOp
-  getExtModuleVerbatimSource(FExtModuleOp oldModule, Block *topLevelModule,
+  getVerbatimSourceForExtModule(FExtModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
   hw::HWModuleLike lowerExtModule(FExtModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState);
@@ -1167,7 +1167,7 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
   return failed;
 }
 
-sv::SVVerbatimSourceOp FIRRTLModuleLowering::getExtModuleVerbatimSource(
+sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
     FExtModuleOp oldModule, Block *topLevelModule,
     CircuitLoweringState &loweringState) {
   CircuitNamespace circuitNamespace(loweringState.circuitOp);
@@ -1282,12 +1282,10 @@ hw::HWModuleLike
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
-  // First try to lower as a verbatim module
   if (auto verbatimMod =
           lowerVerbatimExtModule(oldModule, topLevelModule, loweringState))
     return verbatimMod;
 
-  // If not verbatim, handle as a regular external module
   AnnotationSet annos(oldModule);
 
   // Map the ports over, lowering their types as we go.
@@ -1334,14 +1332,11 @@ sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
   AnnotationSet annos(oldModule);
 
   auto verbatimSource =
-      getExtModuleVerbatimSource(oldModule, topLevelModule, loweringState);
+      getVerbatimSourceForExtModule(oldModule, topLevelModule, loweringState);
 
-  if (!verbatimSource) {
-    // Not a verbatim module, return nullptr
+  if (!verbatimSource)
     return {};
-  }
 
-  // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
@@ -1352,17 +1347,13 @@ sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
   if (auto defName = oldModule.getDefname())
     verilogName = defName.value();
 
-  // Build the new sv.verbatim.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
 
-  // Map over parameters if present.
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
 
-  // Create reference to the verbatim source
   auto sourceRef = FlatSymbolRefAttr::get(verbatimSource);
 
-  // Create the sv.verbatim.module using the static create method
   auto newModule = sv::SVVerbatimModuleOp::create(
       builder, oldModule.getLoc(), nameAttr, ports, sourceRef,
       parameters ? parameters : builder.getArrayAttr({}),

@@ -16,6 +16,8 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @SimpleVerbatim.v
   // CHECK-SAME:    }
+  // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
   firrtl.extmodule @SimpleVerbatim(
     in clk: !firrtl.clock,
     in rst: !firrtl.uint<1>,
@@ -51,6 +53,8 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:      source = @DuplicatedVerbatim.v
   // CHECK-SAME:      verilogName = "DuplicatedVerbatim"
   // CHECK-SAME:    }
+  // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
   firrtl.extmodule @DuplicatedVerbatim(
     in clk: !firrtl.clock,
     out out: !firrtl.uint<1>
@@ -75,6 +79,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:      verilogName = "DuplicatedVerbatim"
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
   firrtl.extmodule @DuplicatedBlackBox_1(
     in clk: !firrtl.clock,
     out out: !firrtl.uint<1>
@@ -134,6 +139,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:      source = @ParameterizedVerbatim.v
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
   firrtl.extmodule @ParameterizedVerbatim_1<WIDTH: i32 = 16>(
     in data_in: !firrtl.uint<16>,
     out data_out: !firrtl.uint<16>
@@ -171,6 +177,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:      source = @MultiFileVerbatim.v
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
   firrtl.extmodule @MultiFileVerbatim(
     out out: !firrtl.uint<1>
   ) attributes {
@@ -205,6 +212,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:      verilogName = "AnalogBlackBox"
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.module
+  // CHECK-NOT:   hw.module.extern
   firrtl.extmodule @AnalogBlackBox(out bus: !firrtl.analog<32>) attributes {
       annotations = [
         {
