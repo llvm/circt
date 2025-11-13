@@ -617,13 +617,12 @@ private:
                              CircuitLoweringState &loweringState);
   sv::SVVerbatimSourceOp
   getExtModuleVerbatimSource(FExtModuleOp oldModule, Block *topLevelModule,
-                         CircuitLoweringState &loweringState);
-  hw::HWModuleLike lowerExtModule(FExtModuleOp oldModule,
-                                  Block *topLevelModule,
+                             CircuitLoweringState &loweringState);
+  hw::HWModuleLike lowerExtModule(FExtModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState);
-  sv::SVVerbatimModuleOp lowerVerbatimExtModule(FExtModuleOp oldModule,
-                                                Block *topLevelModule,
-                                                CircuitLoweringState &loweringState);
+  sv::SVVerbatimModuleOp
+  lowerVerbatimExtModule(FExtModuleOp oldModule, Block *topLevelModule,
+                         CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
@@ -1238,8 +1237,8 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getExtModuleVerbatimSource(
     }
 
     auto fileSymbolName = circuitNamespace.newName(fileName);
-    auto emitFile = emit::FileOp::create(
-        builder, oldModule.getLoc(), outputFile.getValue(), fileSymbolName);
+    auto emitFile = emit::FileOp::create(builder, oldModule.getLoc(),
+                                         outputFile.getValue(), fileSymbolName);
     builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
     emit::VerbatimOp::create(builder, oldModule.getLoc(), content);
     builder.setInsertionPointAfter(emitFile);
@@ -1263,8 +1262,8 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getExtModuleVerbatimSource(
   if (!verbatimSource) {
     verbatimSource = sv::SVVerbatimSourceOp::create(
         builder, oldModule.getLoc(),
-        circuitNamespace.newName(primaryFileName.str()), primaryFileContent.getValue(),
-        primaryOutputFileAttr, parameters,
+        circuitNamespace.newName(primaryFileName.str()),
+        primaryFileContent.getValue(), primaryOutputFileAttr, parameters,
         additionalFiles.empty() ? nullptr
                                 : builder.getArrayAttr(additionalFiles),
         builder.getStringAttr(verilogName));
@@ -1284,7 +1283,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
   // First try to lower as a verbatim module
-  if (auto verbatimMod = lowerVerbatimExtModule(oldModule, topLevelModule, loweringState))
+  if (auto verbatimMod =
+          lowerVerbatimExtModule(oldModule, topLevelModule, loweringState))
     return verbatimMod;
 
   // If not verbatim, handle as a regular external module
@@ -1327,10 +1327,9 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   return newModule;
 }
 
-sv::SVVerbatimModuleOp
-FIRRTLModuleLowering::lowerVerbatimExtModule(FExtModuleOp oldModule,
-                                             Block *topLevelModule,
-                                             CircuitLoweringState &loweringState) {
+sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
+    FExtModuleOp oldModule, Block *topLevelModule,
+    CircuitLoweringState &loweringState) {
   // Check for verbatim black box annotation
   AnnotationSet annos(oldModule);
 
@@ -1365,10 +1364,7 @@ FIRRTLModuleLowering::lowerVerbatimExtModule(FExtModuleOp oldModule,
 
   // Create the sv.verbatim.module using the static create method
   auto newModule = sv::SVVerbatimModuleOp::create(
-      builder, oldModule.getLoc(),
-      nameAttr,
-      ports,
-      sourceRef,
+      builder, oldModule.getLoc(), nameAttr, ports, sourceRef,
       parameters ? parameters : builder.getArrayAttr({}),
       verilogName.empty() ? StringAttr{} : builder.getStringAttr(verilogName));
 

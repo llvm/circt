@@ -2162,19 +2162,16 @@ void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
   printOptionalParameterList(p, *this, getParameters());
 
   Region emptyRegion;
-  hw::module_like_impl::printModuleSignatureNew(p, emptyRegion, getModuleType(),
-                                                getAllPortAttrs(), getAllPortLocs());
+  hw::module_like_impl::printModuleSignatureNew(
+      p, emptyRegion, getModuleType(), getAllPortAttrs(), getAllPortLocs());
 
   SmallVector<StringRef> omittedAttrs = {
-    SymbolTable::getSymbolAttrName(),
-    SymbolTable::getVisibilityAttrName(),
-    getModuleTypeAttrName().getValue(),
-    getPerPortAttrsAttrName().getValue(),
-    getPortLocsAttrName().getValue(),
-    getParametersAttrName().getValue()
-  };
+      SymbolTable::getSymbolAttrName(),   SymbolTable::getVisibilityAttrName(),
+      getModuleTypeAttrName().getValue(), getPerPortAttrsAttrName().getValue(),
+      getPortLocsAttrName().getValue(),   getParametersAttrName().getValue()};
 
-  mlir::function_interface_impl::printFunctionAttributes(p, *this, omittedAttrs);
+  mlir::function_interface_impl::printFunctionAttributes(p, *this,
+                                                         omittedAttrs);
 }
 
 ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
