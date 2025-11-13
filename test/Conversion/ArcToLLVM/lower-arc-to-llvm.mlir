@@ -277,4 +277,35 @@ func.func @ExecuteWithOperandsAndResults(%arg0: i42, %arg1: !hw.array<4xi19>, %a
   return
 }
 
+// CHECK-LABEL: @issue9171
+func.func @issue9171(%arg0: !arc.state<!hw.array<4xi1>>, %idx: i2) -> (i1) {
+
+  // Load the array from memory
+  // CHECK-NEXT: [[ARRLD:%.+]]  = llvm.load %arg0 : !llvm.ptr -> !llvm.array<4 x i1>
+  // CHECK-NEXT: [[CCLTH:%.+]]  = builtin.unrealized_conversion_cast [[ARRLD]]
+  // CHECK-NEXT: [[CCHTL:%.+]]  = builtin.unrealized_conversion_cast [[CCLTH]]
+
+  // Spill the array value on the stack
+  // CHECK-NEXT: [[CST1:%.+]]   = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: [[ALLOCA:%.+]] = llvm.alloca [[CST1]] x !llvm.array<4 x i1>
+  // CHECK-NEXT: llvm.store [[CCHTL]], [[ALLOCA]] : !llvm.array<4 x i1>, !llvm.ptr
+
+  // Write the new value to memory
+  // CHECK:      [[CPTR:%.+]]   = llvm.mlir.addressof
+  // CHECK-NEXT: [[CARR:%.+]]   = llvm.load [[CPTR]] : !llvm.ptr -> !llvm.array<4 x i1>
+  // CHECK-NEXT: llvm.store [[CARR]], %arg0 : !llvm.array<4 x i1>, !llvm.ptr
+
+  // Load saved value from the stack
+  // CHECK-NEXT: [[IDX:%.+]]    = llvm.zext %arg1 : i2 to i3
+  // CHECK-NEXT: [[GPTR:%.+]]   = llvm.getelementptr [[ALLOCA]][0, [[IDX]]]
+  // CHECK-NEXT: [[LD:%.+]]     = llvm.load [[GPTR]]
+  // CHECK-NEXT: llvm.return [[LD]] : i1
+
+  %pre = arc.state_read %arg0 : <!hw.array<4xi1>>
+  %cst = hw.aggregate_constant [false, true, true, false] : !hw.array<4xi1>
+  arc.state_write %arg0 = %cst : <!hw.array<4xi1>>
+  %get = hw.array_get %pre[%idx] : !hw.array<4xi1>, i2
+  return %get : i1
+}
+
 func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage)
