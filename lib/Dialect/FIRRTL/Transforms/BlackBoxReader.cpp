@@ -179,7 +179,8 @@ void BlackBoxReaderPass::runOnOperation() {
       builder.getDictionaryAttr({{builder.getStringAttr("class"),
                                   builder.getStringAttr(blackBoxAnnoClass)}});
   // Track which modules reference which files
-  llvm::MapVector<Operation *, SmallVector<StringAttr>> verbatimExtmoduleToFile;
+  llvm::MapVector<Operation *, SmallVector<StringAttr>>
+      verbatimExtmoduleToFiles;
 
   for (auto extmoduleOp : circuitOp.getBodyBlock()->getOps<FExtModuleOp>()) {
     LLVM_DEBUG({
@@ -199,7 +200,7 @@ void BlackBoxReaderPass::runOnOperation() {
       LLVM_DEBUG(annotationInfo.print(llvm::dbgs().indent(6) << "- ", 8));
 
       // Track that this module references this file
-      verbatimExtmoduleToFile[extmoduleOp].push_back(annotationInfo.name);
+      verbatimExtmoduleToFiles[extmoduleOp].push_back(annotationInfo.name);
 
       // If we have seen a black box trying to create a blackbox with this
       // filename before, then compute the lowest commmon ancestor between the
@@ -234,11 +235,15 @@ void BlackBoxReaderPass::runOnOperation() {
   }
 
   // Now create VerbatimBlackBoxAnno for each module with its referenced files
-  for (auto &[moduleOp, fileNames] : verbatimExtmoduleToFile) {
+  for (auto &[moduleOp, fileNames] : verbatimExtmoduleToFiles) {
     AnnotationSet annotations(moduleOp);
     SmallVector<Attribute> verbatimFiles;
+    llvm::SmallPtrSet<StringAttr, 4> seenFiles;
 
     for (StringAttr fileName : fileNames) {
+      if (!seenFiles.insert(fileName).second)
+        continue;
+
       // Look up the computed LCA output file information
       auto &annotationInfo = filenameToAnnotationInfo[fileName];
       auto fileDict = builder.getDictionaryAttr(
@@ -268,7 +273,7 @@ void BlackBoxReaderPass::runOnOperation() {
 
   // Clean up.
   filenameToAnnotationInfo.clear();
-  verbatimExtmoduleToFile.clear();
+  verbatimExtmoduleToFiles.clear();
 }
 
 /// Run on an operation-annotation pair. The annotation need not be a black box
