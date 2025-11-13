@@ -81,7 +81,7 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
 }
 
 //===----------------------------------------------------------------------===//
-// ArrayBufferCache
+// HWToLLVMArraySpillCache
 //===----------------------------------------------------------------------===//
 
 void HWToLLVMArraySpillCache::spillNonHWOps(OpBuilder &builder,
@@ -92,14 +92,12 @@ void HWToLLVMArraySpillCache::spillNonHWOps(OpBuilder &builder,
       [&](Operation *op) {
         if (isa_and_nonnull<hw::HWDialect>(op->getDialect()))
           return;
-
         auto hasSpillingUser = [](Value arrVal) -> bool {
           for (auto user : arrVal.getUsers())
             if (isa<hw::ArrayGetOp, hw::ArraySliceOp>(user))
               return true;
           return false;
         };
-
         // Spill Block arguments
         for (auto &region : op->getRegions()) {
           for (auto &block : region.getBlocks()) {
@@ -110,7 +108,6 @@ void HWToLLVMArraySpillCache::spillNonHWOps(OpBuilder &builder,
             }
           }
         }
-
         // Spill Op Results
         for (auto result : op->getResults()) {
           if (isa<hw::ArrayType>(result.getType()) && hasSpillingUser(result)) {
@@ -187,6 +184,8 @@ Value HWToLLVMArraySpillCache::spillHWArrayValue(OpBuilder &builder,
 }
 
 namespace {
+// Helper for patterns using or creating buffers containing
+// HW array values.
 template <typename SourceOp>
 struct HWArrayOpToLLVMPattern : public ConvertOpToLLVMPattern<SourceOp> {
 
