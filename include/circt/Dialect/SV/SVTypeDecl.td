@@ -217,7 +217,7 @@ def SVVerbatimSourceOp
                                DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Verbatim verilog source";
   let description = [{
-    The `sv.verbatim.source` operation represents verbatim verilog definition for
+    The "sv.verbatim.source" operation represents verbatim verilog definition for
     a module which may have parameters. Concrete parametrizations and their ports
     are represented by a `hw.module.extern`.
   }];
@@ -246,6 +246,84 @@ def SVVerbatimSourceOp
     }
 
     StringAttr getVerilogModuleNameAttr();
+  }];
+
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Verbatim module operation
+//===----------------------------------------------------------------------===//
+
+def SVVerbatimModuleOp
+    : SVOp<"verbatim.module", [DeclareOpInterfaceMethods<PortList>,
+                               DeclareOpInterfaceMethods<HWModuleLike>, Symbol,
+                               DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+                               HasParent<"mlir::ModuleOp">]> {
+  let summary = "Verbatim verilog module";
+  let description = [{
+    The "sv.verbatim.module" operation represents a verbatim verilog module
+    with explicit ports and parameters. It references an "sv.verbatim.source"
+    operation that contains the actual verilog source code.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      TypeAttrOf<ModuleType>:$module_type,
+      OptionalAttr<DictArrayAttr>:$per_port_attrs,
+      OptionalAttr<LocationArrayAttr>:$port_locs,
+      ParamDeclArrayAttr:$parameters,
+      FlatSymbolRefAttr:$source,
+      OptionalAttr<StrAttr>:$verilogName);
+
+  let results = (outs);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                   "ArrayRef<hw::PortInfo>":$ports,
+                   "FlatSymbolRefAttr":$source,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"StringAttr", "{}">:$verilogName), [{
+      SmallVector<hw::ModulePort> modulePorts;
+      SmallVector<Attribute> portAttrs, portLocs;
+      for (const auto &port : ports) {
+        Type portType = port.type;
+        hw::ModulePort::Direction portDir = port.dir;
+        if (auto inoutType = dyn_cast<hw::InOutType>(port.type)) {
+          portType = inoutType.getElementType();
+          portDir = hw::ModulePort::Direction::InOut;
+        }
+        modulePorts.push_back({port.name, portType, portDir});
+        portAttrs.push_back(port.attrs ? port.attrs : $_builder.getDictionaryAttr({}));
+        portLocs.push_back(port.loc ? static_cast<Location>(port.loc) : $_builder.getUnknownLoc());
+      }
+      auto moduleType = hw::ModuleType::get($_builder.getContext(), modulePorts);
+      build($_builder, $_state, name, TypeAttr::get(moduleType),
+            $_builder.getArrayAttr(portAttrs), $_builder.getArrayAttr(portLocs),
+            parameters, source, verilogName);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
+    /// Return the name to use for the Verilog module. This is typically the
+    /// symbol, but can be overridden with the verilogName attribute.
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
+
+    StringAttr getVerilogModuleNameAttr();
+
+
   }];
 
   let hasVerifier = 1;

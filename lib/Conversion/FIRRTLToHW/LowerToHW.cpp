@@ -618,9 +618,12 @@ private:
   sv::SVVerbatimSourceOp
   getExtModuleVerbatimSource(FExtModuleOp oldModule, Block *topLevelModule,
                          CircuitLoweringState &loweringState);
-  hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
-                                      Block *topLevelModule,
-                                      CircuitLoweringState &loweringState);
+  hw::HWModuleLike lowerExtModule(FExtModuleOp oldModule,
+                                  Block *topLevelModule,
+                                  CircuitLoweringState &loweringState);
+  sv::SVVerbatimModuleOp lowerVerbatimExtModule(FExtModuleOp oldModule,
+                                                Block *topLevelModule,
+                                                CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
@@ -1276,15 +1279,16 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getExtModuleVerbatimSource(
   return verbatimSource;
 }
 
-hw::HWModuleExternOp
+hw::HWModuleLike
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
-  // Check for verbatim black box annotation
-  AnnotationSet annos(oldModule);
+  // First try to lower as a verbatim module
+  if (auto verbatimMod = lowerVerbatimExtModule(oldModule, topLevelModule, loweringState))
+    return verbatimMod;
 
-  auto verbatimSource =
-      getExtModuleVerbatimSource(oldModule, topLevelModule, loweringState);
+  // If not verbatim, handle as a regular external module
+  AnnotationSet annos(oldModule);
 
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
@@ -1309,11 +1313,67 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   SymbolTable::setSymbolVisibility(newModule,
                                    SymbolTable::getSymbolVisibility(oldModule));
 
-  // Add a reference to the verbatim verilog that contains this definition
-  if (verbatimSource) {
-    auto sourceRef = FlatSymbolRefAttr::get(verbatimSource);
-    newModule->setAttr("source", sourceRef);
+  bool hasOutputPort =
+      llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
+  if (!hasOutputPort &&
+      AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
+      loweringState.isInDUT(oldModule))
+    newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
+  if (handleForceNameAnnos(oldModule, annos, loweringState))
+    return {};
+
+  loweringState.processRemainingAnnotations(oldModule, annos);
+  return newModule;
+}
+
+sv::SVVerbatimModuleOp
+FIRRTLModuleLowering::lowerVerbatimExtModule(FExtModuleOp oldModule,
+                                             Block *topLevelModule,
+                                             CircuitLoweringState &loweringState) {
+  // Check for verbatim black box annotation
+  AnnotationSet annos(oldModule);
+
+  auto verbatimSource =
+      getExtModuleVerbatimSource(oldModule, topLevelModule, loweringState);
+
+  if (!verbatimSource) {
+    // Not a verbatim module, return nullptr
+    return {};
   }
+
+  // Map the ports over, lowering their types as we go.
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, oldModule.getName(),
+                        loweringState)))
+    return {};
+
+  StringRef verilogName;
+  if (auto defName = oldModule.getDefname())
+    verilogName = defName.value();
+
+  // Build the new sv.verbatim.module op.
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  auto nameAttr = builder.getStringAttr(oldModule.getName());
+
+  // Map over parameters if present.
+  auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
+
+  // Create reference to the verbatim source
+  auto sourceRef = FlatSymbolRefAttr::get(verbatimSource);
+
+  // Create the sv.verbatim.module using the static create method
+  auto newModule = sv::SVVerbatimModuleOp::create(
+      builder, oldModule.getLoc(),
+      nameAttr,
+      ports,
+      sourceRef,
+      parameters ? parameters : builder.getArrayAttr({}),
+      verilogName.empty() ? StringAttr{} : builder.getStringAttr(verilogName));
+
+  SymbolTable::setSymbolVisibility(newModule,
+                                   SymbolTable::getSymbolVisibility(oldModule));
 
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
