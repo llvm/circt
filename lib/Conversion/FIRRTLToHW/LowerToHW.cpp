@@ -617,7 +617,7 @@ private:
                              CircuitLoweringState &loweringState);
   sv::SVVerbatimSourceOp
   getVerbatimSourceForExtModule(FExtModuleOp oldModule, Block *topLevelModule,
-                             CircuitLoweringState &loweringState);
+                                CircuitLoweringState &loweringState);
   hw::HWModuleLike lowerExtModule(FExtModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState);
   sv::SVVerbatimModuleOp
