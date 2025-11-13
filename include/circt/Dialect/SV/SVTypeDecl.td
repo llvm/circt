@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
@@ -204,6 +206,49 @@ def ModportType : SVType<"Modport"> {
   let mnemonic = "modport";
   let parameters = (ins "::mlir::SymbolRefAttr":$modport);
   let assemblyFormat = "`<` $modport `>`";
+}
+
+//===----------------------------------------------------------------------===//
+// Verbatim source operation
+//===----------------------------------------------------------------------===//
+
+def SVVerbatimSourceOp
+    : SVOp<"verbatim.source", [Symbol, HasParent<"mlir::ModuleOp">,
+                               DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Verbatim verilog source";
+  let description = [{
+    The `sv.verbatim.source` operation represents verbatim verilog definition for
+    a module which may have parameters. Concrete parametrizations and their ports
+    are represented by a `hw.module.extern`.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      StrAttr:$content,
+      OutputFileAttr:$output_file,
+      ParamDeclArrayAttr:$parameters,
+      OptionalAttr<SymbolRefArrayAttr>:$additional_files,
+      StrAttr:$verilogName);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
+
+    StringAttr getVerilogModuleNameAttr();
+  }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

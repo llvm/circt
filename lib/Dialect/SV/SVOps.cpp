@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -1942,6 +1944,103 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
                    StringAttr name) {
   auto ref = hw::InnerRefAttr::get(mod, name);
   odsState.addAttribute("instance", ref);
+}
+
+//===----------------------------------------------------------------------===//
+// SVVerbatimSourceOp
+//===----------------------------------------------------------------------===//
+
+void SVVerbatimSourceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(getSymName());
+
+  // Print parameters
+  circt::printOptionalParameterList(p, *this, getParameters());
+
+  // Print attributes using the helper function
+  SmallVector<StringRef> omittedAttrs = {SymbolTable::getSymbolAttrName(),
+                                         "parameters",
+                                         visibilityAttrName};
+
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+}
+
+ParseResult SVVerbatimSourceOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+
+  // parse optional visibility
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibility;
+  if (succeeded(parser.parseOptionalKeyword(&visibility,
+                                            {"public", "private", "nested"}))) {
+    result.addAttribute(visibilityAttrName,
+                        parser.getBuilder().getStringAttr(visibility));
+  }
+
+  // Parse the symbol name
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse optional parameters
+  ArrayAttr parameters;
+  if (circt::parseOptionalParameterList(parser, parameters))
+    return failure();
+  result.addAttribute("parameters", parameters);
+
+  // Parse attributes using the helper function
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  return success();
+}
+
+LogicalResult SVVerbatimSourceOp::verify() {
+  // must have verbatim content
+  if (getContent().empty())
+    return emitOpError("missing or empty content attribute");
+
+  return success();
+}
+
+LogicalResult
+SVVerbatimSourceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Verify that all symbols in additional_files are emit.file operations
+  if (auto additionalFiles = getAdditionalFiles()) {
+    for (auto fileRef : *additionalFiles) {
+      auto flatRef = dyn_cast<FlatSymbolRefAttr>(fileRef);
+      if (!flatRef)
+        return emitOpError(
+            "additional_files must contain flat symbol references");
+
+      auto *referencedOp =
+          symbolTable.lookupNearestSymbolFrom(getOperation(), flatRef);
+      if (!referencedOp)
+        return emitOpError("references nonexistent file ")
+               << flatRef.getValue();
+
+      // Check that the referenced operation is an emit.file
+      if (referencedOp->getName().getStringRef() != "emit.file")
+        return emitOpError("references ")
+               << flatRef.getValue() << ", which is not an emit.file";
+    }
+  }
+
+  return success();
+}
+
+StringAttr SVVerbatimSourceOp::getVerilogModuleNameAttr() {
+  if (auto vName = getVerilogNameAttr()) {
+    return vName;
+  }
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
 }
 
 //===----------------------------------------------------------------------===//

@@ -1142,6 +1142,27 @@ LogicalResult HWModuleOp::verify() {
 
 LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 
+LogicalResult
+HWModuleExternOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Verify the source reference if present
+  if (auto sourceAttr = (*this)->getAttrOfType<FlatSymbolRefAttr>("source")) {
+    auto *referencedOp =
+        symbolTable.lookupNearestSymbolFrom(getOperation(), sourceAttr);
+
+    if (!referencedOp)
+      return emitOpError("references nonexistant source ")
+             << sourceAttr.getValue();
+
+    // Check that the referenced operation is an sv.verbatim.source
+    // We check by operation name to avoid direct dependency on SV dialect
+    if (referencedOp->getName().getStringRef() != "sv.verbatim.source")
+      return emitOpError("references ")
+             << sourceAttr.getValue() << ", which is not an sv.verbatim.source";
+  }
+
+  return success();
+}
+
 std::pair<StringAttr, BlockArgument>
 HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   // Find a unique name for the wire.
