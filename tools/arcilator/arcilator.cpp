@@ -229,6 +229,12 @@ static llvm::cl::list<std::string> sharedLibs{
     "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
     llvm::cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
 
+static llvm::cl::list<std::string>
+    jitArgs("args",
+            llvm::cl::desc("Arguments to pass to the JIT entry function"),
+            llvm::cl::ZeroOrMore, llvm::cl::CommaSeparated,
+            llvm::cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -442,9 +448,23 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    if (toCallFunc.getNumArguments() != 0) {
+    unsigned numArgs = toCallFunc.getNumArguments();
+    if (numArgs) {
+      if (jitArgs.size() % numArgs != 0) {
+        llvm::errs() << "entry point '" << jitEntryPoint << "' has " << numArgs
+                     << " arguments, but provided " << jitArgs.size()
+                     << " arguments (not a multiple)\n";
+        return failure();
+      }
+      if (jitArgs.empty()) {
+        llvm::errs() << "entry point '" << jitEntryPoint
+                     << "' must have no arguments\n";
+        return failure();
+      }
+    } else if (!jitArgs.empty()) {
       llvm::errs() << "entry point '" << jitEntryPoint
-                   << "' must have no arguments\n";
+                   << "' has no arguments, but provided " << jitArgs.size()
+                   << "arguments\n";
       return failure();
     }
 
@@ -482,7 +502,57 @@ static LogicalResult processBuffer(
     }
 
     void (*simulationFunc)(void **) = *expectedFunc;
-    (*simulationFunc)(nullptr);
+
+    for (unsigned i = 0, e = jitArgs.size(); i < e; i += numArgs) {
+      std::vector<std::vector<uint64_t>> argsStorage;
+      SmallVector<void *> args;
+      argsStorage.reserve(numArgs);
+      args.reserve(numArgs);
+
+      // Repeated args are concatenated, so break apart in groups of multiples
+      // of args.
+      for (auto [val, arg] :
+           llvm::zip(llvm::make_range(jitArgs.begin() + i,
+                                      jitArgs.begin() + i + numArgs),
+                     toCallFunc.getArguments())) {
+        auto type = arg.getType();
+        if (!type.isIntOrIndex()) {
+          llvm::errs() << "argument " << arg.getArgNumber()
+                       << " of entry point '" << jitEntryPoint
+                       << "' is not an integer or index type\n";
+          return failure();
+        }
+
+        // TODO: This should probably be checking if DLTI is set on module.
+        unsigned width = type.isIndex() ? 64 : type.getIntOrFloatBitWidth();
+        APInt apVal(width, 0);
+        if (StringRef(val).getAsInteger(0, apVal)) {
+          llvm::errs() << "invalid integer argument: '" << val << "'\n";
+          return failure();
+        }
+        if (apVal.getBitWidth() > width) {
+          llvm::errs() << "integer argument '" << val << "' (required width "
+                       << apVal.getBitWidth() << ") is too large for type '"
+                       << type << "'\n";
+          return failure();
+        }
+
+        std::vector<uint64_t> argData;
+        unsigned numWords = apVal.getNumWords();
+        argData.resize(numWords);
+        const uint64_t *rawData = apVal.getRawData();
+        for (unsigned j = 0; j < numWords; ++j)
+          argData[j] = rawData[j];
+
+        argsStorage.push_back(std::move(argData));
+        args.push_back(argsStorage.back().data());
+      }
+
+      (*simulationFunc)(args.data());
+    }
+    // Handle the case without arguments as before.
+    if (jitArgs.empty())
+      (*simulationFunc)(nullptr);
 
     return success();
   }
