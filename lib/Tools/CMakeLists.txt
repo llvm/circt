@@ -1,3 +1,4 @@
+add_subdirectory(arcilator)
 add_subdirectory(circt-bmc)
 add_subdirectory(circt-lec)
 

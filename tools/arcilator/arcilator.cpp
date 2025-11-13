@@ -36,6 +36,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Tools/arcilator/pipelines.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -256,116 +257,49 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
-  pm.addPass(om::createStripOMPass());
-  pm.addPass(emit::createStripEmitPass());
-  pm.addPass(createLowerFirMemPass());
-  pm.addPass(createLowerVerifSimulationsPass());
-  {
-    arc::AddTapsOptions opts;
-    opts.tapPorts = observePorts;
-    opts.tapWires = observeWires;
-    opts.tapNamedValues = observeNamedValues;
-    pm.addPass(arc::createAddTapsPass(opts));
-  }
-  pm.addPass(arc::createStripSVPass());
-  {
-    arc::InferMemoriesOptions opts;
-    opts.tapPorts = observePorts;
-    opts.tapMemories = observeMemories;
-    pm.addPass(arc::createInferMemoriesPass(opts));
-  }
-  pm.addPass(sim::createLowerDPIFunc());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+
+  ArcPreprocessingOptions preprocessingOpt;
+  preprocessingOpt.observePorts = observePorts;
+  preprocessingOpt.observeWires = observeWires;
+  preprocessingOpt.observeNamedValues = observeNamedValues;
+  preprocessingOpt.observeMemories = observeMemories;
+  populateArcPreprocessingPipeline(pm, preprocessingOpt);
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
     return;
-  {
-    ConvertToArcsPassOptions opts;
-    opts.tapRegisters = observeRegisters;
-    pm.addPass(createConvertToArcsPass(opts));
-  }
-  if (shouldDedup)
-    pm.addPass(arc::createDedupPass());
-  pm.addPass(hw::createFlattenModules());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+
+  ArcConversionOptions conversionOpt;
+  conversionOpt.observeRegisters = observeRegisters;
+  conversionOpt.shouldDedup = shouldDedup;
+  populateArcConversionPipeline(pm, conversionOpt);
 
   // Perform arc-level optimizations that are not specific to software
   // simulation.
   if (untilReached(UntilArcOpt))
     return;
-  pm.addPass(arc::createSplitLoopsPass());
-  if (shouldDedup)
-    pm.addPass(arc::createDedupPass());
-  {
-    arc::InferStatePropertiesOptions opts;
-    opts.detectEnables = shouldDetectEnables;
-    opts.detectResets = shouldDetectResets;
-    pm.addPass(arc::createInferStateProperties(opts));
-  }
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
-  pm.addNestedPass<hw::HWModuleOp>(arc::createMergeTaps());
-  if (shouldMakeLUTs)
-    pm.addPass(arc::createMakeTablesPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
 
-  // Now some arguments may be unused because reset conditions are not passed as
-  // inputs anymore pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
-  // Because we replace a lot of StateOp inputs with constants in the enable
-  // patterns we may be able to sink a lot of them
-  // TODO: maybe merge RemoveUnusedArcArguments with SinkInputs?
-  // pm.addPass(arc::createSinkInputsPass());
-  // pm.addPass(createCSEPass());
-  // pm.addPass(createSimpleCanonicalizerPass());
-  // Removing some muxes etc. may lead to additional dedup opportunities
-  // if (shouldDedup)
-  // pm.addPass(arc::createDedupPass());
+  ArcOptimizationOptions optimizationOpt;
+  optimizationOpt.shouldDetectEnables = shouldDetectEnables;
+  optimizationOpt.shouldDetectResets = shouldDetectResets;
+  optimizationOpt.shouldMakeLUTs = shouldMakeLUTs;
+  populateArcOptimizationPipeline(pm, optimizationOpt);
 
   // Lower stateful arcs into explicit state reads and writes.
   if (untilReached(UntilStateLowering))
     return;
-  pm.addPass(arc::createLowerStatePass());
 
-  // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
-  // (or nested regions in general) and thus errors out when muxes are also
-  // converted in the hw.module or arc.model
-  // TODO: InlineArcs seems to not properly handle scf.if operations, thus the
-  // following is commented out
-  // pm.addPass(arc::createMuxToControlFlowPass());
-  if (shouldInline)
-    pm.addPass(arc::createInlineArcsPass());
-
-  pm.addPass(arc::createMergeIfsPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  ArcStateLoweringOptions loweringOpt;
+  loweringOpt.shouldInline = shouldInline;
+  populateArcStateLoweringPipeline(pm, loweringOpt);
 
   // Allocate states.
   if (untilReached(UntilStateAlloc))
     return;
-  pm.addPass(arc::createLowerArcsToFuncsPass());
-  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
-  pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
-                                                   // and clock func lowering
-  if (splitFuncsThreshold.getNumOccurrences()) {
-    pm.addPass(arc::createSplitFuncs({splitFuncsThreshold}));
-  }
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
-}
 
-/// Populate a pass manager with the Arc to LLVM pipeline for the given
-/// command line options. This pipeline lowers modules to LLVM IR.
-static void populateArcToLLVMPipeline(PassManager &pm) {
-  // Lower the arcs and update functions to LLVM.
-  if (untilReached(UntilLLVMLowering))
-    return;
-  pm.addPass(createLowerArcToLLVMPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  ArcStateAllocationOptions allocationOpt;
+  allocationOpt.splitFuncsThreshold = splitFuncsThreshold;
+  populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
 static LogicalResult processBuffer(
@@ -417,7 +351,10 @@ static LogicalResult processBuffer(
     pmLlvm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "arcilator"));
-  populateArcToLLVMPipeline(pmLlvm);
+
+  if (!untilReached(UntilLLVMLowering)) {
+    populateArcToLLVMPipeline(pmLlvm);
+  }
 
   if (printDebugInfo && outputFormat == OutputLLVM)
     pmLlvm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
