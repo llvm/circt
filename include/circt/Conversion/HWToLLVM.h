@@ -42,19 +42,31 @@ struct HWToLLVMEndianessConverter {
                                          StringRef fieldName);
 };
 
-struct ArraySpillCache {
+/// Helper class mapping array values (HW or LLVM Dialect) to pointers to
+/// buffers containing the array value.
+struct HWToLLVMArraySpillCache {
+  /// Spill HW array values produced by 'foreign' dialects on the stack.
+  /// The converter is used to map HW array types to the corresponding
+  /// LLVM array types.
   void spillNonHWOps(mlir::OpBuilder &builder,
                      mlir::LLVMTypeConverter &converter,
                      Operation *containerOp);
+
+  /// Map an array value (HW or LLVM Dialect) to a LLVM pointer.
+  /// For the entire lifetime of the array value the pointer must
+  /// refer to a valid buffer containing the respective array value.
   void map(mlir::Value arrayValue, mlir::Value bufferPtr);
+
+  /// Retrieve a pointer to a buffer containing the given array
+  /// value (HW or LLVM Dialect). The buffer must not be modified or
+  /// deallocated. Returns a null value if no buffer has been mapped.
   Value lookup(Value arrayValue);
-  Value spillLLVMArrayValue(OpBuilder &builder, Location loc, Value llvmArray);
-  Value spillHWArrayValue(OpBuilder &builder, Location loc,
-                          mlir::LLVMTypeConverter &converter, Value hwArray,
-                          bool replaceUses);
 
 private:
-  // Map LLVM Array values to pointers to constant (!) buffers
+  Value spillLLVMArrayValue(OpBuilder &builder, Location loc, Value llvmArray);
+  Value spillHWArrayValue(OpBuilder &builder, Location loc,
+                          mlir::LLVMTypeConverter &converter, Value hwArray);
+
   llvm::DenseMap<Value, Value> spillMap;
 };
 
@@ -67,7 +79,7 @@ void populateHWToLLVMConversionPatterns(
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, mlir::LLVM::GlobalOp>
         &constAggregateGlobalsMap,
-    std::optional<ArraySpillCache> &spillCacheOpt);
+    std::optional<HWToLLVMArraySpillCache> &spillCacheOpt);
 
 } // namespace circt
 
