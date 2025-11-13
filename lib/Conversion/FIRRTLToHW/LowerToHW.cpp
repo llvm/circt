@@ -616,7 +616,7 @@ private:
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
   sv::SVVerbatimSourceOp
-  createSvVerbatimSource(FExtModuleOp oldModule, Block *topLevelModule,
+  getExtModuleVerbatimSource(FExtModuleOp oldModule, Block *topLevelModule,
                          CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
@@ -1165,7 +1165,7 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
   return failed;
 }
 
-sv::SVVerbatimSourceOp FIRRTLModuleLowering::createSvVerbatimSource(
+sv::SVVerbatimSourceOp FIRRTLModuleLowering::getExtModuleVerbatimSource(
     FExtModuleOp oldModule, Block *topLevelModule,
     CircuitLoweringState &loweringState) {
   CircuitNamespace circuitNamespace(loweringState.circuitOp);
@@ -1209,9 +1209,11 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::createSvVerbatimSource(
     return {};
   }
 
-  // Create output file attribute
   auto primaryOutputFileAttr = hw::OutputFileAttr::getFromFilename(
       builder.getContext(), primaryOutputFile.getValue());
+
+  auto primaryFileName = llvm::sys::path::filename(primaryOutputFile);
+  auto verbatimSource = loweringState.getVerbatimSourceForFile(primaryFileName);
 
   // Create emit.file operations for additional files, deduplicating by
   // filename
@@ -1219,6 +1221,8 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::createSvVerbatimSource(
 
   // Create emit.file operations for additional files (these are usually
   // additional collateral such as headers or DPI files).
+  //
+  // TODO: do we need to deduplicate additional files?
   for (size_t i = 1; i < filesAttr.size(); ++i) {
     auto file = cast<DictionaryAttr>(filesAttr[i]);
     auto content = file.getAs<StringAttr>("content");
@@ -1253,8 +1257,6 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::createSvVerbatimSource(
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
-  auto primaryFileName = llvm::sys::path::filename(primaryOutputFile);
-  auto verbatimSource = loweringState.getVerbatimSourceForFile(primaryFileName);
   if (!verbatimSource) {
     verbatimSource = sv::SVVerbatimSourceOp::create(
         builder, oldModule.getLoc(),
@@ -1281,10 +1283,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Check for verbatim black box annotation
   AnnotationSet annos(oldModule);
 
-  // Lower to sv.verbatim.module instead of hw.module.extern when the blackbox
-  // has verbatim verilog content.
   auto verbatimSource =
-      createSvVerbatimSource(oldModule, topLevelModule, loweringState);
+      getExtModuleVerbatimSource(oldModule, topLevelModule, loweringState);
 
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
