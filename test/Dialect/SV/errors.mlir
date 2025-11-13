@@ -302,6 +302,6 @@ hw.module @RandomModule() {
 }
 
 // expected-error @below {{references RandomModule, which is not an sv.verbatim.source}}
-hw.module.extern @TestVerbatimModule() attributes {
+sv.verbatim.module @TestVerbatimModule() attributes {
   source = @RandomModule
 }

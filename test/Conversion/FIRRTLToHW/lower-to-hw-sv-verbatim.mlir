@@ -3,7 +3,7 @@
 firrtl.circuit "SVVerbatimTest" {
 
   // Simplest case; a single FIRRTL extmodule should lower to a
-  // hw.module.extern + sv.verbatim.source.
+  // sv.verbatim.module + sv.verbatim.source.
 
   // CHECK-LABEL: sv.verbatim.source @SimpleVerbatim.v
   // CHECK-SAME:    attributes {
@@ -12,7 +12,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       hw.module.extern @SimpleVerbatim(in %clk : !seq.clock, in %rst : i1, out out : i1)
+  // CHECK:       sv.verbatim.module @SimpleVerbatim(in %clk : !seq.clock, in %rst : i1, out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @SimpleVerbatim.v
   // CHECK-SAME:    }
@@ -46,7 +46,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       hw.module.extern @DuplicatedVerbatim(in %clk : !seq.clock, out out : i1)
+  // CHECK:       sv.verbatim.module @DuplicatedVerbatim(in %clk : !seq.clock, out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @DuplicatedVerbatim.v
   // CHECK-SAME:      verilogName = "DuplicatedVerbatim"
@@ -69,12 +69,12 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  // CHECK:       hw.module.extern @DuplicatedBlackBox_1(in %clk : !seq.clock, out out : i1)
+  // CHECK:       sv.verbatim.module @DuplicatedBlackBox_1(in %clk : !seq.clock, out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @DuplicatedVerbatim.v
   // CHECK-SAME:      verilogName = "DuplicatedVerbatim"
   // CHECK-SAME:    }
-  // CHECK-NOT:   hw.module.extern
+  // CHECK-NOT:   sv.verbatim.module
   firrtl.extmodule @DuplicatedBlackBox_1(
     in clk: !firrtl.clock,
     out out: !firrtl.uint<1>
@@ -94,7 +94,7 @@ firrtl.circuit "SVVerbatimTest" {
   }
 
   // Two unique parametrizations of a verbatim extmodule should share an
-  // sv.verbatim.source, but each have hw.module.extern with the actual
+  // sv.verbatim.source, but each have sv.verbatim.module with the actual
   // port interfaces.
 
   // CHECK-LABEL: sv.verbatim.source @ParameterizedVerbatim.v
@@ -104,7 +104,7 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       hw.module.extern @ParameterizedVerbatim
+  // CHECK:       sv.verbatim.module @ParameterizedVerbatim
   // CHECK-SAME:    <WIDTH: i32>
   // CHECK-SAME:    (in %data_in : i8, out data_out : i8)
   // CHECK-SAME:    attributes {
@@ -127,13 +127,13 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  // CHECK:       hw.module.extern @ParameterizedVerbatim_1
+  // CHECK:       sv.verbatim.module @ParameterizedVerbatim_1
   // CHECK-SAME:    <WIDTH: i32>
   // CHECK-SAME:    (in %data_in : i16, out data_out : i16)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @ParameterizedVerbatim.v
   // CHECK-SAME:    }
-  // CHECK-NOT:   hw.module.extern
+  // CHECK-NOT:   sv.verbatim.module
   firrtl.extmodule @ParameterizedVerbatim_1<WIDTH: i32 = 16>(
     in data_in: !firrtl.uint<16>,
     out data_out: !firrtl.uint<16>
@@ -165,12 +165,12 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       hw.module.extern @MultiFileVerbatim
+  // CHECK:       sv.verbatim.module @MultiFileVerbatim
   // CHECK-SAME:    (out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @MultiFileVerbatim.v
   // CHECK-SAME:    }
-  // CHECK-NOT:   hw.module.extern
+  // CHECK-NOT:   sv.verbatim.module
   firrtl.extmodule @MultiFileVerbatim(
     out out: !firrtl.uint<1>
   ) attributes {
@@ -199,12 +199,12 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       hw.module.extern @AnalogBlackBox(inout %bus : i32)
+  // CHECK:       sv.verbatim.module @AnalogBlackBox(inout %bus : i32)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @AnalogBlackBox.v
   // CHECK-SAME:      verilogName = "AnalogBlackBox"
   // CHECK-SAME:    }
-  // CHECK-NOT:   hw.module.extern
+  // CHECK-NOT:   sv.verbatim.module
   firrtl.extmodule @AnalogBlackBox(out bus: !firrtl.analog<32>) attributes {
       annotations = [
         {
