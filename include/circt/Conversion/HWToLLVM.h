@@ -52,7 +52,7 @@ struct HWToLLVMArraySpillCache {
                      mlir::LLVMTypeConverter &converter,
                      Operation *containerOp);
 
-  /// Map an array value (HW or LLVM Dialect) to a LLVM pointer.
+  /// Map an LLVM array value to an LLVM pointer.
   /// For the entire lifetime of the array value the pointer must
   /// refer to a valid buffer containing the respective array value.
   void map(mlir::Value arrayValue, mlir::Value bufferPtr);

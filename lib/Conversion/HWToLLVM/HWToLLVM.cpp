@@ -123,9 +123,7 @@ void HWToLLVMArraySpillCache::map(Value arrayValue, Value bufferPtr) {
          "Key is not an LLVM array.");
   assert(llvm::isa<LLVM::LLVMPointerType>(bufferPtr.getType()) &&
          "Value is not a pointer.");
-  auto insert = spillMap.insert({arrayValue, bufferPtr});
-  (void)insert;
-  assert(insert.second && "Key already mapped");
+  spillMap.insert({arrayValue, bufferPtr});
 }
 
 Value HWToLLVMArraySpillCache::lookup(Value arrayValue) {
