@@ -77,6 +77,26 @@ OpFoldResult WrapWindow::fold(FoldAdaptor) {
     return unwrap.getWindow();
   return {};
 }
+LogicalResult WrapWindow::canonicalize(WrapWindow op,
+                                       PatternRewriter &rewriter) {
+  // Loop over all users and replace the frame of all UnwrapWindow users. Delete
+  // op if no users remain.
+  bool edited = false;
+  bool allUsersAreUnwraps = true;
+  for (auto &use : op.getWindow().getUses()) {
+    if (auto unwrap = dyn_cast<UnwrapWindow>(use.getOwner())) {
+      rewriter.replaceOp(unwrap, op.getFrame());
+      edited = true;
+    } else {
+      allUsersAreUnwraps = false;
+    }
+  }
+  if (allUsersAreUnwraps || op.getWindow().getUses().empty()) {
+    rewriter.eraseOp(op);
+    edited = true;
+  }
+  return success(edited);
+}
 OpFoldResult UnwrapWindow::fold(FoldAdaptor) {
   if (auto wrap = dyn_cast_or_null<WrapWindow>(getWindow().getDefiningOp()))
     return wrap.getFrame();

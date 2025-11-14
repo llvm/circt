@@ -111,6 +111,8 @@ def type_to_pytype(t) -> ir.Type:
     return esi.AnyType(t)
   if esi.BundleType.isinstance(t):
     return esi.BundleType(t)
+  if esi.ListType.isinstance(t):
+    return esi.ListType(t)
   if rtg.LabelType.isinstance(t):
     return rtg.LabelType(t)
   if rtg.SetType.isinstance(t):
