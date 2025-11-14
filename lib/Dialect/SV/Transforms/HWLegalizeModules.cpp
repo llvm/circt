@@ -14,6 +14,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -223,6 +224,35 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
           return false;
 
         // Remove original reg.
+        return true;
+      })
+      .Case<comb::MuxOp>([&](comb::MuxOp muxOp) {
+        // Transform array mux into individual element muxes.
+        auto ty = hw::type_dyn_cast<hw::ArrayType>(muxOp.getType());
+        if (!ty)
+          return false;
+
+        OpBuilder builder(muxOp);
+
+        auto trueValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, muxOp.getLoc(), ty, muxOp.getTrueValue());
+        auto falseValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, muxOp.getLoc(), ty, muxOp.getFalseValue());
+
+        SmallVector<Value> muxedValues;
+
+        for (size_t i = 0, e = trueValues.size(); i < e; i++) {
+          const auto &[trueIndex, trueValue] = trueValues[i];
+          const auto &[falseIndex, falseValue] = falseValues[i];
+          muxedValues.push_back(
+              comb::MuxOp::create(builder, muxOp.getLoc(), muxOp.getCond(),
+                                  trueValue, falseValue, muxOp.getTwoState()));
+        }
+
+        if (!processUsers(op, muxOp.getResult(), muxedValues))
+          return false;
+
+        // Remove original mux.
         return true;
       })
       .Default([&](auto op) { return false; });
