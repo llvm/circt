@@ -49,6 +49,16 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0) {
     os << "chan<";
     dumpType(os, channelType->getInner(), level + 1);
     os << ">";
+  } else if (auto *bundleType = dynamic_cast<const esi::BundleType *>(type)) {
+    os << "bundle {" << std::endl;
+    for (const auto &[name, direction, fieldType] : bundleType->getChannels()) {
+      os << std::string(level + 2, ' ')
+         << std::format(
+                "{} [{}]: ", direction == BundleType::To ? "to" : "from", name);
+      dumpType(os, fieldType, level + 1);
+      os << "," << std::endl;
+    }
+    os << std::string(level, ' ') << "}";
   } else {
     throw std::runtime_error(
         std::format("Unhandled type '{}'", typeid(*type).name()));
