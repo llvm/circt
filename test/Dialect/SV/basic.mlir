@@ -465,3 +465,13 @@ sv.verbatim.source @VerbatimTestModule.v<WIDTH: i32 = 8> attributes {
     additional_files = [@test_header],
     verilogName = "VerbatimTestModule"
 }
+
+// CHECK-LABEL: sv.verbatim.module @VerbatimTestModule
+// CHECK-SAME:    <WIDTH: i32 = 8>
+// CHECK-SAME:    (in %clk : i1, out out : i1)
+// CHECK-SAME:    attributes {
+// CHECK-SAME:      source = @VerbatimTestModule.v
+// CHECK-SAME:    }
+sv.verbatim.module @VerbatimTestModule<WIDTH: i32 = 8>(in %clk: i1, out out: i1) attributes {
+  source = @VerbatimTestModule.v
+}
