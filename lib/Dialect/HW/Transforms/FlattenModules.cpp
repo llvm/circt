@@ -181,7 +181,6 @@ bool FlattenModulesPass::shouldInline(HWModuleOp module,
   bool hasNoOutputs = module.getNumOutputPorts() == 0;
   bool hasOneUse = instanceNode->getNumUses() == 1;
   bool hasState = !module.getOps<seq::FirRegOp>().empty();
-  bool isSmall = bodySize < this->smallThreshold;
 
   // Don't inline modules with state unless explicitly allowed
   if (hasState && !this->inlineWithState)
@@ -199,7 +198,7 @@ bool FlattenModulesPass::shouldInline(HWModuleOp module,
   if (this->inlineSingleUse && hasOneUse)
     shouldInlineModule = true;
 
-  if (this->inlineSmall && isSmall)
+  if (this->inlineSmall && bodySize < this->smallThreshold)
     shouldInlineModule = true;
 
   return shouldInlineModule;
