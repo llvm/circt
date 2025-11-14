@@ -93,43 +93,20 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
       })
       .Case<hw::ArrayConcatOp>([&](hw::ArrayConcatOp concatOp) {
         // Redirect individual element uses (if any) to the input arguments.
-        SmallVector<std::pair<Value, uint64_t>> arrays;
+        SmallVector<Value> values;
+        OpBuilder builder(concatOp);
         for (auto array : llvm::reverse(concatOp.getInputs())) {
           auto ty = hw::type_cast<hw::ArrayType>(array.getType());
-          arrays.emplace_back(array, ty.getNumElements());
+          const auto indexValues = createIndexValuePairs<hw::ArrayGetOp>(
+              builder, concatOp.getLoc(), ty, array);
+          for (const auto &[_, value] : indexValues) {
+            values.push_back(value);
+          }
         }
-        for (auto *user :
-             llvm::make_early_inc_range(concatOp.getResult().getUsers())) {
-          if (TypeSwitch<Operation *, bool>(user)
-                  .Case<hw::ArrayGetOp>([&](hw::ArrayGetOp getOp) {
-                    if (auto indexAndBitWidth =
-                            tryExtractIndexAndBitWidth(getOp.getIndex())) {
-                      auto [indexValue, bitWidth] = *indexAndBitWidth;
-                      // FIXME: More efficient search
-                      for (const auto &[array, size] : arrays) {
-                        if (indexValue >= size) {
-                          indexValue -= size;
-                          continue;
-                        }
-                        OpBuilder builder(getOp);
-                        getOp.getInputMutable().set(array);
-                        getOp.getIndexMutable().set(
-                            builder.createOrFold<hw::ConstantOp>(
-                                getOp.getLoc(), APInt(bitWidth, indexValue)));
-                        return true;
-                      }
-                    }
+        if (!processUsers(op, concatOp.getResult(), values))
+          return false;
 
-                    return false;
-                  })
-                  .Default([](auto op) { return false; }))
-            continue;
-
-          op.emitError("unsupported packed array expression");
-          signalPassFailure();
-        }
-
-        // Remove the original op.
+        // Remove original op.
         return true;
       })
       .Case<hw::ArrayCreateOp>([&](hw::ArrayCreateOp createOp) {
