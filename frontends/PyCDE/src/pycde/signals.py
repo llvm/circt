@@ -19,7 +19,7 @@ import re
 import numpy as np
 
 
-def _FromCirctValue(value: ir.Value, type: Type = None) -> Signal:
+def _FromCirctValue(value: ir.Value, type: Type | None = None) -> Signal:
   from .types import _FromCirctType
   assert isinstance(value, ir.Value)
   if type is None:
