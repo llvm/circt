@@ -431,6 +431,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
     Arg<RefType, "", [MemWrite]>:$dst,
     UnpackedType:$src
   );
+  let hasCanonicalizeMethod = true;
 }
 
 // Non-blocking assignment
