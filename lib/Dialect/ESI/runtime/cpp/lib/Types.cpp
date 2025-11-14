@@ -18,8 +18,51 @@
 #include <cstring>
 #include <format>
 #include <span>
+#include <sstream>
 
 namespace esi {
+
+// NOLINTNEXTLINE(misc-no-recursion)
+static void dumpType(std::ostream &os, const esi::Type *type, int level = 0) {
+  if (auto *uintType = dynamic_cast<const esi::UIntType *>(type)) {
+    os << "uint" << uintType->getBitWidth();
+  } else if (auto *sintType = dynamic_cast<const esi::SIntType *>(type)) {
+    os << "sint" << sintType->getBitWidth();
+  } else if (auto *bitsType = dynamic_cast<const esi::BitsType *>(type)) {
+    os << "bits" << bitsType->getBitWidth();
+  } else if (dynamic_cast<const esi::VoidType *>(type)) {
+    os << "void";
+  } else if (dynamic_cast<const esi::AnyType *>(type)) {
+    os << "any";
+  } else if (auto *structType = dynamic_cast<const esi::StructType *>(type)) {
+    os << "struct {" << std::endl;
+    for (const auto &[name, fieldType] : structType->getFields()) {
+      os << std::string(level + 2, ' ') << name << ": ";
+      dumpType(os, fieldType, level + 1);
+      os << "," << std::endl;
+    }
+    os << std::string(level, ' ') << "}";
+  } else if (auto *arrayType = dynamic_cast<const esi::ArrayType *>(type)) {
+    dumpType(os, arrayType->getElementType(), level + 1);
+    os << "[" << arrayType->getSize() << "]";
+  } else if (auto *channelType = dynamic_cast<const esi::ChannelType *>(type)) {
+    os << "chan<";
+    dumpType(os, channelType->getInner(), level + 1);
+    os << ">";
+  } else {
+    throw std::runtime_error(
+        std::format("Unhandled type '{}'", typeid(*type).name()));
+  }
+}
+
+void Type::dump(std::ostream &os) { dumpType(os, this); }
+
+// Recurse through an ESI type and print an elaborated version of it.
+std::string Type::toString() {
+  std::stringstream ss;
+  dump(ss);
+  return ss.str();
+}
 
 std::pair<const Type *, BundleType::Direction>
 BundleType::findChannel(std::string name) const {
