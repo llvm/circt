@@ -76,8 +76,9 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "only windows into structs are currently supported";
 
   auto fields = structInto.getElements();
-  bool encounteredArrayOrListWithNumItems = false;
   for (auto frame : frames) {
+    bool encounteredArrayOrListWithNumItems = false;
+
     // Efficiently look up fields in the frame.
     DenseMap<StringAttr, WindowFieldType> frameFields;
     for (auto field : frame.getMembers())

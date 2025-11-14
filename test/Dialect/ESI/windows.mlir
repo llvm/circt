@@ -108,7 +108,7 @@ hw.module @ListChannelModule(in %in: !esi.channel<!ListTypeWin_one>, out out: !e
   %c1 = hw.constant 1 : i32
   %data_inc = comb.add %data, %c1 : i32
   %out_struct = hw.struct_create (%data_inc, %last) : !hw.struct<data: i32, last: i1>
-  %out = esi.window.wrap %out_struct : !ListTypeWin_one 
+  %out = esi.window.wrap %out_struct : !ListTypeWin_one
   %channel_out, %ready = esi.wrap.vr %out, %in_valid : !ListTypeWin_one
   hw.output %channel_out : !esi.channel<!ListTypeWin_one>
 }

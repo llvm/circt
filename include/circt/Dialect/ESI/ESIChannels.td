@@ -467,10 +467,11 @@ def WindowFieldType : ESI_Type<"WindowField"> {
     - For arrays, the entire array will appear in the frame.
     - For lists, it is assumed to be 1.
 
-    For lists, a 'last' field to the struct to indicate the end of the list.
-    If 'numItems' is specified for a list, a '<fieldName>_size' field will be
-    added to the struct. The number of valid items in the array is
-    `<fieldName>_size - 1` so zero valid items cannot be represented.
+    For lists, a 'last' field to the struct to indicate that the end of the list is this frame.
+    If 'numItems' is specified for a list, a '<fieldName>_size' (representing
+    the number of valid items in the array) field will be added to the struct.
+    When `<fieldName>_size` is less than 'numItems', `last` MUST be true meaning
+    that all frames must be full except for the last one.
   }];
   let mnemonic = "window.field";
 

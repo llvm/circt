@@ -83,7 +83,7 @@ LogicalResult WrapWindow::canonicalize(WrapWindow op,
   // op if no users remain.
   bool edited = false;
   bool allUsersAreUnwraps = true;
-  for (auto &use : op.getWindow().getUses()) {
+  for (auto &use : llvm::make_early_inc_range(op.getWindow().getUses())) {
     if (auto unwrap = dyn_cast<UnwrapWindow>(use.getOwner())) {
       rewriter.replaceOp(unwrap, op.getFrame());
       edited = true;
