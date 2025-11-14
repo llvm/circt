@@ -212,5 +212,6 @@ class SVVerbatimModuleOp(SVVerbatimModuleOp):
   def parameters(self) -> list[hw.ParamDeclAttr]:
     return hw.ModuleLike.parameters(self)
 
+
 VerbatimSourceOp = SVVerbatimSourceOp
 VerbatimModuleOp = SVVerbatimModuleOp

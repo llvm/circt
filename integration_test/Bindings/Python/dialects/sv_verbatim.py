@@ -20,8 +20,7 @@ with ir.Context() as ctx, ir.Location.unknown():
         content=verbatim_content,
         output_file=hw.OutputFileAttr.get_from_filename(
             ir.StringAttr.get("MyVerbatim.v"), False, False),
-        verilog_name="MyVerbatim"
-    )
+        verilog_name="MyVerbatim")
 
     # CHECK:      sv.verbatim.source @MyVerbatim.v
     # CHECK-SAME:   attributes {
@@ -36,8 +35,7 @@ with ir.Context() as ctx, ir.Location.unknown():
         source=ir.FlatSymbolRefAttr.get("MyVerbatim.v"),
         input_ports=[("clk", i1)],
         output_ports=[("out", i1)],
-        verilog_name="MyVerbatim"
-    )
+        verilog_name="MyVerbatim")
 
     # CHECK:      sv.verbatim.module @MyVerbatim
     # CHECK-SAME:   (in %clk : i1, out out : i1)
@@ -52,12 +50,12 @@ with ir.Context() as ctx, ir.Location.unknown():
 
     param_verbatim_source = sv.SVVerbatimSourceOp(
         sym_name="ParametrizedVerbatim.v",
-        content="module ParametrizedVerbatim #(parameter int WIDTH = 8)(); endmodule",
+        content=
+        "module ParametrizedVerbatim #(parameter int WIDTH = 8)(); endmodule",
         output_file=hw.OutputFileAttr.get_from_filename(
             ir.StringAttr.get("ParametrizedVerbatim.v"), False, False),
         parameters=parameters,
-        verilog_name="ParametrizedVerbatim"
-    )
+        verilog_name="ParametrizedVerbatim")
 
     # CHECK:      sv.verbatim.source @ParametrizedVerbatim.v
     # CHECK-SAME:   <WIDTH: i32 = 8>
@@ -75,8 +73,7 @@ with ir.Context() as ctx, ir.Location.unknown():
         input_ports=[("data_in", i8)],
         output_ports=[("data_out", i8)],
         parameters=[param],
-        verilog_name="ParametrizedVerbatim"
-    )
+        verilog_name="ParametrizedVerbatim")
 
     # CHECK:      sv.verbatim.module @ParametrizedVerbatim
     # CHECK-SAME:   <WIDTH: i32 = 8>
