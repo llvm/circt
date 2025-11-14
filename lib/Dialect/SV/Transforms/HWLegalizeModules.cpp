@@ -42,6 +42,10 @@ struct HWLegalizeModulesPass
 private:
   void processPostOrder(Block &block);
   bool tryLoweringPackedArrayOp(Operation &op);
+  template <typename ElementType>
+  SmallVector<std::pair<Value, Value>>
+  createIndexValuePairs(OpBuilder &builder, LocationAttr loc, hw::ArrayType ty,
+                        Value array);
   Value lowerLookupToCasez(Operation &op, Value input, Value index,
                            mlir::Type elementType,
                            SmallVector<Value> caseValues);
@@ -147,15 +151,12 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Generate case value element lookups.
         auto ty = hw::type_cast<hw::ArrayType>(getOp.getInput().getType());
         OpBuilder builder(getOp);
+        auto loc = op.getLoc();
+        const auto indexValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, loc, ty, getOp.getInput());
         SmallVector<Value> caseValues;
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto index = builder.createOrFold<hw::ConstantOp>(
-              loc, APInt(llvm::Log2_64_Ceil(e), i));
-          auto element =
-              hw::ArrayGetOp::create(builder, loc, getOp.getInput(), index);
-          caseValues.push_back(element);
-        }
+        for (const auto &[_, value] : indexValues)
+          caseValues.push_back(value);
 
         // Transform array index op into casez statement.
         auto theWire = lowerLookupToCasez(op, getOp.getInput(), index,
@@ -183,13 +184,11 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Generate case value element lookups.
         auto ty = hw::type_cast<hw::ArrayType>(inout.getElementType());
         OpBuilder builder(&op);
+        auto loc = op.getLoc();
+        const auto indexValues = createIndexValuePairs<sv::ArrayIndexInOutOp>(
+            builder, loc, ty, indexOp.getInput());
         SmallVector<Value> caseValues;
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto index = builder.createOrFold<hw::ConstantOp>(
-              loc, APInt(llvm::Log2_64_Ceil(e), i));
-          auto element = sv::ArrayIndexInOutOp::create(
-              builder, loc, indexOp.getInput(), index);
+        for (const auto &[_, element] : indexValues) {
           auto readElement = sv::ReadInOutOp::create(builder, loc, element);
           caseValues.push_back(readElement);
         }
@@ -211,14 +210,12 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
           return false;
 
         OpBuilder builder(assignOp);
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto index = builder.createOrFold<hw::ConstantOp>(
-              loc, APInt(llvm::Log2_64_Ceil(e), i));
+        auto loc = op.getLoc();
+        const auto indexValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, loc, ty, assignOp.getSrc());
+        for (const auto &[index, srcElement] : indexValues) {
           auto dstElement = sv::ArrayIndexInOutOp::create(
               builder, loc, assignOp.getDest(), index);
-          auto srcElement =
-              hw::ArrayGetOp::create(builder, loc, assignOp.getSrc(), index);
           sv::PAssignOp::create(builder, loc, dstElement, srcElement);
         }
 
@@ -252,6 +249,21 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         return true;
       })
       .Default([&](auto op) { return false; });
+}
+
+template <typename ElementType>
+SmallVector<std::pair<Value, Value>>
+HWLegalizeModulesPass::createIndexValuePairs(OpBuilder &builder,
+                                             LocationAttr loc, hw::ArrayType ty,
+                                             Value array) {
+  SmallVector<std::pair<Value, Value>> result;
+  for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
+    auto index = builder.createOrFold<hw::ConstantOp>(
+        loc, APInt(llvm::Log2_64_Ceil(e), i));
+    auto element = ElementType::create(builder, loc, array, index);
+    result.emplace_back(index, element);
+  }
+  return result;
 }
 
 Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
