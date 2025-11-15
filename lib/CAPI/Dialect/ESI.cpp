@@ -146,8 +146,8 @@ bool circtESITypeIsAWindowType(MlirType type) {
 }
 
 MlirType circtESIWindowTypeGet(MlirContext cctxt, MlirAttribute name,
-                                MlirType into, size_t numFrames,
-                                const MlirType *cFrames) {
+                               MlirType into, size_t numFrames,
+                               const MlirType *cFrames) {
   MLIRContext *ctxt = unwrap(cctxt);
   SmallVector<WindowFrameType, 4> frames;
   for (size_t i = 0; i < numFrames; ++i)
@@ -205,9 +205,8 @@ bool circtESITypeIsAWindowFieldType(MlirType type) {
 
 MlirType circtESIWindowFieldTypeGet(MlirContext cctxt, MlirAttribute fieldName,
                                     uint64_t numItems) {
-  return wrap(WindowFieldType::get(unwrap(cctxt),
-                                   cast<StringAttr>(unwrap(fieldName)),
-                                   numItems));
+  return wrap(WindowFieldType::get(
+      unwrap(cctxt), cast<StringAttr>(unwrap(fieldName)), numItems));
 }
 
 MlirAttribute circtESIWindowFieldTypeGetFieldName(MlirType field) {
