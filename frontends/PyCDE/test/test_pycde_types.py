@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import dim, types, Input, Output, generator, System, Module
-from pycde.types import Bit, Bits, List, StructType, TypeAlias, UInt
+from pycde.types import Bit, Bits, List, StructType, TypeAlias, UInt, Window
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
@@ -86,3 +86,39 @@ class TestStruct(Module):
     s = ExStruct(a=self.inp1.a, b=self.inp1.get_b_plus1().as_uint(32))
     assert type(s) is ExStruct._get_value_class()
     self.out2 = s
+
+
+# Test Window type with Window.Frame class
+pkt_struct = StructType({
+    "hdr": Bits(8),
+    "payload": Bits(32) * 4,
+    "tail": Bits(4)
+})
+
+# Test Window.Frame construction and representation
+frame1 = Window.Frame("header", ["hdr", ("payload", 4)])
+frame2 = Window.Frame("tail", ["tail"])
+
+# CHECK: Frame('header', ['hdr', ('payload', 4)])
+print(frame1)
+# CHECK: Frame('tail', ['tail'])
+print(frame2)
+
+# Test Window creation with Window.Frame objects
+window_with_frames = Window("pkt", pkt_struct, [frame1, frame2])
+# CHECK: Window<"pkt", struct { hdr: Bits<8>, payload: Bits<32>[4], tail: Bits<4>}, frames=[Frame('header', [('hdr', None), ('payload', 4)]), Frame('tail', [('tail', None)])]>
+print(window_with_frames)
+
+# Verify window properties
+# CHECK: pkt
+print(window_with_frames.name)
+
+# Verify frames property returns Window.Frame objects
+frames = window_with_frames.frames
+assert len(frames) == 2
+assert isinstance(frames[0], Window.Frame)
+assert isinstance(frames[1], Window.Frame)
+# CHECK: Frame('header', [('hdr', None), ('payload', 4)])
+print(frames[0])
+# CHECK: Frame('tail', [('tail', None)])
+print(frames[1])

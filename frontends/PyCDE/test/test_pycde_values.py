@@ -2,9 +2,9 @@
 
 from pycde.dialects import comb, hw
 from pycde import dim, generator, types, Clock, Input, Output, Module
-from pycde.signals import And, Or
+from pycde.signals import And, Or, Struct
 from pycde.testing import unittestmodule
-from pycde.types import Bits
+from pycde.types import Bits, Window
 
 
 # CHECK-LABEL: hw.module @BitsMod(in %inp : i5)
@@ -126,3 +126,27 @@ class ArrayMod(Module):
 
     # CHECK:  seq.from_clock %clk
     ports.clk.to_bit()
+
+
+class Packet(Struct):
+  hdr: Bits(8)
+  payload: Bits(32) * 4
+  tail: Bits(4)
+
+
+@unittestmodule()
+class TestWindowsArr(Module):
+  clk = Clock()
+
+  PktWindow = Window("pkt",
+                     Packet,
+                     frames=[
+                         Window.Frame("header", ["hdr", ("payload", 4)]),
+                         Window.Frame("tail", ["tail"])
+                     ])
+  inp = Input(PktWindow)
+  out = Output(PktWindow)
+
+  @generator
+  def construct(ports):
+    ports.out = ports.inp

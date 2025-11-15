@@ -173,6 +173,8 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(Bundle, type)
   if isinstance(type, esi.ListType):
     return Type.__new__(List, type)
+  if hasattr(esi, "WindowType") and isinstance(type, esi.WindowType):
+    return Type.__new__(Window, type)
   return Type(type)
 
 
@@ -437,6 +439,10 @@ class RegisteredStruct(TypeAlias):
 
   def __call__(self, **kwargs):
     return self._from_obj_or_sig(kwargs)
+
+  @property
+  def fields(self):
+    return self.inner_type.fields
 
   def _get_value_class(self):
     return self._value_class
@@ -943,6 +949,150 @@ class List(Type):
   @property
   def inner(self):
     return self.inner_type
+
+
+class Window(Type):
+  """An ESI data window type.
+
+  Construct with a name (string), an 'into' type (typically a StructType), and
+  a list of Window.Frame objects. Each frame spec contains a name and a list of
+  field specifications. A field specification is either a field name string or a
+  tuple (field_name, num_items). 'num_items' is only allowed for fields with
+  array or list types in the underlying struct and indicates how many items are
+  accessible in the frame.
+
+  Example:
+    Window("pkt", my_struct_type,
+           [
+             Window.Frame("header", ["hdr", ("payload_array", 4)]),
+             Window.Frame("tail", ["tail"])
+           ])
+  """
+
+  @dataclass
+  class Frame:
+    """Represents a frame specification within a Window type."""
+    name: str
+    members: typing.List[typing.Union[str, typing.Tuple[str,
+                                                        typing.Optional[int]]]]
+
+    def __post_init__(self):
+      """Validate frame specification after initialization."""
+      if not isinstance(self.name, str):
+        raise TypeError(
+            f"Frame name must be a string, got {type(self.name).__name__}")
+      if not isinstance(self.members, (list, tuple)):
+        raise TypeError(
+            f"Frame members must be a list, got {type(self.members).__name__}")
+
+    def __repr__(self) -> str:
+      return f"Frame('{self.name}', {self.members})"
+
+  def __new__(cls, name: str, into: StructType | type["Struct"],
+              frames: typing.List["Window.Frame"]):
+    # Convert Window.Frame specs into underlying CIRCT types.
+    # Get struct fields for validation
+    struct_fields = {
+        field_name: field_type for field_name, field_type in into.fields
+    }
+
+    frame_types = []
+    for frame_spec in frames:
+      if not isinstance(frame_spec, Window.Frame):
+        raise TypeError(
+            f"Frame spec must be a Window.Frame object, got {type(frame_spec).__name__}"
+        )
+
+      field_types = []
+      for m in frame_spec.members:
+        if isinstance(m, tuple):
+          field_name, num_items = m
+          # Validate that num_items is only used on array/list fields
+          if field_name not in struct_fields:
+            raise ValueError(f"Field '{field_name}' not found in struct type")
+          field_type = struct_fields[field_name]
+          if num_items is not None:
+            # Check if field is an array or list type
+            if not isinstance(field_type, (Array, List)):
+              raise ValueError(
+                  f"num_items can only be specified for array or list fields. "
+                  f"Field '{field_name}' has type {field_type}")
+          # Convert field name to StringAttr and keep num_items as optional int
+          field_name_attr = ir.StringAttr.get(field_name)
+          field_types.append(esi.WindowFieldType.get(field_name_attr,
+                                                     num_items))
+        else:
+          # Convert field name to StringAttr
+          field_name_attr = ir.StringAttr.get(m)
+          field_types.append(esi.WindowFieldType.get(field_name_attr))
+      # Convert frame name to StringAttr
+      frame_name_attr = ir.StringAttr.get(frame_spec.name)
+      frame_types.append(esi.WindowFrameType.get(frame_name_attr, field_types))
+    # Convert window name to StringAttr
+    window_name_attr = ir.StringAttr.get(name)
+    window_ty = esi.WindowType.get(window_name_attr, into._type, frame_types)
+    return super(Window, cls).__new__(cls, window_ty)
+
+  def _get_value_class(self):
+    from .signals import WindowSignal
+    return WindowSignal
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
+
+  @property
+  def name(self) -> str:
+    return self._type.name
+
+  @property
+  def into(self) -> Type:
+    return _FromCirctType(self._type.into)
+
+  @property
+  def frames(self) -> typing.List[Frame]:
+    # Return a list of Window.Frame objects with python-friendly representation
+    ret = []
+    for f in self._type.frames:
+      members = []
+      frame = support.type_to_pytype(f)
+      for m in frame.members:
+        member = support.type_to_pytype(m)
+        num_items = member.num_items
+        members.append(
+            (member.field_name.value, num_items if num_items > 0 else None))
+      ret.append(Window.Frame(frame.name.value, members))
+    return ret
+
+  def __repr__(self):
+    return f"Window<{self.name}, {self.into}, frames={self.frames}>"
+
+  def wrap(self, signal):
+    """Wrap a signal (struct or union) into a WindowSignal using esi.WindowWrapOp.
+    
+    Args:
+      signal: A Signal with a type that matches the 'into' type of this Window.
+    
+    Returns:
+      A WindowSignal wrapping the input signal.
+    """
+    from .signals import Signal as SignalBase, _FromCirctValue, WindowSignal
+
+    if not isinstance(signal, SignalBase):
+      raise TypeError(f"Expected a Signal, got {type(signal).__name__}")
+
+    if signal.type != self.into:
+      raise TypeError(
+          f"Signal type {signal.type} does not match Window 'into' type {self.into}"
+      )
+
+    with get_user_loc():
+      wrap_op = esi.WindowWrapOp(self._type, signal.value)
+      return WindowSignal(wrap_op, self)
+
+  # Windows are not directly constructible from python literals.
+  def _from_obj(self, obj, alias: typing.Optional[TypeAlias] = None):
+    raise TypeError("Cannot create Window values from Python objects directly")
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],
