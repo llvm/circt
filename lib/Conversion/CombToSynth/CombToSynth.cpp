@@ -990,20 +990,8 @@ struct CombDivUOpConversion : DivModOpConversionBase<DivUOp> {
   matchAndRewrite(DivUOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Check if the divisor is a power of two.
-    if (auto rhsConstantOp = adaptor.getRhs().getDefiningOp<hw::ConstantOp>())
-      if (rhsConstantOp.getValue().isPowerOf2()) {
-        // Extract upper bits.
-        size_t extractAmount = rhsConstantOp.getValue().ceilLogBase2();
-        size_t width = op.getType().getIntOrFloatBitWidth();
-        Value upperBits = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(), adaptor.getLhs(), extractAmount,
-            width - extractAmount);
-        Value constZero = hw::ConstantOp::create(rewriter, op.getLoc(),
-                                                 APInt::getZero(extractAmount));
-        replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(
-            rewriter, op, op.getType(), ArrayRef<Value>{constZero, upperBits});
-        return success();
-      }
+    if (llvm::succeeded(comb::convertDivUByPowerOfTwo(op, rewriter)))
+      return success();
 
     // When rhs is not power of two and the number of unknown bits are small,
     // create a mux tree that emulates all possible cases.
@@ -1024,19 +1012,8 @@ struct CombModUOpConversion : DivModOpConversionBase<ModUOp> {
   matchAndRewrite(ModUOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Check if the divisor is a power of two.
-    if (auto rhsConstantOp = adaptor.getRhs().getDefiningOp<hw::ConstantOp>())
-      if (rhsConstantOp.getValue().isPowerOf2()) {
-        // Extract lower bits.
-        size_t extractAmount = rhsConstantOp.getValue().ceilLogBase2();
-        size_t width = op.getType().getIntOrFloatBitWidth();
-        Value lowerBits = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(), adaptor.getLhs(), 0, extractAmount);
-        Value constZero = hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt::getZero(width - extractAmount));
-        replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(
-            rewriter, op, op.getType(), ArrayRef<Value>{constZero, lowerBits});
-        return success();
-      }
+    if (llvm::succeeded(comb::convertModUByPowerOfTwo(op, rewriter)))
+      return success();
 
     // When rhs is not power of two and the number of unknown bits are small,
     // create a mux tree that emulates all possible cases.

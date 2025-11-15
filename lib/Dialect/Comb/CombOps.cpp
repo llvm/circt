@@ -234,6 +234,72 @@ llvm::LogicalResult comb::convertSubToAdd(comb::SubOp subOp,
   return success();
 }
 
+static llvm::LogicalResult convertDivModUByPowerOfTwo(PatternRewriter &rewriter,
+                                                      Operation *op, Value lhs,
+                                                      Value rhs, bool isDiv) {
+  // Check if the divisor is a power of two constant.
+  auto rhsConstantOp = rhs.getDefiningOp<hw::ConstantOp>();
+  if (!rhsConstantOp)
+    return failure();
+
+  APInt rhsValue = rhsConstantOp.getValue();
+  if (!rhsValue.isPowerOf2())
+    return failure();
+
+  Location loc = op->getLoc();
+
+  unsigned width = lhs.getType().getIntOrFloatBitWidth();
+  unsigned bitPosition = rhsValue.ceilLogBase2();
+
+  if (isDiv) {
+    // divu(x, 2^n) -> concat(0...0, extract(x, n, width-n))
+    // This is equivalent to a right shift by n bits.
+
+    // Extract the upper bits (equivalent to right shift).
+    Value upperBits = rewriter.createOrFold<comb::ExtractOp>(
+        loc, lhs, bitPosition, width - bitPosition);
+
+    // Concatenate with zeros on the left.
+    Value zeros =
+        hw::ConstantOp::create(rewriter, loc, APInt::getZero(bitPosition));
+
+    // use replaceOpWithNewOpAndCopyNamehint?
+    replaceOpAndCopyNamehint(
+        rewriter, op,
+        comb::ConcatOp::create(rewriter, loc,
+                               ArrayRef<Value>{zeros, upperBits}));
+    return success();
+  }
+
+  // modu(x, 2^n) -> concat(0...0, extract(x, 0, n))
+  // This extracts the lower n bits (equivalent to bitwise AND with 2^n - 1).
+
+  // Extract the lower bits.
+  Value lowerBits =
+      rewriter.createOrFold<comb::ExtractOp>(loc, lhs, 0, bitPosition);
+
+  // Concatenate with zeros on the left.
+  Value zeros = hw::ConstantOp::create(rewriter, loc,
+                                       APInt::getZero(width - bitPosition));
+
+  replaceOpAndCopyNamehint(
+      rewriter, op,
+      comb::ConcatOp::create(rewriter, loc, ArrayRef<Value>{zeros, lowerBits}));
+  return success();
+}
+
+LogicalResult comb::convertDivUByPowerOfTwo(DivUOp divOp,
+                                            mlir::PatternRewriter &rewriter) {
+  return convertDivModUByPowerOfTwo(rewriter, divOp, divOp.getLhs(),
+                                    divOp.getRhs(), /*isDiv=*/true);
+}
+
+LogicalResult comb::convertModUByPowerOfTwo(ModUOp modOp,
+                                            mlir::PatternRewriter &rewriter) {
+  return convertDivModUByPowerOfTwo(rewriter, modOp, modOp.getLhs(),
+                                    modOp.getRhs(), /*isDiv=*/false);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//

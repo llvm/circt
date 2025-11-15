@@ -59,8 +59,9 @@ void circt::synth::buildCombLoweringPipeline(
       circt::ConvertDatapathToCombOptions datapathOptions;
       datapathOptions.timingAware = options.timingAware;
       pm.addPass(createConvertDatapathToComb(datapathOptions));
-      pm.addPass(createSimpleCanonicalizerPass());
     }
+    pm.addPass(createCSEPass());
+    pm.addPass(createSimpleCanonicalizerPass());
     // Partially legalize Comb, then run CSE and canonicalization.
     circt::ConvertCombToSynthOptions convOptions;
     addOpName<comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp, comb::ICmpOp,

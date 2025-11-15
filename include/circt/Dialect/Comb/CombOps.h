@@ -90,6 +90,15 @@ Value createInject(OpBuilder &builder, Location loc, Value value,
 LogicalResult convertSubToAdd(comb::SubOp subOp,
                               mlir::PatternRewriter &rewriter);
 
+/// Convert unsigned division or modulo by a power of two.
+/// For division: divu(x, 2^n) -> concat(0...0, extract(x, n, width-n)).
+/// For modulo: modu(x, 2^n) -> concat(0...0, extract(x, 0, n))
+/// TODO: Support signed division and modulo.
+LogicalResult convertDivUByPowerOfTwo(DivUOp divOp,
+                                      mlir::PatternRewriter &rewriter);
+LogicalResult convertModUByPowerOfTwo(ModUOp modOp,
+                                      mlir::PatternRewriter &rewriter);
+
 /// Enum for mux chain folding styles.
 enum MuxChainWithComparisonFoldingStyle { None, BalancedMuxTree, ArrayGet };
 /// Mux chain folding that converts chains of muxes with index
