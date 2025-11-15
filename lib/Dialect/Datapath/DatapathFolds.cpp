@@ -117,6 +117,9 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
   using OpRewritePattern::OpRewritePattern;
 
   // add(compress(a,b,c),d) -> add(compress(a,b,c,d))
+  // FIXME: This should be implemented as a canonicalization pattern for
+  // compress op. Currently `hasDatapathOperand` flag prevents introducing
+  // datapath operations from comb operations.
   LogicalResult matchAndRewrite(comb::AddOp addOp,
                                 PatternRewriter &rewriter) const override {
     // comb.add canonicalization patterns handle folding add operations
@@ -128,14 +131,19 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
     llvm::SmallSetVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
     // Only construct compressor if can form a larger compressor than what
-    // is currently an input of this add
-    bool shouldFold = false;
+    // is currently an input of this add. Also check that there is at least
+    // one datapath operand.
+    bool shouldFold = false, hasDatapathOperand = false;
 
     for (Value operand : operands) {
 
       // Skip if already processed this compressor
       if (processedCompressorResults.contains(operand))
         continue;
+
+      if (auto *op = operand.getDefiningOp())
+        if (isa_and_nonnull<datapath::DatapathDialect>(op->getDialect()))
+          hasDatapathOperand = true;
 
       // If the operand has multiple uses, we do not fold it into a compress
       // operation, so we treat it as a regular operand.
@@ -174,7 +182,7 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 
     // Only fold if we have constructed a larger compressor than what was
     // already there
-    if (!shouldFold)
+    if (!shouldFold || !hasDatapathOperand)
       return failure();
 
     // Create a new CompressOp with all collected operands
