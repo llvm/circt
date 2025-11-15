@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTHWTransforms
   VerifyInnerRefNamespace.cpp
   FlattenModules.cpp
   FooWires.cpp
+  HWVectorization.cpp
 
   DEPENDS
   CIRCTHWTransformsIncGen
