@@ -42,18 +42,46 @@ struct HWToLLVMEndianessConverter {
                                          StringRef fieldName);
 };
 
+/// Helper class mapping array values (HW or LLVM Dialect) to pointers to
+/// buffers containing the array value.
+struct HWToLLVMArraySpillCache {
+  /// Spill HW array values produced by 'foreign' dialects on the stack.
+  /// The converter is used to map HW array types to the corresponding
+  /// LLVM array types. Should be called before dialect conversion.
+  void spillNonHWOps(mlir::OpBuilder &builder,
+                     mlir::LLVMTypeConverter &converter,
+                     Operation *containerOp);
+
+  /// Map an LLVM array value to an LLVM pointer.
+  /// For the entire lifetime of the array value the pointer must
+  /// refer to a valid buffer containing the respective array value.
+  void map(mlir::Value arrayValue, mlir::Value bufferPtr);
+
+  /// Retrieve a pointer to a buffer containing the given array
+  /// value (HW or LLVM Dialect). The buffer must not be modified or
+  /// deallocated. Returns a null value if no buffer has been mapped.
+  Value lookup(Value arrayValue);
+
+private:
+  Value spillLLVMArrayValue(OpBuilder &builder, Location loc, Value llvmArray);
+  Value spillHWArrayValue(OpBuilder &builder, Location loc,
+                          mlir::LLVMTypeConverter &converter, Value hwArray);
+
+  llvm::DenseMap<Value, Value> spillMap;
+};
+
 /// Get the HW to LLVM type conversions.
 void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
 /// Get the HW to LLVM conversion patterns.
+/// Note: The spill cache may only be used when conversion
+///       pattern rollback is disabled.
 void populateHWToLLVMConversionPatterns(
     mlir::LLVMTypeConverter &converter, RewritePatternSet &patterns,
     Namespace &globals,
     DenseMap<std::pair<Type, ArrayAttr>, mlir::LLVM::GlobalOp>
-        &constAggregateGlobalsMap);
-
-/// Create an HW to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> createConvertHWToLLVMPass();
+        &constAggregateGlobalsMap,
+    std::optional<HWToLLVMArraySpillCache> &spillCacheOpt);
 
 } // namespace circt
 
