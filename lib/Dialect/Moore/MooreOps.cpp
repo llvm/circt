@@ -19,6 +19,7 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 
 using namespace circt;
 using namespace circt::moore;
@@ -1633,6 +1634,104 @@ VTableLoadMethodOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (resFnTy != declFnTy)
     return emitOpError() << "result type " << resFnTy
                          << " does not match method erased ABI " << declFnTy;
+
+  return success();
+}
+
+LogicalResult VTableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *self = getOperation();
+
+  // sym_name's root must be a ClassDeclOp
+  SymbolRefAttr name = getSymNameAttr();
+  if (!name)
+    return emitOpError("requires 'sym_name' SymbolRefAttr");
+
+  // Root symbol must resolve (from the nearest symbol table) to a ClassDeclOp.
+  Operation *rootDef = symbolTable.lookupNearestSymbolFrom(
+      self, SymbolRefAttr::get(name.getRootReference()));
+  if (!rootDef)
+    return emitOpError() << "cannot resolve root class symbol '"
+                         << name.getRootReference() << "' for sym_name "
+                         << name;
+
+  if (!isa<ClassDeclOp>(rootDef))
+    return emitOpError()
+           << "root of sym_name must name a 'moore.class.classdecl', got "
+           << name;
+
+  // All good.
+  return success();
+}
+
+LogicalResult VTableOp::verifyRegions() {
+  // Ensure only allowed ops appear inside.
+  for (Operation &op : getBody().front()) {
+    if (!isa<VTableOp, VTableEntryOp>(op))
+      return emitOpError(
+          "body may only contain 'moore.vtable' or 'moore.vtable_entry' ops");
+  }
+  return mlir::success();
+}
+
+LogicalResult
+VTableEntryOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *self = getOperation();
+
+  // 'target' must exist and resolve from the top-level symbol table of a func
+  // op
+  SymbolRefAttr target = getTargetAttr();
+  func::FuncOp def =
+      symbolTable.lookupNearestSymbolFrom<func::FuncOp>(self, target);
+  if (!def)
+    return emitOpError()
+           << "cannot resolve target symbol to a function operation " << target;
+
+  // VTableEntries may only exist in VTables.
+  if (!isa<VTableOp>(self->getParentOp()))
+    return emitOpError("must be nested directly inside a 'moore.vtable' op");
+
+  Operation *currentOp = self;
+  VTableOp currentVTable;
+  bool defined = false;
+
+  // Walk up the VTable tree and check whether the corresponding classDeclOp
+  // declares a method with the same implementation. Further checks all the way
+  // up the tree if another classdeclop overrides the implementation.
+  // The entry is correct iff the impl matches the most derived classdeclop's
+  // methoddeclop implementing the virtual method.
+  while (auto parentOp = dyn_cast<VTableOp>(currentOp->getParentOp())) {
+    currentOp = parentOp;
+    currentVTable = cast<VTableOp>(currentOp);
+
+    auto classSymName = currentVTable.getSymName();
+    ClassDeclOp parentClassDecl =
+        symbolTable.lookupNearestSymbolFrom<ClassDeclOp>(
+            parentOp, classSymName.getRootReference());
+    assert(parentClassDecl && "VTableOp must point to a classdeclop");
+
+    for (auto method : parentClassDecl.getBody().getOps<ClassMethodDeclOp>()) {
+      // A virtual interface declaration. Ignore.
+      if (!method.getImpl())
+        continue;
+
+      // A matching definition.
+      if (method.getSymName() == getName() && method.getImplAttr() == target)
+        defined = true;
+
+      // All definitions of the same method up the tree must be the same as the
+      // current definition, there is no shadowing.
+      // Hence, if we encounter a methoddeclop that has the same name but a
+      // different implementation that means this vtableentry should point to
+      // the op's implementation - that's an error.
+      else if (method.getSymName() == getName() &&
+               method.getImplAttr() != target && defined)
+        return emitOpError() << "Target " << target
+                             << " should be overridden by " << classSymName;
+    }
+  }
+  if (!defined)
+    return emitOpError()
+           << "Parent class does not point to any implementation!";
 
   return success();
 }

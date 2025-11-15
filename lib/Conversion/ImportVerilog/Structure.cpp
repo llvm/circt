@@ -1589,7 +1589,7 @@ struct ClassDeclVisitor {
       extraParams.push_back(handleTy);
 
       auto funcTy = getFunctionSignature(context, fn, extraParams);
-      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy);
+      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
       return success();
     }
 
@@ -1610,7 +1610,8 @@ struct ClassDeclVisitor {
     // Grab the finalized function type from the lowered func.op.
     FunctionType fnTy = lowering->op.getFunctionType();
     // Emit the method decl into the class body, preserving source order.
-    moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy);
+    moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy,
+                                     SymbolRefAttr::get(lowering->op));
 
     return success();
   }

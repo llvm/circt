@@ -2419,10 +2419,11 @@ def ClassMethodDeclOp
     : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
   let summary = "Declare a class method";
   let arguments = (ins SymbolNameAttr:$sym_name,
-      TypeAttrOf<FunctionType>:$function_type);
+      TypeAttrOf<FunctionType>:$function_type,
+      OptionalAttr<SymbolRefAttr>:$impl);
   let results = (outs);
   let assemblyFormat = [{
-      $sym_name `:` $function_type attr-dict
+      $sym_name (`->` $impl^)? `:` $function_type attr-dict
   }];
 }
 
@@ -2515,6 +2516,45 @@ def VTableLoadMethodOp
   let assemblyFormat =
     "$object `:` $methodSym `of` type($object) `->` type($result) attr-dict";
 }
+
+def VTableOp : MooreOp<"vtable",
+    [NoTerminator, SingleBlock, IsolatedFromAbove,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Virtual dispatch table";
+  let description = [{
+    Lives at module top-level. Contains `moore.vtable_entry` and nested
+    `moore.vtable` ops for base segments. Holds the dispatch targets for every
+    possible virtual method call of a class and its ancestors.
+  }];
+  let arguments = (ins
+    SymbolRefAttr:$sym_name
+  );
+
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+  let hasRegionVerifier = 1;
+}
+
+def VTableEntryOp : MooreOp<"vtable_entry", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "One vtable slot pointing to the selected implementation";
+  let description = [{
+    Each entry references the resolved implementation with a SymbolRefAttr.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$name,
+    SymbolRefAttr:$target
+  );
+
+  let assemblyFormat = [{
+    $name `->` $target attr-dict
+  }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // String Builtins
