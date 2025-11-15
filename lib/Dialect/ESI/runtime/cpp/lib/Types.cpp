@@ -211,6 +211,7 @@ void SIntType::ensureValid(const std::any &obj) const {
 }
 
 MutableBitVector SIntType::serialize(const std::any &obj) const {
+  ensureValid(obj);
   Int ival = getIntLikeFromAny(obj, getWidth());
   if (static_cast<uint64_t>(ival.width()) != getWidth())
     throw std::runtime_error("Int width mismatch for SIntType serialize");
@@ -238,6 +239,7 @@ void UIntType::ensureValid(const std::any &obj) const {
 }
 
 MutableBitVector UIntType::serialize(const std::any &obj) const {
+  ensureValid(obj);
   UInt uval = getUIntLikeFromAny(obj, getWidth());
   if (static_cast<uint64_t>(uval.width()) != getWidth())
     throw std::runtime_error("UInt width mismatch for UIntType serialize");
