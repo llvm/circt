@@ -113,6 +113,12 @@ def type_to_pytype(t) -> ir.Type:
     return esi.BundleType(t)
   if esi.ListType.isinstance(t):
     return esi.ListType(t)
+  if esi.WindowType.isinstance(t):
+    return esi.WindowType(t)
+  if esi.WindowFrameType.isinstance(t):
+    return esi.WindowFrameType(t)
+  if esi.WindowFieldType.isinstance(t):
+    return esi.WindowFieldType(t)
   if rtg.LabelType.isinstance(t):
     return rtg.LabelType(t)
   if rtg.SetType.isinstance(t):
