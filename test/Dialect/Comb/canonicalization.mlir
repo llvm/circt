@@ -1993,8 +1993,8 @@ hw.module @truth_table_identity(in %a: i1, in %b: i1, in %c: i1, out out: i1) {
 hw.module @truth_table_inverted(in %a: i1, in %b: i1, in %c: i1, out out: i1) {
   // Truth table that depends only on %a (inverted)
   // Pattern: [1,1,1,1,0,0,0,0] means output is NOT of first input
-  // CHECK-NEXT: %true = hw.constant true
-  // CHECK-NEXT: [[NOT:%.+]] = comb.xor %a, %true
+  // Should simplify to single-input truth table for negation
+  // CHECK-NEXT: [[NOT:%.+]] = comb.truth_table %a -> [true, false]
   // CHECK-NEXT: hw.output [[NOT]]
   %0 = comb.truth_table %a, %b, %c -> [true, true, true, true, false, false, false, false]
   hw.output %0 : i1
@@ -2013,8 +2013,8 @@ hw.module @truth_table_middle_input_identity(in %a: i1, in %b: i1, in %c: i1, ou
 hw.module @truth_table_middle_input_inverted(in %a: i1, in %b: i1, in %c: i1, out out: i1) {
   // Truth table that depends only on %b (middle input, inverted)
   // Pattern: [1,1,0,0,1,1,0,0] means output is NOT of second input
-  // CHECK-NEXT: %true = hw.constant true
-  // CHECK-NEXT: [[NOT:%.+]] = comb.xor %b, %true
+  // Should simplify to single-input truth table for negation
+  // CHECK-NEXT: [[NOT:%.+]] = comb.truth_table %b -> [true, false]
   // CHECK-NEXT: hw.output [[NOT]]
   %0 = comb.truth_table %a, %b, %c -> [true, true, false, false, true, true, false, false]
   hw.output %0 : i1
@@ -2033,8 +2033,8 @@ hw.module @truth_table_last_input_identity(in %a: i1, in %b: i1, in %c: i1, out 
 hw.module @truth_table_last_input_inverted(in %a: i1, in %b: i1, in %c: i1, out out: i1) {
   // Truth table that depends only on %c (last input, inverted)
   // Pattern: [1,0,1,0,1,0,1,0] means output is NOT of third input
-  // CHECK-NEXT: %true = hw.constant true
-  // CHECK-NEXT: [[NOT:%.+]] = comb.xor %c, %true
+  // Should simplify to single-input truth table for negation
+  // CHECK-NEXT: [[NOT:%.+]] = comb.truth_table %c -> [true, false]
   // CHECK-NEXT: hw.output [[NOT]]
   %0 = comb.truth_table %a, %b, %c -> [true, false, true, false, true, false, true, false]
   hw.output %0 : i1

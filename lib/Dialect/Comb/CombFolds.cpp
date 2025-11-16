@@ -3309,14 +3309,13 @@ LogicalResult TruthTableOp::canonicalize(TruthTableOp op,
   size_t numInputs = inputs.size();
   size_t tableSize = table.size();
 
-  if (numInputs == 0 || tableSize == 0 || tableSize != (1ull << numInputs))
+  // A zero-input or single-input truth table is already in canonical form.
+  if (numInputs <= 1)
     return failure();
 
   // Check if the table can be folded to just a constant.
   bool firstValue = cast<BoolAttr>(table[0]).getValue();
-  bool allSame = llvm::all_of(table, [firstValue](Attribute attr) {
-    return cast<BoolAttr>(attr).getValue() == firstValue;
-  });
+  bool allSame = llvm::all_equal(table);
   if (allSame) {
     auto constOp =
         hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, firstValue));
@@ -3371,10 +3370,17 @@ LogicalResult TruthTableOp::canonicalize(TruthTableOp op,
   size_t idxWhen1 = 1ull << (numInputs - 1 - dependentInput);
   bool isIdentity = cast<BoolAttr>(table[idxWhen1]).getValue();
 
-  // Replace with the input or its negation.
+  // Replace with the input or a simpler truth table for negation.
   Value input = inputs[dependentInput];
-  Value replacement =
-      isIdentity ? input : createOrFoldNot(op.getLoc(), input, rewriter);
-  replaceOpAndCopyNamehint(rewriter, op, replacement);
+  if (isIdentity) {
+    // Identity case: just replace with the input directly.
+    replaceOpAndCopyNamehint(rewriter, op, input);
+  } else {
+    // Inverted case: replace with a single-input truth table for negation.
+    // This avoids introducing comb.xor, which is useful for LUT mapping.
+    replaceOpWithNewOpAndCopyNamehint<TruthTableOp>(
+        rewriter, op, ValueRange{input},
+        rewriter.getBoolArrayAttr({true, false}));
+  }
   return success();
 }
