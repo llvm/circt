@@ -238,6 +238,11 @@ struct Context {
   convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                           Location loc, Value value);
 
+  /// Convert system function calls with arity-2.
+  FailureOr<Value>
+  convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc, Value value1, Value value2);
+
   /// Convert system function calls within properties and assertion with a
   /// single argument.
   FailureOr<Value> convertAssertionSystemCallArity1(

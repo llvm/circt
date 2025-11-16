@@ -1417,6 +1417,7 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     FailureOr<Value> result;
     Value value;
+    Value value2;
 
     // $sformatf() and $sformat look like system tasks, but we handle string
     // formatting differently from expression evaluation, so handle them
@@ -1449,6 +1450,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (!value)
         return {};
       result = context.convertSystemCallArity1(subroutine, loc, value);
+      break;
+
+    case (2):
+      value = context.convertRvalueExpression(*args[0]);
+      value2 = context.convertRvalueExpression(*args[1]);
+      if (!value || !value2)
+        return {};
+      result = context.convertSystemCallArity2(subroutine, loc, value, value2);
       break;
 
     default:
@@ -2512,6 +2521,20 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
           .Case("tolower",
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);
+                })
+          .Default([&]() -> Value { return {}; });
+  return systemCallRes();
+}
+
+FailureOr<Value>
+Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
+                                 Location loc, Value value1, Value value2) {
+  auto systemCallRes =
+      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          .Case("getc",
+                [&]() -> Value {
+                  return moore::StringGetCOp::create(builder, loc, value1,
+                                                     value2);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

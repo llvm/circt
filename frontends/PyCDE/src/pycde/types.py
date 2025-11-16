@@ -933,7 +933,6 @@ class List(Type):
   def is_hw_type(self) -> bool:
     return False
 
-  @property
   def _get_value_class(self):
     from .signals import ListSignal
     return ListSignal

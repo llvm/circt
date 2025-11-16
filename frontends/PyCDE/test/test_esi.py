@@ -9,8 +9,8 @@ from pycde.constructs import Wire
 from pycde.esi import HostMem, MMIO
 from pycde.module import Metadata
 from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
-from pycde.types import (Any, Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, ChannelSignaling, UInt, StructType,
+from pycde.types import (Bits, Bundle, BundledChannel, Channel,
+                         ChannelDirection, ChannelSignaling, List, UInt,
                          ClockType)
 from pycde.testing import unittestmodule
 
@@ -225,6 +225,18 @@ class RecvBundleTest(Module):
   def build(self):
     to_channels = self.b_recv.unpack(resp=self.i1_in)
     self.s1_out = to_channels['req']
+
+
+# CHECK-LABEL:  hw.module @ListTest(in %lst_in : !esi.list<i8>, out lst_out : !esi.list<i8>)
+# CHECK-NEXT:     hw.output %lst_in : !esi.list<i8>
+@unittestmodule()
+class ListTest(Module):
+  lst_in = Input(List(Bits(8)))
+  lst_out = Output(List(Bits(8)))
+
+  @generator
+  def build(self):
+    self.lst_out = self.lst_in
 
 
 # CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)

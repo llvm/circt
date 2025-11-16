@@ -39,6 +39,13 @@ def GetHartIdOp : RTGTestOp<"get_hartid", [Pure]> {
   let hasFolder = 1;
 }
 
+def ImplicitConstraintTestOp : RTGTestOp<"implicit_constraint_op", [
+  DeclareOpInterfaceMethods<ImplicitConstraintOpInterface>,
+]> {
+  let arguments = (ins UnitAttr:$implicitConstraint);
+  let assemblyFormat = "(`implicit_constraint` $implicitConstraint^)? attr-dict";
+}
+
 //===- Instruction Formats -------------------------------------------------===//
 
 class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>

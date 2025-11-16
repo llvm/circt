@@ -2553,5 +2553,14 @@ def StringToLowerOp : StringBuiltin<"tolower"> {
   let assemblyFormat = "$str attr-dict";
 }
 
+def StringGetCOp : StringBuiltin<"getc"> {
+  let summary = "Get a character from a string";
+  let description = [{
+    Returns the character at the specified index in the given string.
+  }];
+  let arguments = (ins StringType:$str, TwoValuedI32:$index);
+  let results = (outs TwoValuedI8:$result);
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
