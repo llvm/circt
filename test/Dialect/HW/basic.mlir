@@ -270,3 +270,9 @@ hw.module @aggregate_const(out o : !hw.array<1x!seq.clock>) {
   %0 = hw.aggregate_constant [#seq<clock_constant high> : !seq.clock] : !hw.array<1x!seq.clock>
   hw.output %0 : !hw.array<1x!seq.clock>
 }
+
+hw.container {
+
+  hw.module @Foo() {}
+
+}
