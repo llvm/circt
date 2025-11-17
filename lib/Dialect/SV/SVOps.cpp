@@ -2034,25 +2034,9 @@ SVVerbatimSourceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-StringAttr SVVerbatimSourceOp::getVerilogModuleNameAttr() {
-  if (auto vName = getVerilogNameAttr()) {
-    return vName;
-  }
-  return (*this)->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
-}
-
 //===----------------------------------------------------------------------===//
 // SVVerbatimModuleOp
 //===----------------------------------------------------------------------===//
-
-StringAttr SVVerbatimModuleOp::getVerilogModuleNameAttr() {
-  if (auto vName = getVerilogNameAttr()) {
-    return vName;
-  }
-  return (*this)->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
-}
 
 SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
   SmallVector<hw::PortInfo> ports;

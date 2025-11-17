@@ -231,23 +231,6 @@ def SVVerbatimSourceOp
 
   let hasCustomAssemblyFormat = 1;
 
-  let extraClassDeclaration = [{
-    StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
-    }
-
-    StringRef getName() {
-      return getNameAttr().getValue();
-    }
-
-    StringRef getVerilogModuleName() {
-      return getVerilogModuleNameAttr().getValue();
-    }
-
-    StringAttr getVerilogModuleNameAttr();
-  }];
-
   let hasVerifier = 1;
 }
 
@@ -304,23 +287,6 @@ def SVVerbatimModuleOp
             parameters, source, verilogName);
     }]>
   ];
-
-  let extraClassDeclaration = [{
-    StringAttr getNameAttr() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
-    }
-
-    StringRef getName() {
-      return getNameAttr().getValue();
-    }
-
-    StringRef getVerilogModuleName() {
-      return getVerilogModuleNameAttr().getValue();
-    }
-
-    StringAttr getVerilogModuleNameAttr();
-  }];
 
   let hasVerifier = 1;
 }
