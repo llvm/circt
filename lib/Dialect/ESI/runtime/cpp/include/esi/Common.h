@@ -44,6 +44,12 @@ struct AppID {
   }
   bool operator!=(const AppID &other) const { return !(*this == other); }
   friend std::ostream &operator<<(std::ostream &os, const AppID &id);
+
+  std::string toString() const {
+    if (idx.has_value())
+      return name + "[" + std::to_string(idx.value()) + "]";
+    return name;
+  }
 };
 bool operator<(const AppID &a, const AppID &b);
 

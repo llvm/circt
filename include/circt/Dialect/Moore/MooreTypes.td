@@ -521,6 +521,13 @@ def TwoValuedI32 : MooreType<CPred<[{
   let builderCall = "IntType::getInt($_builder.getContext(), 32)";
 }
 
+// A 32-bit two-valued integer.
+def TwoValuedI8 : MooreType<CPred<[{
+    moore::isIntType($_self, 8, moore::Domain::TwoValued)
+  }]>, "8-bit two-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getInt($_builder.getContext(), 8)";
+}
+
 // A 32-bit real value.
 def RealF32 : MooreType<CPred<[{
     moore::isRealType($_self, 32)

@@ -12,8 +12,8 @@ emit.file "" {
   // CHECK-NEXT:    .space 8
   rtg.isa.space %idx8
 
-  %rd = rtg.fixed_reg #rtgtest.ra
-  %rs = rtg.fixed_reg #rtgtest.s0
+  %rd = rtg.constant #rtgtest.ra
+  %rs = rtg.constant #rtgtest.s0
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
   %imm5 = rtg.constant #rtg.isa.immediate<5, 31>
   %imm21 = rtg.constant #rtg.isa.immediate<21, 0>

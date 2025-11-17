@@ -26,7 +26,7 @@ hw.module @reg_with_argument_initial(in %clk: !seq.clock, in %in: i32, in %init:
 
 // -----
 
-hw.module @variadic_op(in %input: i32) {
-  // expected-error @below {{variadic operations not are not currently supported}}
-  %and = comb.and %input, %input, %input : i32
+hw.module @nullary_variadic() {
+  // expected-error @below {{variadic operations with no operands are not supported}}
+  "comb.concat"() : () -> (i0)
 }

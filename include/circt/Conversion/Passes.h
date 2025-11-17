@@ -24,6 +24,7 @@
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/CombToSynth.h"
 #include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/ConvertToLLVM.h"
 #include "circt/Conversion/DCToHW.h"
 #include "circt/Conversion/DatapathToComb.h"
 #include "circt/Conversion/DatapathToSMT.h"
@@ -55,6 +56,10 @@
 #include "mlir/Pass/PassRegistry.h"
 
 namespace circt {
+
+// Generate pass declarations.
+#define GEN_PASS_DECL_CONVERTTOLLVM
+#include "circt/Conversion/Passes.h.inc"
 
 // Generate the code for registering conversion passes.
 #define GEN_PASS_REGISTRATION

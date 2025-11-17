@@ -14,12 +14,16 @@
 
 #include "esi/Context.h"
 #include "esi/Accelerator.h"
+#include <format>
+#include <sstream>
 
 using namespace esi;
 
 void Context::registerType(Type *type) {
   if (types.count(type->getID()))
-    throw std::runtime_error("Type already exists in context");
+    throw std::runtime_error(
+        std::format("Type '{}' already registered in context (type is '{}')",
+                    type->getID(), type->toString()));
   types.emplace(type->getID(), std::unique_ptr<Type>(type));
 }
 

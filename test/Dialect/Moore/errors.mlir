@@ -74,7 +74,7 @@ moore.constant b10XZ : !moore.i4
 // -----
 
 %0 = moore.constant 0 : i8
-// expected-error @below {{'moore.yield' op expects parent op 'moore.conditional'}}
+// expected-error @below {{'moore.yield' op expects parent op to be one of 'moore.conditional, moore.global_variable'}}
 moore.yield %0 : i8
 
 // -----
@@ -84,7 +84,7 @@ moore.yield %0 : i8
 %2 = moore.constant 42 : i32
 
 moore.conditional %0 : i1 -> i32 {
-  // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
+  // expected-error @below {{yields '!moore.i8', but parent expects '!moore.i32'}}
   moore.yield %1 : i8
 } {
   moore.yield %2 : i32
@@ -99,7 +99,7 @@ moore.conditional %0 : i1 -> i32 {
 moore.conditional %0 : i1 -> i32 {
   moore.yield %1 : i32
 } {
-  // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
+  // expected-error @below {{yields '!moore.i8', but parent expects '!moore.i32'}}
   moore.yield %2 : i8
 }
 
@@ -152,3 +152,27 @@ moore.struct_inject %0, "b", %1 : struct<{a: i32}>, i32
 %1 = moore.constant 42 : i9001
 // expected-error @below {{op injected value '!moore.i9001' must match struct field type '!moore.i32'}}
 moore.struct_inject %0, "a", %1 : struct<{a: i32}>, i9001
+
+// -----
+
+// expected-error @below {{references unknown symbol @doesNotExist}}
+moore.get_global_variable @doesNotExist : <i42>
+
+// -----
+
+// expected-error @below {{must reference a 'moore.global_variable', but @Foo is a 'func.func'}}
+moore.get_global_variable @Foo : <i42>
+func.func @Foo() { return }
+
+// -----
+
+// expected-error @below {{returns a '!moore.i42' reference, but @Foo is of type '!moore.i9001'}}
+moore.get_global_variable @Foo : <i42>
+moore.global_variable @Foo : !moore.i9001
+
+// -----
+
+// expected-error @below {{must have a 'moore.yield' terminator}}
+moore.global_variable @Foo : !moore.i42 init {
+  llvm.unreachable
+}

@@ -21,6 +21,7 @@ add_circt_dialect_library(CIRCTMoore
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRMemorySlotInterfaces
+  MLIRCallInterfaces
 )
 
 add_dependencies(circt-headers MLIRMooreIncGen)

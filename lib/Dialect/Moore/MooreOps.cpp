@@ -537,6 +537,54 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// GlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalVariableOp::verifyRegions() {
+  if (auto *block = getInitBlock()) {
+    auto &terminator = block->back();
+    if (!isa<YieldOp>(terminator))
+      return emitOpError() << "must have a 'moore.yield' terminator";
+  }
+  return success();
+}
+
+Block *GlobalVariableOp::getInitBlock() {
+  if (getInitRegion().empty())
+    return nullptr;
+  return &getInitRegion().front();
+}
+
+//===----------------------------------------------------------------------===//
+// GetGlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GetGlobalVariableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Resolve the target symbol.
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  // Check that the symbol is a global variable.
+  auto var = dyn_cast<GlobalVariableOp>(symbol);
+  if (!var)
+    return emitOpError() << "must reference a 'moore.global_variable', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  // Check that the types match.
+  auto expType = var.getType();
+  auto actType = getType().getNestedType();
+  if (expType != actType)
+    return emitOpError() << "returns a " << actType << " reference, but "
+                         << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -1027,22 +1075,21 @@ LogicalResult UnionExtractRefOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult YieldOp::verify() {
-  // Check that YieldOp's parent operation is ConditionalOp.
-  auto cond = dyn_cast<ConditionalOp>(*(*this).getParentOp());
-  if (!cond) {
-    emitOpError("must have a conditional parent");
-    return failure();
+  Type expType;
+  auto *parentOp = getOperation()->getParentOp();
+  if (auto cond = dyn_cast<ConditionalOp>(parentOp)) {
+    expType = cond.getType();
+  } else if (auto varOp = dyn_cast<GlobalVariableOp>(parentOp)) {
+    expType = varOp.getType();
+  } else {
+    llvm_unreachable("all in ParentOneOf handled");
   }
 
-  // Check that the operand matches the parent operation's result.
-  auto condType = cond.getType();
-  auto yieldType = getOperand().getType();
-  if (condType != yieldType) {
-    emitOpError("yield type must match conditional. Expected ")
-        << condType << ", but got " << yieldType << ".";
-    return failure();
+  auto actType = getOperand().getType();
+  if (expType != actType) {
+    return emitOpError() << "yields " << actType << ", but parent expects "
+                         << expType;
   }
-
   return success();
 }
 
@@ -1393,8 +1440,9 @@ LogicalResult ClassDeclOp::verify() {
   auto &block = body.front();
   for (mlir::Operation &op : block) {
 
-    // allow only property and method decls
-    if (llvm::isa<circt::moore::ClassPropertyDeclOp>(&op))
+    // allow only property and method decls and terminator
+    if (llvm::isa<circt::moore::ClassPropertyDeclOp,
+                  circt::moore::ClassMethodDeclOp>(&op))
       continue;
 
     return emitOpError()
@@ -1483,6 +1531,7 @@ ClassUpcastOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                        << dstTy.getClassSym()
                        << " (destination is not a base class)";
 }
+
 LogicalResult
 ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // The operand is constrained to ClassHandleType in ODS; unwrap it.
@@ -1532,6 +1581,58 @@ ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("result element type (")
            << resRefTy.getNestedType() << ") does not match field type ("
            << expectedElemTy << ")";
+
+  return success();
+}
+
+LogicalResult
+VTableLoadMethodOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *op = getOperation();
+
+  auto object = getObject();
+  auto implSym = object.getType().getClassSym();
+
+  // Check that classdecl of class handle exists
+  Operation *implOp = symbolTable.lookupNearestSymbolFrom(op, implSym);
+  if (!implOp)
+    return emitOpError() << "implementing class " << implSym << " not found";
+  auto implClass = cast<moore::ClassDeclOp>(implOp);
+
+  StringAttr methodName = getMethodSymAttr().getLeafReference();
+  if (!methodName || methodName.getValue().empty())
+    return emitOpError() << "empty method name";
+
+  moore::ClassDeclOp cursor = implClass;
+  Operation *methodDeclOp = nullptr;
+
+  // Find method in class decl or parents' class decl
+  while (cursor && !methodDeclOp) {
+    methodDeclOp = symbolTable.lookupSymbolIn(cursor, methodName);
+    if (methodDeclOp)
+      break;
+    SymbolRefAttr baseSym = cursor.getBaseAttr();
+    if (!baseSym)
+      break;
+    Operation *baseOp = symbolTable.lookupNearestSymbolFrom(op, baseSym);
+    cursor = baseOp ? cast<moore::ClassDeclOp>(baseOp) : moore::ClassDeclOp();
+  }
+
+  if (!methodDeclOp)
+    return emitOpError() << "no method `" << methodName << "` found in "
+                         << implClass.getSymName() << " or its bases";
+
+  // Make sure method decl is a ClassMethodDeclOp
+  auto methodDecl = dyn_cast<moore::ClassMethodDeclOp>(methodDeclOp);
+  if (!methodDecl)
+    return emitOpError() << "`" << methodName
+                         << "` is not a method declaration";
+
+  // Make sure method signature matches
+  auto resFnTy = cast<FunctionType>(getResult().getType());
+  auto declFnTy = cast<FunctionType>(methodDecl.getFunctionType());
+  if (resFnTy != declFnTy)
+    return emitOpError() << "result type " << resFnTy
+                         << " does not match method erased ABI " << declFnTy;
 
   return success();
 }

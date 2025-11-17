@@ -471,18 +471,35 @@ func.func @TimeConversion(%arg0: !moore.time, %arg1: !moore.l64) {
 
 // CHECK-LABEL: func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42)
 func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42) {
-  // CHECK: %0 = moore.real_to_int %arg0 : f32 -> i42
+  // CHECK: moore.real_to_int %arg0 : f32 -> i42
   %0 = moore.real_to_int %arg0 : f32 -> i42
-  // CHECK: %1 = moore.int_to_real %arg1 : i42 -> f32
+  // CHECK: moore.int_to_real %arg1 : i42 -> f32
   %1 = moore.int_to_real %arg1 : i42 -> f32
   return
 }
 
 // CHECK-LABEL: func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42)
 func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42) {
-  // CHECK: %0 = moore.real_to_int %arg0 : f64 -> i42
+  // CHECK: moore.real_to_int %arg0 : f64 -> i42
   %0 = moore.real_to_int %arg0 : f64 -> i42
-  // CHECK: %1 = moore.int_to_real %arg1 : i42 -> f64
+  // CHECK: moore.int_to_real %arg1 : i42 -> f64
   %1 = moore.int_to_real %arg1 : i42 -> f64
   return
 }
+
+// CHECK-LABEL: moore.global_variable @GlobalVar1 : !moore.i42
+moore.global_variable @GlobalVar1 : !moore.i42
+
+// CHECK: moore.get_global_variable @GlobalVar1 : <i42>
+moore.get_global_variable @GlobalVar1 : <i42>
+
+// CHECK-LABEL: moore.global_variable @GlobalVar2 : !moore.i42
+moore.global_variable @GlobalVar2 : !moore.i42 init {
+  // CHECK-NEXT: moore.constant
+  %0 = moore.constant 9001 : i42
+  // CHECK-NEXT: moore.yield
+  moore.yield %0 : !moore.i42
+}
+
+// CHECK: moore.get_global_variable @GlobalVar2 : <i42>
+moore.get_global_variable @GlobalVar2 : <i42>

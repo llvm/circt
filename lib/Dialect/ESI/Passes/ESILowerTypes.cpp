@@ -56,17 +56,14 @@ private:
                                          ValueRange inputs, Location loc) {
     if (inputs.size() != 1)
       return mlir::Value();
-    auto wrap = WrapWindow::create(b, loc, resultType, inputs[0]);
-    return wrap.getWindow();
+    return b.createOrFold<WrapWindow>(loc, resultType, inputs[0]);
   }
 
-  static mlir::Value unwrapMaterialization(OpBuilder &b,
-                                           hw::UnionType resultType,
+  static mlir::Value unwrapMaterialization(OpBuilder &b, Type resultType,
                                            ValueRange inputs, Location loc) {
     if (inputs.size() != 1 || !isa<WindowType>(inputs[0].getType()))
       return mlir::Value();
-    auto unwrap = UnwrapWindow::create(b, loc, resultType, inputs[0]);
-    return unwrap.getFrame();
+    return b.createOrFold<UnwrapWindow>(loc, resultType, inputs[0]);
   }
 };
 } // namespace
@@ -101,6 +98,20 @@ void ESILowerTypesPass::runOnOperation() {
   patterns.add<TypeConversionPattern>(types, &getContext());
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+
+  // Now do a canonicalization pass to clean up any unnecessary wrap-unwrap
+  // pairs.
+  mlir::ConversionConfig config;
+  config.foldingMode = mlir::DialectConversionFoldingMode::BeforePatterns;
+  ConversionTarget partialCanonicalizedTarget(getContext());
+  RewritePatternSet partialPatterns(&getContext());
+  partialCanonicalizedTarget.addIllegalOp<WrapWindow, UnwrapWindow>();
+  WrapWindow::getCanonicalizationPatterns(partialPatterns, &getContext());
+  UnwrapWindow::getCanonicalizationPatterns(partialPatterns, &getContext());
+  if (failed(mlir::applyPartialConversion(getOperation(),
+                                          partialCanonicalizedTarget,
+                                          std::move(partialPatterns), config)))
     signalPassFailure();
 }
 

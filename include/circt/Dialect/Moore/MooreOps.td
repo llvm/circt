@@ -20,6 +20,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -322,6 +323,50 @@ def ReadOp : MooreOp<"read", [
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
   }];
+}
+
+def GlobalVariableOp : MooreOp<"global_variable", [
+  IsolatedFromAbove,
+  NoRegionArguments,
+  SingleBlock,
+  Symbol,
+]> {
+  let summary = "A global variable declaration";
+  let description = [{
+    Defines a global or package variable.
+
+    See IEEE 1800-2017 § 6.8 "Variable declarations".
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<UnpackedType>:$type
+  );
+  let regions = (region MaxSizedRegion<1>:$initRegion);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` $type (`init` $initRegion^)?
+  }];
+  let hasRegionVerifier = 1;
+  let extraClassDeclaration = [{
+    Block *getInitBlock();
+  }];
+}
+
+def GetGlobalVariableOp : MooreOp<"get_global_variable", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  Pure,
+]> {
+  let summary = "Get a reference to a global variable";
+  let arguments = (ins FlatSymbolRefAttr:$global_name);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $global_name attr-dict `:` type($result)
+  }];
+  let builders = [
+    OpBuilder<(ins "moore::GlobalVariableOp":$global), [{
+      build($_builder, $_state,
+        RefType::get(global.getType()), global.getSymName());
+    }]>,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -1777,7 +1822,7 @@ def ConditionalOp : MooreOp<"conditional",[
 def YieldOp : MooreOp<"yield", [
   Pure,
   Terminator,
-  HasParent<"ConditionalOp">
+  ParentOneOf<["ConditionalOp", "GlobalVariableOp"]>,
 ]> {
   let summary = "conditional yield and termination operation";
   let description = [{
@@ -2369,6 +2414,18 @@ def ClassPropertyDeclOp
   }];
 }
 
+
+def ClassMethodDeclOp
+    : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
+  let summary = "Declare a class method";
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      TypeAttrOf<FunctionType>:$function_type);
+  let results = (outs);
+  let assemblyFormat = [{
+      $sym_name `:` $function_type attr-dict
+  }];
+}
+
 def ClassDeclOp
     : MooreOp<"class.classdecl", [Symbol, SymbolTable, IsolatedFromAbove,
     NoTerminator, SingleBlock]> {
@@ -2434,6 +2491,76 @@ def ClassUpcastOp
   let results = (outs ClassHandleType:$result);
   let assemblyFormat =
       "$instance `:` type($instance) `to` type($result) attr-dict";
+}
+
+def VTableLoadMethodOp
+    : MooreOp<"vtable.load_method", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Load a virtual method entry from a vtable.";
+  let description = [{
+    Loads a virtual method function pointer from a vtable.
+    The verifier resolves the symbols in the symbol table and ensures that the
+    result function type matches the erased ABI.
+  }];
+
+  let arguments = (ins
+    ClassHandleType:$object,
+    SymbolRefAttr:$methodSym
+  );
+
+  let results = (outs
+      Type<CPred<"::llvm::isa<mlir::FunctionType>($_self)">>:$result
+  );
+
+  let assemblyFormat =
+    "$object `:` $methodSym `of` type($object) `->` type($result) attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// String Builtins
+//===----------------------------------------------------------------------===//
+
+class StringBuiltin<string mnemonic, list<Trait> traits = []> :
+    MooreOp<"string." # mnemonic, traits>;
+
+def StringLenOp : StringBuiltin<"len"> {
+  let summary = "Get the length of a string";
+  let description = [{
+    Returns the number of characters in the given string.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringToUpperOp : StringBuiltin<"toupper"> {
+  let summary = "Convert a string to uppercase";
+  let description = [{
+    Converts all characters in the given string to uppercase.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringToLowerOp : StringBuiltin<"tolower"> {
+  let summary = "Convert a string to lowercase";
+  let description = [{
+    Converts all characters in the given string to lowercase.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringGetCOp : StringBuiltin<"getc"> {
+  let summary = "Get a character from a string";
+  let description = [{
+    Returns the character at the specified index in the given string.
+  }];
+  let arguments = (ins StringType:$str, TwoValuedI32:$index);
+  let results = (outs TwoValuedI8:$result);
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

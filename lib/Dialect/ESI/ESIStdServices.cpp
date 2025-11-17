@@ -197,7 +197,7 @@ void TelemetryServiceDeclOp::getPortList(
       ChannelBundleType::get(
           ctxt,
           {BundledChannel{StringAttr::get(ctxt, "get"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 1))},
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 0))},
            BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
                           ChannelType::get(ctxt, AnyType::get(ctxt))}},
           /*resettable=*/UnitAttr())});

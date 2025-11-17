@@ -401,7 +401,7 @@ def ESIWindowType : ESI_Type<"Window"> {
   let summary = "a data window";
   let description = [{
     A 'data window' allows designers to break up large messages into multiple
-    frames (aka phits) spread across multiple cycles. Windows are specified in
+    frames (aka flits) spread across multiple cycles. Windows are specified in
     terms of a mapping of struct fields to frames. The width of a window is the
     maximum frame size + the union tag (log2(#frames)).
 
@@ -413,7 +413,20 @@ def ESIWindowType : ESI_Type<"Window"> {
     - Array fields whose array length is not evenly divisible by 'numItems' will
     have an implicit frame inserted directly after containing the leftover array
     items.
-    - Array fields with an array length MUST be in their own frame.
+    - A frame which contains an array with a 'numItems' specification CANNOT
+    contain another array with 'numItems' specified or a list field.
+    - Likewise, a frame which contains a list field CANNOT contain another list
+    field or an array with 'numItems' specified.
+
+    When either a list or an array with 'numItems' is specified in a frame, all
+    the other fields in the frame are assumed to be constant over the length of
+    the list/array transmission. This allows for efficient hardware
+    implementations where the constant fields can be held in registers while the
+    list/array segments stream through. In general, when a struct field appears
+    in multiple frames, it must be constant throughout the message transmission.
+
+    Typically lowered to a union of structs. There is a special case of one
+    frame with no name. In this case, it is lowered to just the struct itself.
   }];
 
   let mnemonic = "window";
@@ -425,7 +438,7 @@ def ESIWindowType : ESI_Type<"Window"> {
 
   let extraClassDeclaration = [{
     /// Get the union which realizes this window during lowering.
-    circt::hw::UnionType getLoweredType() const;
+    Type getLoweredType() const;
   }];
 }
 
@@ -448,6 +461,17 @@ def WindowFieldType : ESI_Type<"WindowField"> {
   let summary = "a field-in-frame specifier";
   let description = [{
     Specify that a field should appear within the enclosing frame.
+    
+    'numItems' indicates how many items of the field should appear in the frame.
+    Only applicable to array or list fields. If not specified:
+    - For arrays, the entire array will appear in the frame.
+    - For lists, it is assumed to be 1.
+
+    For lists, a 'last' field to the struct to indicate that the end of the list is this frame.
+    If 'numItems' is specified for a list, a '<fieldName>_size' (representing
+    the number of valid items in the array) field will be added to the struct.
+    When `<fieldName>_size` is less than 'numItems', `last` MUST be true meaning
+    that all frames must be full except for the last one.
   }];
   let mnemonic = "window.field";
 
@@ -463,10 +487,11 @@ def WindowFieldType : ESI_Type<"WindowField"> {
 def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
   let summary = "wrap a union into a data window";
 
-  let arguments = (ins UnionType:$frame);
+  let arguments = (ins AnyType:$frame);
   let results = (outs ESIWindowType:$window);
   let hasVerifier = 1;
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{
      $frame attr-dict `:` custom<InferWindowRet>(type($frame), type($window))
@@ -480,7 +505,7 @@ def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
   let summary = "unwrap a data window into a union";
 
   let arguments = (ins ESIWindowType:$window);
-  let results = (outs UnionType:$frame);
+  let results = (outs AnyType:$frame);
   let hasFolder = 1;
 
   let assemblyFormat = [{

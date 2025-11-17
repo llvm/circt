@@ -44,7 +44,7 @@ void RTGDialect::initialize() {
 /// constant value. Otherwise, it should return null on failure.
 Operation *RTGDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
-  if (auto attr = dyn_cast<ImmediateAttr>(value))
+  if (auto attr = dyn_cast<TypedAttr>(value))
     if (type == attr.getType())
       return ConstantOp::create(builder, loc, attr);
 

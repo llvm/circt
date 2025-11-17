@@ -10,6 +10,8 @@ from ..ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
 from ._sv_ops_gen import *
 from ._sv_ops_gen import _Dialect
 
+from typing import List
+
 
 @_ods_cext.register_operation(_Dialect, replace=True)
 class IfDefOp(IfDefOp):

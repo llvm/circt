@@ -18,6 +18,7 @@ add_circt_library(CIRCTTransforms
   CIRCTOpCountAnalysis
   MLIRArithDialect
   MLIRControlFlowDialect
+  MLIRControlFlowTransforms
   MLIRFuncDialect
   MLIRIR
   MLIRMemRefDialect

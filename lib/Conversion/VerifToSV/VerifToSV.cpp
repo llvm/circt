@@ -100,17 +100,17 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
     // Create the `always` block that sets the register to 1 as soon as the
     // reset is initiated. For async resets this happens at the reset's posedge;
     // for sync resets this happens on the clock's posedge if the reset is set.
-    Value triggerOn = op.getAsync() ? reset : clock;
-    sv::AlwaysOp::create(
-        rewriter, op.getLoc(), sv::EventControl::AtPosEdge, triggerOn, [&] {
-          auto assignOne = [&] {
-            sv::PAssignOp::create(rewriter, op.getLoc(), reg, constOne);
-          };
-          if (op.getAsync())
-            assignOne();
-          else
-            sv::IfOp::create(rewriter, op.getLoc(), reset, assignOne);
-        });
+    SmallVector<sv::EventControl, 2> eventControl{sv::EventControl::AtPosEdge};
+    SmallVector<Value, 2> triggerOn{clock};
+    if (op.getAsync()) {
+      eventControl.push_back(sv::EventControl::AtPosEdge);
+      triggerOn.push_back(reset);
+    }
+    sv::AlwaysOp::create(rewriter, op.getLoc(), eventControl, triggerOn, [&] {
+      sv::IfOp::create(rewriter, op.getLoc(), reset, [&] {
+        sv::PAssignOp::create(rewriter, op.getLoc(), reg, constOne);
+      });
+    });
 
     // Derive the actual result value:
     //   hasBeenReset = (hasBeenResetReg === 1) && (reset === 0);

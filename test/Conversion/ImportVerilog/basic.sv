@@ -3681,3 +3681,55 @@ function void testRealOps;
     test = c || d;
 
 endfunction // testStrLiteralReturn
+
+// CHECK-LABEL:  moore.module @RejectInnerCapture(in %u : !moore.i1, out v : !moore.i1) {
+// CHECK:    [[UVAR:%.*]] = moore.variable name "u" : <i1>
+// CHECK:    [[VVAR:%.*]] = moore.variable : <i1>
+// CHECK:    [[READU:%.*]] = moore.read [[UVAR]] : <i1>
+// CHECK:    [[CALLBAR:%.*]] = func.call @bar([[READU]]) : (!moore.i1) -> !moore.i1
+// CHECK:    moore.assign [[VVAR]], [[CALLBAR]] : i1
+// CHECK:    moore.assign [[UVAR]], %u : i1
+// CHECK:    [[READV:%.*]] = moore.read [[VVAR]] : <i1>
+// CHECK:    moore.output [[READV]] : !moore.i1
+// CHECK:  }
+// CHECK:  func.func private @bar(%arg0: !moore.i1) -> !moore.i1 {
+// CHECK:    [[BVAR:%.*]] = moore.variable : <i1>
+// CHECK:    [[CALLFOO:%.*]] = call @foo(%arg0) : (!moore.i1) -> !moore.i1
+// CHECK:    moore.blocking_assign [[BVAR]], [[CALLFOO]] : i1
+// CHECK:    [[READB:%.*]] = moore.read [[BVAR]] : <i1>
+// CHECK:    return [[READB]] : !moore.i1
+// CHECK:  }
+// CHECK:  func.func private @foo(%arg0: !moore.i1) -> !moore.i1 {
+// CHECK:    [[FVAR:%.*]] = moore.variable : <i1>
+// CHECK:    moore.blocking_assign [[FVAR]], %arg0 : i1
+// CHECK:    [[READF:%.*]] = moore.read [[FVAR]] : <i1>
+// CHECK:    return [[READF]] : !moore.i1
+// CHECK:  }
+
+module RejectInnerCapture(input bit u, output bit v);
+  assign v = bar(u);
+  function automatic bit bar(input bit b);
+    bar = foo(b);
+  endfunction
+  function automatic bit foo(input bit a);
+    foo = a;
+  endfunction
+endmodule
+
+// CHECK-LABEL: moore.global_variable @rootGlobal1 : !moore.i42
+bit [41:0] rootGlobal1;
+// CHECK-LABEL: moore.global_variable @rootGlobal2 : !moore.i42 init {
+// CHECK-NEXT: [[TMP1:%.+]] = moore.get_global_variable @"PackageGlobal::packageGlobal2" : <i42>
+// CHECK-NEXT: [[TMP2:%.+]] = moore.read [[TMP1]] : <i42>
+// CHECK-NEXT: moore.yield [[TMP2]] : i42
+bit [41:0] rootGlobal2 = PackageGlobal::packageGlobal2;
+
+package PackageGlobal;
+  // CHECK-LABEL: moore.global_variable @"PackageGlobal::packageGlobal1" : !moore.i42
+  bit [41:0] packageGlobal1;
+  // CHECK-LABEL: moore.global_variable @"PackageGlobal::packageGlobal2" : !moore.i42 init {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.get_global_variable @"PackageGlobal::packageGlobal1" : <i42>
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.read [[TMP1]] : <i42>
+  // CHECK-NEXT: moore.yield [[TMP2]] : i42
+  bit [41:0] packageGlobal2 = packageGlobal1;
+endpackage

@@ -9,12 +9,12 @@ rtg.target @target : !rtg.dict<mem_blk: !rtg.isa.memory_block<32>> {
 // CHECK-LABEL: rtg.test @test
 rtg.test @test(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) target @target {
   // CHECK: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
-  // CHECK: [[REG:%.+]] = rtg.fixed_reg
+  // CHECK: [[REG:%.+]] = rtg.constant
   // CHECK: rtgtest.rv32i.la [[REG]], [[IMM0]] : !rtg.isa.immediate<32>
   %idx4 = index.constant 4
   %idx7 = index.constant 7
   %0 = rtg.isa.memory_alloc %mem_blk, %idx7, %idx4 : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 
   // CHECK: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<32, 8>
@@ -40,7 +40,7 @@ rtg.test @test_missing_block(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) targ
   %mem_block_unknown = func.call @passthrough(%mem_blk) : (!rtg.isa.memory_block<32>) -> !rtg.isa.memory_block<32>
   // expected-error @below {{memory block not found}}
   %0 = rtg.isa.memory_alloc %mem_block_unknown, %idx7, %idx4 : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 }
 
@@ -61,7 +61,7 @@ rtg.test @test_unknown_size(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) targe
   %idx4 = index.constant 4
   // expected-error @below {{could not determine memory allocation size}}
   %0 = rtg.isa.memory_alloc %mem_blk, %unknown, %idx4 : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 }
 
@@ -82,7 +82,7 @@ rtg.test @test_unknown_align(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) targ
   %unknown = func.call @const() : () -> index
   // expected-error @below {{could not determine memory allocation alignment}}
   %0 = rtg.isa.memory_alloc %mem_blk, %idx7, %unknown : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 }
 
@@ -98,7 +98,7 @@ rtg.test @test_zero_size(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) target @
   %idx4 = index.constant 4
   // expected-error @below {{memory allocation size must be greater than zero (was 0)}}
   %0 = rtg.isa.memory_alloc %mem_blk, %idx0, %idx4 : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 }
 
@@ -114,7 +114,7 @@ rtg.test @test_non_pow2_align(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) tar
   %idx3 = index.constant 3
   // expected-error @below {{memory allocation alignment must be a power of two (was 3)}}
   %0 = rtg.isa.memory_alloc %mem_blk, %idx7, %idx3 : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 }
 
@@ -130,7 +130,7 @@ rtg.test @test_exceed_size(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) target
   %idx4 = index.constant 4
   // expected-error @below {{memory block not large enough to fit all allocations}}
   %0 = rtg.isa.memory_alloc %mem_blk, %idx16, %idx4 : !rtg.isa.memory_block<32>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
 }
 
@@ -146,7 +146,7 @@ rtg.test @test_truncate_error(mem_blk = %mem_blk: !rtg.isa.memory_block<8>) targ
   %idx4 = index.constant 4
   // expected-error @below {{cannot truncate APInt because value is too big to fit}}
   %0 = rtg.isa.memory_alloc %mem_blk, %idx256, %idx4 : !rtg.isa.memory_block<8>
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<8>
 }
 
@@ -168,7 +168,7 @@ rtg.test @test_entry_matching(
 ) target @target_multiple_entries {
   %idx8 = index.constant 8
   %idx4 = index.constant 4
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
 
   // CHECK: [[MEM_A:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
   %0 = rtg.isa.memory_alloc %mem_a, %idx8, %idx4 : !rtg.isa.memory_block<32>

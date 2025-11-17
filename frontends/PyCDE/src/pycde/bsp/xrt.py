@@ -279,6 +279,10 @@ def XrtBSP(user_module):
       ports.s_axi_control_WREADY = wready
 
       user_module(clk=clk, rst=rst)
+      esi.TelemetryMMIO(esi.Telemetry,
+                        appid=esi.AppID("__telemetry"),
+                        clk=clk,
+                        rst=rst)
 
       data = Wire(Channel(esi.MMIODataType))
       rw_mux = MMIOAxiReadWriteMux(clk=clk,

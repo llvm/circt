@@ -77,6 +77,8 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
 
   auto fields = structInto.getElements();
   for (auto frame : frames) {
+    bool encounteredArrayOrListWithNumItems = false;
+
     // Efficiently look up fields in the frame.
     DenseMap<StringAttr, WindowFieldType> frameFields;
     for (auto field : frame.getMembers())
@@ -94,20 +96,32 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
       if (f == frameFields.end())
         continue;
 
+      // If we encounter an array or list field, no subsequent fields can be
+      // arrays or lists.
+      bool isArrayOrListWithNumItems =
+          hw::type_isa<hw::ArrayType, esi::ListType>(field.type) &&
+          f->getSecond().getNumItems() > 0;
+      if (isArrayOrListWithNumItems) {
+        if (encounteredArrayOrListWithNumItems)
+          return emitError()
+                 << "cannot have two array or list fields with num items (in "
+                 << field.name << ")";
+        encounteredArrayOrListWithNumItems = true;
+      }
+
       // If 'numItems' is specified, gotta run more checks.
       uint64_t numItems = f->getSecond().getNumItems();
       if (numItems > 0) {
-        auto arrField = hw::type_dyn_cast<hw::ArrayType>(field.type);
-        if (!arrField)
-          return emitError() << "cannot specify num items on non-array field "
-                             << field.name;
-        if (numItems > arrField.getNumElements())
-          return emitError() << "num items is larger than array size in field "
-                             << field.name;
-        if (frame.getMembers().size() != 1)
-          return emitError()
-                 << "array with size specified must be in their own frame (in "
-                 << field.name << ")";
+        if (auto arrField = hw::type_dyn_cast<hw::ArrayType>(field.type)) {
+          if (numItems > arrField.getNumElements())
+            return emitError()
+                   << "num items is larger than array size in field "
+                   << field.name;
+        } else if (!hw::type_isa<esi::ListType>(field.type)) {
+          return emitError() << "specification of num items only allowed on "
+                                "array or list fields (in "
+                             << field.name << ")";
+        }
       }
       frameFields.erase(f);
     }
@@ -122,12 +136,21 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-hw::UnionType WindowType::getLoweredType() const {
+Type WindowType::getLoweredType() const {
   // Assemble a fast lookup of struct fields to types.
   auto into = hw::type_cast<hw::StructType>(getInto());
   SmallDenseMap<StringAttr, Type> intoFields;
   for (hw::StructType::FieldInfo field : into.getElements())
     intoFields[field.name] = field.type;
+
+  auto getInnerTypeOrSelf = [&](Type t) {
+    return TypeSwitch<Type, Type>(t)
+        .Case<hw::ArrayType>(
+            [](hw::ArrayType arr) { return arr.getElementType(); })
+        .Case<esi::ListType>(
+            [](esi::ListType list) { return list.getElementType(); })
+        .Default([&](Type t) { return t; });
+  };
 
   // Build the union, frame by frame
   SmallVector<hw::UnionType::FieldInfo, 4> unionFields;
@@ -138,40 +161,76 @@ hw::UnionType WindowType::getLoweredType() const {
     for (WindowFieldType field : frame.getMembers()) {
       auto fieldTypeIter = intoFields.find(field.getFieldName());
       assert(fieldTypeIter != intoFields.end());
+      auto fieldType = fieldTypeIter->getSecond();
 
       // If the number of items isn't specified, just use the type.
       if (field.getNumItems() == 0) {
-        fields.push_back({field.getFieldName(), fieldTypeIter->getSecond()});
+        // Directly use the type from the struct unless it's an array or list,
+        // in which case we want the inner type.
+        fields.push_back({field.getFieldName(), getInnerTypeOrSelf(fieldType)});
+
+        if (hw::type_isa<esi::ListType>(fieldType)) {
+          // Lists need a 'last' signal to indicate the end of the list.
+          fields.push_back({StringAttr::get(getContext(), "last"),
+                            IntegerType::get(getContext(), 1)});
+        }
       } else {
-        // If the number of items is specified, we can assume that it's an array
-        // type.
-        auto array = hw::type_cast<hw::ArrayType>(fieldTypeIter->getSecond());
-        assert(fields.empty()); // Checked by the validator.
+        if (auto array =
+                hw::type_dyn_cast<hw::ArrayType>(fieldTypeIter->getSecond())) {
+          assert(fields.empty()); // Checked by the validator.
 
-        // The first union entry should be an array of length numItems.
-        fields.push_back(
-            {field.getFieldName(),
-             hw::ArrayType::get(array.getElementType(), field.getNumItems())});
-        unionFields.push_back(
-            {frame.getName(), hw::StructType::get(getContext(), fields), 0});
-        fields.clear();
+          // The first union entry should be an array of length numItems.
+          fields.push_back(
+              {field.getFieldName(), hw::ArrayType::get(array.getElementType(),
+                                                        field.getNumItems())});
+          unionFields.push_back(
+              {frame.getName(), hw::StructType::get(getContext(), fields), 0});
+          fields.clear();
 
-        // If the array size is not a multiple of numItems, we need another
-        // frame for the left overs.
-        size_t leftOver = array.getNumElements() % field.getNumItems();
-        if (leftOver) {
+          // If the array size is not a multiple of numItems, we need another
+          // frame for the left overs.
+          size_t leftOver = array.getNumElements() % field.getNumItems();
+          if (leftOver) {
+            fields.push_back(
+                {field.getFieldName(),
+                 hw::ArrayType::get(array.getElementType(), leftOver)});
+
+            unionFields.push_back(
+                {StringAttr::get(getContext(), Twine(frame.getName().getValue(),
+                                                     "_leftOver")),
+                 hw::StructType::get(getContext(), fields), 0});
+          }
+        } else if (auto list = hw::type_cast<esi::ListType>(
+                       fieldTypeIter->getSecond())) {
+          assert(fields.empty()); // Checked by the validator.
+
+          // The first union entry should be a list of length numItems.
           fields.push_back(
               {field.getFieldName(),
-               hw::ArrayType::get(array.getElementType(), leftOver)});
-
-          unionFields.push_back(
+               hw::ArrayType::get(list.getElementType(), field.getNumItems())});
+          // Next needs to be the number of valid items in the array. Should be
+          // clog2(numItems) in width.
+          fields.push_back(
               {StringAttr::get(getContext(),
-                               Twine(frame.getName().getValue(), "_leftOver")),
-               hw::StructType::get(getContext(), fields), 0});
-          fields.clear();
+                               Twine(field.getFieldName().getValue(), "_size")),
+               IntegerType::get(getContext(),
+                                llvm::Log2_64_Ceil(field.getNumItems()))});
+          // Lists need a 'last' signal to indicate the end of the list.
+          fields.push_back({StringAttr::get(getContext(), "last"),
+                            IntegerType::get(getContext(), 1)});
+          unionFields.push_back(
+              {frame.getName(), hw::StructType::get(getContext(), fields), 0});
+        } else {
+          llvm_unreachable("numItems specified on non-array/list field");
         }
+        fields.clear();
       }
     }
+
+    // Special case: if we have one data frame and it doesn't have a name, don't
+    // use a union.
+    if (getFrames().size() == 1 && frame.getName().getValue().empty())
+      return hw::StructType::get(getContext(), fields);
 
     if (!fields.empty())
       unionFields.push_back(

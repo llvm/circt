@@ -1,16 +1,14 @@
 // RUN: arcilator %s --emit-mlir | FileCheck %s
 
-module attributes { dlti.dl_spec = #dlti.dl_spec<
-  #dlti.dl_entry<index, 16>
-> } {
+module {
   hw.module @id(in %i: i8, in %j: i8, out o: i8) {
     hw.output %i : i8
   }
 
-  // CHECK-DAG: llvm.mlir.global internal constant @[[format_str:.*]]("result = %zx\0A\00")
-  // CHECK-DAG: llvm.mlir.global internal constant @[[format_str2:.*]]("result2 = %zx\0A\00")
-  // CHECK-DAG: llvm.mlir.global internal constant @[[format_str_trunc:.*]]("result = (truncated) %zx\0A\00")
 
+  // CHECK-DAG: llvm.mlir.global internal constant @[[format_str2:.*]]("result2 = %02llx\0A\00")
+  // CHECK-DAG: llvm.mlir.global internal constant @[[format_str:.*]]("result = %02llx\0A\00")
+  // CHECK-DAG: llvm.mlir.global internal constant @[[format_str3:.*]]("result3 = %012llx%016llx\0A\00")
   // CHECK-LABEL: llvm.func @full
   func.func @full() {
     %c = arith.constant 24 : i8
@@ -37,7 +35,7 @@ module attributes { dlti.dl_spec = #dlti.dl_spec<
       // CHECK-NEXT: %[[result:.*]] = llvm.load %[[o_ptr]] : !llvm.ptr -> i8
       %result = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@id>
 
-      // CHECK-DAG: %[[to_print:.*]] = llvm.zext %[[result]] : i8 to i16
+      // CHECK-DAG: %[[to_print:.*]] = llvm.zext %[[result]] : i8 to i64
       // CHECK: llvm.call @printf(%[[format_str_ptr]], %[[to_print]])
       arc.sim.emit "result", %result : i8
 
@@ -52,14 +50,17 @@ module attributes { dlti.dl_spec = #dlti.dl_spec<
     return
   }
 
-  // CHECK-LABEL: llvm.func @trunc
-  func.func @trunc() {
-    %v = arith.constant 0 : i32
-    // CHECK-DAG: %[[val_i32:.*]] = llvm.mlir.constant(0 : i32) : i32
-    // CHECK-DAG: %[[val_truncated:.*]] = llvm.trunc %[[val_i32]] : i32 to i16
-    // CHECK-DAG: %[[format_str_trunc_ptr:.*]] = llvm.mlir.addressof @[[format_str_trunc]] : !llvm.ptr
-    // CHECK-DAG: llvm.call @printf(%[[format_str_trunc_ptr]], %[[val_truncated]])
-    arc.sim.emit "result", %v : i32
+
+  // CHECK-LABEL: llvm.func @print_i112
+  // CHECK-SAME:    %[[arg0:.*]]: i112
+  func.func @print_i112(%v: i112) {
+    // CHECK: %[[format_str3_ptr:.*]] = llvm.mlir.addressof @[[format_str3]] : !llvm.ptr
+    // CHECK: %[[shift:.*]] = llvm.mlir.constant(64 : i112)
+    // CHECK: %[[lower:.*]] = llvm.trunc %[[arg0]]
+    // CHECK: %[[shifted:.*]] = llvm.lshr %[[arg0]], %[[shift]]
+    // CHECK: %[[higher:.*]] = llvm.trunc %[[shifted]]
+    // CHECK: llvm.call @printf(%[[format_str3_ptr]], %[[higher]], %[[lower]])
+    arc.sim.emit "result3", %v : i112
     return
   }
 }

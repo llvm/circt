@@ -452,6 +452,7 @@ class System:
       "builtin.module(lower-esi-to-physical)",
       "builtin.module(lower-esi-bundles, lower-esi-ports)",
       "builtin.module(lower-esi-to-hw{{platform={platform}}})",
+      "builtin.module(lower-esi-types)",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(hw.module(lower-seq-fifo))",

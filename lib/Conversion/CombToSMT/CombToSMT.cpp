@@ -304,7 +304,7 @@ void ConvertCombToSMTPass::runOnOperation() {
   // Also add HW patterns because some 'comb' canonicalizers produce constant
   // operations, i.e., even if there is absolutely no HW operation present
   // initially, we might have to convert one.
-  populateHWToSMTConversionPatterns(converter, patterns);
+  populateHWToSMTConversionPatterns(converter, patterns, false);
   populateCombToSMTConversionPatterns(converter, patterns);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,

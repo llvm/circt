@@ -42,7 +42,7 @@ TEST(MaterializerTest, RegisterAttr) {
   auto attr = RegZeroAttr::get(&context);
   auto *op = context.getLoadedDialect<RTGTestDialect>()->materializeConstant(
       builder, attr, attr.getType(), loc);
-  ASSERT_TRUE(op && isa<rtg::FixedRegisterOp>(op));
+  ASSERT_TRUE(op && isa<rtg::ConstantOp>(op));
 }
 
 } // namespace

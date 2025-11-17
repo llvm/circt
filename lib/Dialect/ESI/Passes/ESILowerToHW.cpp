@@ -839,6 +839,7 @@ void ESItoHWPass::runOnOperation() {
   pass3Target.addLegalDialect<HWDialect>();
   pass3Target.addLegalDialect<SVDialect>();
   pass3Target.addIllegalDialect<ESIDialect>();
+  pass3Target.addLegalOp<WrapWindow, UnwrapWindow>();
 
   RewritePatternSet pass3Patterns(ctxt);
   pass3Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);

@@ -59,8 +59,8 @@ rtg.test @interleaveSequences() {
 }
 
 rtg.sequence @nested0() {
-  %ra = rtg.fixed_reg #rtgtest.ra
-  %sp = rtg.fixed_reg #rtgtest.s0
+  %ra = rtg.constant #rtgtest.ra
+  %sp = rtg.constant #rtgtest.s0
   %imm = rtg.constant #rtg.isa.immediate<12, 1>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
@@ -69,20 +69,20 @@ rtg.sequence @nested1() {
   %0 = rtg.get_sequence @nested0 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
   rtg.embed_sequence %1
-  %ra = rtg.fixed_reg #rtgtest.ra
-  %sp = rtg.fixed_reg #rtgtest.sp
+  %ra = rtg.constant #rtgtest.ra
+  %sp = rtg.constant #rtgtest.sp
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
 
 // CHECK-LABEL: @nestedSequences()
 rtg.test @nestedSequences() {
-  // CHECK-NEXT: [[RA0:%.+]] = rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
-  // CHECK-NEXT: [[S0:%.+]] = rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
+  // CHECK-NEXT: [[RA0:%.+]] = rtg.constant #rtgtest.ra : !rtgtest.ireg
+  // CHECK-NEXT: [[S0:%.+]] = rtg.constant #rtgtest.s0 : !rtgtest.ireg
   // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 1>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA0]], [[S0]], [[IMM1]]
-  // CHECK-NEXT: [[RA1:%.+]] = rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
-  // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp : !rtgtest.ireg
+  // CHECK-NEXT: [[RA1:%.+]] = rtg.constant #rtgtest.ra : !rtgtest.ireg
+  // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp : !rtgtest.ireg
   // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA1]], [[SP]], [[IMM0]]
   %0 = rtg.get_sequence @nested1 : !rtg.sequence
@@ -91,7 +91,7 @@ rtg.test @nestedSequences() {
 }
 
 rtg.sequence @seqWithArgs(%imm: !rtg.isa.immediate<12>, %seq: !rtg.randomized_sequence) {
-  %sp = rtg.fixed_reg #rtgtest.sp
+  %sp = rtg.constant #rtgtest.sp
   rtgtest.rv32i.jalr %sp, %sp, %imm
   rtg.embed_sequence %seq
 }
@@ -99,10 +99,10 @@ rtg.sequence @seqWithArgs(%imm: !rtg.isa.immediate<12>, %seq: !rtg.randomized_se
 // CHECK-LABEL: @substitutions
 rtg.test @substitutions() {
   // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<12, 0> : !rtg.isa.immediate<12>
-  // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp : !rtgtest.ireg
+  // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp : !rtgtest.ireg
   // CHECK-NEXT: rtgtest.rv32i.jalr [[SP]], [[SP]], [[IMM0]]
-  // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
-  // CHECK-NEXT: [[S0:%.+]] = rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
+  // CHECK-NEXT: [[RA:%.+]] = rtg.constant #rtgtest.ra : !rtgtest.ireg
+  // CHECK-NEXT: [[S0:%.+]] = rtg.constant #rtgtest.s0 : !rtgtest.ireg
   // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 1> : !rtg.isa.immediate<12>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[S0]], [[IMM1]]
   %imm = rtg.constant #rtg.isa.immediate<12, 0>

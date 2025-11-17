@@ -303,7 +303,7 @@ circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
 }
 
 LogicalResult WrapWindow::verify() {
-  hw::UnionType expectedInput = getWindow().getType().getLoweredType();
+  Type expectedInput = getWindow().getType().getLoweredType();
   if (expectedInput == getFrame().getType())
     return success();
   return emitOpError("Expected input type is ") << expectedInput;

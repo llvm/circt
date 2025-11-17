@@ -51,9 +51,35 @@ module {
     // CHECK:   [[NID16:[0-9]+]] sgte [[NID3]] [[NID10]] 2
     %9 = comb.icmp bin sge %3, %a : i32
 
-    // CHECK:   [[NID13:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
-    // CHECK:   [[NID14:[0-9]+]] not [[NID3]] [[NID13]]
-    // CHECK:   [[NID15:[0-9]+]] bad [[NID14:[0-9]+]]
+    // CHECK:   [[NID17:[0-9]+]] and [[NID0]] 2 [[NID10]]
+    // CHECK:   [[NID18:[0-9]+]] and [[NID0]] [[NID17]] [[NID10]]
+    %10 = comb.and %a, %3, %3 : i32
+
+    // Variadic ops with one operand should be forwarded to the operand's LID
+    // CHECK: [[NID19:[0-9]+]] and [[NID0]] 2 [[NID18]]
+    %11 = comb.and %10 : i32
+    %12 = comb.and %a, %11 : i32
+
+    // CHECK: [[NID20:[0-9]+]] sort bitvec 96
+    // CHECK: [[NID21:[0-9]+]] sort bitvec 64
+    // CHECK: [[NID22:[0-9]+]] concat [[NID21]] 2 2
+    // CHECK: [[NID23:[0-9]+]] concat [[NID20]] [[NID22]] 2
+    %13 = comb.concat %a, %a, %a : i32, i32, i32
+
+    // CHECK: [[NID24:[0-9]+]] concat [[NID21]] 2 2
+    // CHECK: [[NID25:[0-9]+]] concat [[NID20]] [[NID24]] 2
+    // CHECK: [[NID26:[0-9]+]] sort bitvec 128
+    // CHECK: [[NID27:[0-9]+]] concat [[NID26]] [[NID25]] 2
+    %14 = comb.replicate %a : (i32) -> i128
+
+    // Make sure that replicating one time forwards to the original value
+    // CHECK: [[NID28:[0-9]+]] add [[NID0]] 2 2
+    %15 = comb.replicate %a : (i32) -> i32
+    %16 = comb.add %a, %15 : i32
+
+    // CHECK:   [[ASSERTNID1:[0-9]+]] implies [[NID3]] [[NID5]] [[NID12]]
+    // CHECK:   [[ASSERTNID2:[0-9]+]] not [[NID3]] [[ASSERTNID1]]
+    // CHECK:   [[ASSERTNID3:[0-9]+]] bad [[ASSERTNID2:[0-9]+]]
     sv.always posedge %0 {
       sv.if %true {
         sv.assert %5, immediate message "a + 1 should be greater than a"

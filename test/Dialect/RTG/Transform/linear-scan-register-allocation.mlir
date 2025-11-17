@@ -2,10 +2,10 @@
 
 // CHECK-LABEL: @test0
 rtg.test @test0() {
-  // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.ra
-  // CHECK: [[V1:%.+]] = rtg.fixed_reg #rtgtest.s1
-  // CHECK: [[V2:%.+]] = rtg.fixed_reg #rtgtest.s0
-  // CHECK: [[V3:%.+]] = rtg.fixed_reg #rtgtest.ra
+  // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.ra
+  // CHECK: [[V1:%.+]] = rtg.constant #rtgtest.s1
+  // CHECK: [[V2:%.+]] = rtg.constant #rtgtest.s0
+  // CHECK: [[V3:%.+]] = rtg.constant #rtgtest.ra
   // CHECK: rtgtest.rv32i.jalr [[V0]], [[V2]]
   // CHECK: rtgtest.rv32i.jalr [[V1]], [[V0]]
   // CHECK: rtgtest.rv32i.jalr [[V3]], [[V1]]
@@ -23,17 +23,17 @@ rtg.test @test0() {
 
 // CHECK-LABEL: @withFixedRegs
 rtg.test @withFixedRegs() {
-  // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.ra
-  // CHECK: [[V1:%.+]] = rtg.fixed_reg #rtgtest.s1
-  // CHECK: [[V2:%.+]] = rtg.fixed_reg #rtgtest.s0
-  // CHECK: [[V3:%.+]] = rtg.fixed_reg #rtgtest.ra
+  // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.ra
+  // CHECK: [[V1:%.+]] = rtg.constant #rtgtest.s1
+  // CHECK: [[V2:%.+]] = rtg.constant #rtgtest.s0
+  // CHECK: [[V3:%.+]] = rtg.constant #rtgtest.ra
   // CHECK: rtgtest.rv32i.jalr [[V0]], [[V2]]
   // CHECK: rtgtest.rv32i.jalr [[V1]], [[V0]]
   // CHECK: rtgtest.rv32i.jalr [[V3]], [[V1]]
   // CHECK: rtgtest.rv32i.jalr [[V2]], [[V3]]
-  %0 = rtg.fixed_reg #rtgtest.ra
+  %0 = rtg.constant #rtgtest.ra
   %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-  %2 = rtg.fixed_reg #rtgtest.s0
+  %2 = rtg.constant #rtgtest.s0
   %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %0, %2, %imm

@@ -36,6 +36,22 @@ mlir::OpFoldResult GetHartIdOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ImplicitConstraintTestOp
+//===----------------------------------------------------------------------===//
+
+bool ImplicitConstraintTestOp::isConstraintMaterialized() {
+  return !getImplicitConstraint();
+}
+
+Operation *ImplicitConstraintTestOp::materializeConstraint(OpBuilder &builder) {
+  auto val =
+      rtg::ConstantOp::create(builder, getLoc(), builder.getBoolAttr(true));
+  rtg::ConstraintOp::create(builder, getLoc(), val);
+  setImplicitConstraint(false);
+  return getOperation();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

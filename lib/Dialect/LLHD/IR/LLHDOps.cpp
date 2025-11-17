@@ -504,7 +504,8 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  haltOp->eraseOperands(operandsToErase);
+  rewriter.modifyOpInPlace(haltOp,
+                           [&] { haltOp->eraseOperands(operandsToErase); });
 
   SmallVector<Type> resultTypes = llvm::to_vector(haltOp->getOperandTypes());
   auto newProcessOp = ProcessOp::create(rewriter, op.getLoc(), resultTypes,

@@ -228,4 +228,8 @@ def SimpleTestInlinerPass : Pass<"rtg-simple-test-inliner", "mlir::ModuleOp"> {
   }];
 }
 
+def MaterializeConstraintsPass : Pass<"rtg-materialize-constraints"> {
+  let summary = "materialize implicit constraints";
+}
+
 #endif // CIRCT_DIALECT_RTG_TRANSFORMS_RTGPASSES_TD

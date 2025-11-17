@@ -293,7 +293,7 @@ rtg.target @memoryBlockBaseAddressLargerThanEndAddress : !rtg.dict<> {
 // -----
 
 rtg.test @validate() {
-  %0 = rtg.fixed_reg #rtgtest.t0
+  %0 = rtg.constant #rtgtest.t0
   // expected-error @below {{result type must be a valid content type for the ref value}}
   %2 = rtg.validate %0, %0 : !rtgtest.ireg -> !rtgtest.ireg
 }
@@ -328,4 +328,25 @@ rtg.test @concatImmediateNonImmediateOperand() {
   %0 = index.constant 42
   // expected-error @below {{all operands must be of immediate type}}
   %1 = rtg.isa.concat_immediate %0 : index
+}
+
+// -----
+
+rtg.test @setAttrNotSetType() {
+  // expected-error @below {{type must be a an '!rtg.set' type}}
+  rtg.constant #rtg.set<> : !rtg.bag<i32>
+}
+
+// -----
+
+rtg.test @setAttrExplicitTypeRequired() {
+  // expected-error @below {{type must be explicitly provided: cannot infer set element type from empty set}}
+  rtg.constant #rtg.set<>
+}
+
+// -----
+
+rtg.test @setAttrExplicitTypeRequired() {
+  // expected-error @below {{all elements must be of the set element type 'i32'}}
+  rtg.constant #rtg.set<0 : index> : !rtg.set<i32>
 }

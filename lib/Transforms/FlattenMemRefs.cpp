@@ -16,6 +16,7 @@
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
@@ -290,23 +291,6 @@ struct OperandConversionPattern : public OpConversionPattern<TOp> {
   }
 };
 
-// Cannot use OperandConversionPattern for branch op since the default builder
-// doesn't provide a method for communicating block successors.
-struct CondBranchOpConversion
-    : public OpConversionPattern<mlir::cf::CondBranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
-        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
-        op.getTrueDest(), op.getFalseDest());
-    return success();
-  }
-};
-
 // Rewrites a call op signature to flattened types. If rewriteFunctions is set,
 // will also replace the callee with a private definition of the called
 // function of the updated signature.
@@ -378,13 +362,14 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
       [](memref::GlobalOp op) { return isUniDimensional(op.getType()); });
   target.addDynamicallyLegalOp<memref::GetGlobalOp>(
       [](memref::GetGlobalOp op) { return isUniDimensional(op.getType()); });
-  addGenericLegalityConstraint<mlir::cf::CondBranchOp, mlir::cf::BranchOp,
-                               func::CallOp, func::ReturnOp, memref::DeallocOp,
+  addGenericLegalityConstraint<func::CallOp, func::ReturnOp, memref::DeallocOp,
                                memref::CopyOp>(target);
 
   target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
-    auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
-      return hasMultiDimMemRef(block.getArguments());
+    auto argsConverted = llvm::all_of(op.getArgumentTypes(), [](Type type) {
+      if (auto memref = dyn_cast<MemRefType>(type))
+        return isUniDimensional(memref);
+      return true;
     });
 
     auto resultsConverted = llvm::all_of(op.getResultTypes(), [](Type type) {
@@ -447,7 +432,6 @@ public:
                  AllocaOpConversion, GlobalOpConversion, GetGlobalOpConversion,
                  ReshapeOpConversion, OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
-                 CondBranchOpConversion,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<memref::CopyOp>, CallOpConversion>(
         typeConverter, ctx);
@@ -456,6 +440,8 @@ public:
 
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);
+    mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
+                                                             patterns, target);
 
     if (applyPartialConversion(getOperation(), target, std::move(patterns))
             .failed()) {

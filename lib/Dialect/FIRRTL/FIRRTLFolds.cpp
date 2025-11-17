@@ -1169,6 +1169,7 @@ public:
         nonConstantOperands.size() < catOp->getNumOperands()) {
       replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, catOp,
                                                nonConstantOperands);
+      return success();
     }
     return failure();
   }

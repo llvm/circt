@@ -1,11 +1,11 @@
-// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
 // REQUIRES: arcilator-jit
 
 // CHECK-LABEL: output = ca
-// CHECK-NEXT: output = ca
-// CHECK-NEXT: output = 0
-// CHECK-NEXT: output = fe
-// CHECK-NEXT: output = ff
+// CHECK-NEXT:  output = ca
+// CHECK-NEXT:  output = 00
+// CHECK-NEXT:  output = fe
+// CHECK-NEXT:  output = ff
 
 module {
 

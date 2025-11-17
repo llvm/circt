@@ -117,8 +117,10 @@ LogicalResult MemoryWriteOp::canonicalize(MemoryWriteOp op,
 LogicalResult StorageGetOp::canonicalize(StorageGetOp op,
                                          PatternRewriter &rewriter) {
   if (auto pred = op.getStorage().getDefiningOp<StorageGetOp>()) {
-    op.getStorageMutable().assign(pred.getStorage());
-    op.setOffset(op.getOffset() + pred.getOffset());
+    rewriter.modifyOpInPlace(op, [&] {
+      op.getStorageMutable().assign(pred.getStorage());
+      op.setOffset(op.getOffset() + pred.getOffset());
+    });
     return success();
   }
   return failure();
@@ -135,21 +137,28 @@ static bool removeUnusedClockDomainInputs(ClockDomainOp op,
     if (arg.use_empty()) {
       auto i = arg.getArgNumber();
       toDelete.set(i);
-      op.getInputsMutable().erase(i);
+      rewriter.modifyOpInPlace(op, [&] { op.getInputsMutable().erase(i); });
     }
   }
-  op.getBodyBlock().eraseArguments(toDelete);
-  return toDelete.any();
+  if (toDelete.any()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getBodyBlock().eraseArguments(toDelete); });
+    return true;
+  }
+  return false;
 }
 
 static bool removeUnusedClockDomainOutputs(ClockDomainOp op,
                                            PatternRewriter &rewriter) {
   SmallVector<Type> resultTypes;
   for (auto res : llvm::reverse(op->getResults())) {
-    if (res.use_empty())
-      op.getBodyBlock().getTerminator()->eraseOperand(res.getResultNumber());
-    else
+    if (res.use_empty()) {
+      auto *terminator = op.getBodyBlock().getTerminator();
+      rewriter.modifyOpInPlace(
+          terminator, [&] { terminator->eraseOperand(res.getResultNumber()); });
+    } else {
       resultTypes.push_back(res.getType());
+    }
   }
 
   // Nothing is changed.

@@ -210,23 +210,15 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
-    Value arrPtr;
-    if (auto load = adaptor.getInput().getDefiningOp<LLVM::LoadOp>()) {
-      // In this case the array was loaded from an existing address, so we can
-      // just grab that address instead of reallocating the array on the stack.
-      arrPtr = load.getAddr();
-    } else {
-      auto oneC = LLVM::ConstantOp::create(
-          rewriter, op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
-          rewriter.getI32IntegerAttr(1));
-      arrPtr = LLVM::AllocaOp::create(
-          rewriter, op->getLoc(),
-          LLVM::LLVMPointerType::get(rewriter.getContext()),
-          adaptor.getInput().getType(), oneC,
-          /*alignment=*/4);
-      LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
-    }
+    auto oneC = LLVM::ConstantOp::create(
+        rewriter, op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
+        rewriter.getI32IntegerAttr(1));
+    Value arrPtr = LLVM::AllocaOp::create(
+        rewriter, op->getLoc(),
+        LLVM::LLVMPointerType::get(rewriter.getContext()),
+        adaptor.getInput().getType(), oneC,
+        /*alignment=*/4);
+    LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
 
     auto arrTy = typeConverter->convertType(op.getInput().getType());
     auto elemTy = typeConverter->convertType(op.getResult().getType());
