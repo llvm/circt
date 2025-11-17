@@ -255,12 +255,11 @@ void BlackBoxReaderPass::runOnOperation() {
     }
 
     if (!verbatimFiles.empty()) {
-      auto verbatimAnno = builder.getDictionaryAttr(
+      annotations.addAnnotations({builder.getDictionaryAttr(
           {{builder.getStringAttr("class"),
             builder.getStringAttr(verbatimBlackBoxAnnoClass)},
            {builder.getStringAttr("files"),
-            builder.getArrayAttr(verbatimFiles)}});
-      annotations.addAnnotations({verbatimAnno});
+            builder.getArrayAttr(verbatimFiles)}})});
       annotations.applyToOperation(moduleOp);
       anythingChanged = true;
     }

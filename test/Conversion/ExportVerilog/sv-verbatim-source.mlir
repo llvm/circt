@@ -14,9 +14,9 @@ hw.module.extern @SimpleVerbatimModule(out out : i1) attributes {
 }
 
 // CHECK-LABEL: FILE "ParameterizedVerbatimModule.v"
-// CHECK-LABEL: module ParameterizedVerbatimModule(); endmodule
+// CHECK-LABEL: module ParameterizedVerbatimModule #(parameter WIDTH = 2)(); endmodule
 sv.verbatim.source @ParameterizedVerbatimModule.v<WIDTH: i32> attributes {
-  content = "module ParameterizedVerbatimModule(); endmodule",
+  content = "module ParameterizedVerbatimModule #(parameter WIDTH = 2)(); endmodule",
   output_file = #hw.output_file<"ParameterizedVerbatimModule.v">,
   verilogName = "ParameterizedVerbatimModule"
 }

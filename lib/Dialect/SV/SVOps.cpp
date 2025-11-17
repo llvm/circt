@@ -2064,8 +2064,7 @@ SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
 }
 
 hw::PortInfo SVVerbatimModuleOp::getPort(size_t idx) {
-  auto ports = getPortList();
-  return ports[idx];
+  return getPortList()[idx];
 }
 
 size_t SVVerbatimModuleOp::getPortIdForInputId(size_t idx) {

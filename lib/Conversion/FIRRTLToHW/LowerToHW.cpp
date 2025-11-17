@@ -1194,9 +1194,8 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
   AnnotationSet annos(oldModule);
   Annotation verbatimAnno = annos.getAnnotation(verbatimBlackBoxAnnoClass);
 
-  if (!verbatimAnno) {
+  if (!verbatimAnno)
     return {};
-  }
 
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::PortInfo, 8> ports;
@@ -1367,16 +1366,16 @@ sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
     verilogName = defName.value();
 
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
-  auto nameAttr = builder.getStringAttr(oldModule.getName());
-
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
-
-  auto sourceRef = FlatSymbolRefAttr::get(verbatimSource);
-
   auto newModule = sv::SVVerbatimModuleOp::create(
-      builder, oldModule.getLoc(), nameAttr, ports, sourceRef,
-      parameters ? parameters : builder.getArrayAttr({}),
-      verilogName.empty() ? StringAttr{} : builder.getStringAttr(verilogName));
+      /*builder=*/builder,
+      /*location=*/oldModule.getLoc(),
+      /*name=*/builder.getStringAttr(oldModule.getName()),
+      /*ports=*/ports,
+      /*source=*/FlatSymbolRefAttr::get(verbatimSource),
+      /*parameters=*/parameters ? parameters : builder.getArrayAttr({}),
+      /*verilogName=*/verilogName.empty() ? StringAttr{}
+                                          : builder.getStringAttr(verilogName));
 
   SymbolTable::setSymbolVisibility(newModule,
                                    SymbolTable::getSymbolVisibility(oldModule));

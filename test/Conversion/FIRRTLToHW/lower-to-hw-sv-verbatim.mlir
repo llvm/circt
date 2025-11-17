@@ -2,7 +2,7 @@
 
 firrtl.circuit "SVVerbatimTest" {
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // Simplest case; a single FIRRTL extmodule should lower to a
   // sv.verbatim.module + sv.verbatim.source.
 
@@ -13,7 +13,8 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       sv.verbatim.module @SimpleVerbatim(in %clk : !seq.clock, in %rst : i1, out out : i1)
+  // CHECK:       sv.verbatim.module @SimpleVerbatim
+  // CHECK-SAME:    (in %clk : !seq.clock, in %rst : i1, out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @SimpleVerbatim.v
   // CHECK-SAME:    }
@@ -37,7 +38,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // Duplicated extmodule definitions to the same output file. This can
   // happen when generators produce definitions of an inline black box
   // under each of multiple deduping scopes.
@@ -50,7 +51,8 @@ firrtl.circuit "SVVerbatimTest" {
   // CHECK-SAME:    }
   // CHECK-NOT:   sv.verbatim.source
   //
-  // CHECK:       sv.verbatim.module @DuplicatedVerbatim(in %clk : !seq.clock, out out : i1)
+  // CHECK:       sv.verbatim.module @DuplicatedVerbatim
+  // CHECK-SAME:    (in %clk : !seq.clock, out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @DuplicatedVerbatim.v
   // CHECK-SAME:      verilogName = "DuplicatedVerbatim"
@@ -75,7 +77,8 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  // CHECK:       sv.verbatim.module @DuplicatedBlackBox_1(in %clk : !seq.clock, out out : i1)
+  // CHECK:       sv.verbatim.module @DuplicatedBlackBox_1
+  // CHECK-SAME:    (in %clk : !seq.clock, out out : i1)
   // CHECK-SAME:    attributes {
   // CHECK-SAME:      source = @DuplicatedVerbatim.v
   // CHECK-SAME:      verilogName = "DuplicatedVerbatim"
@@ -100,7 +103,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // Two unique parametrizations of a verbatim extmodule should share an
   // sv.verbatim.source, but each have sv.verbatim.module with the actual
   // port interfaces.
@@ -160,7 +163,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // Verbatim extmodule with multiple files should reference those files through
   // the "additional_files" attribute.
 
@@ -202,7 +205,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // Check that two independent modules depending on the same auxillary file
   // results in two separate sv.verbatim.source ops but only one shared emit.file.
 
@@ -278,7 +281,7 @@ firrtl.circuit "SVVerbatimTest" {
     ]
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////
   // Check that analog ports are handled correctly.
 
   // CHECK-LABEL: sv.verbatim.source @AnalogBlackBox.v
