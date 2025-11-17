@@ -2218,9 +2218,8 @@ LogicalResult SVVerbatimModuleOp::verify() { return success(); }
 LogicalResult
 SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Verify that the source attribute references an sv.verbatim.source operation
-  auto *table = SymbolTable::getNearestSymbolTable(*this);
   auto sourceOp = dyn_cast_or_null<SVVerbatimSourceOp>(
-      symbolTable.lookupSymbolIn(table, getSourceAttr()));
+      symbolTable.lookupNearestSymbolFrom(*this, getSourceAttr()));
   if (!sourceOp)
     return emitError("references ") << getSourceAttr().getAttr().getValue()
                                     << ", which is not an sv.verbatim.source";
