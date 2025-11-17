@@ -1195,7 +1195,7 @@ sv::SVVerbatimSourceOp FIRRTLModuleLowering::getVerbatimSourceForExtModule(
   Annotation verbatimAnno = annos.getAnnotation(verbatimBlackBoxAnnoClass);
 
   if (!verbatimAnno) {
-    return nullptr;
+    return {};
   }
 
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
