@@ -135,3 +135,16 @@ with Context() as ctx, Location.unknown():
   print(module_type.input_names)
   # CHECK-NEXT:  ['out']
   print(module_type.output_names)
+
+  # Test UnionType
+  union_type = hw.UnionType.get([('a', i32, 0), ('b', i1, 4), ('c', i2, 0)])
+  # CHECK: !hw.union<a: i32, b: i1 offset 4, c: i2>
+  print(union_type)
+  # CHECK-NEXT: i32
+  print(union_type.get_field('a'))
+  # CHECK-NEXT: i1
+  print(union_type.get_field('b'))
+  # CHECK-NEXT: i2
+  print(union_type.get_field('c'))
+  # CHECK-NEXT: [('a', IntegerType(i32), 0), ('b', IntegerType(i1), 4), ('c', IntegerType(i2), 0)]
+  print(union_type.get_fields())

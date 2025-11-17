@@ -192,6 +192,48 @@ HWStructFieldInfo hwStructTypeGetFieldNum(MlirType structType, unsigned idx) {
   return ret;
 }
 
+bool hwTypeIsAUnionType(MlirType type) { return isa<UnionType>(unwrap(type)); }
+
+MlirType hwUnionTypeGet(MlirContext ctx, intptr_t numElements,
+                        HWUnionFieldInfo const *elements) {
+  SmallVector<UnionType::FieldInfo> fieldInfos;
+  fieldInfos.reserve(numElements);
+  for (intptr_t i = 0; i < numElements; ++i) {
+    fieldInfos.push_back(
+        UnionType::FieldInfo{cast<StringAttr>(unwrap(elements[i].name)),
+                             unwrap(elements[i].type), elements[i].offset});
+  }
+  return wrap(UnionType::get(unwrap(ctx), fieldInfos));
+}
+
+MlirType hwUnionTypeGetField(MlirType unionType, MlirStringRef fieldName) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  return wrap(ut.getFieldType(unwrap(fieldName)));
+}
+
+MlirAttribute hwUnionTypeGetFieldIndex(MlirType unionType,
+                                       MlirStringRef fieldName) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  if (auto idx = ut.getFieldIndex(unwrap(fieldName)))
+    return wrap(IntegerAttr::get(IntegerType::get(ut.getContext(), 32), *idx));
+  return wrap(UnitAttr::get(ut.getContext()));
+}
+
+intptr_t hwUnionTypeGetNumFields(MlirType unionType) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  return ut.getElements().size();
+}
+
+HWUnionFieldInfo hwUnionTypeGetFieldNum(MlirType unionType, unsigned idx) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  auto cppField = ut.getElements()[idx];
+  HWUnionFieldInfo ret;
+  ret.name = wrap(cppField.name);
+  ret.type = wrap(cppField.type);
+  ret.offset = cppField.offset;
+  return ret;
+}
+
 bool hwTypeIsATypeAliasType(MlirType type) {
   return isa<TypeAliasType>(unwrap(type));
 }
