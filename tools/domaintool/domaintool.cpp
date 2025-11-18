@@ -12,14 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Debug/DebugDialect.h"
-#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
-#include "circt/Dialect/OM/OMDialect.h"
-#include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/InitAllDialects.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
@@ -399,13 +393,11 @@ int main(int argc, char **argv) {
                               "from MLIR containing domain information\n");
 
   DialectRegistry registry;
-  registry.insert<comb::CombDialect, debug::DebugDialect, hw::HWDialect,
-                  om::OMDialect, seq::SeqDialect, sv::SVDialect,
-                  verif::VerifDialect>();
+  registerAllDialects(registry);
   MLIRContext context(registry);
-  context.loadDialect<comb::CombDialect, debug::DebugDialect, hw::HWDialect,
-                      om::OMDialect, seq::SeqDialect, sv::SVDialect,
-                      verif::VerifDialect>();
+  // Load the OM dialect explicitly since we use OM types/attributes before
+  // parsing any MLIR.
+  context.loadDialect<om::OMDialect>();
 
   exit(failed(DomainTool(context).execute()));
 }

@@ -1,25 +1,18 @@
-set(libs
-  CIRCTComb
-  CIRCTDebug
-  CIRCTHW
-  CIRCTOM
-  CIRCTOMEvaluator
-  CIRCTSeq
-  CIRCTSV
-  CIRCTVerif
-  MLIRParser
-)
+get_property(dialect_libs GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+get_property(mlir_dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 
 add_circt_tool(domaintool
   domaintool.cpp
   ClockSpecJSONHandler.cpp
-
-  DEPENDS
-  ${libs}
 )
+
 target_link_libraries(domaintool
   PRIVATE
-  ${libs}
+  ${dialect_libs}
+  ${mlir_dialect_libs}
+  CIRCTOMEvaluator
+  MLIRParser
+  MLIRSupport
 )
 
 llvm_update_compile_flags(domaintool)
