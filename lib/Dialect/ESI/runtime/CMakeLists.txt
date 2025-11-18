@@ -244,6 +244,7 @@ add_executable(esiquery
 target_link_libraries(esiquery PRIVATE
   ESICppRuntime
   CLI11::CLI11
+  nlohmann_json::nlohmann_json
 )
 add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
