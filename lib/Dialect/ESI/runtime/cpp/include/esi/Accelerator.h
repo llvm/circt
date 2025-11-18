@@ -158,7 +158,7 @@ private:
 
   /// Cache services via a unique_ptr so they get free'd automatically when
   /// Accelerator objects get deconstructed.
-  using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
+  using ServiceCacheKey = std::tuple<std::string, AppIDPath>;
   std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
 
   std::unique_ptr<AcceleratorServiceThread> serviceThread;

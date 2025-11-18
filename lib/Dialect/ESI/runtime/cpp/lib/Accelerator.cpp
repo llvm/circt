@@ -80,7 +80,8 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      std::string implName,
                                                      ServiceImplDetails details,
                                                      HWClientDetails clients) {
-  std::unique_ptr<Service> &cacheEntry = serviceCache[make_tuple(&svcType, id)];
+  std::unique_ptr<Service> &cacheEntry =
+      serviceCache[make_tuple(std::string(svcType.name()), id)];
   if (cacheEntry == nullptr) {
     Service *svc = createService(svcType, id, implName, details, clients);
     if (!svc)
