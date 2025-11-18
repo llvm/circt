@@ -1,6 +1,7 @@
 set(libs
   CIRCTComb
   CIRCTDebug
+  CIRCTEmit
   CIRCTHW
   CIRCTOM
   CIRCTOMEvaluator

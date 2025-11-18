@@ -14,6 +14,7 @@
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
 #include "circt/Dialect/OM/OMDialect.h"
@@ -384,9 +385,9 @@ int main(int argc, char **argv) {
                   om::OMDialect, seq::SeqDialect, sv::SVDialect,
                   verif::VerifDialect>();
   MLIRContext context(registry);
-  context.loadDialect<comb::CombDialect, debug::DebugDialect, hw::HWDialect,
-                      om::OMDialect, seq::SeqDialect, sv::SVDialect,
-                      verif::VerifDialect>();
+  context.loadDialect<comb::CombDialect, debug::DebugDialect, emit::EmitDialect,
+                      hw::HWDialect, om::OMDialect, seq::SeqDialect,
+                      sv::SVDialect, verif::VerifDialect>();
 
   exit(failed(DomainTool(context).execute()));
 }
