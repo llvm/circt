@@ -54,7 +54,7 @@ int main(int argc, const char *argv[]) {
 
   Context &ctxt = cli.getContext();
   try {
-    std::unique_ptr<AcceleratorConnection> acc = cli.connect();
+    AcceleratorConnection *acc = cli.connect();
     const auto &info = *acc->getService<services::SysInfo>();
 
     if (*versionSub)

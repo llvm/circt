@@ -51,19 +51,19 @@ public:
       ctxt = Context::withLogger<ConsoleLogger>(Logger::Level::Debug);
     else if (verbose)
       ctxt = Context::withLogger<ConsoleLogger>(Logger::Level::Info);
+    else
+      ctxt = Context::withLogger<ConsoleLogger>(Logger::Level::Warning);
     return 0;
   }
 
   /// Connect to the accelerator using the specified backend and connection.
-  std::unique_ptr<AcceleratorConnection> connect() {
-    return ctxt.connect(backend, connStr);
-  }
+  AcceleratorConnection *connect() { return ctxt->connect(backend, connStr); }
 
   /// Get the context.
-  Context &getContext() { return ctxt; }
+  Context &getContext() { return *ctxt; }
 
 protected:
-  Context ctxt;
+  std::unique_ptr<Context> ctxt;
 
   std::string backend;
   std::string connStr;

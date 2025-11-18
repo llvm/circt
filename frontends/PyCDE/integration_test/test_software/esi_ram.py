@@ -6,7 +6,8 @@ import random
 import sys
 
 platform = sys.argv[1]
-acc = esi.AcceleratorConnection(platform, sys.argv[2])
+conn_str = sys.argv[2]
+acc = esi.connect(platform, conn_str)
 
 d = acc.build_accelerator()
 

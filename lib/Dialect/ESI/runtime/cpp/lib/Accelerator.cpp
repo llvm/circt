@@ -225,7 +225,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
                  "trying to find backend plugin: " + backendFileName);
   }
 
-    // Attempt to load it.
+  // Attempt to load it.
 #ifdef __linux__
   void *handle = dlopen(backendPath.string().c_str(), RTLD_NOW | RTLD_GLOBAL);
   if (!handle) {
@@ -308,17 +308,18 @@ void registerBackend(const std::string &name, BackendCreate create) {
 }
 } // namespace internal
 
-std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
-                                               const std::string &backend,
-                                               const std::string &connection) {
-  auto &registry = internal::BackendRegistry::get();
+} // namespace registry
+
+AcceleratorConnection *Context::connect(std::string backend,
+                                        std::string connection) {
+  auto &registry = registry::internal::BackendRegistry::get();
   auto f = registry.find(backend);
   if (f == registry.end()) {
     // If it's not already found in the registry, try to load it dynamically.
-    loadBackend(ctxt, backend);
+    loadBackend(*this, backend);
     f = registry.find(backend);
     if (f == registry.end()) {
-      esi::ServiceImplDetails details;
+      ServiceImplDetails details;
       details["backend"] = backend;
       std::ostringstream loaded_backends;
       bool first = true;
@@ -329,17 +330,18 @@ std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
         first = false;
       }
       details["loaded_backends"] = loaded_backends.str();
-      ctxt.getLogger().error("CONNECT", "backend '" + backend + "' not found",
-                             &details);
+      getLogger().error("CONNECT", "backend '" + backend + "' not found",
+                        &details);
       throw std::runtime_error("Backend '" + backend + "' not found");
     }
   }
-  ctxt.getLogger().info("CONNECT", "connecting to backend " + backend +
-                                       " via '" + connection + "'");
-  return f->second(ctxt, connection);
+  getLogger().info("CONNECT", "connecting to backend " + backend + " via '" +
+                                  connection + "'");
+  auto conn = f->second(*this, connection);
+  auto *connPtr = conn.get();
+  connections.emplace_back(std::move(conn));
+  return connPtr;
 }
-
-} // namespace registry
 
 struct AcceleratorServiceThread::Impl {
   Impl() {}
@@ -437,8 +439,6 @@ void AcceleratorServiceThread::Impl::addListener(
   }
 }
 
-} // namespace esi
-
 AcceleratorServiceThread::AcceleratorServiceThread()
     : impl(std::make_unique<Impl>()) {
   impl->start();
@@ -473,3 +473,5 @@ void AcceleratorConnection::disconnect() {
     serviceThread.reset();
   }
 }
+
+} // namespace esi
