@@ -19,7 +19,12 @@ LogLevel = cpp.LogLevel
 
 
 class Context:
-  """A context for ESI accelerator connections."""
+  """A context for ESI accelerator connections. The underlying C++ context owns
+  everything assocated with it including types, accelerator connections, and
+  the accelerator facade/interface (aka Accelerator) itself. It must not be
+  garbage collected while any accelerators or connections that it owns are still
+  in use as they will be disconnected and destroyed when the context is
+  destroyed."""
 
   _default: Optional["Context"] = None
 

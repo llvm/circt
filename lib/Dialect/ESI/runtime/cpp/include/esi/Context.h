@@ -28,7 +28,9 @@ namespace esi {
 class AcceleratorConnection;
 
 /// AcceleratorConnections, Accelerators, and Manifests must all share a
-/// context. It owns all the types, uniquifying them.
+/// context. It owns all the types, uniquifying them. It also owns the
+/// connections (which own the Accelerators). When it is destroyed, all
+/// connections are disconnected and the objects are destroyed.
 class Context {
 public:
   Context();
