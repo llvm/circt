@@ -1,17 +1,17 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import dim, types, Input, Output, generator, System, Module
-from pycde.types import Bit, Bits, List, StructType, TypeAlias, UInt
+from pycde import dim, Input, Output, generator, System, Module
+from pycde.types import Bit, Bits, List, StructType, TypeAlias, UInt, SInt
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
 
 # CHECK: [('foo', Bits<1>), ('bar', Bits<13>)]
-st1 = StructType({"foo": types.i1, "bar": types.i13})
+st1 = StructType({"foo": Bit, "bar": Bits(13)})
 print(st1.fields)
 # CHECK: Bits<1>
 print(st1.foo)
 
-array1 = dim(types.ui6)
+array1 = dim(UInt(6))
 # CHECK: UInt<6>
 print(array1)
 
@@ -22,10 +22,10 @@ print(array2)
 int_alias = TypeAlias(Bits(8), "myname1")
 # CHECK: myname1
 print(int_alias)
-assert int_alias == types.int(8, "myname1")
+assert int_alias == TypeAlias(Bits(8), "myname1")
 
 # CHECK: struct { a: Bits<1>, b: SInt<1>}
-struct = types.struct({"a": types.i1, "b": types.si1})
+struct = StructType({"a": Bit, "b": SInt(1)})
 print(struct)
 
 dim_alias = dim(1, 8, name="myname5")

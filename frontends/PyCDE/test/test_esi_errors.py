@@ -3,11 +3,17 @@
 # RUN: %PYTHON% py-split-input-file.py %s 2>&1 | FileCheck %s
 
 from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
-                   generator, types)
+                   generator)
 from pycde.common import SendBundle, RecvBundle
-from pycde.types import Bits, Bundle, BundledChannel, Channel, ChannelDirection
+from pycde.types import Bit, Bits, Bundle, BundledChannel, Channel, ChannelDirection
 from pycde import esi
 from pycde.testing import unittestmodule
+
+BIT = Bit
+I1 = Bit
+I2 = Bits(2)
+I4 = Bits(4)
+I32 = Bits(32)
 
 TestBundle = Bundle([
     BundledChannel("resp", ChannelDirection.TO, Bits(16)),
@@ -28,17 +34,17 @@ class HostComms:
 
 class Producer(Module):
   clk = Clock()
-  int_out = OutputChannel(types.i32)
+  int_out = OutputChannel(I32)
 
   @generator
   def construct(ports):
-    chan = HostComms.from_host("loopback_in", types.i32)
+    chan = HostComms.from_host("loopback_in", I32)
     ports.int_out = chan
 
 
 class Consumer(Module):
   clk = Clock()
-  int_in = InputChannel(types.i32)
+  int_in = InputChannel(I32)
 
   @generator
   def construct(ports):
@@ -48,7 +54,7 @@ class Consumer(Module):
 @unittestmodule(print=True)
 class LoopbackTop(Module):
   clk = Clock()
-  rst = Input(types.i1)
+  rst = Input(BIT)
 
   @generator
   def construct(ports):
@@ -61,16 +67,16 @@ class LoopbackTop(Module):
 # -----
 
 Bundle1 = Bundle([
-    BundledChannel("req", ChannelDirection.TO, types.channel(types.i32)),
-    BundledChannel("resp", ChannelDirection.FROM, types.channel(types.i1)),
+    BundledChannel("req", ChannelDirection.TO, Channel(I32)),
+    BundledChannel("resp", ChannelDirection.FROM, Channel(BIT)),
 ])
 
 
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class SendBundleTest(Module):
   b_send = SendBundle(Bundle1)
-  s1_in = InputChannel(types.i32)
-  i1_out = OutputChannel(types.i1)
+  s1_in = InputChannel(I32)
+  i1_out = OutputChannel(BIT)
 
   @generator
   def build(self):
@@ -84,8 +90,8 @@ class SendBundleTest(Module):
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class SendBundleTest(Module):
   b_send = SendBundle(Bundle1)
-  s1_in = InputChannel(types.i32)
-  i1_out = OutputChannel(types.i1)
+  s1_in = InputChannel(I32)
+  i1_out = OutputChannel(BIT)
 
   @generator
   def build(self):
@@ -99,7 +105,7 @@ class SendBundleTest(Module):
 @unittestmodule()
 class SendBundleTest(Module):
   b_send = SendBundle(Bundle1)
-  s1_in = InputChannel(types.i2)
+  s1_in = InputChannel(I2)
 
   @generator
   def build(self):
@@ -113,8 +119,8 @@ class SendBundleTest(Module):
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class RecvBundleTest(Module):
   b_recv = RecvBundle(Bundle1)
-  s1_out = OutputChannel(types.i32)
-  i1_in = InputChannel(types.i1)
+  s1_out = OutputChannel(I32)
+  i1_in = InputChannel(BIT)
 
   @generator
   def build(self):
@@ -128,8 +134,8 @@ class RecvBundleTest(Module):
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class RecvBundleTest(Module):
   b_recv = RecvBundle(Bundle1)
-  s1_out = OutputChannel(types.i32)
-  i1_in = InputChannel(types.i1)
+  s1_out = OutputChannel(I32)
+  i1_in = InputChannel(BIT)
 
   @generator
   def build(self):
@@ -143,7 +149,7 @@ class RecvBundleTest(Module):
 @unittestmodule()
 class RecvBundleTest(Module):
   b_recv = RecvBundle(Bundle1)
-  i1_in = InputChannel(types.i4)
+  i1_in = InputChannel(I4)
 
   @generator
   def build(self):
