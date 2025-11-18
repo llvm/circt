@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (AppID, Input, Output, generator, types)
+from pycde import (AppID, Input, Output, generator)
 from pycde.module import Module, modparams
 from pycde.dialects import comb, hw
 from pycde.constructs import Wire
+from pycde.types import Bit, Bits, StructType, TypeAlias
 
 import sys
 
@@ -21,8 +22,8 @@ def PolynomialCompute(coefficients: Coefficients):
     module_name = f"PolyComputeForCoeff_{coefficients.coeff}"
 
     # Evaluate polynomial for 'x'.
-    x = Input(types.i32)
-    y = Output(types.int(8 * 4))
+    x = Input(Bits(32))
+    y = Output(Bits(8 * 4))
 
     def __init__(self, name: str, **kwargs):
       """coefficients is in 'd' -> 'a' order."""
@@ -35,7 +36,7 @@ def PolynomialCompute(coefficients: Coefficients):
       x = mod.x
       taps = list()
       for power, coeff in enumerate(coefficients.coeff):
-        coeffVal = hw.ConstantOp(types.i32, coeff)
+        coeffVal = hw.ConstantOp(Bits(32), coeff)
         if power == 0:
           newPartialSum = coeffVal
         else:
@@ -57,8 +58,8 @@ def PolynomialCompute(coefficients: Coefficients):
 
 class CoolPolynomialCompute(Module):
   module_name = "supercooldevice"
-  x = Input(types.i32)
-  y = Output(types.i32)
+  x = Input(Bits(32))
+  y = Output(Bits(32))
 
   def __init__(self, coefficients, **inputs):
     super().__init__(**inputs)
@@ -68,12 +69,12 @@ class CoolPolynomialCompute(Module):
 @modparams
 def ExternWithParams(A: str, B: int):
 
-  typedef1 = types.struct({"a": types.i1}, "exTypedef")
+  typedef1 = TypeAlias(StructType({"a": Bit}), "exTypedef")
 
   class M(Module):
     module_name = "parameterized_extern"
-    ignored_input = Input(types.i1)
-    used_input = Input(types.int(B))
+    ignored_input = Input(Bit)
+    used_input = Input(Bits(B))
 
     @property
     def instance_name(self):
@@ -89,11 +90,11 @@ class Coefficients:
 
 
 class PolynomialSystem(Module):
-  y = Output(types.i32)
+  y = Output(Bits(32))
 
   @generator
   def construct(self):
-    i32 = types.i32
+    i32 = Bits(32)
     x = hw.ConstantOp(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
                                                         appid=AppID("poly"),
@@ -104,7 +105,7 @@ class PolynomialSystem(Module):
 
     CoolPolynomialCompute([4, 42], x=23)
 
-    w1 = Wire(types.i4)
+    w1 = Wire(Bits(4))
     m = ExternWithParams("foo", 4)(ignored_input=None, used_input=w1)
     m.name = "pexternInst"
     w1.assign(0)

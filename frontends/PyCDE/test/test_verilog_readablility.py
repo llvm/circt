@@ -1,6 +1,7 @@
 # RUN: %PYTHON% %s %t | FileCheck %s
 
-from pycde import (Clock, Output, Input, Module, generator, types, dim, System)
+from pycde import (Clock, Output, Input, Module, generator, dim, System)
+from pycde.types import Bits
 
 import sys
 
@@ -8,10 +9,10 @@ import sys
 class WireNames(Module):
   clk = Clock()
   data_in = Input(dim(32, 3))
-  sel = Input(types.i2)
+  sel = Input(Bits(2))
 
-  a = Output(types.i32)
-  b = Output(types.i32)
+  a = Output(Bits(32))
+  b = Output(Bits(32))
 
   @generator
   def build(self):

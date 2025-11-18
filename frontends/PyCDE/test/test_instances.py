@@ -4,6 +4,7 @@
 
 import pycde
 import pycde.dialects.hw
+from pycde.types import Bit
 
 from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
@@ -19,8 +20,8 @@ class Nothing(Module):
 
 class Delay(Module):
   clk = pycde.Clock()
-  x = pycde.Input(pycde.types.i1)
-  y = pycde.Output(pycde.types.i1)
+  x = pycde.Input(Bit)
+  y = pycde.Output(Bit)
 
   @pycde.generator
   def construct(mod):
@@ -35,8 +36,8 @@ class Delay(Module):
 
 class UnParameterized(Module):
   clk = pycde.Clock()
-  x = pycde.Input(pycde.types.i1)
-  y = pycde.Output(pycde.types.i1)
+  x = pycde.Input(Bit)
+  y = pycde.Output(Bit)
 
   @pycde.generator
   def construct(mod):
@@ -49,7 +50,7 @@ class Test(Module):
 
   @pycde.generator
   def build(ports):
-    c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
+    c1 = pycde.dialects.hw.ConstantOp(Bit, 1)
     UnParameterized(clk=ports.clk, x=c1, appid=AppID("unparam",
                                                      0)).name = "unparam"
     UnParameterized(clk=ports.clk, x=c1, appid=AppID("unparam",

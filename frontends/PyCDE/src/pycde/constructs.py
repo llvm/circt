@@ -10,7 +10,7 @@ from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
 from .support import get_user_loc
-from .types import dim, types, Array, Bits, InOut, Type, UInt
+from .types import dim, Array, Bit, Bits, InOut, Type, UInt
 
 from .circt import ir
 from .circt.support import BackedgeBuilder
@@ -184,9 +184,9 @@ def ControlReg(clk: Signal,
       def generate(ports):
         a = ports.asserts.or_reduce()
         r = ports.resets.or_reduce()
-        reg = Reg(types.i1, ports.clk, ports.rst)
+        reg = Reg(Bit, ports.clk, ports.rst)
         reg.name = "state"
-        next_value = Mux(a, Mux(r, reg, types.i1(0)), types.i1(1))
+        next_value = Mux(a, Mux(r, reg, Bit(0)), Bit(1))
         reg.assign(next_value)
         ports.out = reg
 

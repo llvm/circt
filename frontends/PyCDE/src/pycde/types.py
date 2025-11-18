@@ -17,43 +17,6 @@ import typing
 from dataclasses import dataclass
 
 
-class _Types:
-  """Python syntactic sugar to get types"""
-
-  def __init__(self):
-    self.registered_aliases = OrderedDict()
-
-  def __getattr__(self, name: str) -> ir.Type:
-    return self.wrap(_FromCirctType(ir.Type.parse(name)))
-
-  def int(self, width: int, name: str = None):
-    return self.wrap(Bits(width), name)
-
-  def array(self, inner: ir.Type, size: int, name: str = None) -> "Array":
-    return self.wrap(Array(inner, size), name)
-
-  def inout(self, inner: ir.Type):
-    return self.wrap(InOut(inner))
-
-  def channel(self, inner):
-    return self.wrap(Channel(inner))
-
-  def struct(self, members, name: str = None) -> "StructType":
-    return self.wrap(StructType(members), name)
-
-  @property
-  def any(self):
-    return self.wrap(Any())
-
-  def wrap(self, type, name=None):
-    if name is not None:
-      type = TypeAlias(type, name)
-    return type
-
-
-types = _Types()
-
-
 class Type:
   """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
   do anything useful with types for which subclasses exist."""
@@ -658,13 +621,12 @@ class Channel(Type):
         raise TypeError(
             f"Expected signal of type {self.inner_type}, got {value.type}")
       valid = Bits(1)(valid_or_empty)
-      wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
-                                     valid.value)
+      wrap_op = esi.WrapValidReadyOp(self._type, Bit, value.value, valid.value)
       return wrap_op[0], wrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
       value = self.inner_type(value)
       empty = Bits(1)(valid_or_empty)
-      wrap_op = esi.WrapFIFOOp(self._type, types.i1, value.value, empty.value)
+      wrap_op = esi.WrapFIFOOp(self._type, Bit, value.value, empty.value)
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")

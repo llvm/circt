@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.types import types, UInt
+from pycde.types import Bit, Bits, SInt, UInt
 
 
 # CHECK: hw.module @InfixArith(in %in0 : si16, in %in1 : ui16)
@@ -16,8 +16,8 @@ from pycde.types import types, UInt
 # CHECK-NEXT:   hw.output
 @unittestmodule(run_passes=True)
 class InfixArith(Module):
-  in0 = Input(types.si16)
-  in1 = Input(types.ui16)
+  in0 = Input(SInt(16))
+  in1 = Input(UInt(16))
 
   @generator
   def construct(ports):
@@ -40,8 +40,8 @@ class InfixArith(Module):
 # CHECK-NEXT:  hw.output
 @unittestmodule(run_passes=True)
 class InfixLogic(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
+  in0 = Input(Bits(16))
+  in1 = Input(Bits(16))
 
   @generator
   def construct(ports):
@@ -60,8 +60,8 @@ class InfixLogic(Module):
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=True)
 class SignlessInfixComparison(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
+  in0 = Input(Bits(16))
+  in1 = Input(Bits(16))
 
   @generator
   def construct(ports):
@@ -82,8 +82,8 @@ class SignlessInfixComparison(Module):
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=False)
 class InfixComparison(Module):
-  in0 = Input(types.ui16)
-  in1 = Input(types.ui16)
+  in0 = Input(UInt(16))
+  in1 = Input(UInt(16))
 
   @generator
   def construct(ports):
@@ -106,9 +106,9 @@ class InfixComparison(Module):
 # CHECK-NEXT:    hw.output %3 {{({sv.namehint = ".*"} )?}}: i16
 @unittestmodule(run_passes=True)
 class Multiple(Module):
-  in0 = Input(types.si16)
-  in1 = Input(types.si16)
-  out0 = Output(types.i16)
+  in0 = Input(SInt(16))
+  in1 = Input(SInt(16))
+  out0 = Output(Bits(16))
 
   @generator
   def construct(ports):
@@ -134,7 +134,7 @@ class Multiple(Module):
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=True)
 class Casting(Module):
-  in0 = Input(types.i16)
+  in0 = Input(Bits(16))
 
   @generator
   def construct(ports):
@@ -159,9 +159,9 @@ class Casting(Module):
 # CHECK-NEXT:    hw.output %3 : i16
 @unittestmodule(generate=True, run_passes=True, debug=True)
 class Lowering(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
-  out0 = Output(types.i16)
+  in0 = Input(Bits(16))
+  in1 = Input(Bits(16))
+  out0 = Output(Bits(16))
 
   @generator
   def construct(ports):
@@ -186,8 +186,8 @@ class Lowering(Module):
 # CHECK-NEXT:     [[R11:%.+]] = hwarith.icmp eq %sin, [[R10]] : si16, ui1
 @unittestmodule()
 class Constants(Module):
-  uin = Input(types.ui16)
-  sin = Input(types.si16)
+  uin = Input(UInt(16))
+  sin = Input(SInt(16))
 
   @generator
   def construct(ports):
