@@ -139,6 +139,7 @@ binaries=(
     circt-test
     circt-translate
     circt-verilog
+    domaintool
     firtool
     om-linker
 )
