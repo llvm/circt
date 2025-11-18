@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.types import Bit, Bits, SInt, UInt
+from pycde.types import Bits, SInt, UInt
 
 
 # CHECK: hw.module @InfixArith(in %in0 : si16, in %in1 : ui16)
