@@ -69,7 +69,7 @@ class CoolPolynomialCompute(Module):
 @modparams
 def ExternWithParams(A: str, B: int):
 
-  typedef1 = TypeAlias(StructType({"a": Bit}), "exTypedef")
+  TypeAlias(StructType({"a": Bit}), "exTypedef")
 
   class M(Module):
     module_name = "parameterized_extern"
