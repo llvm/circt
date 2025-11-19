@@ -19,6 +19,7 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 
 using namespace circt;
 using namespace circt::moore;
@@ -537,6 +538,54 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// GlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalVariableOp::verifyRegions() {
+  if (auto *block = getInitBlock()) {
+    auto &terminator = block->back();
+    if (!isa<YieldOp>(terminator))
+      return emitOpError() << "must have a 'moore.yield' terminator";
+  }
+  return success();
+}
+
+Block *GlobalVariableOp::getInitBlock() {
+  if (getInitRegion().empty())
+    return nullptr;
+  return &getInitRegion().front();
+}
+
+//===----------------------------------------------------------------------===//
+// GetGlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GetGlobalVariableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Resolve the target symbol.
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  // Check that the symbol is a global variable.
+  auto var = dyn_cast<GlobalVariableOp>(symbol);
+  if (!var)
+    return emitOpError() << "must reference a 'moore.global_variable', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  // Check that the types match.
+  auto expType = var.getType();
+  auto actType = getType().getNestedType();
+  if (expType != actType)
+    return emitOpError() << "returns a " << actType << " reference, but "
+                         << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -1027,22 +1076,21 @@ LogicalResult UnionExtractRefOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult YieldOp::verify() {
-  // Check that YieldOp's parent operation is ConditionalOp.
-  auto cond = dyn_cast<ConditionalOp>(*(*this).getParentOp());
-  if (!cond) {
-    emitOpError("must have a conditional parent");
-    return failure();
+  Type expType;
+  auto *parentOp = getOperation()->getParentOp();
+  if (auto cond = dyn_cast<ConditionalOp>(parentOp)) {
+    expType = cond.getType();
+  } else if (auto varOp = dyn_cast<GlobalVariableOp>(parentOp)) {
+    expType = varOp.getType();
+  } else {
+    llvm_unreachable("all in ParentOneOf handled");
   }
 
-  // Check that the operand matches the parent operation's result.
-  auto condType = cond.getType();
-  auto yieldType = getOperand().getType();
-  if (condType != yieldType) {
-    emitOpError("yield type must match conditional. Expected ")
-        << condType << ", but got " << yieldType << ".";
-    return failure();
+  auto actType = getOperand().getType();
+  if (expType != actType) {
+    return emitOpError() << "yields " << actType << ", but parent expects "
+                         << expType;
   }
-
   return success();
 }
 
@@ -1484,6 +1532,7 @@ ClassUpcastOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                        << dstTy.getClassSym()
                        << " (destination is not a base class)";
 }
+
 LogicalResult
 ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // The operand is constrained to ClassHandleType in ODS; unwrap it.
@@ -1533,6 +1582,156 @@ ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("result element type (")
            << resRefTy.getNestedType() << ") does not match field type ("
            << expectedElemTy << ")";
+
+  return success();
+}
+
+LogicalResult
+VTableLoadMethodOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *op = getOperation();
+
+  auto object = getObject();
+  auto implSym = object.getType().getClassSym();
+
+  // Check that classdecl of class handle exists
+  Operation *implOp = symbolTable.lookupNearestSymbolFrom(op, implSym);
+  if (!implOp)
+    return emitOpError() << "implementing class " << implSym << " not found";
+  auto implClass = cast<moore::ClassDeclOp>(implOp);
+
+  StringAttr methodName = getMethodSymAttr().getLeafReference();
+  if (!methodName || methodName.getValue().empty())
+    return emitOpError() << "empty method name";
+
+  moore::ClassDeclOp cursor = implClass;
+  Operation *methodDeclOp = nullptr;
+
+  // Find method in class decl or parents' class decl
+  while (cursor && !methodDeclOp) {
+    methodDeclOp = symbolTable.lookupSymbolIn(cursor, methodName);
+    if (methodDeclOp)
+      break;
+    SymbolRefAttr baseSym = cursor.getBaseAttr();
+    if (!baseSym)
+      break;
+    Operation *baseOp = symbolTable.lookupNearestSymbolFrom(op, baseSym);
+    cursor = baseOp ? cast<moore::ClassDeclOp>(baseOp) : moore::ClassDeclOp();
+  }
+
+  if (!methodDeclOp)
+    return emitOpError() << "no method `" << methodName << "` found in "
+                         << implClass.getSymName() << " or its bases";
+
+  // Make sure method decl is a ClassMethodDeclOp
+  auto methodDecl = dyn_cast<moore::ClassMethodDeclOp>(methodDeclOp);
+  if (!methodDecl)
+    return emitOpError() << "`" << methodName
+                         << "` is not a method declaration";
+
+  // Make sure method signature matches
+  auto resFnTy = cast<FunctionType>(getResult().getType());
+  auto declFnTy = cast<FunctionType>(methodDecl.getFunctionType());
+  if (resFnTy != declFnTy)
+    return emitOpError() << "result type " << resFnTy
+                         << " does not match method erased ABI " << declFnTy;
+
+  return success();
+}
+
+LogicalResult VTableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *self = getOperation();
+
+  // sym_name's root must be a ClassDeclOp
+  SymbolRefAttr name = getSymNameAttr();
+  if (!name)
+    return emitOpError("requires 'sym_name' SymbolRefAttr");
+
+  // Root symbol must resolve (from the nearest symbol table) to a ClassDeclOp.
+  Operation *rootDef = symbolTable.lookupNearestSymbolFrom(
+      self, SymbolRefAttr::get(name.getRootReference()));
+  if (!rootDef)
+    return emitOpError() << "cannot resolve root class symbol '"
+                         << name.getRootReference() << "' for sym_name "
+                         << name;
+
+  if (!isa<ClassDeclOp>(rootDef))
+    return emitOpError()
+           << "root of sym_name must name a 'moore.class.classdecl', got "
+           << name;
+
+  // All good.
+  return success();
+}
+
+LogicalResult VTableOp::verifyRegions() {
+  // Ensure only allowed ops appear inside.
+  for (Operation &op : getBody().front()) {
+    if (!isa<VTableOp, VTableEntryOp>(op))
+      return emitOpError(
+          "body may only contain 'moore.vtable' or 'moore.vtable_entry' ops");
+  }
+  return mlir::success();
+}
+
+LogicalResult
+VTableEntryOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *self = getOperation();
+
+  // 'target' must exist and resolve from the top-level symbol table of a func
+  // op
+  SymbolRefAttr target = getTargetAttr();
+  func::FuncOp def =
+      symbolTable.lookupNearestSymbolFrom<func::FuncOp>(self, target);
+  if (!def)
+    return emitOpError()
+           << "cannot resolve target symbol to a function operation " << target;
+
+  // VTableEntries may only exist in VTables.
+  if (!isa<VTableOp>(self->getParentOp()))
+    return emitOpError("must be nested directly inside a 'moore.vtable' op");
+
+  Operation *currentOp = self;
+  VTableOp currentVTable;
+  bool defined = false;
+
+  // Walk up the VTable tree and check whether the corresponding classDeclOp
+  // declares a method with the same implementation. Further checks all the way
+  // up the tree if another classdeclop overrides the implementation.
+  // The entry is correct iff the impl matches the most derived classdeclop's
+  // methoddeclop implementing the virtual method.
+  while (auto parentOp = dyn_cast<VTableOp>(currentOp->getParentOp())) {
+    currentOp = parentOp;
+    currentVTable = cast<VTableOp>(currentOp);
+
+    auto classSymName = currentVTable.getSymName();
+    ClassDeclOp parentClassDecl =
+        symbolTable.lookupNearestSymbolFrom<ClassDeclOp>(
+            parentOp, classSymName.getRootReference());
+    assert(parentClassDecl && "VTableOp must point to a classdeclop");
+
+    for (auto method : parentClassDecl.getBody().getOps<ClassMethodDeclOp>()) {
+      // A virtual interface declaration. Ignore.
+      if (!method.getImpl())
+        continue;
+
+      // A matching definition.
+      if (method.getSymName() == getName() && method.getImplAttr() == target)
+        defined = true;
+
+      // All definitions of the same method up the tree must be the same as the
+      // current definition, there is no shadowing.
+      // Hence, if we encounter a methoddeclop that has the same name but a
+      // different implementation that means this vtableentry should point to
+      // the op's implementation - that's an error.
+      else if (method.getSymName() == getName() &&
+               method.getImplAttr() != target && defined)
+        return emitOpError() << "Target " << target
+                             << " should be overridden by " << classSymName;
+    }
+  }
+  if (!defined)
+    return emitOpError()
+           << "Parent class does not point to any implementation!";
 
   return success();
 }

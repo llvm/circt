@@ -99,6 +99,37 @@ static uint64_t getTimeScaleInFemtoseconds(Context &context) {
   return scale;
 }
 
+static Value visitClassProperty(Context &context,
+                                const slang::ast::ClassPropertySymbol &expr) {
+  auto loc = context.convertLocation(expr.location);
+  auto builder = context.builder;
+
+  auto type = context.convertType(expr.getType());
+  // Get the scope's implicit this variable
+  mlir::Value instRef = context.getImplicitThisRef();
+  if (!instRef) {
+    mlir::emitError(loc) << "class property '" << expr.name
+                         << "' referenced without an implicit 'this'";
+    return {};
+  }
+
+  auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.name);
+  auto fieldTy = cast<moore::UnpackedType>(type);
+  auto fieldRefTy = moore::RefType::get(fieldTy);
+
+  moore::ClassHandleType classTy =
+      cast<moore::ClassHandleType>(instRef.getType());
+
+  auto targetClassHandle =
+      context.getAncestorClassWithProperty(classTy, expr.name);
+  auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
+                                                 false, instRef.getLoc());
+
+  Value fieldRef = moore::ClassPropertyRefOp::create(builder, loc, fieldRefTy,
+                                                     upcastRef, fieldSym);
+  return fieldRef;
+}
+
 namespace {
 /// A visitor handling expressions that can be lowered as lvalue and rvalue.
 struct ExprVisitor {
@@ -429,6 +460,7 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
+    // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
       if (isa<moore::RefType>(value.getType())) {
         auto readOp = moore::ReadOp::create(builder, loc, value);
@@ -439,34 +471,16 @@ struct RvalueExprVisitor : public ExprVisitor {
       return value;
     }
 
+    // Handle global variables.
+    if (auto globalOp = context.globalVariables.lookup(&expr.symbol)) {
+      auto value = moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+      return moore::ReadOp::create(builder, loc, value);
+    }
+
     // We're reading a class property.
     if (auto *const property =
             expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
-      auto type = context.convertType(*expr.type);
-
-      // Get the scope's implicit this variable
-      mlir::Value instRef = context.getImplicitThisRef();
-      if (!instRef) {
-        mlir::emitError(loc) << "class property '" << property->name
-                             << "' referenced without an implicit 'this'";
-        return {};
-      }
-
-      auto fieldSym =
-          mlir::FlatSymbolRefAttr::get(builder.getContext(), property->name);
-      auto fieldTy = cast<moore::UnpackedType>(type);
-      auto fieldRefTy = moore::RefType::get(fieldTy);
-
-      moore::ClassHandleType classTy =
-          cast<moore::ClassHandleType>(instRef.getType());
-
-      auto targetClassHandle =
-          context.getAncestorClassWithProperty(classTy, property->name);
-      auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
-                                                     false, instRef.getLoc());
-
-      Value fieldRef = moore::ClassPropertyRefOp::create(
-          builder, loc, fieldRefTy, upcastRef, fieldSym);
+      auto fieldRef = visitClassProperty(context, *property);
       return moore::ReadOp::create(builder, loc, fieldRef).getResult();
     }
 
@@ -1226,7 +1240,7 @@ struct RvalueExprVisitor : public ExprVisitor {
   }
 
   /// Build a method call including implicit this argument.
-  mlir::func::CallOp
+  mlir::CallOpInterface
   buildMethodCall(const slang::ast::SubroutineSymbol *subroutine,
                   FunctionLowering *lowering,
                   moore::ClassHandleType actualHandleTy, Value actualThisRef,
@@ -1253,15 +1267,18 @@ struct RvalueExprVisitor : public ExprVisitor {
         (subroutine->flags & slang::ast::MethodFlags::Virtual) != 0;
 
     if (!isVirtual) {
+      auto calleeSym = lowering->op.getSymName();
       // Direct (non-virtual) call -> moore.class.call
-      auto calleeSym =
-          SymbolRefAttr::get(context.getContext(), lowering->op.getSymName());
       return mlir::func::CallOp::create(builder, loc, resultTypes, calleeSym,
                                         explicitArguments);
     }
 
-    mlir::emitError(loc) << "virtual method calls not supported";
-    return {};
+    auto funcName = subroutine->name;
+    auto method = moore::VTableLoadMethodOp::create(
+        builder, loc, funcTy, actualThisRef,
+        SymbolRefAttr::get(context.getContext(), funcName));
+    return mlir::func::CallIndirectOp::create(builder, loc, method,
+                                              explicitArguments);
   }
 
   /// Handle subroutine calls.
@@ -1273,7 +1290,6 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto *lowering = context.declareFunction(*subroutine);
     if (!lowering)
       return {};
-
     auto convertedFunction = context.convertFunction(*subroutine);
     if (failed(convertedFunction))
       return {};
@@ -1355,9 +1371,10 @@ struct RvalueExprVisitor : public ExprVisitor {
         lowering->op.getFunctionType().getResults().begin(),
         lowering->op.getFunctionType().getResults().end());
 
-    mlir::func::CallOp callOp;
+    mlir::CallOpInterface callOp;
     if (isMethod) {
-      // Class functions -> build func.call with implicit this argument
+      // Class functions -> build func.call / func.indirect_call with implicit
+      // this argument
       auto [thisRef, tyHandle] = getMethodReceiverTypeHandle(expr);
       callOp = buildMethodCall(subroutine, lowering, tyHandle, thisRef,
                                arguments, resultTypes);
@@ -1367,7 +1384,7 @@ struct RvalueExprVisitor : public ExprVisitor {
           mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
     }
 
-    auto result = resultTypes.size() > 0 ? callOp.getResult(0) : Value{};
+    auto result = resultTypes.size() > 0 ? callOp->getOpResult(0) : Value{};
     // For calls to void functions we need to have a value to return from this
     // function. Create a dummy `unrealized_conversion_cast`, which will get
     // deleted again later on.
@@ -1400,6 +1417,7 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     FailureOr<Value> result;
     Value value;
+    Value value2;
 
     // $sformatf() and $sformat look like system tasks, but we handle string
     // formatting differently from expression evaluation, so handle them
@@ -1432,6 +1450,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (!value)
         return {};
       result = context.convertSystemCallArity1(subroutine, loc, value);
+      break;
+
+    case (2):
+      value = context.convertRvalueExpression(*args[0]);
+      value2 = context.convertRvalueExpression(*args[1]);
+      if (!value || !value2)
+        return {};
+      result = context.convertSystemCallArity2(subroutine, loc, value, value2);
       break;
 
     default:
@@ -1813,8 +1839,19 @@ struct LvalueExprVisitor : public ExprVisitor {
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
+    // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
+
+    // Handle global variables.
+    if (auto globalOp = context.globalVariables.lookup(&expr.symbol))
+      return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+
+    if (auto *const property =
+            expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
+      return visitClassProperty(context, *property);
+    }
+
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
@@ -1823,8 +1860,13 @@ struct LvalueExprVisitor : public ExprVisitor {
 
   // Handle hierarchical values, such as `Top.sub.var = x`.
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
+
+    // Handle global variables.
+    if (auto globalOp = context.globalVariables.lookup(&expr.symbol))
+      return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
 
     // Emit an error for those hierarchical values not recorded in the
     // `valueSymbols`.
@@ -2471,6 +2513,28 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   if (isa<moore::StringType>(value.getType()))
                     return moore::StringLenOp::create(builder, loc, value);
                   return {};
+                })
+          .Case("toupper",
+                [&]() -> Value {
+                  return moore::StringToUpperOp::create(builder, loc, value);
+                })
+          .Case("tolower",
+                [&]() -> Value {
+                  return moore::StringToLowerOp::create(builder, loc, value);
+                })
+          .Default([&]() -> Value { return {}; });
+  return systemCallRes();
+}
+
+FailureOr<Value>
+Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
+                                 Location loc, Value value1, Value value2) {
+  auto systemCallRes =
+      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          .Case("getc",
+                [&]() -> Value {
+                  return moore::StringGetCOp::create(builder, loc, value1,
+                                                     value2);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

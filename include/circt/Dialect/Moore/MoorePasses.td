@@ -39,4 +39,14 @@ def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
     let constructor = "circt::moore::createLowerConcatRefPass()";
 }
 
+def CreateVTables : Pass<"moore-create-vtables", "mlir::ModuleOp"> {
+    let summary = "Lower moore.vtable ops";
+    let description = [{
+        It's used to compute vtables from classdeclops.
+        Needs to be run before any Symbol DCE pass is run.
+    }];
+    let constructor = "circt::moore::createVTablesPass()";
+}
+
+
 #endif // CIRCT_DIALECT_MOORE_MOOREPASSES_TD

@@ -14,12 +14,19 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK-LABEL: firrtl.extmodule @ExtFoo()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
   // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "// world", output_file = "..{{/|\\\\}}testbench{{/|\\\\}}hello.v"}]
   firrtl.extmodule @ExtFoo() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello.v", text = "// world"}]}
   // CHECK-LABEL: firrtl.extmodule @ExtFoo2()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"
+  // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "// world", output_file = "cover{{/|\\\\}}hello2.v"}]
   firrtl.extmodule @ExtFoo2() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello2.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.extmodule @ExtFoo3()
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"
+  // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "// world", output_file = "..{{/|\\\\}}testbench{{/|\\\\}}hello3.v"}]
   firrtl.extmodule @ExtFoo3() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello3.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.module @DUTBlackboxes
   firrtl.module @DUTBlackboxes() attributes {annotations = [
@@ -28,8 +35,20 @@ firrtl.circuit "Foo" attributes {annotations = [
       firrtl.instance bar @Bar()
       firrtl.instance baz @Baz()
   }
+  // CHECK-LABEL: firrtl.extmodule @Bar()
+  // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "/* Bar */\0A", output_file = "bar{{/|\\\\}}Bar.v"}]
   firrtl.extmodule @Bar() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "Bar.v", text = "/* Bar */\0A"}], output_file = #hw.output_file<"bar/">}
+  // CHECK-LABEL: firrtl.extmodule @Baz()
+  // CHECK-NOT: class = "firrtl.transforms.BlackBoxPathAnno"
+  // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "{{.*}}/* Baz */{{.*}}", output_file = "baz{{/|\\\\}}Baz.sv"}]
   firrtl.extmodule @Baz() attributes {annotations = [{class = "firrtl.transforms.BlackBoxPathAnno", path = "Baz.sv"}], output_file = #hw.output_file<"baz/">}
+  // CHECK-LABEL: firrtl.extmodule @Qux()
+  // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "/* Qux */\0A", output_file = "qux{{/|\\\\}}NotQux.jpeg"}]
   firrtl.extmodule @Qux() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "Qux.sv", text = "/* Qux */\0A"}], output_file = #hw.output_file<"qux/NotQux.jpeg">}
   firrtl.module @Foo() {
     firrtl.instance foo @ExtFoo()
@@ -37,24 +56,7 @@ firrtl.circuit "Foo" attributes {annotations = [
     firrtl.instance dut @DUTBlackboxes()
   }
 
-  // CHECK:      emit.file "..{{/|\\\\}}testbench{{/|\\\\}}hello.v" sym @blackbox_hello.v {
-  // CHECK-NEXT:   emit.verbatim "// world"
-  // CHECK-NEXT: }
-  // CHECK:      emit.file "cover{{/|\\\\}}hello2.v" sym @blackbox_hello2.v {
-  // CHECK-NEXT:   emit.verbatim "// world"
-  // CHECK-NEXT: }
-  // CHECK:      emit.file "..{{/|\\\\}}testbench{{/|\\\\}}hello3.v" sym @blackbox_hello3.v {
-  // CHECK-NEXT:   emit.verbatim "// world"
-  // CHECK-NEXT: }
-  // CHECK:      emit.file "bar{{/|\\\\}}Bar.v" sym @blackbox_Bar.v {
-  // CHECK-NEXT:   emit.verbatim "/* Bar */\0A"
-  // CHECK-NEXT: }
-  // CHECK:      emit.file "baz{{/|\\\\}}Baz.sv" sym @blackbox_Baz.sv {
-  // CHECK-NEXT:   emit.verbatim "/* Baz */{{(\\0D)?}}\0A"
-  // CHECK-NEXT: }
-  // CHECK:      emit.file "qux{{/|\\\\}}NotQux.jpeg" sym @blackbox_Qux.sv {
-  // CHECK-NEXT:   emit.verbatim "/* Qux */\0A"
-  // CHECK-NEXT: }
+
 }
 
 //--- NoDUT.mlir
@@ -68,6 +70,10 @@ firrtl.circuit "NoDUT" attributes {annotations = [
     dirname = "testbench"
   }
 ]} {
+  // CHECK-LABEL: firrtl.extmodule @NoDUTBlackBox()
+  // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
+  // CHECK-SAME: class = "firrtl.transforms.BlackBox"
+  // CHECK-SAME: class = "circt.VerbatimBlackBoxAnno", files = [{content = "module NoDUTBlackBox();\0Aendmodule\0A", output_file = ".{{/|\\\\}}NoDUTBlackBox.sv"}]
   firrtl.extmodule @NoDUTBlackBox() attributes {annotations = [
   {
     class = "firrtl.transforms.BlackBoxInlineAnno",
@@ -79,7 +85,4 @@ firrtl.circuit "NoDUT" attributes {annotations = [
   firrtl.module @NoDUT() {
     firrtl.instance noDUTBlackBox @NoDUTBlackBox()
   }
-  // CHECK:      emit.file ".{{/|\\\\}}NoDUTBlackBox.sv" sym @blackbox_NoDUTBlackBox.sv {
-  // CHECK-NEXT:   emit.verbatim "module NoDUTBlackBox();\0Aendmodule\0A"
-  // CHECK-NEXT: }
 }

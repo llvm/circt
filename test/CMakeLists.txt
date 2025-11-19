@@ -35,6 +35,7 @@ set(CIRCT_TEST_DEPENDS
   circt-test
   circt-translate
   circt-reduce
+  domaintool
   handshake-runner
   firld
   firtool

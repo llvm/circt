@@ -1613,10 +1613,6 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(FixedRegisterOp op) {
-    return visitPureOp(op);
-  }
-
   FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {
     auto *val = sharedState.internalizer.create<VirtualRegisterStorage>(
         op.getAllowedRegsAttr(), op.getType());

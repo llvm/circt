@@ -3143,3 +3143,58 @@ firrtl.circuit "NonPropertyTypeInDomainField" {
   firrtl.domain @Foo ["bar", !firrtl.uint<1>]
   firrtl.module @NonPropertyTypeInDomainField() {}
 }
+
+// -----
+
+firrtl.circuit "WrongInstanceDomainInfo" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(in %a: !firrtl.uint<1>) {}
+  firrtl.module @WrongInstanceDomainInfo() {
+    // expected-error @below {{'firrtl.instance' op has a wrong number of port domain info attributes; expected 1, got 0}}
+    %a = firrtl.instance foo  {domainInfo = []} @Foo(in a: !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceDomainInfo" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain,
+    in %B : !firrtl.domain of @ClockDomain,
+    in %a : !firrtl.uint<1> domains [%A]
+  ) {}
+  firrtl.module @WrongInstanceDomainInfo() {
+  // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
+      in A : !firrtl.domain of @ClockDomain,
+      in B : !firrtl.domain of @ClockDomain,
+      in a : !firrtl.uint<1> domains [B]
+    )
+  }
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceChoiceDomainInfo" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain,
+    in %B : !firrtl.domain of @ClockDomain,
+    in %a : !firrtl.uint<1> domains [%A]
+  ) {}
+  firrtl.module @WrongInstanceChoiceDomainInfo() {
+    // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
+      in A : !firrtl.domain of @ClockDomain,
+      in B : !firrtl.domain of @ClockDomain,
+      in a : !firrtl.uint<1> domains [B]
+    )
+  }
+}

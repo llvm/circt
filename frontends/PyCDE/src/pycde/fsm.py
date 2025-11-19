@@ -3,7 +3,7 @@ from .common import Input, Output
 from .dialects import fsm
 from .module import Module, ModuleLikeBuilderBase
 from .support import _obj_to_attribute
-from .types import Bits, types
+from .types import Bit, Bits
 
 from .circt.ir import FlatSymbolRefAttr, InsertionPoint, StringAttr
 from .circt.support import attribute_to_var
@@ -59,7 +59,7 @@ class State:
     with InsertionPoint(state_op.output):
       outputs = []
       for idx in range(len(spec_mod.outputs)):
-        outputs.append(types.i1(idx == self.output))
+        outputs.append(Bit(idx == self.output))
       fsm.OutputOp(*outputs)
 
     # Emit outgoing transitions from this state.

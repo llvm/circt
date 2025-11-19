@@ -81,4 +81,28 @@ def ValidationTypeInterface : TypeInterface<"ValidationTypeInterface"> {
   ];
 }
 
+def ImplicitConstraintOpInterface : OpInterface<"ImplicitConstraintOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that implicitly enforce
+    a constraint. This is used to automatically materialize constraints that
+    are not explicitly specified by the user.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    InterfaceMethod<[{
+      Returns whether the constraint enforced by this operation has already
+      been materialized.
+    }], "bool", "isConstraintMaterialized">,
+    InterfaceMethod<[{
+      Materialize the constraint enforced by this operation. The operation
+      itself may be modified in place (return itself) or a new operation may
+      be returned to be replaced with this operation. Returning `nullptr` means
+      the operation should be erased without being replaced (only valid for
+      operations without results).
+    }], "mlir::Operation *", "materializeConstraint", (ins
+      "mlir::OpBuilder &":$builder)>,
+  ];
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGINTERFACES_TD

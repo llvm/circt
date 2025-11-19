@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -1942,6 +1944,286 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
                    StringAttr name) {
   auto ref = hw::InnerRefAttr::get(mod, name);
   odsState.addAttribute("instance", ref);
+}
+
+//===----------------------------------------------------------------------===//
+// SVVerbatimSourceOp
+//===----------------------------------------------------------------------===//
+
+void SVVerbatimSourceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(getSymName());
+
+  // Print parameters
+  circt::printOptionalParameterList(p, *this, getParameters());
+
+  // Print attributes using the helper function
+  SmallVector<StringRef> omittedAttrs = {SymbolTable::getSymbolAttrName(),
+                                         "parameters", visibilityAttrName};
+
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+}
+
+ParseResult SVVerbatimSourceOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+
+  // parse optional visibility
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  StringRef visibility;
+  if (succeeded(parser.parseOptionalKeyword(&visibility,
+                                            {"public", "private", "nested"}))) {
+    result.addAttribute(visibilityAttrName,
+                        parser.getBuilder().getStringAttr(visibility));
+  }
+
+  // Parse the symbol name
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse optional parameters
+  ArrayAttr parameters;
+  if (circt::parseOptionalParameterList(parser, parameters))
+    return failure();
+  result.addAttribute("parameters", parameters);
+
+  // Parse attributes using the helper function
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  return success();
+}
+
+LogicalResult SVVerbatimSourceOp::verify() {
+  // must have verbatim content
+  if (getContent().empty())
+    return emitOpError("missing or empty content attribute");
+
+  return success();
+}
+
+LogicalResult
+SVVerbatimSourceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Verify that all symbols in additional_files are emit.file operations
+  if (auto additionalFiles = getAdditionalFiles()) {
+    for (auto fileRef : *additionalFiles) {
+      auto flatRef = dyn_cast<FlatSymbolRefAttr>(fileRef);
+      if (!flatRef)
+        return emitOpError(
+            "additional_files must contain flat symbol references");
+
+      auto *referencedOp =
+          symbolTable.lookupNearestSymbolFrom(getOperation(), flatRef);
+      if (!referencedOp)
+        return emitOpError("references nonexistent file ")
+               << flatRef.getValue();
+
+      // Check that the referenced operation is an emit.file
+      if (referencedOp->getName().getStringRef() != "emit.file")
+        return emitOpError("references ")
+               << flatRef.getValue() << ", which is not an emit.file";
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SVVerbatimModuleOp
+//===----------------------------------------------------------------------===//
+
+SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
+  SmallVector<hw::PortInfo> ports;
+  auto moduleType = getModuleType();
+  auto portLocs = getPortLocs();
+  auto portAttrs = getPerPortAttrs();
+
+  for (size_t i = 0, e = moduleType.getNumPorts(); i < e; ++i) {
+    auto port = moduleType.getPorts()[i];
+    LocationAttr loc = portLocs && i < portLocs->size()
+                           ? cast<LocationAttr>((*portLocs)[i])
+                           : UnknownLoc::get(getContext());
+    DictionaryAttr attrs = portAttrs && i < portAttrs->size()
+                               ? cast<DictionaryAttr>((*portAttrs)[i])
+                               : DictionaryAttr::get(getContext());
+    hw::PortInfo::Direction dir =
+        port.dir == hw::ModulePort::Direction::Input
+            ? hw::PortInfo::Direction::Input
+            : (port.dir == hw::ModulePort::Direction::Output
+                   ? hw::PortInfo::Direction::Output
+                   : hw::PortInfo::Direction::InOut);
+    ports.push_back({{port.name, port.type, dir}, i, attrs, loc});
+  }
+  return ports;
+}
+
+hw::PortInfo SVVerbatimModuleOp::getPort(size_t idx) {
+  return getPortList()[idx];
+}
+
+size_t SVVerbatimModuleOp::getPortIdForInputId(size_t idx) {
+  return getModuleType().getPortIdForInputId(idx);
+}
+
+size_t SVVerbatimModuleOp::getPortIdForOutputId(size_t idx) {
+  return getModuleType().getPortIdForOutputId(idx);
+}
+
+size_t SVVerbatimModuleOp::getNumPorts() {
+  return getModuleType().getNumPorts();
+}
+
+size_t SVVerbatimModuleOp::getNumInputPorts() {
+  return getModuleType().getNumInputs();
+}
+
+size_t SVVerbatimModuleOp::getNumOutputPorts() {
+  return getModuleType().getNumOutputs();
+}
+
+hw::ModuleType SVVerbatimModuleOp::getHWModuleType() { return getModuleType(); }
+
+ArrayRef<Attribute> SVVerbatimModuleOp::getAllPortAttrs() {
+  if (auto attrs = getPerPortAttrs())
+    return attrs->getValue();
+  return {};
+}
+
+void SVVerbatimModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  setPerPortAttrsAttr(ArrayAttr::get(getContext(), attrs));
+}
+
+void SVVerbatimModuleOp::removeAllPortAttrs() { removePerPortAttrsAttr(); }
+
+SmallVector<Location> SVVerbatimModuleOp::getAllPortLocs() {
+  if (auto locs = getPortLocs()) {
+    SmallVector<Location> result;
+    result.reserve(locs->size());
+    for (auto loc : *locs)
+      result.push_back(cast<Location>(loc));
+    return result;
+  }
+  return SmallVector<Location>(getNumPorts(), UnknownLoc::get(getContext()));
+}
+
+void SVVerbatimModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
+}
+
+void SVVerbatimModuleOp::setHWModuleType(hw::ModuleType type) {
+  setModuleTypeAttr(TypeAttr::get(type));
+}
+
+void SVVerbatimModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
+  // Port names are part of the module type, so we need to reconstruct it
+  auto currentType = getModuleType();
+  SmallVector<hw::ModulePort> ports;
+  for (size_t i = 0, e = currentType.getNumPorts(); i < e; ++i) {
+    auto port = currentType.getPorts()[i];
+    if (i < names.size())
+      port.name = cast<StringAttr>(names[i]);
+    ports.push_back(port);
+  }
+  setHWModuleType(hw::ModuleType::get(getContext(), ports));
+}
+
+void SVVerbatimModuleOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
+
+  printOptionalParameterList(p, *this, getParameters());
+
+  Region emptyRegion;
+  hw::module_like_impl::printModuleSignatureNew(
+      p, emptyRegion, getModuleType(), getAllPortAttrs(), getAllPortLocs());
+
+  SmallVector<StringRef> omittedAttrs = {
+      SymbolTable::getSymbolAttrName(),   SymbolTable::getVisibilityAttrName(),
+      getModuleTypeAttrName().getValue(), getPerPortAttrsAttrName().getValue(),
+      getPortLocsAttrName().getValue(),   getParametersAttrName().getValue()};
+
+  mlir::function_interface_impl::printFunctionAttributes(p, *this,
+                                                         omittedAttrs);
+}
+
+ParseResult SVVerbatimModuleOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  using namespace mlir::function_interface_impl;
+  auto builder = parser.getBuilder();
+
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the parameters.
+  ArrayAttr parameters;
+  if (parseOptionalParameterList(parser, parameters))
+    return failure();
+
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+    return failure();
+
+  result.addAttribute(getModuleTypeAttrName(result.name), modType);
+  result.addAttribute("parameters", parameters);
+
+  // Convert the specified array of dictionary attrs (which may have null
+  // entries) to an ArrayAttr of dictionaries.
+  auto unknownLoc = builder.getUnknownLoc();
+  SmallVector<Attribute> attrs, locs;
+
+  for (auto &port : ports) {
+    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
+    auto loc = port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc;
+    locs.push_back(loc);
+  }
+
+  if (!attrs.empty())
+    result.addAttribute("per_port_attrs", builder.getArrayAttr(attrs));
+  if (!locs.empty())
+    result.addAttribute("port_locs", builder.getArrayAttr(locs));
+
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // Verify required attributes exist
+  if (!result.attributes.get("source"))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "sv.verbatim.module requires 'source' attribute");
+
+  return success();
+}
+
+LogicalResult SVVerbatimModuleOp::verify() { return success(); }
+
+LogicalResult
+SVVerbatimModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Verify that the source attribute references an sv.verbatim.source operation
+  auto sourceOp = dyn_cast_or_null<SVVerbatimSourceOp>(
+      symbolTable.lookupNearestSymbolFrom(*this, getSourceAttr()));
+  if (!sourceOp)
+    return emitError("references ") << getSourceAttr().getAttr().getValue()
+                                    << ", which is not an sv.verbatim.source";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

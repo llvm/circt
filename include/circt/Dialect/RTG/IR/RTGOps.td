@@ -33,7 +33,8 @@ class RTGOp<string mnemonic, list<Trait> traits = []> :
 def ConstantOp : RTGOp<"constant", [
   Pure,
   ConstantLike,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "create an SSA value from an attribute";
 
@@ -210,11 +211,15 @@ class LabelDeclBase<string mnemonic,
 def LabelDeclOp : LabelDeclBase<"label_decl", [Pure]> {
   let summary = "declares a label for an instruction sequence";
   let results = (outs LabelType:$label);
+
+  let hasFolder = 1;
 }
 
 def LabelUniqueDeclOp : LabelDeclBase<"label_unique_decl", []> {
   let summary = "declares a unique label for an instruction sequence";
   let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
+
+  let hasFolder = 1;
 }
 
 def LabelVisibilityAttr : I32EnumAttr<"LabelVisibility",
@@ -654,26 +659,25 @@ def CommentOp : RTGOp<"comment", []> {
   let assemblyFormat = "$comment attr-dict";
 }
 
-//===- ISA Register Handling Operations -----------------------------------===//
-
-def FixedRegisterOp : RTGOp<"fixed_reg", [
-  Pure, ConstantLike,
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-]> {
-  let summary = "returns a value representing a fixed register";
+def ConstraintOp : RTGOp<"constraint", []> {
+  let summary = "enforce a constraint";
   let description = [{
-    This operation creates a value representing the register given as the 'reg'
-    attribute. This is always a concrete ISA register.
-    The return type always matches the register attribute type.
+    This operation enforces a constraint. This allows to specify additional
+    constraints on values after their construction. It should be avoided when
+    possible as these backward constraints are computationally more expensive.
+    
+    Constraints should be tried to be solved such that all of them evaluate to
+    'true'. If the constraint system turns out to be unsolvable, the compiler
+    should error out gracefully as early as possible (it might also error out
+    when the system is too expensive to solve).
   }];
 
-  let arguments = (ins RegisterAttrInterface:$reg);
-  let results = (outs RegisterTypeInterface:$result);
+  let arguments = (ins I1:$condition);
 
-  let assemblyFormat = "$reg attr-dict";
-  let hasFolder = 1;
+  let assemblyFormat = "$condition attr-dict";
 }
+
+//===- ISA Register Handling Operations -----------------------------------===//
 
 def VirtualRegisterOp : RTGOp<"virtual_reg", [
   DeclareOpInterfaceMethods<InferTypeOpInterface>,
@@ -687,7 +691,7 @@ def VirtualRegisterOp : RTGOp<"virtual_reg", [
 
   // ArrayAttr of RegisterAttrInterfaces
   let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
-  let results = (outs RegisterTypeInterface:$result);
+  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
 
   let assemblyFormat = "$allowedRegs attr-dict";
 }
@@ -949,7 +953,7 @@ def MemoryBlockDeclareOp : RTGISAOp<"memory_block_declare", [
   }];
 
   let arguments = (ins APIntAttr:$baseAddress, APIntAttr:$endAddress);
-  let results = (outs MemoryBlockType:$result);
+  let results = (outs Res<MemoryBlockType, "", [MemAlloc]>:$result);
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -974,7 +978,7 @@ def MemoryAllocOp : RTGISAOp<"memory_alloc", [
                        Index:$size,
                        Index:$alignment);
 
-  let results = (outs MemoryType:$result);
+  let results = (outs Res<MemoryType, "", [MemAlloc]>:$result);
 
   let assemblyFormat = [{
     $memoryBlock `,` $size `,` $alignment

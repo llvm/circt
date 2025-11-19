@@ -21,13 +21,16 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <string>
 
 using namespace esi;
 
 void printInfo(std::ostream &os, AcceleratorConnection &acc, bool details);
 void printHier(std::ostream &os, AcceleratorConnection &acc, bool details);
 void printTelemetry(std::ostream &os, AcceleratorConnection &acc);
+void printTelemetryJson(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
   CliParser cli("esiquery");
@@ -44,8 +47,11 @@ int main(int argc, const char *argv[]) {
   CLI::App *hierSub = cli.add_subcommand("hier", "Print ESI system hierarchy");
   hierSub->add_flag("--details", hierDetails,
                     "Print detailed information about the system");
+  bool telemetryJson = false;
   CLI::App *telemetrySub =
       cli.add_subcommand("telemetry", "Print ESI system telemetry information");
+  telemetrySub->add_flag("--json", telemetryJson,
+                         "Dump telemetry information as JSON");
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -54,7 +60,7 @@ int main(int argc, const char *argv[]) {
 
   Context &ctxt = cli.getContext();
   try {
-    std::unique_ptr<AcceleratorConnection> acc = cli.connect();
+    AcceleratorConnection *acc = cli.connect();
     const auto &info = *acc->getService<services::SysInfo>();
 
     if (*versionSub)
@@ -63,8 +69,12 @@ int main(int argc, const char *argv[]) {
       printInfo(std::cout, *acc, infoDetails);
     else if (*hierSub)
       printHier(std::cout, *acc, hierDetails);
-    else if (*telemetrySub)
-      printTelemetry(std::cout, *acc);
+    else if (*telemetrySub) {
+      if (telemetryJson)
+        printTelemetryJson(std::cout, *acc);
+      else
+        printTelemetry(std::cout, *acc);
+    }
     return 0;
   } catch (std::exception &e) {
     ctxt.getLogger().error("esiquery", e.what());
@@ -159,13 +169,51 @@ void printHier(std::ostream &os, AcceleratorConnection &acc, bool details) {
   printInstance(os, design, /*indent=*/"", details);
 }
 
+// Recursively collect telemetry metrics into a hierarchical JSON structure.
+static bool collectTelemetryJson(const HWModule &module, nlohmann::json &node) {
+  bool hasData = false;
+
+  for (const auto &portRef : module.getPortsOrdered()) {
+    BundlePort &port = portRef.get();
+    if (auto *metric =
+            dynamic_cast<services::TelemetryService::Metric *>(&port)) {
+      metric->connect();
+      node[metric->getID().toString()] = metric->readInt();
+      hasData = true;
+    }
+  }
+
+  for (const Instance *child : module.getChildrenOrdered()) {
+    nlohmann::json childNode = nlohmann::json::object();
+    if (collectTelemetryJson(*child, childNode)) {
+      node[child->getID().toString()] = childNode;
+      hasData = true;
+    }
+  }
+
+  return hasData;
+}
+
+void printTelemetryJson(std::ostream &os, AcceleratorConnection &acc) {
+  Manifest manifest(acc.getCtxt(),
+                    acc.getService<services::SysInfo>()->getJsonManifest());
+  auto accel = manifest.buildAccelerator(acc);
+  acc.getServiceThread()->addPoll(*accel);
+
+  nlohmann::json root = nlohmann::json::object();
+  if (!collectTelemetryJson(*accel, root))
+    root = nlohmann::json{{"error", "No telemetry metrics found"}};
+
+  os << root.dump(2) << std::endl;
+}
+
 void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
   Manifest manifest(acc.getCtxt(),
                     acc.getService<services::SysInfo>()->getJsonManifest());
   auto accel = manifest.buildAccelerator(acc);
   acc.getServiceThread()->addPoll(*accel);
 
-  auto telemetry = acc.getService<services::TelemetryService>();
+  auto *telemetry = acc.getService<services::TelemetryService>();
   if (!telemetry) {
     os << "No telemetry service found" << std::endl;
     return;
@@ -175,13 +223,13 @@ void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
   os << "********************************" << std::endl;
   os << std::endl;
 
-  const std::map<AppIDPath, services::TelemetryService::Telemetry *>
+  const std::map<AppIDPath, services::TelemetryService::Metric *>
       &telemetryPorts = telemetry->getTelemetryPorts();
   for (const auto &[id, port] : telemetryPorts) {
     port->connect();
     os << id << ": ";
     os.flush();
-    uint64_t value = *port->read().get().as<uint64_t>();
+    uint64_t value = port->readInt();
     os << value << std::endl;
   }
 }

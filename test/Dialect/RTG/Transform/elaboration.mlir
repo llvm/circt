@@ -73,20 +73,20 @@ rtg.test @setCartesianProduct(singleton = %none: index) {
   %true = index.bool.constant true
   %false = index.bool.constant false
   %1 = rtg.set_create %true, %false : i1
-  %s0 = rtg.fixed_reg #rtgtest.s0
-  %s1 = rtg.fixed_reg #rtgtest.s1
+  %s0 = rtg.constant #rtgtest.s0
+  %s1 = rtg.constant #rtgtest.s1
   %2 = rtg.set_create %s0, %s1 : !rtgtest.ireg
 
   // CHECK-DAG: [[IDX1:%.+]] = index.constant 1
   // CHECK-DAG: [[FALSE:%.+]] = index.bool.constant false
-  // CHECK-DAG: [[S1:%.+]] = rtg.fixed_reg #rtgtest.s1 : !rtgtest.ireg
+  // CHECK-DAG: [[S1:%.+]] = rtg.constant #rtgtest.s1 : !rtgtest.ireg
   // CHECK-DAG: [[T1:%.+]] = rtg.tuple_create [[IDX1]], [[FALSE]], [[S1]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[IDX0:%.+]] = index.constant 0
   // CHECK-DAG: [[T2:%.+]] = rtg.tuple_create [[IDX0]], [[FALSE]], [[S1]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[TRUE:%.+]] = index.bool.constant true
   // CHECK-DAG: [[T3:%.+]] = rtg.tuple_create [[IDX1]], [[TRUE]], [[S1]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[T4:%.+]] = rtg.tuple_create [[IDX0]], [[TRUE]], [[S1]] : index, i1, !rtgtest.ireg
-  // CHECK-DAG: [[S0:%.+]] = rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
+  // CHECK-DAG: [[S0:%.+]] = rtg.constant #rtgtest.s0 : !rtgtest.ireg
   // CHECK-DAG: [[T5:%.+]] = rtg.tuple_create [[IDX1]], [[FALSE]], [[S0]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[T6:%.+]] = rtg.tuple_create [[IDX0]], [[FALSE]], [[S0]] : index, i1, !rtgtest.ireg
   // CHECK-DAG: [[T7:%.+]] = rtg.tuple_create [[IDX1]], [[TRUE]], [[S0]] : index, i1, !rtgtest.ireg
@@ -389,12 +389,12 @@ rtg.test @scfFor(singleton = %none: index) {
 
 // CHECK-LABEL: @fixedRegisters
 rtg.test @fixedRegisters(singleton = %none: index) {
-  // CHECK-NEXT: [[RA:%.+]] = rtg.fixed_reg #rtgtest.ra
-  // CHECK-NEXT: [[SP:%.+]] = rtg.fixed_reg #rtgtest.sp
+  // CHECK-NEXT: [[RA:%.+]] = rtg.constant #rtgtest.ra
+  // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp
   // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[SP]], [[IMM]]
-  %ra = rtg.fixed_reg #rtgtest.ra
-  %sp = rtg.fixed_reg #rtgtest.sp
+  %ra = rtg.constant #rtgtest.ra
+  %sp = rtg.constant #rtgtest.sp
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %ra, %sp, %imm
 }
@@ -741,11 +741,11 @@ rtg.test @subtypeMatching(b = %b: index) {
 
 // CHECK-LABEL: rtg.test @validateOp
 rtg.test @validateOp(singleton = %none: index) {
-  // CHECK-NEXT: [[V0:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtgtest.t0
   // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
   // CHECK-NEXT: [[V2:%.+]] = rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   // CHECK-NEXT: func.call @dummy15([[V2]])
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   %default = rtg.constant #rtg.isa.immediate<32, 0>
   %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   func.call @dummy15(%0) : (!rtg.isa.immediate<32>) -> ()
@@ -794,7 +794,7 @@ rtg.test @immediateOps(singleton = %none: index) {
   // CHECK-NEXT: func.call @dummy16([[CONCAT]]) :
   // CHECK-NEXT: [[SLICE:%.+]] = rtg.isa.slice_immediate [[V1]] from 4 :
   // CHECK-NEXT: func.call @dummy6([[SLICE]]) :
-  %reg = rtg.fixed_reg #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0
   %def1 = rtg.constant #rtg.isa.immediate<6, 0>
   %val1 = rtg.validate %reg, %def1, "val1" : !rtgtest.ireg -> !rtg.isa.immediate<6>
   %concat = rtg.isa.concat_immediate %val1, %val1 : !rtg.isa.immediate<6>, !rtg.isa.immediate<6>

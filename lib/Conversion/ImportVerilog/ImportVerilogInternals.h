@@ -122,6 +122,7 @@ struct Context {
   LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
   LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
+  LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
 
   /// Checks whether one class (actualTy) is derived from another class
   /// (baseTy). True if it's a subclass, false otherwise.
@@ -237,6 +238,11 @@ struct Context {
   convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                           Location loc, Value value);
 
+  /// Convert system function calls with arity-2.
+  FailureOr<Value>
+  convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc, Value value1, Value value2);
+
   /// Convert system function calls within properties and assertion with a
   /// single argument.
   FailureOr<Value> convertAssertionSystemCallArity1(
@@ -284,6 +290,14 @@ struct Context {
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
+
+  /// A table of defined global variables that may be referred to by name in
+  /// expressions.
+  DenseMap<const slang::ast::ValueSymbol *, moore::GlobalVariableOp>
+      globalVariables;
+  /// A list of global variables that still need their initializers to be
+  /// converted.
+  SmallVector<const slang::ast::ValueSymbol *> globalVariableWorklist;
 
   /// Collect all hierarchical names used for the per module/instance.
   DenseMap<const slang::ast::InstanceBodySymbol *, SmallVector<HierPathInfo>>

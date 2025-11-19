@@ -1,6 +1,4 @@
 // RUN: circt-opt %s --convert-hw-to-smt | FileCheck %s
-// RUN: circt-opt %s --convert-hw-to-smt='assert-module-outputs' | FileCheck %s --check-prefix=CHECK-ASSERTOUTPUTS
-
 
 // CHECK-LABEL: func @test
 func.func @test() {
@@ -13,11 +11,6 @@ func.func @test() {
 
   return
 }
-
-// CHECK-ASSERTOUTPUTS: func.func @modA(%[[ARG0:.*]]: !smt.bv<32>) -> !smt.bv<32>
-// CHECK-ASSERTOUTPUTS-NEXT: %[[DECL:.*]] = smt.declare_fun : !smt.bv<32>
-// CHECK-ASSERTOUTPUTS-NEXT: %[[EQ:.*]] = smt.eq %[[ARG0]], %[[DECL]] : !smt.bv<32>
-// CHECK-ASSERTOUTPUTS-NEXT: smt.assert %[[EQ]]
 
 // CHECK-LABEL: func.func @modA(%{{.*}}: !smt.bv<32>) -> !smt.bv<32>
 hw.module @modA(in %in: i32, out out: i32) {
@@ -44,18 +37,4 @@ hw.module @inject(in %arr: !hw.array<3xi8>, in %index: i2, in %v: i8, out out: !
   // CHECK-NEXT: return %[[RESULT]] : !smt.array<[!smt.bv<2> -> !smt.bv<8>]>
   %arr_injected = hw.array_inject %arr[%index], %v : !hw.array<3xi8>, i2
   hw.output %arr_injected : !hw.array<3xi8>
-}
-
-// Check that output assertions are generated correctly with multiple outputs
-// CHECK-ASSERTOUTPUTS: func.func @modC(%[[ARG0:.*]]: !smt.bv<32>, %[[ARG1:.*]]: !smt.bv<32>)
-// CHECK-ASSERTOUTPUTS: %[[DECL1:.*]] = smt.declare_fun : !smt.bv<32>
-// CHECK-ASSERTOUTPUTS: %[[EQ1:.*]] = smt.eq %[[ARG0]], %[[DECL1]] : !smt.bv<32>
-// CHECK-ASSERTOUTPUTS: smt.assert %[[EQ1]]
-// CHECK-ASSERTOUTPUTS: %[[DECL2:.*]] = smt.declare_fun : !smt.bv<32>
-// CHECK-ASSERTOUTPUTS: %[[EQ2:.*]] = smt.eq %[[ARG1]], %[[DECL2]] : !smt.bv<32>
-// CHECK-ASSERTOUTPUTS: smt.assert %[[EQ2]]
-// CHECK-ASSERTOUTPUTS: return %[[ARG0]], %[[ARG1]]
-
-hw.module @modC(in %in1: i32, in %in2: i32, out out1: i32, out out2: i32) {
-  hw.output %in1, %in2 : i32, i32
 }

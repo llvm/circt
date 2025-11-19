@@ -298,11 +298,11 @@ def test2_labels(config):
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
 # MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
 # MLIR-NEXT: [[IMM13:%.+]] = rtg.constant #rtg.isa.immediate<13, 9>
-# MLIR-NEXT: [[T2:%.+]] = rtg.fixed_reg #rtgtest.t2 : !rtgtest.ireg
+# MLIR-NEXT: [[T2:%.+]] = rtg.constant #rtgtest.t2 : !rtgtest.ireg
 # MLIR-NEXT: [[IMM5:%.+]] = rtg.constant #rtg.isa.immediate<5, 4>
-# MLIR-NEXT: [[T1:%.+]] = rtg.fixed_reg #rtgtest.t1 : !rtgtest.ireg
+# MLIR-NEXT: [[T1:%.+]] = rtg.constant #rtgtest.t1 : !rtgtest.ireg
 # MLIR-NEXT: [[IMM12:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
-# MLIR-NEXT: [[T0:%.+]] = rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
+# MLIR-NEXT: [[T0:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
 # MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
 # MLIR-NEXT: rtgtest.rv32i.addi [[VREG]], [[T0]], [[IMM12]]
 # MLIR-NEXT: rtgtest.rv32i.slli [[VREG]], [[T1]], [[IMM5]]
@@ -328,7 +328,7 @@ def test3_registers_and_immediates(config):
 
 
 # MLIR-LABEL: rtg.test @test4_integer_to_immediate()
-# MLIR-NEXT: [[V0:%.+]] = rtg.fixed_reg
+# MLIR-NEXT: [[V0:%.+]] = rtg.constant
 # MLIR-NEXT: [[V1:%.+]] = index.constant 2
 # MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
 # MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
@@ -341,7 +341,7 @@ def test4_integer_to_immediate(config):
 
 
 # MLIR-LABEL: rtg.test @test6_memories
-# MLIR-NEXT: [[REG:%.+]] = rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
+# MLIR-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
 # MLIR-NEXT: [[IDX8:%.+]] = index.constant 8
 # MLIR-NEXT: [[IDX4:%.+]] = index.constant 4
 # MLIR-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_blk, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32>

@@ -194,8 +194,12 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, FuncOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp,
+            sv::SVVerbatimModuleOp, FuncOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
+      .Case<SVVerbatimSourceOp>([](SVVerbatimSourceOp op) {
+        return op.getVerilogNameAttr().getValue();
+      })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
@@ -4109,6 +4113,7 @@ private:
 
   LogicalResult visitSV(BindOp op);
   LogicalResult visitSV(InterfaceOp op);
+  LogicalResult visitSV(sv::SVVerbatimSourceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
@@ -5692,6 +5697,18 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(sv::SVVerbatimSourceOp op) {
+  emitSVAttributes(op);
+  startStatement();
+  ps.addCallback({op, true});
+
+  ps << op.getContent();
+
+  ps.addCallback({op, false});
+  setPendingNewline();
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   // Emit SV attributes.
   emitSVAttributes(op);
@@ -6834,7 +6851,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<HWModuleExternOp>([&](HWModuleExternOp op) {
+        .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
+          symbolCache.addDefinition(op.getNameAttr(), op);
+          separateFile(op, op.getOutputFile().getFilename().getValue());
+        })
+        .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
@@ -6968,14 +6989,14 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWModuleExternOp>([&](auto op) {
+      .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
         // External modules are _not_ emitted.
       })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefOp>(
+      .Case<InterfaceOp, VerbatimOp, IfDefOp, sv::SVVerbatimSourceOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);

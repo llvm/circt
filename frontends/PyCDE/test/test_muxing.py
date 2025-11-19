@@ -1,10 +1,10 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import generator, dim, Clock, Input, Output, Module, types
+from pycde import generator, dim, Clock, Input, Output, Module
 from pycde.signals import Signal
 from pycde.constructs import Mux
 from pycde.testing import unittestmodule
-from pycde.types import Bits
+from pycde.types import Bit, Bits
 
 # CHECK-LABEL: hw.module @ComplexMux(in %Clk : !seq.clock, in %In : !hw.array<5xarray<4xi3>>, in %Sel : i1, out Out : !hw.array<4xi3>, out OutArr : !hw.array<2xarray<4xi3>>, out OutInt : i1, out OutSlice : !hw.array<3xarray<4xi3>>)
 # CHECK:         %c3_i3 = hw.constant 3 : i3
@@ -41,7 +41,7 @@ class ComplexMux(Module):
   Sel = Input(dim(1))
   Out = Output(dim(3, 4))
   OutArr = Output(dim(3, 4, 2))
-  OutInt = Output(types.i1)
+  OutInt = Output(Bit)
   OutSlice = Output(dim(3, 4, 3))
 
   @generator

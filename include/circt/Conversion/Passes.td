@@ -514,6 +514,23 @@ def ConvertHWToLLVM : Pass<"convert-hw-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertToLLVM
+//===----------------------------------------------------------------------===//
+
+def ConvertToLLVM : Pass<"convert-to-llvm", "mlir::ModuleOp"> {
+  let summary = "Convert Comb and HW to LLVM";
+  let description = [{
+    This pass translates Comb and HW operations inside func.func to LLVM IR.
+    It combines both HW and Comb conversion patterns to provide a complete
+    lowering from hardware description to LLVM IR.
+  }];
+  let dependentDialects = [
+    "mlir::LLVM::LLVMDialect",
+    "mlir::arith::ArithDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // HWArithToHW
 //===----------------------------------------------------------------------===//
 
@@ -671,10 +688,11 @@ def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert HW ops and constants to SMT ops";
   let dependentDialects = ["mlir::smt::SMTDialect", "mlir::func::FuncDialect"];
   let options = [
-    Option<"assertModuleOutputs", "assert-module-outputs", "bool",
+    Option<"forSMTLIBExport", "for-smtlib-export", "bool",
            /*default=*/"false",
-           "For each output of each hw.module operation, instantiate a"
-           "constant and assert its equivalence to the output.">,
+           "Produce output for SMTLIB export - this will replace hw.module"
+           "operations with smt.solver operations and assert the equivalence"
+           "of each module output with a symbolic constant.">,
   ];
 }
 
