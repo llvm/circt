@@ -53,19 +53,19 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
     control which modules are inlined based on their characteristics.
   }];
   let options = [
-    Option<"inlineEmpty", "inline-empty", "bool", "true",
+    Option<"inlineEmpty", "hw-inline-empty", "bool", "true",
            "Inline modules that are empty (only contain hw.output)">,
-    Option<"inlineNoOutputs", "inline-no-outputs", "bool", "true",
+    Option<"inlineNoOutputs", "hw-inline-no-outputs", "bool", "true",
            "Inline modules that have no output ports">,
-    Option<"inlineSingleUse", "inline-single-use", "bool", "true",
+    Option<"inlineSingleUse", "hw-inline-single-use", "bool", "true",
            "Inline modules that have only one use">,
-    Option<"inlineSmall", "inline-small", "bool", "true",
+    Option<"inlineSmall", "hw-inline-small", "bool", "true",
            "Inline modules that are small (fewer than smallThreshold operations)">,
-    Option<"smallThreshold", "small-threshold", "unsigned", "8",
+    Option<"smallThreshold", "hw-small-threshold", "unsigned", "8",
            "Maximum number of operations for a module to be considered small">,
-    Option<"inlineWithState", "inline-with-state", "bool", "false",
+    Option<"inlineWithState", "hw-inline-with-state", "bool", "false",
            "Allow inlining of modules that contain state (seq.firreg operations)">,
-    Option<"inlineAll", "inline-all", "bool", "true",
+    Option<"inlineAll", "hw-inline-all", "bool", "true",
            "Inline all private modules regardless of heuristics (default behavior)">
   ];
 }
