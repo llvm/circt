@@ -47,6 +47,20 @@ using namespace circt;
 namespace cl = llvm::cl;
 using llvm::WithColor;
 
+void enablePrinting(mlir::PassManager &pm, llvm::StringRef path) {
+  if (path.empty()) {
+    return;
+  }
+  pm.getContext()->disableMultithreading();
+  pm.enableIRPrintingToFileTree(
+      [](mlir::Pass *, mlir::Operation *) { return true; },
+      [](mlir::Pass *, mlir::Operation *) { return true; },
+      /*printModuleScope=*/true, /*printAfterOnlyOnChange=*/true,
+      /*printAfterOnlyOnFailure=*/false,
+      /*printTreeDir=*/path,
+      /*opPrintingFlags=*/OpPrintingFlags());
+}
+
 //===----------------------------------------------------------------------===//
 // Command Line Options
 //===----------------------------------------------------------------------===//
@@ -69,6 +83,11 @@ enum class LoweringMode {
 
 struct CLOptions {
   cl::OptionCategory cat{"Verilog Frontend Options"};
+
+  llvm::cl::opt<std::string> mlirDumpPath{
+      "mlir-dump-path",
+      llvm::cl::desc("Path to dump pass manager intermediate results to"),
+      llvm::cl::init(""), llvm::cl::cat(cat)};
 
   cl::opt<Format> format{
       "format", cl::desc("Input file format (auto-detected by default)"),
@@ -393,6 +412,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
     if (failed(applyPassManagerCLOptions(pm)))
       return failure();
     populatePasses(pm);
+    enablePrinting(pm, opts.mlirDumpPath);
     if (failed(pm.run(module.get())))
       return failure();
   }
