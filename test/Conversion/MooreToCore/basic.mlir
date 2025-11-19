@@ -199,7 +199,11 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
   // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
-  // CHECK-NEXT: hw.array_get %arg5[[[V24]]] : !hw.array<5xi32>
+  // CHECK-NEXT: [[C5:%.+]] = hw.constant 5 : i32 
+  // CHECK-NEXT: [[V25:%.+]] = comb.icmp uge %c2_i32, [[C5]] : i32 
+  // CHECK-NEXT: [[V26:%.+]] = hw.array_get %arg5[[[V24]]] : !hw.array<5xi32>
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i32 
+  // CHECK-NEXT: [[V27:%.+]] = comb.mux [[V25]], [[C0]], [[V26]] : i32 
   moore.dyn_extract %arg5 from %2 : !moore.array<5 x i32>, !moore.i32 -> !moore.i32
 
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i32

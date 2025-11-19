@@ -1590,7 +1590,7 @@ def ExtractOp : MooreOp<"extract", [Pure]> {
 def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
   let description = [{
     It's similar with extract, but it's used to select from a value
-    with a dynamic low bit.
+    with a dynamic low bit. The `lowBit` operand is always interpreted as unsigned.
   }];
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
