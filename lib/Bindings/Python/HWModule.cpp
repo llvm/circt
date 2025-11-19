@@ -176,6 +176,10 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
             llvm::SmallVector<llvm::SmallString<8>> names;
             for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
               auto tuple = nb::cast<nb::tuple>(pyFieldInfos[i]);
+              if (tuple.size() < 3)
+                throw std::invalid_argument(
+                    "UnionType field info must be a tuple of (name, type, "
+                    "offset)");
               auto type = nb::cast<MlirType>(tuple[1]);
               size_t offset = nb::cast<size_t>(tuple[2]);
               ctx = mlirTypeGetContext(type);

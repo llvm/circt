@@ -99,6 +99,8 @@ def type_to_pytype(t) -> ir.Type:
     return hw.ArrayType(t)
   if hw.StructType.isinstance(t):
     return hw.StructType(t)
+  if hw.UnionType.isinstance(t):
+    return hw.UnionType(t)
   if hw.TypeAliasType.isinstance(t):
     return hw.TypeAliasType(t)
   if hw.InOutType.isinstance(t):

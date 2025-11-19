@@ -708,6 +708,27 @@ class Struct(StructSignal, metaclass=StructMetaType):
   # All the work is done in the metaclass.
 
 
+class UnionSignal(Signal):
+
+  @property
+  def field_indices(self) -> Dict[str, int]:
+    return {
+        name: idx for idx, (name, _, _) in enumerate(self.type.strip.fields)
+    }
+
+  def __getitem__(self, sub):
+    if sub not in self.field_indices:
+      raise ValueError(f"Struct field '{sub}' not found in {self.type}")
+    from .dialects import hw
+    with get_user_loc():
+      return hw.UnionExtractOp(self.value, self.field_indices[sub])
+
+  def __getattr__(self, attr):
+    if attr not in self.field_indices:
+      raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
+    return self.__getitem__(attr)
+
+
 class ChannelSignal(Signal):
 
   def reg(self, clk, rst=None, name=None):
@@ -859,6 +880,7 @@ class BundleSignal(Signal):
   def connect(self, other: BundleSignal):
     """Connect two bundles together such that one drives the other."""
     from .constructs import Wire
+    from .types import Bits
     froms = [(bc.name, Wire(bc.channel))
              for bc in other.type.channels
              if bc.direction == ChannelDirection.FROM]
