@@ -152,6 +152,22 @@ Type WindowType::getLoweredType() const {
         .Default([&](Type t) { return t; });
   };
 
+  // Helper to wrap a lowered type in a TypeAlias if the 'into' type is a
+  // TypeAlias.
+  auto wrapInTypeAliasIfNeeded = [&](Type loweredType) -> Type {
+    if (auto intoAlias = dyn_cast<hw::TypeAliasType>(getInto())) {
+      auto intoRef = intoAlias.getRef();
+      std::string aliasName = (Twine(intoRef.getLeafReference().getValue()) +
+                               "_" + getName().getValue())
+                                  .str();
+      auto newRef = SymbolRefAttr::get(
+          intoRef.getRootReference(),
+          {FlatSymbolRefAttr::get(StringAttr::get(getContext(), aliasName))});
+      return hw::TypeAliasType::get(newRef, loweredType);
+    }
+    return loweredType;
+  };
+
   // Build the union, frame by frame
   SmallVector<hw::UnionType::FieldInfo, 4> unionFields;
   for (WindowFrameType frame : getFrames()) {
@@ -230,8 +246,10 @@ Type WindowType::getLoweredType() const {
     // Special case: if we have one data frame and it doesn't have a name, don't
     // use a union.
     if (getFrames().size() == 1 && frame.getName().getValue().empty() &&
-        !hasLeftOver)
-      return hw::StructType::get(getContext(), fields);
+        !hasLeftOver) {
+      auto loweredStruct = hw::StructType::get(getContext(), fields);
+      return wrapInTypeAliasIfNeeded(loweredStruct);
+    }
 
     if (!fields.empty())
       unionFields.push_back(
@@ -242,7 +260,8 @@ Type WindowType::getLoweredType() const {
           {leftOverName, hw::StructType::get(getContext(), leftOverFields), 0});
   }
 
-  return hw::UnionType::get(getContext(), unionFields);
+  auto unionType = hw::UnionType::get(getContext(), unionFields);
+  return wrapInTypeAliasIfNeeded(unionType);
 }
 
 namespace mlir {

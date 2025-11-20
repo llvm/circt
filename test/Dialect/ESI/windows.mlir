@@ -141,3 +141,37 @@ hw.module @ArrayStructWindowModule(in %a: !arrStructWindow, out x: !hw.union<fra
 // LOW-LABEL: hw.module.extern @TypeBugFixModuleDst
 // LOW-SAME: !hw.union<FrameA: !hw.struct<header1: i6, header3: !hw.array<3xi16>, header2: i1>, FrameA_leftOver: !hw.struct<header1: i6, header3: !hw.array<1xi16>, header2: i1>>
 hw.module.extern @TypeBugFixModuleDst(in %windowed: !TypeBugFixWin)
+
+// Test TypeAlias lowering with single unnamed frame
+!SimpleStruct = !hw.typealias<@pycde::@SimpleStruct, !hw.struct<field1: i8, field2: i16>>
+!SimpleWindow = !esi.window<"SimpleWin", !SimpleStruct, [
+  <"", [<"field1">, <"field2">]>
+]>
+
+// The lowered type of a single unnamed frame window should be the struct itself.
+// If the 'into' type is a TypeAlias, the lowered type should also be a TypeAlias
+// named '<originalAlias>_<windowName>'.
+// CHECK-LABEL: hw.module @SimpleWindowModule(in %a : !esi.window<"SimpleWin", !hw.typealias<@pycde::@SimpleStruct, !hw.struct<field1: i8, field2: i16>>, [<"", [<"field1">, <"field2">]>]>, out x : !hw.typealias<@pycde::@SimpleStruct_SimpleWin, !hw.struct<field1: i8, field2: i16>>)
+// LOW-LABEL: hw.module @SimpleWindowModule(in %a : !hw.typealias<@pycde::@SimpleStruct_SimpleWin, !hw.struct<field1: i8, field2: i16>>, out x : !hw.typealias<@pycde::@SimpleStruct_SimpleWin, !hw.struct<field1: i8, field2: i16>>)
+hw.module @SimpleWindowModule(in %a: !SimpleWindow, out x: !hw.typealias<@pycde::@SimpleStruct_SimpleWin, !hw.struct<field1: i8, field2: i16>>) {
+  %u = esi.window.unwrap %a : !SimpleWindow
+  hw.output %u : !hw.typealias<@pycde::@SimpleStruct_SimpleWin, !hw.struct<field1: i8, field2: i16>>
+}
+
+// Test TypeAlias lowering with multiple frames (non-special case)
+!MultiFrameStruct = !hw.typealias<@pycde::@MultiFrameStruct, !hw.struct<header: i8, data: i16, tail: i8>>
+!MultiFrameWindow = !esi.window<"MultiWin", !MultiFrameStruct, [
+  <"HeaderFrame", [<"header">]>,
+  <"DataFrame", [<"data">]>,
+  <"TailFrame", [<"tail">]>
+]>
+
+// For multiple frames, the lowered type is a union of structs.
+// If the 'into' type is a TypeAlias, the lowered type should also be a TypeAlias
+// named '<originalAlias>_<windowName>'.
+// CHECK-LABEL: hw.module @MultiFrameWindowModule(in %a : !esi.window<"MultiWin", !hw.typealias<@pycde::@MultiFrameStruct, !hw.struct<header: i8, data: i16, tail: i8>>, [<"HeaderFrame", [<"header">]>, <"DataFrame", [<"data">]>, <"TailFrame", [<"tail">]>]>, out x : !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>)
+// LOW-LABEL: hw.module @MultiFrameWindowModule(in %a : !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>, out x : !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>)
+hw.module @MultiFrameWindowModule(in %a: !MultiFrameWindow, out x: !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>) {
+  %u = esi.window.unwrap %a : !MultiFrameWindow
+  hw.output %u : !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>
+}
