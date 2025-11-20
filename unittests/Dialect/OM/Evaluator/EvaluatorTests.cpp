@@ -1452,4 +1452,132 @@ TEST(EvaluatorTests, ListAttrConcat) {
   checkEq(listVal[3].get(), "Y");
 }
 
+TEST(EvaluatorTests, UnknownValuesBasic) {
+  StringRef mod = R"MLIR(
+om.class @Bar(
+  %a: !om.integer
+) -> (
+  b: !om.integer
+) {
+  om.class.fields %a : !om.integer
+}
+
+om.class @Foo(
+  %unknown_int: !om.integer,
+  %unknown_frozenbasepath: !om.frozenbasepath,
+  %unknown_class: !om.class.type<@Bar>
+) -> (
+  a: !om.integer,
+  b: !om.integer,
+  c: !om.list<!om.integer>,
+  d: !om.list<!om.integer>,
+  e: !om.frozenbasepath,
+  f: !om.frozenpath,
+  g: !om.integer
+) {
+  %0 = om.constant #om.integer<1 : i4> : !om.integer
+  %1 = om.integer.add %0, %unknown_int : !om.integer
+  %2 = om.list_create %0, %unknown_int : !om.integer
+  %3 = om.list_concat %2, %2 : !om.list<!om.integer>
+  %4 = om.frozenbasepath_create %unknown_frozenbasepath "Foo/bar"
+  %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
+  %6 = om.object.field %unknown_class, [@b] : (!om.class.type<@Bar>) -> !om.integer
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = UnknownLoc::get(&context);
+  auto unknownValue = std::make_shared<circt::om::evaluator::UnknownValue>(
+      circt::om::evaluator::UnknownValue(&context, unknownLoc));
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Foo"),
+                            {unknownValue, unknownValue, unknownValue});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
+
+  ASSERT_EQ(object->getFieldNames().size(), 7ul);
+
+  for (auto fieldName : object->getFieldNames()) {
+    auto field = object->getField(cast<StringAttr>(fieldName));
+    ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(field->get()));
+  }
+}
+
+TEST(EvaluatorTests, UnknownValuesNested) {
+  StringRef mod = R"MLIR(
+om.class @Bar(
+  %known_in: !om.integer,
+  %unknown_in: !om.integer
+) -> (
+  known_out: !om.integer,
+  unknown_out: !om.integer
+) {
+  om.class.fields %known_in, %unknown_in : !om.integer, !om.integer
+}
+
+om.class @Foo(
+  %unknown_in: !om.integer
+) -> (
+  a: !om.integer,
+  b: !om.integer
+) {
+  %0 = om.constant #om.integer<1 : i4> : !om.integer
+
+  %bar = om.object @Bar(%0, %unknown_in) : (!om.integer, !om.integer) -> !om.class.type<@Bar>
+  %1 = om.object.field %bar, [@known_out] : (!om.class.type<@Bar>) -> !om.integer
+  %2 = om.object.field %bar, [@unknown_out] : (!om.class.type<@Bar>) -> !om.integer
+
+  om.class.fields %0, %2 : !om.integer, !om.integer
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = UnknownLoc::get(&context);
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "Foo"),
+      {std::make_shared<circt::om::evaluator::UnknownValue>(
+          circt::om::evaluator::UnknownValue(&context, unknownLoc))});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
+
+  // A should be a known constant.
+  auto a =
+      cast<circt::om::IntegerAttr>(cast<circt::om::evaluator::AttributeValue>(
+                                       object->getField("a").value().get())
+                                       ->getAttr())
+          .getValue()
+          .getValue()
+          .getZExtValue() == 1;
+  ASSERT_TRUE(a == 1);
+
+  // B should be unknown.
+  ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(
+      object->getField("b").value().get()));
+}
+
 } // namespace
