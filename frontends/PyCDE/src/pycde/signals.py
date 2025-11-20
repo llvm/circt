@@ -1057,6 +1057,21 @@ class ListSignal(Signal):
   pass
 
 
+class WindowSignal(Signal):
+  """A signal representing a Window.
+
+  Windows are a way to view a struct as a set of frames. Each frame is a
+  collection of fields from the struct.
+  """
+
+  def unwrap(self) -> UnionSignal | StructSignal:
+    """Unwrap the window into either a struct (if the window has one unnamed
+    frame) or a union of frames."""
+
+    from .dialects import esi
+    return esi.UnwrapWindow(self.value)
+
+
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
   """Wraps all of a dialect's OpView classes to have their create method return
      a Signal instead of an OpView. The wrapped classes are inserted into

@@ -187,7 +187,9 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
           "get",
           [](nb::object cls, MlirAttribute name, MlirType into,
              std::vector<MlirType> frames, MlirContext ctxt) {
-            if (!hwTypeIsAStructType(into))
+            if (!hwTypeIsAStructType(into) &&
+                (!hwTypeIsATypeAliasType(into) ||
+                 !hwTypeIsAStructType(hwTypeAliasTypeGetInnerType(into))))
               throw nb::type_error("'into' type must be a hw.StructType");
 
             // Verify all frames are WindowFrameTypes
