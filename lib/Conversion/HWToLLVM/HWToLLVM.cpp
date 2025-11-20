@@ -241,7 +241,6 @@ struct StructExplodeOpConversion
 } // namespace
 
 namespace {
-
 /// Convert a StructExtractOp to LLVM dialect.
 /// Pattern: struct_extract(input, fieldname) =>
 ///   extractvalue(input, fieldname_to_index(fieldname))
