@@ -173,16 +173,14 @@ Type WindowType::getLoweredType() const {
         // in which case we want the inner type.
         auto type = getInnerTypeOrSelf(fieldType);
         fields.push_back({field.getFieldName(), type});
-        if (hasLeftOver)
-          leftOverFields.push_back({field.getFieldName(), type});
+        leftOverFields.push_back({field.getFieldName(), type});
 
         if (hw::type_isa<esi::ListType>(fieldType)) {
           // Lists need a 'last' signal to indicate the end of the list.
           auto lastType = IntegerType::get(getContext(), 1);
           auto lastField = StringAttr::get(getContext(), "last");
           fields.push_back({lastField, lastType});
-          if (hasLeftOver)
-            leftOverFields.push_back({lastField, lastType});
+          leftOverFields.push_back({lastField, lastType});
         }
       } else {
         if (auto array =
@@ -196,8 +194,10 @@ Type WindowType::getLoweredType() const {
           // frame for the left overs.
           size_t leftOver = array.getNumElements() % field.getNumItems();
           if (leftOver) {
+            // The verifier checks that there is only one field per frame with
+            // numItems > 0.
+            assert(!hasLeftOver);
             hasLeftOver = true;
-            leftOverFields.append(fields.begin(), fields.end() - 1);
             leftOverFields.push_back(
                 {field.getFieldName(),
                  hw::ArrayType::get(array.getElementType(), leftOver)});
