@@ -140,7 +140,8 @@ void HWToLLVMArraySpillCache::map(Value arrayValue, Value bufferPtr) {
 }
 
 Value HWToLLVMArraySpillCache::lookup(Value arrayValue) {
-  assert(isa<LLVM::LLVMArrayType, hw::ArrayType>(arrayValue.getType()) && "Not an array value");
+  assert(isa<LLVM::LLVMArrayType, hw::ArrayType>(arrayValue.getType()) &&
+         "Not an array value");
   while (isa<LLVM::LLVMArrayType, hw::ArrayType>(arrayValue.getType())) {
     if (isa<LLVM::LLVMArrayType>(arrayValue.getType())) {
       auto mapVal = spillMap.lookup(arrayValue);
