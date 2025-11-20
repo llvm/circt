@@ -112,3 +112,32 @@ hw.module @ListChannelModule(in %in: !esi.channel<!ListTypeWin_one>, out out: !e
   %channel_out, %ready = esi.wrap.vr %out, %in_valid : !ListTypeWin_one
   hw.output %channel_out : !esi.channel<!ListTypeWin_one>
 }
+
+!arrStruct = !hw.struct<field1: !hw.array<5xi32>, field2: i8>
+!arrStructWindow = !esi.window<"window1", !arrStruct, [
+  <"frame1", [<"field1", 5>, <"field2">]>
+]>
+
+hw.module @ArrayStructWindowModule(in %a: !arrStructWindow, out x: !hw.union<frame1: !hw.struct<field1: !hw.array<5xi32>, field2: i8>>) {
+  %u = esi.window.unwrap %a : !arrStructWindow
+  hw.output %u : !hw.union<
+    frame1: !hw.struct<field1: !hw.array<5xi32>, field2: i8>>
+}
+
+// LOW-LABEL: hw.module @ArrayStructWindowModule
+// LOW-NEXT:    hw.output %a
+
+
+!TypeBugFix = !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>
+!TypeBugFixWin = !esi.window<
+  "TypeBugFixWin", !TypeBugFix, [
+    <"FrameA", [
+      <"header1">,
+      <"header3", 3>,
+      <"header2">
+    ]>
+  ]>
+
+// LOW-LABEL: hw.module.extern @TypeBugFixModuleDst
+// LOW-SAME: !hw.union<FrameA: !hw.struct<header1: i6, header3: !hw.array<3xi16>, header2: i1>, FrameA_leftOver: !hw.struct<header1: i6, header3: !hw.array<1xi16>, header2: i1>>
+hw.module.extern @TypeBugFixModuleDst(in %windowed: !TypeBugFixWin)
