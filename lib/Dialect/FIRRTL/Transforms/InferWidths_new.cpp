@@ -537,6 +537,7 @@ private:
 
   DenseMap<FieldRef, std::vector<Constraint1>>
       constraints_;
+  std::vector<Constraint2> constraints2_;
 
   Valuation solution_;
 
@@ -545,8 +546,8 @@ private:
 public:
   explicit ConstraintSolver(
       DenseMap<FieldRef, std::vector<Constraint1>>
-          &constraints, FieldRefGraph &graph)
-      : constraints_(constraints), graph_(graph) {}
+          &constraints, std::vector<Constraint2> &constraints2, FieldRefGraph &graph)
+      : constraints_(constraints), constraints2_(constraints2), graph_(graph) {}
 
   void addConstraint(const Constraint1 &c) {
     auto &vec = constraints_[c.lhs_var1()];
@@ -732,7 +733,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints, const std::vector<F
   FieldRef zero = FieldRef();
   var_to_index[zero] = next_index;
 
-  LLVM_DEBUG(llvm::dbgs() << "floyd邻接矩阵标号:\n");
+  LLVM_DEBUG(llvm::dbgs() << "numberin:\n");
   for (const auto &[var, index] : var_to_index) 
     LLVM_DEBUG(llvm::dbgs() << var << " : " << index << "\n");
     
@@ -754,7 +755,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints, const std::vector<F
       graph[i][j] = weight;
   }
       
-  LLVM_DEBUG(llvm::dbgs() << "初始邻接矩阵:\n");
+  LLVM_DEBUG(llvm::dbgs() << "initial matrix:\n");
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
       if (graph[i][j] == INF) LLVM_DEBUG(llvm::dbgs() << "  INF  ");
@@ -841,6 +842,14 @@ LogicalResult ConstraintSolver::solve() {
     }
     solution_ = *merge_result;
   }
+  // test if all select signal satisfies constraint2
+  for (auto c2 : constraints2_) {
+    if (c2.satisfies(solution_)) continue;
+    else {
+      LLVM_DEBUG(llvm::dbgs() << "Constraint2 failed: \n" << c2 << "\n");
+      return failure();
+    } 
+  }
   return success();
 }
 
@@ -851,6 +860,7 @@ LogicalResult ConstraintSolver::solve() {
 class InferenceMapping {
 private:
   std::vector<Constraint_Min> constraints_min_;
+  std::vector<Constraint2> constraints2_;
   DenseMap<FieldRef, std::vector<Constraint1>>
       constraints_;
 
@@ -905,6 +915,10 @@ public:
     }
   }
 
+  void addConstraint(const Constraint2 &constraint) {
+    constraints2_.push_back(constraint);
+  }
+
   FieldRefGraph &fieldRefGraph() { return graph_; }
 
   const std::vector<Constraint_Min> &constraints_min() const {
@@ -931,6 +945,8 @@ public:
   void generateConstraints(FieldRef lhs, FieldRef rhs, FIRRTLType type);
   void generateConstraints(Value larger, Value smaller);
   void generateConstraints(Value result, Value lhs, Value rhs);
+  void generateConstraints2_Mux(FieldRef sel);
+  void generateConstraints2_Mux4Cell(FieldRef sel);
   std::vector<Constraint1> list_Constraint_Min(const Constraint_Min &minc);
 
   LogicalResult solve();
@@ -1038,6 +1054,20 @@ void InferenceMapping::generateConstraints(Value value) {
   };
   if (auto type = getBaseType(value.getType()))
     generate(type);
+}
+
+void InferenceMapping::generateConstraints2_Mux(FieldRef sel) {
+  Term t_sel(1, sel);
+  Constraint2 temp_c(1, {t_sel});
+  LLVM_DEBUG(llvm::dbgs() << "build constraint2 : " << temp_c << "\n");
+  addConstraint(temp_c);
+}
+
+void InferenceMapping::generateConstraints2_Mux4Cell(FieldRef sel) {
+  Term t_sel(1, sel);
+  Constraint2 temp_c(2, {t_sel});
+  LLVM_DEBUG(llvm::dbgs() << "build constraint2 : " << temp_c << "\n");
+  addConstraint(temp_c);
 }
 
 /// generate constraints of the fields in the `src` argument as the
@@ -1803,13 +1833,19 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
         }
       })
       .Case<MuxPrimOp, Mux2CellIntrinsicOp>([&](auto op) {
-        // auto *sel = getExpr(op.getSel());
-        // constrainTypes(solver.known(1), sel, true); TBD : select signal <= 1
+        if (type_cast<FIRRTLType>(getBaseType(op.getSel().getType()))
+          .hasUninferredWidth()) {
+          FieldRef fr(op.getSel(), 0);
+          generateConstraints2_Mux(fr);
+        }
         generateConstraints(op.getResult(), op.getHigh(), op.getLow());
       })
       .Case<Mux4CellIntrinsicOp>([&](Mux4CellIntrinsicOp op) {
-        // auto *sel = getExpr(op.getSel());
-        // constrainTypes(solver.known(2), sel, true);
+        if (type_cast<FIRRTLType>(getBaseType(op.getSel().getType()))
+          .hasUninferredWidth()) {
+          FieldRef fr(op.getSel(), 0);
+          generateConstraints2_Mux4Cell(fr);
+        }
         generateConstraints(op.getResult(), op.getV3(), op.getV2());
         generateConstraints(op.getResult(), op.getV0(), op.getV1());
       })
@@ -2869,7 +2905,7 @@ LogicalResult InferenceMapping::solve() {
   auto flatten_min = cartesian_product(min_list);
 
   for (auto cs : flatten_min) {
-    ConstraintSolver solver(constraints_, graph_);
+    ConstraintSolver solver(constraints_, constraints2_, graph_);
     for (auto c : cs) {
       solver.addConstraint(c);
     }
