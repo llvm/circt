@@ -6,7 +6,7 @@
 # with the runtime, though it is intended to be extensible for other languages.
 
 from typing import List, TextIO, Type, Optional
-from .accelerator import AcceleratorConnection
+from .accelerator import AcceleratorConnection, Context
 from .esiCppAccel import ModuleInfo
 from . import types
 
@@ -171,12 +171,12 @@ def run(generator: Type[Generator] = CppGenerator,
 
   conn: AcceleratorConnection
   if args.file is not None:
-    conn = AcceleratorConnection("trace", f"-:{args.file}")
+    conn = Context.default().connect("trace", f"-:{args.file}")
   elif args.platform is not None:
     if args.connection is None:
       print("Must specify --connection with --platform")
       return 1
-    conn = AcceleratorConnection(args.platform, args.connection)
+    conn = Context.default().connect(args.platform, args.connection)
   else:
     print("Must specify either --file or --platform")
     return 1

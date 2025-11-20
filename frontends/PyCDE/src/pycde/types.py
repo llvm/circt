@@ -17,43 +17,6 @@ import typing
 from dataclasses import dataclass
 
 
-class _Types:
-  """Python syntactic sugar to get types"""
-
-  def __init__(self):
-    self.registered_aliases = OrderedDict()
-
-  def __getattr__(self, name: str) -> ir.Type:
-    return self.wrap(_FromCirctType(ir.Type.parse(name)))
-
-  def int(self, width: int, name: str = None):
-    return self.wrap(Bits(width), name)
-
-  def array(self, inner: ir.Type, size: int, name: str = None) -> "Array":
-    return self.wrap(Array(inner, size), name)
-
-  def inout(self, inner: ir.Type):
-    return self.wrap(InOut(inner))
-
-  def channel(self, inner):
-    return self.wrap(Channel(inner))
-
-  def struct(self, members, name: str = None) -> "StructType":
-    return self.wrap(StructType(members), name)
-
-  @property
-  def any(self):
-    return self.wrap(Any())
-
-  def wrap(self, type, name=None):
-    if name is not None:
-      type = TypeAlias(type, name)
-    return type
-
-
-types = _Types()
-
-
 class Type:
   """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
   do anything useful with types for which subclasses exist."""
@@ -152,6 +115,8 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(Array, type)
   if isinstance(type, hw.StructType):
     return Type.__new__(StructType, type)
+  if isinstance(type, hw.UnionType):
+    return Type.__new__(UnionType, type)
   if isinstance(type, hw.TypeAliasType):
     return Type.__new__(TypeAlias, type, incl_cls_in_key=False)
   if isinstance(type, hw.InOutType):
@@ -452,6 +417,99 @@ class RegisteredStruct(TypeAlias):
     return True
 
 
+class UnionType(Type):
+
+  def __new__(
+      cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
+                                typing.List[typing.Tuple[str, Type, int]],
+                                typing.Dict[str, Type]]
+  ) -> UnionType:
+    if len(fields) == 0:
+      raise ValueError("Unions must have at least one field.")
+    if isinstance(fields, dict):
+      fields = list(fields.items())
+    if not isinstance(fields, list):
+      raise TypeError("Expected either list or dict.")
+
+    circt_fields = []
+    for field in fields:
+      if len(field) == 2:
+        circt_fields.append((field[0], field[1]._type, 0))
+      elif len(field) == 3:
+        circt_fields.append((field[0], field[1]._type, field[2]))
+      else:
+        raise ValueError(
+            "Fields must be either (name, type) or (name, type, offset)")
+
+    return super(UnionType, cls).__new__(cls, hw.UnionType.get(circt_fields))
+
+  @property
+  def is_hw_type(self) -> bool:
+    return True
+
+  @property
+  def fields(self):
+    return [(n, _FromCirctType(t), o) for n, t, o in self._type.get_fields()]
+
+  def __getattr__(self, attrname: str):
+    for field in self.fields:
+      if field[0] == attrname:
+        return _FromCirctType(self._type.get_field(attrname))
+    return super().__getattribute__(attrname)
+
+  def _get_value_class(self):
+    from .signals import UnionSignal
+    return UnionSignal
+
+  def __repr__(self) -> str:
+    ret = "union { "
+    first = True
+    for field in self.fields:
+      if first:
+        first = False
+      else:
+        ret += ", "
+      ret += f"{field[0]}: {field[1]}"
+      if field[2] > 0:
+        ret += f" offset {field[2]}"
+    ret += "}"
+    return ret
+
+  def _from_obj(self, x, alias: typing.Optional[TypeAlias] = None):
+    from .dialects import hw
+    if not isinstance(x, tuple):
+      raise ValueError(
+          f"Unions can only be created from tuples, not '{type(x)}'")
+    if len(x) != 2:
+      raise ValueError(
+          "Union tuple must have exactly 2 elements: (name, value)")
+
+    name, value = x
+    if not isinstance(name, str):
+      raise TypeError("Union field name must be a string")
+
+    # Find the field in the union type
+    field_type = None
+    field_index = -1
+    for idx, (fname, ftype, _) in enumerate(self.fields):
+      if fname == name:
+        field_type = ftype
+        field_index = idx
+        break
+
+    if field_type is None:
+      raise ValueError(f"Field '{name}' not found in union type {self}")
+
+    # Convert the value to a signal
+    val_sig = field_type._from_obj_or_sig(value)
+
+    result_type = self if alias is None else alias
+    with get_user_loc():
+      return hw.UnionCreateOp(result_type._type,
+                              fieldIndex=field_index,
+                              input=val_sig.value)
+
+
 class BitVectorType(Type):
 
   @property
@@ -664,13 +722,12 @@ class Channel(Type):
         raise TypeError(
             f"Expected signal of type {self.inner_type}, got {value.type}")
       valid = Bits(1)(valid_or_empty)
-      wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
-                                     valid.value)
+      wrap_op = esi.WrapValidReadyOp(self._type, Bit, value.value, valid.value)
       return wrap_op[0], wrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
       value = self.inner_type(value)
       empty = Bits(1)(valid_or_empty)
-      wrap_op = esi.WrapFIFOOp(self._type, types.i1, value.value, empty.value)
+      wrap_op = esi.WrapFIFOOp(self._type, Bit, value.value, empty.value)
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")

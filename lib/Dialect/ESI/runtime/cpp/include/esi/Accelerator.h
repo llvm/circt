@@ -158,7 +158,7 @@ private:
 
   /// Cache services via a unique_ptr so they get free'd automatically when
   /// Accelerator objects get deconstructed.
-  using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
+  using ServiceCacheKey = std::tuple<std::string, AppIDPath>;
   std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
 
   std::unique_ptr<AcceleratorServiceThread> serviceThread;
@@ -168,12 +168,6 @@ private:
 };
 
 namespace registry {
-
-// Connect to an ESI accelerator given a backend name and connection specifier.
-// Alternatively, instantiate the backend directly (if you're using C++).
-std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
-                                               const std::string &backend,
-                                               const std::string &connection);
 
 namespace internal {
 

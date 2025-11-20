@@ -32,6 +32,13 @@ struct HWStructFieldInfo {
 };
 typedef struct HWStructFieldInfo HWStructFieldInfo;
 
+struct HWUnionFieldInfo {
+  MlirIdentifier name;
+  MlirType type;
+  size_t offset;
+};
+typedef struct HWUnionFieldInfo HWUnionFieldInfo;
+
 enum HWModulePortDirection { Input, Output, InOut };
 typedef enum HWModulePortDirection HWModulePortDirection;
 
@@ -77,6 +84,9 @@ MLIR_CAPI_EXPORTED bool hwTypeIsAModuleType(MlirType type);
 
 /// If the type is an HW struct.
 MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
+
+/// If the type is an HW union.
+MLIR_CAPI_EXPORTED bool hwTypeIsAUnionType(MlirType);
 
 /// If the type is an HW type alias.
 MLIR_CAPI_EXPORTED bool hwTypeIsATypeAliasType(MlirType);
@@ -148,6 +158,22 @@ MLIR_CAPI_EXPORTED HWStructFieldInfo
 hwStructTypeGetFieldNum(MlirType structType, unsigned idx);
 
 MLIR_CAPI_EXPORTED intptr_t hwStructTypeGetNumFields(MlirType structType);
+
+/// Creates an HW union type in the context associated with the elements.
+MLIR_CAPI_EXPORTED MlirType hwUnionTypeGet(MlirContext ctx,
+                                           intptr_t numElements,
+                                           HWUnionFieldInfo const *elements);
+
+MLIR_CAPI_EXPORTED MlirType hwUnionTypeGetField(MlirType unionType,
+                                                MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED MlirAttribute
+hwUnionTypeGetFieldIndex(MlirType unionType, MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED HWUnionFieldInfo hwUnionTypeGetFieldNum(MlirType unionType,
+                                                           unsigned idx);
+
+MLIR_CAPI_EXPORTED intptr_t hwUnionTypeGetNumFields(MlirType unionType);
 
 MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGet(MlirStringRef scope,
                                                MlirStringRef name,

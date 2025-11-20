@@ -1,9 +1,10 @@
 # RUN: %PYTHON% %s | FileCheck %s
 # XFAIL: *
 
-from pycde import System, module, generator, types
+from pycde import System, module, generator
 
 from pycde.dialects import hw
+from pycde.types import Bits
 
 
 @module
@@ -11,11 +12,11 @@ class GeneratorOptions:
 
   @generator
   def generator_a(mod):
-    hw.ConstantOp(types.i32, 1)
+    hw.ConstantOp(Bits(32), 1)
 
   @generator
   def generator_b(mod):
-    hw.ConstantOp(types.i32, 2)
+    hw.ConstantOp(Bits(32), 2)
 
 
 # CHECK: hw.constant 1

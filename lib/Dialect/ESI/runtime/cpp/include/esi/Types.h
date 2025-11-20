@@ -80,6 +80,12 @@ public:
     }
   }
 
+  // Dump a textual representation of this type to the provided stream.
+  void dump(std::ostream &os);
+
+  // Return a textual representation of this type.
+  std::string toString();
+
 protected:
   ID id;
 };

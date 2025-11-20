@@ -4,7 +4,7 @@ from pycde import System, Input, Output, generator, Module
 from pycde.common import Clock, Reset
 from pycde.dialects import comb
 from pycde import fsm
-from pycde.types import types
+from pycde.types import Bit
 from pycde.testing import unittestmodule
 
 # FSM state transitions example
@@ -76,14 +76,14 @@ from pycde.testing import unittestmodule
 
 
 class F0(fsm.Machine):
-  a = Input(types.i1)
-  b = Input(types.i1)
-  c = Input(types.i1)
+  a = Input(Bit)
+  b = Input(Bit)
+  c = Input(Bit)
 
   def maj3(ports):
 
     def nand(*args):
-      return comb.XorOp(comb.AndOp(*args), types.i1(1))
+      return comb.XorOp(comb.AndOp(*args), Bit(1))
 
     c1 = nand(ports.a, ports.b)
     c2 = nand(ports.b, ports.c)
@@ -97,19 +97,19 @@ class F0(fsm.Machine):
   A.set_transitions((B, lambda ports: ports.a))
   B.set_transitions((C, maj3))
   C.set_transitions((idle, lambda ports: ports.c),
-                    (A, lambda ports: comb.XorOp(ports.b, types.i1(1))))
+                    (A, lambda ports: comb.XorOp(ports.b, Bit(1))))
 
 
 @unittestmodule()
 class FSMUser(Module):
-  a = Input(types.i1)
-  b = Input(types.i1)
-  c = Input(types.i1)
+  a = Input(Bit)
+  b = Input(Bit)
+  c = Input(Bit)
   clk = Clock()
-  rst = Input(types.i1)
-  is_a = Output(types.i1)
-  is_b = Output(types.i1)
-  is_c = Output(types.i1)
+  rst = Input(Bit)
+  is_a = Output(Bit)
+  is_b = Output(Bit)
+  is_c = Output(Bit)
 
   @generator
   def construct(ports):
@@ -134,7 +134,7 @@ class FsmClockTest(fsm.Machine):
   clock = Clock()
   reset = Reset()
 
-  a = Input(types.i1)
+  a = Input(Bit)
   A = fsm.State(initial=True)
   B = fsm.State()
 

@@ -412,14 +412,20 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection");
 
-  py::class_<Context>(m, "Context")
-      .def(py::init<>())
-      .def("connect", &Context::connect)
+  py::class_<Context>(
+      m, "Context",
+      "An ESI context owns everything -- types, accelerator connections, and "
+      "the accelerator facade (aka Accelerator) itself. It MUST NOT be garbage "
+      "collected while the accelerator is still in use. When it is destroyed, "
+      "all accelerator connections are disconnected.")
+      .def(py::init<>(), "Create a context with a default logger.",
+           py::return_value_policy::take_ownership)
+      .def("connect", &Context::connect, py::return_value_policy::reference)
       .def("set_stdio_logger", [](Context &ctxt, Logger::Level level) {
         ctxt.setLogger(std::make_unique<StreamLogger>(level));
       });
 
-  accConn.def(py::init(&registry::connect))
+  accConn
       .def(
           "sysinfo",
           [](AcceleratorConnection &acc) {
@@ -446,8 +452,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def_property_readonly("api_version", &Manifest::getApiVersion)
       .def(
           "build_accelerator",
-          [&](Manifest &m, AcceleratorConnection &conn) {
-            auto acc = m.buildAccelerator(conn);
+          [&](Manifest &m, AcceleratorConnection &conn) -> Accelerator * {
+            auto *acc = m.buildAccelerator(conn);
             conn.getServiceThread()->addPoll(*acc);
             return acc;
           },

@@ -1,10 +1,14 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import generator, types, dim, Module
+from pycde import generator, dim, Module
 from pycde.common import Clock, Input, Output
 from pycde.constructs import ControlReg, NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
 from pycde.testing import unittestmodule
+from pycde.types import Bit, Bits
+
+I1 = Bit
+I8 = Bits(8)
 
 # CHECK-LABEL: hw.module @WireAndRegTest(in %In : i8, in %InCE : i1, in %clk : !seq.clock, in %rst : i1, out Out : i8, out OutReg : i8, out OutRegRst : i8, out OutRegCE : i8)
 # CHECK:         [[r0:%.+]] = comb.extract %In from 0 {sv.namehint = "In_0upto7"} : (i8) -> i7
@@ -22,33 +26,33 @@ from pycde.testing import unittestmodule
 
 @unittestmodule()
 class WireAndRegTest(Module):
-  In = Input(types.i8)
-  InCE = Input(types.i1)
+  In = Input(I8)
+  InCE = Input(I1)
   clk = Clock()
-  rst = Input(types.i1)
-  Out = Output(types.i8)
-  OutReg = Output(types.i8)
-  OutRegRst = Output(types.i8)
-  OutRegCE = Output(types.i8)
+  rst = Input(I1)
+  Out = Output(I8)
+  OutReg = Output(I8)
+  OutRegRst = Output(I8)
+  OutRegCE = Output(I8)
 
   @generator
   def create(ports):
-    w1 = Wire(types.i8, "w1")
+    w1 = Wire(I8, "w1")
     ports.Out = w1
     w1[0:7] = ports.In[0:7]
     w1[7] = ports.In[7]
 
     NamedWire(ports.In, "in")
 
-    r1 = Reg(types.i8)
+    r1 = Reg(I8)
     ports.OutReg = r1
     r1.assign(ports.In)
 
-    r_rst = Reg(types.i8, rst=ports.rst, rst_value=0)
+    r_rst = Reg(I8, rst=ports.rst, rst_value=0)
     ports.OutRegRst = r_rst
     r_rst.assign(ports.In)
 
-    r_ce = Reg(types.i8, ce=ports.InCE)
+    r_ce = Reg(I8, ce=ports.InCE)
     ports.OutRegCE = r_ce
     r_ce.assign(ports.In)
 
@@ -99,10 +103,10 @@ class SystolicArrayTest(Module):
 @unittestmodule()
 class ControlRegTest(Module):
   clk = Clock()
-  rst = Input(types.i1)
-  a1 = Input(types.i1)
-  a2 = Input(types.i1)
-  r1 = Input(types.i1)
+  rst = Input(I1)
+  a1 = Input(I1)
+  a2 = Input(I1)
+  r1 = Input(I1)
 
   @generator
   def build(ports):

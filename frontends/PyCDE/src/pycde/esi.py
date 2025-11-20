@@ -12,8 +12,7 @@ from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
 from .support import clog2, optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
-                    ChannelDirection, StructType, Type, UInt, types,
-                    _FromCirctType)
+                    ChannelDirection, StructType, Type, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft

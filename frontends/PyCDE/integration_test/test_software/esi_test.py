@@ -4,10 +4,10 @@ from esiaccel.types import MMIORegion
 import sys
 import time
 
-esi.accelerator.ctxt.set_stdio_logger(esi.accelerator.cpp.LogLevel.Debug)
-
+ctxt = esi.Context(esi.LogLevel.Debug)
 platform = sys.argv[1]
-acc = esi.AcceleratorConnection(platform, sys.argv[2])
+conn_str = sys.argv[2]
+acc = ctxt.connect(platform, conn_str)
 
 mmio = acc.get_service_mmio()
 data = mmio.read(8)

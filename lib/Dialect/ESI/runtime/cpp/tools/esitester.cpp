@@ -222,7 +222,7 @@ int main(int argc, const char *argv[]) {
     return 0;
 
   Context &ctxt = cli.getContext();
-  std::unique_ptr<AcceleratorConnection> acc = cli.connect();
+  AcceleratorConnection *acc = cli.connect();
   try {
     const auto &info = *acc->getService<services::SysInfo>();
     ctxt.getLogger().info("esitester", "Connected to accelerator.");
@@ -232,22 +232,22 @@ int main(int argc, const char *argv[]) {
     acc->getServiceThread()->addPoll(*accel);
 
     if (*callback_test) {
-      callbackTest(acc.get(), accel, cb_iters);
+      callbackTest(acc, accel, cb_iters);
     } else if (*hostmemtestSub) {
-      hostmemTest(acc.get(), accel, hostmemWidths, hmWrite, hmRead);
+      hostmemTest(acc, accel, hostmemWidths, hmWrite, hmRead);
     } else if (*loopbackSub) {
-      loopbackAddTest(acc.get(), accel, loopbackIters, loopbackPipeline);
+      loopbackAddTest(acc, accel, loopbackIters, loopbackPipeline);
     } else if (*dmatestSub) {
-      dmaTest(acc.get(), accel, dmaWidths, dmaRead, dmaWrite);
+      dmaTest(acc, accel, dmaWidths, dmaRead, dmaWrite);
     } else if (*bandwidthSub) {
-      bandwidthTest(acc.get(), accel, bandwidthWidths, xferCount, bandwidthRead,
+      bandwidthTest(acc, accel, bandwidthWidths, xferCount, bandwidthRead,
                     bandwidthWrite);
     } else if (*hostmembwSub) {
-      hostmemBandwidthTest(acc.get(), accel, hmBwCount, hmBwWidths, hmBwRead,
+      hostmemBandwidthTest(acc, accel, hmBwCount, hmBwWidths, hmBwRead,
                            hmBwWrite);
     } else if (*aggBwSub) {
-      aggregateHostmemBandwidthTest(acc.get(), accel, aggWidth, aggCount,
-                                    aggRead, aggWrite);
+      aggregateHostmemBandwidthTest(acc, accel, aggWidth, aggCount, aggRead,
+                                    aggWrite);
     }
 
     acc->disconnect();

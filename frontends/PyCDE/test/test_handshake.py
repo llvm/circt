@@ -1,9 +1,9 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Clock, Output, Input, generator, types, Module)
+from pycde import (Clock, Output, Input, generator, Module)
 from pycde.handshake import Func, cmerge, demux
 from pycde.testing import unittestmodule
-from pycde.types import Bits, Channel
+from pycde.types import Bits, Channel, StructType, TypeAlias
 
 # CHECK:  hw.module @Top(in %clk : !seq.clock, in %rst : i1, in %a : !esi.channel<i8>, in %b : !esi.channel<i8>, out x : !esi.channel<i8>)
 # CHECK:    %0:2 = handshake.esi_instance @TestFunc "TestFunc" clk %clk rst %rst(%a, %b) : (!esi.channel<i8>, !esi.channel<i8>) -> (!esi.channel<i8>, !esi.channel<i8>)
@@ -32,7 +32,7 @@ class TestFunc(Func):
     ports.y = y
 
 
-BarType = types.struct({"foo": types.i12}, "bar")
+BarType = TypeAlias(StructType({"foo": Bits(12)}), "bar")
 
 
 @unittestmodule(print=True)

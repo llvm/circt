@@ -1,16 +1,16 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde.dialects import comb, hw
-from pycde import dim, generator, types, Clock, Input, Output, Module
+from pycde import dim, generator, Clock, Input, Output, Module
 from pycde.signals import And, Or, Struct
 from pycde.testing import unittestmodule
-from pycde.types import Bits, Window
+from pycde.types import Bit, Bits, Window
 
 
 # CHECK-LABEL: hw.module @BitsMod(in %inp : i5)
 @unittestmodule()
 class BitsMod(Module):
-  inp = Input(types.i5)
+  inp = Input(Bits(5))
 
   @generator
   def construct(ports):
@@ -77,7 +77,7 @@ def MyModule(SIZE: int):
 @unittestmodule()
 class ArrayMod(Module):
   clk = Clock()
-  inp = Input(dim(types.i1, 5))
+  inp = Input(dim(Bit, 5))
 
   @generator
   def construct(ports):
@@ -122,7 +122,7 @@ class ArrayMod(Module):
     And(a, b, c)
 
     # CHECK:  hw.bitcast %inp : (!hw.array<5xi1>) -> i5
-    ports.inp.bitcast(types.i5)
+    ports.inp.bitcast(Bits(5))
 
     # CHECK:  seq.from_clock %clk
     ports.clk.to_bit()
