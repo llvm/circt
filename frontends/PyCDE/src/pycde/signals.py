@@ -1058,9 +1058,16 @@ class ListSignal(Signal):
 
 
 class WindowSignal(Signal):
+  """A signal representing a Window.
+
+  Windows are a way to view a struct as a set of frames. Each frame is a
+  collection of fields from the struct.
+  """
 
   def unwrap(self) -> List[Signal]:
-    """Unwrap the window into a list of signals."""
+    """Unwrap the window into either a struct (if the window has one unnamed
+    frame) or a union of frames."""
+
     from .dialects import esi
     return esi.UnwrapWindow(self.value)
 
