@@ -47,7 +47,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// the appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Reference, BasePath, Path };
+  enum class Kind { Attr, Object, List, Reference, BasePath, Path, Unknown };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -337,6 +337,27 @@ private:
   StringAttr field;
 };
 
+/// An unknown value.  This is used by users of the evaluator to mark object
+/// parameters that they do not care to evaluate or about values which it fans
+/// out to.  Pratically, a user is expected to set the parameters they care
+/// about to non-unknown values and the ones they don't to unknown.  The results
+/// that are computable given this configuration will then be non-unknown.
+struct UnknownValue : EvaluatorValue {
+  /// Create a value representing unknown information.  This value is _always_
+  /// fully evaluated and finalized.  There is no further processing required.
+  UnknownValue(MLIRContext *ctx, Location loc)
+      : EvaluatorValue(ctx, Kind::Unknown, loc) {
+    markFullyEvaluated();
+    (void)finalize();
+  };
+
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Unknown;
+  }
+
+  LogicalResult finalizeImpl() { return success(); }
+};
+
 } // namespace evaluator
 
 using Object = evaluator::ObjectValue;
@@ -461,6 +482,8 @@ operator<<(mlir::Diagnostic &diag,
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
     diag << "Path()";
+  else if (llvm::isa<evaluator::UnknownValue>(&evaluatorValue))
+    diag << "Unknown()";
   else
     assert(false && "unhandled evaluator value");
   return diag;
