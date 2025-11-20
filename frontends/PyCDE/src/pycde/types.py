@@ -1121,6 +1121,10 @@ class Window(Type):
       ret.append(Window.Frame(frame.name.value, members))
     return ret
 
+  @property
+  def lowered_type(self) -> Type:
+    return _FromCirctType(self._type.get_lowered_type())
+
   def __repr__(self):
     return f"Window<{self.name}, {self.into}, frames={self.frames}>"
 
@@ -1138,13 +1142,13 @@ class Window(Type):
     if not isinstance(signal, SignalBase):
       raise TypeError(f"Expected a Signal, got {type(signal).__name__}")
 
-    if signal.type != self.into:
-      raise TypeError(
-          f"Signal type {signal.type} does not match Window 'into' type {self.into}"
-      )
+    lowered_type = _FromCirctType(self._type.get_lowered_type())
+    if signal.type != lowered_type:
+      raise TypeError(f"Signal type {signal.type} does not match Window "
+                      f"input type '{lowered_type}'")
 
     with get_user_loc():
-      wrap_op = esi.WindowWrapOp(self._type, signal.value)
+      wrap_op = esi.WrapWindow(self._type, signal.value).window
       return WindowSignal(wrap_op, self)
 
   # Windows are not directly constructible from python literals.

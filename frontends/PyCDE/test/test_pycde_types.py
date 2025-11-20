@@ -158,3 +158,20 @@ assert isinstance(frames[1], Window.Frame)
 print(frames[0])
 # CHECK: Frame('tail', [('tail', None)])
 print(frames[1])
+
+
+# CHECK-LABEL: hw.module @TestWindowWrap
+# CHECK-NEXT:    [[RES:%.+]] = esi.window.wrap %in_union : !esi.window<"pkt", !hw.struct<hdr: i8, payload: !hw.array<4xi32>, tail: i4>, [<"header", [<"hdr">, <"payload", 4>]>, <"tail", [<"tail">]>]
+# CHECK-NEXT:    [[R1:%.+]] = esi.window.unwrap %0 : !esi.window<"pkt", !hw.struct<hdr: i8, payload: !hw.array<4xi32>, tail: i4>, [<"header", [<"hdr">, <"payload", 4>]>, <"tail", [<"tail">]>]>
+# CHECK-NEXT:    hw.output [[RES]], [[R1]]
+@unittestmodule()
+class TestWindowWrap(Module):
+  in_union = Input(window_with_frames.lowered_type)
+  out_window = Output(window_with_frames)
+  out_union = Output(window_with_frames.lowered_type)
+
+  @generator
+  def build(self):
+    window = window_with_frames.wrap(self.in_union)
+    self.out_window = window
+    self.out_union = window.unwrap()

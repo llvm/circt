@@ -1058,7 +1058,11 @@ class ListSignal(Signal):
 
 
 class WindowSignal(Signal):
-  pass
+
+  def unwrap(self) -> List[Signal]:
+    """Unwrap the window into a list of signals."""
+    from .dialects import esi
+    return esi.UnwrapWindow(self.value)
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):
