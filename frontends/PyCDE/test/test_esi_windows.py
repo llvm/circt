@@ -1,9 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import System, Module, generator
 from pycde.signals import Struct
 from pycde.types import Window, StructType, Bits, List, TypeAlias
-from pycde.testing import unittestmodule
 
 # Test default_of with a simple struct
 # CHECK: Window<"default_window", struct { a: Bits<8>, b: Bits<8>}, frames=[Frame(None, ['a', 'b'])]>

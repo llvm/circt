@@ -58,7 +58,8 @@ class Type:
   @property
   def has_computable_bitwidth(self) -> bool:
     """Can this type have its bitwidth computed at compile time? This is
-    distinct from having it computable now as it may be determined by a pass."""
+    distinct from having a bitwidth which is known now as it may be determined
+    by a pass."""
     return self.bitwidth is not None
 
   @property
@@ -422,12 +423,12 @@ class RegisteredStruct(TypeAlias):
   def __call__(self, **kwargs):
     return self._from_obj_or_sig(kwargs)
 
+  def _get_value_class(self):
+    return self._value_class
+
   @property
   def fields(self):
     return self.inner_type.fields
-
-  def _get_value_class(self):
-    return self._value_class
 
   @property
   def is_hw_type(self) -> bool:
