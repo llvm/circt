@@ -1058,21 +1058,23 @@ class Window(Type):
   @dataclass
   class Frame:
     """Represents a frame specification within a Window type."""
-    name: str
+    name: str | None
     members: typing.List[typing.Union[str, typing.Tuple[str,
                                                         typing.Optional[int]]]]
 
     def __post_init__(self):
       """Validate frame specification after initialization."""
-      if not isinstance(self.name, str):
+      if self.name is not None and not isinstance(self.name, str):
         raise TypeError(
-            f"Frame name must be a string, got {type(self.name).__name__}")
+            f"Frame name must be a string or None, got {type(self.name).__name__}"
+        )
       if not isinstance(self.members, (list, tuple)):
         raise TypeError(
             f"Frame members must be a list, got {type(self.members).__name__}")
 
     def __repr__(self) -> str:
-      return f"Frame('{self.name}', {self.members})"
+      name = f"'{self.name}'" if self.name is not None else "None"
+      return f"Frame({name}, {self.members})"
 
   def __new__(cls, name: str, into: StructType | type["Struct"],
               frames: typing.List["Window.Frame"]):
@@ -1108,11 +1110,15 @@ class Window(Type):
           field_types.append(esi.WindowFieldType.get(field_name_attr,
                                                      num_items))
         else:
+          # Validate field exists in struct
+          if m not in struct_fields:
+            raise ValueError(f"Field '{m}' not found in struct type")
           # Convert field name to StringAttr
           field_name_attr = ir.StringAttr.get(m)
           field_types.append(esi.WindowFieldType.get(field_name_attr))
       # Convert frame name to StringAttr
-      frame_name_attr = ir.StringAttr.get(frame_spec.name)
+      frame_name_attr = ir.StringAttr.get(
+          frame_spec.name if frame_spec.name is not None else "")
       frame_types.append(esi.WindowFrameType.get(frame_name_attr, field_types))
     # Convert window name to StringAttr
     window_name_attr = ir.StringAttr.get(name)
@@ -1147,7 +1153,9 @@ class Window(Type):
         num_items = member.num_items
         members.append(
             (member.field_name.value, num_items if num_items > 0 else None))
-      ret.append(Window.Frame(frame.name.value, members))
+      ret.append(
+          Window.Frame(frame.name.value if frame.name.value != "" else None,
+                       members))
     return ret
 
   @property
@@ -1158,7 +1166,7 @@ class Window(Type):
     return f"Window<{self.name}, {self.into}, frames={self.frames}>"
 
   def wrap(self, signal) -> "WindowSignal":
-    """Wrap a signal (struct or union) into a WindowSignal using esi.WindowWrapOp.
+    """Wrap a signal (struct or union) into a WindowSignal.
     
     Args:
       signal: A Signal with a type that matches the 'lowered' type of this Window.

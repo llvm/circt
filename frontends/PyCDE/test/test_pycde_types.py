@@ -176,3 +176,14 @@ class TestWindowWrap(Module):
     window = window_with_frames.wrap(ports.in_union)
     ports.out_window = window
     ports.out_union = window.unwrap()
+
+
+# Test Window with single unnamed frame
+# CHECK: Window<"pkt_single", struct { hdr: Bits<8>, payload: Bits<32>[4], tail: Bits<4>}, frames=[Frame(None, [('hdr', None), ('tail', None)])]>
+window_single = Window("pkt_single", pkt_struct, [
+    Window.Frame(None, ["hdr", "tail"]),
+])
+print(window_single)
+
+# CHECK: struct { hdr: Bits<8>, tail: Bits<4>}
+print(window_single.lowered_type)

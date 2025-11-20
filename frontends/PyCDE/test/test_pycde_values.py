@@ -150,3 +150,21 @@ class TestWindowsArr(Module):
   @generator
   def construct(ports):
     ports.out = ports.inp
+
+
+PktWindow = Window("pkt_single",
+                   Packet,
+                   frames=[Window.Frame(None, ["hdr", "tail"])])
+
+
+# CHECK-LABEL: hw.module @TestWindowSingleFrame
+@unittestmodule()
+class TestWindowSingleFrame(Module):
+  clk = Clock()
+
+  inp = Input(PktWindow)
+  out = Output(PktWindow)
+
+  @generator
+  def construct(ports):
+    ports.out = ports.inp
