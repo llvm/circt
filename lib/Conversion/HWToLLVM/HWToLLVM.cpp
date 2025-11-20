@@ -84,6 +84,19 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
 // HWToLLVMArraySpillCache
 //===----------------------------------------------------------------------===//
 
+static Value spillValueOnStack(OpBuilder &builder, Location loc,
+                               Value spillVal) {
+  auto oneC = LLVM::ConstantOp::create(
+      builder, loc, IntegerType::get(builder.getContext(), 32),
+      builder.getI32IntegerAttr(1));
+  Value ptr = LLVM::AllocaOp::create(
+      builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
+      spillVal.getType(), oneC,
+      /*alignment=*/4);
+  LLVM::StoreOp::create(builder, loc, spillVal, ptr);
+  return ptr;
+}
+
 void HWToLLVMArraySpillCache::spillNonHWOps(OpBuilder &builder,
                                             LLVMTypeConverter &converter,
                                             Operation *containerOp) {
@@ -149,14 +162,8 @@ Value HWToLLVMArraySpillCache::spillLLVMArrayValue(OpBuilder &builder,
                                                    Location loc,
                                                    Value llvmArray) {
   assert(isa<LLVM::LLVMArrayType>(llvmArray.getType()) &&
-         "Expected an LLVM array");
-  auto oneC = LLVM::ConstantOp::create(builder, loc, builder.getI32Type(),
-                                       builder.getI32IntegerAttr(1));
-  auto spillBuffer = LLVM::AllocaOp::create(
-      builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
-      llvmArray.getType(), oneC,
-      /*alignment=*/4);
-  LLVM::StoreOp::create(builder, loc, llvmArray, spillBuffer);
+         "Expected an LLVM array.");
+  auto spillBuffer = spillValueOnStack(builder, loc, llvmArray);
   auto loadOp =
       LLVM::LoadOp::create(builder, loc, llvmArray.getType(), spillBuffer);
   map(loadOp.getResult(), spillBuffer);
@@ -336,21 +343,10 @@ struct ArrayGetOpConversion : public HWArrayOpToLLVMPattern<hw::ArrayGetOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Value arrPtr;
-
     if (spillCacheOpt)
       arrPtr = spillCacheOpt->lookup(adaptor.getInput());
-
-    if (!arrPtr) {
-      auto oneC = LLVM::ConstantOp::create(
-          rewriter, op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
-          rewriter.getI32IntegerAttr(1));
-      arrPtr = LLVM::AllocaOp::create(
-          rewriter, op->getLoc(),
-          LLVM::LLVMPointerType::get(rewriter.getContext()),
-          adaptor.getInput().getType(), oneC,
-          /*alignment=*/4);
-      LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
-    }
+    if (!arrPtr)
+      arrPtr = spillValueOnStack(rewriter, op.getLoc(), adaptor.getInput());
 
     auto arrTy = typeConverter->convertType(op.getInput().getType());
     auto elemTy = typeConverter->convertType(op.getResult().getType());
@@ -385,23 +381,10 @@ struct ArraySliceOpConversion
     auto dstTy = typeConverter->convertType(op.getDst().getType());
 
     Value arrPtr;
-
     if (spillCacheOpt)
       arrPtr = spillCacheOpt->lookup(adaptor.getInput());
-
-    if (!arrPtr) {
-      auto oneC = LLVM::ConstantOp::create(rewriter, op->getLoc(),
-                                           rewriter.getI32Type(),
-                                           rewriter.getI32IntegerAttr(1));
-
-      arrPtr = LLVM::AllocaOp::create(
-          rewriter, op->getLoc(),
-          LLVM::LLVMPointerType::get(rewriter.getContext()),
-          adaptor.getInput().getType(), oneC,
-          /*alignment=*/4);
-
-      LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
-    }
+    if (!arrPtr)
+      arrPtr = spillValueOnStack(rewriter, op.getLoc(), adaptor.getInput());
 
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getLowIndex());
 
@@ -491,15 +474,7 @@ struct ArrayConcatOpConversion
     // If we've got a cache, spill the array right away.
     if (spillCacheOpt) {
       rewriter.setInsertionPointAfter(arr.getDefiningOp());
-      auto oneC = rewriter.createOrFold<LLVM::ConstantOp>(
-          loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
-
-      auto ptr = LLVM::AllocaOp::create(
-          rewriter, loc, LLVM::LLVMPointerType::get(rewriter.getContext()),
-          resultTy, oneC,
-          /*alignment=*/4);
-
-      LLVM::StoreOp::create(rewriter, loc, arr, ptr);
+      auto ptr = spillValueOnStack(rewriter, loc, arr);
       spillCacheOpt->map(arr, ptr);
     }
     return success();
@@ -524,18 +499,7 @@ struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Type resultTy = typeConverter->convertType(op.getResult().getType());
-
-    auto oneC = rewriter.createOrFold<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
-
-    auto ptr = LLVM::AllocaOp::create(
-        rewriter, op->getLoc(),
-        LLVM::LLVMPointerType::get(rewriter.getContext()),
-        adaptor.getInput().getType(), oneC,
-        /*alignment=*/4);
-
-    LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), ptr);
-
+    auto ptr = spillValueOnStack(rewriter, op.getLoc(), adaptor.getInput());
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, ptr);
 
     return success();
