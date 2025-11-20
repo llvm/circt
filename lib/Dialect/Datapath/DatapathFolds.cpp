@@ -143,12 +143,9 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
       if (processedCompressorResults.contains(operand))
         continue;
 
-      if (auto *op = operand.getDefiningOp()) {
-        if (llvm::isa_and_nonnull<datapath::DatapathDialect>(
-                op->getDialect())) {
+      if (auto *op = operand.getDefiningOp())
+        if (isa_and_nonnull<datapath::DatapathDialect>(op->getDialect()))
           hasDatapathOperand = true;
-        }
-      }
 
       // If the operand has multiple uses, we do not fold it into a compress
       // operation, so we treat it as a regular operand.
