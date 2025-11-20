@@ -132,18 +132,16 @@ void HWToLLVMArraySpillCache::spillNonHWOps(OpBuilder &builder,
 }
 
 void HWToLLVMArraySpillCache::map(Value arrayValue, Value bufferPtr) {
-  assert(llvm::isa<LLVM::LLVMArrayType>(arrayValue.getType()) &&
+  assert(isa<LLVM::LLVMArrayType>(arrayValue.getType()) &&
          "Key is not an LLVM array.");
-  assert(llvm::isa<LLVM::LLVMPointerType>(bufferPtr.getType()) &&
+  assert(isa<LLVM::LLVMPointerType>(bufferPtr.getType()) &&
          "Value is not a pointer.");
   spillMap.insert({arrayValue, bufferPtr});
 }
 
 Value HWToLLVMArraySpillCache::lookup(Value arrayValue) {
-  assert(isa<LLVM::LLVMArrayType>(arrayValue.getType()) ||
-         isa<hw::ArrayType>(arrayValue.getType()) && "Not an array value");
-  while (isa<LLVM::LLVMArrayType>(arrayValue.getType()) ||
-         isa<hw::ArrayType>(arrayValue.getType())) {
+  assert(isa<LLVM::LLVMArrayType, hw::ArrayType>(arrayValue.getType()) && "Not an array value");
+  while (isa<LLVM::LLVMArrayType, hw::ArrayType>(arrayValue.getType())) {
     if (isa<LLVM::LLVMArrayType>(arrayValue.getType())) {
       auto mapVal = spillMap.lookup(arrayValue);
       if (mapVal)
