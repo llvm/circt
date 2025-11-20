@@ -1064,7 +1064,7 @@ class WindowSignal(Signal):
   collection of fields from the struct.
   """
 
-  def unwrap(self) -> List[Signal]:
+  def unwrap(self) -> UnionSignal | StructSignal:
     """Unwrap the window into either a struct (if the window has one unnamed
     frame) or a union of frames."""
 

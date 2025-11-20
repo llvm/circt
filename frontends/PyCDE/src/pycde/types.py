@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
 from collections import OrderedDict
 from functools import singledispatchmethod
@@ -12,6 +13,9 @@ from .support import clog2, get_user_loc
 from .circt import ir, support
 from .circt.dialects import esi, hw, seq, sv
 from .circt.dialects.esi import ChannelSignaling, ChannelDirection
+
+if TYPE_CHECKING:
+  from .signals import Signal, WindowSignal
 
 import typing
 from dataclasses import dataclass
@@ -138,7 +142,7 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(Bundle, type)
   if isinstance(type, esi.ListType):
     return Type.__new__(List, type)
-  if hasattr(esi, "WindowType") and isinstance(type, esi.WindowType):
+  if isinstance(type, esi.WindowType):
     return Type.__new__(Window, type)
   return Type(type)
 
@@ -405,12 +409,12 @@ class RegisteredStruct(TypeAlias):
   def __call__(self, **kwargs):
     return self._from_obj_or_sig(kwargs)
 
+  def _get_value_class(self):
+    return self._value_class
+
   @property
   def fields(self):
     return self.inner_type.fields
-
-  def _get_value_class(self):
-    return self._value_class
 
   @property
   def is_hw_type(self) -> bool:
@@ -1011,17 +1015,42 @@ class List(Type):
 class Window(Type):
   """An ESI data window type.
 
+  ESI windows provide a mechanism to view a structured data type (like a struct)
+  through multiple "frames". Each frame exposes a specific subset of the fields
+  from the underlying struct. This is particularly useful for modeling data that
+  is transmitted or processed in chunks, such as network packets (header frame,
+  payload frame) or other serialized data streams. It is required for
+  variably-sized data like lists.
+
   Construct with a name (string), an 'into' type (typically a StructType), and
   a list of Window.Frame objects. Each frame spec contains a name and a list of
   field specifications. A field specification is either a field name string or a
   tuple (field_name, num_items). 'num_items' is only allowed for fields with
   array or list types in the underlying struct and indicates how many items are
   accessible in the frame.
+  
+  In the case of lists, a 'last' field is added to the frame struct to indicate
+  that this is the last frame of the list. If 'numItems' is specified, a field
+  named `<list_name>_size` is added to indicate how many valid items are in this
+  frame.
+
+  The 'lowered type' of a Window is a union of structs, where each struct
+  corresponds to a frame and contains the fields specified in that frame. To
+  create a window signal, one typically constructs a signal of this lowered type
+  (representing one of the frames) and then 'wrap' it into the window type.
 
   Example:
-    Window("pkt", my_struct_type,
+    # Define the underlying struct
+    pkt_struct = StructType({
+        "hdr": Bits(8),
+        "payload": Bits(32) * 4,
+        "tail": Bits(4)
+    })
+
+    # Define the Window with two frames
+    window = Window("pkt", pkt_struct,
            [
-             Window.Frame("header", ["hdr", ("payload_array", 4)]),
+             Window.Frame("header", ["hdr", ("payload", 4)]),
              Window.Frame("tail", ["tail"])
            ])
   """
@@ -1128,16 +1157,37 @@ class Window(Type):
   def __repr__(self):
     return f"Window<{self.name}, {self.into}, frames={self.frames}>"
 
-  def wrap(self, signal):
+  def wrap(self, signal) -> "WindowSignal":
     """Wrap a signal (struct or union) into a WindowSignal using esi.WindowWrapOp.
     
     Args:
-      signal: A Signal with a type that matches the 'into' type of this Window.
+      signal: A Signal with a type that matches the 'lowered' type of this Window.
     
     Returns:
       A WindowSignal wrapping the input signal.
+
+    Example:
+      # Assuming 'window' is defined as in the class docstring,
+      # the lowered type of 'window' is:
+      # Union(
+      #   header=Struct(hdr=Bits(8), payload=Array(Bits(32), 4)),
+      #   tail=Struct(tail=Bits(4))
+      # )
+
+      # Create a signal for the 'header' frame.
+      header_frame_struct = window.lowered_type.header
+      header_data = header_frame_struct({"hdr": 0xAA, "payload": [0x1, 0x2, 0x3, 0x4]})
+      
+      # Wrap it into a window signal.
+      # Since lowered_type is a union, we need to create the union first.
+      union_val = window.lowered_type(("header", header_data))
+      window_sig = window.wrap(union_val)
+
+      Note that this example only transmits the 'header' frame. To transmit
+      the 'tail' frame, one would need to create a signal for that frame and mux
+      it into the union.
     """
-    from .signals import Signal as SignalBase, _FromCirctValue, WindowSignal
+    from .signals import Signal as SignalBase, WindowSignal
 
     if not isinstance(signal, SignalBase):
       raise TypeError(f"Expected a Signal, got {type(signal).__name__}")

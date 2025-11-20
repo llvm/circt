@@ -171,7 +171,8 @@ class TestWindowWrap(Module):
   out_union = Output(window_with_frames.lowered_type)
 
   @generator
-  def build(self):
-    window = window_with_frames.wrap(self.in_union)
-    self.out_window = window
-    self.out_union = window.unwrap()
+  @staticmethod
+  def build(ports):
+    window = window_with_frames.wrap(ports.in_union)
+    ports.out_window = window
+    ports.out_union = window.unwrap()
