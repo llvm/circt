@@ -158,6 +158,10 @@ Type WindowType::getLoweredType() const {
 
     // ... field by field.
     SmallVector<hw::StructType::FieldInfo, 4> fields;
+    SmallVector<hw::StructType::FieldInfo, 4> leftOverFields;
+    bool hasLeftOver = false;
+    StringAttr leftOverName;
+
     for (WindowFieldType field : frame.getMembers()) {
       auto fieldTypeIter = intoFields.find(field.getFieldName());
       assert(fieldTypeIter != intoFields.end());
@@ -167,43 +171,42 @@ Type WindowType::getLoweredType() const {
       if (field.getNumItems() == 0) {
         // Directly use the type from the struct unless it's an array or list,
         // in which case we want the inner type.
-        fields.push_back({field.getFieldName(), getInnerTypeOrSelf(fieldType)});
+        auto type = getInnerTypeOrSelf(fieldType);
+        fields.push_back({field.getFieldName(), type});
+        leftOverFields.push_back({field.getFieldName(), type});
 
         if (hw::type_isa<esi::ListType>(fieldType)) {
           // Lists need a 'last' signal to indicate the end of the list.
-          fields.push_back({StringAttr::get(getContext(), "last"),
-                            IntegerType::get(getContext(), 1)});
+          auto lastType = IntegerType::get(getContext(), 1);
+          auto lastField = StringAttr::get(getContext(), "last");
+          fields.push_back({lastField, lastType});
+          leftOverFields.push_back({lastField, lastType});
         }
       } else {
         if (auto array =
                 hw::type_dyn_cast<hw::ArrayType>(fieldTypeIter->getSecond())) {
-          assert(fields.empty()); // Checked by the validator.
-
           // The first union entry should be an array of length numItems.
           fields.push_back(
               {field.getFieldName(), hw::ArrayType::get(array.getElementType(),
                                                         field.getNumItems())});
-          unionFields.push_back(
-              {frame.getName(), hw::StructType::get(getContext(), fields), 0});
-          fields.clear();
 
           // If the array size is not a multiple of numItems, we need another
           // frame for the left overs.
           size_t leftOver = array.getNumElements() % field.getNumItems();
           if (leftOver) {
-            fields.push_back(
+            // The verifier checks that there is only one field per frame with
+            // numItems > 0.
+            assert(!hasLeftOver);
+            hasLeftOver = true;
+            leftOverFields.push_back(
                 {field.getFieldName(),
                  hw::ArrayType::get(array.getElementType(), leftOver)});
 
-            unionFields.push_back(
-                {StringAttr::get(getContext(), Twine(frame.getName().getValue(),
-                                                     "_leftOver")),
-                 hw::StructType::get(getContext(), fields), 0});
+            leftOverName = StringAttr::get(
+                getContext(), Twine(frame.getName().getValue(), "_leftOver"));
           }
         } else if (auto list = hw::type_cast<esi::ListType>(
                        fieldTypeIter->getSecond())) {
-          assert(fields.empty()); // Checked by the validator.
-
           // The first union entry should be a list of length numItems.
           fields.push_back(
               {field.getFieldName(),
@@ -218,23 +221,25 @@ Type WindowType::getLoweredType() const {
           // Lists need a 'last' signal to indicate the end of the list.
           fields.push_back({StringAttr::get(getContext(), "last"),
                             IntegerType::get(getContext(), 1)});
-          unionFields.push_back(
-              {frame.getName(), hw::StructType::get(getContext(), fields), 0});
         } else {
           llvm_unreachable("numItems specified on non-array/list field");
         }
-        fields.clear();
       }
     }
 
     // Special case: if we have one data frame and it doesn't have a name, don't
     // use a union.
-    if (getFrames().size() == 1 && frame.getName().getValue().empty())
+    if (getFrames().size() == 1 && frame.getName().getValue().empty() &&
+        !hasLeftOver)
       return hw::StructType::get(getContext(), fields);
 
     if (!fields.empty())
       unionFields.push_back(
           {frame.getName(), hw::StructType::get(getContext(), fields), 0});
+
+    if (hasLeftOver)
+      unionFields.push_back(
+          {leftOverName, hw::StructType::get(getContext(), leftOverFields), 0});
   }
 
   return hw::UnionType::get(getContext(), unionFields);
