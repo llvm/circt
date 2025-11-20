@@ -5,7 +5,8 @@ import sys
 import time
 
 platform = sys.argv[1]
-acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
+connstr = sys.argv[2]
+acc = esiaccel.connect(platform, connstr)
 
 hostmem = acc.get_service_hostmem()
 if hostmem is not None:
