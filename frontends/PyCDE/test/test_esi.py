@@ -11,7 +11,7 @@ from pycde.module import Metadata
 from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
 from pycde.types import (Bit, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, ClockType, List,
-                         StructType, UInt)
+                         StructType, UInt, Window)
 from pycde.testing import unittestmodule
 
 BIT = Bit
@@ -232,12 +232,13 @@ class RecvBundleTest(Module):
     self.s1_out = to_channels['req']
 
 
-# CHECK-LABEL:  hw.module @ListTest(in %lst_in : !esi.list<i8>, out lst_out : !esi.list<i8>)
-# CHECK-NEXT:     hw.output %lst_in : !esi.list<i8>
+# CHECK-LABEL:  hw.module @ListTest(in %lst_in : !esi.window<"default_window", !hw.struct<data: !esi.list<i8>>, [<"", [<"data">]>]>, out lst_out : !esi.window<"default_window", !hw.struct<data: !esi.list<i8>>, [<"", [<"data">]>]>)
+# CHECK-NEXT:     hw.output %lst_in : !esi.window<"default_window", !hw.struct<data: !esi.list<i8>>, [<"", [<"data">]>]>
 @unittestmodule()
 class ListTest(Module):
-  lst_in = Input(List(Bits(8)))
-  lst_out = Output(List(Bits(8)))
+  list_window = Window.default_of(List(Bits(8)))
+  lst_in = Input(list_window)
+  lst_out = Output(list_window)
 
   @generator
   def build(self):
