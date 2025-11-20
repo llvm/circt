@@ -13,7 +13,7 @@ from .circt import support
 from .circt import ir
 
 from contextvars import ContextVar
-from functools import singledispatchmethod
+from functools import cached_property, singledispatchmethod
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 import re
 import numpy as np
@@ -706,6 +706,27 @@ class Struct(StructSignal, metaclass=StructMetaType):
   ```
   """
   # All the work is done in the metaclass.
+
+
+class UnionSignal(Signal):
+
+  @cached_property
+  def field_indices(self) -> Dict[str, int]:
+    return {
+        name: idx for idx, (name, _, _) in enumerate(self.type.strip.fields)
+    }
+
+  def __getitem__(self, sub):
+    if sub not in self.field_indices:
+      raise LookupError(f"Union field '{sub}' not found in {self.type}")
+    from .dialects import hw
+    with get_user_loc():
+      return hw.UnionExtractOp(self.value, self.field_indices[sub])
+
+  def __getattr__(self, attr):
+    if attr not in self.field_indices:
+      raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
+    return self.__getitem__(attr)
 
 
 class ChannelSignal(Signal):
