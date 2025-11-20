@@ -76,6 +76,7 @@ MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetInto(MlirType window);
 MLIR_CAPI_EXPORTED size_t circtESIWindowTypeGetNumFrames(MlirType window);
 MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetFrame(MlirType window,
                                                        size_t idx);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetLoweredType(MlirType window);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFrameType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGet(MlirContext cctxt,

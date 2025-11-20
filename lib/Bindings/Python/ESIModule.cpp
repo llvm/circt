@@ -189,9 +189,9 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
              std::vector<MlirType> frames, MlirContext ctxt) {
             if (!hwTypeIsAStructType(into) &&
                 (!hwTypeIsATypeAliasType(into) ||
-                 !hwTypeIsAStructType(hwTypeAliasTypeGetInnerType(into)))) {
+                 !hwTypeIsAStructType(hwTypeAliasTypeGetInnerType(into))))
               throw nb::type_error("'into' type must be a hw.StructType");
-            }
+
             // Verify all frames are WindowFrameTypes
             for (const auto &frame : frames) {
               if (!circtESITypeIsAWindowFrameType(frame)) {
@@ -205,14 +205,16 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
           nb::arg("ctxt") = nullptr)
       .def_property_readonly("name", &circtESIWindowTypeGetName)
       .def_property_readonly("into", &circtESIWindowTypeGetInto)
-      .def_property_readonly("frames", [](MlirType windowType) {
-        std::vector<MlirType> frames;
-        size_t numFrames = circtESIWindowTypeGetNumFrames(windowType);
-        for (size_t i = 0; i < numFrames; ++i) {
-          frames.push_back(circtESIWindowTypeGetFrame(windowType, i));
-        }
-        return frames;
-      });
+      .def_property_readonly(
+          "frames",
+          [](MlirType windowType) {
+            std::vector<MlirType> frames;
+            size_t numFrames = circtESIWindowTypeGetNumFrames(windowType);
+            for (size_t i = 0; i < numFrames; ++i)
+              frames.push_back(circtESIWindowTypeGetFrame(windowType, i));
+            return frames;
+          })
+      .def("get_lowered_type", &circtESIWindowTypeGetLoweredType);
 
   mlir_type_subclass(m, "WindowFrameType", circtESITypeIsAWindowFrameType)
       .def_classmethod(
@@ -234,9 +236,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
       .def_property_readonly("members", [](MlirType frameType) {
         std::vector<MlirType> members;
         size_t numMembers = circtESIWindowFrameTypeGetNumMembers(frameType);
-        for (size_t i = 0; i < numMembers; ++i) {
+        for (size_t i = 0; i < numMembers; ++i)
           members.push_back(circtESIWindowFrameTypeGetMember(frameType, i));
-        }
         return members;
       });
 

@@ -91,6 +91,8 @@ with Context() as ctx:
   for frame in window_type.frames:
     print(frame)
   # CHECK: !esi.window.frame<"frame1", [<"field1", 5>, <"field2">]>
+  print(window_type.get_lowered_type())
+  # CHECK: !hw.union<frame1: !hw.struct<field1: !hw.array<5xi32>, field2: i8>>
   print()
 
 # CHECK-LABEL: === testGen called with ops:

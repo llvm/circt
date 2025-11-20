@@ -172,6 +172,10 @@ MlirType circtESIWindowTypeGetFrame(MlirType window, size_t idx) {
   return wrap(cast<WindowType>(unwrap(window)).getFrames()[idx]);
 }
 
+MlirType circtESIWindowTypeGetLoweredType(MlirType window) {
+  return wrap(cast<WindowType>(unwrap(window)).getLoweredType());
+}
+
 bool circtESITypeIsAWindowFrameType(MlirType type) {
   return isa<WindowFrameType>(unwrap(type));
 }
