@@ -51,8 +51,16 @@ class Type:
     return self
 
   @property
-  def bitwidth(self) -> int:
-    return hw.get_bitwidth(self._type)
+  def bitwidth(self) -> int | None:
+    bw = hw.get_bitwidth(self._type)
+    return bw if bw >= 0 else None
+
+  @property
+  def has_computable_bitwidth(self) -> bool:
+    """Can this type have its bitwidth computed at compile time? This is
+    distinct from having a bitwidth which is known now as it may be determined
+    by a pass."""
+    return self.bitwidth is not None
 
   @property
   def is_hw_type(self) -> bool:
@@ -193,6 +201,12 @@ class TypeAlias(Type):
   @property
   def is_hw_type(self) -> bool:
     return self.inner_type.is_hw_type
+
+  @property
+  def fields(self):
+    if isinstance(self.inner_type, (StructType, UnionType)):
+      return self.inner_type.fields
+    raise AttributeError("Only struct and union type aliases have fields")
 
   @staticmethod
   def declare_aliases(mod):
@@ -633,6 +647,10 @@ class ClockType(Type):
   def is_hw_type(self) -> bool:
     return False
 
+  @property
+  def has_computable_bitwidth(self) -> bool:
+    return True
+
   def _get_value_class(self):
     from .signals import ClockSignal
     return ClockSignal
@@ -666,7 +684,11 @@ class Channel(Type):
 
   SignalingNames = {
       ChannelSignaling.ValidReady: "ValidReady",
-      ChannelSignaling.FIFO: "FIFO"
+      ChannelSignaling.FIFO: "FIFO",
+  }
+  SignalingBitwidth = {
+      ChannelSignaling.ValidReady: 2,
+      ChannelSignaling.FIFO: 2,
   }
 
   def __new__(cls,
@@ -679,6 +701,13 @@ class Channel(Type):
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner)
+
+  @property
+  def bitwidth(self) -> int | None:
+    bw = self.inner_type.bitwidth
+    if bw is None:
+      return None
+    return bw + Channel.SignalingBitwidth[self.signaling]
 
   @property
   def is_hw_type(self) -> bool:
@@ -815,6 +844,16 @@ class Bundle(Type):
   def _get_value_class(self):
     from .signals import BundleSignal
     return BundleSignal
+
+  @property
+  def bitwidth(self) -> int | None:
+    total_bw = 0
+    for channel in self.channels:
+      bw = channel.channel.bitwidth
+      if bw is None:
+        return None
+      total_bw += bw
+    return total_bw
 
   @property
   def is_hw_type(self) -> bool:
@@ -1074,7 +1113,17 @@ class Window(Type):
 
     def __repr__(self) -> str:
       name = f"'{self.name}'" if self.name is not None else "None"
-      return f"Frame({name}, {self.members})"
+      formatted_members = []
+      for member in self.members:
+        if isinstance(member, tuple):
+          field_name, num_items = member
+          if num_items is not None:
+            formatted_members.append((field_name, num_items))
+          else:
+            formatted_members.append(field_name)
+        else:
+          formatted_members.append(member)
+      return f"Frame({name}, {formatted_members})"
 
   def __new__(cls, name: str, into: StructType | type["Struct"],
               frames: typing.List["Window.Frame"]):
@@ -1128,6 +1177,10 @@ class Window(Type):
   def _get_value_class(self):
     from .signals import WindowSignal
     return WindowSignal
+
+  @property
+  def bitwidth(self) -> int | None:
+    return self.lowered_type.bitwidth
 
   @property
   def is_hw_type(self) -> bool:
@@ -1212,6 +1265,53 @@ class Window(Type):
   # Windows are not directly constructible from python literals.
   def _from_obj(self, obj, alias: typing.Optional[TypeAlias] = None):
     raise TypeError("Cannot create Window values from Python objects directly")
+
+  @staticmethod
+  def default_of(type: Type) -> "Window":
+    """Get a 'reasonable' window in a type.
+  
+    If the type is not a struct, wrap it in a struct with a single field and
+    proceed.
+    
+    If the struct does not contain any types for which the bitwidth cannot be
+    statically computed (i.e. lists or Any types), then return just a window
+    with a single frame containing the entire struct. There's really no window
+    needed for this type.
+
+    If the struct type contains a list: create a window with one frame
+    containing all of the static fields followed by the list field 'numItems'
+    unset (it will default to 1). The list will always be placed at the end of
+    the struct.
+
+    If the struct type contains multiple lists or an 'Any' type: raise an
+    exception as this is not currently supported.
+    """
+
+    def is_struct_type(t: Type) -> bool:
+      return isinstance(t, StructType) or (isinstance(t, TypeAlias) and
+                                           isinstance(t.inner_type, StructType))
+
+    target_type = type
+    if not is_struct_type(target_type):
+      target_type = StructType({"data": type})
+
+    static_fields = []
+    list_fields = []
+
+    for name, ftype in target_type.fields:
+      if isinstance(ftype, List):
+        list_fields.append(name)
+      elif not ftype.has_computable_bitwidth:
+        raise ValueError(f"Field '{name}' has indeterminate bitwidth")
+      else:
+        static_fields.append(name)
+
+    if len(list_fields) > 1:
+      raise ValueError("Multiple list fields not supported")
+
+    frame_members = static_fields + list_fields
+    return Window("default_window", target_type,
+                  [Window.Frame(None, frame_members)])
 
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],
