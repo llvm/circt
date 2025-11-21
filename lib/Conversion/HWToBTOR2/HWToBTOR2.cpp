@@ -939,8 +939,8 @@ public:
 
   // Crash on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
-      op->emitError("not supported in btor2!");
-      return signalPassFailure();
+    op->emitError("not supported in btor2!");
+    return signalPassFailure();
   }
 
   // Dispatch next visitors
@@ -1030,9 +1030,10 @@ public:
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              seq::InitialOp, sv::AlwaysFFOp, seq::InitialOp,
-              seq::YieldOp, hw::OutputOp, hw::HWModuleOp,
-               // Specifically ignore printfs, as we can't do anything with them in btor2
+              seq::InitialOp, sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp,
+              hw::OutputOp, hw::HWModuleOp,
+              // Specifically ignore printfs, as we can't do anything with them
+              // in btor2
               verif::FormatVerilogStringOp, verif::PrintOp>(
             [&](auto expr) { ignore(op); })
 
