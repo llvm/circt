@@ -432,7 +432,7 @@ private:
         for (auto v : args) bools.push_back(toBool(v));
         Value result = bools[0];
         for (size_t i = 1; i < bools.size(); ++i)
-          result = b.create<smt::AndOp>(loc, result, bools[i]);
+          result = b.create<smt::XOrOp>(loc, result, bools[i]);
         return result;
       } 
       SmallVector<Value> convertedOps;
