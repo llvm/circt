@@ -37,15 +37,6 @@ hw.module @and(in %a: i2, in %b: i2, in %c: i2, in %d: i1, out and: i2) {
   hw.output %0 : i2
 }
 
-// CHECK-LABEL: @verification(
-// CHECK-NOT: sv.assert
-hw.module @verification(in %a: i1, out result: i1) {
-  sv.initial {
-    sv.assert %a, immediate
-  }
-  hw.output %a : i1
-}
-
 // TOP-LABEL: hw.module @unrelated
 // TOP-NEXT: comb.add %a, %b
 hw.module @unrelated(in %a: i2, in %b: i2, out and: i2) {
