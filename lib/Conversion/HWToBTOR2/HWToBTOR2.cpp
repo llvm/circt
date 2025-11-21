@@ -662,6 +662,10 @@ private:
   }
 
 public:
+  // Ignore all other explicitly mentionned operations
+  // ** Purposefully left empty **
+  void ignore(Operation *op) {}
+
   /// Visitor Methods used later on for pattern matching
 
   // Visitor for the inputs of the module.
@@ -933,11 +937,13 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
+  // Crash on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
-    op->emitError("not supported in btor2!");
-    return signalPassFailure();
+      op->emitError("not supported in btor2!");
+      return signalPassFailure();
   }
 
+  // Dispatch next visitors
   void visitInvalidVerif(Operation *op) { visit(op); }
 
   // Seq operation visitor, that dispatches to other seq ops
@@ -1014,10 +1020,6 @@ public:
     regOps.push_back(reg);
   }
 
-  // Ignore all other explicitly mentionned operations
-  // ** Purposefully left empty **
-  void ignore(Operation *op) {}
-
   // Tail method that handles all operations that weren't handled by previous
   // visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
@@ -1028,8 +1030,10 @@ public:
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              seq::InitialOp, sv::AlwaysFFOp, seq::FromClockOp, seq::InitialOp,
-              seq::YieldOp, hw::OutputOp, hw::HWModuleOp>(
+              seq::InitialOp, sv::AlwaysFFOp, seq::InitialOp,
+              seq::YieldOp, hw::OutputOp, hw::HWModuleOp,
+               // Specifically ignore printfs, as we can't do anything with them in btor2
+              verif::FormatVerilogStringOp, verif::PrintOp>(
             [&](auto expr) { ignore(op); })
 
         // Make sure that the design only contains one clock
