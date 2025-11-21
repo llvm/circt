@@ -937,7 +937,7 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
-  // Crash on most unhandled verif ops
+  // Error out on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
     op->emitError("not supported in btor2!");
     return signalPassFailure();
