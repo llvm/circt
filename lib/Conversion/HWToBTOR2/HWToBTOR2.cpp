@@ -662,7 +662,7 @@ private:
   }
 
 public:
-  // Ignore all other explicitly mentionned operations
+  // Ignore all other explicitly mentioned operations
   // ** Purposefully left empty **
   void ignore(Operation *op) {}
 
