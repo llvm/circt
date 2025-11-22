@@ -578,19 +578,20 @@ TEST(EvaluatorTests, AnyCastParam) {
 }
 
 TEST(EvaluatorTests, InstantiateGraphRegion) {
-  StringRef module =
-      "!ty = !om.class.type<@LinkedList>"
-      "om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val: "
-      "!om.string){"
-      "  om.class.fields %n, %val : !ty, !om.string"
-      "}"
-      "om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {"
-      "  %str = om.constant \"foo\" : !om.string"
-      "  %val = om.object.field %1, [@n, @n, @val] : (!ty) -> !om.string"
-      "  %0 = om.object @LinkedList(%1, %val) : (!ty, !om.string) -> !ty"
-      "  %1 = om.object @LinkedList(%0, %str) : (!ty, !om.string) -> !ty"
-      "  om.class.fields %0, %1 : !ty, !ty"
-      "}";
+  StringRef mod = R"MLIR(
+!ty = !om.class.type<@LinkedList>
+om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val:
+!om.string){
+  om.class.fields %n, %val : !ty, !om.string
+}
+om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
+  %str = om.constant "foo" : !om.string
+  %val = om.object.field %1, [@n, @n, @val] : (!ty) -> !om.string
+  %0 = om.object @LinkedList(%1, %val) : (!ty, !om.string) -> !ty
+  %1 = om.object @LinkedList(%0, %str) : (!ty, !om.string) -> !ty
+  om.class.fields %0, %1 : !ty, !ty
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -599,7 +600,7 @@ TEST(EvaluatorTests, InstantiateGraphRegion) {
   context.getOrLoadDialect<OMDialect>();
 
   OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(module, ParserConfig(&context));
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
 
   Evaluator evaluator(owning.release());
 
@@ -634,15 +635,17 @@ TEST(EvaluatorTests, InstantiateGraphRegion) {
 }
 
 TEST(EvaluatorTests, InstantiateCycle) {
-  StringRef module = "!ty = !om.class.type<@LinkedList>"
-                     "om.class @LinkedList(%n: !ty) -> (n: !ty){"
-                     "  om.class.fields %n : !ty"
-                     "}"
-                     "om.class @ReferenceEachOther() -> (field: !ty){"
-                     "  %val = om.object.field %0, [@n] : (!ty) -> !ty"
-                     "  %0 = om.object @LinkedList(%val) : (!ty) -> !ty"
-                     "  om.class.fields %0 : !ty"
-                     "}";
+  StringRef mod = R"MLIR(
+!ty = !om.class.type<@LinkedList>
+om.class @LinkedList(%n: !ty) -> (n: !ty){
+  om.class.fields %n : !ty
+}
+om.class @ReferenceEachOther() -> (field: !ty){
+  %val = om.object.field %0, [@n] : (!ty) -> !ty
+  %0 = om.object @LinkedList(%val) : (!ty) -> !ty
+  om.class.fields %0 : !ty
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -656,7 +659,7 @@ TEST(EvaluatorTests, InstantiateCycle) {
   });
 
   OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(module, ParserConfig(&context));
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
 
   Evaluator evaluator(owning.release());
 
@@ -667,13 +670,14 @@ TEST(EvaluatorTests, InstantiateCycle) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {"
-      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %2 = om.integer.add %0, %1 : !om.integer"
-      "  om.class.fields %2 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
+  %0 = om.constant #om.integer<1 : si3> : !om.integer
+  %1 = om.constant #om.integer<2 : si3> : !om.integer
+  %2 = om.integer.add %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -702,13 +706,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {"
-      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
-      "  %2 = om.integer.mul %0, %1 : !om.integer"
-      "  om.class.fields %2 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
+  %0 = om.constant #om.integer<2 : si3> : !om.integer
+  %1 = om.constant #om.integer<3 : si3> : !om.integer
+  %2 = om.integer.mul %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -737,13 +742,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){"
-      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %2 = om.integer.shr %0, %1 : !om.integer"
-      "  om.class.fields %2 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
+  %0 = om.constant #om.integer<8 : si5> : !om.integer
+  %1 = om.constant #om.integer<2 : si3> : !om.integer
+  %2 = om.integer.shr %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -772,13 +778,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){"
-      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-      "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
-      "  %2 = om.integer.shr %0, %1 : !om.integer"
-      "  om.class.fields %2 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
+  %0 = om.constant #om.integer<8 : si5> : !om.integer
+  %1 = om.constant #om.integer<-2 : si3> : !om.integer
+  %2 = om.integer.shr %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -806,14 +813,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){"
-      "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-      "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
-      ": !om.integer"
-      "  %2 = om.integer.shr %0, %1 : !om.integer"
-      "  om.class.fields %2 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
+  %0 = om.constant #om.integer<8 : si5> : !om.integer
+  %1 = om.constant #om.integer<36893488147419100000 : si66> : !om.integer
+  %2 = om.integer.shr %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -842,13 +849,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShl) {
-  StringRef mod =
-      "om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){"
-      "  %0 = om.constant #om.integer<8 : si7> : !om.integer"
-      "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  %2 = om.integer.shl %0, %1 : !om.integer"
-      "  om.class.fields %2 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
+  %0 = om.constant #om.integer<8 : si7> : !om.integer
+  %1 = om.constant #om.integer<2 : si3> : !om.integer
+  %2 = om.integer.shl %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -877,13 +885,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShl) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShlNegative() -> (result: "
-                  "!om.integer) {"
-                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-                  "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
-                  "  %2 = om.integer.shl %0, %1 : !om.integer"
-                  "  om.class.fields %2 : !om.integer"
-                  "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
+  %0 = om.constant #om.integer<8 : si5> : !om.integer
+  %1 = om.constant #om.integer<-2 : si3> : !om.integer
+  %2 = om.integer.shl %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -911,14 +920,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: "
-                  "!om.integer) {"
-                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
-                  "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
-                  ": !om.integer"
-                  "  %2 = om.integer.shl %0, %1 : !om.integer"
-                  "  om.class.fields %2 : !om.integer"
-                  "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
+  %0 = om.constant #om.integer<8 : si5> : !om.integer
+  %1 = om.constant #om.integer<36893488147419100000 : si66> : !om.integer
+  %2 = om.integer.shl %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -947,29 +956,28 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
-  StringRef mod =
-      "om.class @Class1() -> (value: !om.integer){"
-      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  om.class.fields %0 : !om.integer"
-      "}"
-      ""
-      "om.class @Class2() -> (value: !om.integer){"
-      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  om.class.fields %0 : !om.integer"
-      "}"
-      ""
-      "om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {"
-      "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
-      "  %1 = om.object.field %0, [@value] : "
-      "(!om.class.type<@Class1>) -> !om.integer"
-      ""
-      "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
-      "  %3 = om.object.field %2, [@value] : "
-      "(!om.class.type<@Class2>) -> !om.integer"
-      ""
-      "  %5 = om.integer.add %1, %3 : !om.integer"
-      "  om.class.fields %5 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @Class1() -> (value: !om.integer){
+  %0 = om.constant #om.integer<1 : si3> : !om.integer
+  om.class.fields %0 : !om.integer
+}
+
+om.class @Class2() -> (value: !om.integer){
+  %0 = om.constant #om.integer<2 : si3> : !om.integer
+  om.class.fields %0 : !om.integer
+}
+
+om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
+  %0 = om.object @Class1() : () -> !om.class.type<@Class1>
+  %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+
+  %2 = om.object @Class2() : () -> !om.class.type<@Class2>
+  %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+
+  %5 = om.integer.add %1, %3 : !om.integer
+  om.class.fields %5 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -998,31 +1006,28 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
-  StringRef mod =
-      "om.class @Class1(%input: !om.integer) -> (value: !om.integer, input: "
-      "!om.integer) {"
-      "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  om.class.fields %0, %input : !om.integer, !om.integer"
-      "}"
-      ""
-      "om.class @Class2() -> (value: !om.integer){"
-      "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  om.class.fields %0 : !om.integer"
-      "}"
-      ""
-      "om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: "
-      "!om.integer){"
-      "  %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>"
-      "  %1 = om.object.field %0, [@value] : "
-      "(!om.class.type<@Class1>) -> !om.integer"
-      ""
-      "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
-      "  %3 = om.object.field %2, [@value] : "
-      "(!om.class.type<@Class2>) -> !om.integer"
-      ""
-      "  %5 = om.integer.add %1, %3 : !om.integer"
-      "  om.class.fields %5 : !om.integer"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @Class1(%input: !om.integer) -> (value: !om.integer, input: !om.integer) {
+  %0 = om.constant #om.integer<1 : si3> : !om.integer
+  om.class.fields %0, %input : !om.integer, !om.integer
+}
+
+om.class @Class2() -> (value: !om.integer){
+  %0 = om.constant #om.integer<2 : si3> : !om.integer
+  om.class.fields %0 : !om.integer
+}
+
+om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
+  %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
+  %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+
+  %2 = om.object @Class2() : () -> !om.class.type<@Class2>
+  %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+
+  %5 = om.integer.add %1, %3 : !om.integer
+  om.class.fields %5 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1051,13 +1056,14 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
-  StringRef mod = "om.class @IntegerBinaryArithmeticWidthMismatch() -> "
-                  "(result: !om.integer) {"
-                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-                  "  %1 = om.constant #om.integer<2 : si4> : !om.integer"
-                  "  %2 = om.integer.add %0, %1 : !om.integer"
-                  "  om.class.fields %2 : !om.integer"
-                  "}";
+  StringRef mod = R"MLIR(
+om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
+  %0 = om.constant #om.integer<1 : si3> : !om.integer
+  %1 = om.constant #om.integer<2 : si4> : !om.integer
+  %2 = om.integer.add %0, %1 : !om.integer
+  om.class.fields %2 : !om.integer
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1086,15 +1092,17 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
 }
 
 TEST(EvaluatorTests, ListConcat) {
-  StringRef mod = "om.class @ListConcat() -> (result: !om.list<!om.integer>) {"
-                  "  %0 = om.constant #om.integer<0 : i8> : !om.integer"
-                  "  %1 = om.constant #om.integer<1 : i8> : !om.integer"
-                  "  %2 = om.constant #om.integer<2 : i8> : !om.integer"
-                  "  %l0 = om.list_create %0, %1 : !om.integer"
-                  "  %l1 = om.list_create %2 : !om.integer"
-                  "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
-                  "  om.class.fields %concat : !om.list<!om.integer>"
-                  "}";
+  StringRef mod = R"MLIR(
+om.class @ListConcat() -> (result: !om.list<!om.integer>) {
+  %0 = om.constant #om.integer<0 : i8> : !om.integer
+  %1 = om.constant #om.integer<1 : i8> : !om.integer
+  %2 = om.constant #om.integer<2 : i8> : !om.integer
+  %l0 = om.list_create %0, %1 : !om.integer
+  %l1 = om.list_create %2 : !om.integer
+  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>
+  om.class.fields %concat : !om.list<!om.integer>
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1138,22 +1146,22 @@ TEST(EvaluatorTests, ListConcat) {
 }
 
 TEST(EvaluatorTests, ListConcatField) {
-  StringRef mod =
-      "om.class @ListField() -> (value: !om.list<!om.integer>) {"
-      "  %0 = om.constant #om.integer<2 : i8> : !om.integer"
-      "  %1 = om.list_create %0 : !om.integer"
-      "  om.class.fields %1 : !om.list<!om.integer>"
-      "}"
-      "om.class @ListConcatField() -> (result: !om.list<!om.integer>){"
-      "  %listField = om.object @ListField() : () -> !om.class.type<@ListField>"
-      "  %0 = om.constant #om.integer<0 : i8> : !om.integer"
-      "  %1 = om.constant #om.integer<1 : i8> : !om.integer"
-      "  %l0 = om.list_create %0, %1 : !om.integer"
-      "  %l1 = om.object.field %listField, [@value] : "
-      "(!om.class.type<@ListField>) -> !om.list<!om.integer>"
-      "  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>"
-      "  om.class.fields %concat : !om.list<!om.integer>"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @ListField() -> (value: !om.list<!om.integer>) {
+  %0 = om.constant #om.integer<2 : i8> : !om.integer
+  %1 = om.list_create %0 : !om.integer
+  om.class.fields %1 : !om.list<!om.integer>
+}
+om.class @ListConcatField() -> (result: !om.list<!om.integer>){
+  %listField = om.object @ListField() : () -> !om.class.type<@ListField>
+  %0 = om.constant #om.integer<0 : i8> : !om.integer
+  %1 = om.constant #om.integer<1 : i8> : !om.integer
+  %l0 = om.list_create %0, %1 : !om.integer
+  %l1 = om.object.field %listField, [@value] : (!om.class.type<@ListField>) -> !om.list<!om.integer>
+  %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>
+  om.class.fields %concat : !om.list<!om.integer>
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1197,19 +1205,20 @@ TEST(EvaluatorTests, ListConcatField) {
 }
 
 TEST(EvaluatorTests, ListOfListConcat) {
-  StringRef mod = "om.class @ListOfListConcat()  -> (result: "
-                  "    !om.list<!om.list<!om.string>>) {"
-                  "  %0 = om.constant \"foo\" : !om.string"
-                  "  %1 = om.constant \"bar\" : !om.string"
-                  "  %2 = om.constant \"baz\" : !om.string"
-                  "  %3 = om.constant \"qux\" : !om.string"
-                  "  %4 = om.list_create %0, %1 : !om.string"
-                  "  %5 = om.list_create %4 : !om.list<!om.string>"
-                  "  %6 = om.list_create %2, %3 : !om.string"
-                  "  %7 = om.list_create %6 : !om.list<!om.string>"
-                  "  %8 = om.list_concat %5, %7 : <!om.list<!om.string>>"
-                  "  om.class.fields %8 : !om.list<!om.list<!om.string>> "
-                  "}";
+  StringRef mod = R"MLIR(
+om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
+  %0 = om.constant "foo" : !om.string
+  %1 = om.constant "bar" : !om.string
+  %2 = om.constant "baz" : !om.string
+  %3 = om.constant "qux" : !om.string
+  %4 = om.list_create %0, %1 : !om.string
+  %5 = om.list_create %4 : !om.list<!om.string>
+  %6 = om.list_create %2, %3 : !om.string
+  %7 = om.list_create %6 : !om.list<!om.string>
+  %8 = om.list_concat %5, %7 : <!om.list<!om.string>>
+  om.class.fields %8 : !om.list<!om.list<!om.string>>
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1264,30 +1273,29 @@ TEST(EvaluatorTests, ListOfListConcat) {
 }
 
 TEST(EvaluatorTests, ListConcatPartialCycle) {
-  StringRef mod =
-      "om.class @Child(%field_in: !om.any) -> (field: !om.list<!om.any>) {"
-      "  %1 = om.list_create %field_in : !om.any"
-      "  om.class.fields %1 : !om.list<!om.any>"
-      "}"
-      "om.class @Leaf(%id_in: !om.integer) -> (id: !om.integer) {"
-      "  om.class.fields %id_in : !om.integer"
-      "}"
-      "om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){"
-      "  %0 = om.object @Child(%7) : (!om.any) -> !om.class.type<@Child>"
-      "  %1 = om.object.field %0, [@field] : (!om.class.type<@Child>) -> "
-      "!om.list<!om.any>"
-      "  %2 = om.object @Child(%10) : (!om.any) -> !om.class.type<@Child>"
-      "  %3 = om.object.field %2, [@field] : (!om.class.type<@Child>) -> "
-      "!om.list<!om.any>"
-      "  %4 = om.list_concat %1, %3 : <!om.any>"
-      "  %5 = om.constant #om.integer<1 : i64>"
-      "  %6 = om.object @Leaf(%5) : (!om.integer) -> !om.class.type<@Leaf>"
-      "  %7 = om.any_cast %6 : (!om.class.type<@Leaf>) -> !om.any"
-      "  %8 = om.constant #om.integer<2 : i64>"
-      "  %9 = om.object @Leaf(%8) : (!om.integer) -> !om.class.type<@Leaf>"
-      "  %10 = om.any_cast %9 : (!om.class.type<@Leaf>) -> !om.any"
-      "  om.class.fields %4 : !om.list<!om.any>"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @Child(%field_in: !om.any) -> (field: !om.list<!om.any>) {
+  %1 = om.list_create %field_in : !om.any
+  om.class.fields %1 : !om.list<!om.any>
+}
+om.class @Leaf(%id_in: !om.integer) -> (id: !om.integer) {
+  om.class.fields %id_in : !om.integer
+}
+om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
+  %0 = om.object @Child(%7) : (!om.any) -> !om.class.type<@Child>
+  %1 = om.object.field %0, [@field] : (!om.class.type<@Child>) -> !om.list<!om.any>
+  %2 = om.object @Child(%10) : (!om.any) -> !om.class.type<@Child>
+  %3 = om.object.field %2, [@field] : (!om.class.type<@Child>) -> !om.list<!om.any>
+  %4 = om.list_concat %1, %3 : <!om.any>
+  %5 = om.constant #om.integer<1 : i64>
+  %6 = om.object @Leaf(%5) : (!om.integer) -> !om.class.type<@Leaf>
+  %7 = om.any_cast %6 : (!om.class.type<@Leaf>) -> !om.any
+  %8 = om.constant #om.integer<2 : i64>
+  %9 = om.object @Leaf(%8) : (!om.integer) -> !om.class.type<@Leaf>
+  %10 = om.any_cast %9 : (!om.class.type<@Leaf>) -> !om.any
+  om.class.fields %4 : !om.list<!om.any>
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1326,52 +1334,45 @@ TEST(EvaluatorTests, ListConcatPartialCycle) {
 }
 
 TEST(EvaluatorTests, NestedReferenceValue) {
-  StringRef mod =
-      "om.class @Empty() {"
-      "  om.class.fields"
-      "}"
-      "om.class @Any() -> (object: !om.any, string: !om.any) {"
-      "  %0 = om.object @Empty() : () -> !om.class.type<@Empty>"
-      "  %1 = om.any_cast %0 : (!om.class.type<@Empty>) -> !om.any"
-      "  %2 = om.constant \"foo\" : !om.string"
-      "  %3 = om.any_cast %2 : (!om.string) -> !om.any"
-      "  om.class.fields %1, %3 : !om.any, !om.any"
-      "}"
-      "om.class @InnerClass1(%anyListIn: !om.list<!om.any>)  -> (any_list1: "
-      "!om.list<!om.any>) {"
-      "  om.class.fields %anyListIn : !om.list<!om.any>"
-      "}"
-      "om.class @InnerClass2(%anyListIn: !om.list<!om.any>)  -> (any_list2: "
-      "!om.list<!om.any>) {"
-      "  om.class.fields %anyListIn : !om.list<!om.any>"
-      "}"
-      "om.class @OuterClass2()  -> (om: !om.class.type<@InnerClass2>) {"
-      "  %0 = om.object @InnerClass2(%5) : (!om.list<!om.any>) -> "
-      "!om.class.type<@InnerClass2>"
-      "  %1 = om.object @Any() : () -> !om.class.type<@Any>"
-      "  %2 = om.object.field %1, [@object] : (!om.class.type<@Any>) -> "
-      "!om.any"
-      "  %3 = om.object @Any() : () -> !om.class.type<@Any>"
-      "  %4 = om.object.field %3, [@object] : (!om.class.type<@Any>) -> "
-      "!om.any"
-      "  %5 = om.list_create %2, %4 : !om.any"
-      "  om.class.fields %0 : !om.class.type<@InnerClass2>"
-      "}"
-      "om.class @OuterClass1()  -> (om: !om.any) {"
-      "  %0 = om.object @InnerClass1(%8) : (!om.list<!om.any>) -> "
-      "!om.class.type<@InnerClass1>"
-      "  %1 = om.any_cast %0 : (!om.class.type<@InnerClass1>) -> !om.any"
-      "  %2 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>"
-      "  %3 = om.object.field %2, [@om] : (!om.class.type<@OuterClass2>) -> "
-      "!om.class.type<@InnerClass2>"
-      "  %4 = om.any_cast %3 : (!om.class.type<@InnerClass2>) -> !om.any"
-      "  %5 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>"
-      "  %6 = om.object.field %5, [@om] : (!om.class.type<@OuterClass2>) -> "
-      "!om.class.type<@InnerClass2>"
-      "  %7 = om.any_cast %6 : (!om.class.type<@InnerClass2>) -> !om.any"
-      "  %8 = om.list_create %4, %7 : !om.any"
-      "  om.class.fields %1 : !om.any"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @Empty() {
+  om.class.fields
+}
+om.class @Any() -> (object: !om.any, string: !om.any) {
+  %0 = om.object @Empty() : () -> !om.class.type<@Empty>
+  %1 = om.any_cast %0 : (!om.class.type<@Empty>) -> !om.any
+  %2 = om.constant "foo" : !om.string
+  %3 = om.any_cast %2 : (!om.string) -> !om.any
+  om.class.fields %1, %3 : !om.any, !om.any
+}
+om.class @InnerClass1(%anyListIn: !om.list<!om.any>)  -> (any_list1: !om.list<!om.any>) {
+  om.class.fields %anyListIn : !om.list<!om.any>
+}
+om.class @InnerClass2(%anyListIn: !om.list<!om.any>)  -> (any_list2: !om.list<!om.any>) {
+  om.class.fields %anyListIn : !om.list<!om.any>
+}
+om.class @OuterClass2()  -> (om: !om.class.type<@InnerClass2>) {
+  %0 = om.object @InnerClass2(%5) : (!om.list<!om.any>) -> !om.class.type<@InnerClass2>
+  %1 = om.object @Any() : () -> !om.class.type<@Any>
+  %2 = om.object.field %1, [@object] : (!om.class.type<@Any>) -> !om.any
+  %3 = om.object @Any() : () -> !om.class.type<@Any>
+  %4 = om.object.field %3, [@object] : (!om.class.type<@Any>) -> !om.any
+  %5 = om.list_create %2, %4 : !om.any
+  om.class.fields %0 : !om.class.type<@InnerClass2>
+}
+om.class @OuterClass1()  -> (om: !om.any) {
+  %0 = om.object @InnerClass1(%8) : (!om.list<!om.any>) -> !om.class.type<@InnerClass1>
+  %1 = om.any_cast %0 : (!om.class.type<@InnerClass1>) -> !om.any
+  %2 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>
+  %3 = om.object.field %2, [@om] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
+  %4 = om.any_cast %3 : (!om.class.type<@InnerClass2>) -> !om.any
+  %5 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>
+  %6 = om.object.field %5, [@om] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
+  %7 = om.any_cast %6 : (!om.class.type<@InnerClass2>) -> !om.any
+  %8 = om.list_create %4, %7 : !om.any
+  om.class.fields %1 : !om.any
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1408,13 +1409,13 @@ TEST(EvaluatorTests, NestedReferenceValue) {
 }
 
 TEST(EvaluatorTests, ListAttrConcat) {
-  StringRef mod =
-      "om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {"
-      "%0 = om.constant #om.list<!om.string, [\"X\" : !om.string, \"Y\" : "
-      "!om.string]> : !om.list<!om.string>"
-      "%1 = om.list_concat %0, %0 : !om.list<!om.string>"
-      "om.class.fields %1 : !om.list<!om.string>"
-      "}";
+  StringRef mod = R"MLIR(
+om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
+  %0 = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
+  %1 = om.list_concat %0, %0 : !om.list<!om.string>
+  om.class.fields %1 : !om.list<!om.string>
+}
+)MLIR";
 
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -1450,6 +1451,134 @@ TEST(EvaluatorTests, ListAttrConcat) {
   checkEq(listVal[1].get(), "Y");
   checkEq(listVal[2].get(), "X");
   checkEq(listVal[3].get(), "Y");
+}
+
+TEST(EvaluatorTests, UnknownValuesBasic) {
+  StringRef mod = R"MLIR(
+om.class @Bar(
+  %a: !om.integer
+) -> (
+  b: !om.integer
+) {
+  om.class.fields %a : !om.integer
+}
+
+om.class @Foo(
+  %unknown_int: !om.integer,
+  %unknown_frozenbasepath: !om.frozenbasepath,
+  %unknown_class: !om.class.type<@Bar>
+) -> (
+  a: !om.integer,
+  b: !om.integer,
+  c: !om.list<!om.integer>,
+  d: !om.list<!om.integer>,
+  e: !om.frozenbasepath,
+  f: !om.frozenpath,
+  g: !om.integer
+) {
+  %0 = om.constant #om.integer<1 : i4> : !om.integer
+  %1 = om.integer.add %0, %unknown_int : !om.integer
+  %2 = om.list_create %0, %unknown_int : !om.integer
+  %3 = om.list_concat %2, %2 : !om.list<!om.integer>
+  %4 = om.frozenbasepath_create %unknown_frozenbasepath "Foo/bar"
+  %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
+  %6 = om.object.field %unknown_class, [@b] : (!om.class.type<@Bar>) -> !om.integer
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = UnknownLoc::get(&context);
+  auto unknownValue = std::make_shared<circt::om::evaluator::UnknownValue>(
+      circt::om::evaluator::UnknownValue(&context, unknownLoc));
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Foo"),
+                            {unknownValue, unknownValue, unknownValue});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
+
+  ASSERT_EQ(object->getFieldNames().size(), 7ul);
+
+  for (auto fieldName : object->getFieldNames()) {
+    auto field = object->getField(cast<StringAttr>(fieldName));
+    ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(field->get()));
+  }
+}
+
+TEST(EvaluatorTests, UnknownValuesNested) {
+  StringRef mod = R"MLIR(
+om.class @Bar(
+  %known_in: !om.integer,
+  %unknown_in: !om.integer
+) -> (
+  known_out: !om.integer,
+  unknown_out: !om.integer
+) {
+  om.class.fields %known_in, %unknown_in : !om.integer, !om.integer
+}
+
+om.class @Foo(
+  %unknown_in: !om.integer
+) -> (
+  a: !om.integer,
+  b: !om.integer
+) {
+  %0 = om.constant #om.integer<1 : i4> : !om.integer
+
+  %bar = om.object @Bar(%0, %unknown_in) : (!om.integer, !om.integer) -> !om.class.type<@Bar>
+  %1 = om.object.field %bar, [@known_out] : (!om.class.type<@Bar>) -> !om.integer
+  %2 = om.object.field %bar, [@unknown_out] : (!om.class.type<@Bar>) -> !om.integer
+
+  om.class.fields %0, %2 : !om.integer, !om.integer
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = UnknownLoc::get(&context);
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "Foo"),
+      {std::make_shared<circt::om::evaluator::UnknownValue>(
+          circt::om::evaluator::UnknownValue(&context, unknownLoc))});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
+
+  // A should be a known constant.
+  auto a =
+      cast<circt::om::IntegerAttr>(cast<circt::om::evaluator::AttributeValue>(
+                                       object->getField("a").value().get())
+                                       ->getAttr())
+          .getValue()
+          .getValue()
+          .getZExtValue() == 1;
+  ASSERT_TRUE(a == 1);
+
+  // B should be unknown.
+  ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(
+      object->getField("b").value().get()));
 }
 
 } // namespace
