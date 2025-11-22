@@ -124,7 +124,7 @@ void printPort(std::ostream &os, const BundlePort &port, std::string indent,
     }
   os << std::endl;
   for (const auto &[name, chan] : port.getChannels())
-    os << indent << "    " << name << ": " << chan.getType()->getID()
+    os << indent << "    " << name << ": " << chan.getType()->toString()
        << std::endl;
 }
 
