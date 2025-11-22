@@ -71,6 +71,24 @@ class Immediate(Value):
 
     return Immediate(width, 2**width - 1)
 
+  @staticmethod
+  def smax(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the maximum signed value it can
+    hold.
+    """
+
+    return Immediate(width, 2**(width - 1) - 1)
+  
+  @staticmethod
+  def smin(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the minimum signed value it can
+    hold.
+    """
+
+    return Immediate(width, 1 << (width - 1))
+
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"
 
