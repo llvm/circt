@@ -42,10 +42,10 @@ bool arcTypeIsAMemory(MlirType type) {
 
 MlirType arcMemoryTypeGet(unsigned numWords, MlirType wordType,
                           MlirType addressType) {
-  return wrap(MemoryType::get(
-      unwrap(wordType).getContext(), numWords,
-      llvm::cast<mlir::IntegerType>(unwrap(wordType)),
-      llvm::cast<mlir::IntegerType>(unwrap(addressType))));
+  return wrap(
+      MemoryType::get(unwrap(wordType).getContext(), numWords,
+                      llvm::cast<mlir::IntegerType>(unwrap(wordType)),
+                      llvm::cast<mlir::IntegerType>(unwrap(addressType))));
 }
 
 bool arcTypeIsAStorage(MlirType type) {
@@ -68,4 +68,3 @@ MlirType arcSimModelInstanceTypeGet(MlirAttribute model) {
   auto attr = llvm::cast<mlir::FlatSymbolRefAttr>(unwrap(model));
   return wrap(SimModelInstanceType::get(attr.getContext(), attr));
 }
-

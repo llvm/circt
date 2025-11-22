@@ -27,10 +27,8 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
             return cls(arcStateTypeGet(innerType));
           },
           nb::arg("cls"), nb::arg("inner_type"))
-      .def_property_readonly("type",
-                             [](MlirType self) {
-                               return arcStateTypeGetType(self);
-                             });
+      .def_property_readonly(
+          "type", [](MlirType self) { return arcStateTypeGetType(self); });
 
   mlir_type_subclass(m, "MemoryType", arcTypeIsAMemory)
       .def_classmethod(
@@ -48,7 +46,8 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
           [](nb::object cls, MlirContext ctx, nb::object size) {
             if (size.is_none())
               return cls(arcStorageTypeGet(ctx));
-            return cls(arcStorageTypeGetWithSize(ctx, nb::cast<unsigned>(size)));
+            return cls(
+                arcStorageTypeGetWithSize(ctx, nb::cast<unsigned>(size)));
           },
           nb::arg("cls"), nb::arg("context") = nb::none(),
           nb::arg("size") = nb::none());
