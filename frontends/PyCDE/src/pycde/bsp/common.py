@@ -13,7 +13,7 @@ from ..module import Module, generator, modparams
 from ..signals import BitsSignal, ChannelSignal, StructSignal
 from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
-                     ChannelDirection, StructType, Type, UInt)
+                     ChannelDirection, StructType, Type, UInt, Window)
 
 from typing import Callable, Dict, List, Tuple
 import typing
@@ -1001,6 +1001,8 @@ def HostMemWriteProcessor(
         # Get the request channel and its data type.
         reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
         client_type = reqch.inner_type
+        if isinstance(client_type.data, Window):
+          client_type = client_type.lowered_type
 
         # Pack up the bundle and assign the request channel.
         write_req_bundle_type = esi.HostMem.write_req_bundle_type(

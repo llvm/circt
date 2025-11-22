@@ -32,6 +32,8 @@ StringAttr circt::esi::detail::getTypeID(Type t) {
 uint64_t circt::esi::detail::getWidth(Type t) {
   if (auto ch = dyn_cast<ChannelType>(t))
     t = ch.getInner();
+  if (auto win = dyn_cast<WindowType>(t))
+    t = win.getLoweredType();
   return hw::getBitWidth(t);
 }
 

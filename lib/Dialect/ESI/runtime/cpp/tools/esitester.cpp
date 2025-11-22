@@ -57,6 +57,8 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *,
                                           Accelerator *, uint32_t width,
                                           uint32_t xferCount, bool read,
                                           bool write);
+static void streamingAddTest(AcceleratorConnection *, Accelerator *,
+                             uint32_t addAmt, uint32_t numItems);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -216,6 +218,15 @@ int main(int argc, const char *argv[]) {
   aggBwSub->add_flag("-r,--read", aggRead, "Include read units");
   aggBwSub->add_flag("-w,--write", aggWrite, "Include write units");
 
+  CLI::App *streamingAddSub = cli.add_subcommand(
+      "streaming_add", "Test StreamingAdder function service with list input");
+  uint32_t streamingAddAmt = 5;
+  uint32_t streamingNumItems = 5;
+  streamingAddSub->add_option("-a,--add", streamingAddAmt,
+                              "Amount to add to each element (default 5)");
+  streamingAddSub->add_option("-n,--num-items", streamingNumItems,
+                              "Number of random items in the list (default 5)");
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -248,6 +259,8 @@ int main(int argc, const char *argv[]) {
     } else if (*aggBwSub) {
       aggregateHostmemBandwidthTest(acc, accel, aggWidth, aggCount, aggRead,
                                     aggWrite);
+    } else if (*streamingAddSub) {
+      streamingAddTest(acc, accel, streamingAddAmt, streamingNumItems);
     }
 
     acc->disconnect();
@@ -1187,4 +1200,132 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
             << " wall_time=" << humanTimeUS(wallUs) << " (" << wallUs << " us)"
             << std::endl;
   logger.info("esitester", "Aggregate hostmem bandwidth test complete");
+}
+
+/// Packed struct representing a parallel window argument for StreamingAdder.
+/// Layout in SystemVerilog (so it must be reversed in C):
+///   { add_amt: UInt(32), input: UInt(32), last: UInt(8) }
+#pragma pack(push, 1)
+struct StreamingAddArg {
+  uint8_t last;
+  uint32_t input;
+  uint32_t addAmt;
+};
+#pragma pack(pop)
+static_assert(sizeof(StreamingAddArg) == 9,
+              "StreamingAddArg must be 9 bytes packed");
+
+/// Packed struct representing a parallel window result for StreamingAdder.
+/// Layout in SystemVerilog (so it must be reversed in C):
+///   { data: UInt(32), last: UInt(8) }
+#pragma pack(push, 1)
+struct StreamingAddResult {
+  uint8_t last;
+  uint32_t data;
+};
+#pragma pack(pop)
+static_assert(sizeof(StreamingAddResult) == 5,
+              "StreamingAddResult must be 5 bytes packed");
+
+/// Test the StreamingAdder module. This module takes a struct containing
+/// an add_amt and a list of uint32s, adds add_amt to each element, and
+/// returns the resulting list. The data is streamed using windowed types.
+static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
+                             uint32_t addAmt, uint32_t numItems) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting streaming add test with add_amt=" +
+                               std::to_string(addAmt) +
+                               ", num_items=" + std::to_string(numItems));
+
+  // Generate random input data.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<uint32_t> inputData;
+  inputData.reserve(numItems);
+  for (uint32_t i = 0; i < numItems; ++i)
+    inputData.push_back(dist(rng));
+
+  // Find the streaming_adder child.
+  auto streamingAdderChild =
+      accel->getChildren().find(AppID("streaming_adder"));
+  if (streamingAdderChild == accel->getChildren().end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_adder' child found");
+
+  auto &ports = streamingAdderChild->second->getPorts();
+  auto addIter = ports.find(AppID("streaming_add"));
+  if (addIter == ports.end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_add' port found");
+
+  // Get the raw read/write channel ports for the windowed function.
+  // The argument channel expects parallel windowed data where each message
+  // contains: struct { add_amt: UInt(32), input: UInt(32), last: bool }
+  WriteChannelPort &argPort = addIter->second.getRawWrite("arg");
+  ReadChannelPort &resultPort = addIter->second.getRawRead("result");
+
+  argPort.connect();
+  resultPort.connect();
+
+  // Send each list element with add_amt repeated in every message.
+  for (size_t i = 0; i < inputData.size(); ++i) {
+    StreamingAddArg arg;
+    arg.addAmt = addAmt;
+    arg.input = inputData[i];
+    arg.last = (i == inputData.size() - 1) ? 1 : 0;
+    argPort.write(
+        MessageData(reinterpret_cast<const uint8_t *>(&arg), sizeof(arg)));
+    logger.debug("esitester", "Sent {add_amt=" + std::to_string(arg.addAmt) +
+                                  ", input=" + std::to_string(arg.input) +
+                                  ", last=" + (arg.last ? "true" : "false") +
+                                  "}");
+  }
+
+  // Read the result list (also windowed).
+  std::vector<uint32_t> results;
+  bool lastSeen = false;
+  while (!lastSeen) {
+    MessageData resMsg;
+    resultPort.read(resMsg);
+    if (resMsg.getSize() < sizeof(StreamingAddResult))
+      throw std::runtime_error(
+          "Streaming add test: unexpected result message size");
+
+    const auto *res =
+        reinterpret_cast<const StreamingAddResult *>(resMsg.getBytes());
+    lastSeen = res->last != 0;
+    results.push_back(res->data);
+    logger.debug("esitester", "Received result=" + std::to_string(res->data) +
+                                  " (last=" + (lastSeen ? "true" : "false") +
+                                  ")");
+  }
+
+  // Verify results.
+  if (results.size() != inputData.size())
+    throw std::runtime_error(
+        "Streaming add test: result size mismatch. Expected " +
+        std::to_string(inputData.size()) + ", got " +
+        std::to_string(results.size()));
+
+  bool passed = true;
+  std::cout << "Streaming add test results:" << std::endl;
+  for (size_t i = 0; i < inputData.size(); ++i) {
+    uint32_t expected = inputData[i] + addAmt;
+    std::cout << "  input[" << i << "]=" << inputData[i] << " + " << addAmt
+              << " = " << results[i] << " (expected " << expected << ")";
+    if (results[i] != expected) {
+      std::cout << " MISMATCH!";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  argPort.disconnect();
+  resultPort.disconnect();
+
+  if (!passed)
+    throw std::runtime_error("Streaming add test failed: result mismatch");
+
+  logger.info("esitester", "Streaming add test passed");
+  std::cout << "Streaming add test passed" << std::endl;
 }
