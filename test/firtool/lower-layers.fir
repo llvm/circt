@@ -333,3 +333,19 @@ circuit Top:
     inst foo of Foo
 
 ; CHECK: `include "layers-Bar-A.sv"
+
+; // -----
+
+; Check that bindfile for Top should include layers-MyExt-A when defname is
+; empty, falling back to the module name.
+
+FIRRTL version 5.1.0
+circuit TopEmptyDefname:
+  layer A, bind:
+
+  extmodule MyExt knownlayer A:
+
+  public module TopEmptyDefname:
+    inst ext of MyExt
+
+; CHECK: `include "layers-MyExt-A.sv"
