@@ -18,6 +18,7 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/STLExtras.h"
 
 namespace circt {
 #define GEN_PASS_DEF_INDEXSWITCHTOIF
@@ -38,11 +39,14 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
     Region &defaultRegion = switchOp.getDefaultRegion();
     bool hasResults = !switchOp.getResultTypes().empty();
 
-    Value finalResult;
+    SmallVector<Value> finalResults;
     scf::IfOp prevIfOp = nullptr;
 
     rewriter.setInsertionPointAfter(switchOp);
     auto switchCases = switchOp.getCases();
+    Value switchOperand = adaptor.getArg();
+    if (!switchOperand)
+      switchOperand = switchOp.getOperand();
     for (size_t i = 0; i < switchCases.size(); i++) {
       auto caseValueInt = switchCases[i];
       if (prevIfOp)
@@ -50,9 +54,8 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
 
       Value caseValue =
           arith::ConstantIndexOp::create(rewriter, loc, caseValueInt);
-      Value cond =
-          arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::eq,
-                                switchOp.getOperand(), caseValue);
+      Value cond = arith::CmpIOp::create(
+          rewriter, loc, arith::CmpIPredicate::eq, switchOperand, caseValue);
 
       auto ifOp = scf::IfOp::create(rewriter, loc, switchOp.getResultTypes(),
                                     cond, /*hasElseRegion=*/true);
@@ -70,17 +73,17 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
 
       if (prevIfOp && hasResults) {
         rewriter.setInsertionPointToEnd(&prevIfOp.getElseRegion().front());
-        scf::YieldOp::create(rewriter, loc, ifOp.getResult(0));
+        scf::YieldOp::create(rewriter, loc, ifOp.getResults());
       }
 
       if (i == 0 && hasResults)
-        finalResult = ifOp.getResult(0);
+        llvm::append_range(finalResults, ifOp.getResults());
 
       prevIfOp = ifOp;
     }
 
     if (hasResults)
-      rewriter.replaceOp(switchOp, finalResult);
+      rewriter.replaceOp(switchOp, finalResults);
     else
       rewriter.eraseOp(switchOp);
 
