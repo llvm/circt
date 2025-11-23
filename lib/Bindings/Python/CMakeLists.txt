@@ -14,6 +14,7 @@ set(LLVM_OPTIONAL_SOURCES
 )
 
 set(PYTHON_BINDINGS_SOURCES
+  ArcModule.cpp
   CIRCTModule.cpp
   ESIModule.cpp
   HWModule.cpp
@@ -112,6 +113,14 @@ file(MAKE_DIRECTORY ${CIRCT_BINARY_DIR}/lib/Bindings/Python/circt/dialects)
 
 declare_mlir_python_sources(CIRCTBindingsPythonSources.Dialects
   ADD_TO_PARENT CIRCTBindingsPythonSources)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/ArcOps.td
+  SOURCES
+    dialects/arc.py
+  DIALECT_NAME arc)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
