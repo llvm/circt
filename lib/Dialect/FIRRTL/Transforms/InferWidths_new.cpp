@@ -21,13 +21,13 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/SCCIterator.h"
-#include "llvm/ADT/DepthFirstIterator.h"
 
 #define DEBUG_TYPE "infer-widths-new"
 
@@ -152,7 +152,7 @@ public:
   bool operator!=(const Terms &other) const { return !(*this == other); }
 
   Terms combine_term(const Term &term) const {
-    Terms result = *this; 
+    Terms result = *this;
     auto it =
         std::find_if(result.terms_.begin(), result.terms_.end(),
                      [&](const Term &t) { return t.var() == term.var(); });
@@ -195,21 +195,21 @@ public:
   std::optional<FieldRef> findVarWithCoeGreaterThanOne() const {
     for (const auto &term : terms_) {
       if (term.coe() > 1) {
-        return term.var(); 
+        return term.var();
       }
     }
-    return std::nullopt; 
+    return std::nullopt;
   }
 
   std::optional<std::pair<FieldRef, FieldRef>> findFirstTwoVars() const {
     if (terms_.size() < 2) {
-      return std::nullopt; 
+      return std::nullopt;
     }
 
     auto it = terms_.begin();
     const FieldRef &firstVar = it->var();
     ++it;
-    const FieldRef &secondVar = it->var(); 
+    const FieldRef &secondVar = it->var();
 
     return std::make_pair(firstVar, secondVar);
   }
@@ -293,7 +293,7 @@ public:
 bool Constraint1::satisfies(const Valuation &v) const {
   auto lhs_it = v.find(lhs_var1_);
   if (lhs_it == v.end()) {
-    return false; 
+    return false;
   }
   long long lhs_value = lhs_it->second;
   long long linear_value = rhs_terms1_.evaluate(v);
@@ -392,141 +392,138 @@ bool Constraint2::satisfies(const Valuation &v) const {
   return static_cast<long long>(lhs_const2_) >= rhs_value;
 }
 
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const FieldRef& node) {
-    if (node == FieldRef()) {
-        os << "Zero";
-    } else {
-        os << "FieldRef[" << node.getValue() << " (fieldID: " << node.getFieldID() << ")]";
-    }
-    return os;
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const FieldRef &node) {
+  if (node == FieldRef()) {
+    os << "Zero";
+  } else {
+    os << "FieldRef[" << node.getValue() << " (fieldID: " << node.getFieldID()
+       << ")]";
+  }
+  return os;
 }
 
 struct Node {
-    FieldRef field;
-    std::vector<Node*> successors;
-    
-    Node(Value value, unsigned id) : field(FieldRef{value, id}) {}
-    Node(const FieldRef& fr) : field(fr) {}
-    
-    void addSuccessor(Node* node) {
-        successors.push_back(node);
-    }
+  FieldRef field;
+  std::vector<Node *> successors;
+
+  Node(Value value, unsigned id) : field(FieldRef{value, id}) {}
+  Node(const FieldRef &fr) : field(fr) {}
+
+  void addSuccessor(Node *node) { successors.push_back(node); }
 };
 
 struct FieldRefGraph {
-    std::deque<Node> nodes;
-    DenseMap<FieldRef, Node*> nodeMap;
-    
-    Node* addNode_zero() {
-        FieldRef key = FieldRef();
-        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
-            return it->second;
-        }
- 
-        nodes.emplace_back(key);
-        Node* newNode = &nodes.back();
-        nodeMap[key] = std::move(newNode);
-        return newNode;
-    }
-    
-    Node* addNode_wd(Value value, unsigned id) {
-        FieldRef key = FieldRef{value, id};
-        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
-            return it->second;
-        }
-        
-        nodes.emplace_back(value, id);
-        Node* newNode = &nodes.back();
-        nodeMap[key] = std::move(newNode);
+  std::deque<Node> nodes;
+  DenseMap<FieldRef, Node *> nodeMap;
 
-        Node* root = addNode_zero();
-        root->addSuccessor(newNode);
-
-        return newNode;
+  Node *addNode_zero() {
+    FieldRef key = FieldRef();
+    if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+      return it->second;
     }
 
-    Node* addNode_wd(FieldRef key) {
-        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
-            return it->second;
-        }
-        
-        nodes.emplace_back(key);
-        Node* newNode = &nodes.back();
-        nodeMap[key] = std::move(newNode);
+    nodes.emplace_back(key);
+    Node *newNode = &nodes.back();
+    nodeMap[key] = std::move(newNode);
+    return newNode;
+  }
 
-        Node* root = addNode_zero();
-        root->addSuccessor(newNode);
-
-        return newNode;
+  Node *addNode_wd(Value value, unsigned id) {
+    FieldRef key = FieldRef{value, id};
+    if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+      return it->second;
     }
 
-    Node* addNode(FieldRef key) {
-        if (auto it = nodeMap.find(key); it != nodeMap.end()) {
-            return it->second;
-        }
-        
-        nodes.emplace_back(key);
-        Node* newNode = &nodes.back();
-        nodeMap[key] = std::move(newNode);
-        return newNode;
+    nodes.emplace_back(value, id);
+    Node *newNode = &nodes.back();
+    nodeMap[key] = std::move(newNode);
+
+    Node *root = addNode_zero();
+    root->addSuccessor(newNode);
+
+    return newNode;
+  }
+
+  Node *addNode_wd(FieldRef key) {
+    if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+      return it->second;
     }
-    
-    Node* getEntryNode() {
-      Node* root = addNode_zero();
-      return root;
+
+    nodes.emplace_back(key);
+    Node *newNode = &nodes.back();
+    nodeMap[key] = std::move(newNode);
+
+    Node *root = addNode_zero();
+    root->addSuccessor(newNode);
+
+    return newNode;
+  }
+
+  Node *addNode(FieldRef key) {
+    if (auto it = nodeMap.find(key); it != nodeMap.end()) {
+      return it->second;
     }
+
+    nodes.emplace_back(key);
+    Node *newNode = &nodes.back();
+    nodeMap[key] = std::move(newNode);
+    return newNode;
+  }
+
+  Node *getEntryNode() {
+    Node *root = addNode_zero();
+    return root;
+  }
 
   FieldRefGraph() = default;
 
-  FieldRefGraph(const FieldRefGraph& other) {
-    DenseMap<const Node*, Node*> oldToNewMap;
+  FieldRefGraph(const FieldRefGraph &other) {
+    DenseMap<const Node *, Node *> oldToNewMap;
 
-    for (const Node& oldNode : other.nodes) {
-        nodes.emplace_back(oldNode.field); 
-        Node* newNode = &nodes.back();
-        oldToNewMap[&oldNode] = newNode;
-        nodeMap[newNode->field] = &nodes.back();
+    for (const Node &oldNode : other.nodes) {
+      nodes.emplace_back(oldNode.field);
+      Node *newNode = &nodes.back();
+      oldToNewMap[&oldNode] = newNode;
+      nodeMap[newNode->field] = &nodes.back();
     }
 
-    for (const Node& oldNode : other.nodes) {
-        Node* newNode = oldToNewMap[&oldNode];
-        for (Node* oldSuccessor : oldNode.successors) {
-            auto it = oldToNewMap.find(oldSuccessor);
-            if (it != oldToNewMap.end()) {
-                newNode->successors.push_back(it->second);
-            }
+    for (const Node &oldNode : other.nodes) {
+      Node *newNode = oldToNewMap[&oldNode];
+      for (Node *oldSuccessor : oldNode.successors) {
+        auto it = oldToNewMap.find(oldSuccessor);
+        if (it != oldToNewMap.end()) {
+          newNode->successors.push_back(it->second);
         }
+      }
     }
   }
 };
 
 namespace llvm {
-    template <> struct GraphTraits<FieldRefGraph*> {
-        using NodeRef = Node*; 
-        using ChildIteratorType = std::vector<Node*>::iterator;  
-        
-        static NodeRef getEntryNode(FieldRefGraph* G) {
-            return G->getEntryNode();
-        }
-        
-        static ChildIteratorType child_begin(NodeRef node) {
-            return node->successors.begin();
-        }
-        
-        static ChildIteratorType child_end(NodeRef node) {
-            return node->successors.end();
-        }
-        
-        static NodeRef nodes_begin(FieldRefGraph* G) {
-            return G->nodes.empty() ? nullptr : &G->nodes[0];
-        }
-        
-        static NodeRef nodes_end(FieldRefGraph* G) {
-            return G->nodes.empty() ? nullptr : &G->nodes[0] + G->nodes.size();
-        }
-        
-    };
-}
+template <>
+struct GraphTraits<FieldRefGraph *> {
+  using NodeRef = Node *;
+  using ChildIteratorType = std::vector<Node *>::iterator;
+
+  static NodeRef getEntryNode(FieldRefGraph *G) { return G->getEntryNode(); }
+
+  static ChildIteratorType child_begin(NodeRef node) {
+    return node->successors.begin();
+  }
+
+  static ChildIteratorType child_end(NodeRef node) {
+    return node->successors.end();
+  }
+
+  static NodeRef nodes_begin(FieldRefGraph *G) {
+    return G->nodes.empty() ? nullptr : &G->nodes[0];
+  }
+
+  static NodeRef nodes_end(FieldRefGraph *G) {
+    return G->nodes.empty() ? nullptr : &G->nodes[0] + G->nodes.size();
+  }
+};
+} // namespace llvm
 
 //===----------------------------------------------------------------------===//
 // Constraint Solver
@@ -534,9 +531,7 @@ namespace llvm {
 
 class ConstraintSolver {
 private:
-
-  DenseMap<FieldRef, std::vector<Constraint1>>
-      constraints_;
+  DenseMap<FieldRef, std::vector<Constraint1>> constraints_;
   std::vector<Constraint2> constraints2_;
 
   Valuation solution_;
@@ -545,8 +540,8 @@ private:
 
 public:
   explicit ConstraintSolver(
-      DenseMap<FieldRef, std::vector<Constraint1>>
-          &constraints, std::vector<Constraint2> &constraints2, FieldRefGraph &graph)
+      DenseMap<FieldRef, std::vector<Constraint1>> &constraints,
+      std::vector<Constraint2> &constraints2, FieldRefGraph &graph)
       : constraints_(constraints), constraints2_(constraints2), graph_(graph) {}
 
   void addConstraint(const Constraint1 &c) {
@@ -554,17 +549,17 @@ public:
     vec.push_back(c);
 
     FieldRef lhs = c.lhs_var1();
-    Node* lhs_node = graph_.addNode_wd(lhs);
+    Node *lhs_node = graph_.addNode_wd(lhs);
 
     for (const auto &term : c.rhs_terms1()) {
       FieldRef rhs_var = term.var();
-      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      Node *rhs_node = graph_.addNode_wd(rhs_var);
       lhs_node->addSuccessor(rhs_node);
     }
 
     if (c.rhs_power().has_value()) {
       FieldRef rhs_var = c.rhs_power().value();
-      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      Node *rhs_node = graph_.addNode_wd(rhs_var);
       lhs_node->addSuccessor(rhs_node);
     }
   }
@@ -580,8 +575,7 @@ public:
     return result;
   }
 
-  const DenseMap<FieldRef, std::vector<Constraint1>> &
-  constraints_map() const {
+  const DenseMap<FieldRef, std::vector<Constraint1>> &constraints_map() const {
     return constraints_;
   }
 
@@ -602,7 +596,7 @@ bool is_simple_cycle(const std::vector<Constraint1> &cs) {
     }
 
     auto it = terms.begin();
-    if (it->coe() != 1) { 
+    if (it->coe() != 1) {
       return false;
     }
 
@@ -615,7 +609,8 @@ filterConstraints(const std::vector<FieldRef> &targetVars,
                   const std::vector<Constraint1> &constraints) {
   std::vector<Constraint1> result;
   for (const auto &constraint : constraints) {
-    if (std::find(targetVars.begin(), targetVars.end(), constraint.lhs_var1()) != targetVars.end()) {
+    if (std::find(targetVars.begin(), targetVars.end(),
+                  constraint.lhs_var1()) != targetVars.end()) {
       result.push_back(constraint);
     }
   }
@@ -624,8 +619,7 @@ filterConstraints(const std::vector<FieldRef> &targetVars,
 
 std::vector<Constraint1> filterConstraints(
     const std::vector<FieldRef> &targetVars,
-    DenseMap<FieldRef, std::vector<Constraint1>>
-        &constraints_map) {
+    DenseMap<FieldRef, std::vector<Constraint1>> &constraints_map) {
   std::vector<Constraint1> result;
   for (const auto &var : targetVars) {
     auto &vec = constraints_map[var];
@@ -658,18 +652,14 @@ Constraint1 remove_solved_c(const Valuation &values, const Constraint1 &c) {
     auto it = values.find(c.rhs_power().value());
     if (it != values.end()) {
       long long power_value = c.power_value(values);
-      return Constraint1(
-          c.lhs_var1(),
-          c.rhs_const1() + static_cast<int>(term_constant + power_value),
-          new_terms,
-          std::nullopt 
-      );
+      return Constraint1(c.lhs_var1(),
+                         c.rhs_const1() +
+                             static_cast<int>(term_constant + power_value),
+                         new_terms, std::nullopt);
     } else {
       return Constraint1(c.lhs_var1(),
                          c.rhs_const1() + static_cast<int>(term_constant),
-                         new_terms,
-                         c.rhs_power() 
-      );
+                         new_terms, c.rhs_power());
     }
   } else {
     return Constraint1(c.lhs_var1(),
@@ -693,12 +683,12 @@ std::vector<Constraint1> remove_solveds(const Valuation &values,
 std::optional<Valuation> merge_solution(const std::vector<FieldRef> &tbsolved,
                                         const Valuation &initial,
                                         const Valuation &solution_of_tbsolved) {
-  Valuation result = initial; 
+  Valuation result = initial;
 
   for (const FieldRef &var : tbsolved) {
     auto it = solution_of_tbsolved.find(var);
     if (it == solution_of_tbsolved.end()) {
-      return std::nullopt; 
+      return std::nullopt;
     }
 
     result[var] = it->second;
@@ -710,13 +700,14 @@ std::optional<Valuation> merge_solution(const std::vector<FieldRef> &tbsolved,
 Valuation bab(const std::vector<Constraint1> &constraints,
               const std::vector<FieldRef> &tbsolved);
 
-std::vector<FieldRef> extractFieldRefs(const std::vector<Node*>& nodes) {
-    std::vector<FieldRef> result;
-    for (Node* node : nodes) {
-        if (!node) continue;
-        result.push_back(node->field);
-    }
-    return result;
+std::vector<FieldRef> extractFieldRefs(const std::vector<Node *> &nodes) {
+  std::vector<FieldRef> result;
+  for (Node *node : nodes) {
+    if (!node)
+      continue;
+    result.push_back(node->field);
+  }
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -724,42 +715,46 @@ std::vector<FieldRef> extractFieldRefs(const std::vector<Node*>& nodes) {
 //===----------------------------------------------------------------------===//
 
 const int INF = 1e9;
-Valuation floyd(const std::vector<Constraint1> &constraints, const std::vector<FieldRef> &tbsolved) {
+Valuation floyd(const std::vector<Constraint1> &constraints,
+                const std::vector<FieldRef> &tbsolved) {
   DenseMap<FieldRef, int> var_to_index;
 
   int next_index = 0;
-  for (const auto& var : tbsolved) 
+  for (const auto &var : tbsolved)
     var_to_index[var] = next_index++;
   FieldRef zero = FieldRef();
   var_to_index[zero] = next_index;
 
   LLVM_DEBUG(llvm::dbgs() << "numberin:\n");
-  for (const auto &[var, index] : var_to_index) 
+  for (const auto &[var, index] : var_to_index)
     LLVM_DEBUG(llvm::dbgs() << var << " : " << index << "\n");
-    
+
   int n = var_to_index.size();
   std::vector<std::vector<int>> graph(n, std::vector<int>(n, INF));
-    
-  for (const auto& constraint : constraints) {
+
+  for (const auto &constraint : constraints) {
     FieldRef source = constraint.lhs_var1();
     FieldRef target;
-    if (constraint.rhs_terms1().empty()) 
+    if (constraint.rhs_terms1().empty())
       target = zero;
-    else 
+    else
       target = constraint.rhs_terms1().begin()->var();
 
     int i = var_to_index[source];
     int j = var_to_index[target];
-    int weight = -constraint.rhs_const1();  // x >= y + c  =>  edge: x -> y with weight -c
-    if (weight < graph[i][j]) 
+    int weight =
+        -constraint.rhs_const1(); // x >= y + c  =>  edge: x -> y with weight -c
+    if (weight < graph[i][j])
       graph[i][j] = weight;
   }
-      
+
   LLVM_DEBUG(llvm::dbgs() << "initial matrix:\n");
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
-      if (graph[i][j] == INF) LLVM_DEBUG(llvm::dbgs() << "  INF  ");
-      else LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
+      if (graph[i][j] == INF)
+        LLVM_DEBUG(llvm::dbgs() << "  INF  ");
+      else
+        LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
     }
     LLVM_DEBUG(llvm::dbgs() << "\n");
   }
@@ -776,21 +771,25 @@ Valuation floyd(const std::vector<Constraint1> &constraints, const std::vector<F
 
   for (int i = 0; i < n; i++) {
     if (graph[i][i] < 0) {
-      LLVM_DEBUG(llvm::dbgs() << "Negative weight cycle detected! shortest path cannot be calculated." << "\n");
+      LLVM_DEBUG(llvm::dbgs() << "Negative weight cycle detected! shortest "
+                                 "path cannot be calculated."
+                              << "\n");
     }
   }
 
   LLVM_DEBUG(llvm::dbgs() << "Shortest path matrix:\n");
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
-      if (graph[i][j] == INF) LLVM_DEBUG(llvm::dbgs() << "  INF  ");
-      else LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
+      if (graph[i][j] == INF)
+        LLVM_DEBUG(llvm::dbgs() << "  INF  ");
+      else
+        LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
     }
-  LLVM_DEBUG(llvm::dbgs() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "\n");
   }
 
   Valuation valuation;
-  for (int i = 0; i < n-1; i++) {
+  for (int i = 0; i < n - 1; i++) {
     FieldRef source = tbsolved[i];
     int min_distance = 0;
     for (int j = 0; j < n; j++) {
@@ -803,22 +802,25 @@ Valuation floyd(const std::vector<Constraint1> &constraints, const std::vector<F
   }
 
   LLVM_DEBUG(llvm::dbgs() << "floyd result:\n");
-  for (const auto &[var, value] : valuation) 
+  for (const auto &[var, value] : valuation)
     LLVM_DEBUG(llvm::dbgs() << var_to_index[var] << " : " << value << "\n");
 
   return valuation;
 }
 
 LogicalResult ConstraintSolver::solve() {
-  for (auto sccIter = llvm::scc_begin(&graph_); sccIter != llvm::scc_end(&graph_); ++sccIter) {
-    const auto& node_list = *sccIter;
+  for (auto sccIter = llvm::scc_begin(&graph_);
+       sccIter != llvm::scc_end(&graph_); ++sccIter) {
+    const auto &node_list = *sccIter;
     LLVM_DEBUG(llvm::dbgs() << "SCC (size " << node_list.size() << "): ");
-    for (Node* node : node_list) 
+    for (Node *node : node_list)
       LLVM_DEBUG(llvm::dbgs() << node->field << "; ");
     LLVM_DEBUG(llvm::dbgs() << "\n");
 
     std::vector<FieldRef> component = extractFieldRefs(node_list);
-    if (component.empty()) { continue; }
+    if (component.empty()) {
+      continue;
+    }
     std::vector<Constraint1> tbsolved_cs1;
     tbsolved_cs1 = filterConstraints(component, constraints_);
     auto cs1 = remove_solveds(solution_, tbsolved_cs1);
@@ -844,11 +846,12 @@ LogicalResult ConstraintSolver::solve() {
   }
   // test if all select signal satisfies constraint2
   for (auto c2 : constraints2_) {
-    if (c2.satisfies(solution_)) continue;
+    if (c2.satisfies(solution_))
+      continue;
     else {
       LLVM_DEBUG(llvm::dbgs() << "Constraint2 failed: \n" << c2 << "\n");
       return failure();
-    } 
+    }
   }
   return success();
 }
@@ -861,8 +864,7 @@ class InferenceMapping {
 private:
   std::vector<Constraint_Min> constraints_min_;
   std::vector<Constraint2> constraints2_;
-  DenseMap<FieldRef, std::vector<Constraint1>>
-      constraints_;
+  DenseMap<FieldRef, std::vector<Constraint1>> constraints_;
 
   FieldRefGraph graph_;
 
@@ -900,17 +902,17 @@ public:
     vec.push_back(c);
 
     FieldRef lhs = c.lhs_var1();
-    Node* lhs_node = graph_.addNode_wd(lhs);
+    Node *lhs_node = graph_.addNode_wd(lhs);
 
     for (const auto &term : c.rhs_terms1()) {
       FieldRef rhs_var = term.var();
-      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      Node *rhs_node = graph_.addNode_wd(rhs_var);
       lhs_node->addSuccessor(rhs_node);
     }
 
     if (c.rhs_power().has_value()) {
       FieldRef rhs_var = c.rhs_power().value();
-      Node* rhs_node = graph_.addNode_wd(rhs_var);
+      Node *rhs_node = graph_.addNode_wd(rhs_var);
       lhs_node->addSuccessor(rhs_node);
     }
   }
@@ -924,8 +926,7 @@ public:
   const std::vector<Constraint_Min> &constraints_min() const {
     return constraints_min_;
   }
-  const DenseMap<FieldRef, std::vector<Constraint1>> &
-  constraints_map() const {
+  const DenseMap<FieldRef, std::vector<Constraint1>> &constraints_map() const {
     return constraints_;
   }
 
@@ -1140,7 +1141,7 @@ Operation *getRootDefiningOp(Value value) {
       break;
     }
   }
-  return currentOp; 
+  return currentOp;
 }
 
 /// generate constraints to ensure `larger` are greater than or equal to
@@ -1179,7 +1180,8 @@ void InferenceMapping::generateConstraints(Value larger, Value smaller) {
           fieldID = save + vecType.getMaxFieldID();
           // } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
           //   constrainTypes(getExpr(FieldRef(larger, fieldID)),
-          //                  getExpr(FieldRef(smaller, fieldID)), false, equal);
+          //                  getExpr(FieldRef(smaller, fieldID)), false,
+          //                  equal);
           //   fieldID++;
         } else if (type.isGround()) {
           // Leaf element, generate the constraint.
@@ -1193,7 +1195,7 @@ void InferenceMapping::generateConstraints(Value larger, Value smaller) {
           LLVM_DEBUG(llvm::dbgs() << "\nlooking at width_result : "
                                   << width_result << "\n\n");
           if (width_result >= 0) {
-          } else if (width_result == -1) { 
+          } else if (width_result == -1) {
             FieldRef fieldRef_input(smaller, fieldID);
             auto baseType_input =
                 getBaseType(fieldRef_input.getValue().getType());
@@ -1203,14 +1205,13 @@ void InferenceMapping::generateConstraints(Value larger, Value smaller) {
                 cast<FIRRTLBaseType>(type_input).getBitWidthOrSentinel();
             LLVM_DEBUG(llvm::dbgs() << "\nlooking at width_input : "
                                     << width_input << "\n\n");
-            if (width_input >= 0) { 
+            if (width_input >= 0) {
               Constraint1 temp_c(fieldRef_result, static_cast<int>(width_input),
                                  {}, std::nullopt);
               LLVM_DEBUG(llvm::dbgs()
                          << "build constraint1 : " << temp_c << "\n");
               addConstraint(temp_c);
-            } else if (width_input ==
-                       -1) { 
+            } else if (width_input == -1) {
               if (is_invalid) {
                 LLVM_DEBUG(llvm::dbgs()
                            << "this one is connected to invalid\n");
@@ -1262,7 +1263,8 @@ void InferenceMapping::generateConstraints(Value result, Value lhs, Value rhs) {
           fieldID = save + vecType.getMaxFieldID();
           // } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
           //   constrainTypes(getExpr(FieldRef(larger, fieldID)),
-          //                  getExpr(FieldRef(smaller, fieldID)), false, equal);
+          //                  getExpr(FieldRef(smaller, fieldID)), false,
+          //                  equal);
           //   fieldID++;
         } else if (type.isGround()) {
           // Leaf element, generate the constraint.
@@ -1287,8 +1289,8 @@ void InferenceMapping::generateConstraints(Value result, Value lhs, Value rhs) {
               auto type_r = hw::FieldIdImpl::getFinalTypeByFieldID(
                   baseType_r, fr_r.getFieldID());
               auto wr = cast<FIRRTLBaseType>(type_r).getBitWidthOrSentinel();
-              if (wr >= 0) {         
-              } else if (wr == -1) { 
+              if (wr >= 0) {
+              } else if (wr == -1) {
                 Term t_2(1, fr_r);
                 Constraint1 temp_c1(fieldRef_result, static_cast<int>(wl), {},
                                     std::nullopt),
@@ -1298,13 +1300,13 @@ void InferenceMapping::generateConstraints(Value result, Value lhs, Value rhs) {
                 addConstraint(temp_c1);
                 addConstraint(temp_c2);
               }
-            } else if (wl == -1) { 
+            } else if (wl == -1) {
               FieldRef fr_r(rhs, fieldID);
               auto baseType_r = getBaseType(fr_r.getValue().getType());
               auto type_r = hw::FieldIdImpl::getFinalTypeByFieldID(
                   baseType_r, fr_r.getFieldID());
               auto wr = cast<FIRRTLBaseType>(type_r).getBitWidthOrSentinel();
-              if (wr >= 0) { 
+              if (wr >= 0) {
                 Term t_1(1, fr_l);
                 Constraint1 temp_c2(fieldRef_result, static_cast<int>(wr), {},
                                     std::nullopt),
@@ -1313,7 +1315,7 @@ void InferenceMapping::generateConstraints(Value result, Value lhs, Value rhs) {
                                         << "\nand : " << temp_c2 << "\n");
                 addConstraint(temp_c1);
                 addConstraint(temp_c2);
-              } else if (wr == -1) { 
+              } else if (wr == -1) {
                 Term t_1(1, fr_l), t_2(1, fr_r);
                 Constraint1 temp_c1(fieldRef_result, 0, {t_1}, std::nullopt),
                     temp_c2(fieldRef_result, 0, {t_2}, std::nullopt);
@@ -1449,7 +1451,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
             addConstraint(temp_c1);
             addConstraint(temp_c2);
           }
-        } else { 
+        } else {
           if (type_cast<FIRRTLType>(getBaseType(op.getRhs().getType()))
                   .hasUninferredWidth()) {
             auto w = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
@@ -1462,23 +1464,24 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
             addConstraint(temp_c1);
             addConstraint(temp_c2);
           } else {
-          //   auto w0 =
-          // getBaseType(op.getLhs().getType()).getBitWidthOrSentinel(); auto w1 =
-          // getBaseType(op.getRhs().getType()).getBitWidthOrSentinel(); FieldRef
-          // fr_dest(op.getResult(), 0); Constraint1 temp_c1(fr_dest,
-          // static_cast<int>(w0) + 1, {}, {}), temp_c2(fr_dest,
-          // static_cast<int>(w1) + 1, {}, std::nullopt); LLVM_DEBUG(llvm::dbgs()
-          // << "build constraint1 : " << temp_c1 << "\nand : " << temp_c2 <<
-          // "\n");
+            //   auto w0 =
+            // getBaseType(op.getLhs().getType()).getBitWidthOrSentinel(); auto
+            // w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
+            // FieldRef fr_dest(op.getResult(), 0); Constraint1 temp_c1(fr_dest,
+            // static_cast<int>(w0) + 1, {}, {}), temp_c2(fr_dest,
+            // static_cast<int>(w1) + 1, {}, std::nullopt);
+            // LLVM_DEBUG(llvm::dbgs()
+            // << "build constraint1 : " << temp_c1 << "\nand : " << temp_c2 <<
+            // "\n");
           }
         }
       })
       .Case<MulPrimOp>([&](auto op) {
         auto w0 = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
-        if (w0 >= 0) { 
+        if (w0 >= 0) {
           auto w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
-          if (w1 >= 0) {         
-          } else if (w1 == -1) { 
+          if (w1 >= 0) {
+          } else if (w1 == -1) {
             FieldRef fr_2(op.getRhs(), 0), fr_dest(op.getResult(), 0);
             Term t_2(1, fr_2);
             Constraint1 temp_c(fr_dest, static_cast<int>(w0), {t_2},
@@ -1487,9 +1490,9 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
                        << "build constraint1 : " << temp_c << "\n");
             addConstraint(temp_c);
           }
-        } else if (w0 == -1) { 
+        } else if (w0 == -1) {
           auto w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
-          if (w1 >= 0) { 
+          if (w1 >= 0) {
             FieldRef fr_1(op.getLhs(), 0), fr_dest(op.getResult(), 0);
             Term t_1(1, fr_1);
             Constraint1 temp_c(fr_dest, static_cast<int>(w1), {t_1},
@@ -1497,7 +1500,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
             LLVM_DEBUG(llvm::dbgs()
                        << "build constraint1 : " << temp_c << "\n");
             addConstraint(temp_c);
-          } else if (w1 == -1) { 
+          } else if (w1 == -1) {
             FieldRef fr_1(op.getLhs(), 0), fr_2(op.getRhs(), 0),
                 fr_dest(op.getResult(), 0);
             Term t_1(1, fr_1), t_2(1, fr_2);
@@ -1513,7 +1516,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
       .Case<DivPrimOp>([&](auto op) {
         auto w = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
         if (w >= 0) {
-        } else if (w == -1) { 
+        } else if (w == -1) {
           FieldRef fr_1(op.getLhs(), 0), fr_dest(op.getResult(), 0);
           Term t_1(1, fr_1);
           if (op.getType().base().isSigned()) {
@@ -1533,8 +1536,8 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
         auto w0 = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
         if (w0 >= 0) {
           auto w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
-          if (w1 >= 0) {         
-          } else if (w1 == -1) { 
+          if (w1 >= 0) {
+          } else if (w1 == -1) {
             FieldRef fr_2(op.getRhs(), 0), fr_dest(op.getResult(), 0);
             Constraint_Min temp_c(fr_dest, static_cast<int>(w0), 0,
                                   std::nullopt, fr_2);
@@ -1542,16 +1545,16 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
                        << "build constraint_min : " << temp_c << "\n");
             addConstraint(temp_c);
           }
-        } else if (w0 == -1) { 
+        } else if (w0 == -1) {
           auto w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
-          if (w1 >= 0) { 
+          if (w1 >= 0) {
             FieldRef fr_1(op.getLhs(), 0), fr_dest(op.getResult(), 0);
             Constraint_Min temp_c(fr_dest, 0, static_cast<int>(w1), fr_1,
                                   std::nullopt);
             LLVM_DEBUG(llvm::dbgs()
                        << "build constraint_min : " << temp_c << "\n");
             addConstraint(temp_c);
-          } else if (w1 == -1) { 
+          } else if (w1 == -1) {
             FieldRef fr_1(op.getLhs(), 0), fr_2(op.getRhs(), 0),
                 fr_dest(op.getResult(), 0);
             Constraint_Min temp_c(fr_dest, 0, 0, fr_1, fr_2);
@@ -1586,7 +1589,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
             addConstraint(temp_c1);
             addConstraint(temp_c2);
           }
-        } else { 
+        } else {
           if (type_cast<FIRRTLType>(getBaseType(op.getRhs().getType()))
                   .hasUninferredWidth()) {
             auto w = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
@@ -1610,15 +1613,14 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
         } else {
           auto w = getBaseType(op.getInputs().front().getType())
                        .getBitWidthOrSentinel();
-          if (w >= 0) { 
+          if (w >= 0) {
             Terms result_t = {};
             int result_cst = static_cast<int>(w);
             for (Value operand : op.getInputs().drop_front()) {
               auto w0 = getBaseType(operand.getType()).getBitWidthOrSentinel();
-              if (w0 >= 0) 
+              if (w0 >= 0)
                 result_cst += static_cast<int>(w0);
-              else 
-              {
+              else {
                 FieldRef fr_2(operand, 0);
                 Term t_2(1, fr_2);
                 result_t = result_t.combine_term(t_2);
@@ -1635,10 +1637,9 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
             int result_cst = 0;
             for (Value operand : op.getInputs().drop_front()) {
               auto w0 = getBaseType(operand.getType()).getBitWidthOrSentinel();
-              if (w0 >= 0) 
+              if (w0 >= 0)
                 result_cst += static_cast<int>(w0);
-              else 
-              {
+              else {
                 FieldRef fr_2(operand, 0);
                 Term t_2(1, fr_2);
                 result_t = result_t.combine_term(t_2);
@@ -1654,19 +1655,19 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
       // Misc Binary Primitives
       .Case<DShlPrimOp>([&](auto op) {
         auto w0 = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
-        if (w0 >= 0) { 
+        if (w0 >= 0) {
           auto w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
-          if (w1 >= 0) {         
-          } else if (w1 == -1) { 
+          if (w1 >= 0) {
+          } else if (w1 == -1) {
             FieldRef fr_2(op.getRhs(), 0), fr_dest(op.getResult(), 0);
             Constraint1 temp_c(fr_dest, static_cast<int>(w0) - 1, {}, fr_2);
             LLVM_DEBUG(llvm::dbgs()
                        << "build constraint1 : " << temp_c << "\n");
             addConstraint(temp_c);
           }
-        } else if (w0 == -1) { 
+        } else if (w0 == -1) {
           auto w1 = getBaseType(op.getRhs().getType()).getBitWidthOrSentinel();
-          if (w1 >= 0) { 
+          if (w1 >= 0) {
             FieldRef fr_1(op.getLhs(), 0), fr_dest(op.getResult(), 0);
             Term t_1(1, fr_1);
             Constraint1 temp_c(fr_dest, (1 << static_cast<int>(w1)) - 1, {t_1},
@@ -1674,7 +1675,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
             LLVM_DEBUG(llvm::dbgs()
                        << "build constraint1 : " << temp_c << "\n");
             addConstraint(temp_c);
-          } else if (w1 == -1) { 
+          } else if (w1 == -1) {
             FieldRef fr_1(op.getLhs(), 0), fr_2(op.getRhs(), 0),
                 fr_dest(op.getResult(), 0);
             Term t_1(1, fr_1);
@@ -1687,8 +1688,8 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
       })
       .Case<DShlwPrimOp, DShrPrimOp>([&](auto op) {
         auto w = getBaseType(op.getLhs().getType()).getBitWidthOrSentinel();
-        if (w >= 0) {        
-        } else if (w == -1) { 
+        if (w >= 0) {
+        } else if (w == -1) {
           FieldRef fr_1(op.getLhs(), 0), fr_dest(op.getResult(), 0);
           Term t_1(1, fr_1);
           Constraint1 temp_c(fr_dest, 0, {t_1}, std::nullopt);
@@ -1834,7 +1835,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
       })
       .Case<MuxPrimOp, Mux2CellIntrinsicOp>([&](auto op) {
         if (type_cast<FIRRTLType>(getBaseType(op.getSel().getType()))
-          .hasUninferredWidth()) {
+                .hasUninferredWidth()) {
           FieldRef fr(op.getSel(), 0);
           generateConstraints2_Mux(fr);
         }
@@ -1842,7 +1843,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
       })
       .Case<Mux4CellIntrinsicOp>([&](Mux4CellIntrinsicOp op) {
         if (type_cast<FIRRTLType>(getBaseType(op.getSel().getType()))
-          .hasUninferredWidth()) {
+                .hasUninferredWidth()) {
           FieldRef fr(op.getSel(), 0);
           generateConstraints2_Mux4Cell(fr);
         }
@@ -1909,14 +1910,10 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
         // apply to the ports of the instantiated module.
         for (auto [result, arg] :
              llvm::zip(op->getResults(), module.getArguments())) {
-          generateConstraints(
-              {result, 0},
-              {arg, 0}, 
-              type_cast<FIRRTLType>(result.getType()));
-          generateConstraints(
-              {arg, 0},
-              {result, 0},
-              type_cast<FIRRTLType>(result.getType()));
+          generateConstraints({result, 0}, {arg, 0},
+                              type_cast<FIRRTLType>(result.getType()));
+          generateConstraints({arg, 0}, {result, 0},
+                              type_cast<FIRRTLType>(result.getType()));
         }
       })
 
@@ -2031,47 +2028,48 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
 //===----------------------------------------------------------------------===//
 // upper_bound
 //===----------------------------------------------------------------------===//
-std::vector<Node*> findPathBetween(Node* start, Node* end) {
-        if (!start || !end) return {};
-        if (start == end) return {start};  
+std::vector<Node *> findPathBetween(Node *start, Node *end) {
+  if (!start || !end)
+    return {};
+  if (start == end)
+    return {start};
 
-        struct StackFrame {
-            Node* node;
-            size_t nextChildIndex;
-        };
-        std::stack<StackFrame> stack;
-        std::unordered_set<Node*> visited;
-        std::vector<Node*> path;
+  struct StackFrame {
+    Node *node;
+    size_t nextChildIndex;
+  };
+  std::stack<StackFrame> stack;
+  std::unordered_set<Node *> visited;
+  std::vector<Node *> path;
 
-        stack.push({start, 0});
-        path.push_back(start);
-        visited.insert(start);
+  stack.push({start, 0});
+  path.push_back(start);
+  visited.insert(start);
 
-        while (!stack.empty()) {
-            auto& current = stack.top();
-            
-            if (current.node == end) {
-                return path;
-            }
+  while (!stack.empty()) {
+    auto &current = stack.top();
 
-            if (current.nextChildIndex < current.node->successors.size()) {
-                Node* nextChild = current.node->successors[current.nextChildIndex];
-                current.nextChildIndex++;
-                
-                if (!visited.count(nextChild)) {
-                    visited.insert(nextChild);
-                    path.push_back(nextChild);
-                    stack.push({nextChild, 0});
-                }
-            } 
-            else {
-                stack.pop();
-                path.pop_back();
-            }
-        }
-        
-        return {}; 
+    if (current.node == end) {
+      return path;
     }
+
+    if (current.nextChildIndex < current.node->successors.size()) {
+      Node *nextChild = current.node->successors[current.nextChildIndex];
+      current.nextChildIndex++;
+
+      if (!visited.count(nextChild)) {
+        visited.insert(nextChild);
+        path.push_back(nextChild);
+        stack.push({nextChild, 0});
+      }
+    } else {
+      stack.pop();
+      path.pop_back();
+    }
+  }
+
+  return {};
+}
 
 static bool termsContains(const Terms &terms, const FieldRef &var) {
   for (const auto &term : terms) {
@@ -2108,7 +2106,7 @@ orderConstraints(const std::vector<FieldRef> &vars,
           result.push_back(c);
           used[j] = true;
           constraintFound = true;
-          break; 
+          break;
         }
       }
     }
@@ -2229,16 +2227,16 @@ std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
   // looking for : x >= ? * lhs + ..., var >= ? * x + ...
   LLVM_DEBUG(llvm::dbgs() << "Solving [" << x.getValue()
                           << " (fieldID: " << x.getFieldID() << ")]\n");
-  Node* var_node = graph_.addNode(var);
-  Node* x_node = graph_.addNode(x);
-  Node* lhs_node = graph_.addNode(c.lhs_var1());
+  Node *var_node = graph_.addNode(var);
+  Node *x_node = graph_.addNode(x);
+  Node *lhs_node = graph_.addNode(c.lhs_var1());
 
   if (!var_node || !x_node || !lhs_node) {
     return std::nullopt;
   }
 
-  std::vector<Node*> node_list1 = findPathBetween(var_node, x_node);
-  std::vector<Node*> node_list0 = findPathBetween(x_node, lhs_node);
+  std::vector<Node *> node_list1 = findPathBetween(var_node, x_node);
+  std::vector<Node *> node_list0 = findPathBetween(x_node, lhs_node);
   std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
   std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
 
@@ -2282,15 +2280,14 @@ std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
 
   std::vector<Constraint1> conslist;
   conslist.reserve(conslist0.size() + 1 + conslist1.size());
-  conslist.insert(conslist.end(), conslist0.begin(),
-                  conslist0.end()); 
-  conslist.push_back(c);            
-  conslist.insert(conslist.end(), conslist1.begin(),
-                  conslist1.end()); 
+  conslist.insert(conslist.end(), conslist0.begin(), conslist0.end());
+  conslist.push_back(c);
+  conslist.insert(conslist.end(), conslist1.begin(), conslist1.end());
 
   auto ConResult = substitute_cs(conslist);
   if (ConResult.has_value()) {
-    LLVM_DEBUG(llvm::dbgs() << "Successfully obtained the constraints: " << ConResult.value() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "Successfully obtained the constraints: "
+                            << ConResult.value() << "\n");
   } else {
     LLVM_DEBUG(llvm::dbgs() << "Unable to obtain constraints\n");
   }
@@ -2328,24 +2325,24 @@ Valuation solve_ubs_case1(const std::vector<FieldRef> &tbsolved,
 std::optional<int> solve_ub_case2(const FieldRef &x, const FieldRef &var1,
                                   const FieldRef &var2, const Constraint1 &c,
                                   const std::vector<Constraint1> &constraints,
-                                  //const DependencyGraphResult &result,
+                                  // const DependencyGraphResult &result,
                                   FieldRefGraph &graph_) {
   // c : lhs >= coe0 * var0 + coe1 * var1 + ... + cst c
   // looking for : x >= ? * lhs + ..., var0 >= ? * x + ..., var1 >= ? * x + ...
   LLVM_DEBUG(llvm::dbgs() << "Solving " << x.getValue()
                           << " (fieldID: " << x.getFieldID() << ")]\n");
-  Node* var1_node = graph_.addNode(var1);
-  Node* var2_node = graph_.addNode(var2);
-  Node* x_node = graph_.addNode(x);
-  Node* lhs_node = graph_.addNode(c.lhs_var1());
+  Node *var1_node = graph_.addNode(var1);
+  Node *var2_node = graph_.addNode(var2);
+  Node *x_node = graph_.addNode(x);
+  Node *lhs_node = graph_.addNode(c.lhs_var1());
 
   if (!var1_node || !var2_node || !x_node || !lhs_node) {
     return std::nullopt;
   }
 
-  std::vector<Node*> node_list2 = findPathBetween(var2_node,x_node);
-  std::vector<Node*> node_list1 = findPathBetween(var1_node, x_node);
-  std::vector<Node*> node_list0 = findPathBetween(x_node, lhs_node);
+  std::vector<Node *> node_list2 = findPathBetween(var2_node, x_node);
+  std::vector<Node *> node_list1 = findPathBetween(var1_node, x_node);
+  std::vector<Node *> node_list0 = findPathBetween(x_node, lhs_node);
   std::vector<FieldRef> path2 = extractFieldRefs(node_list2);
   std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
   std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
@@ -2408,17 +2405,15 @@ std::optional<int> solve_ub_case2(const FieldRef &x, const FieldRef &var1,
 
   std::vector<Constraint1> conslist;
   conslist.reserve(conslist0.size() + 1 + conslist1.size() + conslist2.size());
-  conslist.insert(conslist.end(), conslist0.begin(),
-                  conslist0.end()); 
-  conslist.push_back(c);            
-  conslist.insert(conslist.end(), conslist1.begin(),
-                  conslist1.end()); 
-  conslist.insert(conslist.end(), conslist2.begin(),
-                  conslist2.end()); 
+  conslist.insert(conslist.end(), conslist0.begin(), conslist0.end());
+  conslist.push_back(c);
+  conslist.insert(conslist.end(), conslist1.begin(), conslist1.end());
+  conslist.insert(conslist.end(), conslist2.begin(), conslist2.end());
 
   auto ConResult = substitute_cs(conslist);
   if (ConResult.has_value()) {
-    LLVM_DEBUG(llvm::dbgs() << "Successfully obtained the constraints: " << ConResult.value() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "Successfully obtained the constraints: "
+                            << ConResult.value() << "\n");
   } else {
     LLVM_DEBUG(llvm::dbgs() << "Unable to obtain constraints\n");
   }
@@ -2463,7 +2458,7 @@ findCWithCoeGreaterThanOne(const std::vector<Constraint1> &constraints) {
       return c;
     }
   }
-  return std::nullopt; 
+  return std::nullopt;
 }
 
 std::optional<Constraint1>
@@ -2474,7 +2469,7 @@ findCWithTwoVars(const std::vector<Constraint1> &constraints) {
       return c;
     }
   }
-  return std::nullopt; 
+  return std::nullopt;
 }
 
 Constraint1 relax_power(const Constraint1 &c) {
@@ -2503,9 +2498,8 @@ remove_only_const(const std::vector<Constraint1> &constraints) {
   std::vector<Constraint1> result;
   result.reserve(constraints.size());
   std::copy_if(constraints.begin(), constraints.end(),
-               std::back_inserter(result), [](const Constraint1 &c) {
-                 return !c.rhs_terms1().empty(); 
-               });
+               std::back_inserter(result),
+               [](const Constraint1 &c) { return !c.rhs_terms1().empty(); });
 
   return result;
 }
@@ -2518,19 +2512,20 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
   FieldRefGraph graph_;
   for (const auto &c : constraints) {
     FieldRef lhs = c.lhs_var1();
-    Node* lhs_node = graph_.addNode(lhs);
+    Node *lhs_node = graph_.addNode(lhs);
 
     for (const auto &term : c.rhs_terms1()) {
       FieldRef rhs_var = term.var();
-      Node* rhs_node = graph_.addNode(rhs_var);
+      Node *rhs_node = graph_.addNode(rhs_var);
       lhs_node->addSuccessor(rhs_node);
     }
   }
 
   auto c = findCWithCoeGreaterThanOne(processed_constraints);
   if (c.has_value()) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "Successfully obtaining constraint with a coefficient greater than 1: " << c.value() << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "Successfully obtaining constraint with a "
+                               "coefficient greater than 1: "
+                            << c.value() << "\n");
     auto var = c.value().rhs_terms1().findVarWithCoeGreaterThanOne();
     if (var.has_value()) {
       Valuation ubs = solve_ubs_case1(tbsolved, var.value(), c.value(),
@@ -2541,14 +2536,16 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
       }
       return ubs;
     } else {
-      LLVM_DEBUG(llvm::dbgs() << "There are no terms with a coefficient greater than 1.\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "There are no terms with a coefficient greater than 1.\n");
       return std::nullopt;
     };
   } else {
     auto c = findCWithTwoVars(processed_constraints);
     if (c.has_value()) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "Successfully obtaining constraint with more than 2 terms: " << c.value() << "\n");
+                 << "Successfully obtaining constraint with more than 2 terms: "
+                 << c.value() << "\n");
       auto var = c.value().rhs_terms1().findFirstTwoVars();
       if (var.has_value()) {
         Valuation ubs =
@@ -2561,7 +2558,8 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
         }
         return ubs;
       } else {
-        LLVM_DEBUG(llvm::dbgs() << "There are no constraint with more than 2 terms.\n");
+        LLVM_DEBUG(llvm::dbgs()
+                   << "There are no constraint with more than 2 terms.\n");
         return std::nullopt;
       };
     } else {
@@ -2575,8 +2573,7 @@ std::optional<Valuation> solve_ubs(const std::vector<Constraint1> &constraints,
 // bab
 //===----------------------------------------------------------------------===//
 
-using Bounds =
-    DenseMap<FieldRef, std::pair<int, int>>;
+using Bounds = DenseMap<FieldRef, std::pair<int, int>>;
 
 Valuation key_value(const Bounds &bounds) {
   Valuation node_val;
@@ -2734,9 +2731,8 @@ std::optional<Valuation> bab_bin(const std::vector<FieldRef> &scc,
 
         return bab_bin(scc, update_lb(bounds, *v, mid + 1), cs1, cs2);
       }
-      return std::nullopt; 
-    }
-    else if (length(bounds, c1.lhs_var1()) == 0) {
+      return std::nullopt;
+    } else if (length(bounds, c1.lhs_var1()) == 0) {
       return std::nullopt;
     } else {
       auto it = bounds.find(c1.lhs_var1());
@@ -2791,11 +2787,11 @@ std::optional<Valuation> bab_bin(const std::vector<FieldRef> &scc,
 
         return bab_bin(scc, update_lb(bounds, *v, mid + 1), cs1, cs2);
       }
-      return std::nullopt; 
+      return std::nullopt;
     }
-    return std::nullopt; 
+    return std::nullopt;
   }
-  return std::nullopt; 
+  return std::nullopt;
 }
 
 Bounds combineValuations(const std::vector<FieldRef> &vars,
@@ -2820,8 +2816,8 @@ Valuation createlb(const std::vector<Constraint1> &constraints) {
   Valuation valuation;
 
   for (const auto &c : constraints) {
-    FieldRef lhs_var = c.lhs_var1();                  
-    int rhs_const = static_cast<int>(c.rhs_const1()); 
+    FieldRef lhs_var = c.lhs_var1();
+    int rhs_const = static_cast<int>(c.rhs_const1());
 
     auto it = valuation.find(lhs_var);
 
@@ -2841,17 +2837,15 @@ Valuation bab(const std::vector<Constraint1> &constraints,
   Valuation lbs = createlb(constraints);
   Bounds bounds = combineValuations(tbsolved, lbs, ubs);
 
-  std::optional<Valuation> solution = bab_bin(tbsolved, bounds,
-                                              constraints, 
-                                              {} 
-  );
+  std::optional<Valuation> solution =
+      bab_bin(tbsolved, bounds, constraints, {});
 
   if (solution.has_value()) {
     LLVM_DEBUG(llvm::dbgs() << "find a solution :\n");
-    for (const auto& [var, val] : *solution) {
-        LLVM_DEBUG(llvm::dbgs() << "[" << var.getValue() << " (fieldID: " <<
-        var.getFieldID() << ")]"
-        << "\n = " << val << "\n");
+    for (const auto &[var, val] : *solution) {
+      LLVM_DEBUG(llvm::dbgs() << "[" << var.getValue()
+                              << " (fieldID: " << var.getFieldID() << ")]"
+                              << "\n = " << val << "\n");
     }
 
     return solution.value();
@@ -2918,7 +2912,7 @@ LogicalResult InferenceMapping::solve() {
       Valuation current_solution = solver.solution();
       for (const auto &[pv, value] : current_solution) {
         LLVM_DEBUG(llvm::dbgs() //<< "[" << pv.getValue() << " (fieldID: " <<
-                                //pv.getFieldID() << ")] : \n"
+                                // pv.getFieldID() << ")] : \n"
                    << pv.getValue().getLoc() << " : " << value << "\n");
       }
 
@@ -2933,7 +2927,7 @@ LogicalResult InferenceMapping::solve() {
   LLVM_DEBUG(llvm::dbgs() << "final solution:\n");
   for (const auto &[pv, value] : final_solution_) {
     LLVM_DEBUG(llvm::dbgs() //<< "[" << pv.getValue() << " (fieldID: " <<
-                            //pv.getFieldID() << ")] : \n"
+                            // pv.getFieldID() << ")] : \n"
                << pv.getValue().getLoc() << " : " << value << "\n");
   }
   return success();
