@@ -69,7 +69,7 @@ static cl::OptionCategory mainCategory("circt-synth Options");
 enum InputFormatKind { InputUnspecified, InputAIGERFile, InputMLIRFile };
 
 static cl::opt<InputFormatKind> inputFormat(
-    "input-format", cl::desc("Specify the input file format"),
+    "format", cl::desc("Specify the input file format"),
     cl::values(clEnumValN(InputUnspecified, "unspecified",
                           "Unspecified input format"),
                clEnumValN(InputAIGERFile, "aiger", "AIGER input format"),
