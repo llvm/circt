@@ -1214,13 +1214,15 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
                                      op->getLoc());
 
-      if (isa<hw::ArrayType>(resultType)) {
+      bool isSingleElementExtract = arrType.getElementType() == resultType;
+
+      if (isSingleElementExtract)
+        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(),
+                                                    idx);
+      else
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
-        return success();
-      }
 
-      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
       return success();
     }
 
@@ -1257,14 +1259,17 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
           rewriter, adaptor.getLowBit(),
           llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
 
-      if (isa<hw::ArrayType>(cast<llhd::RefType>(resultType).getNestedType())) {
+      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
+      bool isSingleElementExtract =
+          arrType.getElementType() == resultNestedType;
+
+      if (isSingleElementExtract)
+        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                         idx);
+      else
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), idx);
-        return success();
-      }
 
-      rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
-                                                       idx);
       return success();
     }
 
