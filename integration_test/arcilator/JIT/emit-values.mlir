@@ -1,4 +1,6 @@
-// RUN: arcilator --run %s | FileCheck %s
+// RUN: arcilator --run %s | FileCheck --match-full-lines %s
+// REQUIRES: arcilator-jit
+
 module {
   func.func @entry() {
     // CHECK: a1 = 1
