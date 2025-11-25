@@ -211,7 +211,7 @@ struct TermBase : Term {
 struct VariableTerm : public TermBase<TermKind::Variable> {
   VariableTerm() : leader(nullptr) {}
   VariableTerm(Term *leader) : leader(leader) {}
-  Term *leader;
+  Term *leader = nullptr;
 };
 
 /// A concrete value defined in the IR.
@@ -246,12 +246,14 @@ Term *find(Term *x) {
 }
 
 /// A helper for assigning low numeric IDs to variables for user-facing output.
-struct VariableIDTable {
+class VariableIDTable {
+public:
   size_t get(VariableTerm *term) {
     auto [it, inserted] = table.insert({term, table.size() + 1});
     return it->second;
   }
 
+private:
   DenseMap<VariableTerm *, size_t> table;
 };
 
@@ -303,13 +305,8 @@ raw_ostream &dump(raw_ostream &out, const ValueTerm *term) {
 // NOLINTNEXTLINE(misc-no-recursion)
 raw_ostream &dump(raw_ostream &out, const RowTerm *term) {
   out << "row@" << term << "{";
-  bool first = true;
-  for (auto *element : term->elements) {
-    if (!first)
-      out << ", ";
-    dump(out, element);
-    first = false;
-  }
+  llvm::interleaveComma(term->elements, out,
+                        [&](auto element) { dump(out, element); });
   out << "}";
   return out;
 }
@@ -708,6 +705,7 @@ template <typename T>
 LogicalResult processInstancePorts(const DomainInfo &info,
                                    TermAllocator &allocator, DomainTable &table,
                                    T op) {
+                                    llvm::errs() << "ins=" << op << "\n";
   auto numDomainTypes = info.getNumDomains();
   DenseMap<unsigned, unsigned> domainPortTypeIDTable;
   auto domainInfo = op.getDomainInfoAttr();
@@ -966,7 +964,7 @@ void createModuleDomainPorts(const DomainInfo &info, TermAllocator &allocator,
         if (isPort(module, value))
           continue;
 
-        // The domain is defined internally. If there value is already exported,
+        // The domain is defined internally. If the value is already exported,
         // or will be exported, we are done.
         if (exportTable.contains(value) || pendingExports.contains(value))
           continue;
@@ -1134,7 +1132,7 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
       continue;
     }
 
-    newModuleDomainInfo[i] = oldModuleDomainInfo[i];
+    newModuleDomainInfo[i] = ArrayAttr::get(context, {});
   }
 
   result = ArrayAttr::get(module.getContext(), newModuleDomainInfo);
@@ -1410,12 +1408,12 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
 
 LogicalResult runOnModuleLike(InferDomainsMode mode, const DomainInfo &info,
                               ModuleUpdateTable &updateTable, Operation *op) {
-  // llvm::errs() << "********\n";
-  // llvm::errs() << *op << "\n";
-
-  if (auto module = dyn_cast<FModuleOp>(op)) {
+  
+                                llvm::errs() << *op << "\n";
+                                if (auto module = dyn_cast<FModuleOp>(op)) {
     if (mode == InferDomainsMode::Check)
       return checkModule(info, module);
+
     if (mode == InferDomainsMode::InferAll || module.isPrivate())
       return inferModule(info, updateTable, module);
 
