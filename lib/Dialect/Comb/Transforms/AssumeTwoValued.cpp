@@ -21,7 +21,6 @@ namespace comb {
 } // namespace circt
 
 namespace {
-/// Convert ceq comparisons to eq comparisons
 struct ICmpOpConversion : OpRewritePattern<ICmpOp> {
   using OpRewritePattern<ICmpOp>::OpRewritePattern;
 
