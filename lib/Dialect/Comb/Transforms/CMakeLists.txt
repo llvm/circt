@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTCombTransforms
   IntRangeOptimizations.cpp
   IntRangeAnnotations.cpp
   BalanceMux.cpp
+  AssumeTwoValued.cpp
 
   DEPENDS
   CIRCTCombTransformsIncGen
