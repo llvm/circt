@@ -1,4 +1,5 @@
-// RUN: arcilator --run %s --jit-entry=entry --args=1,2 --args=3,4 | FileCheck %s
+// RUN: arcilator --run %s --jit-entry=entry --args=1,2 --args=3,4 | FileCheck --match-full-lines %s
+// REQUIRES: arcilator-jit
 
 module {
   func.func @entry(%arg0: i32, %arg1: i32) {
