@@ -193,7 +193,14 @@ void circt::python::populateDialectSynthSubmodule(nb::module_ &m) {
                    [](SynthLongestPathObject &self) {
                      return synthLongestPathObjectName(self);
                    })
-      .def_prop_ro("bit_pos", [](SynthLongestPathObject &self) {
-        return synthLongestPathObjectBitPos(self);
+      .def_prop_ro("bit_pos",
+                   [](SynthLongestPathObject &self) {
+                     return synthLongestPathObjectBitPos(self);
+                   })
+      .def_prop_ro("value", [](SynthLongestPathObject &self) -> nb::object {
+        MlirValue value = synthLongestPathObjectGetValue(self);
+        if (!value.ptr)
+          return nb::none();
+        return nb::cast(value);
       });
 }
