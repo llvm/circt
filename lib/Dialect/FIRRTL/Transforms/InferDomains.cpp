@@ -845,6 +845,12 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = module.getArgument(i);
     auto type = port.getType();
+    auto copyDomainInfo = [&]() -> void {
+      if (oldModuleDomainInfo.empty())
+        newModuleDomainInfo[i] = ArrayAttr::get(context, {});
+      else
+        newModuleDomainInfo[i] = oldModuleDomainInfo[i];
+    };
 
     // If the port is an output domain, we may need to drive the output with
     // a value. If we don't know what value to drive to the port, error.
@@ -877,7 +883,7 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
         }
       }
 
-      newModuleDomainInfo[i] = oldModuleDomainInfo[i];
+      copyDomainInfo();
       continue;
     }
 
@@ -929,7 +935,7 @@ InferModuleDomains::updatePortDomainAssociations(FModuleOp module) {
       continue;
     }
 
-    newModuleDomainInfo[i] = oldModuleDomainInfo[i];
+    copyDomainInfo();
   }
 
   auto newModuleDomainInfoAttr =
