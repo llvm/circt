@@ -120,6 +120,16 @@ void testLongestPathAnalysis(void) {
       // CHECK: StartPoint instance path size: 1
       // CHECK: EndPoint instance path size: 1
 
+      // Test value property
+      MlirValue startValue = synthLongestPathObjectGetValue(startPoint);
+      MlirValue endValue = synthLongestPathObjectGetValue(endPoint);
+      printf("StartPoint has value: %s\n",
+             !mlirValueIsNull(startValue) ? "true" : "false");
+      printf("EndPoint has value: %s\n",
+             !mlirValueIsNull(endValue) ? "true" : "false");
+      // CHECK: StartPoint has value: true
+      // CHECK: EndPoint has value: true
+
       // Test History API
       SynthLongestPathHistory history =
           synthLongestPathDataflowPathGetHistory(path);
@@ -167,6 +177,18 @@ void testLongestPathAnalysis(void) {
            synthLongestPathCollectionGetSize(collection4));
     // CHECK: Input-to-internal paths count: 0
     // CHECK-NEXT: Internal-to-output paths count: 2
+
+    // Test that output port endpoints have null values
+    if (synthLongestPathCollectionGetSize(collection4) > 0) {
+      SynthLongestPathDataflowPath outputPath =
+          synthLongestPathCollectionGetDataflowPath(collection4, 0);
+      SynthLongestPathObject outputEndPoint =
+          synthLongestPathDataflowPathGetEndPoint(outputPath);
+      MlirValue outputValue = synthLongestPathObjectGetValue(outputEndPoint);
+      printf("Output port endpoint has null value: %s\n",
+             mlirValueIsNull(outputValue) ? "true" : "false");
+      // CHECK-NEXT: Output port endpoint has null value: true
+    }
 
     printf("Path count before drop: %zu\n",
            synthLongestPathCollectionGetSize(collection1));
