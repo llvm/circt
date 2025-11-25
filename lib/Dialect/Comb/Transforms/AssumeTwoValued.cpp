@@ -27,12 +27,22 @@ struct ICmpOpConversion : OpRewritePattern<ICmpOp> {
 
   LogicalResult matchAndRewrite(ICmpOp op,
                                 PatternRewriter &rewriter) const override {
-    if (op.getPredicate() == ICmpPredicate::ceq) {
-      rewriter.replaceOpWithNewOp<ICmpOp>(op, ICmpPredicate::eq, op.getLhs(),
-                                          op.getRhs());
-      return success();
+    ICmpPredicate newPredicate;
+    switch (op.getPredicate()) {
+    case ICmpPredicate::ceq:
+    case ICmpPredicate::weq:
+      newPredicate = ICmpPredicate::eq;
+      break;
+    case ICmpPredicate::cne:
+    case ICmpPredicate::wne:
+      newPredicate = ICmpPredicate::ne;
+      break;
+    default:
+      return failure();
     }
-    return failure();
+    rewriter.replaceOpWithNewOp<ICmpOp>(op, newPredicate, op.getLhs(),
+                                        op.getRhs());
+    return success();
   }
 };
 } // namespace
