@@ -1692,8 +1692,14 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   // The annotations attribute is always present, but not printed when empty.
   properties.setAnnotations(builder.getArrayAttr({}));
 
-  // Add domains.
-  properties.setDomainInfo(ArrayAttr::get(context, domains));
+  // Add domains.  Use an empty array if none are set.
+  if (llvm::all_of(domains, [&](Attribute attr) {
+        auto arrayAttr = dyn_cast<ArrayAttr>(attr);
+        return arrayAttr && arrayAttr.empty();
+      }))
+    properties.setDomainInfo(ArrayAttr::get(context, {}));
+  else
+    properties.setDomainInfo(ArrayAttr::get(context, domains));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
