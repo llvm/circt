@@ -69,6 +69,7 @@ cmake -G Ninja llvm/llvm -B build \
     -DLLVM_ENABLE_PROJECTS=mlir \
     -DLLVM_EXTERNAL_PROJECTS=circt \
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
+    -DLLVM_ENABLE_LLD=ON
 ```
 
 If you want to build everything about the CIRCT tools and libraries, run below command(also runs all tests):
