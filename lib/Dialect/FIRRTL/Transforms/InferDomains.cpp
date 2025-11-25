@@ -488,7 +488,6 @@ public:
   /// For a hardware value, get the term which represents the row of associated
   /// domains.
   Term *getDomainAssociation(Value value) const {
-    llvm::errs() << "value = " << value << "\n";
     auto *term = getOptDomainAssociation(value);
     assert(term);
     return term;
@@ -1256,7 +1255,7 @@ LogicalResult inferModule(const DomainInfo &info,
 // module.
 //====--------------------------------------------------------------------------
 
-/// Check that a module has complete domain information for its ports.
+/// Check that a module's hardware ports have complete domain associations.
 LogicalResult checkModulePorts(const DomainInfo &info, FModuleLike module) {
   auto numDomains = info.getNumDomains();
   auto domainInfo = module.getDomainInfoAttr();
@@ -1309,20 +1308,79 @@ LogicalResult checkModulePorts(const DomainInfo &info, FModuleLike module) {
   return success();
 }
 
-LogicalResult checkModuleBody(const DomainInfo &info,
-                              ModuleUpdateTable &updateTable,
-                              FModuleOp module) {
+/// Check that output domain ports are driven.
+LogicalResult checkModuleDomainPortDrivers(const DomainInfo &info,
+                                           FModuleOp module) {
+  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+    auto port = module.getArgument(i);
+    auto type = port.getType();
+    if (!isa<DomainType>(type) ||
+        module.getPortDirection(i) != Direction::Out || isDriven(port))
+      continue;
+
+    auto name = module.getPortNameAttr(i);
+    emitError(module.getPortLocation(i)) << "undriven domain port " << name;
+    return failure();
+  }
+
   return success();
+}
+
+/// Check that the input domain ports are driven.
+template <typename T>
+LogicalResult checkInstanceDomainPortDrivers(T op) {
+  for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
+    auto port = op.getResult(i);
+    auto type = port.getType();
+    if (!isa<DomainType>(type) || op.getPortDirection(i) != Direction::In ||
+        isDriven(port))
+      continue;
+
+    auto name = op.getPortNameAttr(i);
+    emitError(op.getPortLocation(i)) << "undriven domain port " << name;
+    return failure();
+  }
+
+  return success();
+}
+
+LogicalResult checkOp(Operation *op) {
+  if (auto inst = dyn_cast<InstanceOp>(op))
+    return checkInstanceDomainPortDrivers(inst);
+  if (auto inst = dyn_cast<InstanceChoiceOp>(op))
+    return checkInstanceDomainPortDrivers(inst);
+  return success();
+}
+
+/// Check that instances under this module have driven domain input ports.
+LogicalResult checkModuleBody(FModuleOp module) {
+  LogicalResult result = success();
+  module.getBody().walk([&](Operation *op) -> WalkResult {
+    if (failed(checkOp(op))) {
+      result = failure();
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  return result;
 }
 
 /// Check that a module's ports are fully annotated, before performing domain
 /// inference on the module.
-LogicalResult checkModule(const DomainInfo &info,
-                          ModuleUpdateTable &updateTable, FModuleOp module) {
+LogicalResult checkModule(const DomainInfo &info, FModuleOp module) {
   if (failed(checkModulePorts(info, module)))
     return failure();
 
-  return checkModuleBody(info, updateTable, module);
+  if (failed(checkModuleDomainPortDrivers(info, module)))
+    return failure();
+
+  if (failed(checkModuleBody(module)))
+    return failure();
+
+  TermAllocator allocator;
+  DomainTable table;
+  ModuleUpdateTable updateTable;
+  return processModule(info, allocator, table, updateTable, module);
 }
 
 /// Check that an extmodule's ports are fully annotated.
@@ -1352,15 +1410,15 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
 
 LogicalResult runOnModuleLike(InferDomainsMode mode, const DomainInfo &info,
                               ModuleUpdateTable &updateTable, Operation *op) {
-  llvm::errs() << "********\n";
-  llvm::errs() << *op << "\n";
+  // llvm::errs() << "********\n";
+  // llvm::errs() << *op << "\n";
 
   if (auto module = dyn_cast<FModuleOp>(op)) {
     if (mode == InferDomainsMode::Check)
-      return checkModule(info, updateTable, module);
+      return checkModule(info, module);
     if (mode == InferDomainsMode::InferAll || module.isPrivate())
       return inferModule(info, updateTable, module);
-  
+
     return checkAndInferModule(info, updateTable, module);
   }
 

@@ -1,7 +1,8 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=check}))' %s --verify-diagnostics --split-input-file
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-domains{mode=check}))' %s --verify-diagnostics
 
-// In check-mode, we check that the interface of public modules is fully annotated
-// with domain inference
+// in "check" mode, infer-domains will require that all ops are fully annotated
+// with domains. No inference is run.
+
 // CHECK-LABEL: MissingDomain
 firrtl.circuit "MissingDomain" {
   firrtl.domain @ClockDomain
@@ -29,7 +30,7 @@ firrtl.circuit "UndrivenOutputDomain" {
   firrtl.domain @ClockDomain
 
   firrtl.module @UndrivenOutputDomain(
-    // expected-error @below {{unable to infer value for undriven domain port "c"}}
+    // expected-error @below {{undriven domain port "c"}}
     out %c : !firrtl.domain of @ClockDomain
   ) {}
 }
@@ -41,7 +42,7 @@ firrtl.circuit "UndrivenInstanceDomainPort" {
   firrtl.extmodule @Foo(in c : !firrtl.domain of @ClockDomain)
 
   firrtl.module @UndrivenInstanceDomainPort() {
-    // expected-error @below {{unable to infer value for undriven domain port "c"}}
+    // expected-error @below {{undriven domain port "c"}}
     %foo_c = firrtl.instance foo @Foo(in c : !firrtl.domain of @ClockDomain)
   }
 }
@@ -58,7 +59,24 @@ firrtl.circuit "UndrivenInstanceChoiceDomainPort" {
   firrtl.extmodule @Bar(in c : !firrtl.domain of @ClockDomain)
 
   firrtl.module @UndrivenInstanceChoiceDomainPort() {
-    // expected-error @below {{unable to infer value for undriven domain port "c"}}
+    // expected-error @below {{undriven domain port "c"}}
     %inst_c = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar } (in c : !firrtl.domain of @ClockDomain)
+  }
+}
+
+// Test that domain crossing errors are still caught when in check-only mode.
+// Catching this involves processing the module without writing back to the IR.
+firrtl.circuit "IllegalDomainCrossing" {
+  firrtl.domain @ClockDomain
+  firrtl.module @IllegalDomainCrossing(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain of @ClockDomain,
+    // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
+    in %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
