@@ -333,3 +333,32 @@ firrtl.circuit "EmptyDomainInfo" {
     firrtl.propassign %x, %0 : !firrtl.integer
   }
 }
+
+// Ensure that unique domain names are created.
+// CHECK-LABEL: firrtl.circuit "NoDuplicateNames"
+firrtl.circuit "NoDuplicateNames" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule private @Bar(
+    in A: !firrtl.domain of @ClockDomain,
+    in B: !firrtl.domain of @ClockDomain,
+    in a: !firrtl.uint<1> domains [A],
+    out b: !firrtl.uint<1> domains [B]
+  )
+  // CHECK:      firrtl.module @NoDuplicateNames
+  // CHECK-SAME:   in %ClockDomain:
+  // CHECK-SAME:   in %{{ClockDomain[A-Za-z0-9_]+}}:
+  // CHECK-NOT:    portNames
+  firrtl.module @NoDuplicateNames(
+    in %a: !firrtl.uint<1>,
+    out %b: !firrtl.uint<1>
+  ) {
+    %bar_A, %bar_B, %bar_a, %bar_b = firrtl.instance bar @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in B: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains [A],
+      out b: !firrtl.uint<1> domains [B]
+    )
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %bar_b : !firrtl.uint<1>
+  }
+}

@@ -972,12 +972,15 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
   // an output domain port, to allow the domain to escape.
   DenseMap<VariableTerm *, unsigned> pendingSolutions;
   llvm::MapVector<Value, unsigned> pendingExports;
+  Namespace ns;
 
   size_t inserted = 0;
   auto numPorts = module.getNumPorts();
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = module.getArgument(i);
     auto type = port.getType();
+    auto *ctx = module.getContext();
+    ns.add(module.getPortName(i));
 
     if (!isa<FIRRTLBaseType>(type))
       continue;
@@ -1004,8 +1007,8 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
         auto domainName = domainDecl.getNameAttr();
 
         auto portInsertionPoint = i;
-        auto portName = domainName;
-        auto portType = DomainType::get(module.getContext());
+        auto portName = StringAttr::get(ctx, ns.newName(domainName.getValue()));
+        auto portType = DomainType::get(ctx);
         auto portDirection = Direction::Out;
         auto portSym = StringAttr();
         auto portLoc = port.getLoc();
@@ -1030,8 +1033,8 @@ void InferModuleDomains::generalizeModule(FModuleOp module) {
         auto domainName = domainDecl.getNameAttr();
 
         auto portInsertionPoint = i;
-        auto portName = domainName;
-        auto portType = DomainType::get(module.getContext());
+        auto portName = StringAttr::get(ctx, ns.newName(domainName.getValue()));
+        auto portType = DomainType::get(ctx);
         auto portDirection = Direction::In;
         auto portSym = StringAttr();
         auto portLoc = port.getLoc();
