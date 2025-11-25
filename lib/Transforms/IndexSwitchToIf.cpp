@@ -46,7 +46,8 @@ struct SwitchToIfConversion : public OpConversionPattern<scf::IndexSwitchOp> {
     auto switchCases = switchOp.getCases();
     Value switchOperand = adaptor.getArg();
     if (!switchOperand)
-      switchOperand = switchOp.getOperand();
+      return rewriter.notifyMatchFailure(switchOp,
+                                         "missing converted switch operand");
     for (size_t i = 0; i < switchCases.size(); i++) {
       auto caseValueInt = switchCases[i];
       if (prevIfOp)
