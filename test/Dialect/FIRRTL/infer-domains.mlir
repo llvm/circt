@@ -321,3 +321,15 @@ firrtl.circuit "Top" {
     firrtl.matchingconnect %foo1_i, %foo2_o : !firrtl.uint<1>
   }
 }
+
+// This test checks that a module with ports that have empty domain information
+// do not crash the InferDomains pass.  This stems from the fact that "no domain
+// information" can be represented as both an empty array `[]` and an empty
+// array of arrays `[[]]`.
+firrtl.circuit "EmptyDomainInfo" {
+  firrtl.domain @DomainKind
+  firrtl.module @EmptyDomainInfo(out %x: !firrtl.integer) {
+    %0 = firrtl.integer 5
+    firrtl.propassign %x, %0 : !firrtl.integer
+  }
+}
