@@ -1932,6 +1932,12 @@ void FExtModuleOp::getAsmBlockArgumentNames(
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
+StringRef FExtModuleOp::getExtModuleName() {
+  if (auto defname = getDefname(); defname && !defname->empty())
+    return *defname;
+  return getName();
+}
+
 void FIntModuleOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);

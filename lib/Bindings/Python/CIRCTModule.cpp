@@ -84,6 +84,10 @@ NB_MODULE(_circt, m) {
 
         // Collect CIRCT dialects to register.
 
+        MlirDialectHandle arc = mlirGetDialectHandle__arc__();
+        mlirDialectHandleRegisterDialect(arc, context);
+        mlirDialectHandleLoadDialect(arc, context);
+
         MlirDialectHandle comb = mlirGetDialectHandle__comb__();
         mlirDialectHandleRegisterDialect(comb, context);
         mlirDialectHandleLoadDialect(comb, context);
@@ -187,6 +191,8 @@ NB_MODULE(_circt, m) {
     mlirExportSplitVerilog(mod, cDirectory);
   });
 
+  nb::module_ arc = m.def_submodule("_arc", "Arc API");
+  circt::python::populateDialectArcSubmodule(arc);
   nb::module_ synth = m.def_submodule("_synth", "synth API");
   circt::python::populateDialectSynthSubmodule(synth);
   nb::module_ esi = m.def_submodule("_esi", "ESI API");

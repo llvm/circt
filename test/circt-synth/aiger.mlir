@@ -1,4 +1,4 @@
-// RUN: circt-translate --export-aiger %s | circt-synth --input-format=aiger | FileCheck %s
+// RUN: circt-translate --export-aiger %s | circt-synth --format=aiger | FileCheck %s
 // RUN: circt-translate --export-aiger %s -o %t.aig && circt-synth %t.aig | FileCheck %s
 // CHECK-LABEL: @aiger_top(
 // CHECK: synth.aig.and_inv %a, not %b : i1

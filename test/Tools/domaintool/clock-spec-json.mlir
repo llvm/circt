@@ -1,6 +1,6 @@
-// RUN: domaintool --module Foo --domain ClockDomain,A,10 --assign 0 %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
-// RUN: domaintool --module Foo --domain ClockDomain,A,10 --assign 0 --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
-// RUN: domaintool --module Foo --domain ClockDomain,A,10 --assign 0 --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
+// RUN: domaintool --module Foo --domain ClockDomain,A,10 --assign 0 --assign u %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
+// RUN: domaintool --module Foo --domain ClockDomain,A,10 --assign 0 --assign u --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A,10 --assign 0 --assign u --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
 
 om.class @ClockDomain(
   %basepath: !om.frozenbasepath,
@@ -26,9 +26,11 @@ om.class @ClockDomain_out(
 
 om.class @Foo_Class(
   %basepath: !om.frozenbasepath,
-  %A: !om.class.type<@ClockDomain>
+  %A: !om.class.type<@ClockDomain>,
+  %base_address: !om.integer
 )  -> (
-  A_out: !om.class.type<@ClockDomain_out>
+  A_out: !om.class.type<@ClockDomain_out>,
+  effective_address: !om.integer
 ) {
   %0 = om.object @ClockDomain_out(%basepath, %A, %3) : (
     !om.frozenbasepath,
@@ -38,7 +40,9 @@ om.class @Foo_Class(
   %1 = om.frozenpath_create reference %basepath "Foo>a"
   %2 = om.frozenpath_create reference %basepath "Foo>b"
   %3 = om.list_create %1, %2 : !om.frozenpath
-  om.class.fields %0 : !om.class.type<@ClockDomain_out>
+  %4 = om.constant #om.integer<1 : si4> : !om.integer
+  %5 = om.integer.add %base_address, %4 : !om.integer
+  om.class.fields %0, %5 : !om.class.type<@ClockDomain_out>, !om.integer
 }
 
 // CHECK:        {

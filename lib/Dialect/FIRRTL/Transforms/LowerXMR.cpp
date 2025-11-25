@@ -416,11 +416,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
   /// Generate the ABI ref_<module> prefix string into `prefix`.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
     auto modName = mod.getModuleName();
-    if (auto ext = dyn_cast<FExtModuleOp>(*mod)) {
-      // Use defName for module portion, if set.
-      if (auto defname = ext.getDefname(); defname && !defname->empty())
-        modName = *defname;
-    }
+    if (auto ext = dyn_cast<FExtModuleOp>(*mod))
+      modName = ext.getExtModuleName();
     (Twine("ref_") + modName).toVector(prefix);
   }
 

@@ -12,14 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Debug/DebugDialect.h"
-#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
-#include "circt/Dialect/OM/OMDialect.h"
-#include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/InitAllDialects.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/Diagnostics.h"
@@ -27,6 +21,7 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/ToolUtilities.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
@@ -57,12 +52,13 @@ cl::list<std::string> domains{
     cl::desc("a domain name to instantiate and arguments to instantiate it, "
              "e.g., '--domain ClockDomain,clockA,42'"),
     cl::Prefix, cl::cat(cat)};
-cl::list<size_t> assign{
+cl::list<std::string> assign{
     "assign",
     cl::desc(
         "connect one of the previously declared domains to a port by its "
         "numeric id, e.g., to attach the second domain to the first port and "
-        "the first domain to the second port use '--domain 1 --domain 0'"),
+        "the first domain to the second port use '--assign 1 --assign 0'.  To "
+        "set a port to 'unknown' use '--assign u'."),
     cl::Prefix, cl::cat(cat)};
 cl::opt<std::string> moduleName{
     "module", cl::Required,
@@ -194,7 +190,21 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   om::evaluator::BasePathValue emptyPath(&context);
   parameters.push_back(
       std::make_shared<om::evaluator::BasePathValue>(emptyPath));
-  for (auto domainIndex : options::assign) {
+  auto unknownLoc = UnknownLoc::get(&context);
+  for (auto &value : options::assign) {
+    if (value == "u") {
+      auto unknown = om::evaluator::UnknownValue(&context, unknownLoc);
+      parameters.push_back(
+          std::make_shared<om::evaluator::UnknownValue>(unknown));
+      continue;
+    }
+    size_t domainIndex;
+    if (!to_integer(value, domainIndex)) {
+      llvm::errs() << "illegal assignment value '" << value
+                   << "', must be 'x' or a number\n";
+      return failure();
+    }
+
     if (domainIndex >= domainObjects.size()) {
       llvm::errs()
           << "unable to assign domain '" << domainIndex
@@ -243,35 +253,38 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   llvm::MapVector<Type, ObjectMap> byType;
   auto *object = cast<om::evaluator::ObjectValue>(evaluatorValue->get());
   for (auto fieldNameAttr : object->getFieldNames().getAsRange<StringAttr>()) {
+    // Skip anything which is unknown.
+    if (dyn_cast<om::evaluator::UnknownValue>(
+            object->getField(fieldNameAttr)->get()))
+      continue;
+
+    // Skip anything which is not an object.
     auto *domain = dyn_cast<om::evaluator::ObjectValue>(
         object->getField(fieldNameAttr)->get());
+    if (!domain)
+      continue;
+
+    // TODO: Improve the structural typing here in favor of something stricter,
+    // like an actual ABI that relies on dedicated class names to figure out
+    // what an output domain is.
 
     // Get "domainInfo_out".
     auto domainInfoValue = domain->getField("domainInfo_out");
-    if (failed(domainInfoValue)) {
-      llvm::errs() << "output object did not contain an 'domainInfo_out' field";
-      return failure();
-    }
+    if (failed(domainInfoValue))
+      continue;
     auto *domainInfoObject =
         dyn_cast<om::evaluator::ObjectValue>(domainInfoValue->get());
-    if (!domainInfoObject) {
-      llvm::errs() << "unexpected type of 'domainInfo_out'. Must be an object.";
-      return failure();
-    }
+    if (!domainInfoObject)
+      continue;
 
     // Get "associations_out".
     auto associationsValue = domain->getField("associations_out");
-    if (failed(associationsValue)) {
-      llvm::errs()
-          << "output object did not contain an 'associations_out' field";
-      return failure();
-    }
+    if (failed(associationsValue))
+      continue;
     auto *associationsList =
         dyn_cast<om::evaluator::ListValue>(associationsValue->get());
-    if (!associationsList) {
-      llvm::errs() << "unexpected type of 'associations_out'. Must be a list.";
-      return failure();
-    }
+    if (!associationsList)
+      continue;
 
     // Update the `byType` map.
     byType[domainInfoObject->getType()][domainInfoObject].append(
@@ -380,13 +393,11 @@ int main(int argc, char **argv) {
                               "from MLIR containing domain information\n");
 
   DialectRegistry registry;
-  registry.insert<comb::CombDialect, debug::DebugDialect, hw::HWDialect,
-                  om::OMDialect, seq::SeqDialect, sv::SVDialect,
-                  verif::VerifDialect>();
+  registerAllDialects(registry);
   MLIRContext context(registry);
-  context.loadDialect<comb::CombDialect, debug::DebugDialect, hw::HWDialect,
-                      om::OMDialect, seq::SeqDialect, sv::SVDialect,
-                      verif::VerifDialect>();
+  // Load the OM dialect explicitly since we use OM types/attributes before
+  // parsing any MLIR.
+  context.loadDialect<om::OMDialect>();
 
   exit(failed(DomainTool(context).execute()));
 }
