@@ -58,7 +58,7 @@ cl::list<std::string> assign{
         "connect one of the previously declared domains to a port by its "
         "numeric id, e.g., to attach the second domain to the first port and "
         "the first domain to the second port use '--assign 1 --assign 0'.  To "
-        "set a port to 'unknown' use '--assign x'."),
+        "set a port to 'unknown' use '--assign u'."),
     cl::Prefix, cl::cat(cat)};
 cl::opt<std::string> moduleName{
     "module", cl::Required,
