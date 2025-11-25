@@ -77,10 +77,11 @@ If you want to build everything about the CIRCT tools and libraries, run below c
 ninja -C build check-circt
 ```
 
-If you want to only build a specific part, for example the `circt-opt` tool(only build the necessary parts of LLVM, MLIR, and CIRCT, a lot quicker):
+If you want to only build a specific part, for example the `circt-opt` tool:
 ```sh
 ninja -C build circt-opt
-```
+\```
+This will only build the necessary parts of LLVM, MLIR, and CIRCT, which can be a lot quicker than building everything.
 
 If you only want to build the `firtool` binary:
 ```sh
