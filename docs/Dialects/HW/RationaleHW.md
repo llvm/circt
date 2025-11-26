@@ -44,8 +44,7 @@ several major contributions:
  1) The `hw` dialect provides unifying structure and
     abstractions that are useful for a wide range of hardware modeling problems.
     It allows other dialects to "mix in" with it to provide higher level
-    functionality. `hw` is roughly akin to the "std" dialect in MLIR (but better
-    curated).
+    functionality.
  2) The `comb` dialect provides a common set of operations for combinational
     logic.  This dialect is designed to allow easy analysis and transformation.
  3) The `sv` dialect provides direct access to a wide variety
