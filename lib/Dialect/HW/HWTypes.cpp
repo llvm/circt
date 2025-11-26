@@ -566,7 +566,7 @@ std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
 std::optional<int64_t> EnumType::getBitWidth() const {
   auto w = getFields().size();
   if (w > 1)
-    return llvm::Log2_64_Ceil(getFields().size());
+    return llvm::Log2_64_Ceil(w);
   return 1;
 }
 
