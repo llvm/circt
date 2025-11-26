@@ -63,4 +63,15 @@ def AssumeTwoValued : Pass<"comb-assume-two-valued"> {
   }];
 }
 
+
+def SimplifyTruthTable : Pass<"comb-simplify-tt"> {
+  let summary = "Simplify truth tables that depend on 1 or less inputs";
+  let description = [{
+    Simplifies truth tables that are constant or depend only on single input.
+    For truth tables that depend on no input, reduce them to hw.constant. For
+    truth tables that depend on single input, reduce to identity of input or
+    negation of input.
+  }];
+}
+
 #endif // CIRCT_DIALECT_COMB_PASSES_TD
