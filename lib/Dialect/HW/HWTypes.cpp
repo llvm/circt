@@ -108,17 +108,19 @@ bool circt::hw::isHWValueType(Type type) {
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
 int64_t circt::hw::getBitWidth(mlir::Type type) {
-  // First, check if the type implements the BitWidthTypeInterface.
-  if (auto iface = dyn_cast<BitWidthTypeInterface>(type)) {
-    auto width = iface.getBitWidth();
-    return width.has_value() ? *width : -1;
-  }
-
-  // Handle built-in types that don't implement the interface.
+  // Handle built-in types that don't implement the interface. Do this first
+  // since it is faster than downcasting to an interface.
   return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Default([](Type) { return -1; });
+      .Default([](Type type) -> int64_t {
+        // If type implements the BitWidthTypeInterface, use it.
+        if (auto iface = dyn_cast<BitWidthTypeInterface>(type)) {
+          std::optional<int64_t> width = iface.getBitWidth();
+          return width.has_value() ? *width : -1;
+        }
+        return -1;
+      });
 }
 
 /// Return true if the specified type contains known marker types like
@@ -674,10 +676,10 @@ std::optional<int64_t> hw::ArrayType::getBitWidth() const {
   auto elementBitWidth = hw::getBitWidth(getElementType());
   if (elementBitWidth < 0)
     return std::nullopt;
-  int64_t dimBitWidth = getNumElements();
-  if (dimBitWidth < 0)
+  int64_t numElements = getNumElements();
+  if (numElements < 0)
     return std::nullopt;
-  return (int64_t)getNumElements() * elementBitWidth;
+  return numElements * elementBitWidth;
 }
 
 //===----------------------------------------------------------------------===//

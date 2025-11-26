@@ -1746,9 +1746,11 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitAsTwoStateType);
       })
       .Case<EnumType>([&](EnumType enumType) {
+        assert(enumType.getBitWidth().has_value() &&
+               "enum type must have bitwidth");
         os << "enum ";
         if (enumType.getBitWidth() != 32)
-          os << "bit [" << enumType.getBitWidth() - 1 << ":0] ";
+          os << "bit [" << *enumType.getBitWidth() - 1 << ":0] ";
         os << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
@@ -2302,8 +2304,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
