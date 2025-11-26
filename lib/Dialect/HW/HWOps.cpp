@@ -1134,7 +1134,7 @@ LogicalResult HWModuleOp::verify() {
   // Verify the number of block arguments.
   auto numInputs = type.getNumInputs();
   if (body->getNumArguments() != numInputs)
-    return emitOpError("entry block must have")
+    return emitOpError("entry block must have ")
            << numInputs << " arguments to match module signature";
 
   return success();
