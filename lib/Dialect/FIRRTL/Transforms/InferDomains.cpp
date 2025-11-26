@@ -705,7 +705,7 @@ template <typename T>
 LogicalResult processInstancePorts(const DomainInfo &info,
                                    TermAllocator &allocator, DomainTable &table,
                                    T op) {
-                                    llvm::errs() << "ins=" << op << "\n";
+  llvm::errs() << "ins=" << op << "\n";
   auto numDomainTypes = info.getNumDomains();
   DenseMap<unsigned, unsigned> domainPortTypeIDTable;
   auto domainInfo = op.getDomainInfoAttr();
@@ -863,15 +863,10 @@ LogicalResult processModuleBody(const DomainInfo &info,
                                 TermAllocator &allocator, DomainTable &table,
                                 const ModuleUpdateTable &updateTable,
                                 FModuleOp module) {
-  LogicalResult result = success();
-  module.getBody().walk([&](Operation *op) -> WalkResult {
-    if (failed(processOp(info, allocator, table, updateTable, op))) {
-      result = failure();
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
+  auto result = module.getBody().walk([&](Operation *op) -> WalkResult {
+    return processOp(info, allocator, table, updateTable, op);
   });
-  return result;
+  return failure(result.wasInterrupted());
 }
 
 /// Populate the domain table by processing the module. If the module has any
@@ -1207,15 +1202,9 @@ LogicalResult updateOp(const DomainTable &table, Operation *op) {
 /// After updating the port domain associations, walk the body of the module
 /// to fix up any child instance modules.
 LogicalResult updateModuleBody(const DomainTable &table, FModuleOp module) {
-  auto result = success();
-  module.getBodyBlock()->walk([&](Operation *op) -> WalkResult {
-    if (failed(updateOp(table, op))) {
-      result = failure();
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
-  return result;
+  auto result = module.getBodyBlock()->walk(
+      [&](Operation *op) -> WalkResult { return updateOp(table, op); });
+  return failure(result.wasInterrupted());
 }
 
 /// Write the domain associations recorded in the domain table back to the IR.
@@ -1352,15 +1341,9 @@ LogicalResult checkOp(Operation *op) {
 
 /// Check that instances under this module have driven domain input ports.
 LogicalResult checkModuleBody(FModuleOp module) {
-  LogicalResult result = success();
-  module.getBody().walk([&](Operation *op) -> WalkResult {
-    if (failed(checkOp(op))) {
-      result = failure();
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
-  return result;
+  auto result = module.getBody().walk(
+      [&](Operation *op) -> WalkResult { return checkOp(op); });
+  return failure(result.wasInterrupted());
 }
 
 /// Check that a module's ports are fully annotated, before performing domain
@@ -1408,9 +1391,7 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
 
 LogicalResult runOnModuleLike(InferDomainsMode mode, const DomainInfo &info,
                               ModuleUpdateTable &updateTable, Operation *op) {
-  
-                                llvm::errs() << *op << "\n";
-                                if (auto module = dyn_cast<FModuleOp>(op)) {
+  if (auto module = dyn_cast<FModuleOp>(op)) {
     if (mode == InferDomainsMode::Check)
       return checkModule(info, module);
 
