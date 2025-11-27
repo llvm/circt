@@ -4,6 +4,7 @@ add_circt_dialect_library(CIRCTCombTransforms
   IntRangeAnnotations.cpp
   BalanceMux.cpp
   AssumeTwoValued.cpp
+  SimplifyTruthTable.cpp
 
   DEPENDS
   CIRCTCombTransformsIncGen
