@@ -830,17 +830,19 @@ OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
 
   // and(x, 01, 10) -> 00 -- annulment.
   for (auto operand : inputs) {
-    if (!operand)
+    auto attr = dyn_cast_or_null<IntegerAttr>(operand);
+    if (!attr)
       continue;
-    value &= cast<IntegerAttr>(operand).getValue();
+    value &= attr.getValue();
     if (value.isZero())
       return getIntAttr(value, getContext());
   }
 
   // and(x, -1) -> x.
-  if (inputs.size() == 2 && inputs[1] &&
-      cast<IntegerAttr>(inputs[1]).getValue().isAllOnes())
-    return getInputs()[0];
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1]))
+      if (intAttr.getValue().isAllOnes())
+        return getInputs()[0];
 
   // and(x, x, x) -> x.  This also handles and(x) -> x.
   if (llvm::all_of(getInputs(),
@@ -1115,17 +1117,19 @@ OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
   auto inputs = adaptor.getInputs();
   // or(x, 10, 01) -> 11
   for (auto operand : inputs) {
-    if (!operand)
+    auto attr = dyn_cast_or_null<IntegerAttr>(operand);
+    if (!attr)
       continue;
-    value |= cast<IntegerAttr>(operand).getValue();
+    value |= attr.getValue();
     if (value.isAllOnes())
       return getIntAttr(value, getContext());
   }
 
   // or(x, 0) -> x
-  if (inputs.size() == 2 && inputs[1] &&
-      cast<IntegerAttr>(inputs[1]).getValue().isZero())
-    return getInputs()[0];
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1]))
+      if (intAttr.getValue().isZero())
+        return getInputs()[0];
 
   // or(x, x, x) -> x.  This also handles or(x) -> x
   if (llvm::all_of(getInputs(),
@@ -1266,9 +1270,10 @@ OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
     return IntegerAttr::get(getType(), 0);
 
   // xor(x, 0) -> x
-  if (inputs.size() == 2 && inputs[1] &&
-      cast<IntegerAttr>(inputs[1]).getValue().isZero())
-    return getInputs()[0];
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1]))
+      if (intAttr.getValue().isZero())
+        return getInputs()[0];
 
   // xor(xor(x,1),1) -> x
   // but not self loop
@@ -1573,9 +1578,10 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 
   // mul(x, 0, 1) -> 0 -- annulment
   for (auto operand : inputs) {
-    if (!operand)
+    auto attr = dyn_cast_or_null<IntegerAttr>(operand);
+    if (!attr)
       continue;
-    value *= cast<IntegerAttr>(operand).getValue();
+    value *= attr.getValue();
     if (value.isZero())
       return getIntAttr(value, getContext());
   }
