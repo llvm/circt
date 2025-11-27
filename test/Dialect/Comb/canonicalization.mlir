@@ -796,6 +796,21 @@ hw.module @fold_mux_tree1r(in %sel: i2, in %a: i8, in %b: i8, in %c: i8, in %d: 
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @parameter
+hw.module @parameter<in: i8> (in %a: i8, out o1: i8) {
+  %param = hw.param.value i8 = #hw.param.decl.ref<"in">
+  // CHECK-NEXT: %[[PARAM:.+]] = hw.param.value i8 = #hw.param.decl.ref<"in">
+  // CHECK-NEXT: comb.and %a, %[[PARAM]]
+  // CHECK-NEXT: comb.or %a, %[[PARAM]]
+  // CHECK-NEXT: comb.xor %a, %[[PARAM]]
+  // CHECK-NEXT: comb.mul %a, %[[PARAM]]
+  %0 = comb.and %a, %param : i8
+  %1 = comb.or %a, %param : i8
+  %2 = comb.xor %a, %param : i8
+  %3 = comb.mul %a, %param : i8
+  %result = comb.add %0, %1, %2, %3 : i8
+  hw.output %result : i8
+}
 
 // CHECK-LABEL: hw.module @fold_mux_tree2
 // This is a sparse tree with 5/8ths load.
