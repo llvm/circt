@@ -165,6 +165,10 @@ class InOut(Type):
     return _FromCirctType(self._type.element_type)
 
   @property
+  def bitwidth(self) -> int | None:
+    return self.element_type.bitwidth
+
+  @property
   def is_hw_type(self) -> bool:
     return True
 
@@ -201,6 +205,10 @@ class TypeAlias(Type):
   @property
   def is_hw_type(self) -> bool:
     return self.inner_type.is_hw_type
+
+  @property
+  def bitwidth(self) -> int | None:
+    return self.element_type.bitwidth
 
   @property
   def fields(self):
@@ -306,6 +314,10 @@ class Array(Type):
     return self._type.size
 
   @property
+  def bitwidth(self) -> int | None:
+    return self.size * self.element_type.bitwidth
+
+  @property
   def select_bits(self) -> int:
     return clog2(self.size)
 
@@ -367,6 +379,13 @@ class StructType(Type):
   def fields(self):
     return [(n, _FromCirctType(t)) for n, t in self._type.get_fields()]
 
+  @property
+  def bitwidth(self) -> int | None:
+    bitwidths = [f[1].bitwidth for f in self.fields]
+    if any(bw is None for bw in bitwidths):
+      return None
+    return sum(bitwidths)
+
   def __getattr__(self, attrname: str):
     for field in self.fields:
       if field[0] == attrname:
@@ -427,6 +446,10 @@ class RegisteredStruct(TypeAlias):
     return self._value_class
 
   @property
+  def bitwidth(self) -> int | None:
+    return self.inner_type.bitwidth
+
+  @property
   def fields(self):
     return self.inner_type.fields
 
@@ -468,6 +491,15 @@ class UnionType(Type):
   @property
   def fields(self):
     return [(n, _FromCirctType(t), o) for n, t, o in self._type.get_fields()]
+
+  @property
+  def bitwidth(self) -> int | None:
+    if len(self.fields) == 0:
+      return 0
+    bitwidths = [f[1].bitwidth for f in self.fields]
+    if any(bw is None for bw in bitwidths):
+      return None
+    return max(bitwidths)
 
   def __getattr__(self, attrname: str):
     for field in self.fields:
@@ -667,6 +699,10 @@ class Any(Type):
   @property
   def is_hw_type(self) -> bool:
     return False
+
+  @property
+  def bitwidth(self) -> None:
+    return None
 
   def _from_obj_or_sig(self,
                        obj,
@@ -1038,6 +1074,10 @@ class List(Type):
   @property
   def is_hw_type(self) -> bool:
     return False
+
+  @property
+  def bitwidth(self) -> None:
+    return None
 
   def _get_value_class(self):
     from .signals import ListSignal

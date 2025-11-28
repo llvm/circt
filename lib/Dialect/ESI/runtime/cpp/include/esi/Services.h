@@ -296,7 +296,8 @@ public:
     virtual std::optional<std::string> toString() const override {
       const esi::Type *argType = getArgType();
       const esi::Type *resultType = getResultType();
-      return "function " + resultType->getID() + "(" + argType->getID() + ")";
+      return "function " + resultType->toString() + "(" + argType->toString() +
+             ")";
     }
 
   private:
@@ -352,7 +353,8 @@ public:
     virtual std::optional<std::string> toString() const override {
       const esi::Type *argType = getArgType();
       const esi::Type *resultType = getResultType();
-      return "callback " + resultType->getID() + "(" + argType->getID() + ")";
+      return "callback " + resultType->toString() + "(" + argType->toString() +
+             ")";
     }
 
   private:
@@ -398,7 +400,7 @@ public:
       const esi::Type *dataType =
           dynamic_cast<const ChannelType *>(type->findChannel("data").first)
               ->getInner();
-      return "telemetry " + dataType->getID();
+      return "telemetry " + dataType->toString();
     }
 
   private:

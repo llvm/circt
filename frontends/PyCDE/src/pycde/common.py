@@ -28,10 +28,6 @@ class ModuleDecl(property):
     self.name = name
     self.type = type
 
-    if not type.has_computable_bitwidth:
-      raise ValueError(
-          f"Cannot create port with non-computable bitwidth type: {type}")
-
 
 class Output(ModuleDecl):
   """Create an RTL-level output port"""

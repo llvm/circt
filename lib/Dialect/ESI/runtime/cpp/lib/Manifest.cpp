@@ -574,6 +574,31 @@ ArrayType *parseArray(const nlohmann::json &typeJson, Context &cache) {
                        parseType(typeJson.at("element"), cache), size);
 }
 
+WindowType *parseWindow(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "window");
+  std::string name = typeJson.at("name");
+  const Type *intoType = parseType(typeJson.at("into"), cache);
+  const Type *loweredType = parseType(typeJson.at("loweredType"), cache);
+
+  // Parse the frames information.
+  std::vector<WindowType::Frame> frames;
+  for (auto &frameJson : typeJson.at("frames")) {
+    WindowType::Frame frame;
+    frame.name = frameJson.at("name");
+    for (auto &fieldName : frameJson.at("fields"))
+      frame.fields.push_back(fieldName.at("name"));
+    frames.push_back(frame);
+  }
+
+  return new WindowType(typeJson.at("id"), name, intoType, loweredType, frames);
+}
+
+ListType *parseList(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "list");
+  return new ListType(typeJson.at("id"),
+                      parseType(typeJson.at("element"), cache));
+}
+
 using TypeParser = std::function<Type *(const nlohmann::json &, Context &)>;
 const std::map<std::string_view, TypeParser> typeParsers = {
     {"bundle", parseBundleType},
@@ -583,6 +608,8 @@ const std::map<std::string_view, TypeParser> typeParsers = {
     {"int", parseInt},
     {"struct", parseStruct},
     {"array", parseArray},
+    {"window", parseWindow},
+    {"list", parseList},
 
 };
 
