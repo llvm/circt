@@ -1,0 +1,65 @@
+// RUN: circt-translate --import-liberty --verify-diagnostics --split-input-file %s
+
+library(test) {
+  cell() { } // expected-error {{cell missing name}}
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin() { } // expected-error {{pin missing name}}
+  }
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { } // expected-error {{pin direction must be specified}}
+  }
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { // expected-error {{pin direction must be input, output, or inout}}
+      direction: invalid;
+    }
+  }
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(Z) { // expected-error {{expected function attribute}}
+      direction: output;
+    }
+  }
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { direction: input; }
+    pin(Z) {
+      direction: output;
+      function: "A * B"; // expected-error {{variable not found}}
+    }
+  }
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { direction: input; }
+    pin(Z) {
+      direction: output;
+      function: "A *"; // expected-error {{expected expression}}
+    }
+  }
+}
