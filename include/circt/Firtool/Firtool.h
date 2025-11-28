@@ -23,6 +23,34 @@
 
 namespace circt {
 namespace firtool {
+
+enum class DomainMode {
+  /// Disable domain checking.
+  Disable,
+  /// Check domains with inference for private modules.
+  Infer,
+  /// Check domains without inference.
+  Check,
+  /// Check domains with inference for both public and private modules.
+  InferAll,
+};
+
+/// Convert the "domain mode" firtool option to a "firrtl::InferDomainsMode",
+/// the configuration for a pass.
+constexpr std::optional<firrtl::InferDomainsMode>
+toInferDomainsPassMode(DomainMode mode) {
+  switch (mode) {
+  case DomainMode::Disable:
+    return std::nullopt;
+  case DomainMode::Infer:
+    return firrtl::InferDomainsMode::Infer;
+  case DomainMode::Check:
+    return firrtl::InferDomainsMode::Check;
+  case DomainMode::InferAll:
+    return firrtl::InferDomainsMode::InferAll;
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // FirtoolOptions
 //===----------------------------------------------------------------------===//
@@ -143,6 +171,8 @@ public:
   bool getLintXmrsInDesign() const { return lintXmrsInDesign; }
 
   bool getEmitAllBindFiles() const { return emitAllBindFiles; }
+
+  DomainMode getDomainMode() const { return domainMode; }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -393,6 +423,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setdomainMode(DomainMode value) {
+    domainMode = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -447,6 +482,7 @@ private:
   bool lintStaticAsserts;
   bool lintXmrsInDesign;
   bool emitAllBindFiles;
+  DomainMode domainMode;
 };
 
 void registerFirtoolCLOptions();
