@@ -70,6 +70,20 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
 
+def ConvertIndexToUInt : Pass<"convert-index-to-uint", "::mlir::ModuleOp"> {
+  let summary = "Rewrite index-based switch comparisons into unsigned integer ops.";
+  let description = [{
+    Replace `arith.cmpi` operations whose operands are `index` values (often
+    produced when lowering `scf.index_switch`) with comparisons over the
+    original integer type so that downstream hardware mapping passes (e.g.
+    `--map-arith-to-comb`) do not encounter unsupported index-typed arithmetic.
+    The pass converts any associated index constants and erases the redundant
+    casts that become dead afterwards.
+  }];
+  let constructor = "circt::createConvertIndexToUIntPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
+}
+
 def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
   let summary = "Insert explicit merge blocks";
   let description = [{

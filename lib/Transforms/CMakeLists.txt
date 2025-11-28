@@ -3,6 +3,7 @@ add_circt_library(CIRCTTransforms
   HierarchicalRunner.cpp
   IndexSwitchToIf.cpp
   InsertMergeBlocks.cpp
+  ConvertIndexToUInt.cpp
   MapArithToComb.cpp
   MaximizeSSA.cpp
   MemoryBanking.cpp
