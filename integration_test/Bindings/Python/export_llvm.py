@@ -19,7 +19,8 @@ with circt.ir.Context() as ctx, circt.ir.Location.unknown():
 
   PassManager.parse("builtin.module(arc-add-taps)").run(m.operation)
   PassManager.parse("builtin.module(arc-lower-state)").run(m.operation)
-  PassManager.parse("builtin.module(arc.model(arc-allocate-state))").run(m.operation)
+  PassManager.parse("builtin.module(arc.model(arc-allocate-state))").run(
+    m.operation)
   PassManager.parse("builtin.module(lower-arc-to-llvm)").run(m.operation)
   PassManager.parse("builtin.module(cse)").run(m.operation)
   PassManager.parse("builtin.module(arc-canonicalizer)").run(m.operation)
@@ -27,5 +28,3 @@ with circt.ir.Context() as ctx, circt.ir.Location.unknown():
   buffer = io.StringIO()
   circt.export_llvm_ir(m, buffer)
   assert len(buffer.getvalue()) > 0
-
-
