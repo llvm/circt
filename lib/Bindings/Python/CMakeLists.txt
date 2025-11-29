@@ -20,6 +20,7 @@ set(PYTHON_BINDINGS_SOURCES
   HWModule.cpp
   MSFTModule.cpp
   OMModule.cpp
+  PipelineModule.cpp
   RTGModule.cpp
   SeqModule.cpp
   SupportModule.cpp
@@ -206,6 +207,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/om.py
   DIALECT_NAME om)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/PipelineOps.td
+  SOURCES
+    dialects/pipeline.py
+  DIALECT_NAME pipeline)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
