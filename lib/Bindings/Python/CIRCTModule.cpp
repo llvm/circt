@@ -205,6 +205,8 @@ NB_MODULE(_circt, m) {
   circt::python::populateDialectSeqSubmodule(seq);
   nb::module_ om = m.def_submodule("_om", "OM API");
   circt::python::populateDialectOMSubmodule(om);
+  nb::module_ pipeline = m.def_submodule("_pipeline", "Pipeline API");
+  circt::python::populateDialectPipelineSubmodule(pipeline);
   nb::module_ rtg = m.def_submodule("_rtg", "RTG API");
   circt::python::populateDialectRTGSubmodule(rtg);
 #ifdef CIRCT_INCLUDE_TESTS
