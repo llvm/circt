@@ -54,7 +54,7 @@ For more information, please see our longer [charter document](docs/Charter.md).
 
 ## Getting Started
 
-To get started hacking on CIRCT quickly, run the following commands:
+To get started hacking on CIRCT quickly, run the following commands. If you want to include `circt-verilog` in the build, add `-DCIRCT_SLANG_FRONTEND_ENABLED=ON` to the cmake call:
 
 ```sh
 # Clone the repository and its submodules
@@ -69,14 +69,24 @@ cmake -G Ninja llvm/llvm -B build \
     -DLLVM_ENABLE_PROJECTS=mlir \
     -DLLVM_EXTERNAL_PROJECTS=circt \
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
+    -DLLVM_ENABLE_LLD=ON
+```
 
-# Run the build
+If you want to build everything about the CIRCT tools and libraries, run below command(also runs all tests):
+```
 ninja -C build check-circt
 ```
 
-The above builds the CIRCT tools and libraries and runs all regression tests.
-If you want to include `circt-verilog` in the build, add `-DCIRCT_SLANG_FRONTEND_ENABLED=ON` to the cmake call.
-You can ask ninja to only build a specific library or tool, such as `ninja -C build circt-opt`.
+If you want to only build a specific part, for example the `circt-opt` tool:
+```sh
+ninja -C build bin/circt-opt
+```
+
+or the `firtool` tool:
+```sh
+ninja -C build bin/firtool
+```
+
 This will only build the necessary parts of LLVM, MLIR, and CIRCT, which can be a lot quicker than building everything.
 
 ### Dependencies
