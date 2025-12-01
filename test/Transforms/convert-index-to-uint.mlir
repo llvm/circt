@@ -1,13 +1,13 @@
-// RUN: circt-opt -split-input-file --switch-to-if --convert-index-to-uint --canonicalize %s | FileCheck %s
+// RUN: circt-opt -split-input-file --convert-index-to-uint %s | FileCheck %s --check-prefixes=SIMPLE,SINGLE,MULTI
 
-// CHECK-LABEL: func.func @simple_cmp
-// CHECK-NOT: arith.index_cast
-// CHECK-NOT: : index
-// CHECK: %[[C2:.*]] = arith.constant 2 : i4
-// CHECK: %[[CMP0:.*]] = arith.cmpi ult, %arg0, %[[C2]] : i4
-// CHECK: %[[CMP1:.*]] = arith.cmpi eq, %arg1, %[[C2]] : i4
-// CHECK: %[[RES:.*]] = arith.andi %[[CMP0]], %[[CMP1]] : i1
-// CHECK: return %[[RES]] : i1
+// SIMPLE-LABEL: func.func @simple_cmp
+// SIMPLE-NOT: arith.index_cast
+// SIMPLE-NOT: : index
+// SIMPLE: %[[C2:.*]] = arith.constant 2 : i4
+// SIMPLE: %[[CMP0:.*]] = arith.cmpi ult, %arg0, %[[C2]] : i4
+// SIMPLE: %[[CMP1:.*]] = arith.cmpi eq, %arg1, %[[C2]] : i4
+// SIMPLE: %[[RES:.*]] = arith.andi %[[CMP0]], %[[CMP1]] : i1
+// SIMPLE: return %[[RES]] : i1
 module {
   func.func @simple_cmp(%arg0: i4, %arg1: i4) -> i1 {
     %a = arith.index_cast %arg0 : i4 to index
@@ -22,60 +22,53 @@ module {
 
 // -----
 
-// CHECK-LABEL: func.func @single_case
-// CHECK-NOT: arith.index_cast
-// CHECK: %[[C5:.*]] = arith.constant 5 : i8
-// CHECK: %[[CMP:.*]] = arith.cmpi eq, %arg0, %[[C5]] : i8
-// CHECK: return %[[CMP]] : i1
+// SINGLE-LABEL: func.func @single_case
+// SINGLE-NOT: arith.index_cast
+// SINGLE: %[[C5:.*]] = arith.constant 5 : i8
+// SINGLE: %[[CMP:.*]] = arith.cmpi eq, %arg0, %[[C5]] : i8
+// SINGLE: return %[[CMP]] : i1
 module {
   func.func @single_case(%cond: i8) -> i1 {
     %switch_val = arith.index_cast %cond : i8 to index
-    %0 = scf.index_switch %switch_val -> i1
-      case 5 {
-        %t = arith.constant true
-        scf.yield %t : i1
-      }
-      default {
-        %f = arith.constant false
-        scf.yield %f : i1
-      }
-    return %0 : i1
+    %c5 = arith.constant 5 : index
+    %cmp = arith.cmpi eq, %switch_val, %c5 : index
+    return %cmp : i1
   }
 }
 
 // -----
 
-// CHECK-LABEL: func.func @multi_case
-// CHECK-NOT: arith.index_cast
-// CHECK-NOT: : index
-// CHECK-DAG: %[[CNEG:.*]] = arith.constant -3 : i3
-// CHECK-DAG: %[[ZERO:.*]] = arith.constant 0 : i3
-// CHECK: %[[MASK:.*]] = arith.trunci %{{.*}} : i16 to i3
-// CHECK: %[[CMP0:.*]] = arith.cmpi eq, %[[MASK]], %[[ZERO]] : i3
-// CHECK: %[[RES:.*]] = scf.if %[[CMP0]] -> (i1) {
-// CHECK: } else {
-// CHECK:   %[[CMP1:.*]] = arith.cmpi eq, %[[MASK]], %[[CNEG]] : i3
-// CHECK:   scf.yield %[[CMP1]] : i1
-// CHECK: }
-// CHECK: return %[[RES]] : i1
+// MULTI-LABEL: func.func @multi_case
+// MULTI-NOT: arith.index_cast
+// MULTI-NOT: : index
+// MULTI-DAG: %[[CNEG:.*]] = arith.constant -3 : i3
+// MULTI-DAG: %[[ZERO:.*]] = arith.constant 0 : i3
+// MULTI-DAG: %[[TRUE:.*]] = arith.constant true
+// MULTI: %[[MASK:.*]] = arith.trunci %{{.*}} : i16 to i3
+// MULTI: %[[CMP0:.*]] = arith.cmpi eq, %[[MASK]], %[[ZERO]] : i3
+// MULTI: %[[RES:.*]] = scf.if %[[CMP0]] -> (i1) {
+// MULTI:   scf.yield %[[TRUE]] : i1
+// MULTI: } else {
+// MULTI:   %[[CMP1:.*]] = arith.cmpi eq, %[[MASK]], %[[CNEG]] : i3
+// MULTI:   scf.yield %[[CMP1]] : i1
+// MULTI: }
+// MULTI: return %[[RES]] : i1
 module {
   func.func @multi_case(%arg0: i16) -> i1 {
     %c5_i16 = arith.constant 5 : i16
     %cst_true = arith.constant true
-    %cst_false = arith.constant false
     %shr = arith.shrui %arg0, %c5_i16 : i16
     %mask = arith.trunci %shr : i16 to i3
     %switch_val = arith.index_cast %mask : i3 to index
-    %0 = scf.index_switch %switch_val -> i1
-      case 0 {
-        scf.yield %cst_true : i1
-      }
-      case 5 {
-        scf.yield %cst_true : i1
-      }
-      default {
-        scf.yield %cst_false : i1
-      }
+    %c0 = arith.constant 0 : index
+    %cmp0 = arith.cmpi eq, %switch_val, %c0 : index
+    %0 = scf.if %cmp0 -> (i1) {
+      scf.yield %cst_true : i1
+    } else {
+      %c5 = arith.constant 5 : index
+      %cmp1 = arith.cmpi eq, %switch_val, %c5 : index
+      scf.yield %cmp1 : i1
+    }
     return %0 : i1
   }
 }

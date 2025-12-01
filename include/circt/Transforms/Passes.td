@@ -78,7 +78,14 @@ def ConvertIndexToUInt : Pass<"convert-index-to-uint", "::mlir::ModuleOp"> {
     original integer type so that downstream hardware mapping passes (e.g.
     `--map-arith-to-comb`) do not encounter unsupported index-typed arithmetic.
     The pass converts any associated index constants and erases the redundant
-    casts that become dead afterwards.
+    casts that become dead afterwards. For example, it rewrites:
+
+      `arith.cmpi eq, (arith.index_cast %v : i4 to index),
+                      (arith.constant 5 : index)`
+
+    into:
+
+      `arith.cmpi eq, %v, (arith.constant 5 : i4)`
   }];
   let constructor = "circt::createConvertIndexToUIntPass()";
   let dependentDialects = ["mlir::arith::ArithDialect"];

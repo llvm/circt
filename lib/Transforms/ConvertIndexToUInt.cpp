@@ -1,12 +1,8 @@
-//===- ConvertIndexToUInt.cpp - Rewrite index compares to integers --------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// Contains the definitions of the ConvertIndexToUInt pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -39,13 +35,17 @@ public:
 
   LogicalResult matchAndRewrite(arith::CmpIOp op,
                                 PatternRewriter &rewriter) const override {
-    if (!op.getLhs().getType().isIndex())
+    if (!op.getLhs().getType().isIndex() || !op.getRhs().getType().isIndex())
       return failure();
 
     FailureOr<IntegerType> targetType = getTargetIntegerType(op);
     if (failed(targetType))
       return failure();
 
+    // Peel index operands back to the original integer type: either drop an
+    // index_cast (only if it came from the exact target integer type) or
+    // rebuild an index constant as an integer constant. Anything else keeps
+    // the pattern from firing so we never rewrite mixed or ambiguous operands.
     auto convertOperand = [&](Value operand) -> FailureOr<Value> {
       if (auto castOp = operand.getDefiningOp<arith::IndexCastOp>()) {
         Value source = castOp.getIn();
