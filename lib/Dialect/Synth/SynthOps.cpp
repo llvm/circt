@@ -199,11 +199,9 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
       // If we have two identical operands, we can fold.
       if (op.getOperand(i) == op.getOperand(j)) {
         // If they are inverted differently, we can fold to the third.
-        if (op.isInverted(i) != op.isInverted(j)) {
+        if (op.isInverted(i) != op.isInverted(j))
           return replaceWithIndex(k);
-        }
-        rewriter.replaceOp(op, op.getOperand(i));
-        return success();
+        return replaceWithIndex(i);
       }
 
       // If i and j are constant.
