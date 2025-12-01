@@ -537,8 +537,10 @@ void ConcatOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getOperands());
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : ";
-  llvm::interleaveComma(getOperandTypes(), p);
+  if (!getOperands().empty()) {
+    p << " : ";
+    llvm::interleaveComma(getOperandTypes(), p);
+  }
 }
 
 //===----------------------------------------------------------------------===//
