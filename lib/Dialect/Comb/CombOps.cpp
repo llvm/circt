@@ -503,6 +503,9 @@ LogicalResult ConcatOp::inferReturnTypes(
   return success();
 }
 
+/// Parse a ConcatOp that can either follow the format:
+/// $inputs attr-dict `:` qualified(type($inputs))
+/// or have no operands, colon and typelist.
 ParseResult ConcatOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   SmallVector<Type, 4> types;
