@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
+#include "circt/Dialect/RTG/IR/RTGOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Path.h"
@@ -63,6 +64,11 @@ public:
         }
 
         continue;
+      }
+      
+      if (auto implicitConstrOp = dyn_cast<ImplicitConstraintOpInterface>(&op)) {
+        if (!implicitConstrOp.isConstraintMaterialized())
+          return op.emitError("implicit constraint not materialized");
       }
 
       auto res =

@@ -21,6 +21,7 @@ using namespace mlir;
 
 void circt::rtg::buildRandomizationPipeline(
     OpPassManager &pm, const RandomizationPipelineOptions &options) {
+  pm.nestAny().addPass(rtg::createMaterializeConstraintsPass());
   {
     ElaborationPassOptions passOptions;
     passOptions.seed = options.seed;

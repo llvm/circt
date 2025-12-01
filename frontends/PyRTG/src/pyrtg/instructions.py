@@ -27,12 +27,15 @@ class Instruction(SequenceDeclaration):
     super().__init__(sequence_func, [t for t, _ in arg_types_and_side_effects])
     self.side_effects = [se for _, se in arg_types_and_side_effects]
 
-  def get_side_effects(self, operand_index: int) -> SideEffects:
+  def num_read_effects(self) -> int:
     """
-    Returns the side effects of this instruction on the given operand.
+    Returns the number of operands of this instruction.
     """
 
-    return self.side_effects[operand_index]
+    return self.side_effects.count(SideEffects.READ)
+
+  def __repr__(self):
+    return f"Instruction<{self.name}, {self.arg_types}, {self.side_effects}>"
 
 
 def instruction(args: List[Tuple[Type, SideEffects]], **kwargs):

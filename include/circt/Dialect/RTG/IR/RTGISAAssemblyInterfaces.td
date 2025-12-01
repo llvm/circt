@@ -58,8 +58,8 @@ def RegisterAllocationOpInterface : OpInterface<"RegisterAllocationOpInterface">
         registers may depend on them.
       }],
       "void", "getReadRegisters",
-      (ins "llvm::ArrayRef<RegisterAttrInterface>":$operands,
-           "llvm::SmallVectorImpl<RegisterAttrInterface> &":$readRegisters),
+      (ins "llvm::ArrayRef<rtg::RegisterAttrInterface>":$operands,
+           "llvm::SmallVectorImpl<rtg::RegisterAttrInterface> &":$readRegisters),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
         // Usually operands contain read and written registers, i.e., this is
@@ -77,8 +77,8 @@ def RegisterAllocationOpInterface : OpInterface<"RegisterAllocationOpInterface">
         of implicit registers may depend on them.
       }],
       "void", "getWrittenRegisters",
-      (ins "llvm::ArrayRef<RegisterAttrInterface>":$operands,
-           "llvm::SmallVectorImpl<RegisterAttrInterface> &":$writtenRegisters),
+      (ins "llvm::ArrayRef<rtg::RegisterAttrInterface>":$operands,
+           "llvm::SmallVectorImpl<rtg::RegisterAttrInterface> &":$writtenRegisters),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
         // Usually operands contain read and written registers, i.e., this is

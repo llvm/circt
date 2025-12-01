@@ -58,6 +58,9 @@ static uint32_t computeMask(size_t w) {
 
 /// Get a number uniformly at random in the in specified range.
 static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
+  // This can be ~100x faster than doing all of the below.
+  // return (rng() % (b - a + 1)) + a;
+
   const uint32_t diff = b - a + 1;
   if (diff == 1)
     return a;
@@ -817,7 +820,15 @@ public:
 
   ArrayRef<Type> getBlockArgTypes() const { return blockArgTypes; }
 
-  void map(ElaboratorValue eval, Value val) { materializedValues[eval] = val; }
+  void map(ElaboratorValue eval, Value val) {
+    // NOTE: this leads to problems with, e.g., scf.for loops as operations
+    // perform a mapping but then the cloned body still used the old mappings.
+    // Maybe there is a way to clear mappings when a region cloning is
+    // happening, but maybe just never mapping isn't too big of a performance
+    // hit.
+
+    // materializedValues[eval] = val;
+  }
 
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
@@ -949,6 +960,8 @@ private:
     // We need to get back the sequence to reference, and the list of elaborated
     // values to pass as arguments.
     SmallVector<ElaboratorValue> elabArgs;
+    // NOTE: we wouldn't need to elaborate the sequence if it doesn't contain
+    // randomness to be elaborated.
     SequenceOp seqOp = elaborateSequence(val, elabArgs);
     if (!seqOp)
       return {};
@@ -1689,6 +1702,9 @@ public:
     if (!isa<IndexType>(op.getType()))
       return op->emitError("only index operands supported");
 
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
     state[op.getResult()] = lhs + rhs;
@@ -1698,6 +1714,9 @@ public:
   FailureOr<DeletionKind> visitOp(arith::AndIOp op) {
     if (!op.getType().isSignlessInteger(1))
       return op->emitError("only 'i1' operands supported");
+
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
 
     bool lhs = get<bool>(op.getLhs());
     bool rhs = get<bool>(op.getRhs());
@@ -1709,6 +1728,9 @@ public:
     if (!op.getType().isSignlessInteger(1))
       return op->emitError("only 'i1' operands supported");
 
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+
     bool lhs = get<bool>(op.getLhs());
     bool rhs = get<bool>(op.getRhs());
     state[op.getResult()] = lhs != rhs;
@@ -1719,6 +1741,9 @@ public:
     if (!op.getType().isSignlessInteger(1))
       return op->emitError("only 'i1' operands supported");
 
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+
     bool lhs = get<bool>(op.getLhs());
     bool rhs = get<bool>(op.getRhs());
     state[op.getResult()] = lhs || rhs;
@@ -1726,6 +1751,9 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(arith::SelectOp op) {
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+
     bool cond = get<bool>(op.getCondition());
     auto trueVal = state[op.getTrueValue()];
     auto falseVal = state[op.getFalseValue()];
@@ -1734,13 +1762,29 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(index::AddOp op) {
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+    
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
     state[op.getResult()] = lhs + rhs;
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(index::AndOp op) {
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+    
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs & rhs;
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(index::CmpOp op) {
+    if (mustHandleSymbolically(op))
+      return visitOpGeneric(op);
+    
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
     bool result;
@@ -1874,7 +1918,7 @@ public:
             arith::AddIOp, arith::XOrIOp, arith::AndIOp, arith::OrIOp,
             arith::SelectOp,
             // Index ops
-            index::AddOp, index::CmpOp,
+            index::AddOp, index::AndOp, index::CmpOp,
             // SCF ops
             scf::IfOp, scf::ForOp, scf::YieldOp>(
             [&](auto op) { return visitOp(op); })

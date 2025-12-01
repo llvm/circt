@@ -28,21 +28,22 @@ def enable_handler(handler: Handler) -> None:
       "illegal_instruction_handler")
   test_lbl = Label.declare_unique("test")
 
-  # Handler setup
-  curr_mtvec = rv32i.csrr_r(CSR.mtvec())
-  handler_addr = rv32i.la_r(illegal_instruction_handler_lbl)
-  rv32i.csrw(CSR.mtvec(), handler_addr)
-  test_addr = rv32i.la_r(test_lbl)
-  rv32i.jalr(IntegerRegister.zero(), test_addr, Immediate(12, 0))
+  # # Handler setup
+  # curr_mtvec = rv32i.csrr_r(CSR.mtvec())
+  # handler_addr = rv32i.la_r(illegal_instruction_handler_lbl)
+  # rv32i.csrw(CSR.mtvec(), handler_addr)
+  # test_addr = rv32i.la_r(test_lbl)
+  # rv32i.jalr(IntegerRegister.zero(), test_addr, Immediate(12, 0))
 
-  # Handler
-  illegal_instruction_handler_lbl.place()
-  handler.func()
-  rv32i.mret()
+  # # Handler
+  # illegal_instruction_handler_lbl.place()
+  # handler.func()
+  # rv32i.mret()
 
   # Test
   test_lbl.place()
 
 
 def disable_handler(handler: Handler) -> None:
-  rv32i.csrw(CSR.mtvec(), reg)
+  # rv32i.csrw(CSR.mtvec(), reg)
+  pass
