@@ -511,11 +511,12 @@ ParseResult ConcatOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the operand list, attributes and colon
   if (parser.parseOperandList(operands) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+      parser.parseOptionalAttrDict(result.attributes))
     return failure();
 
   // If we have operands, we need to parse the types too
-  if (!operands.empty() && parser.parseTypeList(types))
+
+  if (parser.parseOptionalColonTypeList(types))
     return failure();
 
   if (parser.resolveOperands(operands, types, allOperandLoc, result.operands))
