@@ -194,7 +194,6 @@ NB_MODULE(_circt, m) {
 
   m.def("export_llvm_ir", [](MlirModule mod, nb::object fileObject) {
     circt::python::PyFileAccumulator accum(fileObject, false);
-    nb::gil_scoped_release();
     mlirExportLLVMIR(mod, accum.getCallback(), accum.getUserData());
   });
 
