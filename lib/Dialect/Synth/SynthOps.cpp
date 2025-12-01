@@ -141,16 +141,16 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         value = ~value;
         return IntegerAttr::get(
             IntegerType::get(getContext(), value.getBitWidth()), value);
-      } else {
-        // ~x ~x
-        if (isInverted(i)) {
-          (*this)->setOperands({getOperand(i)});
-          (*this).setInverted({true});
-          return getResult();
-        } else {
-          // x x
+      } else if (isInverted(i) == isInverted(j)) {
+        // x x const
+        if (!isInverted(i))
           return getOperand(i);
-        }
+        // ~x ~x
+        // if (isInverted(i)) {
+        //  (*this)->setOperands({getOperand(i)});
+        //  (*this).setInverted({true});
+        //  return getResult();
+        //}
       }
     }
   }
