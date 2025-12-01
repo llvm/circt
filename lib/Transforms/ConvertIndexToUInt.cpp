@@ -105,8 +105,7 @@ private:
 };
 
 /// Drop `arith.index_cast` that became unused once comparisons were rewritten.
-class DropUnusedIndexCastPattern
-    : public OpRewritePattern<arith::IndexCastOp> {
+class DropUnusedIndexCastPattern : public OpRewritePattern<arith::IndexCastOp> {
 public:
   using OpRewritePattern::OpRewritePattern;
 
