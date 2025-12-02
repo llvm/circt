@@ -493,11 +493,11 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
     if (hw::type_isa<seq::ClockType>(ty)) {
       width = 1;
     } else {
-      int64_t maybeWidth = hw::getBitWidth(ty);
-      if (maybeWidth < 0)
+      auto maybeWidth = hw::getBitWidth(ty);
+      if (!maybeWidth)
         return parser.emitError(presetValueLoc,
                                 "cannot preset register of unknown width");
-      width = maybeWidth;
+      width = *maybeWidth;
     }
 
     APInt presetResult = presetValue->sextOrTrunc(width);
@@ -566,9 +566,9 @@ LogicalResult FirRegOp::verify() {
       return emitOpError("register with no reset cannot be async");
   }
   if (auto preset = getPresetAttr()) {
-    int64_t presetWidth = hw::getBitWidth(preset.getType());
-    int64_t width = hw::getBitWidth(getType());
-    if (preset.getType() != getType() && presetWidth != width)
+    auto presetWidth = hw::getBitWidth(preset.getType());
+    auto width = hw::getBitWidth(getType());
+    if (preset.getType() != getType() && (!presetWidth || !width || *presetWidth != *width))
       return emitOpError("preset type width must match register type");
   }
   return success();
@@ -626,8 +626,10 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
           op, seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
     } else {
+      auto width = hw::getBitWidth(op.getType());
+      assert(width && "register type must have known bitwidth");
       auto constant = hw::ConstantOp::create(
-          rewriter, op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+          rewriter, op.getLoc(), APInt::getZero(*width));
       rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
     }
     return success();
@@ -704,9 +706,11 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
                 matchPattern(arrayGet.getIndex(),
                              m_ConstantInt(&elementIndex)) &&
                 elementIndex == index) {
+              auto width = hw::getBitWidth(arrayGet.getType());
+              assert(width && "array element type must have known bitwidth");
               nextOperands.push_back(hw::ConstantOp::create(
                   rewriter, op.getLoc(),
-                  APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
+                  APInt::getZero(*width)));
               changed = true;
               continue;
             }
@@ -889,9 +893,11 @@ LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
     // Replace all read ports with a constant 0.
     for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
       auto readOp = cast<FirMemReadOp>(user);
+      auto width = hw::getBitWidth(readOp.getType());
+      assert(width && "read type must have known bitwidth");
       Value zero = hw::ConstantOp::create(
           rewriter, readOp.getLoc(),
-          APInt::getZero(hw::getBitWidth(readOp.getType())));
+          APInt::getZero(*width));
       if (readOp.getType() != zero.getType())
         zero = hw::BitcastOp::create(rewriter, readOp.getLoc(),
                                      readOp.getType(), zero);

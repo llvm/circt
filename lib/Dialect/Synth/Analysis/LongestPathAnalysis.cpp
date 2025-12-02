@@ -82,7 +82,9 @@ static size_t getBitWidth(Value value) {
     return 1;
   if (auto memory = dyn_cast<seq::FirMemType>(value.getType()))
     return memory.getWidth();
-  return hw::getBitWidth(value.getType());
+  auto width = hw::getBitWidth(value.getType());
+  assert(width && "value must have known bitwidth");
+  return *width;
 }
 
 template <typename T, typename Key>
@@ -1368,9 +1370,9 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
     if (type.isInteger())
       return type;
     auto bitWidth = hw::getBitWidth(type);
-    if (bitWidth < 0)
+    if (!bitWidth)
       return Type(); // Unsupported type
-    return IntegerType::get(op->getContext(), bitWidth);
+    return IntegerType::get(op->getContext(), *bitWidth);
   };
 
   // Helper to add a port to the module definition
