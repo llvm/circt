@@ -188,8 +188,9 @@ hw.module private @ModuleWithMultipleSyms(in %a: i4, out b: i4) {
 hw.module @InlineWithInnerRef(in %x: i4, out y: i4) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: %[[V0:.+]] = comb.add %x, %x
-  // CHECK-NEXT: %[[W0:.+]] = hw.wire %[[V0]] sym @[[SYM:wire_op]]
-  // CHECK-NEXT: sv.verbatim "ref to {{[{][{]}}0{{[}][}]}}" {symbols = [#hw.innerNameRef<@InlineWithInnerRef::@[[SYM]]>]}
+  // CHECK-NEXT: %[[W0:.+]] = hw.wire %[[V0]] sym @wire_op
+  // CHECK-NEXT: sv.verbatim 
+  // CHECK-SAME: {symbols = [#hw.innerNameRef<@InlineWithInnerRef::@wire_op>]}
   // CHECK-NEXT: hw.output %[[W0]]
   %0 = hw.instance "myinst" @ChildWithRef(a: %x: i4) -> (b: i4)
   hw.output %0 : i4
@@ -207,9 +208,11 @@ hw.module private @ChildWithRef(in %a: i4, out b: i4) {
 hw.module @InlineMultiInstanceInnerRef(in %x: i4, in %y: i4, out a: i4, out b: i4) {
   // CHECK-NOT: hw.instance
   // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @[[SYM1:wire_op(_[0-9]+)?]]
-  // CHECK-DAG: sv.verbatim "ref to {{[{][{]}}0{{[}][}]}}" {symbols = [#hw.innerNameRef<@InlineMultiInstanceInnerRef::@[[SYM1]]>]}
+  // CHECK-DAG: sv.verbatim 
+  // CHECK-SAME: {symbols = [#hw.innerNameRef<@InlineMultiInstanceInnerRef::@[[SYM1]]>]}
   // CHECK-DAG: %{{.+}} = hw.wire %{{.+}} sym @[[SYM2:wire_op(_[0-9]+)?]]
-  // CHECK-DAG: sv.verbatim "ref to {{[{][{]}}0{{[}][}]}}" {symbols = [#hw.innerNameRef<@InlineMultiInstanceInnerRef::@[[SYM2]]>]}
+  // CHECK-DAG: sv.verbatim
+  // CHECK-SAME: {symbols = [#hw.innerNameRef<@InlineMultiInstanceInnerRef::@[[SYM2]]>]}
   // CHECK: hw.output
   %0 = hw.instance "inst1" @ChildWithRefMulti(a: %x: i4) -> (b: i4)
   %1 = hw.instance "inst2" @ChildWithRefMulti(a: %y: i4) -> (b: i4)
