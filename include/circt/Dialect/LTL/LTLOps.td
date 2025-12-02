@@ -253,7 +253,7 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
 // Properties
 //===----------------------------------------------------------------------===//
 
-def BooleanConstantOp : LTLOp<"boolean_constant", [Pure]> {
+def BooleanConstantOp : LTLOp<"boolean_constant", [Pure, ConstantLike]> {
   let summary = "A constant boolean property value.";
   let description = [{
     Represents a constant boolean value as an LTL property. This operation
@@ -271,6 +271,8 @@ def BooleanConstantOp : LTLOp<"boolean_constant", [Pure]> {
   let assemblyFormat = [{
     $value attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def NotOp : LTLOp<"not", [Pure]> {
@@ -295,6 +297,8 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
+
+  let hasFolder = 1;
 
   let summary = "Only check a property after a sequence matched.";
   let description = [{
