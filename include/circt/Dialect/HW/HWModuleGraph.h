@@ -183,8 +183,8 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
          << ")\"";
     }
 
-    int64_t width = circt::hw::getBitWidth(v.getType());
-    if (width > 1)
+    auto width = circt::hw::getBitWidth(v.getType());
+    if (width && *width > 1)
       os << " style=bold";
 
     return os.str();
