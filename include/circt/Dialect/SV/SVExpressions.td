@@ -162,7 +162,9 @@ def ConstantXOp : SVOp<"constantX", [Pure, HasCustomSSAName]> {
   let hasVerifier = 1;
   let extraClassDeclaration = [{
     int64_t getWidth() {
-      return hw::getBitWidth(getType());
+      auto width = hw::getBitWidth(getType());
+      assert(width && "ConstantX must have a known bitwidth");
+      return static_cast<int64_t>(*width);
     }
   }];
 }
@@ -180,7 +182,9 @@ def ConstantZOp : SVOp<"constantZ", [Pure, HasCustomSSAName]> {
   let hasVerifier = 1;
   let extraClassDeclaration = [{
     int64_t getWidth() {
-      return hw::getBitWidth(getType());
+      auto width = hw::getBitWidth(getType());
+      assert(width && "ConstantZ must have a known bitwidth");
+      return static_cast<int64_t>(*width);
     }
   }];
 }

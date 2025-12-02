@@ -81,7 +81,7 @@ def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/HW type"> {
   let predicate = And<[
       CPred<"llvm::isa<::mlir::TypeAttr>($_self)">,
       CPred<"::circt::hw::getBitWidth(" #
-              "llvm::cast<::mlir::TypeAttr>($_self).getValue()) != -1">
+              "llvm::cast<::mlir::TypeAttr>($_self).getValue()).has_value()">
   ]>;
 }
 

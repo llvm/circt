@@ -118,7 +118,7 @@ def WireOp : HWOp<"wire", [
   }];
 }
 
-def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+def KnownBitWidthType : Type<CPred<[{getBitWidth($_self).has_value()}]>,
   "Type wherein the bitwidth in hardware is known">;
 
 def BitcastOp: HWOp<"bitcast", [Pure]> {

@@ -129,9 +129,9 @@ bool isHWValueType(mlir::Type type);
 /// Return the hardware bit width of a type. Does not reflect any encoding,
 /// padding, or storage scheme, just the bit (and wire width) of a
 /// statically-size type. Reflects the number of wires needed to transmit a
-/// value of this type. Returns -1 if the type is not known or cannot be
-/// statically computed.
-int64_t getBitWidth(mlir::Type type);
+/// value of this type. Returns std::nullopt if the type is not known or cannot
+/// be statically computed.
+std::optional<uint64_t> getBitWidth(mlir::Type type);
 
 /// Return true if the specified type contains known marker types like
 /// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
