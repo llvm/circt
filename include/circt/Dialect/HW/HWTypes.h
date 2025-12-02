@@ -21,6 +21,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
+#include <optional>
 
 namespace circt {
 namespace hw {
