@@ -123,3 +123,25 @@ hw.module @UseWithInnerSym(in %data: i16, out out: i16) {
 
   hw.output %inst.out : i16
 }
+
+// Test that ports with mixed constant and variable instances
+// CHECK-LABEL: hw.module private @MixedConstantVariable<id: i8>(in %mode : i4, out out : i8)
+hw.module private @MixedConstantVariable(in %id: i8, in %mode: i4, out out: i8) {
+  hw.output %id : i8
+}
+
+// CHECK-LABEL: hw.module @UseMixedConstantVariable
+hw.module @UseMixedConstantVariable(in %var_mode: i4, out out0: i8, out out1: i8) {
+  %c5_i8 = hw.constant 5 : i8
+  %c0_i4 = hw.constant 0 : i4
+
+  // First instance: both ports are constant
+  // CHECK: %inst0.out = hw.instance "inst0" @MixedConstantVariable<id: i8 = 5>(mode: %c0_i4: i4) -> (out: i8)
+  %inst0.out = hw.instance "inst0" @MixedConstantVariable(id: %c5_i8: i8, mode: %c0_i4: i4) -> (out: i8)
+
+  // Second instance: id is constant but mode is variable
+  // CHECK: %inst1.out = hw.instance "inst1" @MixedConstantVariable<id: i8 = 5>(mode: %var_mode: i4) -> (out: i8)
+  %inst1.out = hw.instance "inst1" @MixedConstantVariable(id: %c5_i8: i8, mode: %var_mode: i4) -> (out: i8)
+
+  hw.output %inst0.out, %inst1.out : i8, i8
+}

@@ -105,7 +105,6 @@ def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
     timing information and better optimization of each instance independently,
     since the constant values are immediately visible at the module interface.
   }];
-  let dependentDialects = ["comb::CombDialect"];
 }
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD
