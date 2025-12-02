@@ -14,16 +14,11 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Conversion/VerifToSV.h"
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/OM/OMDialect.h"
-#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/InitAllDialects.h"
 #include "circt/Support/JSON.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Passes.h"
@@ -227,7 +222,7 @@ LogicalResult RunnerSuite::resolve() {
 
 namespace {
 /// The various kinds of test that can be executed.
-enum class TestKind { Formal };
+enum class TestKind { Formal, Simulation };
 
 /// A single discovered test.
 class Test {
@@ -266,6 +261,7 @@ public:
   TestSuite(MLIRContext *context, bool listIgnored)
       : context(context), listIgnored(listIgnored) {}
   LogicalResult discoverInModule(ModuleOp module);
+  LogicalResult discoverTest(Test &&test, Operation *op);
 };
 } // namespace
 
@@ -274,6 +270,8 @@ static StringRef toString(TestKind kind) {
   switch (kind) {
   case TestKind::Formal:
     return "formal";
+  case TestKind::Simulation:
+    return "simulation";
   }
   return "unknown";
 }
@@ -305,36 +303,49 @@ collectRunnerFilters(DictionaryAttr attrs, StringRef attrName,
 
 /// Discover all tests in an MLIR module.
 LogicalResult TestSuite::discoverInModule(ModuleOp module) {
-  auto result = module.walk([&](verif::FormalOp op) {
-    Test test;
-    test.name = op.getSymNameAttr();
-    test.kind = TestKind::Formal;
-    test.loc = op.getLoc();
-    test.attrs = op.getParametersAttr();
-
-    // Handle the `ignore` attribute.
-    if (auto attr = test.attrs.get("ignore")) {
-      auto boolAttr = dyn_cast<BoolAttr>(attr);
-      if (!boolAttr) {
-        op.emitError() << "`ignore` attribute of test " << test.name
-                       << " must be a boolean";
+  auto result = module.walk([&](Operation *op) {
+    if (auto testOp = dyn_cast<verif::FormalOp>(op)) {
+      Test test;
+      test.kind = TestKind::Formal;
+      test.name = testOp.getSymNameAttr();
+      test.attrs = testOp.getParametersAttr();
+      if (failed(discoverTest(std::move(test), op)))
         return WalkResult::interrupt();
-      }
-      test.ignore = boolAttr.getValue();
+    } else if (auto testOp = dyn_cast<verif::SimulationOp>(op)) {
+      Test test;
+      test.kind = TestKind::Simulation;
+      test.name = testOp.getSymNameAttr();
+      test.attrs = testOp.getParametersAttr();
+      if (failed(discoverTest(std::move(test), op)))
+        return WalkResult::interrupt();
     }
-
-    // Handle the `require_runners` and `exclude_runners` attributes.
-    if (failed(collectRunnerFilters(test.attrs, "require_runners",
-                                    test.requiredRunners, test.loc,
-                                    test.name)) ||
-        failed(collectRunnerFilters(test.attrs, "exclude_runners",
-                                    test.excludedRunners, test.loc, test.name)))
-      return WalkResult::interrupt();
-
-    tests.push_back(std::move(test));
     return WalkResult::advance();
   });
   return failure(result.wasInterrupted());
+}
+
+/// Discover a single test in an MLIR module.
+LogicalResult TestSuite::discoverTest(Test &&test, Operation *op) {
+  test.loc = op->getLoc();
+
+  // Handle the `ignore` attribute.
+  if (auto attr = test.attrs.get("ignore")) {
+    auto boolAttr = dyn_cast<BoolAttr>(attr);
+    if (!boolAttr)
+      return op->emitError() << "`ignore` attribute of test " << test.name
+                             << " must be a boolean";
+    test.ignore = boolAttr.getValue();
+  }
+
+  // Handle the `require_runners` and `exclude_runners` attributes.
+  if (failed(collectRunnerFilters(test.attrs, "require_runners",
+                                  test.requiredRunners, test.loc, test.name)) ||
+      failed(collectRunnerFilters(test.attrs, "exclude_runners",
+                                  test.excludedRunners, test.loc, test.name)))
+    return failure();
+
+  tests.push_back(std::move(test));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -700,18 +711,12 @@ int main(int argc, char **argv) {
 
   // Register the dialects.
   DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect>();
-  registry.insert<circt::hw::HWDialect>();
-  registry.insert<circt::om::OMDialect>();
-  registry.insert<circt::seq::SeqDialect>();
-  registry.insert<circt::sim::SimDialect>();
-  registry.insert<circt::sv::SVDialect>();
-  registry.insert<circt::verif::VerifDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithDialect>();
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
+  circt::registerAllDialects(registry);
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.
