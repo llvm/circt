@@ -18,6 +18,7 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 
@@ -42,7 +43,9 @@ def ChannelSignaling : I32EnumAttr<
   let cppNamespace = "::circt::esi";
 }
 
-def ChannelTypeImpl : ESI_Type<"Channel"> {
+def ChannelTypeImpl : ESI_Type<"Channel", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An ESI-compatible channel port";
   let description = [{
     An ESI port kind which models a latency-insensitive, unidirectional,
@@ -307,7 +310,9 @@ def ChannelDirection : I32EnumAttr<"ChannelDirection",
 }
 
 
-def ChannelBundleType : ESI_Type<"ChannelBundle"> {
+def ChannelBundleType : ESI_Type<"ChannelBundle", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "a bundle of channels";
 
   let description = [{
@@ -397,7 +402,9 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
 // Data windows
 //===----------------------------------------------------------------------===//
 
-def ESIWindowType : ESI_Type<"Window"> {
+def ESIWindowType : ESI_Type<"Window", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "a data window";
   let description = [{
     A 'data window' allows designers to break up large messages into multiple

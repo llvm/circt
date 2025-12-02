@@ -426,6 +426,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
+// CHECK-NEXT:        "hwBitwidth": 36,
 // CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
@@ -450,6 +451,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
+// CHECK-NEXT:        "hwBitwidth": 10,
 // CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
@@ -474,6 +476,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
+// CHECK-NEXT:        "hwBitwidth": 10,
 // CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
@@ -498,6 +501,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "dialect": "esi",
+// CHECK-NEXT:        "hwBitwidth": 2,
 // CHECK-NEXT:        "id": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      },
