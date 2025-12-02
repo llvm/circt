@@ -300,10 +300,6 @@ public:
     return loweredType->getBitWidth();
   }
 
-  // Windows are opaque types from a serialization perspective; they are
-  // typically handled specially at the service level.
-  void ensureValid(const std::any &obj) const override;
-
 private:
   std::string name;
   const Type *intoType;
@@ -321,10 +317,6 @@ public:
   const Type *getElementType() const { return elementType; }
 
   std::ptrdiff_t getBitWidth() const override { return -1; }
-
-  // Lists are opaque types from a serialization perspective; they are
-  // typically handled specially at higher levels.
-  void ensureValid(const std::any &obj) const override;
 
 private:
   const Type *elementType;

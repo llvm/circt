@@ -20,6 +20,7 @@
 # Test cosim without DMA.
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester -v cosim env callback -i 5 | FileCheck %s
+# RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
@@ -41,6 +42,14 @@ from pycde.module import Metadata
 from pycde.types import Bits, Channel, ChannelSignaling, UInt
 
 # CHECK: [CONNECT] connecting to backend
+
+# STREAMING_ADD: Streaming add test results:
+# STREAMING_ADD:   input[0]=222709 + 5 = 222714 (expected 222714)
+# STREAMING_ADD:   input[1]=894611 + 5 = 894616 (expected 894616)
+# STREAMING_ADD:   input[2]=772894 + 5 = 772899 (expected 772899)
+# STREAMING_ADD:   input[3]=429150 + 5 = 429155 (expected 429155)
+# STREAMING_ADD:   input[4]=629806 + 5 = 629811 (expected 629811)
+# STREAMING_ADD: Streaming add test passed
 
 # TELEMETRY: ********************************
 # TELEMETRY: * Telemetry

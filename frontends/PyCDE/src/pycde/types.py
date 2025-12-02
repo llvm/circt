@@ -165,10 +165,6 @@ class InOut(Type):
     return _FromCirctType(self._type.element_type)
 
   @property
-  def bitwidth(self) -> int | None:
-    return self.element_type.bitwidth
-
-  @property
   def is_hw_type(self) -> bool:
     return True
 
@@ -205,10 +201,6 @@ class TypeAlias(Type):
   @property
   def is_hw_type(self) -> bool:
     return self.inner_type.is_hw_type
-
-  @property
-  def bitwidth(self) -> int | None:
-    return self.element_type.bitwidth
 
   @property
   def fields(self):
@@ -314,10 +306,6 @@ class Array(Type):
     return self._type.size
 
   @property
-  def bitwidth(self) -> int | None:
-    return self.size * self.element_type.bitwidth
-
-  @property
   def select_bits(self) -> int:
     return clog2(self.size)
 
@@ -379,13 +367,6 @@ class StructType(Type):
   def fields(self):
     return [(n, _FromCirctType(t)) for n, t in self._type.get_fields()]
 
-  @property
-  def bitwidth(self) -> int | None:
-    bitwidths = [f[1].bitwidth for f in self.fields]
-    if any(bw is None for bw in bitwidths):
-      return None
-    return sum(bitwidths)
-
   def __getattr__(self, attrname: str):
     for field in self.fields:
       if field[0] == attrname:
@@ -446,10 +427,6 @@ class RegisteredStruct(TypeAlias):
     return self._value_class
 
   @property
-  def bitwidth(self) -> int | None:
-    return self.inner_type.bitwidth
-
-  @property
   def fields(self):
     return self.inner_type.fields
 
@@ -491,15 +468,6 @@ class UnionType(Type):
   @property
   def fields(self):
     return [(n, _FromCirctType(t), o) for n, t, o in self._type.get_fields()]
-
-  @property
-  def bitwidth(self) -> int | None:
-    if len(self.fields) == 0:
-      return 0
-    bitwidths = [f[1].bitwidth for f in self.fields]
-    if any(bw is None for bw in bitwidths):
-      return None
-    return max(bitwidths)
 
   def __getattr__(self, attrname: str):
     for field in self.fields:
@@ -700,10 +668,6 @@ class Any(Type):
   def is_hw_type(self) -> bool:
     return False
 
-  @property
-  def bitwidth(self) -> None:
-    return None
-
   def _from_obj_or_sig(self,
                        obj,
                        alias: typing.Optional["TypeAlias"] = None) -> "Signal":
@@ -737,13 +701,6 @@ class Channel(Type):
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner)
-
-  @property
-  def bitwidth(self) -> int | None:
-    bw = self.inner_type.bitwidth
-    if bw is None:
-      return None
-    return bw + Channel.SignalingBitwidth[self.signaling]
 
   @property
   def is_hw_type(self) -> bool:
@@ -880,16 +837,6 @@ class Bundle(Type):
   def _get_value_class(self):
     from .signals import BundleSignal
     return BundleSignal
-
-  @property
-  def bitwidth(self) -> int | None:
-    total_bw = 0
-    for channel in self.channels:
-      bw = channel.channel.bitwidth
-      if bw is None:
-        return None
-      total_bw += bw
-    return total_bw
 
   @property
   def is_hw_type(self) -> bool:
@@ -1075,10 +1022,6 @@ class List(Type):
   def is_hw_type(self) -> bool:
     return False
 
-  @property
-  def bitwidth(self) -> None:
-    return None
-
   def _get_value_class(self):
     from .signals import ListSignal
     return ListSignal
@@ -1217,10 +1160,6 @@ class Window(Type):
   def _get_value_class(self):
     from .signals import WindowSignal
     return WindowSignal
-
-  @property
-  def bitwidth(self) -> int | None:
-    return self.lowered_type.bitwidth
 
   @property
   def is_hw_type(self) -> bool:

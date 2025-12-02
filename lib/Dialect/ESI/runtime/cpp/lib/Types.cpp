@@ -377,16 +377,4 @@ std::any ArrayType::deserialize(BitVector &data) const {
     std::reverse(result.begin(), result.end());
   return std::any(result);
 }
-
-void WindowType::ensureValid(const std::any &obj) const {
-  // Windows are opaque from the type validation perspective. They are typically
-  // managed at the service level and contain complex metadata that cannot be
-  // validated generically.
-}
-
-void ListType::ensureValid(const std::any &obj) const {
-  // Lists are opaque from the type validation perspective. They are typically
-  // managed at higher levels and their contents are determined at runtime.
-}
-
 } // namespace esi
