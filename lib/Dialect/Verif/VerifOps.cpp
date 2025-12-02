@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -60,18 +61,27 @@ OpFoldResult HasBeenResetOp::fold(FoldAdaptor adaptor) {
 // AssertLikeOps Canonicalizations
 //===----------------------------------------------------------------------===//
 
-namespace AssertLikeOp {
-// assertlike(ltl.clock(prop, clk), en) -> clocked_assertlike(prop, en, clk)
+namespace CoverLikeOp {
+
+// Canonicalizations that are reasonable to do on asserts, assumes, and covers.
 template <typename TargetOp, typename Op>
 static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
-  // If the property is a block argument, then no canonicalization is possible
+  // assert(%a, true) -> assert(%a)
+  if (Value enable = op.getEnable())
+    if (auto enableConst = enable.getDefiningOp<hw::ConstantOp>())
+      if (enableConst.getValue().isOne()) {
+        rewriter.modifyOpInPlace(op, [&]() { op.getEnableMutable().clear(); });
+        return success();
+      }
+
+  // If the property is a block argument, then no further canonicalization is
+  // possible.
   Value property = op.getProperty();
   auto clockOp = property.getDefiningOp<ltl::ClockOp>();
   if (!clockOp)
     return failure();
 
-  // Check for clock operand
-  // If it exists, fold it into a clocked assertlike
+  // assert(ltl.clock(prop, clk), en) -> clocked_assert(prop, en, clk)
   rewriter.replaceOpWithNewOp<TargetOp>(
       op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
       clockOp.getClock(), op.getEnable(), op.getLabelAttr());
@@ -79,18 +89,51 @@ static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
   return success();
 }
 
+} // namespace CoverLikeOp
+
+namespace AssertLikeOp {
+
+// Canonicalizations that are reasonable to do on asserts and assumes, but not
+// covers.
+template <typename Op>
+static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
+  // verif.assert %a if false -> <delete>
+  if (Value enable = op.getEnable())
+    if (auto enableConst = enable.getDefiningOp<hw::ConstantOp>())
+      if (enableConst.getValue().isZero()) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+
+  // verif.assert %a where %a is ltl.boolean_constant true -> <delete>
+  Value property = op.getProperty();
+  if (auto boolConst = property.getDefiningOp<ltl::BooleanConstantOp>())
+    if (boolConst.getValueAttr().getValue()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+  return failure();
+}
+
 } // namespace AssertLikeOp
 
 LogicalResult AssertOp::canonicalize(AssertOp op, PatternRewriter &rewriter) {
-  return AssertLikeOp::canonicalize<ClockedAssertOp>(op, rewriter);
+  if (succeeded(AssertLikeOp::canonicalize(op, rewriter)))
+    return success();
+
+  return CoverLikeOp::canonicalize<ClockedAssertOp>(op, rewriter);
 }
 
 LogicalResult AssumeOp::canonicalize(AssumeOp op, PatternRewriter &rewriter) {
-  return AssertLikeOp::canonicalize<ClockedAssumeOp>(op, rewriter);
+  if (succeeded(AssertLikeOp::canonicalize(op, rewriter)))
+    return success();
+
+  return CoverLikeOp::canonicalize<ClockedAssumeOp>(op, rewriter);
 }
 
 LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
-  return AssertLikeOp::canonicalize<ClockedCoverOp>(op, rewriter);
+  return CoverLikeOp::canonicalize<ClockedCoverOp>(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
