@@ -3198,3 +3198,12 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
     )
   }
 }
+
+// -----
+
+firrtl.circuit "UndefinedDomainInAnonDomain" {
+  firrtl.module @UndefinedDomainInAnonDomain() {
+    // expected-error @below {{references undefined domain '@ClockDomain'}}
+    %0 = firrtl.domain.anon @ClockDomain : !firrtl.domain
+  }
+}

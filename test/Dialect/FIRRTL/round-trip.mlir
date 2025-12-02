@@ -276,4 +276,10 @@ firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain of @ClockDomain, i
   firrtl.domain.define %inst_A, %A
 }
 
+// CHECK-LABEL: firrtl.module @CreateAnonDomain
+firrtl.module @CreateAnonDomain() {
+  // CHECK-NEXT: %0 = firrtl.domain.anon @ClockDomain : !firrtl.domain
+  %0 = firrtl.domain.anon @ClockDomain : !firrtl.domain
+}
+
 }
