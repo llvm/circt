@@ -557,12 +557,13 @@ private:
   // has been generated
   int64_t requireSort(mlir::Type type) {
     // Start by figuring out what sort needs to be generated
-    int64_t width = hw::getBitWidth(type);
+    auto widthOpt = hw::getBitWidth(type);
 
-    // Sanity check: getBitWidth can technically return -1 it is a type with
+    // Sanity check: getBitWidth can return nullopt for types with
     // no width (like a clock). This shouldn't be allowed as width is required
     // to generate a sort
-    assert(width != noWidth);
+    assert(widthOpt && "type must have known bitwidth");
+    int64_t width = *widthOpt;
 
     // Generate the sort regardles of resulting width (nothing will be added
     // if the sort already exists)
@@ -578,12 +579,16 @@ private:
 
     // Extract the operands depending on the register type
     if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
+      auto widthOpt = hw::getBitWidth(reg.getType());
+      assert(widthOpt && "register type must have known bitwidth");
+      width = *widthOpt;
       next = reg.getInput();
       reset = reg.getReset();
       resetVal = reg.getResetValue();
     } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
+      auto widthOpt = hw::getBitWidth(reg.getType());
+      assert(widthOpt && "register type must have known bitwidth");
+      width = *widthOpt;
       next = reg.getNext();
       reset = reg.getReset();
       resetVal = reg.getResetValue();

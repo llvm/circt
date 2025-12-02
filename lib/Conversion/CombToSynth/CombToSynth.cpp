@@ -177,7 +177,9 @@ static int64_t getNumUnknownBitsAndPopulateValues(
   // Consider other operations as unknown bits.
   // TODO: We can handle replicate, extract, etc.
   values.push_back(value);
-  return hw::getBitWidth(value.getType());
+  auto width = hw::getBitWidth(value.getType());
+  assert(width && "value must have known bitwidth");
+  return *width;
 }
 
 // Return a value that substitutes the unknown bits with the mask.
@@ -193,8 +195,9 @@ substitueMaskToValues(size_t width,
       elemWidth = constant.getValue().getBitWidth();
       result.insertBits(constant.getValue(), bitPos);
     } else {
-      elemWidth = hw::getBitWidth(cast<Value>(constantOrValue).getType());
-      assert(elemWidth >= 0 && "unknown bit width");
+      auto width = hw::getBitWidth(cast<Value>(constantOrValue).getType());
+      assert(width && "value must have known bitwidth");
+      elemWidth = *width;
       assert(elemWidth + unknownPos < 32 && "unknown bit width too large");
       // Create a mask for the unknown bits.
       uint32_t usedBits = (mask >> unknownPos) & ((1 << elemWidth) - 1);
@@ -326,9 +329,11 @@ struct CombOrToMIGConversion : OpConversionPattern<OrOp> {
     if (op.getNumOperands() != 2)
       return failure();
     SmallVector<Value, 3> inputs(adaptor.getInputs());
+    auto width = hw::getBitWidth(op.getType());
+    assert(width && "op result must have known bitwidth");
     auto one = hw::ConstantOp::create(
         rewriter, op.getLoc(),
-        APInt::getAllOnes(hw::getBitWidth(op.getType())));
+        APInt::getAllOnes(*width));
     inputs.push_back(one);
     std::array<bool, 3> inverts = {false, false, false};
     replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
@@ -352,8 +357,10 @@ struct AndInverterToMIGConversion
       return success();
     }
     SmallVector<Value, 3> inputs(adaptor.getInputs());
+    auto width = hw::getBitWidth(op.getType());
+    assert(width && "op result must have known bitwidth");
     auto one = hw::ConstantOp::create(
-        rewriter, op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+        rewriter, op.getLoc(), APInt::getZero(*width));
     inputs.push_back(one);
     SmallVector<bool, 3> inverts(adaptor.getInverted());
     inverts.push_back(false);
@@ -442,7 +449,9 @@ struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
 
     if (!op.getType().isInteger()) {
       // If the type of the mux is not integer, bitcast the operands first.
-      auto widthType = rewriter.getIntegerType(hw::getBitWidth(op.getType()));
+      auto width = hw::getBitWidth(op.getType());
+      assert(width && "op result must have known bitwidth");
+      auto widthType = rewriter.getIntegerType(*width);
       trueVal =
           hw::BitcastOp::create(rewriter, op->getLoc(), widthType, trueVal);
       falseVal =
