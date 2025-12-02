@@ -2304,7 +2304,8 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(
+	ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
