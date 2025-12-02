@@ -697,14 +697,14 @@ static Value createZeroValue(Type type, Location loc,
   }
 
   // Otherwise try to create a zero integer and bitcast it to the result type.
-  int64_t width = hw::getBitWidth(type);
-  if (width == -1)
+  auto width = hw::getBitWidth(type);
+  if (!width)
     return {};
 
   // TODO: Once the core dialects support four-valued integers, this code
   // will additionally need to generate an all-X value for four-valued
   // variables.
-  Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+  Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(*width, 0));
   return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
 }
 

@@ -6103,11 +6103,14 @@ LogicalResult HWStructCastOp::verify() {
              << hwFields[findex].name.getValue() << "'";
     int64_t firWidth =
         FIRRTLBaseType(firFields[findex].type).getBitWidthOrSentinel();
-    int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
-    if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
-      return emitError("size of field '")
-             << hwFields[findex].name.getValue() << "' don't match " << firWidth
-             << ", " << hwWidth;
+    auto hwWidthOpt = hw::getBitWidth(hwFields[findex].type);
+    if (firWidth > 0 && hwWidthOpt) {
+      int64_t hwWidth = *hwWidthOpt;
+      if (firWidth != hwWidth)
+        return emitError("size of field '")
+               << hwFields[findex].name.getValue() << "' don't match " << firWidth
+               << ", " << hwWidth;
+    }
   }
 
   return success();
