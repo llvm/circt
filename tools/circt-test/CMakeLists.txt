@@ -1,23 +1,21 @@
+get_property(dialect_libs GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+
 set(libs
-  CIRCTComb
+  ${dialect_libs}
+
   CIRCTExportVerilog
-  CIRCTHW
-  CIRCTOM
-  CIRCTSeq
   CIRCTSeqToSV
-  CIRCTSim
   CIRCTSimToSV
-  CIRCTSV
   CIRCTSVTransforms
-  CIRCTVerif
   CIRCTVerifToSV
   CIRCTVerifTransforms
 
-  MLIRLLVMDialect
   MLIRArithDialect
   MLIRControlFlowDialect
   MLIRFuncDialect
+  MLIRLLVMDialect
   MLIRSCFDialect
+  MLIRSMT
 
   MLIRBytecodeReader
   MLIRIR

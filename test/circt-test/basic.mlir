@@ -13,10 +13,20 @@
 // JSON-NEXT:   "name": "Some.TestB"
 // JSON-NEXT:   "kind": "formal"
 // JSON-NEXT: }
+// JSON-NEXT: {
+// JSON-NEXT:   "name": "Some.TestC"
+// JSON-NEXT:   "kind": "simulation"
+// JSON-NEXT: }
 // CHECK: Some.TestA formal {}
 // CHECK: Some.TestB formal {}
+// CHECK: Some.TestC simulation {}
 verif.formal @Some.TestA {} {}
 verif.formal @Some.TestB {} {}
+verif.simulation @Some.TestC {} {
+^bb0(%clock: !seq.clock, %init: i1):
+  %0 = hw.constant true
+  verif.yield %0, %0 : i1, i1
+}
 
 // JSON-NEXT: {
 // JSON-NEXT:   "name": "Attrs"
