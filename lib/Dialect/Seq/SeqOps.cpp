@@ -1197,8 +1197,7 @@ FailureOr<seq::InitialOp> circt::seq::mergeInitialOps(Block *block) {
 
   if (!mlir::computeTopologicalSorting(initialOps, {}))
     return block->getParentOp()->emitError()
-           << "initial ops cannot be "
-           << "topologically sorted";
+           << "initial ops cannot be topologically sorted";
 
   // No need to merge if there is only one initial op.
   if (initialOps.size() <= 1)
