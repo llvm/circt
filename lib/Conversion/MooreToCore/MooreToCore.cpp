@@ -902,10 +902,10 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
     // TODO: Once the core dialects support four-valued integers, this code
     // will additionally need to generate an all-X value for four-valued nets.
     auto elementType = cast<llhd::RefType>(resultType).getNestedType();
-    int64_t width = hw::getBitWidth(elementType);
-    if (width == -1)
+    auto width = hw::getBitWidth(elementType);
+    if (!width)
       return failure();
-    auto constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+    auto constZero = hw::ConstantOp::create(rewriter, loc, APInt(*width, 0));
     auto init =
         rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
 
@@ -1032,7 +1032,10 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
-      int32_t resultWidth = hw::getBitWidth(resultType);
+      auto resultWidthOpt = hw::getBitWidth(resultType);
+      if (!resultWidthOpt)
+        return failure();
+      int32_t resultWidth = *resultWidthOpt;
       int32_t high = low + resultWidth;
 
       SmallVector<Value> toConcat;
@@ -1069,9 +1072,10 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
       if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
           resArrTy && resArrTy != arrTy.getElementType()) {
-        int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
-        if (elementWidth < 0)
+        auto elementWidthOpt = hw::getBitWidth(arrTy.getElementType());
+        if (!elementWidthOpt)
           return failure();
+        int32_t elementWidth = *elementWidthOpt;
 
         int32_t high = low + resArrTy.getNumElements();
         int32_t resWidth = resArrTy.getNumElements();
@@ -1119,9 +1123,10 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
 
       // Otherwise, it has to be the array's element type
       if (low < 0 || low >= inputWidth) {
-        int32_t bw = hw::getBitWidth(resultType);
-        if (bw < 0)
+        auto bwOpt = hw::getBitWidth(resultType);
+        if (!bwOpt)
           return failure();
+        int32_t bw = *bwOpt;
 
         Value val = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(bw, 0));
         Value bitcast =
@@ -1153,9 +1158,10 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
-      int64_t width = hw::getBitWidth(inputType);
-      if (width == -1)
+      auto widthOpt = hw::getBitWidth(inputType);
+      if (!widthOpt)
         return failure();
+      int64_t width = *widthOpt;
 
       Value lowBit = hw::ConstantOp::create(
           rewriter, op.getLoc(),
@@ -1242,9 +1248,10 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
-      int64_t width = hw::getBitWidth(inputType);
-      if (width == -1)
+      auto widthOpt = hw::getBitWidth(inputType);
+      if (!widthOpt)
         return failure();
+      int64_t width = *widthOpt;
 
       Value amount =
           adjustIntegerWidth(rewriter, adaptor.getLowBit(),
@@ -1503,10 +1510,12 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
       op.emitError("conversion result type is not currently supported");
       return failure();
     }
-    int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
-    int64_t resultBw = hw::getBitWidth(resultType);
-    if (inputBw == -1 || resultBw == -1)
+    auto inputBwOpt = hw::getBitWidth(adaptor.getInput().getType());
+    auto resultBwOpt = hw::getBitWidth(resultType);
+    if (!inputBwOpt || !resultBwOpt)
       return failure();
+    int64_t inputBw = *inputBwOpt;
+    int64_t resultBw = *resultBwOpt;
 
     Value input = rewriter.createOrFold<hw::BitcastOp>(
         loc, rewriter.getIntegerType(inputBw), adaptor.getInput());
