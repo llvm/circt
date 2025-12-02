@@ -1886,3 +1886,15 @@ hw.module @Wires(in %a: i42) {
   // CHECK-NEXT: hw.instance "names4" @WiresKeep(keep: %5: i42)
 }
 hw.module.extern @WiresKeep(in %keep: i42)
+
+// CHECK-LABEL: hw.module @parameter
+// CHECK-NEXT:    %[[PARAM:.+]] = hw.param.value i8 = #hw.param.decl.ref<"in">
+// CHECK-NEXT:    %[[ARRAY:.+]] = hw.array_create %[[PARAM]]
+// CHECK-NEXT:    %[[STRUCT:.+]] = hw.struct_create (%[[PARAM]])
+// CHECK-NEXT:    hw.output %[[ARRAY]], %[[STRUCT]]
+hw.module @parameter<in: i8> (in %a: i8, out o1: !hw.array<1xi8>, out o2: !hw.struct<foo: i8>) {
+  %param = hw.param.value i8 = #hw.param.decl.ref<"in">
+  %0 = hw.array_create %param : i8
+  %1 = hw.struct_create (%param) : !hw.struct<foo: i8>
+  hw.output %0, %1 : !hw.array<1xi8>, !hw.struct<foo: i8>
+}
