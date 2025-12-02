@@ -268,13 +268,15 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_full" << " " << threshold.getInt();
+    p << "almost_full"
+      << " " << threshold.getInt();
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_empty" << " " << threshold.getInt();
+    p << "almost_empty"
+      << " " << threshold.getInt();
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
