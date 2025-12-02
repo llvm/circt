@@ -331,9 +331,8 @@ struct CombOrToMIGConversion : OpConversionPattern<OrOp> {
     SmallVector<Value, 3> inputs(adaptor.getInputs());
     auto width = hw::getBitWidth(op.getType());
     assert(width && "op result must have known bitwidth");
-    auto one = hw::ConstantOp::create(
-        rewriter, op.getLoc(),
-        APInt::getAllOnes(*width));
+    auto one = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                      APInt::getAllOnes(*width));
     inputs.push_back(one);
     std::array<bool, 3> inverts = {false, false, false};
     replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
@@ -359,8 +358,8 @@ struct AndInverterToMIGConversion
     SmallVector<Value, 3> inputs(adaptor.getInputs());
     auto width = hw::getBitWidth(op.getType());
     assert(width && "op result must have known bitwidth");
-    auto one = hw::ConstantOp::create(
-        rewriter, op.getLoc(), APInt::getZero(*width));
+    auto one =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getZero(*width));
     inputs.push_back(one);
     SmallVector<bool, 3> inverts(adaptor.getInverted());
     inverts.push_back(false);

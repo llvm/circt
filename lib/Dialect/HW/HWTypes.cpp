@@ -111,19 +111,13 @@ std::optional<uint64_t> circt::hw::getBitWidth(mlir::Type type) {
   // Handle built-in types that don't implement the interface. Do this first
   // since it is faster than downcasting to an interface.
   return llvm::TypeSwitch<::mlir::Type, std::optional<uint64_t>>(type)
-      .Case<IntegerType>(
-          [](IntegerType t) -> std::optional<uint64_t> {
-            return t.getIntOrFloatBitWidth();
-          })
+      .Case<IntegerType>([](IntegerType t) -> std::optional<uint64_t> {
+        return t.getIntOrFloatBitWidth();
+      })
       .Default([](Type type) -> std::optional<uint64_t> {
         // If type implements the BitWidthTypeInterface, use it.
-        if (auto iface = dyn_cast<BitWidthTypeInterface>(type)) {
-          if (auto width = iface.getBitWidth()) {
-            if (*width < 0)
-              return std::nullopt;
-            return static_cast<uint64_t>(*width);
-          }
-        }
+        if (auto iface = dyn_cast<BitWidthTypeInterface>(type))
+          return iface.getBitWidth();
         return std::nullopt;
       });
 }
@@ -406,13 +400,13 @@ Type hw::StructType::getTypeAtIndex(Attribute index) const {
   return getSubTypeByFieldID(indexAttr.getInt()).first;
 }
 
-std::optional<int64_t> StructType::getBitWidth() const {
-  int64_t total = 0;
+std::optional<uint64_t> StructType::getBitWidth() const {
+  uint64_t total = 0;
   for (auto field : getElements()) {
     auto fieldSize = hw::getBitWidth(field.type);
     if (!fieldSize)
       return std::nullopt;
-    total += static_cast<int64_t>(*fieldSize);
+    total += *fieldSize;
   }
   return total;
 }
@@ -519,13 +513,13 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
   return getFieldInfo(fieldName).type;
 }
 
-std::optional<int64_t> UnionType::getBitWidth() const {
-  int64_t maxSize = 0;
+std::optional<uint64_t> UnionType::getBitWidth() const {
+  uint64_t maxSize = 0;
   for (auto field : getElements()) {
     auto fieldSize = hw::getBitWidth(field.type);
     if (!fieldSize)
       return std::nullopt;
-    int64_t totalSize = static_cast<int64_t>(*fieldSize) + field.offset;
+    uint64_t totalSize = *fieldSize + field.offset;
     if (totalSize > maxSize)
       maxSize = totalSize;
   }
@@ -570,7 +564,7 @@ std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   return {};
 }
 
-std::optional<int64_t> EnumType::getBitWidth() const {
+std::optional<uint64_t> EnumType::getBitWidth() const {
   auto w = getFields().size();
   if (w > 1)
     return llvm::Log2_64_Ceil(w);
@@ -677,14 +671,14 @@ Type hw::ArrayType::getTypeAtIndex(Attribute index) const {
   return getElementType();
 }
 
-std::optional<int64_t> hw::ArrayType::getBitWidth() const {
+std::optional<uint64_t> hw::ArrayType::getBitWidth() const {
   auto elementBitWidth = hw::getBitWidth(getElementType());
   if (!elementBitWidth)
     return std::nullopt;
   int64_t numElements = getNumElements();
   if (numElements < 0)
     return std::nullopt;
-  return numElements * static_cast<int64_t>(*elementBitWidth);
+  return static_cast<uint64_t>(numElements) * *elementBitWidth;
 }
 
 //===----------------------------------------------------------------------===//
@@ -744,14 +738,14 @@ uint64_t UnpackedArrayType::getFieldID(uint64_t index) const {
   return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
-std::optional<int64_t> UnpackedArrayType::getBitWidth() const {
+std::optional<uint64_t> UnpackedArrayType::getBitWidth() const {
   auto elementBitWidth = hw::getBitWidth(getElementType());
   if (!elementBitWidth)
     return std::nullopt;
   int64_t dimBitWidth = getNumElements();
   if (dimBitWidth < 0)
     return std::nullopt;
-  return static_cast<int64_t>(getNumElements()) * static_cast<int64_t>(*elementBitWidth);
+  return static_cast<uint64_t>(getNumElements()) * *elementBitWidth;
 }
 
 //===----------------------------------------------------------------------===//
@@ -822,11 +816,8 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
-std::optional<int64_t> TypeAliasType::getBitWidth() const {
-  auto width = hw::getBitWidth(getCanonicalType());
-  if (!width)
-    return std::nullopt;
-  return static_cast<int64_t>(*width);
+std::optional<uint64_t> TypeAliasType::getBitWidth() const {
+  return hw::getBitWidth(getCanonicalType());
 }
 
 //===----------------------------------------------------------------------===//

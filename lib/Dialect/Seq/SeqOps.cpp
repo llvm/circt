@@ -268,15 +268,13 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_full"
-      << " " << threshold.getInt();
+    p << "almost_full" << " " << threshold.getInt();
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_empty"
-      << " " << threshold.getInt();
+    p << "almost_empty" << " " << threshold.getInt();
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -568,7 +566,8 @@ LogicalResult FirRegOp::verify() {
   if (auto preset = getPresetAttr()) {
     auto presetWidth = hw::getBitWidth(preset.getType());
     auto width = hw::getBitWidth(getType());
-    if (preset.getType() != getType() && (!presetWidth || !width || *presetWidth != *width))
+    if (preset.getType() != getType() &&
+        (!presetWidth || !width || *presetWidth != *width))
       return emitOpError("preset type width must match register type");
   }
   return success();
@@ -628,8 +627,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     } else {
       auto width = hw::getBitWidth(op.getType());
       assert(width && "register type must have known bitwidth");
-      auto constant = hw::ConstantOp::create(
-          rewriter, op.getLoc(), APInt::getZero(*width));
+      auto constant =
+          hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getZero(*width));
       rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
     }
     return success();
@@ -709,8 +708,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
               auto width = hw::getBitWidth(arrayGet.getType());
               assert(width && "array element type must have known bitwidth");
               nextOperands.push_back(hw::ConstantOp::create(
-                  rewriter, op.getLoc(),
-                  APInt::getZero(*width)));
+                  rewriter, op.getLoc(), APInt::getZero(*width)));
               changed = true;
               continue;
             }
@@ -895,9 +893,8 @@ LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
       auto readOp = cast<FirMemReadOp>(user);
       auto width = hw::getBitWidth(readOp.getType());
       assert(width && "read type must have known bitwidth");
-      Value zero = hw::ConstantOp::create(
-          rewriter, readOp.getLoc(),
-          APInt::getZero(*width));
+      Value zero = hw::ConstantOp::create(rewriter, readOp.getLoc(),
+                                          APInt::getZero(*width));
       if (readOp.getType() != zero.getType())
         zero = hw::BitcastOp::create(rewriter, readOp.getLoc(),
                                      readOp.getType(), zero);
@@ -1197,8 +1194,8 @@ FailureOr<seq::InitialOp> circt::seq::mergeInitialOps(Block *block) {
       initialOps.push_back(&op);
 
   if (!mlir::computeTopologicalSorting(initialOps, {}))
-    return block->getParentOp()->emitError() << "initial ops cannot be "
-                                             << "topologically sorted";
+    return block->getParentOp()->emitError()
+           << "initial ops cannot be " << "topologically sorted";
 
   // No need to merge if there is only one initial op.
   if (initialOps.size() <= 1)

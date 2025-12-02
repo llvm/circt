@@ -6108,8 +6108,8 @@ LogicalResult HWStructCastOp::verify() {
       int64_t hwWidth = *hwWidthOpt;
       if (firWidth != hwWidth)
         return emitError("size of field '")
-               << hwFields[findex].name.getValue() << "' don't match " << firWidth
-               << ", " << hwWidth;
+               << hwFields[findex].name.getValue() << "' don't match "
+               << firWidth << ", " << hwWidth;
     }
   }
 
