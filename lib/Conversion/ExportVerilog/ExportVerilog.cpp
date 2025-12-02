@@ -1797,8 +1797,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         }
 
         auto unionWidthOpt = hw::getBitWidth(unionType);
-        assert(unionWidthOpt && "union type must have known bitwidth");
-        int64_t unionWidth = *unionWidthOpt;
+        int64_t unionWidth =
+            unionWidthOpt ? static_cast<int64_t>(*unionWidthOpt) : -1;
         os << "union packed {";
         for (auto &element : unionType.getElements()) {
           if (isZeroBitType(element.type)) {
@@ -1807,8 +1807,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             continue;
           }
           auto elementWidthOpt = hw::getBitWidth(element.type);
-          assert(elementWidthOpt && "element type must have known bitwidth");
-          int64_t elementWidth = *elementWidthOpt;
+          int64_t elementWidth =
+              elementWidthOpt ? static_cast<int64_t>(*elementWidthOpt) : -1;
           bool needsPadding = elementWidth < unionWidth || element.offset > 0;
           if (needsPadding) {
             os << " struct packed {";
