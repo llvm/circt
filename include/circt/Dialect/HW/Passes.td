@@ -92,4 +92,19 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
+def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
+                                       "mlir::ModuleOp"> {
+  let summary = "Parametize constant ports on private modules";
+  let description = [{
+    This pass converts input ports on private modules into parameters when all
+    instances pass constant values (or parameter values) to those ports.
+
+    By converting constant ports to parameters, synthesis pipelines can
+    recognize these values as compile-time constants through local analysis
+    alone, without requiring inter-module analysis. This enables more precise
+    timing information and better optimization of each instance independently,
+    since the constant values are immediately visible at the module interface.
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
