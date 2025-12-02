@@ -17,6 +17,7 @@ set(LIBS
   MLIRIR
   MLIRBytecodeWriter
   MLIRParser
+  MLIRPluginsLib
   MLIRSupport
   MLIRTransforms
   MLIRReduceLib
