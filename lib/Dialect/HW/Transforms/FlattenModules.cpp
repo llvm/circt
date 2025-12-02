@@ -44,7 +44,7 @@ static const StringRef innerSymAttrName =
     InnerSymbolTable::getInnerSymbolAttrName();
 struct FlattenModulesPass
     : public circt::hw::impl::FlattenModulesBase<FlattenModulesPass> {
-  using FlattenModulesBase::FlattenModulesBase;
+  using Base::Base;
 
   void runOnOperation() override;
 
@@ -180,28 +180,26 @@ bool FlattenModulesPass::shouldInline(HWModuleOp module,
   bool isEmpty = bodySize == 1;
   bool hasNoOutputs = module.getNumOutputPorts() == 0;
   bool hasOneUse = instanceNode->getNumUses() == 1;
-  bool hasState = !module.getOps<seq::FirRegOp>().empty();
+  bool hasState = false;
+  module.walk([&](Operation *op) {
+    // Check for stateful operations (registers and memories)
+    if (isa<seq::FirRegOp, seq::CompRegOp, seq::CompRegClockEnabledOp,
+            seq::ShiftRegOp, seq::FirMemOp, seq::HLMemOp>(op)) {
+      hasState = true;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
 
   // Don't inline modules with state unless explicitly allowed
   if (hasState && !this->inlineWithState)
     return false;
 
   // Inline if any of the enabled conditions are met:
-  bool shouldInlineModule = false;
-
-  if (this->inlineEmpty && isEmpty)
-    shouldInlineModule = true;
-
-  if (this->inlineNoOutputs && hasNoOutputs)
-    shouldInlineModule = true;
-
-  if (this->inlineSingleUse && hasOneUse)
-    shouldInlineModule = true;
-
-  if (this->inlineSmall && bodySize < this->smallThreshold)
-    shouldInlineModule = true;
-
-  return shouldInlineModule;
+  return (this->inlineEmpty && isEmpty) ||
+         (this->inlineNoOutputs && hasNoOutputs) ||
+         (this->inlineSingleUse && hasOneUse) ||
+         (this->inlineSmall && bodySize < this->smallThreshold);
 }
 
 void FlattenModulesPass::runOnOperation() {
@@ -213,18 +211,17 @@ void FlattenModulesPass::runOnOperation() {
   // Build a mapping of hierarchical path ops.
   DenseSet<StringAttr> leafModules;
   HierPathTable pathsTable;
-  llvm::for_each(getOperation().getOps<hw::HierPathOp>(),
-                 [&](hw::HierPathOp path) {
-                   // Record leaf modules to be banned from inlining.
-                   if (path.isModule())
-                     leafModules.insert(path.leafMod());
+  for (auto path : getOperation().getOps<hw::HierPathOp>()) {
+    // Record leaf modules to be banned from inlining.
+    if (path.isModule())
+      leafModules.insert(path.leafMod());
 
-                   // For each instance in the path, record the path
-                   for (auto name : path.getNamepath()) {
-                     if (auto ref = dyn_cast<hw::InnerRefAttr>(name))
-                       pathsTable[ref].push_back(path);
-                   }
-                 });
+    // For each instance in the path, record the path
+    for (auto name : path.getNamepath()) {
+      if (auto ref = dyn_cast<hw::InnerRefAttr>(name))
+        pathsTable[ref].push_back(path);
+    }
+  }
 
   // Cache InnerSymbolNamespace objects per parent module to avoid
   // recreating them for each instance in the same parent.
@@ -268,14 +265,12 @@ void FlattenModulesPass::runOnOperation() {
       mlir::AttrTypeReplacer innerRefReplacer;
 
       // Scan the module body to collect all inner symbols that need renaming
-      for (Operation &oldOp : *body) {
-        oldOp.walk([&](Operation *op) {
-          if (auto innerSymAttr =
-                  op->getAttrOfType<hw::InnerSymAttr>(innerSymAttrName))
-            inlineModuleInnerSyms.insert(
-                {innerSymAttr.getSymName(), StringAttr()});
-        });
-      }
+      module.walk([&](Operation *op) {
+        if (auto innerSymAttr =
+                op->getAttrOfType<hw::InnerSymAttr>(innerSymAttrName))
+          inlineModuleInnerSyms.insert(
+              {innerSymAttr.getSymName(), StringAttr()});
+      });
 
       for (auto *instRecord : node->uses()) {
         // Only inline at plain old HW `InstanceOp`s.

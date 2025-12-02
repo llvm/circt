@@ -9,10 +9,17 @@
 // NONE-LABEL: hw.module @TestSingleUse
 // SINGLE-LABEL: hw.module @TestSingleUse
 hw.module @TestSingleUse(in %x: i4, out y: i4) {
-  // NONE-NEXT: hw.instance "small" @SmallModule
+  // NONE-NEXT: hw.instance "large" @LargeModule
   // SINGLE-NEXT: %[[V0:.+]] = comb.add %x, %x
-  // SINGLE-NEXT: hw.output %[[V0]]
-  %0 = hw.instance "small" @SmallModule(a: %x: i4) -> (b: i4)
+  // SINGLE-NEXT: %[[V1:.+]] = comb.and %[[V0]], %[[V0]]
+  // SINGLE-NEXT: %[[V2:.+]] = comb.or %[[V1]], %[[V1]]
+  // SINGLE-NEXT: %[[V3:.+]] = comb.xor %[[V2]], %[[V2]]
+  // SINGLE-NEXT: %[[V4:.+]] = comb.mul %[[V3]], %[[V3]]
+  // SINGLE-NEXT: %[[V5:.+]] = comb.add %[[V4]], %[[V4]]
+  // SINGLE-NEXT: %[[V6:.+]] = comb.sub %[[V5]], %[[V5]]
+  // SINGLE-NEXT: %[[V7:.+]] = comb.add %x, %x
+  // SINGLE-NEXT: hw.output %[[V7]]
+  %0 = hw.instance "large" @LargeModule(a: %x: i4) -> (b: i4)
   hw.output %0 : i4
 }
 
@@ -25,14 +32,10 @@ hw.module private @SmallModule(in %a: i4, out b: i4) {
 hw.module @TestSmall(in %x: i4, out y: i4) {
   // SMALL-NEXT: %[[V0:.+]] = comb.add %x, %x
   // SMALL-NEXT: hw.output %[[V0]]
-  %0 = hw.instance "tiny" @TinyModule(a: %x: i4) -> (b: i4)
+  %0 = hw.instance "small" @SmallModule(a: %x: i4) -> (b: i4)
   hw.output %0 : i4
 }
 
-hw.module private @TinyModule(in %a: i4, out b: i4) {
-  %0 = comb.add %a, %a : i4
-  hw.output %0 : i4
-}
 
 // THRESHOLD-LABEL: hw.module @TestThreshold
 hw.module @TestThreshold(in %x: i4, out y: i4) {
@@ -62,5 +65,19 @@ hw.module @TestState(in %clk: !seq.clock, in %x: i4, out y: i4) {
 hw.module private @RegModule(in %clk: !seq.clock, in %a: i4, out b: i4) {
   %0 = seq.firreg %a clock %clk : i4
   hw.output %0 : i4
+}
+
+// This module has 9 operations (8 comb ops + 1 hw.output), exceeding the default threshold of 8
+// It should NOT be inlined based on size alone, but WILL be inlined if single-use is enabled
+hw.module private @LargeModule(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  %1 = comb.and %0, %0 : i4
+  %2 = comb.or %1, %1 : i4
+  %3 = comb.xor %2, %2 : i4
+  %4 = comb.mul %3, %3 : i4
+  %5 = comb.add %4, %4 : i4
+  %6 = comb.sub %5, %5 : i4
+  %7 = comb.add %a, %a : i4
+  hw.output %7 : i4
 }
 
