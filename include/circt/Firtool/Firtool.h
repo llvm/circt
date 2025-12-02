@@ -393,6 +393,57 @@ public:
     return *this;
   }
 
+  // HW FlattenModules options getters
+  bool shouldEnableHWFlattenModules() const { return enableHWFlattenModules; }
+  bool getHWInlineEmpty() const { return hwInlineEmpty; }
+  bool getHWInlineNoOutputs() const { return hwInlineNoOutputs; }
+  bool getHWInlineSingleUse() const { return hwInlineSingleUse; }
+  bool getHWInlineSmall() const { return hwInlineSmall; }
+  unsigned getHWSmallThreshold() const { return hwSmallThreshold; }
+  bool getHWInlineWithState() const { return hwInlineWithState; }
+  bool getHWInlineAll() const { return hwInlineAll; }
+
+  // HW FlattenModules options setters
+  FirtoolOptions &setEnableHWFlattenModules(bool value) {
+    enableHWFlattenModules = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWInlineEmpty(bool value) {
+    hwInlineEmpty = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWInlineNoOutputs(bool value) {
+    hwInlineNoOutputs = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWInlineSingleUse(bool value) {
+    hwInlineSingleUse = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWInlineSmall(bool value) {
+    hwInlineSmall = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWSmallThreshold(unsigned value) {
+    hwSmallThreshold = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWInlineWithState(bool value) {
+    hwInlineWithState = value;
+    return *this;
+  }
+
+  FirtoolOptions &setHWInlineAll(bool value) {
+    hwInlineAll = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -447,6 +498,16 @@ private:
   bool lintStaticAsserts;
   bool lintXmrsInDesign;
   bool emitAllBindFiles;
+
+  // HW FlattenModules options
+  bool enableHWFlattenModules;
+  bool hwInlineEmpty;
+  bool hwInlineNoOutputs;
+  bool hwInlineSingleUse;
+  bool hwInlineSmall;
+  unsigned hwSmallThreshold;
+  bool hwInlineWithState;
+  bool hwInlineAll;
 };
 
 void registerFirtoolCLOptions();
