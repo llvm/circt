@@ -49,7 +49,8 @@ class ESI_Abstract_Op<string mnemonic, list<Trait> traits = []> :
 class ESI_Physical_Op<string mnemonic, list<Trait> traits = []> :
     ESI_Op<mnemonic, traits>;
 
-class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
+class ESI_Type<string name, list<Trait> traits = []> :
+    TypeDef<ESI_Dialect, name, traits> { }
 
 class ESI_Attr<string name, list<Trait> traits = [],
                 string baseCppClass = "::mlir::Attribute">

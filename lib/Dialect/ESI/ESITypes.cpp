@@ -25,6 +25,22 @@ using namespace circt::esi;
 
 AnyType AnyType::get(MLIRContext *context) { return Base::get(context); }
 
+static unsigned getSignalingBitWidth(ChannelSignaling signaling) {
+  switch (signaling) {
+  case ChannelSignaling::ValidReady:
+    return 2;
+  case ChannelSignaling::FIFO:
+    return 2;
+  }
+  llvm_unreachable("Unhandled ChannelSignaling");
+}
+std::optional<int64_t> ChannelType::getBitWidth() const {
+  int64_t innerWidth = circt::hw::getBitWidth(getInner());
+  if (innerWidth < 0)
+    return std::nullopt;
+  return innerWidth + getSignalingBitWidth(getSignaling());
+}
+
 /// Get the list of users with snoops filtered out. Returns a filtered range
 /// which is lazily constructed.
 static auto getChannelConsumers(mlir::TypedValue<ChannelType> chan) {
@@ -65,6 +81,10 @@ LogicalResult ChannelType::verifyChannel(mlir::TypedValue<ChannelType> chan) {
   for (auto &consumer : consumers)
     err.attachNote(consumer.getOwner()->getLoc()) << "channel used here";
   return err;
+}
+
+std::optional<int64_t> WindowType::getBitWidth() const {
+  return hw::getBitWidth(getLoweredType());
 }
 
 LogicalResult
@@ -295,6 +315,17 @@ ChannelBundleType ChannelBundleType::getReversed() const {
   for (auto channel : getChannels())
     reversed.push_back({channel.name, flip(channel.direction), channel.type});
   return ChannelBundleType::get(getContext(), reversed, getResettable());
+}
+
+std::optional<int64_t> ChannelBundleType::getBitWidth() const {
+  int64_t totalWidth = 0;
+  for (auto channel : getChannels()) {
+    std::optional<int64_t> channelWidth = channel.type.getBitWidth();
+    if (!channelWidth)
+      return std::nullopt;
+    totalWidth += *channelWidth;
+  }
+  return totalWidth;
 }
 
 #define GET_TYPEDEF_CLASSES
