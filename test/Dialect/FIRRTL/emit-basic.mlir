@@ -961,7 +961,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: domain PowerDomain :
   // CHECK-NEXT:    name : String
   // CHECK-NEXT:    voltage : Integer
-  // CHECk-NEXT:    alwaysOn : Bool
+  // CHECK-NEXT:    alwaysOn : Bool
   firrtl.domain @PowerDomain [
     #firrtl.domain.field<"name", !firrtl.string>,
     #firrtl.domain.field<"voltage", !firrtl.integer>,

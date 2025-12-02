@@ -3341,7 +3341,7 @@ function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longin
 
    // CHECK: [[R:%.+]] = moore.read [[logicTest]] : <l32>
    // CHECK-NEXT: [[IMM2:%.+]] = moore.logic_to_int [[R]] : l32
-   // CHECK-Next: [[F2:%.+]] = moore.int_to_real [[IMM2]] : i32 -> f64
+   // CHECK-NEXT: [[F2:%.+]] = moore.int_to_real [[IMM2]] : i32 -> f64
    real realTest = real'(logicTest);
 endfunction
 
