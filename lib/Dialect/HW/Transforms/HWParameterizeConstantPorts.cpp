@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -34,23 +33,19 @@ namespace hw {
 using namespace circt;
 using namespace hw;
 
-/// Helper to get constant or parameter value from an instance input.
-static Value getConstantOrParamValue(InstanceOp inst, unsigned portIndex) {
-  Value input = inst.getInputs()[portIndex];
-  if (auto constOp = input.getDefiningOp<hw::ConstantOp>())
-    return constOp;
-  if (auto paramOp = input.getDefiningOp<hw::ParamValueOp>())
-    return paramOp;
+/// Helper to extract the attribute value and defining operation from a
+/// constant or param.value op.
+static std::pair<Attribute, Operation *>
+getAttributeAndDefiningOp(InstanceOp inst, unsigned portIndex) {
+  Value value = inst.getInputs()[portIndex];
+  auto *op = value.getDefiningOp();
+  if (!op)
+    return {};
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op))
+    return {constOp.getValueAttr(), op};
+  if (auto paramOp = dyn_cast<hw::ParamValueOp>(op))
+    return {paramOp.getValueAttr(), op};
   return {};
-}
-
-/// Helper to extract the attribute value from a constant or param.value op.
-static Attribute getAttributeValue(Value value) {
-  if (auto constOp = value.getDefiningOp<hw::ConstantOp>())
-    return IntegerAttr::get(value.getType(), constOp.getValue());
-  if (auto paramOp = value.getDefiningOp<hw::ParamValueOp>())
-    return paramOp.getValue();
-  llvm_unreachable("unexpected value type");
 }
 
 /// Check if all instances have constant values for a given port.
@@ -61,7 +56,7 @@ static bool allInstancesHaveConstantForPort(igraph::InstanceGraphNode *node,
 
   for (auto *instRecord : node->uses()) {
     auto inst = dyn_cast<InstanceOp>(instRecord->getInstance().getOperation());
-    if (!inst || !getConstantOrParamValue(inst, portIndex))
+    if (!inst || !getAttributeAndDefiningOp(inst, portIndex).first)
       return false;
   }
   return true;
@@ -110,10 +105,9 @@ void HWParameterizeConstantPortsPass::processModule(
   OpBuilder builder(module.getContext());
   builder.setInsertionPointToStart(module.getBodyBlock());
 
-  Namespace paramNamespace;
-
   // Create parameters and replace port uses
   SmallVector<Attribute> newParameters;
+  Namespace paramNamespace;
   if (auto existingParams = module.getParameters()) {
     newParameters.append(existingParams.begin(), existingParams.end());
     for (auto param : existingParams)
@@ -125,7 +119,6 @@ void HWParameterizeConstantPortsPass::processModule(
 
   for (unsigned portIdx : portsToParameterize) {
     auto port = inputPorts[portIdx];
-    BlockArgument arg = module.getBodyBlock()->getArgument(portIdx);
 
     // Create a parameter name based on the port name
     auto paramNameAttr =
@@ -140,7 +133,10 @@ void HWParameterizeConstantPortsPass::processModule(
     auto paramRef = ParamDeclRefAttr::get(paramNameAttr, port.type);
     auto paramValueOp =
         ParamValueOp::create(builder, module.getLoc(), port.type, paramRef);
-    arg.replaceAllUsesWith(paramValueOp);
+
+    // Replace all uses of the port argument with the param.value operation
+    module.getBodyBlock()->getArgument(portIdx).replaceAllUsesWith(
+        paramValueOp);
   }
 
   // Update module parameters
@@ -166,6 +162,8 @@ void HWParameterizeConstantPortsPass::processModule(
   // Update all instances of this module
   for (auto *instRecord : node->uses()) {
     auto inst = dyn_cast<InstanceOp>(instRecord->getInstance().getOperation());
+    // Skip non-InstanceOp users (e.g., InstanceChoiceOp or other instance-like
+    // operations).
     if (!inst)
       continue;
 
@@ -177,9 +175,8 @@ void HWParameterizeConstantPortsPass::processModule(
       instParams.append(existingParams.begin(), existingParams.end());
 
     for (unsigned portIdx : portsToParameterize) {
-      auto constValue = getConstantOrParamValue(inst, portIdx);
-      assert(constValue && "expected constant or param value");
-      auto paramValueAttr = getAttributeValue(constValue);
+      auto [paramValueAttr, constOp] = getAttributeAndDefiningOp(inst, portIdx);
+      assert(paramValueAttr && "expected constant or param value");
       auto paramDecl =
           ParamDeclAttr::get(builder.getContext(), portToParamName[portIdx],
                              inputPorts[portIdx].type, paramValueAttr);
@@ -187,10 +184,9 @@ void HWParameterizeConstantPortsPass::processModule(
 
       // Delete the constant or param.value op if it's only used by this
       // instance.
-      if (constValue.hasOneUse()) {
-        auto *op = constValue.getDefiningOp();
-        op->dropAllUses();
-        op->erase();
+      if (constOp->hasOneUse()) {
+        constOp->dropAllUses();
+        constOp->erase();
       }
     }
 
@@ -218,10 +214,13 @@ void HWParameterizeConstantPortsPass::processModule(
 void HWParameterizeConstantPortsPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
 
-  // Process all HW modules in inverse post-order (bottom-up).
+  // Process all HW modules in inverse post-order (top-down).
   instanceGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &node) {
     if (auto module =
             dyn_cast_or_null<HWModuleOp>(node.getModule().getOperation()))
       processModule(module, &node, instanceGraph);
   });
+
+  // The instance graph is updated during the pass and remains valid.
+  markAnalysesPreserved<hw::InstanceGraph>();
 }

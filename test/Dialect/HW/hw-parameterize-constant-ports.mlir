@@ -1,33 +1,37 @@
 // RUN: circt-opt -hw-parameterize-constant-ports %s | FileCheck %s
 
-// Test multiple constant ports
-// CHECK-LABEL: hw.module private @MultipleConstantPorts<id: i8, mode: i4>
-// CHECK-SAME: (in %data : i32, out out : i32)
+// Test multiple constant ports and mixed constant/variable ports
+// mode1 is constant in inst0 but variable in inst1, so it should NOT be parameterized
+// id and mode2 are constant in both instances, so they should be parameterized
+// CHECK-LABEL: hw.module private @MultipleConstantPorts<id: i8, mode2: i4>
+// CHECK-SAME: (in %mode1 : i4, in %data : i32, out out : i32)
 // CHECK: %[[ID:[0-9]+]] = hw.param.value i8 = #hw.param.decl.ref<"id">
-// CHECK: %[[MODE:[0-9]+]] = hw.param.value i4 = #hw.param.decl.ref<"mode">
+// CHECK: %[[MODE2:[0-9]+]] = hw.param.value i4 = #hw.param.decl.ref<"mode2">
 // CHECK: dbg.variable "id", %[[ID]] : i8
-// CHECK: dbg.variable "mode", %[[MODE]] : i4
+// CHECK: dbg.variable "mode1", %mode1 : i4
+// CHECK: dbg.variable "mode2", %[[MODE2]] : i4
 // CHECK: hw.output %data : i32
-hw.module private @MultipleConstantPorts(in %id: i8, in %mode: i4, in %data: i32, out out: i32) {
+hw.module private @MultipleConstantPorts(in %id: i8, in %mode1: i4, in %mode2: i4, in %data: i32, out out: i32) {
   dbg.variable "id", %id : i8
-  dbg.variable "mode", %mode : i4
+  dbg.variable "mode1", %mode1 : i4
+  dbg.variable "mode2", %mode2 : i4
   hw.output %data : i32
 }
 
 // CHECK-LABEL: hw.module @UseMultipleConstantPorts
-hw.module @UseMultipleConstantPorts(in %data: i32, out out0: i32, out out1: i32) {
+hw.module @UseMultipleConstantPorts(in %data: i32, in %mode: i4, out out0: i32, out out1: i32) {
   %c0_i8 = hw.constant 0 : i8
   %c0_i4 = hw.constant 0 : i4
 
-  // CHECK: %inst0.out = hw.instance "inst0" @MultipleConstantPorts<id: i8 = 0, mode: i4 = 0>
-  // CHECK-SAME: (data: %data: i32) -> (out: i32)
-  %inst0.out = hw.instance "inst0" @MultipleConstantPorts(id: %c0_i8: i8, mode: %c0_i4: i4, data: %data: i32) -> (out: i32)
+  // CHECK: %inst0.out = hw.instance "inst0" @MultipleConstantPorts<id: i8 = 0, mode2: i4 = 0>
+  // CHECK-SAME: (mode1: %c0_i4: i4, data: %data: i32) -> (out: i32)
+  %inst0.out = hw.instance "inst0" @MultipleConstantPorts(id: %c0_i8: i8, mode1: %c0_i4: i4, mode2: %c0_i4: i4, data: %data: i32) -> (out: i32)
 
   %c1_i8 = hw.constant 1 : i8
   %c1_i4 = hw.constant 1 : i4
-  // CHECK: %inst1.out = hw.instance "inst1" @MultipleConstantPorts<id: i8 = 1, mode: i4 = 1>
-  // CHECK-SAME: (data: %data: i32) -> (out: i32)
-  %inst1.out = hw.instance "inst1" @MultipleConstantPorts(id: %c1_i8: i8, mode: %c1_i4: i4, data: %data: i32) -> (out: i32)
+  // CHECK: %inst1.out = hw.instance "inst1" @MultipleConstantPorts<id: i8 = 1, mode2: i4 = 1>
+  // CHECK-SAME: (mode1: %mode: i4, data: %data: i32) -> (out: i32)
+  %inst1.out = hw.instance "inst1" @MultipleConstantPorts(id: %c1_i8: i8, mode1: %mode: i4, mode2: %c1_i4: i4, data: %data: i32) -> (out: i32)
 
   hw.output %inst0.out, %inst1.out : i32, i32
 }
