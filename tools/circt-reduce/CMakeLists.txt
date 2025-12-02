@@ -13,6 +13,7 @@ set(LIBS
   CIRCTEmitReductions
   CIRCTHWReductions
   CIRCTFIRRTLReductions
+  CIRCTRTGReductions
   CIRCTReduceLib
   MLIRIR
   MLIRBytecodeWriter
