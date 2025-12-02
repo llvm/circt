@@ -49,6 +49,10 @@ hw.module @BasicEmissionTemporal(in %a: i1) {
   sv.assume_property %p : !ltl.property
   sv.cover_property %p : !ltl.property
 
+  %bc = ltl.boolean_constant true
+  // CHECK: assert property (1'h1);
+  sv.assert_property %bc : !ltl.property
+
   // CHECK: initial begin
   sv.initial {
     // CHECK: assert property (not a);

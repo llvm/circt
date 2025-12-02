@@ -3578,6 +3578,7 @@ private:
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
   EmittedProperty visitUnhandledLTL(Operation *op);
+  EmittedProperty visitLTL(ltl::BooleanConstantOp op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
   EmittedProperty visitLTL(ltl::IntersectOp op);
@@ -3715,6 +3716,12 @@ EmittedProperty PropertyEmitter::emitNestedProperty(
 EmittedProperty PropertyEmitter::visitUnhandledLTL(Operation *op) {
   emitOpError(op, "emission as Verilog property or sequence not supported");
   ps << "<<unsupported: " << PPExtString(op->getName().getStringRef()) << ">>";
+  return {PropertyPrecedence::Symbol};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::BooleanConstantOp op) {
+  // Emit the boolean constant value as a literal.
+  ps << (op.getValueAttr().getValue() ? "1'h1" : "1'h0");
   return {PropertyPrecedence::Symbol};
 }
 
