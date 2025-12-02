@@ -3442,11 +3442,11 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
   auto unionType = cast<UnionType>(getCanonicalType(op.getType()));
   auto unionWidthOpt = hw::getBitWidth(unionType);
   assert(unionWidthOpt && "union type must have known bitwidth");
-  auto unionWidth = *unionWidthOpt;
+  uint64_t unionWidth = *unionWidthOpt;
   auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidthOpt = hw::getBitWidth(element.type);
   assert(elementWidthOpt && "element type must have known bitwidth");
-  auto elementWidth = *elementWidthOpt;
+  uint64_t elementWidth = *elementWidthOpt;
 
   // If the element is 0 width, just fill the union with 0s.
   if (!elementWidth) {
@@ -3489,11 +3489,11 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
   auto unionType = cast<UnionType>(getCanonicalType(op.getInput().getType()));
   auto unionWidthOpt = hw::getBitWidth(unionType);
   assert(unionWidthOpt && "union type must have known bitwidth");
-  auto unionWidth = *unionWidthOpt;
+  uint64_t unionWidth = *unionWidthOpt;
   auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidthOpt = hw::getBitWidth(element.type);
   assert(elementWidthOpt && "element type must have known bitwidth");
-  auto elementWidth = *elementWidthOpt;
+  uint64_t elementWidth = *elementWidthOpt;
   bool needsPadding = elementWidth < unionWidth || element.offset > 0;
   auto verilogFieldName = emitter.getVerilogStructFieldName(element.name);
 

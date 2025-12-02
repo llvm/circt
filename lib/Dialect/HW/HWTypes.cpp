@@ -412,7 +412,7 @@ std::optional<int64_t> StructType::getBitWidth() const {
     auto fieldSize = hw::getBitWidth(field.type);
     if (!fieldSize)
       return std::nullopt;
-    total += *fieldSize;
+    total += static_cast<int64_t>(*fieldSize);
   }
   return total;
 }
@@ -525,7 +525,7 @@ std::optional<int64_t> UnionType::getBitWidth() const {
     auto fieldSize = hw::getBitWidth(field.type);
     if (!fieldSize)
       return std::nullopt;
-    int64_t totalSize = *fieldSize + field.offset;
+    int64_t totalSize = static_cast<int64_t>(*fieldSize) + field.offset;
     if (totalSize > maxSize)
       maxSize = totalSize;
   }
