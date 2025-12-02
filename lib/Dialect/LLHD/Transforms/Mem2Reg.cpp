@@ -1739,7 +1739,9 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
           args.push_back(def->getValueOrPlaceholder());
         } else {
           auto type = getStoredType(slot);
-          auto flatType = builder.getIntegerType(hw::getBitWidth(type));
+          auto width = hw::getBitWidth(type);
+          assert(width && "type must have known bitwidth");
+          auto flatType = builder.getIntegerType(*width);
           Value value =
               hw::ConstantOp::create(builder, getLoc(slot), flatType, 0);
           if (type != flatType)

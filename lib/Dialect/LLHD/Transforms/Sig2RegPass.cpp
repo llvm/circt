@@ -93,10 +93,10 @@ public:
           TypeSwitch<Operation *, LogicalResult>(curr)
               .Case<llhd::ProbeOp>([&](llhd::ProbeOp probeOp) {
                 auto bw = hw::getBitWidth(probeOp.getResult().getType());
-                if (bw <= 0)
+                if (!bw || *bw == 0)
                   return failure();
 
-                readIntervals.emplace_back(offset, bw, probeOp.getResult());
+                readIntervals.emplace_back(offset, *bw, probeOp.getResult());
                 return success();
               })
               .Case<llhd::DriveOp>([&](llhd::DriveOp driveOp) {
@@ -115,10 +115,10 @@ public:
                 }
 
                 auto bw = hw::getBitWidth(driveOp.getValue().getType());
-                if (bw <= 0)
+                if (!bw || *bw == 0)
                   return failure();
 
-                intervals.emplace_back(offset, bw, driveOp.getValue(),
+                intervals.emplace_back(offset, *bw, driveOp.getValue(),
                                        timeOp.getValueAttr());
                 return success();
               })
@@ -137,7 +137,7 @@ public:
                 auto bw = hw::getBitWidth(
                     cast<llhd::RefType>(extractOp.getInput().getType())
                         .getNestedType());
-                if (bw <= 0)
+                if (!bw || *bw == 0)
                   return failure();
 
                 SmallVector<Value> indices(offset.dynamic);
@@ -145,7 +145,7 @@ public:
 
                 for (auto *user : extractOp->getUsers())
                   stack.emplace_back(
-                      user, Offset(offset.min, offset.max + bw - 1, indices));
+                      user, Offset(offset.min, offset.max + *bw - 1, indices));
 
                 return success();
               })
@@ -219,12 +219,12 @@ public:
   /// values, and removes the signal and signal value handling operations.
   void promote() {
     auto bw = hw::getBitWidth(sigOp.getInit().getType());
-    assert(bw > 0 && "bw must be known and non-zero");
+    assert(bw && *bw > 0 && "bw must be known and non-zero");
 
     OpBuilder builder(sigOp);
     Value val = sigOp.getInit();
     Location loc = sigOp->getLoc();
-    auto type = builder.getIntegerType(bw);
+    auto type = builder.getIntegerType(*bw);
     val = builder.createOrFold<hw::BitcastOp>(loc, type, val);
 
     // Handle the writes by starting with the signal init value and injecting
@@ -304,8 +304,9 @@ private:
 
     for (auto idx : indices) {
       auto bw = hw::getBitWidth(idx.getType());
+      assert(bw && "index must have known bitwidth");
       Value pad =
-          hw::ConstantOp::create(builder, loc, APInt::getZero(width - bw));
+          hw::ConstantOp::create(builder, loc, APInt::getZero(width - *bw));
       idx = builder.createOrFold<comb::ConcatOp>(loc, pad, idx);
       index = builder.createOrFold<comb::AddOp>(loc, index, idx);
     }
