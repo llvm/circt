@@ -514,13 +514,22 @@ ParseResult ConcatOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the operand list, attributes and colon
   if (parser.parseOperandList(operands) ||
-      parser.parseOptionalAttrDict(result.attributes))
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
     return failure();
 
-  // If we have operands, we need to parse the types too
-
-  if (parser.parseOptionalColonTypeList(types))
-    return failure();
+  // Parse an optional list of types
+  Type parsedType;
+  auto parseResult = parser.parseOptionalType(parsedType);
+  if (parseResult.has_value()) {
+    if (failed(parseResult.value()))
+      return failure();
+    types.push_back(parsedType);
+    while (succeeded(parser.parseOptionalComma())) {
+      if (parser.parseType(parsedType))
+        return failure();
+      types.push_back(parsedType);
+    }
+  }
 
   if (parser.resolveOperands(operands, types, allOperandLoc, result.operands))
     return failure();
@@ -540,10 +549,8 @@ void ConcatOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getOperands());
   p.printOptionalAttrDict((*this)->getAttrs());
-  if (!getOperands().empty()) {
-    p << " : ";
-    llvm::interleaveComma(getOperandTypes(), p);
-  }
+  p << " : ";
+  llvm::interleaveComma(getOperandTypes(), p);
 }
 
 //===----------------------------------------------------------------------===//

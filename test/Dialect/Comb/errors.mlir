@@ -42,5 +42,5 @@ hw.module @err() {
 
 hw.module @err(in %arg0: i1) {
   // expected-error @below {{number of operands and types do not match: got 1 operands and 0 types}}
-  comb.concat %arg0
+  comb.concat %arg0 :
 }

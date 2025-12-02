@@ -13,6 +13,8 @@ hw.module @Issue5772(in %arg0: !hw.typealias<@__hw_typedecls::@foo,i1>) {
 
 // CHECK-LABEL: @NullaryConcat
 hw.module @NullaryConcat() {
-  // CHECK: comb.concat
-  comb.concat
+  // CHECK: %0 = comb.concat :
+  // CHECK: %1 = comb.concat %0, %0 : i0, i0
+  %0 = comb.concat :
+  %1 = comb.concat %0, %0 : i0, i0
 }
