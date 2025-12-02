@@ -93,8 +93,9 @@ bool Converter::operandCallback(OpOperand &op, size_t bitPos,
   if (mapIterator == operandMap.end()) {
     // Initialize with -1 for all bit positions (indicating unmapped)
     auto bitWidth = hw::getBitWidth(op.get().getType());
+    assert(bitWidth && "operand type must have known bitwidth");
     mapIterator =
-        operandMap.insert({operandKey, SmallVector<int>(bitWidth, -1)}).first;
+        operandMap.insert({operandKey, SmallVector<int>(*bitWidth, -1)}).first;
   }
 
   // Map this specific bit position to the AIGER output index
@@ -112,8 +113,9 @@ bool Converter::valueCallback(Value value, size_t bitPos, size_t inputIndex) {
   if (mapIterator == valueMap.end()) {
     // Initialize with -1 for all bit positions (indicating unmapped)
     auto bitWidth = hw::getBitWidth(value.getType());
+    assert(bitWidth && "value type must have known bitwidth");
     mapIterator =
-        valueMap.insert({value, SmallVector<int>(bitWidth, -1)}).first;
+        valueMap.insert({value, SmallVector<int>(*bitWidth, -1)}).first;
   }
 
   LLVM_DEBUG(llvm::dbgs() << "Mapping value: " << value << " bitPos: " << bitPos

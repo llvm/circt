@@ -32,7 +32,9 @@ StringAttr circt::esi::detail::getTypeID(Type t) {
 uint64_t circt::esi::detail::getWidth(Type t) {
   if (auto ch = dyn_cast<ChannelType>(t))
     t = ch.getInner();
-  return hw::getBitWidth(t);
+  auto width = hw::getBitWidth(t);
+  assert(width && "type must have known bitwidth");
+  return *width;
 }
 
 //===----------------------------------------------------------------------===//

@@ -349,11 +349,11 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
   llvm::raw_string_ostream(typeID) << type;
   o["id"] = typeID;
 
-  int64_t width = hw::getBitWidth(type);
+  auto width = hw::getBitWidth(type);
   if (auto chanType = dyn_cast<ChannelType>(type))
     width = hw::getBitWidth(chanType.getInner());
-  if (width >= 0)
-    o["hwBitwidth"] = width;
+  if (width)
+    o["hwBitwidth"] = *width;
 
   o["dialect"] = type.getDialect().getNamespace();
   if (m.length())
