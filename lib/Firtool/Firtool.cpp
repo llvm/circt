@@ -48,7 +48,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
-  if (auto mode = toInferDomainsPassMode(opt.getDomainMode()))
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
 
   return success();
@@ -763,17 +763,17 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Emit bindfiles for private modules"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<firtool::DomainMode> domainMode{
+  llvm::cl::opt<firtool::FirtoolOptions::DomainMode> domainMode{
       "domain-mode", llvm::cl::desc("Enable domain inference and checking"),
-      llvm::cl::init(firtool::DomainMode::Disable),
+      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Disable),
       llvm::cl::values(
-          clEnumValN(firtool::DomainMode::Disable, "disable",
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Disable, "disable",
                      "Disable domain checking"),
-          clEnumValN(firtool::DomainMode::Infer, "infer",
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Infer, "infer",
                      "Check domains with inference for private modules"),
-          clEnumValN(firtool::DomainMode::Check, "check",
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Check, "check",
                      "Check domains without inference"),
-          clEnumValN(firtool::DomainMode::InferAll, "infer-all",
+          clEnumValN(firtool::FirtoolOptions::DomainMode::InferAll, "infer-all",
                      "Check domains with inference for both public and private "
                      "modules"))};
 
