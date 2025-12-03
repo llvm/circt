@@ -356,12 +356,18 @@ firrtl.circuit "UndrivenInstanceChoiceDomainPort" {
 // Unable to infer domain of port, when port is driven by constant.
 firrtl.circuit "UnableToInferDomainOfPortDrivenByConstant" {
   firrtl.domain @ClockDomain
+
+// CHECK: firrtl.module @Foo(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<1> domains [%ClockDomain])
   firrtl.module @Foo(in %i: !firrtl.uint<1>) {}
 
+  // CHECK: firrtl.module @UnableToInferDomainOfPortDrivenByConstant(in %ClockDomain: !firrtl.domain of @ClockDomain) {
+  // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:   %foo_ClockDomain, %foo_i = firrtl.instance foo @Foo(in ClockDomain: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<1> domains [ClockDomain])
+  // CHECK:   firrtl.domain.define %foo_ClockDomain, %ClockDomain
+  // CHECK:   firrtl.matchingconnect %foo_i, %c0_ui1 : !firrtl.uint<1>
+  // CHECK: }
   firrtl.module @UnableToInferDomainOfPortDrivenByConstant() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // expected-error @below {{unable to infer value for undriven domain port "ClockDomain"}}
-    // expected-note  @below {{associated with hardware port "i"}}
     %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<1>)
     firrtl.matchingconnect %foo_i, %c0_ui1 : !firrtl.uint<1>
   }
@@ -370,14 +376,28 @@ firrtl.circuit "UnableToInferDomainOfPortDrivenByConstant" {
 // Unable to infer domain of port, when port is driven by arithmetic on constant.
 firrtl.circuit "UnableToInferDomainOfPortDrivenByConstantExpr" {
   firrtl.domain @ClockDomain
+
+  // CHECK: firrtl.module @Foo(in %ClockDomain: !firrtl.domain of @ClockDomain, in %i: !firrtl.uint<2> domains [%ClockDomain])
   firrtl.module @Foo(in %i: !firrtl.uint<2>) {}
 
+  // CHECK: firrtl.module @UnableToInferDomainOfPortDrivenByConstantExpr(in %ClockDomain: !firrtl.domain of @ClockDomain) {
+  // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:   %0 = firrtl.add %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK:   %foo_ClockDomain, %foo_i = firrtl.instance foo @Foo(in ClockDomain: !firrtl.domain of @ClockDomain, in i: !firrtl.uint<2> domains [ClockDomain])
+  // CHECK:   firrtl.domain.define %foo_ClockDomain, %ClockDomain
+  // CHECK:   firrtl.matchingconnect %foo_i, %0 : !firrtl.uint<2>
+  // CHECK: }
   firrtl.module @UnableToInferDomainOfPortDrivenByConstantExpr() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.add %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    // expected-error @below {{unable to infer value for undriven domain port "ClockDomain"}}
-    // expected-note  @below {{associated with hardware port "i"}}
     %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<2>)
     firrtl.matchingconnect %foo_i, %0 : !firrtl.uint<2>
   }
+}
+
+// Name of inferred domain port is already taken. Ensure name freshness.
+firrtl.circuit "NameAlreadyTaken" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module @NameAlreadyTaken(in %ClockDomain_0: !firrtl.domain of @ClockDomain, in %ClockDomain: !firrtl.uint<1> domains [%ClockDomain_0])
+  firrtl.module @NameAlreadyTaken(in %ClockDomain: !firrtl.uint<1>) {}
 }

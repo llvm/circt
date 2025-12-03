@@ -941,18 +941,17 @@ struct PendingUpdates {
 
 /// If `var` is not solved, solve it by recording a pending input port at
 /// the indicated insertion point.
-void ensureSolved(const DomainInfo &info, DomainTypeID typeID, size_t ip,
-                  LocationAttr loc, VariableTerm *var,
+void ensureSolved(const DomainInfo &info, Namespace &ns, DomainTypeID typeID,
+                  size_t ip, LocationAttr loc, VariableTerm *var,
                   PendingUpdates &pending) {
   if (pending.solutions.contains(var))
     return;
 
-  // llvm::errs() << "ensureSolved ip" << ip << "\n";
-
+  auto *context = loc.getContext();
   auto domainDecl = info.getDomain(typeID);
   auto domainName = domainDecl.getNameAttr();
 
-  auto portName = domainName;
+  auto portName = StringAttr::get(context, ns.newName(domainName.getValue()));
   auto portType = DomainType::get(loc.getContext());
   auto portDirection = Direction::In;
   auto portSym = StringAttr();
@@ -970,19 +969,21 @@ void ensureSolved(const DomainInfo &info, DomainTypeID typeID, size_t ip,
 /// so that subsequent hardware ports may be associated with this domain.
 // If the domain is defined internally in the module, ensure it is aliased by an
 /// output port.
-void ensureExported(const DomainInfo &info, const ExportTable &exports,
-                    DomainTypeID typeID, size_t ip, LocationAttr loc,
-                    ValueTerm *val, PendingUpdates &pending) {
+void ensureExported(const DomainInfo &info, Namespace &ns,
+                    const ExportTable &exports, DomainTypeID typeID, size_t ip,
+                    LocationAttr loc, ValueTerm *val, PendingUpdates &pending) {
   auto value = val->value;
   assert(isa<DomainType>(value.getType()));
   if (isPort(value) || exports.contains(value) ||
       pending.exports.contains(value))
     return;
 
+  auto *context = loc.getContext();
+
   auto domainDecl = info.getDomain(typeID);
   auto domainName = domainDecl.getNameAttr();
 
-  auto portName = domainName;
+  auto portName = StringAttr::get(context, ns.newName(domainName.getValue()));
   auto portType = DomainType::get(loc.getContext());
   auto portDirection = Direction::Out;
   auto portSym = StringAttr();
@@ -999,32 +1000,33 @@ void ensureExported(const DomainInfo &info, const ExportTable &exports,
   pending.insertions.push_back({ip, portInfo});
 }
 
-void getUpdatesForDomainAssociationOfPort(const DomainInfo &info,
+void getUpdatesForDomainAssociationOfPort(const DomainInfo &info, Namespace &ns,
                                           PendingUpdates &pending,
                                           DomainTypeID typeID, size_t ip,
                                           LocationAttr loc, Term *term,
                                           const ExportTable &exports) {
   if (auto *var = dyn_cast<VariableTerm>(term)) {
-    ensureSolved(info, typeID, ip, loc, var, pending);
+    ensureSolved(info, ns, typeID, ip, loc, var, pending);
     return;
   }
   if (auto *val = dyn_cast<ValueTerm>(term)) {
-    ensureExported(info, exports, typeID, ip, loc, val, pending);
+    ensureExported(info, ns, exports, typeID, ip, loc, val, pending);
     return;
   }
   llvm_unreachable("invalid domain association");
 }
 
-void getUpdatesForDomainAssociationOfPort(const DomainInfo &info,
+void getUpdatesForDomainAssociationOfPort(const DomainInfo &info, Namespace &ns,
                                           const ExportTable &exports, size_t ip,
                                           LocationAttr loc, RowTerm *row,
                                           PendingUpdates &pending) {
   for (auto [index, term] : llvm::enumerate(row->elements))
-    getUpdatesForDomainAssociationOfPort(info, pending, DomainTypeID{index}, ip,
-                                         loc, find(term), exports);
+    getUpdatesForDomainAssociationOfPort(info, ns, pending, DomainTypeID{index},
+                                         ip, loc, find(term), exports);
 }
 
-void getUpdatesForModulePorts(const DomainInfo &info, TermAllocator &allocator,
+void getUpdatesForModulePorts(const DomainInfo &info, Namespace &ns,
+                              TermAllocator &allocator,
                               const ExportTable &exports, DomainTable &table,
                               FModuleOp module, PendingUpdates &pending) {
   for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
@@ -1033,7 +1035,7 @@ void getUpdatesForModulePorts(const DomainInfo &info, TermAllocator &allocator,
     if (!isa<FIRRTLBaseType>(type))
       continue;
     getUpdatesForDomainAssociationOfPort(
-        info, exports, i, module.getPortLocation(i),
+        info, ns, exports, i, module.getPortLocation(i),
         getDomainAssociationAsRow(info, allocator, table, port), pending);
   }
 }
@@ -1043,7 +1045,8 @@ void getUpdatesForModulePorts(const DomainInfo &info, TermAllocator &allocator,
 /// updates.
 template <typename T>
 void getUpdatesForInstance(const DomainInfo &info, const DomainTable &table,
-                           size_t ip, PendingUpdates &pending, T op) {
+                           Namespace &ns, size_t ip, PendingUpdates &pending,
+                           T op) {
   llvm::errs() << "getUpdatesForInstance ip =" << ip << "op = " << op << "\n";
 
   for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
@@ -1058,30 +1061,38 @@ void getUpdatesForInstance(const DomainInfo &info, const DomainTable &table,
 
     auto typeID = info.getDomainTypeID(result);
     auto loc = op.getPortLocation(i);
-    ensureSolved(info, typeID, ip, loc, var, pending);
+    ensureSolved(info, ns, typeID, ip, loc, var, pending);
   }
 }
 
 void getUpdatesForOp(const DomainInfo &info, const DomainTable &table,
-                     size_t ip, PendingUpdates &pending, Operation *op) {
+                     Namespace &ns, size_t ip, PendingUpdates &pending,
+                     Operation *op) {
   if (auto inst = dyn_cast<InstanceOp>(op))
-    return getUpdatesForInstance(info, table, ip, pending, inst);
+    return getUpdatesForInstance(info, table, ns, ip, pending, inst);
   if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return getUpdatesForInstance(info, table, ip, pending, inst);
+    return getUpdatesForInstance(info, table, ns, ip, pending, inst);
 }
 
 void getUpdatesForModuleBody(const DomainInfo &info, const DomainTable &table,
-                             FModuleOp mod, PendingUpdates &pending) {
+                             Namespace &ns, FModuleOp mod,
+                             PendingUpdates &pending) {
   auto ip = mod.getNumPorts();
-  mod->walk(
-      [&](Operation *op) { getUpdatesForOp(info, table, ip, pending, op); });
+  mod->walk([&](Operation *op) {
+    getUpdatesForOp(info, table, ns, ip, pending, op);
+  });
 }
 
 void getUpdatesForModule(const DomainInfo &info, TermAllocator &allocator,
                          const ExportTable &exports, DomainTable &table,
                          FModuleOp mod, PendingUpdates &pending) {
-  getUpdatesForModulePorts(info, allocator, exports, table, mod, pending);
-  getUpdatesForModuleBody(info, table, mod, pending);
+  Namespace ns;
+  auto names = mod.getPortNamesAttr();
+  for (auto name : names.getAsRange<StringAttr>())
+    ns.add(name);
+
+  getUpdatesForModulePorts(info, ns, allocator, exports, table, mod, pending);
+  getUpdatesForModuleBody(info, table, ns, mod, pending);
 }
 
 void applyUpdatesToModule(const DomainInfo &info, TermAllocator &allocator,
@@ -1191,7 +1202,7 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
       newModuleDomainInfo[i] = oldModuleDomainInfo[i];
       continue;
     }
-  
+
     if (isa<FIRRTLBaseType>(type)) {
       auto associations =
           copyPortDomainAssociations(info, oldModuleDomainInfo, i);
@@ -1318,7 +1329,7 @@ LogicalResult updateModule(const DomainInfo &info, TermAllocator &allocator,
   // Drive output domain ports.
   if (failed(driveModuleOutputDomainPorts(info, table, op)))
     return failure();
-  
+
   llvm::errs() << "after update interface ***\n" << op << "\n";
 
   // Record the updated interface change in the update table.
@@ -1501,7 +1512,7 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
 
   if (failed(driveModuleOutputDomainPorts(info, table, module)))
     return failure();
-  
+
   return updateModuleBody(table, module);
 }
 
