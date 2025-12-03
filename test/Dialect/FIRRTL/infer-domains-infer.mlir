@@ -7,8 +7,8 @@ firrtl.circuit "InferOutputDomain" {
 
   // CHECK: firrtl.module private @Bar(out %ClockDomain: !firrtl.domain of @ClockDomain, out %x: !firrtl.uint<1> domains [%ClockDomain]) {
   // CHECK:   %foo_D, %foo_x = firrtl.instance foo @Foo(out D: !firrtl.domain of @ClockDomain, out x: !firrtl.uint<1> domains [D])
-  // CHECK:   firrtl.matchingconnect %x, %foo_x : !firrtl.uint<1>
   // CHECK:   firrtl.domain.define %ClockDomain, %foo_D
+  // CHECK:   firrtl.matchingconnect %x, %foo_x : !firrtl.uint<1>
   // CHECK: }
   firrtl.module private @Bar(out %x : !firrtl.uint<1>) {
     %foo_D, %foo_x = firrtl.instance foo @Foo(out D: !firrtl.domain of @ClockDomain, out x: !firrtl.uint<1> domains [D])
