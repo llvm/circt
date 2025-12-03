@@ -206,15 +206,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
           return replaceWithIndex(k);
         return replaceWithIndex(i);
       }
-
-      // If i and j are constant.
-      if (auto c1 = getConstant(i)) {
-        if (auto c2 = getConstant(j)) {
-          // If constants are complementary, we can fold.
-          if (*c1 == ~*c2)
-            return replaceWithIndex(k);
-        }
-      }
     }
   }
   return failure();
