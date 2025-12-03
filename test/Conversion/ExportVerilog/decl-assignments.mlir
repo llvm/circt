@@ -1,0 +1,21 @@
+// RUN: circt-opt --export-verilog %s | FileCheck %s --check-prefixes=CHECK
+// RUN: circt-opt --test-apply-lowering-options='options=disallowDeclAssignments' --export-verilog %s | FileCheck %s --check-prefixes=DISALLOW
+
+// CHECK-LABEL: module test(
+// DISALLOW-LABEL: module test(
+hw.module @test(in %v: i1) {
+  // CHECK:    wire w = v;
+  // DISALLOW: wire w;
+  // DISALLOW: assign w = v;
+  %w = sv.wire : !hw.inout<i1>
+  sv.assign %w, %v : i1
+  // CHECK: initial begin
+  // DISALLOW: initial begin
+  sv.initial {
+    // CHECK:         automatic logic l = v;
+    // DISALLOW:      automatic logic l;
+    // DISALLOW-NEXT: l = v;
+    %l = sv.logic : !hw.inout<i1>
+    sv.bpassign %l, %v : i1
+  }
+}
