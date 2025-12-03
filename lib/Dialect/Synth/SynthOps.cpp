@@ -123,37 +123,38 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
       else
         return getOperand(k);
     }
-  } else if (nonConstantValues.size() == 2) {
-    // x x 1 -> x
-    // x ~x 1 -> 1
-    // ~x ~x 1 -> ~x
-    auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
-    auto i = nonConstantValues[0];
-    auto j = nonConstantValues[1];
-    auto c1 = adaptor.getInputs()[i];
-    auto c2 = adaptor.getInputs()[j];
-    if (c1 == c2) {
-      // x ~x
-      if (isInverted(i) != isInverted(j)) {
-        if (!isInverted(k))
-          return getOperand(k);
-        auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
-        value = ~value;
-        return IntegerAttr::get(
-            IntegerType::get(getContext(), value.getBitWidth()), value);
-      } else if (isInverted(i) == isInverted(j)) {
-        // x x const
-        if (!isInverted(i))
-          return getOperand(i);
-        // ~x ~x
-        // if (isInverted(i)) {
-        //  (*this)->setOperands({getOperand(i)});
-        //  (*this).setInverted({true});
-        //  return getResult();
-        //}
-      }
-    }
   }
+  // else if (nonConstantValues.size() == 2) {
+  //   // x x 1 -> x
+  //   // x ~x 1 -> 1
+  //   // ~x ~x 1 -> ~x
+  //   auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
+  //   auto i = nonConstantValues[0];
+  //   auto j = nonConstantValues[1];
+  //   auto c1 = adaptor.getInputs()[i];
+  //   auto c2 = adaptor.getInputs()[j];
+  //   if (c1 == c2) {
+  //     // x ~x
+  //     if (isInverted(i) != isInverted(j)) {
+  //       if (!isInverted(k))
+  //         return getOperand(k);
+  //       auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
+  //       value = ~value;
+  //       return IntegerAttr::get(
+  //           IntegerType::get(getContext(), value.getBitWidth()), value);
+  //     } else if (isInverted(i) == isInverted(j)) {
+  //       // x x const
+  //       if (!isInverted(i))
+  //         return getOperand(i);
+  //       // ~x ~x
+  //        if (isInverted(i)) {
+  //         (*this)->setOperands({getOperand(i)});
+  //         (*this).setInverted({true});
+  //         return getResult();
+  //       //}
+  //     }
+  //   }
+  // }
   return {};
 }
 
