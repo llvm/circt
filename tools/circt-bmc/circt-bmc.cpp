@@ -189,7 +189,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
-  pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(verif::createLowerTestsPass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;

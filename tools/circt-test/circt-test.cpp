@@ -515,7 +515,7 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   // Generate Verilog output.
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
-  pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(verif::createLowerTestsPass());
   pm.addPass(
       verif::createLowerSymbolicValuesPass({opts.symbolicValueLowering}));
   pm.addPass(createLowerSimToSVPass());
