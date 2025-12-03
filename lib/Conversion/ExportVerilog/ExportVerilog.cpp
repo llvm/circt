@@ -6040,7 +6040,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining an assignment into declarations.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (isa<sv::WireOp>(op) &&
+    if (!state.options.disallowDeclAssignments && isa<sv::WireOp>(op) &&
         !op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignments if any.
@@ -6065,7 +6065,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>() &&
+    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+        op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.
       if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
