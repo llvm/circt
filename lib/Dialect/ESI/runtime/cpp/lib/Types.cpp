@@ -59,16 +59,24 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0) {
       os << "," << std::endl;
     }
     os << std::string(level, ' ') << "}";
+  } else if (auto *windowType = dynamic_cast<const esi::WindowType *>(type)) {
+    os << "window[";
+    dumpType(os, windowType->getIntoType(), level + 1);
+    os << "]";
+  } else if (auto *listType = dynamic_cast<const esi::ListType *>(type)) {
+    os << "list<";
+    dumpType(os, listType->getElementType(), level + 1);
+    os << ">";
   } else {
-    throw std::runtime_error(
-        std::format("Unhandled type '{}'", typeid(*type).name()));
+    // For unknown types, just print the type ID
+    os << type->getID();
   }
 }
 
-void Type::dump(std::ostream &os) { dumpType(os, this); }
+void Type::dump(std::ostream &os) const { dumpType(os, this); }
 
 // Recurse through an ESI type and print an elaborated version of it.
-std::string Type::toString() {
+std::string Type::toString() const {
   std::stringstream ss;
   dump(ss);
   return ss.str();
@@ -369,5 +377,4 @@ std::any ArrayType::deserialize(BitVector &data) const {
     std::reverse(result.begin(), result.end());
   return std::any(result);
 }
-
 } // namespace esi

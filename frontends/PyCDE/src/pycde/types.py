@@ -703,13 +703,6 @@ class Channel(Type):
     return _FromCirctType(self._type.inner)
 
   @property
-  def bitwidth(self) -> int | None:
-    bw = self.inner_type.bitwidth
-    if bw is None:
-      return None
-    return bw + Channel.SignalingBitwidth[self.signaling]
-
-  @property
   def is_hw_type(self) -> bool:
     return False
 
@@ -844,16 +837,6 @@ class Bundle(Type):
   def _get_value_class(self):
     from .signals import BundleSignal
     return BundleSignal
-
-  @property
-  def bitwidth(self) -> int | None:
-    total_bw = 0
-    for channel in self.channels:
-      bw = channel.channel.bitwidth
-      if bw is None:
-        return None
-      total_bw += bw
-    return total_bw
 
   @property
   def is_hw_type(self) -> bool:
@@ -1177,10 +1160,6 @@ class Window(Type):
   def _get_value_class(self):
     from .signals import WindowSignal
     return WindowSignal
-
-  @property
-  def bitwidth(self) -> int | None:
-    return self.lowered_type.bitwidth
 
   @property
   def is_hw_type(self) -> bool:
