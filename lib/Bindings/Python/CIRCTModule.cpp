@@ -33,6 +33,7 @@
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/Dialect/Verif.h"
+#include "circt-c/ExportLLVM.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Dialect/Index.h"
@@ -189,6 +190,11 @@ NB_MODULE(_circt, m) {
   m.def("export_split_verilog", [](MlirModule mod, std::string directory) {
     auto cDirectory = mlirStringRefCreateFromCString(directory.c_str());
     mlirExportSplitVerilog(mod, cDirectory);
+  });
+
+  m.def("export_llvm_ir", [](MlirModule mod, nb::object fileObject) {
+    circt::python::PyFileAccumulator accum(fileObject, false);
+    mlirExportLLVMIR(mod, accum.getCallback(), accum.getUserData());
   });
 
   nb::module_ arc = m.def_submodule("_arc", "Arc API");
