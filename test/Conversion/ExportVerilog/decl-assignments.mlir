@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: module test(
 hw.module @test(in %v: i1) {
-  // CHECK:    wire w = v;
+  // ALLOW:    wire w = v;
   // DISALLOW: wire w;
   // DISALLOW: assign w = v;
   %w = sv.wire : !hw.inout<i1>
