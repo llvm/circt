@@ -118,9 +118,11 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
       } else
         return getOperand(i);
     } else {
-      if (isInverted(k))
-        return {}; //~x
-      else
+      if (isInverted(k)) {
+        (*this)->setOperands({getOperand(i)});
+        (*this).setInverted({true});
+        return getResult();
+      } else
         return getOperand(k);
     }
   }
