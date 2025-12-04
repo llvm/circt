@@ -3201,9 +3201,19 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
 
 // -----
 
+firrtl.circuit "AnonDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @UndefinedDomainInAnonDomain() {
+    // expected-error @below {{references undefined domain '@Foo'}}
+    %0 = firrtl.domain.anon @Foo : !firrtl.domain
+  }
+}
+
+// -----
+
 firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@ClockDomain'}}
-    %0 = firrtl.domain.anon @ClockDomain : !firrtl.domain
+    // expected-error @below {{references undefined domain '@Foo'}}
+    %0 = firrtl.domain.anon @Foo : !firrtl.domain
   }
 }

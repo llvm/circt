@@ -7032,7 +7032,7 @@ LogicalResult
 DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
   auto domain = getDomainAttr();
-  if (!symbolTable.lookupSymbolIn(circuitOp, domain))
+  if (!symbolTable.lookupSymbolIn<DomainOp>(circuitOp, domain))
     return emitOpError() << "references undefined domain '" << domain << "'";
 
   return success();
