@@ -23,7 +23,8 @@
 namespace esi {
 
 // NOLINTNEXTLINE(misc-no-recursion)
-static void dumpType(std::ostream &os, const esi::Type *type, int level = 0) {
+static void dumpType(std::ostream &os, const esi::Type *type, int level = 0,
+                     bool oneLine = false) {
   if (auto *uintType = dynamic_cast<const esi::UIntType *>(type)) {
     os << "uint" << uintType->getBitWidth();
   } else if (auto *sintType = dynamic_cast<const esi::SIntType *>(type)) {
@@ -35,37 +36,56 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0) {
   } else if (dynamic_cast<const esi::AnyType *>(type)) {
     os << "any";
   } else if (auto *structType = dynamic_cast<const esi::StructType *>(type)) {
-    os << "struct {" << std::endl;
-    for (const auto &[name, fieldType] : structType->getFields()) {
-      os << std::string(level + 2, ' ') << name << ": ";
-      dumpType(os, fieldType, level + 1);
-      os << "," << std::endl;
+    os << "struct {";
+    const auto &fields = structType->getFields();
+    for (size_t i = 0; i < fields.size(); ++i) {
+      if (!oneLine)
+        os << std::endl << std::string(level + 2, ' ');
+      else if (i > 0)
+        os << " ";
+      const auto &[name, fieldType] = fields[i];
+      os << name << ": ";
+      dumpType(os, fieldType, level + 1, oneLine);
+      if (i < fields.size() - 1)
+        os << ",";
     }
-    os << std::string(level, ' ') << "}";
+    if (!oneLine)
+      os << std::endl << std::string(level, ' ');
+    os << "}";
   } else if (auto *arrayType = dynamic_cast<const esi::ArrayType *>(type)) {
-    dumpType(os, arrayType->getElementType(), level + 1);
+    dumpType(os, arrayType->getElementType(), level + 1, oneLine);
     os << "[" << arrayType->getSize() << "]";
   } else if (auto *channelType = dynamic_cast<const esi::ChannelType *>(type)) {
     os << "chan<";
-    dumpType(os, channelType->getInner(), level + 1);
+    dumpType(os, channelType->getInner(), level + 1, oneLine);
     os << ">";
   } else if (auto *bundleType = dynamic_cast<const esi::BundleType *>(type)) {
-    os << "bundle {" << std::endl;
-    for (const auto &[name, direction, fieldType] : bundleType->getChannels()) {
-      os << std::string(level + 2, ' ')
-         << std::format(
-                "{} [{}]: ", direction == BundleType::To ? "to" : "from", name);
-      dumpType(os, fieldType, level + 1);
-      os << "," << std::endl;
+    os << "bundle {";
+    const auto &channels = bundleType->getChannels();
+    for (size_t i = 0; i < channels.size(); ++i) {
+      if (!oneLine)
+        os << std::endl << std::string(level + 2, ' ');
+      else if (i > 0)
+        os << " ";
+      const auto &[name, direction, fieldType] = channels[i];
+      os << std::format(
+          "{} [{}]: ", direction == BundleType::To ? "to" : "from", name);
+      dumpType(os, fieldType, level + 1, oneLine);
+      if (i < channels.size() - 1)
+        os << ",";
     }
-    os << std::string(level, ' ') << "}";
+    if (!oneLine)
+      os << std::endl << std::string(level, ' ');
+    else
+      os << " ";
+    os << "}";
   } else if (auto *windowType = dynamic_cast<const esi::WindowType *>(type)) {
     os << "window[";
-    dumpType(os, windowType->getIntoType(), level + 1);
+    dumpType(os, windowType->getIntoType(), level + 1, oneLine);
     os << "]";
   } else if (auto *listType = dynamic_cast<const esi::ListType *>(type)) {
     os << "list<";
-    dumpType(os, listType->getElementType(), level + 1);
+    dumpType(os, listType->getElementType(), level + 1, oneLine);
     os << ">";
   } else {
     // For unknown types, just print the type ID
@@ -73,12 +93,14 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0) {
   }
 }
 
-void Type::dump(std::ostream &os) const { dumpType(os, this); }
+void Type::dump(std::ostream &os, bool oneLine) const {
+  dumpType(os, this, oneLine ? 0 : 0, oneLine);
+}
 
 // Recurse through an ESI type and print an elaborated version of it.
-std::string Type::toString() const {
+std::string Type::toString(bool oneLine) const {
   std::stringstream ss;
-  dump(ss);
+  dump(ss, oneLine);
   return ss.str();
 }
 
