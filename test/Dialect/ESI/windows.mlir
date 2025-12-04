@@ -268,7 +268,7 @@ hw.module @MultiFrameWindowModule(in %a: !MultiFrameWindow, out x: !hw.typealias
 
 // Test bulk transfer encoding for lists.
 // Bulk transfer uses countWidth to specify the width of a 'count' field in the
-// header frame. This count indicates how many items will be transmitted in 
+// header frame. This count indicates how many items will be transmitted in
 // subsequent data frames. Unlike streaming mode, no 'last' or '_size' fields
 // are added to the header frame.
 !BulkTransferStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>

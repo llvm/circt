@@ -482,7 +482,7 @@ def WindowFieldType : ESI_Type<"WindowField"> {
       'numItems', `last` MUST be true meaning that all frames must be full
       except for the last one.
       - Bulk transfer: in this encoding, there must be a 'header' frame
-      immediately preceeding the frame which contains the list field. That frame
+      immediately preceding the frame which contains the list field. That frame
       must include a special 'count' field which indicates how many items of the
       list will be transmitted next. Once the number of items are transmitted
       (transmitted frames == ceil(count/numItems)), the header is re-transmitted

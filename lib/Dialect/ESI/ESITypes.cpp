@@ -113,6 +113,9 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
 
   // Track which fields have been consumed (for non-bulk-transfer uses).
   DenseSet<StringAttr> consumedFields;
+  // Track which fields have been used as bulk transfer fields (header with
+  // countWidth). These fields can be reused in data frames with numItems.
+  DenseSet<StringAttr> bulkTransferFields;
 
   for (auto frame : frames) {
     bool encounteredArrayOrListWithNumItems = false;
@@ -125,14 +128,30 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
       Type fieldType = fieldTypeIter->getSecond();
 
       // Check if this field was already consumed by a previous frame.
-      // Exception: bulk transfer mode (countWidth > 0) allows the same list
-      // field to appear in a header frame (with countWidth) and later in a
-      // data frame (with numItems).
+      // Bulk transfer mode allows the same list field to appear in a header
+      // frame (with countWidth) and later in data frames (with numItems),
+      // but only if the field was first introduced as a bulk transfer field.
       bool isBulkTransferHeader = field.getBulkCountWidth() > 0;
-      if (consumedFields.contains(field.getFieldName()) &&
-          !isBulkTransferHeader)
+      bool isBulkTransferData =
+          field.getNumItems() > 0 &&
+          bulkTransferFields.contains(field.getFieldName());
+
+      if (consumedFields.contains(field.getFieldName())) {
+        // Field was already consumed in a non-bulk-transfer context.
+        // Cannot reuse it.
         return emitError() << "field '" << field.getFieldName()
                            << "' already consumed by a previous frame";
+      }
+
+      if (bulkTransferFields.contains(field.getFieldName()) &&
+          !isBulkTransferData) {
+        // Field was introduced as a bulk transfer field but is not being
+        // used as bulk transfer data (i.e., doesn't have numItems specified).
+        return emitError()
+               << "field '" << field.getFieldName()
+               << "' was introduced as a bulk transfer field and can only "
+                  "be reused with numItems specified";
+      }
 
       // If we encounter an array or list field with numItems, no subsequent
       // fields in this frame can be arrays or lists with numItems.
@@ -170,11 +189,13 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
           return emitError() << "bulk transfer (countWidth) only allowed on "
                                 "list fields (in "
                              << field.getFieldName() << ")";
+        // Mark this field as a bulk transfer field.
+        bulkTransferFields.insert(field.getFieldName());
       }
 
-      // Mark this field as consumed (unless it's a bulk transfer header entry,
-      // which allows the field to be used again in a data frame).
-      if (!isBulkTransferHeader)
+      // Mark this field as consumed (unless it's a bulk transfer header entry
+      // or a bulk transfer data entry, which allows the field to be reused).
+      if (!isBulkTransferHeader && !isBulkTransferData)
         consumedFields.insert(field.getFieldName());
     }
   }
