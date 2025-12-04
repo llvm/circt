@@ -778,7 +778,14 @@ def ObjectOp :  FIRRTLOp<"object", [
 }
 
 def DomainCreateAnonOp : FIRRTLOp<"domain.anon", [
-    ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp"]>,
+    ParentOneOf<[
+      "firrtl::ContractOp",
+      "firrtl::FModuleOp",
+      "firrtl::LayerBlockOp",
+      "firrtl::MatchOp",
+      "firrtl::WhenOp",
+      "sv::IfDefOp"
+    ]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
   let summary = "Create an anonymous domain, without parameters set";
