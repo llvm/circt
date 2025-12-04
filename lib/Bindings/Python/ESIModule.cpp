@@ -245,13 +245,16 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
       .def_classmethod(
           "get",
           [](nb::object cls, MlirAttribute fieldName, uint64_t numItems,
-             MlirContext ctxt) {
-            return cls(circtESIWindowFieldTypeGet(ctxt, fieldName, numItems));
+             uint64_t bulkCountWidth, MlirContext ctxt) {
+            return cls(circtESIWindowFieldTypeGet(ctxt, fieldName, numItems,
+                                                  bulkCountWidth));
           },
           nb::arg("cls"), nb::arg("field_name"), nb::arg("num_items") = 0,
-          nb::arg("ctxt") = nullptr)
+          nb::arg("bulk_count_width") = 0, nb::arg("ctxt") = nullptr)
       .def_property_readonly("field_name", &circtESIWindowFieldTypeGetFieldName)
-      .def_property_readonly("num_items", &circtESIWindowFieldTypeGetNumItems);
+      .def_property_readonly("num_items", &circtESIWindowFieldTypeGetNumItems)
+      .def_property_readonly("bulk_count_width",
+                             &circtESIWindowFieldTypeGetBulkCountWidth);
 
   mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
       .def_classmethod(
