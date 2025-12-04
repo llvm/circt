@@ -1,4 +1,4 @@
-// REQUIRES: yosys
+// REQUIRES: yosys-abc
 // RUN: circt-synth %s -abc-path %yosys-abc -abc-commands "balance" -top balanceTest | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(synth-abc-runner{abc-path=%yosys-abc abc-commands="balance"}))' | FileCheck %s
 
