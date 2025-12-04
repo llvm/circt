@@ -33,28 +33,12 @@ void CombDialect::initialize() {
 }
 
 /// Registered hook to materialize a single constant operation from a given
-/// attribute value with the desired resultant type. This method should use
-/// the provided builder to create the operation without changing the
-/// insertion position. The generated operation is expected to be constant
-/// like, i.e. single result, zero operands, non side-effecting, etc. On
-/// success, this hook should return the value generated to represent the
-/// constant value. Otherwise, it should return null on failure.
+/// attribute value with the desired resultant type. This implementation
+/// delegates to the HW dialect's materializeConstant function. See the
+/// documentation in HWDialect for more information.
 Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                             Type type, Location loc) {
-  // Integer constants.
-  if (auto intType = dyn_cast<IntegerType>(type))
-    if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return hw::ConstantOp::create(builder, loc, type, attrValue);
-
-  // Parameter expressions materialize into hw.param.value.
-  auto *parentOp = builder.getBlock()->getParentOp();
-  auto curModule = dyn_cast<hw::HWModuleOp>(parentOp);
-  if (!curModule)
-    curModule = parentOp->getParentOfType<hw::HWModuleOp>();
-  if (curModule && isValidParameterExpression(value, curModule))
-    return hw::ParamValueOp::create(builder, loc, type, value);
-
-  return nullptr;
+  return hw::materializeConstant(builder, value, type, loc);
 }
 
 // Provide implementations for the enums we use.
