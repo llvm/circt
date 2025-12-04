@@ -15,6 +15,7 @@
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -25,18 +26,15 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include "circt/Conversion/CoreToFSM.h"
-#include "mlir/Analysis/TopologicalSortUtils.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "mlir/Transforms/Passes.h"
 #include <string>
+
 namespace circt {
 #define GEN_PASS_DEF_CONVERTCORETOFSM
 #include "circt/Conversion/Passes.h.inc"
@@ -45,6 +43,7 @@ namespace circt {
 using namespace mlir;
 using namespace circt;
 using namespace hw;
+using namespace comb;
 using namespace fsm;
 
 namespace {
@@ -56,31 +55,29 @@ static void generateConcatenatedValues(
     llvm::DenseSet<size_t> &finalPossibleValues, size_t operandIdx,
     size_t currentValue);
 
-static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
-  if (circt::hw::ConstantOp c =
-          dyn_cast_or_null<hw::ConstantOp>(v.getDefiningOp())) {
+static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
+  if (auto c = dyn_cast_or_null<hw::ConstantOp>(v.getDefiningOp())) {
     possibleValues.insert(c.getValueAttr().getValue().getZExtValue());
     return;
   }
-  if (circt::comb::MuxOp m = dyn_cast_or_null<comb::MuxOp>(v.getDefiningOp())) {
-    getPossibleValues(possibleValues, m.getTrueValue());
-    getPossibleValues(possibleValues, m.getFalseValue());
+  if (auto m = dyn_cast_or_null<MuxOp>(v.getDefiningOp())) {
+    addPossibleValues(possibleValues, m.getTrueValue());
+    addPossibleValues(possibleValues, m.getFalseValue());
     return;
   }
 
-  if (circt::comb::ConcatOp concatOp =
-          dyn_cast_or_null<comb::ConcatOp>(v.getDefiningOp())) {
+  if (auto concatOp = dyn_cast_or_null<ConcatOp>(v.getDefiningOp())) {
     llvm::SmallVector<llvm::DenseSet<size_t>> allOperandValues;
     llvm::SmallVector<unsigned> operandWidths;
 
     for (Value operand : concatOp.getOperands()) {
       llvm::DenseSet<size_t> operandPossibleValues;
-      getPossibleValues(operandPossibleValues, operand);
+      addPossibleValues(operandPossibleValues, operand);
 
       // It's crucial to handle the case where a sub-computation is too complex.
       // If we can't determine specific values for an operand, we must
       // pessimistically assume it can be any value its bitwidth allows.
-      IntegerType opType = dyn_cast<IntegerType>(operand.getType());
+      auto opType = dyn_cast<IntegerType>(operand.getType());
       unsigned width = opType.getWidth();
       if (operandPossibleValues.empty()) {
         uint64_t numStates = 1ULL << width;
@@ -90,6 +87,10 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
           // If the search space is too large, we abandon the analysis for this
           // path. The outer function will fall back to its own full-range
           // default.
+          v.getDefiningOp()->emitWarning()
+              << "Search space too large (>" << 256
+              << " states) for operand with bitwidth " << width
+              << "; abandoning analysis for this path";
           return;
         }
         for (uint64_t i = 0; i < numStates; ++i)
@@ -114,15 +115,17 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   // --- Fallback Case ---
   // If the operation is not recognized, assume all possible values for its
   // bitwidth.
-  Operation *o = v.getDefiningOp();
 
-  IntegerType addrType = dyn_cast<IntegerType>(v.getType());
+  auto addrType = dyn_cast<IntegerType>(v.getType());
   if (!addrType)
     return; // Not an integer type we can analyze
 
   unsigned bitWidth = addrType.getWidth();
   // Again, use a threshold to avoid trying to enumerate 2^64 values.
   if (bitWidth > 16) {
+    v.getDefiningOp()->emitWarning()
+        << "Bitwidth " << bitWidth
+        << " too large (>16); abandoning analysis for this path";
     return;
   }
 
@@ -134,60 +137,55 @@ static void getPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 };
 
 static bool isConstant(mlir::Value value) {
-  Operation *getDefiningOp = value.getDefiningOp();
-  if (!getDefiningOp) {
+  Operation *definingOp = value.getDefiningOp();
+  if (!definingOp) {
     return false;
   }
-  if (circt::hw::ConstantOp constantOp =
-          mlir::dyn_cast<circt::hw::ConstantOp>(getDefiningOp)) {
+  if (isa<hw::ConstantOp>(definingOp)) {
     return true;
   }
-  if (circt::comb::MuxOp muxOp =
-          mlir::dyn_cast<circt::comb::MuxOp>(getDefiningOp)) {
+  if (auto muxOp = dyn_cast<MuxOp>(definingOp)) {
     return isConstant(muxOp.getTrueValue()) &&
            isConstant(muxOp.getFalseValue());
   }
   return false;
 }
-LogicalResult pushIcmp(comb::ICmpOp op, PatternRewriter &rewriter) {
+
+LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
-  if (op.getPredicate() == circt::comb::ICmpPredicate::eq &&
-      op.getLhs().getDefiningOp<circt::comb::MuxOp>() &&
+  if (op.getPredicate() == ICmpPredicate::eq &&
+      op.getLhs().getDefiningOp<MuxOp>() &&
       (isConstant(op.getLhs()) ||
-       op.getRhs().getDefiningOp<circt::hw::ConstantOp>())) {
+       op.getRhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
-    circt::comb::MuxOp mux = op.getLhs().getDefiningOp<circt::comb::MuxOp>();
+    auto mux = op.getLhs().getDefiningOp<MuxOp>();
     mlir::Value x = mux.getTrueValue();
     mlir::Value y = mux.getFalseValue();
     mlir::Value b = op.getRhs();
     Location loc = op.getLoc();
-    circt::comb::ICmpOp eq1 = rewriter.create<circt::comb::ICmpOp>(
-        loc, circt::comb::ICmpPredicate::eq, x, b);
-    circt::comb::ICmpOp eq2 = rewriter.create<circt::comb::ICmpOp>(
-        loc, circt::comb::ICmpPredicate::eq, y, b);
-    circt::comb::MuxOp newMux = rewriter.create<circt::comb::MuxOp>(
-        loc, mux.getCond(), eq1.getResult(), eq2.getResult());
+    auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
+    auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
+    auto newMux = rewriter.create<MuxOp>(loc, mux.getCond(), eq1.getResult(),
+                                         eq2.getResult());
     Operation *o = newMux;
     op.replaceAllUsesWith(o);
     op.erase();
     return llvm::success();
   }
-  if (op.getPredicate() == circt::comb::ICmpPredicate::eq &&
-      op.getRhs().getDefiningOp<circt::comb::MuxOp>() &&
+  if (op.getPredicate() == ICmpPredicate::eq &&
+      op.getRhs().getDefiningOp<MuxOp>() &&
       (isConstant(op.getRhs()) ||
-       op.getLhs().getDefiningOp<circt::hw::ConstantOp>())) {
+       op.getLhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
-    circt::comb::MuxOp mux = op.getRhs().getDefiningOp<circt::comb::MuxOp>();
+    auto mux = op.getRhs().getDefiningOp<MuxOp>();
     mlir::Value x = mux.getTrueValue();
     mlir::Value y = mux.getFalseValue();
     mlir::Value b = op.getLhs();
     Location loc = op.getLoc();
-    circt::comb::ICmpOp eq1 = rewriter.create<circt::comb::ICmpOp>(
-        loc, circt::comb::ICmpPredicate::eq, x, b);
-    circt::comb::ICmpOp eq2 = rewriter.create<circt::comb::ICmpOp>(
-        loc, circt::comb::ICmpPredicate::eq, y, b);
-    circt::comb::MuxOp newMux = rewriter.create<circt::comb::MuxOp>(
-        loc, mux.getCond(), eq1.getResult(), eq2.getResult());
+    auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
+    auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
+    auto newMux = rewriter.create<MuxOp>(loc, mux.getCond(), eq1.getResult(),
+                                         eq2.getResult());
     Operation *o = newMux;
     op.replaceAllUsesWith(o);
     op.erase();
@@ -195,6 +193,7 @@ LogicalResult pushIcmp(comb::ICmpOp op, PatternRewriter &rewriter) {
   }
   return llvm::failure();
 }
+
 /// Recursively builds all possible concatenated integer values.
 static void generateConcatenatedValues(
     const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
@@ -233,6 +232,7 @@ intToRegMap(llvm::SmallVector<seq::CompRegOp> v, int i) {
   }
   return m;
 }
+
 static int regMapToInt(llvm::SmallVector<seq::CompRegOp> v,
                        llvm::DenseMap<mlir::Value, int> m) {
   int i = 0;
@@ -291,38 +291,37 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
   RewritePatternSet patterns(&context);
   for (auto *dialect : context.getLoadedDialects())
     dialect->getCanonicalizationPatterns(patterns);
-  comb::ICmpOp::getCanonicalizationPatterns(patterns, &context);
-  comb::AndOp::getCanonicalizationPatterns(patterns, &context);
-  comb::XorOp::getCanonicalizationPatterns(patterns, &context);
-  comb::MuxOp::getCanonicalizationPatterns(patterns, &context);
-  comb::ConcatOp::getCanonicalizationPatterns(patterns, &context);
-  comb::ExtractOp::getCanonicalizationPatterns(patterns, &context);
-  comb::AddOp::getCanonicalizationPatterns(patterns, &context);
-  comb::OrOp::getCanonicalizationPatterns(patterns, &context);
-  comb::MulOp::getCanonicalizationPatterns(patterns, &context);
+  ICmpOp::getCanonicalizationPatterns(patterns, &context);
+  AndOp::getCanonicalizationPatterns(patterns, &context);
+  XorOp::getCanonicalizationPatterns(patterns, &context);
+  MuxOp::getCanonicalizationPatterns(patterns, &context);
+  ConcatOp::getCanonicalizationPatterns(patterns, &context);
+  ExtractOp::getCanonicalizationPatterns(patterns, &context);
+  AddOp::getCanonicalizationPatterns(patterns, &context);
+  OrOp::getCanonicalizationPatterns(patterns, &context);
+  MulOp::getCanonicalizationPatterns(patterns, &context);
   hw::ConstantOp::getCanonicalizationPatterns(patterns, &context);
-  fsm::TransitionOp::getCanonicalizationPatterns(patterns, &context);
-  fsm::StateOp::getCanonicalizationPatterns(patterns, &context);
-  fsm::MachineOp::getCanonicalizationPatterns(patterns, &context);
+  TransitionOp::getCanonicalizationPatterns(patterns, &context);
+  StateOp::getCanonicalizationPatterns(patterns, &context);
+  MachineOp::getCanonicalizationPatterns(patterns, &context);
   patterns.add(pushIcmp);
   FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   return frozenPatterns;
 }
 
 static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
-                               circt::hw::HWModuleOp moduleOp,
-                               size_t currentStateIndex,
+                               HWModuleOp moduleOp, size_t currentStateIndex,
                                llvm::SmallVector<seq::CompRegOp> registers,
                                OpBuilder opBuilder, bool isInitialState) {
 
   IRMapping mapping;
-  HWModuleOp clonedBody = llvm::dyn_cast<circt::hw::HWModuleOp>(
-      opBuilder.clone(*moduleOp, mapping));
+  auto clonedBody =
+      llvm::dyn_cast<HWModuleOp>(opBuilder.clone(*moduleOp, mapping));
 
   llvm::DenseMap<mlir::Value, int> stateMap =
       intToRegMap(registers, currentStateIndex);
   Operation *terminator = clonedBody.getBody().front().getTerminator();
-  circt::hw::OutputOp output = dyn_cast<circt::hw::OutputOp>(terminator);
+  auto output = dyn_cast<hw::OutputOp>(terminator);
   int i = 0;
   llvm::SmallVector<mlir::Value> values;
   llvm::SmallVector<mlir::Type> types;
@@ -332,12 +331,12 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
 
     mlir::Value clonedRegValue = mapping.lookup(originalRegValue);
     Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-    circt::seq::CompRegOp reg = dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
+    auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
     mlir::Type constantType = reg.getType();
     IntegerAttr constantAttr =
         opBuilder.getIntegerAttr(constantType, constStateValue);
     opBuilder.setInsertionPoint(clonedRegOp);
-    circt::hw::ConstantOp otherStateConstant =
+    auto otherStateConstant =
         opBuilder.create<hw::ConstantOp>(reg.getLoc(), constantAttr);
     values.push_back(reg.getInput());
     types.push_back(reg.getType());
@@ -347,8 +346,7 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
     i++;
   }
   opBuilder.setInsertionPointToEnd(clonedBody.front().getBlock());
-  circt::hw::OutputOp newOutput =
-      opBuilder.create<circt::hw::OutputOp>(output.getLoc(), values);
+  auto newOutput = opBuilder.create<hw::OutputOp>(output.getLoc(), values);
   output.erase();
   FrozenRewritePatternSet frozenPatterns = loadPatterns(*moduleOp.getContext());
 
@@ -365,13 +363,13 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
     llvm::DenseSet<size_t> possibleValues;
 
     Value v = newOutput.getOperand(j);
-    getPossibleValues(possibleValues, v);
+    addPossibleValues(possibleValues, v);
     pv.push_back(possibleValues);
   }
   std::set<llvm::SmallVector<size_t>> flipped = calculateCartesianProduct(pv);
   for (llvm::SmallVector<size_t> v : flipped) {
     llvm::DenseMap<mlir::Value, int> m;
-    for (int k = 0; k < v.size(); k++) {
+    for (size_t k = 0; k < v.size(); k++) {
       seq::CompRegOp r = registers[k];
       m[r] = v[k];
     }
@@ -389,9 +387,9 @@ public:
   HWModuleOpConverter(OpBuilder &builder, HWModuleOp moduleOp)
       : moduleOp(moduleOp), opBuilder(builder) {}
   LogicalResult run() {
-    llvm::SmallVector<circt::seq::CompRegOp> stateRegs;
-    llvm::SmallVector<circt::seq::CompRegOp> variableRegs;
-    moduleOp.walk([&](circt::seq::CompRegOp reg) {
+    llvm::SmallVector<seq::CompRegOp> stateRegs;
+    llvm::SmallVector<seq::CompRegOp> variableRegs;
+    moduleOp.walk([&](seq::CompRegOp reg) {
       if (reg.getName()->contains("state")) {
         stateRegs.push_back(reg);
       } else {
@@ -413,8 +411,8 @@ public:
       registers.push_back(c);
     }
 
-    llvm::DenseMap<size_t, circt::fsm::StateOp> stateToStateOp;
-    llvm::DenseMap<circt::fsm::StateOp, size_t> stateOpToState;
+    llvm::DenseMap<size_t, StateOp> stateToStateOp;
+    llvm::DenseMap<StateOp, size_t> stateOpToState;
     // gather async reset arguments to delete them from function type
     llvm::DenseSet<size_t> asyncResetArguments;
     auto regsInGroup = stateRegs;
@@ -430,11 +428,10 @@ public:
     llvm::DenseMap<mlir::Value, int> initialStateMap;
     for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {
       mlir::Value resetValue = reg.getResetValue();
-      circt::hw::ConstantOp definingConstant =
-          resetValue.getDefiningOp<circt::hw::ConstantOp>();
+      auto definingConstant = resetValue.getDefiningOp<hw::ConstantOp>();
       if (!definingConstant) {
         reg->emitError(
-            "Cannot find defining constant for reset value of register: ");
+            "cannot find defining constant for reset value of register");
         return failure();
       }
       int resetValueInt =
@@ -455,20 +452,23 @@ public:
     // The builder for fsm.MachineOp will create the body region and block
     // arguments.
     opBuilder.setInsertionPoint(moduleOp);
-    fsm::MachineOp machine = opBuilder.create<fsm::MachineOp>(
+    auto machine = opBuilder.create<MachineOp>(
         loc, machineName, initialStateName, machineType, machineAttrs);
 
     OpBuilder::InsertionGuard guard(opBuilder);
     opBuilder.setInsertionPointToStart(&machine.getBody().front());
-    llvm::DenseMap<circt::seq::CompRegOp, circt::fsm::VariableOp> variableMap;
-    for (circt::seq::CompRegOp varReg : variableRegs) {
+    llvm::DenseMap<seq::CompRegOp, VariableOp> variableMap;
+    for (seq::CompRegOp varReg : variableRegs) {
       ::mlir::TypedValue<::mlir::Type> initialValue = varReg.getResetValue();
-      circt::hw::ConstantOp definingConstant =
-          initialValue.getDefiningOp<circt::hw::ConstantOp>();
-      circt::fsm::VariableOp variableOp =
-          opBuilder.create<circt::fsm::VariableOp>(
-              varReg->getLoc(), varReg.getInput().getType(),
-              definingConstant.getValueAttr(), varReg.getName().value_or("a"));
+      auto definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
+      if (!definingConstant) {
+        varReg->emitError("cannot find defining constant for reset value of "
+                          "variable register");
+        return failure();
+      }
+      auto variableOp = opBuilder.create<VariableOp>(
+          varReg->getLoc(), varReg.getInput().getType(),
+          definingConstant.getValueAttr(), varReg.getName().value_or("a"));
       variableMap[varReg] = variableOp;
     }
 
@@ -491,10 +491,10 @@ public:
 
       opBuilder.setInsertionPointToEnd(&machine.getBody().front());
 
-      circt::fsm::StateOp stateOp;
+      StateOp stateOp;
 
       if (!stateToStateOp.contains(currentStateIndex)) {
-        stateOp = opBuilder.create<fsm::StateOp>(
+        stateOp = opBuilder.create<StateOp>(
             loc, "state_" + std::to_string(currentStateIndex));
         stateToStateOp.insert({currentStateIndex, stateOp});
         stateOpToState.insert({stateOp, currentStateIndex});
@@ -511,7 +511,7 @@ public:
 
       auto *terminator = outputRegion.front().getTerminator();
       auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
-      assert(hwOutputOp && "Expected terminator to be hw.OutputOp");
+      assert(hwOutputOp && "expected terminator to be hw.output op");
 
       // Position the builder to insert the new terminator right before the
       // old one.
@@ -531,8 +531,7 @@ public:
       for (auto &[originalRegValue, variableOp] : variableMap) {
         Value clonedRegValue = mapping.lookup(originalRegValue);
         Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-        circt::seq::CompRegOp reg =
-            dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
+        auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
         const auto res = variableOp.getResult();
         clonedRegValue.replaceAllUsesWith(res);
         reg.erase();
@@ -546,7 +545,7 @@ public:
 
         assert(clonedRegOp && "Cloned value must have a defining op.");
         opBuilder.setInsertionPoint(clonedRegOp);
-        circt::seq::CompRegOp r = dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
+        auto r = dyn_cast<seq::CompRegOp>(clonedRegOp);
         assert(r && "Must be a register.");
         TypedValue<IntegerType> registerReset = r.getReset();
         if (registerReset) { // Ensure the register has a reset.
@@ -554,20 +553,19 @@ public:
                   mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
             asyncResetArguments.insert(blockArg.getArgNumber());
             // blockArg.dump();
-            ConstantOp falseConst = opBuilder.create<hw::ConstantOp>(
+            auto falseConst = opBuilder.create<hw::ConstantOp>(
                 blockArg.getLoc(), clonedRegValue.getType(), 0);
             blockArg.replaceAllUsesWith(falseConst.getResult());
             // Check if this argument belongs to the top-level module block.
           }
           // also check for rst_ni case, because OpenTitan uses ni.
-          if (circt::comb::XorOp xorOp =
-                  registerReset.getDefiningOp<circt::comb::XorOp>()) {
+          if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
             if (xorOp.isBinaryNot()) {
               mlir::Value rhs = xorOp.getOperand(0);
               if (BlockArgument blockArg =
                       mlir::dyn_cast<mlir::BlockArgument>(rhs)) {
                 asyncResetArguments.insert(blockArg.getArgNumber());
-                ConstantOp trueConst = opBuilder.create<hw::ConstantOp>(
+                auto trueConst = opBuilder.create<hw::ConstantOp>(
                     blockArg.getLoc(), blockArg.getType(), 1);
                 blockArg.replaceAllUsesWith(trueConst.getResult());
               }
@@ -621,20 +619,19 @@ public:
       getReachableStates(vistableStates, moduleOp, currentStateIndex, registers,
                          opBuilder, currentStateIndex == initialStateIndex);
       for (size_t j : vistableStates) {
-        circt::fsm::StateOp toState;
+        StateOp toState;
         if (!stateToStateOp.contains(j)) {
           opBuilder.setInsertionPointToEnd(&machine.getBody().front());
           toState =
-              opBuilder.create<fsm::StateOp>(loc, "state_" + std::to_string(j));
+              opBuilder.create<StateOp>(loc, "state_" + std::to_string(j));
           stateToStateOp.insert({j, toState});
           stateOpToState.insert({toState, j});
         } else {
           toState = stateToStateOp[j];
         }
         opBuilder.setInsertionPointToStart(&transitionRegion.front());
-        circt::fsm::TransitionOp transitionOp =
-            opBuilder.create<circt::fsm::TransitionOp>(
-                loc, "state_" + std::to_string(j));
+        auto transitionOp =
+            opBuilder.create<TransitionOp>(loc, "state_" + std::to_string(j));
         mlir::Region &guardRegion = transitionOp.getGuard();
         opBuilder.createBlock(&guardRegion);
 
@@ -647,8 +644,8 @@ public:
         guardBlock.erase();
         mlir::Block &newGuardBlock = guardRegion.front();
         Operation *terminator = newGuardBlock.getTerminator();
-        hw::OutputOp hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
-        assert(hwOutputOp && "Expected terminator to be hw.OutputOp");
+        auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
+        assert(hwOutputOp && "expected terminator to be hw.output op");
 
         // Position the builder to insert the new terminator right before
         // the old one.
@@ -660,8 +657,7 @@ public:
           opBuilder.setInsertionPointToStart(&newGuardBlock);
           Value clonedRegValue = mapping.lookup(originalRegValue);
           Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-          circt::seq::CompRegOp reg =
-              dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
+          auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
           const auto res = variableOp.getResult();
           clonedRegValue.replaceAllUsesWith(res);
           reg.erase();
@@ -671,26 +667,24 @@ public:
           Value clonedRegValue = mapping.lookup(originalRegValue);
           Operation *clonedRegOp = clonedRegValue.getDefiningOp();
           opBuilder.setInsertionPoint(clonedRegOp);
-          circt::seq::CompRegOp r =
-              dyn_cast<circt::seq::CompRegOp>(clonedRegOp);
+          auto r = dyn_cast<seq::CompRegOp>(clonedRegOp);
 
           mlir::Value registerInput = r.getInput();
           TypedValue<IntegerType> registerReset = r.getReset();
           if (registerReset) { // Ensure the register has a reset.
             if (BlockArgument blockArg =
                     mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
-              ConstantOp falseConst = opBuilder.create<hw::ConstantOp>(
+              auto falseConst = opBuilder.create<hw::ConstantOp>(
                   blockArg.getLoc(), clonedRegValue.getType(), 0);
               blockArg.replaceAllUsesWith(falseConst.getResult());
             }
             // also check for rst_ni case, because OpenTitan uses ni.
-            if (circt::comb::XorOp xorOp =
-                    registerReset.getDefiningOp<circt::comb::XorOp>()) {
+            if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
               if (xorOp.isBinaryNot()) {
                 mlir::Value rhs = xorOp.getOperand(0);
                 if (BlockArgument blockArg =
                         mlir::dyn_cast<mlir::BlockArgument>(rhs)) {
-                  ConstantOp trueConst = opBuilder.create<hw::ConstantOp>(
+                  auto trueConst = opBuilder.create<hw::ConstantOp>(
                       blockArg.getLoc(), blockArg.getType(), 1);
                   blockArg.replaceAllUsesWith(trueConst.getResult());
                 }
@@ -703,18 +697,17 @@ public:
 
           IntegerAttr constantAttr =
               opBuilder.getIntegerAttr(constantType, constStateValue);
-          circt::hw::ConstantOp otherStateConstant =
-              opBuilder.create<hw::ConstantOp>(hwOutputOp.getLoc(),
-                                               constantAttr);
+          auto otherStateConstant = opBuilder.create<hw::ConstantOp>(
+              hwOutputOp.getLoc(), constantAttr);
 
-          circt::comb::ICmpOp doesEqual = opBuilder.create<circt::comb::ICmpOp>(
-              hwOutputOp.getLoc(), comb::ICmpPredicate::eq, registerInput,
+          auto doesEqual = opBuilder.create<ICmpOp>(
+              hwOutputOp.getLoc(), ICmpPredicate::eq, registerInput,
               otherStateConstant.getResult());
           equalityChecks.push_back(doesEqual.getResult());
         }
         opBuilder.setInsertionPoint(hwOutputOp);
-        circt::comb::AndOp allEqualCheck = opBuilder.create<circt::comb::AndOp>(
-            hwOutputOp.getLoc(), equalityChecks, false);
+        auto allEqualCheck =
+            opBuilder.create<AndOp>(hwOutputOp.getLoc(), equalityChecks, false);
         // return `true` iff all registers match their value in the toState.
         opBuilder.create<fsm::ReturnOp>(hwOutputOp.getLoc(),
                                         allEqualCheck.getResult());
@@ -772,16 +765,17 @@ public:
             //  Find the cloned register's result value using the mapping.
             Value clonedRegValue = mapping.lookup(originalRegValue);
             Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-            seq::CompRegOp reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
+            auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
             opBuilder.setInsertionPointToStart(&newActionBlock);
-            fsm::UpdateOp updateOp = opBuilder.create<fsm::UpdateOp>(
-                reg.getLoc(), variableOp, reg.getInput());
+            auto updateOp = opBuilder.create<UpdateOp>(reg.getLoc(), variableOp,
+                                                       reg.getInput());
             const mlir::Value res = variableOp.getResult();
             clonedRegValue.replaceAllUsesWith(res);
             reg.erase();
           }
           Operation *terminator = actionRegion.back().getTerminator();
-          hw::OutputOp hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
+          auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
+          assert(hwOutputOp && "expected terminator to be hw.output op");
           hwOutputOp.erase();
 
           for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
@@ -856,10 +850,9 @@ public:
              stateOp.getTransitions().getOps<TransitionOp>()) {
           StateOp nextState = transition.getNextStateOp();
           int nextStateIndex = stateOpToState.lookup(nextState);
-          hw::ConstantOp guardConst =
-              transition.getGuardReturn()
-                  .getOperand()
-                  .getDefiningOp<circt::hw::ConstantOp>();
+          auto guardConst = transition.getGuardReturn()
+                                .getOperand()
+                                .getDefiningOp<hw::ConstantOp>();
           bool nextStateIsReachable =
               !guardConst || (guardConst.getValueAttr().getInt() != 0);
           // If we find a valid next state and haven't seen it before, add it to
@@ -873,18 +866,18 @@ public:
       }
     }
 
-    SmallVector<fsm::StateOp> statesToErase;
+    SmallVector<StateOp> statesToErase;
 
     // First, collect the states that need to be erased.
-    for (fsm::StateOp stateOp : machine.getOps<fsm::StateOp>()) {
+    for (StateOp stateOp : machine.getOps<StateOp>()) {
       if (!stateOp.getOutputOp()) {
         statesToErase.push_back(stateOp);
       }
     }
 
     // Now, erase them in a separate loop.
-    for (fsm::StateOp stateOp : statesToErase) {
-      for (fsm::TransitionOp transition : machine.getOps<fsm::TransitionOp>()) {
+    for (StateOp stateOp : statesToErase) {
+      for (TransitionOp transition : machine.getOps<TransitionOp>()) {
         if (transition.getNextStateOp().getSymName() == stateOp.getSymName()) {
           transition.erase();
         }
