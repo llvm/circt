@@ -1299,5 +1299,5 @@ firrtl.circuit "OptionalBindFile" attributes {
 // Check that each companion instance gets a separate per-module bind file name
 // based on the module that instantiates it
 // CHECK-LABEL: firrtl.circuit "OptionalBindFile"
-// CHECK: firrtl.instance ground_companion {lowerToBind, output_file = #hw.output_file<"grandcentral-DUT.sv", excludeFromFileList>} @GroundView_companion()
-// CHECK: firrtl.instance vector_companion {lowerToBind, output_file = #hw.output_file<"grandcentral-Memory.sv", excludeFromFileList>} @VectorView_companion()
+// CHECK: firrtl.instance ground_companion {lowerToBind, output_file = #hw.output_file<"gct-dir/grandcentral-DUT.sv", excludeFromFileList>} @GroundView_companion()
+// CHECK: firrtl.instance vector_companion {lowerToBind, output_file = #hw.output_file<"gct-dir/grandcentral-Memory.sv", excludeFromFileList>} @VectorView_companion()

@@ -30,6 +30,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/YAMLTraits.h"
 #include <variant>
 
@@ -2122,16 +2123,18 @@ void GrandCentralPass::runOnOperation() {
                   if (companionMode == CompanionMode::Bind)
                     instance->setAttr("lowerToBind", builder.getUnitAttr());
 
-                  // Determine the bind file name; use grandcentral-<module>.sv
-                  // if not specified.
-                  std::string bindFilename;
+                  // Determine the bind file name; use
+                  // <directory>/grandcentral-<module>.sv if not specified.
+                  SmallString<128> bindFilename;
                   if (maybeExtractInfo->bindFilename) {
                     bindFilename = maybeExtractInfo->bindFilename.getValue();
                   } else {
-                    bindFilename =
+                    bindFilename = maybeExtractInfo->directory.getValue();
+                    llvm::sys::path::append(
+                        bindFilename,
                         "grandcentral-" +
-                        i->getParent()->getModule().getModuleName().str() +
-                        ".sv";
+                            i->getParent()->getModule().getModuleName().str() +
+                            ".sv");
                   }
 
                   instance->setAttr("output_file",
