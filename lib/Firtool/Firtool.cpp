@@ -261,7 +261,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Run this after output directories are (otherwise) assigned,
   // so generated interfaces can be appropriately marked.
   pm.addNestedPass<firrtl::CircuitOp>(
-      firrtl::createGrandCentral({/*companionMode=*/opt.getCompanionMode()}));
+      firrtl::createGrandCentral({/*companionMode=*/opt.getCompanionMode(),
+                                  /*noViews*/ opt.getNoViews()}));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
@@ -575,6 +576,12 @@ struct FirtoolCmdOptions {
       llvm::cl::Hidden,
   };
 
+  llvm::cl::opt<bool> noViews{
+      "no-views",
+      llvm::cl::desc("Disable emission of FIRRTL views (delete them instead)"),
+      llvm::cl::init(false),
+  };
+
   llvm::cl::opt<bool> disableAggressiveMergeConnections{
       "disable-aggressive-merge-connections",
       llvm::cl::desc(
@@ -793,9 +800,9 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       buildMode(BuildModeRelease), disableLayerSink(false),
       disableOptimization(false), vbToBV(false), noDedup(false),
       dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false), lowerMemories(false),
-      blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
-      extractTestCode(false), ignoreReadEnableMem(false),
+      noViews(false), disableAggressiveMergeConnections(false),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
       enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
@@ -828,6 +835,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   noDedup = clOptions->noDedup;
   dedupClasses = clOptions->dedupClasses;
   companionMode = clOptions->companionMode;
+  noViews = clOptions->noViews;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
   lowerMemories = clOptions->lowerMemories;

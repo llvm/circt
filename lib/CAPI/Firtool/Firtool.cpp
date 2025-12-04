@@ -164,6 +164,11 @@ void circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setCompanionMode(converted);
 }
 
+void circtFirtoolOptionsSetNoViews(CirctFirtoolFirtoolOptions options,
+                                   bool value) {
+  unwrap(options)->setNoViews(value);
+}
+
 void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setDisableAggressiveMergeConnections(value);
