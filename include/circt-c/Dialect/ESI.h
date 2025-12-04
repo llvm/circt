@@ -91,10 +91,13 @@ MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGetMember(MlirType frame,
 MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFieldType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIWindowFieldTypeGet(MlirContext cctxt,
                                                        MlirAttribute fieldName,
-                                                       uint64_t numItems);
+                                                       uint64_t numItems,
+                                                       uint64_t bulkCountWidth);
 MLIR_CAPI_EXPORTED MlirAttribute
 circtESIWindowFieldTypeGetFieldName(MlirType field);
 MLIR_CAPI_EXPORTED uint64_t circtESIWindowFieldTypeGetNumItems(MlirType field);
+MLIR_CAPI_EXPORTED uint64_t
+circtESIWindowFieldTypeGetBulkCountWidth(MlirType field);
 
 //===----------------------------------------------------------------------===//
 // Services

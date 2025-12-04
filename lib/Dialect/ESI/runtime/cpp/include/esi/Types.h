@@ -81,10 +81,10 @@ public:
   }
 
   // Dump a textual representation of this type to the provided stream.
-  void dump(std::ostream &os) const;
+  void dump(std::ostream &os, bool oneLine = false) const;
 
   // Return a textual representation of this type.
-  std::string toString() const;
+  std::string toString(bool oneLine = false) const;
 
 protected:
   ID id;

@@ -118,13 +118,13 @@ void printPort(std::ostream &os, const BundlePort &port, std::string indent,
     return;
   os << indent << "  " << port.getID() << ":";
   if (auto svcPort = dynamic_cast<const services::ServicePort *>(&port))
-    if (auto svcPortStr = svcPort->toString()) {
+    if (auto svcPortStr = svcPort->toString(true)) {
       os << " " << *svcPortStr << std::endl;
       return;
     }
   os << std::endl;
   for (const auto &[name, chan] : port.getChannels())
-    os << indent << "    " << name << ": " << chan.getType()->toString()
+    os << indent << "    " << name << ": " << chan.getType()->toString(true)
        << std::endl;
 }
 

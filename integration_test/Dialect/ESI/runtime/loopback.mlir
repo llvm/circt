@@ -144,30 +144,30 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER: ********************************
 // QUERY-HIER: * Instance: top
 // QUERY-HIER: * Ports:
-// QUERY-HIER:     func1: function i16(i16)
-// QUERY-HIER:     structFunc: function !hw.struct<x: si8, y: si8>(!hw.struct<a: ui16, b: si8>)
-// QUERY-HIER:     arrayFunc: function !hw.array<2xsi8>(!hw.array<1xsi8>)
+// QUERY-HIER:     func1: function bits16(bits16)
+// QUERY-HIER:     structFunc: function struct {x: sint8, y: sint8}(struct {a: uint16, b: sint8})
+// QUERY-HIER:     arrayFunc: function sint8[2](sint8[1])
 // QUERY-HIER: * Children:
 // QUERY-HIER:   * Instance: loopback_inst[0]
 // QUERY-HIER:   * Ports:
 // QUERY-HIER:       loopback_tohw:
-// QUERY-HIER:         recv: !esi.channel<i8>
+// QUERY-HIER:         recv: chan<bits8>
 // QUERY-HIER:       loopback_fromhw:
-// QUERY-HIER:         send: !esi.channel<i8>
+// QUERY-HIER:         send: chan<bits8>
 // QUERY-HIER:       mysvc_recv:
-// QUERY-HIER:         recv: !esi.channel<i0>
+// QUERY-HIER:         recv: chan<void>
 // QUERY-HIER:       mysvc_send:
-// QUERY-HIER:         send: !esi.channel<i0>
+// QUERY-HIER:         send: chan<void>
 // QUERY-HIER:   * Instance: loopback_inst[1]
 // QUERY-HIER:   * Ports:
 // QUERY-HIER:       loopback_tohw:
-// QUERY-HIER:         recv: !esi.channel<i8>
+// QUERY-HIER:         recv: chan<bits8>
 // QUERY-HIER:       loopback_fromhw:
-// QUERY-HIER:         send: !esi.channel<i8>
+// QUERY-HIER:         send: chan<bits8>
 // QUERY-HIER:       mysvc_recv:
-// QUERY-HIER:         recv: !esi.channel<i0>
+// QUERY-HIER:         recv: chan<void>
 // QUERY-HIER:       mysvc_send:
-// QUERY-HIER:         send: !esi.channel<i0>
+// QUERY-HIER:         send: chan<void>
 
 
 // LOOPBACK-H:       /// Generated header for esi_system module LoopbackIP.

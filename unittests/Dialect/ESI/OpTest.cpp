@@ -70,7 +70,7 @@ TEST(ESIOpTest, TypeMatching) {
   auto esiWindowAny = WindowType::get(
       &ctxt, b.getStringAttr("aWindow"), structAny,
       {WindowFrameType::get(&ctxt, aStr,
-                            {WindowFieldType::get(&ctxt, aStr, 0)})});
+                            {WindowFieldType::get(&ctxt, aStr, 0, {})})});
   EXPECT_SUCCESS(checkInnerTypeMatch(
       esiWindowAny, hw::StructType::get(&ctxt, {{aStr, i1Type}})));
   EXPECT_SUCCESS(checkInnerTypeMatch(

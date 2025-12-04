@@ -49,7 +49,9 @@ public:
   using BundlePort::BundlePort;
   virtual ~ServicePort() = default;
   // Get a description of the service port.
-  virtual std::optional<std::string> toString() const { return std::nullopt; }
+  virtual std::optional<std::string> toString(bool oneLine = false) const {
+    return std::nullopt;
+  }
 };
 
 /// Parent class of all APIs modeled as 'services'. May or may not map to a
@@ -181,7 +183,8 @@ public:
     /// Write a 64-bit value to this region, not the global address space.
     virtual void write(uint32_t addr, uint64_t data);
 
-    virtual std::optional<std::string> toString() const override {
+    virtual std::optional<std::string>
+    toString(bool oneLine = false) const override {
       return "MMIO region " + toHex(desc.base) + " - " +
              toHex(desc.base + desc.size);
     }
@@ -293,11 +296,12 @@ public:
           ->getInner();
     }
 
-    virtual std::optional<std::string> toString() const override {
+    virtual std::optional<std::string>
+    toString(bool oneLine = false) const override {
       const esi::Type *argType = getArgType();
       const esi::Type *resultType = getResultType();
-      return "function " + resultType->toString() + "(" + argType->toString() +
-             ")";
+      return "function " + resultType->toString(oneLine) + "(" +
+             argType->toString(oneLine) + ")";
     }
 
   private:
@@ -350,11 +354,12 @@ public:
           ->getInner();
     }
 
-    virtual std::optional<std::string> toString() const override {
+    virtual std::optional<std::string>
+    toString(bool oneLine = false) const override {
       const esi::Type *argType = getArgType();
       const esi::Type *resultType = getResultType();
-      return "callback " + resultType->toString() + "(" + argType->toString() +
-             ")";
+      return "callback " + resultType->toString(oneLine) + "(" +
+             argType->toString(oneLine) + ")";
     }
 
   private:
@@ -396,11 +401,12 @@ public:
     std::future<MessageData> read();
     uint64_t readInt();
 
-    virtual std::optional<std::string> toString() const override {
+    virtual std::optional<std::string>
+    toString(bool oneLine = false) const override {
       const esi::Type *dataType =
           dynamic_cast<const ChannelType *>(type->findChannel("data").first)
               ->getInner();
-      return "telemetry " + dataType->toString();
+      return "telemetry " + dataType->toString(oneLine);
     }
 
   private:
