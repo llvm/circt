@@ -1845,10 +1845,10 @@ void GrandCentralPass::runOnOperation() {
 
       auto directory = anno.getMember<StringAttr>("directory");
       auto filename = anno.getMember<StringAttr>("filename");
-      if (!directory || !filename) {
+      if (!directory) {
         emitCircuitError()
             << "contained an invalid 'ExtractGrandCentralAnnotation' that does "
-               "not contain 'directory' and 'filename' fields: "
+               "not contain 'directory' field: "
             << anno.getDict();
         removalError = true;
         return false;
@@ -2122,11 +2122,22 @@ void GrandCentralPass::runOnOperation() {
                   if (companionMode == CompanionMode::Bind)
                     instance->setAttr("lowerToBind", builder.getUnitAttr());
 
+                  // Determine the bind file name; use grandcentral-<module>.sv
+                  // if not specified.
+                  std::string bindFilename;
+                  if (maybeExtractInfo->bindFilename) {
+                    bindFilename = maybeExtractInfo->bindFilename.getValue();
+                  } else {
+                    bindFilename = "grandcentral-" +
+                        i->getParent()->getModule().getModuleName().str() +
+                        ".sv";
+                  }
+
                   instance->setAttr(
                       "output_file",
                       hw::OutputFileAttr::getFromFilename(
                           &getContext(),
-                          maybeExtractInfo->bindFilename.getValue(),
+                          bindFilename,
                           /*excludeFromFileList=*/true));
                 }
               }
