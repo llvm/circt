@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Naming.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SetVector.h"
@@ -21,6 +22,13 @@ using namespace mlir;
 using namespace circt;
 using namespace comb;
 using namespace matchers;
+
+// Returns true if the op has one of its own results as an operand.
+static bool isOpTriviallyRecursive(Operation *op) {
+  return llvm::any_of(op->getOperands(), [op](auto operand) {
+    return operand.getDefiningOp() == op;
+  });
+}
 
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
@@ -254,6 +262,9 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   // Replicate one time -> noop.
   if (cast<IntegerType>(getType()).getWidth() ==
       getInput().getType().getIntOrFloatBitWidth())
@@ -281,6 +292,9 @@ OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   // Constant fold.
   if (auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
@@ -307,6 +321,9 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 }
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     if (rhs.getValue().isZero())
       return getOperand(0);
@@ -319,6 +336,9 @@ OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -345,6 +365,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     if (rhs.getValue().isZero())
       return getOperand(0);
@@ -357,6 +380,9 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -383,6 +409,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs()))
     if (rhs.getValue().isZero())
       return getOperand(0);
@@ -390,6 +419,9 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -421,6 +453,9 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   // If we are extracting the entire input, then return it.
   if (getInput().getType() == getType())
     return getInput();
@@ -549,6 +584,8 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
   auto *inputOp = op.getInput().getDefiningOp();
 
   // This turns out to be incredibly expensive.  Disable until performance is
@@ -784,23 +821,28 @@ static bool canCombineOppositeBinCmpIntoConstant(OperandRange operands) {
 }
 
 OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   APInt value = APInt::getAllOnes(cast<IntegerType>(getType()).getWidth());
 
   auto inputs = adaptor.getInputs();
 
   // and(x, 01, 10) -> 00 -- annulment.
   for (auto operand : inputs) {
-    if (!operand)
+    auto attr = dyn_cast_or_null<IntegerAttr>(operand);
+    if (!attr)
       continue;
-    value &= cast<IntegerAttr>(operand).getValue();
+    value &= attr.getValue();
     if (value.isZero())
       return getIntAttr(value, getContext());
   }
 
   // and(x, -1) -> x.
-  if (inputs.size() == 2 && inputs[1] &&
-      cast<IntegerAttr>(inputs[1]).getValue().isAllOnes())
-    return getInputs()[0];
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1]))
+      if (intAttr.getValue().isAllOnes())
+        return getInputs()[0];
 
   // and(x, x, x) -> x.  This also handles and(x) -> x.
   if (llvm::all_of(getInputs(),
@@ -921,6 +963,9 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
 
@@ -992,41 +1037,49 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
       }
     }
 
-    // If this is an and from an extract op, try shrinking the extract.
-    if (auto extractOp = inputs[0].getDefiningOp<ExtractOp>()) {
-      if (size == 2 &&
-          // We can shrink it if the mask has leading or trailing zeros.
-          (value.countLeadingZeros() || value.countTrailingZeros())) {
-        unsigned lz = value.countLeadingZeros();
-        unsigned tz = value.countTrailingZeros();
+    // Narrow the op if the constant has leading or trailing zeros.
+    //
+    // and(a, 0b00101100) -> concat(0b00, and(extract(a), 0b1011), 0b00)
+    unsigned leadingZeros = value.countLeadingZeros();
+    unsigned trailingZeros = value.countTrailingZeros();
+    if (leadingZeros > 0 || trailingZeros > 0) {
+      unsigned maskLength = value.getBitWidth() - leadingZeros - trailingZeros;
 
-        // Start by extracting the smaller number of bits.
-        auto smallTy = rewriter.getIntegerType(value.getBitWidth() - lz - tz);
-        Value smallElt = rewriter.createOrFold<ExtractOp>(
-            extractOp.getLoc(), smallTy, extractOp->getOperand(0),
-            extractOp.getLowBit() + tz);
-        // Apply the 'and' mask if needed.
-        APInt smallMask = value.extractBits(smallTy.getWidth(), tz);
-        if (!smallMask.isAllOnes()) {
-          auto loc = inputs.back().getLoc();
-          smallElt = rewriter.createOrFold<AndOp>(
-              loc, smallElt, hw::ConstantOp::create(rewriter, loc, smallMask),
-              false);
+      // Extract the non-zero regions of the operands. Look through extracts.
+      SmallVector<Value> operands;
+      for (auto input : inputs.drop_back()) {
+        unsigned offset = trailingZeros;
+        while (auto extractOp = input.getDefiningOp<ExtractOp>()) {
+          input = extractOp.getInput();
+          offset += extractOp.getLowBit();
         }
-
-        // The final replacement will be a concat of the leading/trailing zeros
-        // along with the smaller extracted value.
-        SmallVector<Value> resultElts;
-        if (lz)
-          resultElts.push_back(hw::ConstantOp::create(rewriter, op.getLoc(),
-                                                      APInt::getZero(lz)));
-        resultElts.push_back(smallElt);
-        if (tz)
-          resultElts.push_back(hw::ConstantOp::create(rewriter, op.getLoc(),
-                                                      APInt::getZero(tz)));
-        replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, resultElts);
-        return success();
+        operands.push_back(ExtractOp::create(rewriter, op.getLoc(), input,
+                                             offset, maskLength));
       }
+
+      // Add the narrowed mask if needed.
+      auto narrowMask = value.extractBits(maskLength, trailingZeros);
+      if (!narrowMask.isAllOnes())
+        operands.push_back(hw::ConstantOp::create(
+            rewriter, inputs.back().getLoc(), narrowMask));
+
+      // Create the narrow and op.
+      Value narrowValue = operands.back();
+      if (operands.size() > 1)
+        narrowValue =
+            AndOp::create(rewriter, op.getLoc(), operands, op.getTwoState());
+      operands.clear();
+
+      // Concatenate the narrow and with the leading and trailing zeros.
+      if (leadingZeros > 0)
+        operands.push_back(hw::ConstantOp::create(
+            rewriter, op.getLoc(), APInt::getZero(leadingZeros)));
+      operands.push_back(narrowValue);
+      if (trailingZeros > 0)
+        operands.push_back(hw::ConstantOp::create(
+            rewriter, op.getLoc(), APInt::getZero(trailingZeros)));
+      replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, operands);
+      return success();
     }
 
     // and(concat(x, cst1), a, b, c, cst2)
@@ -1057,21 +1110,26 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   auto value = APInt::getZero(cast<IntegerType>(getType()).getWidth());
   auto inputs = adaptor.getInputs();
   // or(x, 10, 01) -> 11
   for (auto operand : inputs) {
-    if (!operand)
+    auto attr = dyn_cast_or_null<IntegerAttr>(operand);
+    if (!attr)
       continue;
-    value |= cast<IntegerAttr>(operand).getValue();
+    value |= attr.getValue();
     if (value.isAllOnes())
       return getIntAttr(value, getContext());
   }
 
   // or(x, 0) -> x
-  if (inputs.size() == 2 && inputs[1] &&
-      cast<IntegerAttr>(inputs[1]).getValue().isZero())
-    return getInputs()[0];
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1]))
+      if (intAttr.getValue().isZero())
+        return getInputs()[0];
 
   // or(x, x, x) -> x.  This also handles or(x) -> x
   if (llvm::all_of(getInputs(),
@@ -1103,6 +1161,9 @@ OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
 
@@ -1194,6 +1255,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1206,9 +1270,10 @@ OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
     return IntegerAttr::get(getType(), 0);
 
   // xor(x, 0) -> x
-  if (inputs.size() == 2 && inputs[1] &&
-      cast<IntegerAttr>(inputs[1]).getValue().isZero())
-    return getInputs()[0];
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1]))
+      if (intAttr.getValue().isZero())
+        return getInputs()[0];
 
   // xor(xor(x,1),1) -> x
   // but not self loop
@@ -1247,6 +1312,9 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 }
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1322,6 +1390,9 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   // sub(x - x) -> 0
   if (getRhs() == getLhs())
     return getIntAttr(
@@ -1352,6 +1423,9 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   // sub(x, cst) -> add(x, -cst)
   APInt value;
   if (matchPattern(op.getRhs(), m_ConstantInt(&value))) {
@@ -1369,6 +1443,9 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   auto size = getInputs().size();
 
   // add(x) -> x -- noop
@@ -1380,6 +1457,9 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1480,6 +1560,9 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1495,9 +1578,10 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 
   // mul(x, 0, 1) -> 0 -- annulment
   for (auto operand : inputs) {
-    if (!operand)
+    auto attr = dyn_cast_or_null<IntegerAttr>(operand);
+    if (!attr)
       continue;
-    value *= cast<IntegerAttr>(operand).getValue();
+    value *= attr.getValue();
     if (value.isZero())
       return getIntAttr(value, getContext());
   }
@@ -1507,6 +1591,9 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1571,10 +1658,14 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult DivUOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
   return foldDiv<DivUOp, /*isSigned=*/false>(*this, adaptor.getOperands());
 }
 
 OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
   return foldDiv<DivSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
 
@@ -1602,18 +1693,39 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult ModUOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
   return foldMod<ModUOp, /*isSigned=*/false>(*this, adaptor.getOperands());
 }
 
 OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
   return foldMod<ModSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
+
+LogicalResult DivUOp::canonicalize(DivUOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op) || !op.getTwoState())
+    return failure();
+  return convertDivUByPowerOfTwo(op, rewriter);
+}
+
+LogicalResult ModUOp::canonicalize(ModUOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op) || !op.getTwoState())
+    return failure();
+
+  return convertModUByPowerOfTwo(op, rewriter);
+}
+
 //===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
 // Constant folding
 OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   if (getNumOperands() == 1)
     return getOperand(0);
 
@@ -1638,6 +1750,9 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1801,6 +1916,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
+  if (isOpTriviallyRecursive(*this))
+    return {};
+
   // mux (c, b, b) -> b
   if (getTrueValue() == getFalseValue() && getTrueValue() != getResult())
     return getTrueValue();
@@ -1818,11 +1936,12 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   }
 
   // mux(cond, 1, 0) -> cond
-  if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
-    if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
-      if (tv.getValue().isOne() && fv.getValue().isZero() &&
-          hw::getBitWidth(getType()) == 1 && getCond() != getResult())
-        return getCond();
+  if (getCond().getType() == getTrueValue().getType())
+    if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
+      if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
+        if (tv.getValue().isOne() && fv.getValue().isZero() &&
+            hw::getBitWidth(getType()) == 1 && getCond() != getResult())
+          return getCond();
 
   return {};
 }
@@ -1876,13 +1995,17 @@ getMuxChainCondConstant(Value cond, Value indexValue, bool isInverted,
 /// Given a mux, check to see if the "on true" value (or "on false" value if
 /// isFalseSide=true) is a mux tree with the same condition.  This allows us
 /// to turn things like `mux(VAL == 0, A, (mux (VAL == 1), B, C))` into
-/// `array_get (array_create(A, B, C), VAL)` which is far more compact and
-/// allows synthesis tools to do more interesting optimizations.
+/// `array_get (array_create(A, B, C), VAL)` or a balanced mux tree which is far
+/// more compact and allows synthesis tools to do more interesting
+/// optimizations.
 ///
 /// This returns false if we cannot form the mux tree (or do not want to) and
 /// returns true if the mux was replaced.
-static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
-                         PatternRewriter &rewriter) {
+bool comb::foldMuxChainWithComparison(
+    PatternRewriter &rewriter, MuxOp rootMux, bool isFalseSide,
+    llvm::function_ref<MuxChainWithComparisonFoldingStyle(size_t indexWidth,
+                                                          size_t numEntries)>
+        styleFn) {
   // Get the index value being compared.  Later we check to see if it is
   // compared to a constant with the right predicate.
   auto rootCmp = rootMux.getCond().getDefiningOp<ICmpOp>();
@@ -1942,24 +2065,16 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     nextTreeValue = getTreeValue(nextMux);
   }
 
-  // We need to have more than three values to create an array.  This is an
-  // arbitrary threshold which is saying that one or two muxes together is ok,
-  // but three should be folded.
-  if (valuesFound.size() < 3)
-    return false;
-
-  // If the array is greater that 9 bits, it will take over 512 elements and
-  // it will be too large for a single expression.
   auto indexWidth = cast<IntegerType>(indexValue.getType()).getWidth();
-  if (indexWidth >= 9)
+
+  if (indexWidth > 20)
+    return false; // Too big to make a table.
+
+  auto foldingStyle = styleFn(indexWidth, valuesFound.size());
+  if (foldingStyle == MuxChainWithComparisonFoldingStyle::None)
     return false;
 
-  // Next we need to see if the values are dense-ish.  We don't want to have
-  // a tremendous number of replicated entries in the array.  Some sparsity is
-  // ok though, so we require the table to be at least 5/8 utilized.
   uint64_t tableSize = 1ULL << indexWidth;
-  if (valuesFound.size() < (tableSize * 5) / 8)
-    return false; // Not dense enough.
 
   // Ok, we're going to do the transformation, start by building the table
   // filled with the "otherwise" value.
@@ -1973,6 +2088,18 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     assert(idx < table.size() && "constant should be same bitwidth as index");
     table[idx] = elt.second;
   }
+
+  if (foldingStyle == MuxChainWithComparisonFoldingStyle::BalancedMuxTree) {
+    SmallVector<Value> bits;
+    comb::extractBits(rewriter, indexValue, bits);
+    auto result = constructMuxTree(rewriter, rootMux->getLoc(), bits, table,
+                                   nextTreeValue);
+    replaceOpAndCopyNamehint(rewriter, rootMux, result);
+    return true;
+  }
+
+  assert(foldingStyle == MuxChainWithComparisonFoldingStyle::ArrayGet &&
+         "unknown folding style");
 
   // The hw.array_create operation has the operand list in unintuitive order
   // with a[0] stored as the last element, not the first.
@@ -2081,16 +2208,6 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
       // We can't fold `mux(cond, a, mux(a, x, y))`.
       return false;
     }
-
-    auto isARecursiveMux = [](Value v) {
-      if (auto muxOp = v.getDefiningOp<MuxOp>())
-        return muxOp.getTrueValue() == v || muxOp.getFalseValue() == v;
-      return false;
-    };
-
-    // Avoid infinitely recursing canonicalizations
-    if (isARecursiveMux(otherValue) || isARecursiveMux(subCond))
-      return false;
 
     // Invert the outer cond if needed, and combine the mux conditions.
     if (!isTrueOperand)
@@ -2265,7 +2382,7 @@ static bool assumeMuxCondInOperand(Value muxCond, Value muxValue,
   if (!muxValue.hasOneUse())
     return false;
   auto *op = muxValue.getDefiningOp();
-  if (!op || !isa<CombDialect>(op->getDialect()))
+  if (!op || !isa_and_nonnull<CombDialect>(op->getDialect()))
     return false;
   if (!llvm::is_contained(op->getOperands(), muxCond))
     return false;
@@ -2289,14 +2406,37 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
                                 PatternRewriter &rewriter) const override;
 };
 
+MuxChainWithComparisonFoldingStyle
+foldToArrayCreateOnlyWhenDense(size_t indexWidth, size_t numEntries) {
+  // If the array is greater that 9 bits, it will take over 512 elements and
+  // it will be too large for a single expression.
+  if (indexWidth >= 9 || numEntries < 3)
+    return MuxChainWithComparisonFoldingStyle::None;
+
+  // Next we need to see if the values are dense-ish.  We don't want to have
+  // a tremendous number of replicated entries in the array.  Some sparsity is
+  // ok though, so we require the table to be at least 5/8 utilized.
+  uint64_t tableSize = 1ULL << indexWidth;
+  if (numEntries >= tableSize * 5 / 8)
+    return MuxChainWithComparisonFoldingStyle::ArrayGet;
+  return MuxChainWithComparisonFoldingStyle::None;
+}
+
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
+  bool isSignlessInt = false;
+  if (auto intType = dyn_cast<IntegerType>(op.getType()))
+    isSignlessInt = intType.isSignless();
+
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
     return failure();
   APInt value;
 
-  if (matchPattern(op.getTrueValue(), m_ConstantInt(&value))) {
+  if (matchPattern(op.getTrueValue(), m_ConstantInt(&value)) && isSignlessInt) {
     if (value.getBitWidth() == 1) {
       // mux(a, 0, b) -> and(~a, b) for single-bit values.
       if (value.isZero()) {
@@ -2364,7 +2504,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   }
 
   if (matchPattern(op.getFalseValue(), m_ConstantInt(&value)) &&
-      value.getBitWidth() == 1) {
+      isSignlessInt && value.getBitWidth() == 1) {
     // mux(a, b, 0) -> and(a, b) for single-bit values.
     if (value.isZero()) {
       replaceOpWithNewOpAndCopyNamehint<AndOp>(rewriter, op, op.getCond(),
@@ -2432,7 +2572,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (auto falseMux = op.getFalseValue().getDefiningOp<MuxOp>();
       falseMux && falseMux != op) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
-    if (op.getCond() == falseMux.getCond()) {
+    if (op.getCond() == falseMux.getCond() &&
+        falseMux.getFalseValue() != falseMux) {
       replaceOpWithNewOpAndCopyNamehint<MuxOp>(
           rewriter, op, op.getCond(), op.getTrueValue(),
           falseMux.getFalseValue(), op.getTwoStateAttr());
@@ -2440,7 +2581,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
-    if (foldMuxChain(op, /*isFalse*/ true, rewriter))
+    if (foldMuxChainWithComparison(rewriter, op, /*isFalse*/ true,
+                                   foldToArrayCreateOnlyWhenDense))
       return success();
   }
 
@@ -2455,7 +2597,8 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
-    if (foldMuxChain(op, /*isFalseSide*/ false, rewriter))
+    if (foldMuxChainWithComparison(rewriter, op, /*isFalseSide*/ false,
+                                   foldToArrayCreateOnlyWhenDense))
       return success();
   }
 
@@ -2529,7 +2672,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
   if (foldMuxOfUniformArrays(op, rewriter))
     return success();
 
-  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(1))
+  // mux(cond, opA(cond), opB(cond)) -> mux(cond, opA(1), opB(0))
   if (op.getTrueValue().getDefiningOp() &&
       op.getTrueValue().getDefiningOp() != op)
     if (assumeMuxCondInOperand(op.getCond(), op.getTrueValue(), true, rewriter))
@@ -2951,6 +3094,8 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 }
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
   APInt lhs, rhs;
 
   // icmp 1, x -> icmp x, 1

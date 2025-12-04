@@ -44,6 +44,15 @@ def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
   let assemblyFormat = "";
 }
 
-def RegisterType : AnyTypeOf<[IntegerRegisterType]>;
+def FloatRegisterType : TypeDef<RTGTestDialect, "FloatRegister", [
+  RegisterTypeInterface,
+]> {
+  let summary = "represents a floating-point register";
+
+  let mnemonic = "freg";
+  let assemblyFormat = "";
+}
+
+def RegisterType : AnyTypeOf<[IntegerRegisterType, FloatRegisterType]>;
 
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTTYPES_TD

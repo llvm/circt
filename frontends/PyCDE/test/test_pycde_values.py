@@ -1,16 +1,16 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde.dialects import comb, hw
-from pycde import dim, generator, types, Clock, Input, Output, Module
-from pycde.signals import And, Or
+from pycde import dim, generator, Clock, Input, Output, Module
+from pycde.signals import And, Or, Struct
 from pycde.testing import unittestmodule
-from pycde.types import Bits
+from pycde.types import Bit, Bits, Window
 
 
 # CHECK-LABEL: hw.module @BitsMod(in %inp : i5)
 @unittestmodule()
 class BitsMod(Module):
-  inp = Input(types.i5)
+  inp = Input(Bits(5))
 
   @generator
   def construct(ports):
@@ -77,7 +77,7 @@ def MyModule(SIZE: int):
 @unittestmodule()
 class ArrayMod(Module):
   clk = Clock()
-  inp = Input(dim(types.i1, 5))
+  inp = Input(dim(Bit, 5))
 
   @generator
   def construct(ports):
@@ -122,7 +122,49 @@ class ArrayMod(Module):
     And(a, b, c)
 
     # CHECK:  hw.bitcast %inp : (!hw.array<5xi1>) -> i5
-    ports.inp.bitcast(types.i5)
+    ports.inp.bitcast(Bits(5))
 
     # CHECK:  seq.from_clock %clk
     ports.clk.to_bit()
+
+
+class Packet(Struct):
+  hdr: Bits(8)
+  payload: Bits(32) * 4
+  tail: Bits(4)
+
+
+@unittestmodule()
+class TestWindowsArr(Module):
+  clk = Clock()
+
+  PktWindow = Window("pkt",
+                     Packet,
+                     frames=[
+                         Window.Frame("header", ["hdr", ("payload", 4)]),
+                         Window.Frame("tail", ["tail"])
+                     ])
+  inp = Input(PktWindow)
+  out = Output(PktWindow)
+
+  @generator
+  def construct(ports):
+    ports.out = ports.inp
+
+
+PktWindow = Window("pkt_single",
+                   Packet,
+                   frames=[Window.Frame(None, ["hdr", "tail"])])
+
+
+# CHECK-LABEL: hw.module @TestWindowSingleFrame
+@unittestmodule()
+class TestWindowSingleFrame(Module):
+  clk = Clock()
+
+  inp = Input(PktWindow)
+  out = Output(PktWindow)
+
+  @generator
+  def construct(ports):
+    ports.out = ports.inp

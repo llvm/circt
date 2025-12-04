@@ -11,16 +11,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "LSPUtils.h"
-#include "mlir/Tools/lsp-server-support/Logging.h"
+#include "llvm/Support/LSP/Logging.h"
 
 void circt::lsp::Logger::error(Twine message) {
-  mlir::lsp::Logger::error("{}", message);
+  llvm::lsp::Logger::error("{}", message);
 }
 
 void circt::lsp::Logger::info(Twine message) {
-  mlir::lsp::Logger::info("{}", message);
+  llvm::lsp::Logger::info("{}", message);
 }
 
 void circt::lsp::Logger::debug(Twine message) {
-  mlir::lsp::Logger::debug("{}", message);
+  llvm::lsp::Logger::debug("{}", message);
 }

@@ -11,6 +11,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/HW.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
@@ -180,6 +181,77 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
         }
         return channels;
       });
+
+  mlir_type_subclass(m, "WindowType", circtESITypeIsAWindowType)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirAttribute name, MlirType into,
+             std::vector<MlirType> frames, MlirContext ctxt) {
+            if (!hwTypeIsAStructType(into) &&
+                (!hwTypeIsATypeAliasType(into) ||
+                 !hwTypeIsAStructType(hwTypeAliasTypeGetInnerType(into))))
+              throw nb::type_error("'into' type must be a hw.StructType");
+
+            // Verify all frames are WindowFrameTypes
+            for (const auto &frame : frames) {
+              if (!circtESITypeIsAWindowFrameType(frame)) {
+                throw nb::type_error("All frames must be WindowFrameTypes");
+              }
+            }
+            return cls(circtESIWindowTypeGet(ctxt, name, into, frames.size(),
+                                             frames.data()));
+          },
+          nb::arg("cls"), nb::arg("name"), nb::arg("into"), nb::arg("frames"),
+          nb::arg("ctxt") = nullptr)
+      .def_property_readonly("name", &circtESIWindowTypeGetName)
+      .def_property_readonly("into", &circtESIWindowTypeGetInto)
+      .def_property_readonly(
+          "frames",
+          [](MlirType windowType) {
+            std::vector<MlirType> frames;
+            size_t numFrames = circtESIWindowTypeGetNumFrames(windowType);
+            for (size_t i = 0; i < numFrames; ++i)
+              frames.push_back(circtESIWindowTypeGetFrame(windowType, i));
+            return frames;
+          })
+      .def("get_lowered_type", &circtESIWindowTypeGetLoweredType);
+
+  mlir_type_subclass(m, "WindowFrameType", circtESITypeIsAWindowFrameType)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirAttribute name, std::vector<MlirType> members,
+             MlirContext ctxt) {
+            // Verify all members are WindowFieldTypes
+            for (const auto &member : members) {
+              if (!circtESITypeIsAWindowFieldType(member)) {
+                throw nb::type_error("All members must be WindowFieldTypes");
+              }
+            }
+            return cls(circtESIWindowFrameTypeGet(ctxt, name, members.size(),
+                                                  members.data()));
+          },
+          nb::arg("cls"), nb::arg("name"), nb::arg("members"),
+          nb::arg("ctxt") = nullptr)
+      .def_property_readonly("name", &circtESIWindowFrameTypeGetName)
+      .def_property_readonly("members", [](MlirType frameType) {
+        std::vector<MlirType> members;
+        size_t numMembers = circtESIWindowFrameTypeGetNumMembers(frameType);
+        for (size_t i = 0; i < numMembers; ++i)
+          members.push_back(circtESIWindowFrameTypeGetMember(frameType, i));
+        return members;
+      });
+
+  mlir_type_subclass(m, "WindowFieldType", circtESITypeIsAWindowFieldType)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirAttribute fieldName, uint64_t numItems,
+             MlirContext ctxt) {
+            return cls(circtESIWindowFieldTypeGet(ctxt, fieldName, numItems));
+          },
+          nb::arg("cls"), nb::arg("field_name"), nb::arg("num_items") = 0,
+          nb::arg("ctxt") = nullptr)
+      .def_property_readonly("field_name", &circtESIWindowFieldTypeGetFieldName)
+      .def_property_readonly("num_items", &circtESIWindowFieldTypeGetNumItems);
 
   mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
       .def_classmethod(

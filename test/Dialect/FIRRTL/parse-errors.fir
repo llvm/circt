@@ -572,8 +572,8 @@ circuit DefineTwice:
   public module DefineTwice:
     input in: UInt<1>
     output out : Probe<UInt<1>>
-    define out = probe(in) ; expected-error {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
-    define out = probe(in)
+    define out = probe(in) ; expected-error {{destination cannot be driven by multiple operation}}
+    define out = probe(in) ; expected-note {{other driver is here}}
 
 ;// -----
 
@@ -607,52 +607,10 @@ circuit InProbeTop:
 FIRRTL version 4.0.0
 circuit InProbeExt:
   extmodule BadExtMod:
-    input p : Probe<UInt<1>> ; expected-error {{references in ports must be output on extmodule and intmodule}}
+    input p : Probe<UInt<1>> ; expected-error {{input probe not allowed}}
 
-  module InProbeExt:
+  public module InProbeExt:
     inst e of BadExtMod
-
-;// -----
-
-FIRRTL version 3.0.0
-circuit RefDupe:
-  extmodule RefDupe:
-    output p : Probe<UInt<2>>
-    ref p is "x.y"
-    ref p is "a.z" ; expected-error {{duplicate ref statement for 'p'}}
-
-;// -----
-; Either use ref statements or ABI, can't partially use ref statements.
-
-FIRRTL version 3.0.0
-circuit MissingRef:
-  extmodule MissingRef:
-    output p : Probe<UInt<2>> ; expected-error {{no ref statement found for ref port "p"}}
-    output q : Probe<UInt<2>>
-    ref q is "foo.bar"
-
-;// -----
-
-FIRRTL version 3.0.0
-circuit UnusedRef:
-  extmodule UnusedRef:
-    ref p is "x.y" ; expected-error {{unused ref statement}}
-
-;// -----
-
-FIRRTL version 3.0.0
-circuit RefNotString:
-  extmodule RefNotString:
-    output p : Probe<UInt<2>>
-    ref p is a.b ; expected-error {{expected string in ref statement}}
-
-;// -----
-
-FIRRTL version 3.0.0
-circuit RefForAggElement:
-  extmodule RefForAggElement:
-    output p : { x: Probe<UInt<2>> }
-    ref p.x is a.b ; expected-error {{ref statements for aggregate elements not yet supported}}
 
 ;// -----
 
@@ -663,14 +621,6 @@ circuit ConnectWrongType:
     output b: SInt<1>
 
     connect b, a ; expected-error {{cannot connect non-equivalent type}}
-
-;// -----
-FIRRTL version 4.0.0
-
-circuit RefStatementDeprecated:
-  extmodule RefStatementDeprecated:
-    output p : Probe<UInt<1>>
-    ref p is "x.y" ; expected-error {{ref statements were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.0.0}}
 
 ;// -----
 
@@ -1844,3 +1794,137 @@ circuit CatSign:
     node n = cat(UInt<1>(0),
     ; expected-note @below {{non-integer operand is here}}
                  a)
+
+// -----
+FIRRTL version 5.0.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
+    input A: Domain
+
+// -----
+FIRRTL version 5.0.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
+    input a: UInt<1> domains [A]
+
+;// -----
+
+FIRRTL version 5.0.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    domain_define
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  public module Domains:
+    ; expected-error @+3 {{expected domain expression}}
+    domain_define
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    ; expected-error @below {{use of unknown declaration 'x'}}
+    domain_define x
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : UInt<1>
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    ; expected-error @+3 {{expected '='}}
+    domain_define x
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    ; expected-error @+3 {{expected domain expression}}
+    domain_define x =
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    ; expected-error @below {{use of unknown declaration 'y'}}
+    domain_define x = y
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    input  y : UInt<1>
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x = y
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    input  y : UInt<1>[3]
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x = y[1]
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : Domain of D
+    input  y : {a: UInt<1>}
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x = y.a
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : UInt<1>[3]
+    input  y : Domain of D
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x[1] = y
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Domains:
+  domain D:
+  public module Domains:
+    output x : {a: UInt<1>}
+    input  y : Domain of D
+    ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
+    domain_define x.a = y

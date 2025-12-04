@@ -13,6 +13,7 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
@@ -109,7 +110,9 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
        getPerArgumentAttrsAttrName(), getArgumentLocsAttrName()});
 }
 
-OpFoldResult FormatLitOp::fold(FoldAdaptor adaptor) { return getLiteralAttr(); }
+OpFoldResult FormatLiteralOp::fold(FoldAdaptor adaptor) {
+  return getLiteralAttr();
+}
 
 OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
   if (getValue().getType() == IntegerType::get(getContext(), 0U))
@@ -295,11 +298,11 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
   SmallVector<StringRef> litSequence;
   SmallVector<Value> newOperands;
   newOperands.reserve(op.getNumOperands());
-  FormatLitOp prevLitOp;
+  FormatLiteralOp prevLitOp;
 
   auto oldOperands = hasBeenFlattened ? flatOperands : op.getOperands();
   for (auto operand : oldOperands) {
-    if (auto litOp = operand.getDefiningOp<FormatLitOp>()) {
+    if (auto litOp = operand.getDefiningOp<FormatLiteralOp>()) {
       if (!litOp.getLiteral().empty()) {
         prevLitOp = litOp;
         litSequence.push_back(litOp.getLiteral());
@@ -308,7 +311,7 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
       if (!litSequence.empty()) {
         if (litSequence.size() > 1) {
           // Create a fused literal.
-          auto newLit = rewriter.createOrFold<FormatLitOp>(
+          auto newLit = rewriter.createOrFold<FormatLiteralOp>(
               op.getLoc(), fmtStrType,
               concatLiterals(op.getContext(), litSequence));
           newOperands.push_back(newLit);
@@ -326,7 +329,7 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
   if (!litSequence.empty()) {
     if (litSequence.size() > 1) {
       // Create a fused literal.
-      auto newLit = rewriter.createOrFold<FormatLitOp>(
+      auto newLit = rewriter.createOrFold<FormatLiteralOp>(
           op.getLoc(), fmtStrType,
           concatLiterals(op.getContext(), litSequence));
       newOperands.push_back(newLit);
@@ -340,8 +343,8 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
     return failure(); // Nothing changed
 
   if (newOperands.empty())
-    rewriter.replaceOpWithNewOp<FormatLitOp>(op, fmtStrType,
-                                             rewriter.getStringAttr(""));
+    rewriter.replaceOpWithNewOp<FormatLiteralOp>(op, fmtStrType,
+                                                 rewriter.getStringAttr(""));
   else if (newOperands.size() == 1)
     rewriter.replaceOp(op, newOperands);
   else
@@ -369,13 +372,13 @@ LogicalResult PrintFormattedProcOp::verify() {
   if (!parentOp)
     return emitOpError("must be within a procedural region.");
 
-  if (isa<hw::HWDialect>(parentOp->getDialect())) {
+  if (isa_and_nonnull<hw::HWDialect>(parentOp->getDialect())) {
     if (!isa<hw::TriggeredOp>(parentOp))
       return emitOpError("must be within a procedural region.");
     return success();
   }
 
-  if (isa<sv::SVDialect>(parentOp->getDialect())) {
+  if (isa_and_nonnull<sv::SVDialect>(parentOp->getDialect())) {
     if (!parentOp->hasTrait<sv::ProceduralRegion>())
       return emitOpError("must be within a procedural region.");
     return success();
@@ -388,7 +391,7 @@ LogicalResult PrintFormattedProcOp::verify() {
 LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
                                                  PatternRewriter &rewriter) {
   // Remove empty prints.
-  if (auto litInput = op.getInput().getDefiningOp<FormatLitOp>()) {
+  if (auto litInput = op.getInput().getDefiningOp<FormatLiteralOp>()) {
     if (litInput.getLiteral().empty()) {
       rewriter.eraseOp(op);
       return success();

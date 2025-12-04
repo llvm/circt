@@ -18,7 +18,6 @@ set(CIRCT_TEST_DEPENDS
   FileCheck count not
   split-file
   arcilator
-  circt-capi-aig-test
   circt-capi-ir-test
   circt-capi-om-test
   circt-capi-firrtl-test
@@ -26,6 +25,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-rtg-test
   circt-capi-rtgtest-test
   circt-capi-support-test
+  circt-capi-synth-test
   circt-as
   circt-bmc
   circt-dis
@@ -35,6 +35,7 @@ set(CIRCT_TEST_DEPENDS
   circt-test
   circt-translate
   circt-reduce
+  domaintool
   handshake-runner
   firld
   firtool

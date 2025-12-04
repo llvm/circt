@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt --verify-diagnostics --verify-roundtrip %s | FileCheck %s
 
 // CHECK-LABEL: moore.module @Empty()
 moore.module @Empty() {
@@ -90,18 +90,37 @@ moore.module @Module() {
   moore.assign %v1, %2 : i1
 
   moore.procedure always {
-    // CHECK: %[[TMP1:.+]] = moore.read %v2
-    // CHECK: moore.blocking_assign %v1, %[[TMP1]] : i1
-    %3 = moore.read %v2 : <i1>
-    moore.blocking_assign %v1, %3 : i1
-    // CHECK: %[[TMP2:.+]] = moore.read %v2
-    // CHECK: moore.nonblocking_assign %v1, %[[TMP2]] : i1
-    %4 = moore.read %v2 : <i1>
-    moore.nonblocking_assign %v1, %4 : i1
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
     moore.return
   }
+}
+
+// CHECK-LABEL: moore.module @ContinuousAssignments
+moore.module @ContinuousAssignments(
+  in %arg0: !moore.ref<i42>,
+  in %arg1: !moore.i42,
+  in %arg2: !moore.time
+) {
+  // CHECK: moore.assign %arg0, %arg1 : i42
+  moore.assign %arg0, %arg1 : i42
+  // CHECK: moore.delayed_assign %arg0, %arg1, %arg2 : i42
+  moore.delayed_assign %arg0, %arg1, %arg2 : i42
+}
+
+// CHECK-LABEL: func.func @ProceduralAssignments
+func.func @ProceduralAssignments(
+  %arg0: !moore.ref<i42>,
+  %arg1: !moore.i42,
+  %arg2: !moore.time
+) {
+  // CHECK: moore.blocking_assign %arg0, %arg1 : i42
+  moore.blocking_assign %arg0, %arg1 : i42
+  // CHECK: moore.nonblocking_assign %arg0, %arg1 : i42
+  moore.nonblocking_assign %arg0, %arg1 : i42
+  // CHECK: moore.delayed_nonblocking_assign %arg0, %arg1, %arg2 : i42
+  moore.delayed_nonblocking_assign %arg0, %arg1, %arg2 : i42
+  return
 }
 
 // CHECK-LABEL: moore.module @Expressions
@@ -168,6 +187,16 @@ moore.module @Expressions(
 
   // CHECK: moore.conversion [[A]] : !moore.i32 -> !moore.l32
   moore.conversion %a : !moore.i32 -> !moore.l32
+  // CHECK: moore.packed_to_sbv [[STRUCT1]] : struct<{a: i32, b: i32}>
+  moore.packed_to_sbv %struct1 : struct<{a: i32, b: i32}>
+  // CHECK: moore.sbv_to_packed [[C]] : struct<{u: l16, v: l16}>
+  moore.sbv_to_packed %c : struct<{u: l16, v: l16}>
+  // CHECK: moore.logic_to_int [[C]] : l32
+  moore.logic_to_int %c : l32
+  // CHECK: moore.int_to_logic [[A]] : i32
+  moore.int_to_logic %a : i32
+  // CHECK: moore.to_builtin_bool [[X]] : i1
+  moore.to_builtin_bool %x : i1
 
   // CHECK: moore.neg [[A]] : i32
   moore.neg %a : i32
@@ -311,10 +340,10 @@ moore.module @Expressions(
   // CHECK: moore.struct_inject [[STRUCT1]], "a", [[B]] : struct<{a: i32, b: i32}>, i32
   moore.struct_inject %struct1, "a", %b : struct<{a: i32, b: i32}>, i32
 
-  // CHECK: moore.string_constant "Test" : i128
-  moore.string_constant "Test" : i128
-  // CHECK: moore.string_constant "" : i128
-  moore.string_constant "" : i128
+  // CHECK: moore.constant_string "Test" : i128
+  moore.constant_string "Test" : i128
+  // CHECK: moore.constant_string "" : i128
+  moore.constant_string "" : i128
   // CHECK: moore.string_cmp eq %s1, %s2 : string -> i1
   moore.string_cmp eq %s1, %s2 : string -> i1
   // CHECK: moore.string_cmp ne %s1, %s2 : string -> i1
@@ -356,6 +385,12 @@ func.func @WaitEvent(%arg0: !moore.i1, %arg1: !moore.i1) {
   return
 }
 
+// CHECK-LABEL: func.func @WaitDelay
+func.func @WaitDelay(%arg0: !moore.time) {
+  // CHECK: moore.wait_delay %arg0
+  moore.wait_delay %arg0
+  return
+}
 
 // CHECK-LABEL: func.func @FormatStrings
 // CHECK-SAME: %arg0: !moore.format_string
@@ -420,3 +455,51 @@ func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42) {
   moore.builtin.clog2 %arg1 : l42
   return
 }
+
+// CHECK-LABEL: func.func @TimeConversion
+func.func @TimeConversion(%arg0: !moore.time, %arg1: !moore.l64) {
+  // CHECK: moore.packed_to_sbv %arg0 : time
+  moore.packed_to_sbv %arg0 : time
+  // CHECK: moore.sbv_to_packed %arg1 : time
+  moore.sbv_to_packed %arg1 : time
+  // CHECK: moore.time_to_logic %arg0
+  moore.time_to_logic %arg0
+  // CHECK: moore.logic_to_time %arg1
+  moore.logic_to_time %arg1
+  return
+}
+
+// CHECK-LABEL: func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42)
+func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42) {
+  // CHECK: moore.real_to_int %arg0 : f32 -> i42
+  %0 = moore.real_to_int %arg0 : f32 -> i42
+  // CHECK: moore.int_to_real %arg1 : i42 -> f32
+  %1 = moore.int_to_real %arg1 : i42 -> f32
+  return
+}
+
+// CHECK-LABEL: func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42)
+func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42) {
+  // CHECK: moore.real_to_int %arg0 : f64 -> i42
+  %0 = moore.real_to_int %arg0 : f64 -> i42
+  // CHECK: moore.int_to_real %arg1 : i42 -> f64
+  %1 = moore.int_to_real %arg1 : i42 -> f64
+  return
+}
+
+// CHECK-LABEL: moore.global_variable @GlobalVar1 : !moore.i42
+moore.global_variable @GlobalVar1 : !moore.i42
+
+// CHECK: moore.get_global_variable @GlobalVar1 : <i42>
+moore.get_global_variable @GlobalVar1 : <i42>
+
+// CHECK-LABEL: moore.global_variable @GlobalVar2 : !moore.i42
+moore.global_variable @GlobalVar2 : !moore.i42 init {
+  // CHECK-NEXT: moore.constant
+  %0 = moore.constant 9001 : i42
+  // CHECK-NEXT: moore.yield
+  moore.yield %0 : !moore.i42
+}
+
+// CHECK: moore.get_global_variable @GlobalVar2 : <i42>
+moore.get_global_variable @GlobalVar2 : <i42>

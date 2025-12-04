@@ -80,3 +80,14 @@ hw.module @array_inject(in %in: !hw.array<3xi2>, in %sel: i2, in %val: i2, out o
   %0 = hw.array_inject %in[%sel], %val : !hw.array<3xi2>, i2
   hw.output %0 : !hw.array<3xi2>
 }
+
+// CHECK-LABEL: @struct_array(
+hw.module private @struct_array(in %data_0 : !hw.struct<i: i2>, in %data_1 : !hw.struct<i: i2>, out data_o : !hw.array<2x!hw.struct<i: i2>>) {
+  %0 = hw.array_create %data_0, %data_1 : !hw.struct<i: i2>
+  // CHECK-NEXT: %[[BITCAST_1:.+]] = hw.bitcast %data_1 : (!hw.struct<i: i2>) -> i2
+  // CHECK-NEXT: %[[BITCAST_0:.+]] = hw.bitcast %data_0 : (!hw.struct<i: i2>) -> i2
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %[[BITCAST_0]], %[[BITCAST_1]]
+  // CHECK-NEXT: %[[RESULT:.+]] = hw.bitcast %[[CONCAT]] : (i4) -> !hw.array<2xstruct<i: i2>>
+  // CHECK-NEXT: hw.output %[[RESULT]]
+  hw.output %0 : !hw.array<2x!hw.struct<i: i2>>
+}

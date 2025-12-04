@@ -257,6 +257,10 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
     Statistic<"erasedModules", "num-erased-modules",
       "Number of modules which were erased by deduplication">
   ];
+  let options = [
+    Option<"dedupClasses", "dedup-classes", "bool", "true",
+      "Deduplicate classes, violating their nominal typing.">
+  ];
 }
 
 def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
@@ -479,7 +483,7 @@ def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
   let summary = "Perform SFC Compatibility fixes";
 }
 
-def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+def MergeConnections : Pass<"firrtl-merge-connections", "firrtl::FModuleOp"> {
   let summary = "Merge field-level connections into full bundle connections";
   let options = [
     Option<"enableAggressiveMerging", "aggressive-merging", "bool", "false",
@@ -487,7 +491,7 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   ];
 }
 
-def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
+def Vectorization : Pass<"firrtl-vectorization", "firrtl::FModuleOp"> {
   let summary = "Transform firrtl primitive operations into vector operations";
 }
 
@@ -734,6 +738,10 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
     pass, all layer blocks and layers are removed.
   }];
   let dependentDialects = ["sv::SVDialect", "emit::EmitDialect"];
+  let options = [
+    Option<"emitAllBindFiles", "emit-all-bind-files", "bool", "false",
+      "Emit bind files for private modules.">
+  ];
 }
 
 def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
@@ -899,6 +907,18 @@ def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
     This pass checks for illegal instantiation of a module with a layer
     underneath another layer.
   }];
+}
+
+def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {
+  let summary = "lower domain information to properties";
+  let description = [{
+    Lower all domain information into FIRRTL properties.  This has the effect of
+    erasing all domain information.
+  }];
+  let statistics = [
+    Statistic<"numDomains", "num-domains",
+      "Number of domains lowered">
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

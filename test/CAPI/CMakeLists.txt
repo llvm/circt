@@ -97,19 +97,21 @@ target_link_libraries(circt-capi-rtgtest-test
   CIRCTCAPIRTGTest
 )
 
-add_llvm_executable(circt-capi-aig-test
+add_llvm_executable(circt-capi-synth-test
   PARTIAL_SOURCES_INTENDED
-  aig.c
+  synth.c
 )
-llvm_update_compile_flags(circt-capi-aig-test)
 
-target_link_libraries(circt-capi-aig-test
+llvm_update_compile_flags(circt-capi-synth-test)
+
+target_link_libraries(circt-capi-synth-test
   PRIVATE
 
   MLIRCAPIIR
-  CIRCTCAPIAIG
+  CIRCTCAPIComb
   CIRCTCAPIHW
   CIRCTCAPISeq
+  CIRCTCAPISynth
 )
 
 add_llvm_executable(circt-capi-support-test
@@ -122,8 +124,8 @@ target_link_libraries(circt-capi-support-test
   PRIVATE
 
   MLIRCAPIIR
-  CIRCTCAPIAIG
   CIRCTCAPIHW
   CIRCTCAPISeq
   CIRCTCAPISupport
+  CIRCTCAPISynth
 )

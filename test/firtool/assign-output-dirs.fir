@@ -19,26 +19,25 @@ FIRRTL version 4.0.0
 
 circuit Foo: %[[
   {"class": "circt.OutputDirAnnotation", "target": "~Foo|Bar", "dirname": "subdir"},
-  {"class": "circt.OutputDirAnnotation", "target": "~Foo|Baz", "dirname": ".."},
-  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Foo|XFoo>w"},
-  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Foo|XBar>w"},
-  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Foo|XBaz>w"}
+  {"class": "circt.OutputDirAnnotation", "target": "~Foo|Baz", "dirname": ".."}
 ]]
-  module XFoo:
-    wire w : UInt<8>
-    invalidate w
-  module XBar:
-    wire w : UInt<8>
-    invalidate w
-  module XBaz:
-    wire w : UInt<8>
-    invalidate w
   public module Foo:
     inst x of XFoo
   public module Bar:
     inst x of XBar
   public module Baz:
     inst x of XBaz
+
+  module XFoo:
+    inst y of YFoo
+  module XBar:
+    inst y of YBar
+  module XBaz:
+    inst y of YBaz
+
+  extmodule YFoo:
+  extmodule YBar:
+  extmodule YBaz:
 
 ; FOO: module Foo();
 ; BAR: module Bar();

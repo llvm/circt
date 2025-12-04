@@ -9,6 +9,8 @@
 // Package: Cosim_DpiPkg
 //
 // Main cosim <--> dpi bridge module.
+
+
 //
 //===----------------------------------------------------------------------===//
 
@@ -80,15 +82,6 @@ module Cosim_Endpoint_ToHost
                        TO_HOST_SIZE_BYTES_FLOOR_IN_BITS];
   endgenerate
 
-  initial begin
-    $display("TO_HOST_SIZE_BITS: %d", TO_HOST_SIZE_BITS);
-    $display("TO_HOST_SIZE_BYTES: %d", TO_HOST_SIZE_BYTES);
-    $display("TO_HOST_SIZE_BITS_DIFF: %d", TO_HOST_SIZE_BITS_DIFF);
-    $display("TO_HOST_SIZE_BYTES_FLOOR: %d", TO_HOST_SIZE_BYTES_FLOOR);
-    $display("TO_HOST_SIZE_BYTES_FLOOR_IN_BITS: %d",
-             TO_HOST_SIZE_BYTES_FLOOR_IN_BITS);
-  end
-
 endmodule
 
 module Cosim_Endpoint_FromHost
@@ -118,9 +111,8 @@ module Cosim_Endpoint_FromHost
       $error("Cosim endpoint (%s) register failed: %d", ENDPOINT_ID, rc);
   end
 
-  /// *******************
-  /// Data out management.
-  ///
+  /// ***********************
+  /// Useful constants.
 
   localparam int FROM_HOST_SIZE_BYTES = int'((FROM_HOST_SIZE_BITS+7)/8);
   // The number of bits over a byte.
@@ -129,13 +121,30 @@ module Cosim_Endpoint_FromHost
   localparam int FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS
       = FROM_HOST_SIZE_BYTES_FLOOR * 8;
 
+  // Buffer to hold incoming data directly from the DPI calls.
   byte unsigned DataOutBuffer[FROM_HOST_SIZE_BYTES-1:0];
+
+  // Pipeline interface signals for buffering DataOut.
+  // DataOut_a_valid is asserted when a complete message is available in
+  // DataOut_a buffer and waiting to be accepted by the skid buffer.
+  logic DataOut_a_valid;
+  // Packed representation of the byte buffer to feed the skid input.
+  logic [FROM_HOST_SIZE_BITS-1:0] DataOut_a;
+  // Ready/valid wires between this module and the skid buffer.
+  wire DataOut_a_ready;
+  wire DataOut_x_valid;
+  wire [FROM_HOST_SIZE_BITS-1:0] DataOut_x;
+
   always @(posedge clk) begin
     if (~rst) begin
-      if (DataOutValid && DataOutReady) // A transfer occurred.
-        DataOutValid <= 1'b0;
+      // If the skid buffer accepted the input token this cycle, clear the
+      // internal valid that indicates we have buffered data.
+      if (DataOut_a_valid && DataOut_a_ready)
+        DataOut_a_valid <= 1'b0;
 
-      if (!DataOutValid || DataOutReady) begin
+      // Only attempt to fetch data from the host when the skid buffer can
+      // accept it (DataOut_a_ready).
+      if (!DataOut_a_valid && DataOut_a_ready) begin
         int data_limit;
         int rc;
 
@@ -149,7 +158,7 @@ module Cosim_Endpoint_FromHost
             ENDPOINT_ID, FROM_HOST_SIZE_BYTES, data_limit, rc);
         end else if (rc == 0) begin
           if (data_limit == FROM_HOST_SIZE_BYTES)
-            DataOutValid <= 1'b1;
+            DataOut_a_valid <= 1'b1;
           else if (data_limit == 0)
             begin end // No message.
           else
@@ -159,31 +168,51 @@ module Cosim_Endpoint_FromHost
         end
       end
     end else begin
-      DataOutValid <= 1'b0;
+      DataOut_a_valid <= 1'b0;
     end
   end
 
-  // Assign packed output bit array from unpacked byte array.
+  // Pack the byte array into a single vector that will be handed to the
+  // skid buffer as its input payload.
   genvar iOut;
   generate
     for (iOut=0; iOut<FROM_HOST_SIZE_BYTES_FLOOR; iOut++)
-      assign DataOut[((iOut+1)*8)-1:iOut*8] = DataOutBuffer[iOut];
+      assign DataOut_a[((iOut+1)*8)-1:iOut*8] = DataOutBuffer[iOut];
     if (FROM_HOST_SIZE_BITS_DIFF != 0)
-      // If the type is not a multiple of 8, we've got to copy the extra bits.
-      assign DataOut[(FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS +
-                      FROM_HOST_SIZE_BITS_DIFF - 1) :
-                        FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS]
+      // If the type is not a multiple of 8, copy the extra bits.
+      assign DataOut_a[(FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS +
+                        FROM_HOST_SIZE_BITS_DIFF - 1) :
+                          FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS]
              = DataOutBuffer[FROM_HOST_SIZE_BYTES - 1]
                             [FROM_HOST_SIZE_BITS_DIFF - 1 : 0];
   endgenerate
 
-  initial begin
-    $display("FROM_HOST_SIZE_BITS: %d", FROM_HOST_SIZE_BITS);
-    $display("FROM_HOST_SIZE_BYTES: %d", FROM_HOST_SIZE_BYTES);
-    $display("FROM_HOST_SIZE_BITS_DIFF: %d", FROM_HOST_SIZE_BITS_DIFF);
-    $display("FROM_HOST_SIZE_BYTES_FLOOR: %d", FROM_HOST_SIZE_BYTES_FLOOR);
-    $display("FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS: %d",
-             FROM_HOST_SIZE_BYTES_FLOOR_IN_BITS);
-  end
+  /// *******************
+  /// Data out management.
+  ///
+  /// It has been observed that some simulators (verilator) does not handle
+  /// combinational driving from DPI well (resulting in non-determinism wrt
+  /// some of the combinational outputs being dropped/replicated). Questa does
+  /// not show this behavior.
+  /// A mitigation is to add a skid buffer to decouple the DPI interface
+  /// from the output interface.
+
+  // Instantiate a single-stage pipeline to buffer tokens that arrive from
+  // the host and present them to the module's output with proper
+  // ready/valid handshaking.
+  ESI_PipelineStage #(.WIDTH(FROM_HOST_SIZE_BITS)) out_pipe (
+    .clk(clk),
+    .rst(rst),
+    .a_valid(DataOut_a_valid),
+    .a(DataOut_a),
+    .a_ready(DataOut_a_ready),
+    .x_valid(DataOut_x_valid),
+    .x(DataOut_x),
+    .x_ready(DataOutReady)
+  );
+
+  // Drive the module's outward-facing signals from the pipeline output.
+  assign DataOutValid = DataOut_x_valid;
+  assign DataOut = DataOut_x;
 
 endmodule

@@ -6,10 +6,19 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-add_circt_dialect_library(CIRCTEmit
+set(CIRCT_EMIT_Sources
   EmitDialect.cpp
   EmitOpInterfaces.cpp
   EmitOps.cpp
+)
+
+set(LLVM_OPTIONAL_SOURCES
+  ${CIRCT_EMIT_Sources}
+  EmitReductions.cpp
+)
+
+add_circt_dialect_library(CIRCTEmit
+  ${CIRCT_EMIT_Sources}
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Emit
@@ -25,6 +34,16 @@ add_circt_dialect_library(CIRCTEmit
   MLIRIR
   MLIRPass
   MLIRTransforms
+)
+
+add_circt_library(CIRCTEmitReductions
+  EmitReductions.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTReduceLib
+  CIRCTEmit
+  CIRCTHW
+  MLIRIR
 )
 
 add_subdirectory(Transforms)

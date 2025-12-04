@@ -191,7 +191,7 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
 
 void OneItemBuffersToHostReadPort::connectImpl(std::optional<unsigned>) {
   engine->connect();
-  buffer = engine->hostMem->allocate(bufferSize, {});
+  buffer = engine->hostMem->allocate(bufferSize, {true, false});
   writeBufferPtr();
 }
 
@@ -384,9 +384,9 @@ void OneItemBuffersFromHost::connect() {
 
 void OneItemBuffersFromHostWritePort::connectImpl(std::optional<unsigned>) {
   engine->connect();
-  data_buffer =
-      engine->hostMem->allocate(std::max(bufferSize, (size_t)512), {});
-  completion_buffer = engine->hostMem->allocate(512, {});
+  data_buffer = engine->hostMem->allocate(std::max(bufferSize, (size_t)512),
+                                          {false, false});
+  completion_buffer = engine->hostMem->allocate(512, {true, false});
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
   // and sent to the device.
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;

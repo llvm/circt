@@ -29,24 +29,22 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(LLHD, llhd, circt::llhd::LLHDDialect)
 /// Check if a type is a time type.
 bool llhdTypeIsATimeType(MlirType type) { return isa<TimeType>(unwrap(type)); }
 
-/// Check if a type is a pointer type.
-bool llhdTypeIsAPointerType(MlirType type) {
-  return isa<PtrType>(unwrap(type));
-}
+/// Check if a type is a reference type.
+bool llhdTypeIsARefType(MlirType type) { return isa<RefType>(unwrap(type)); }
 
 /// Create a time type.
 MlirType llhdTimeTypeGet(MlirContext ctx) {
   return wrap(TimeType::get(unwrap(ctx)));
 }
 
-/// Create a pointer type.
-MlirType llhdPointerTypeGet(MlirType element) {
-  return wrap(PtrType::get(unwrap(element)));
+/// Create a reference type.
+MlirType llhdRefTypeGet(MlirType element) {
+  return wrap(RefType::get(unwrap(element)));
 }
 
-/// Get the inner type of a pointer.
-MlirType llhdPointerTypeGetElementType(MlirType type) {
-  return wrap(cast<PtrType>(unwrap(type)).getElementType());
+/// Get the inner type of a reference.
+MlirType llhdRefTypeGetNestedType(MlirType type) {
+  return wrap(cast<RefType>(unwrap(type)).getNestedType());
 }
 
 //===----------------------------------------------------------------------===//

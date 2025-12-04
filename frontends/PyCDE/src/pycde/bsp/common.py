@@ -7,13 +7,13 @@ from math import ceil
 
 from ..common import Clock, Input, InputChannel, Output, OutputChannel, Reset
 from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
-                          Reg, Wire)
+                          Wire)
 from .. import esi
 from ..module import Module, generator, modparams
-from ..signals import BitsSignal, BundleSignal, ChannelSignal, ClockSignal
+from ..signals import BitsSignal, ChannelSignal, StructSignal
 from ..support import clog2
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
-                     ChannelDirection, StructType, Type, UInt)
+                     ChannelDirection, StructType, Type, UInt, Window)
 
 from typing import Callable, Dict, List, Tuple
 import typing
@@ -93,6 +93,210 @@ def HeaderMMIO(manifest_loc: int) -> Module:
   return HeaderMMIO
 
 
+@modparams
+def ChannelDemuxN_HalfStage_ReadyBlocking(
+    data_type: Type, num_outs: int,
+    next_sel_width: int) -> type["ChannelDemuxNImpl"]:
+  """N-way channel demultiplexer for valid/ready signaling. Contains
+    valid/ready registers on the output channels. The selection signal is now
+    embedded in the input channel payload as a struct {sel, data}. Input
+    signals ready when the selected output register is empty."""
+
+  assert num_outs >= 1, "num_outs must be at least 1."
+
+  class ChannelDemuxNImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    # Input channel now carries selection along with data.
+    InPayloadType = StructType([
+        ("sel", Bits(clog2(num_outs))),
+        ("next_sel", Bits(next_sel_width)),
+        ("data", data_type),
+    ])
+    inp = Input(Channel(InPayloadType))
+    OutPayloadType = StructType([
+        ("next_sel", Bits(next_sel_width)),
+        ("data", data_type),
+    ])
+    # Outputs are channels of OutPayloadType, which includes both 'next_sel' and 'data' fields.
+    for i in range(num_outs):
+      locals()[f"output_{i}"] = Output(Channel(OutPayloadType))
+
+    @generator
+    def generate(ports) -> None:
+      # Half-stage demux: one register per output channel. Input is ready
+      # when the currently selected output register is empty (not valid).
+      clk = ports.clk
+      rst = ports.rst
+      sel_width = clog2(num_outs)
+
+      # Unwrap input with backpressure from selected output register.
+      input_ready = Wire(Bits(1), name="input_ready")
+      in_payload, in_valid = ports.inp.unwrap(input_ready)
+      in_sel = in_payload.sel
+      in_next_sel = in_payload.next_sel
+      in_data = in_payload.data
+
+      # Track per-output valid regs and build a purely combinational
+      # expression 'selected_valid_expr' = OR_i((sel==i)&valid_i). Avoid
+      # assigning to a Wire multiple times.
+      valid_regs: List[BitsSignal] = []
+      selected_valid_expr = Bits(1)(0)
+
+      for i in range(num_outs):
+        # Write when input transaction targets this output and output not holding data yet.
+        will_write = Wire(Bits(1), name=f"will_write_{i}")
+        write_cond = (in_valid & input_ready & (in_sel == Bits(sel_width)(i)))
+        will_write.assign(write_cond)
+
+        # Data and next_sel registers.
+        out_msg_reg = ChannelDemuxNImpl.OutPayloadType({
+            "next_sel": in_next_sel,
+            "data": in_data
+        }).reg(clk=clk, rst=rst, ce=will_write, name=f"out{i}_msg_reg")
+
+        # Valid register cleared on successful downstream consume.
+        consume = Wire(Bits(1), name=f"consume_{i}")
+        valid_reg = ControlReg(
+            clk=clk,
+            rst=rst,
+            asserts=[will_write],
+            resets=[consume],
+            name=f"out{i}_valid_reg",
+        )
+        valid_regs.append(valid_reg)
+
+        # Channel wrapper.
+        ch_sig, ch_ready = Channel(ChannelDemuxNImpl.OutPayloadType).wrap(
+            out_msg_reg, valid_reg)
+        setattr(ports, f"output_{i}", ch_sig)
+        consume.assign(valid_reg & ch_ready)
+
+        # Accumulate selected_valid expression.
+        selected_valid_expr = (selected_valid_expr | (
+            (in_sel == Bits(sel_width)(i)) & valid_reg)).as_bits()
+
+      # Input ready only when selected output has no valid data latched.
+      input_ready.assign((selected_valid_expr ^ Bits(1)(1)).as_bits())
+
+    def get_out(self, index: int) -> ChannelSignal:
+      return getattr(self, f"output_{index}")
+
+  return ChannelDemuxNImpl
+
+
+@modparams
+def ChannelDemuxTree_HalfStage_ReadyBlocking(
+    data_type: Type, num_outs: int,
+    branching_factor_log2: int) -> type["ChannelDemuxTree"]:
+  """Pipelined N-way channel demultiplexer for valid/ready signaling. This
+    implementation uses a tree structure of
+    ChannelDemuxN_HalfStage_ReadyBlocking modules to reduce fanout pressure.
+    Supports maximum half-throughput to save complexity and area.
+    """
+
+  root_sel_width = clog2(num_outs)
+  # Simplify algorithm by making sure num_outs is a power of two.
+  num_outs = 2**root_sel_width
+  sel_width = branching_factor_log2
+  fanout = 2**sel_width
+
+  class ChannelDemuxTree(Module):
+    clk = Clock()
+    rst = Reset()
+    # Input now embeds selection bits alongside data.
+    InPayloadType = StructType([
+        ("sel", Bits(clog2(num_outs))),
+        ("data", data_type),
+    ])
+    inp = Input(Channel(InPayloadType))
+
+    # Outputs (data only).
+    for i in range(num_outs):
+      locals()[f"output_{i}"] = Output(Channel(data_type))
+
+    @generator
+    def build(ports) -> None:
+      assert branching_factor_log2 > 0
+      if num_outs == 1:
+        # Strip selection bits and return single channel.
+        setattr(ports, "output_0", ports.inp.transform(lambda p: p.data))
+        return
+
+      def payload_type(sel_width: int, next_sel_width: int) -> Type:
+        return StructType([
+            ("sel", Bits(sel_width)),
+            ("next_sel", Bits(next_sel_width)),
+            ("data", data_type),
+        ])
+
+      def next_sel_width_calc(curr_sel_width) -> int:
+        return max(curr_sel_width - sel_width, 0)
+
+      def payload_next(curr_msg: StructSignal) -> StructSignal:
+        """Given current level payload, produce next level payload by
+        stripping off the top selection bits."""
+
+        next_sel_width = next_sel_width_calc(curr_msg.next_sel.type.width)
+        curr_sel_width = curr_msg.next_sel.type.width
+        new_sel_width = min(curr_sel_width, sel_width)
+        return payload_type(
+            new_sel_width,
+            next_sel_width,
+        )({
+            # Use the MSB bits of next_sel as the next level selection.
+            "sel": (curr_msg.next_sel[next_sel_width:]
+                    if curr_sel_width > 0 else Bits(0)(0)),
+            "next_sel": (curr_msg.next_sel[:next_sel_width]
+                         if next_sel_width > 0 else Bits(0)(0)),
+            "data": curr_msg.data,
+        })
+
+      current_channels: List[ChannelSignal] = [
+          ports.inp.transform(lambda m: payload_type(0, root_sel_width)({
+              "sel": Bits(0)(0),
+              "next_sel": m.sel,
+              "data": m.data,
+          }))
+      ]
+
+      curr_sel_width = root_sel_width
+      level = 0
+      while len(current_channels) < num_outs:
+        next_level: List[ChannelSignal] = []
+        level_num_outs = min(2**curr_sel_width, fanout)
+        for i, c in enumerate(current_channels):
+          dmux = ChannelDemuxN_HalfStage_ReadyBlocking(
+              data_type,
+              num_outs=level_num_outs,
+              next_sel_width=next_sel_width_calc(curr_sel_width),
+          )(
+              clk=ports.clk,
+              rst=ports.rst,
+              inp=c.transform(payload_next),
+              instance_name=f"demux_l{level}_i{i}",
+          )
+          for j in range(level_num_outs):
+            next_level.append(dmux.get_out(j))
+        current_channels = next_level
+        curr_sel_width -= sel_width
+        level += 1
+
+      for i in range(num_outs):
+        # Strip off next_sel bits for final output.
+        setattr(
+            ports,
+            f"output_{i}",
+            current_channels[i].transform(lambda p: p.data),
+        )
+
+    def get_out(self, index: int) -> ChannelSignal:
+      return getattr(self, f"output_{index}")
+
+  return ChannelDemuxTree
+
+
 class ChannelMMIO(esi.ServiceImplementation):
   """MMIO service implementation with MMIO bundle interfaces. Should be
   relatively easy to adapt to physical interfaces by wrapping the wires to
@@ -112,8 +316,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x10000: Start of MMIO space for requests. Mapping is contained in the
-               manifest so can be dynamically queried.
+    - 0x400: Start of MMIO space for requests. Mapping is contained in the
+             manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
     - addr(Manifest ROM) + 8: Start of compressed manifest
@@ -133,16 +337,12 @@ class ChannelMMIO(esi.ServiceImplementation):
   # TODO: make the amount of register space each client gets a parameter.
   # Supporting this will require more address decode logic.
   #
-  # TODO: if the compressed manifest is larger than 'RegisterSpace', we won't be
-  # allocating enough address space. This should be fixed with the more complex
-  # address decode logic mentioned above.
-  #
   # TODO: only supports one outstanding transaction at a time. This is NOT
   # enforced or checked! Enforce this.
 
-  RegisterSpace = 0x100000
+  RegisterSpace = 0x400
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
-  AddressMask = 0xFFFFF
+  AddressMask = 0x3FF
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = RegisterSpace
@@ -204,15 +404,30 @@ class ChannelMMIO(esi.ServiceImplementation):
     counted_output.assign(data_resp_channel)
 
     # Get the selection index and the address to hand off to the clients.
-    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(cmd_channel)
+    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
+        cmd_channel, len(table), manifest_loc)
 
     # Build the demux/mux and assign the results of each appropriately.
     read_clients_clog2 = clog2(len(table))
-    client_cmd_channels = esi.ChannelDemux(
-        sel=sel_bits.pad_or_truncate(read_clients_clog2),
-        input=client_cmd_chan,
-        num_outs=len(table),
-        instance_name="client_cmd_demux")
+    # Combine selection bits and command channel payload into a struct channel for the demux tree.
+    TreeInType = StructType([
+        ("sel", Bits(read_clients_clog2)),
+        ("data", client_cmd_chan.type.inner_type),
+    ])
+    sel_bits_truncated = sel_bits.pad_or_truncate(read_clients_clog2)
+    combined_cmd_chan = client_cmd_chan.transform(
+        lambda cmd, _sel=sel_bits_truncated: TreeInType({
+            "sel": _sel,
+            "data": cmd
+        }))
+    demux_inst = ChannelDemuxTree_HalfStage_ReadyBlocking(
+        client_cmd_chan.type.inner_type, len(table), branching_factor_log2=2)(
+            clk=ports.clk,
+            rst=ports.rst,
+            inp=combined_cmd_chan,
+            instance_name="client_cmd_demux",
+        )
+    client_cmd_channels = [demux_inst.get_out(i) for i in range(len(table))]
     client_data_channels = []
     for (idx, offset) in enumerate(sorted(table.keys())):
       bundle_wire = table[offset]
@@ -231,8 +446,8 @@ class ChannelMMIO(esi.ServiceImplementation):
     data_resp_channel.assign(resp_channel)
 
   @staticmethod
-  def build_addr_read(
-      read_addr_chan: ChannelSignal) -> Tuple[BitsSignal, ChannelSignal]:
+  def build_addr_read(read_addr_chan: ChannelSignal, num_clients: int,
+                      manifest_loc: int) -> Tuple[BitsSignal, ChannelSignal]:
     """Build a channel for the address read request. Returns the index to select
     the client and a channel for the masked address to be passed to the
     clients."""
@@ -241,19 +456,27 @@ class ChannelMMIO(esi.ServiceImplementation):
     # change to support more flexibility in addressing. Not clear if what we're
     # doing now it sufficient or not.
 
+    manifest_loc_const = UInt(32)(manifest_loc)
+
     cmd_ready_wire = Wire(Bits(1))
     cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
+    is_manifest_read = cmd.offset >= manifest_loc_const
     sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
-    sel_bits.assign(cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:])
+    # If reading the manifest, override the selection to select the manifest instead.
+    sel_bits.assign(
+        Mux(is_manifest_read,
+            cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:],
+            Bits(32 - ChannelMMIO.RegisterSpaceBits)(num_clients - 1)))
+    regular_client_offset = (cmd.offset.as_bits() &
+                             Bits(32)(ChannelMMIO.AddressMask)).as_uint()
+    offset = Mux(is_manifest_read, regular_client_offset,
+                 (cmd.offset - manifest_loc_const).as_uint(32))
     client_cmd = NamedWire(esi.MMIOReadWriteCmdType, "client_cmd")
     client_cmd.assign(
         esi.MMIOReadWriteCmdType({
-            "write":
-                cmd.write,
-            "offset": (cmd.offset.as_bits() &
-                       Bits(32)(ChannelMMIO.AddressMask)).as_uint(),
-            "data":
-                cmd.data
+            "write": cmd.write,
+            "offset": offset,
+            "data": cmd.data
         }))
     client_addr_chan, client_addr_ready = Channel(
         esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
@@ -548,7 +771,9 @@ def TaggedWriteGearbox(input_bitwidth: int,
 
   if output_bitwidth % 8 != 0:
     raise ValueError("Output bitwidth must be a multiple of 8.")
-  input_pad_bits = 8 - (input_bitwidth % 8)
+  input_pad_bits = 0
+  if input_bitwidth % 8 != 0:
+    input_pad_bits = 8 - (input_bitwidth % 8)
   input_padded_bitwidth = input_bitwidth + input_pad_bits
 
   class TaggedWriteGearboxImpl(Module):
@@ -662,6 +887,57 @@ def TaggedWriteGearbox(input_bitwidth: int,
   return TaggedWriteGearboxImpl
 
 
+@modparams
+def EmitEveryN(message_type: Type, N: int) -> type['EmitEveryNImpl']:
+  """Emit (forward) one message for every N input messages. The emitted message
+  is the last one of the N received. N must be >= 1."""
+
+  if N < 1:
+    raise ValueError("N must be >= 1")
+
+  class EmitEveryNImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(message_type)
+    out = OutputChannel(message_type)
+
+    @generator
+    def build(ports):
+      ready_for_in = Wire(Bits(1))
+      in_data, in_valid = ports.in_.unwrap(ready_for_in)
+      xact = in_valid & ready_for_in
+
+      # Fast path: N == 1 -> pass-through.
+      if N == 1:
+        out_chan, out_ready = EmitEveryNImpl.out.type.wrap(in_data, in_valid)
+        ready_for_in.assign(out_ready)
+        ports.out = out_chan
+        return
+
+      counter_width = clog2(N)
+      increment = xact
+      clear = Wire(Bits(1))
+      counter = Counter(counter_width)(clk=ports.clk,
+                                       rst=ports.rst,
+                                       increment=increment,
+                                       clear=clear)
+
+      # Capture last message of the group.
+      last_msg = in_data.reg(ports.clk, ports.rst, ce=xact, name="last_msg")
+
+      hit_last = (counter.out == UInt(counter_width)(N - 1)) & xact
+      out_valid = ControlReg(ports.clk, ports.rst, [hit_last], [clear])
+
+      out_chan, out_ready = EmitEveryNImpl.out.type.wrap(last_msg, out_valid)
+      # Stall input while waiting for downstream to accept the aggregated output.
+      ready_for_in.assign(~(out_valid & ~out_ready))
+      clear.assign(out_valid & out_ready)  # Clear after successful emit.
+
+      ports.out = out_chan
+
+  return EmitEveryNImpl
+
+
 def HostMemWriteProcessor(
     write_width: int, hostmem_module,
     reqs: List[esi._OutputBundleSetter]) -> type["HostMemWriteProcessorImpl"]:
@@ -690,6 +966,9 @@ def HostMemWriteProcessor(
 
     @generator
     def build(ports):
+      clk = ports.clk
+      rst = ports.rst
+
       # If there's no write clients, just create a no-op write bundle
       if len(reqs) == 0:
         req, _ = Channel(hostmem_module.UpstreamWriteReq).wrap(
@@ -722,12 +1001,14 @@ def HostMemWriteProcessor(
         # Get the request channel and its data type.
         reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
         client_type = reqch.inner_type
+        if isinstance(client_type.data, Window):
+          client_type = client_type.lowered_type
 
         # Pack up the bundle and assign the request channel.
         write_req_bundle_type = esi.HostMem.write_req_bundle_type(
             client_type.data)
-        bundle_sig, froms = write_req_bundle_type.pack(
-            ackTag=demuxed_acks.get_out(idx))
+        input_flit_ack = Wire(upstream_ack_tag.type)
+        bundle_sig, froms = write_req_bundle_type.pack(ackTag=input_flit_ack)
 
         gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth, write_width)
         gearbox_in_type = gearbox_mod.in_.type.inner_type
@@ -750,6 +1031,13 @@ def HostMemWriteProcessor(
                 "data": m.data,
                 "valid_bytes": m.valid_bytes
             })))
+
+        # Count the number of acks received from hostmem for this client
+        # and only send one back to the client per input.
+        ack_every_n = EmitEveryN(upstream_ack_tag.type, gearbox_mod.num_chunks)(
+            clk=clk, rst=rst, in_=demuxed_acks.get_out(idx))
+        input_flit_ack.assign(ack_every_n.out)
+
         # Set the port for the client request.
         setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
 

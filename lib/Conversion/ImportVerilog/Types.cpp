@@ -38,7 +38,9 @@ struct TypeVisitor {
   Type visit(const slang::ast::FloatingType &type) {
     if (type.floatKind == slang::ast::FloatingType::Kind::RealTime)
       return moore::TimeType::get(context.getContext());
-    return moore::RealType::get(context.getContext());
+    if (type.floatKind == slang::ast::FloatingType::Kind::Real)
+      return moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+    return moore::RealType::get(context.getContext(), moore::RealWidth::f32);
   }
 
   Type visit(const slang::ast::PredefinedIntegerType &type) {
@@ -73,6 +75,11 @@ struct TypeVisitor {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
+    if (!type.indexType) {
+      mlir::emitError(
+          loc, "unsupported type: associative arrays with wildcard index");
+      return {};
+    }
     auto indexType = type.indexType->visit(*this);
     if (!indexType)
       return {};
@@ -153,6 +160,21 @@ struct TypeVisitor {
 
   Type visit(const slang::ast::StringType &type) {
     return moore::StringType::get(context.getContext());
+  }
+
+  Type visit(const slang::ast::CHandleType &type) {
+    return moore::ChandleType::get(context.getContext());
+  }
+
+  Type visit(const slang::ast::ClassType &type) {
+    if (failed(context.convertClassDeclaration(type)))
+      return {};
+    if (auto *lowering = context.declareClass(type)) {
+      mlir::StringAttr symName = lowering->op.getSymNameAttr();
+      mlir::FlatSymbolRefAttr symRef = mlir::FlatSymbolRefAttr::get(symName);
+      return moore::ClassHandleType::get(context.getContext(), symRef);
+    }
+    return {};
   }
 
   /// Emit an error for all other types.

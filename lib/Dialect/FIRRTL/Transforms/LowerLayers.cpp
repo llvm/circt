@@ -199,6 +199,8 @@ struct BindFileInfo {
 
 class LowerLayersPass
     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
+  using Base::Base;
+
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
     auto layer = symbolToLayer.lookup(layerName);
     if (!layer)
@@ -387,7 +389,7 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
   if (!layerBlock.getBody()->empty()) {
     OpBuilder builder(layerBlock);
     auto macroName = macroNames[layer];
-    auto ifDef = builder.create<sv::IfDefOp>(layerBlock.getLoc(), macroName);
+    auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
     ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
   }
   layerBlock.erase();
@@ -606,26 +608,61 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // transparently referencing a spilled op, spill the node, too.  The node
       // provides an anchor for an inner symbol (which subfield, subindex, and
       // subaccess do not).
-      if (isa<SubfieldOp, SubindexOp>(op)) {
-        auto input = op->getOperand(0);
-        if (!firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive() &&
-            !isAncestorOfValueOwner(layerBlock, input)) {
-          op->moveBefore(layerBlock);
-          spilledSubOps.insert(op);
-        }
-        return WalkResult::advance();
-      }
-      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+      auto fixSubOp = [&](auto subOp) {
         auto input = subOp.getInput();
-        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive())
+
+        // If the input is defined in this layerblock, we are done.
+        if (isAncestorOfValueOwner(layerBlock, input))
           return WalkResult::advance();
 
-        if (!isAncestorOfValueOwner(layerBlock, input) &&
-            !isAncestorOfValueOwner(layerBlock, subOp.getIndex())) {
+        // Otherwise, capture the input operand, if possible.
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive()) {
+          subOp.getInputMutable().assign(getReplacement(subOp, input));
+          return WalkResult::advance();
+        }
+
+        // Otherwise, move the subfield op out of the layerblock.
+        op->moveBefore(layerBlock);
+        spilledSubOps.insert(op);
+        return WalkResult::advance();
+      };
+
+      if (auto subOp = dyn_cast<SubfieldOp>(op))
+        return fixSubOp(subOp);
+
+      if (auto subOp = dyn_cast<SubindexOp>(op))
+        return fixSubOp(subOp);
+
+      if (auto subOp = dyn_cast<SubaccessOp>(op)) {
+        auto input = subOp.getInput();
+        auto index = subOp.getIndex();
+
+        // If the input is defined in this layerblock, capture the index if
+        // needed, and we are done.
+        if (isAncestorOfValueOwner(layerBlock, input)) {
+          if (!isAncestorOfValueOwner(layerBlock, index)) {
+            subOp.getIndexMutable().assign(getReplacement(subOp, index));
+          }
+          return WalkResult::advance();
+        }
+
+        // Otherwise, capture the input operand, if possible.
+        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive()) {
+          subOp.getInputMutable().assign(getReplacement(subOp, input));
+          if (!isAncestorOfValueOwner(layerBlock, index))
+            subOp.getIndexMutable().assign(getReplacement(subOp, index));
+          return WalkResult::advance();
+        }
+
+        // Otherwise, move the subaccess op out of the layerblock, if possible.
+        if (!isAncestorOfValueOwner(layerBlock, index)) {
           subOp->moveBefore(layerBlock);
           spilledSubOps.insert(op);
           return WalkResult::advance();
         }
+
+        // When the input is not passive, but the index is defined inside this
+        // layerblock, we are out of options.
         auto diag = op->emitOpError()
                     << "has a non-passive operand and captures a value defined "
                        "outside its enclosing bind-convention layerblock.  The "
@@ -635,6 +672,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             << "the layerblock is defined here";
         return WalkResult::interrupt();
       }
+
       if (auto nodeOp = dyn_cast<NodeOp>(op)) {
         auto *definingOp = nodeOp.getInput().getDefiningOp();
         if (definingOp &&
@@ -917,7 +955,7 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
   llvm::SmallDenseSet<LayerOp> layersRequiringBindFiles;
 
   // If the module is public, create a bind file for all layers.
-  if (module.isPublic())
+  if (module.isPublic() || emitAllBindFiles)
     for (auto [_, layer] : symbolToLayer)
       if (layer.getConvention() == LayerConvention::Bind)
         layersRequiringBindFiles.insert(layer);
@@ -974,7 +1012,7 @@ void LowerLayersPass::preprocessExtModule(CircuitNamespace &ns,
   if (known.empty())
     return;
 
-  auto moduleName = extModule.getModuleName();
+  auto moduleName = extModule.getExtModuleName();
   auto &files = bindFiles[extModule];
   SmallPtrSet<Operation *, 8> seen;
 
@@ -1014,10 +1052,7 @@ void LowerLayersPass::preprocessModuleLike(CircuitNamespace &ns,
 /// Create the bind file skeleton for each layer, for each module.
 void LowerLayersPass::preprocessModules(CircuitNamespace &ns,
                                         InstanceGraph &ig) {
-  DenseSet<InstanceGraphNode *> visited;
-  for (auto *root : ig)
-    for (auto *node : llvm::post_order_ext(root, visited))
-      preprocessModuleLike(ns, node);
+  ig.walkPostOrder([&](auto &node) { preprocessModuleLike(ns, &node); });
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level

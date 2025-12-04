@@ -18,70 +18,70 @@ rtg.test @misc() {
 // CHECK-LABEL: rtg.test @registers
 // CHECK-SAME: !rtgtest.ireg
 rtg.test @registers(reg = %reg: !rtgtest.ireg) {
-  // CHECK: rtg.fixed_reg #rtgtest.zero : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.ra : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.sp : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.gp : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.tp : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t0 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t1 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t2 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s0 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s1 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a0 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a1 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a2 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a3 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a4 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a5 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a6 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.a7 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s2 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s3 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s4 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s5 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s6 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s7 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s8 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s9 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s10 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.s11 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t3 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t4 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t5 : !rtgtest.ireg
-  // CHECK: rtg.fixed_reg #rtgtest.t6 : !rtgtest.ireg
-  rtg.fixed_reg #rtgtest.zero
-  rtg.fixed_reg #rtgtest.ra
-  rtg.fixed_reg #rtgtest.sp
-  rtg.fixed_reg #rtgtest.gp
-  rtg.fixed_reg #rtgtest.tp
-  rtg.fixed_reg #rtgtest.t0
-  rtg.fixed_reg #rtgtest.t1
-  rtg.fixed_reg #rtgtest.t2
-  rtg.fixed_reg #rtgtest.s0
-  rtg.fixed_reg #rtgtest.s1
-  rtg.fixed_reg #rtgtest.a0
-  rtg.fixed_reg #rtgtest.a1
-  rtg.fixed_reg #rtgtest.a2
-  rtg.fixed_reg #rtgtest.a3
-  rtg.fixed_reg #rtgtest.a4
-  rtg.fixed_reg #rtgtest.a5
-  rtg.fixed_reg #rtgtest.a6
-  rtg.fixed_reg #rtgtest.a7
-  rtg.fixed_reg #rtgtest.s2
-  rtg.fixed_reg #rtgtest.s3
-  rtg.fixed_reg #rtgtest.s4
-  rtg.fixed_reg #rtgtest.s5
-  rtg.fixed_reg #rtgtest.s6
-  rtg.fixed_reg #rtgtest.s7
-  rtg.fixed_reg #rtgtest.s8
-  rtg.fixed_reg #rtgtest.s9
-  rtg.fixed_reg #rtgtest.s10
-  rtg.fixed_reg #rtgtest.s11
-  rtg.fixed_reg #rtgtest.t3
-  rtg.fixed_reg #rtgtest.t4
-  rtg.fixed_reg #rtgtest.t5
-  rtg.fixed_reg #rtgtest.t6
+  // CHECK: rtg.constant #rtgtest.zero : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.ra : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.sp : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.gp : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.tp : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t0 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t1 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t2 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s0 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s1 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a0 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a1 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a2 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a3 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a4 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a5 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a6 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.a7 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s2 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s3 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s4 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s5 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s6 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s7 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s8 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s9 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s10 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.s11 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t3 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t4 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t5 : !rtgtest.ireg
+  // CHECK: rtg.constant #rtgtest.t6 : !rtgtest.ireg
+  rtg.constant #rtgtest.zero
+  rtg.constant #rtgtest.ra
+  rtg.constant #rtgtest.sp
+  rtg.constant #rtgtest.gp
+  rtg.constant #rtgtest.tp
+  rtg.constant #rtgtest.t0
+  rtg.constant #rtgtest.t1
+  rtg.constant #rtgtest.t2
+  rtg.constant #rtgtest.s0
+  rtg.constant #rtgtest.s1
+  rtg.constant #rtgtest.a0
+  rtg.constant #rtgtest.a1
+  rtg.constant #rtgtest.a2
+  rtg.constant #rtgtest.a3
+  rtg.constant #rtgtest.a4
+  rtg.constant #rtgtest.a5
+  rtg.constant #rtgtest.a6
+  rtg.constant #rtgtest.a7
+  rtg.constant #rtgtest.s2
+  rtg.constant #rtgtest.s3
+  rtg.constant #rtgtest.s4
+  rtg.constant #rtgtest.s5
+  rtg.constant #rtgtest.s6
+  rtg.constant #rtgtest.s7
+  rtg.constant #rtgtest.s8
+  rtg.constant #rtgtest.s9
+  rtg.constant #rtgtest.s10
+  rtg.constant #rtgtest.s11
+  rtg.constant #rtgtest.t3
+  rtg.constant #rtgtest.t4
+  rtg.constant #rtgtest.t5
+  rtg.constant #rtgtest.t6
 
   // CHECK: rtg.virtual_reg [#rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
   rtg.virtual_reg [#rtgtest.ra, #rtgtest.sp]
@@ -197,13 +197,22 @@ rtg.test @instructions(imm = %imm: !rtg.isa.immediate<12>, imm13 = %imm13: !rtg.
 // -----
 
 rtg.test @emptyAllowed() {
-  // expected-error @below {{must have at least one allowed register}}
-  rtg.virtual_reg []
+  // expected-error @below {{expected attribute value}}
+  // expected-error @below {{failed to parse VirtualRegisterConfigAttr parameter 'allowedRegs' which is to be a `::llvm::ArrayRef<rtg::RegisterAttrInterface>`}}
+  rtg.virtual_reg #rtg.virtual_register_config[]
 }
 
 // -----
 
 rtg.test @invalidAllowedAttr() {
-  // expected-error @below {{allowed register attributes must be of RegisterAttrInterface}}
-  rtg.virtual_reg ["invalid"]
+  // expected-error @below {{invalid kind of attribute specified}}
+  // expected-error @below {{failed to parse VirtualRegisterConfigAttr parameter 'allowedRegs' which is to be a `::llvm::ArrayRef<rtg::RegisterAttrInterface>`}}
+  rtg.virtual_reg #rtg.virtual_register_config["invalid"]
+}
+
+// -----
+
+rtg.test @invalidAllowedAttr() {
+  // expected-error @below {{all allowed registers must be of the same type}}
+  rtg.virtual_reg #rtg.virtual_register_config[#rtgtest.a0, #rtgtest.f0]
 }

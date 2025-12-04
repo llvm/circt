@@ -331,14 +331,14 @@ struct ContainerInstanceOpConversionPattern
 
   ContainerPortInfoMap &portOrder;
   ContainerHWModSymbolMap &modSymMap;
-}; // namespace
+};
 
 struct ContainersToHWPass
     : public circt::kanagawa::impl::KanagawaContainersToHWBase<
           ContainersToHWPass> {
   void runOnOperation() override;
 };
-} // anonymous namespace
+} // namespace
 
 void ContainersToHWPass::runOnOperation() {
   auto *ctx = &getContext();

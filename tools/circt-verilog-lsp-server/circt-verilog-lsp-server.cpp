@@ -12,14 +12,13 @@
 
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 
-#include "mlir/Tools/lsp-server-support/Logging.h"
-#include "mlir/Tools/lsp-server-support/Transport.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LSP/Logging.h"
+#include "llvm/Support/LSP/Transport.h"
 #include "llvm/Support/Program.h"
 
-using namespace mlir;
-using namespace mlir::lsp;
+using namespace llvm::lsp;
 
 int main(int argc, char **argv) {
   //===--------------------------------------------------------------------===//
@@ -37,16 +36,16 @@ int main(int argc, char **argv) {
       llvm::cl::init(Logger::Level::Info),
   };
 
-  llvm::cl::opt<mlir::lsp::JSONStreamStyle> inputStyle{
+  llvm::cl::opt<llvm::lsp::JSONStreamStyle> inputStyle{
       "input-style",
       llvm::cl::desc("Input JSON stream encoding"),
-      llvm::cl::values(clEnumValN(mlir::lsp::JSONStreamStyle::Standard,
+      llvm::cl::values(clEnumValN(llvm::lsp::JSONStreamStyle::Standard,
                                   "standard", "usual LSP protocol"),
-                       clEnumValN(mlir::lsp::JSONStreamStyle::Delimited,
+                       clEnumValN(llvm::lsp::JSONStreamStyle::Delimited,
                                   "delimited",
                                   "messages delimited by `// -----` lines, "
                                   "with // comment support")),
-      llvm::cl::init(mlir::lsp::JSONStreamStyle::Standard),
+      llvm::cl::init(llvm::lsp::JSONStreamStyle::Standard),
       llvm::cl::Hidden,
   };
 
@@ -61,6 +60,43 @@ int main(int argc, char **argv) {
       llvm::cl::value_desc("dir"), llvm::cl::Prefix};
   llvm::cl::alias libDirsLong{"libdir", llvm::cl::desc("Alias for -y"),
                               llvm::cl::aliasopt(libDirs), llvm::cl::NotHidden};
+
+  llvm::cl::list<std::string> sourceLocationIncludeDirs(
+      "source-location-include-dir",
+      llvm::cl::desc("Root directory of file source locations"),
+      llvm::cl::value_desc("directory"), llvm::cl::Prefix);
+
+  //===--------------------------------------------------------------------===//
+  // Command files
+  //===--------------------------------------------------------------------===//
+
+  llvm::cl::list<std::string> commandFiles{
+      "C",
+      llvm::cl::desc(
+          "One or more command files, which are independent compilation units "
+          "where modules are automatically instantiated."),
+      llvm::cl::value_desc("filename"), llvm::cl::Prefix};
+  llvm::cl::alias commandFilesLong{
+      "command-file", llvm::cl::desc("Alias for -C"),
+      llvm::cl::aliasopt(commandFiles), llvm::cl::NotHidden};
+
+  //===------------------------------------------------------------------===//
+  // Debounce tuning
+  //===------------------------------------------------------------------===//
+  llvm::cl::opt<bool> noDebounce{
+      "no-debounce",
+      llvm::cl::desc("Disable debouncing (rebuild synchronously on change)"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<unsigned> debounceMinMs{
+      "debounce-min-ms",
+      llvm::cl::desc("Minimum idle time (ms) before rebuild"),
+      llvm::cl::init(150)};
+
+  llvm::cl::opt<unsigned> debounceMaxMs{
+      "debounce-max-ms",
+      llvm::cl::desc("Maximum wait (ms) while edits continue; 0 = no cap"),
+      llvm::cl::init(500)};
 
   //===--------------------------------------------------------------------===//
   // Testing
@@ -82,20 +118,27 @@ int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv, "Verilog LSP Language Server");
 
   if (litTest) {
-    inputStyle = mlir::lsp::JSONStreamStyle::Delimited;
-    logLevel = mlir::lsp::Logger::Level::Debug;
+    inputStyle = llvm::lsp::JSONStreamStyle::Delimited;
+    logLevel = llvm::lsp::Logger::Level::Debug;
     prettyPrint = true;
+    noDebounce = true;
+    debounceMinMs = 0;
+    debounceMaxMs = 0;
   }
 
   // Configure the logger.
-  mlir::lsp::Logger::setLogLevel(logLevel);
+  llvm::lsp::Logger::setLogLevel(logLevel);
 
   // Configure the transport used for communication.
   (void)llvm::sys::ChangeStdinToBinary();
-  mlir::lsp::JSONTransport transport(stdin, llvm::outs(), inputStyle,
+  llvm::lsp::JSONTransport transport(stdin, llvm::outs(), inputStyle,
                                      prettyPrint);
 
   // Configure the servers and start the main language server.
-  circt::lsp::VerilogServerOptions options(libDirs);
-  return failed(circt::lsp::CirctVerilogLspServerMain(options, transport));
+  circt::lsp::VerilogServerOptions options(libDirs, sourceLocationIncludeDirs,
+                                           commandFiles);
+  circt::lsp::LSPServerOptions lspOptions(noDebounce, debounceMinMs,
+                                          debounceMaxMs);
+  return failed(
+      circt::lsp::CirctVerilogLspServerMain(lspOptions, options, transport));
 }

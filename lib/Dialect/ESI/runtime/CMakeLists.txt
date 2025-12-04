@@ -59,16 +59,20 @@ endif()
 # conflicts with local zlib versions, and since we don't export anything zlib
 # related in our public headers.
 message("-- pulling down zlib from git")
-set(ZLIB_USE_STATIC_LIBS ON)
-set(ZLIB_BUILD_EXAMPLES OFF)
+set(ZLIB_BUILD_SHARED OFF)
+set(ZLIB_BUILD_STATIC ON)
+set(ZLIB_BUILD_TESTING OFF)
 FetchContent_Declare(
   ZLIB
   GIT_REPOSITORY https://github.com/madler/zlib.git
-  GIT_TAG        v1.3.1
+  # Note @mortbopet: The latest zlib release (v1.3.1) is fairly old (Jan 22. 2024)
+  # and is missing some key changes/fixes for building w/ a static library.
+  # For now, fixed by tagging to head of their development branch.
+  # Change once a new release is made that includes these fixes.
+  GIT_TAG        5a82f71ed1dfc0bec044d9702463dbdf84ea3b71
 )
 FetchContent_MakeAvailable(ZLIB)
 set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
-set(ZLIB_LIBRARY zlibstatic)
 if(UNIX)
   target_compile_options(zlibstatic
     PRIVATE
@@ -123,7 +127,9 @@ set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Types.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Values.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
 set(ESICppRuntimeHeaders
@@ -136,19 +142,13 @@ set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Engines.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Logging.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Manifest.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Values.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Services.h
 )
 set(ESICppRuntimeBackendHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
-)
-set(ESIPythonRuntimeSources
-  python/esiaccel/__init__.py
-  python/esiaccel/accelerator.py
-  python/esiaccel/codegen.py
-  python/esiaccel/types.py
-  python/esiaccel/utils.py
 )
 
 IF(MSVC)
@@ -180,7 +180,7 @@ if (DEFINED ZLIB_INCLUDE_DIR)
 endif()
 
 target_link_libraries(ESICppRuntime PRIVATE
-  ${ZLIB_LIBRARY}
+  ZLIB::ZLIBSTATIC
   nlohmann_json::nlohmann_json
 )
 target_link_libraries(ESICppRuntime PRIVATE
@@ -244,6 +244,7 @@ add_executable(esiquery
 target_link_libraries(esiquery PRIVATE
   ESICppRuntime
   CLI11::CLI11
+  nlohmann_json::nlohmann_json
 )
 add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
@@ -265,150 +266,8 @@ target_link_libraries(esitester PRIVATE
 )
 add_dependencies(ESIRuntime esitester)
 
-##===----------------------------------------------------------------------===//
-## Python bindings for the ESI runtime.
-##===----------------------------------------------------------------------===//
-
-# Pybind11 is used to wrap the ESICppRuntime APIs.
-find_package(Python3 COMPONENTS Interpreter Development)
-if(Python3_FOUND)
-  IF(MSVC)
-    # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
-    set_target_properties(Python3::Module PROPERTIES
-          MAP_IMPORTED_CONFIG_DEBUG ";RELEASE")
-  ENDIF(MSVC)
-
-  if(pybind11_DIR)
-    message(STATUS "Using explicit pybind11 cmake directory: ${pybind11_DIR} (-Dpybind11_DIR to change)")
-  else()
-    message(STATUS "Checking for pybind11 in python path...")
-    execute_process(
-      COMMAND "${Python3_EXECUTABLE}"
-      -c "import pybind11;print(pybind11.get_cmake_dir(), end='')"
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      RESULT_VARIABLE STATUS
-      OUTPUT_VARIABLE PACKAGE_DIR
-      ERROR_QUIET)
-    if(NOT STATUS EQUAL "0")
-      message(FATAL_ERROR "pybind11 not found (install via 'pip install pybind11' or set pybind11_DIR)")
-    endif()
-    message(STATUS "found (${PACKAGE_DIR})")
-    set(pybind11_DIR "${PACKAGE_DIR}")
-  endif()
-
-  # Now, find pybind11.
-  find_package(pybind11 CONFIG)
-  if (NOT pybind11_FOUND)
-    message (STATUS "Could not find pybind11. Disabling Python API.")
-    if (WHEEL_BUILD)
-      message (FATAL_ERROR "pybind11 is required for a wheel build.")
-    endif()
-  else()
-    # Compile Pybind11 module and copy to the correct python directory.
-    pybind11_add_module(esiCppAccel
-      ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.cpp)
-    target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
-    set_target_properties(esiCppAccel PROPERTIES
-      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel"
-    )
-
-    # Check for stubgen and generate stubs if available.
-    find_program(STUBGEN pybind11-stubgen)
-    if ("${STUBGEN}" STREQUAL "STUBGEN-NOTFOUND")
-      message(STATUS "pybind11_stubgen not found. Skipping stub generation.")
-    else()
-      if(WIN32)
-        # I just wasted all day trying to figure out the DLL search path on
-        # Windows both locally and in the runner. I'm done. Windows wheels
-        # won't have a stub until somebody else figures this out.
-        # TODO: have the patience to make this work.
-        message(WARNING "pybind11-stubgen is not supported on Windows.")
-      else()
-        set(stubgen_python_path "$ENV{PYTHONPATH}:${CMAKE_CURRENT_BINARY_DIR}/python")
-        add_custom_command(
-            TARGET esiCppAccel
-            POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${stubgen_python_path}"
-                ${STUBGEN}
-                  -o "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel"
-                  esiaccel.esiCppAccel
-        )
-      endif()
-    endif()
-
-    if (WHEEL_BUILD)
-      if ("${STUBGEN}" STREQUAL "STUBGEN-NOTFOUND")
-        message (FATAL_ERROR "pybind11_stubgen is required for a wheel build.")
-      endif()
-      set_target_properties(esiCppAccel PROPERTIES
-        INSTALL_RPATH "$ORIGIN/lib")
-    else()
-      set_target_properties(esiCppAccel PROPERTIES
-        INSTALL_RPATH "$ORIGIN/../../lib")
-    endif()
-    set_target_properties(esiCppAccel PROPERTIES
-      INSTALL_RPATH_USE_LINK_PATH FALSE)
-
-    if (WHEEL_BUILD)
-      install(TARGETS esiCppAccel
-        DESTINATION .
-        COMPONENT ESIRuntime
-      )
-    else()
-      install(TARGETS esiCppAccel
-        DESTINATION python/esiaccel
-        COMPONENT ESIRuntime
-      )
-    endif()
-    install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
-      DESTINATION ${ESIRT_INSTALL_LIBDIR}
-      PRE_EXCLUDE_REGEXES .*
-      COMPONENT ESIRuntime
-    )
-
-    foreach(pysrc ${ESIPythonRuntimeSources})
-      # Copy each of the Python sources to the build dir.
-      add_custom_command(
-          OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
-          COMMAND ${CMAKE_COMMAND} -E copy
-              ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
-              ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
-          DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
-      )
-
-      # Specify the install location for the Python sources.
-      get_filename_component(DEST ${pysrc} DIRECTORY)
-      # If we're building a wheel, we need to install to the root directory.
-      if (WHEEL_BUILD)
-        cmake_path(GET DEST PARENT_PATH DEST)
-        cmake_path(GET DEST PARENT_PATH DEST)
-        if (DEST STREQUAL "")
-          set(DEST ".")
-        endif()
-      endif()
-
-      install(FILES ${pysrc}
-        DESTINATION ${DEST}
-        COMPONENT ESIRuntime)
-    endforeach()
-
-    # Custom target for the Python runtime just aggregates the python sources
-    # and Pybind11 module.
-    add_custom_target(ESIPythonRuntime
-      DEPENDS
-        ${ESIPythonRuntimeSources}
-        esiCppAccel
-    )
-
-    add_dependencies(ESIRuntime ESIPythonRuntime)
-
-  endif()
-else() # Python not found.
-  if (WHEEL_BUILD)
-    message (FATAL_ERROR "python-dev is required for a wheel build.")
-  endif()
-endif()
-
+# Add the Python bindings.
+add_subdirectory(python)
 
 ##===----------------------------------------------------------------------===//
 ## Backends are loaded dynamically as plugins.
@@ -458,10 +317,22 @@ if(ESI_COSIM)
 
   add_dependencies(ESIRuntime CosimBackend)
 
-  install(TARGETS CosimBackend
-    DESTINATION ${ESIRT_INSTALL_LIBDIR}
-    COMPONENT ESIRuntime
-  )
+  if(WIN32)
+    # Windows cosim backend carries a lot of runtime dependencies, mainly
+    # transitively through gRPC. Make sure they're installed as well.
+    install(TARGETS CosimBackend
+      DESTINATION ${ESIRT_INSTALL_LIBDIR}
+      RUNTIME_DEPENDENCIES
+        PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
+        POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
+      COMPONENT ESIRuntime
+    )
+  else()
+    install(TARGETS CosimBackend
+      DESTINATION ${ESIRT_INSTALL_LIBDIR}
+      COMPONENT ESIRuntime
+    )
+  endif()
 
   # Build the RTL DPI cosim server.
   add_subdirectory(cosim_dpi_server)

@@ -48,12 +48,14 @@ struct AttrCache {
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
-    sInternalPaths = StringAttr::get(context, "internalPaths");
+    sPortDomains = StringAttr::get(context, "domainInfo");
+    aEmpty = ArrayAttr::get(context, {});
   }
   AttrCache(const AttrCache &) = default;
 
   StringAttr nameAttr, sPortDirections, sPortNames, sPortTypes, sPortLocations,
-      sPortAnnotations, sInternalPaths;
+      sPortAnnotations, sPortDomains;
+  ArrayAttr aEmpty;
 };
 
 struct FieldMapEntry : public PortInfo {
@@ -151,7 +153,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
-                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+                annosForFieldIDRange(ctx, annos, fieldID, lastId),
+                port.domains},
                portID,
                newPorts.size(),
                fieldID});
@@ -193,7 +196,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
-                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+                annosForFieldIDRange(ctx, annos, fieldID, lastId),
+                port.domains},
                portID,
                newPorts.size(),
                fieldID});
@@ -233,7 +237,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
             {{StringAttr::get(ctx, name), type,
               isFlip ? Direction::Out : Direction::In,
               symbolsForFieldIDRange(ctx, syms, fieldID, fieldID), port.loc,
-              annosForFieldIDRange(ctx, annos, fieldID, fieldID)},
+              annosForFieldIDRange(ctx, annos, fieldID, fieldID), port.domains},
              portID,
              newPorts.size(),
              fieldID});
@@ -324,8 +328,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSymbols" && attr.getName() != "portLocations" &&
-        attr.getName() != "internalPaths")
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newPortDirections;
@@ -334,10 +337,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   SmallVector<Attribute> newPortSyms;
   SmallVector<Attribute> newPortLocations;
   SmallVector<Attribute, 8> newPortAnnotations;
-  SmallVector<Attribute> newInternalPaths;
+  SmallVector<Attribute> newPortDomains;
 
-  bool hasInternalPaths = false;
-  auto internalPaths = module->getAttrOfType<ArrayAttr>("internalPaths");
   for (auto p : newPorts) {
     newPortTypes.push_back(TypeAttr::get(p.type));
     newPortNames.push_back(p.name);
@@ -345,12 +346,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     newPortSyms.push_back(p.sym);
     newPortLocations.push_back(p.loc);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
-    if (internalPaths) {
-      auto internalPath = cast<InternalPathAttr>(internalPaths[p.portID]);
-      newInternalPaths.push_back(internalPath);
-      if (internalPath.getPath())
-        hasInternalPaths = true;
-    }
+    newPortDomains.push_back(p.domains ? p.domains : cache.aEmpty);
   }
 
   newModuleAttrs.push_back(NamedAttribute(
@@ -369,12 +365,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, theBuilder.getArrayAttr(newPortAnnotations)));
 
-  assert(newInternalPaths.empty() ||
-         newInternalPaths.size() == newPorts.size());
-  if (hasInternalPaths) {
-    newModuleAttrs.emplace_back(cache.sInternalPaths,
-                                theBuilder.getArrayAttr(newInternalPaths));
-  }
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortDomains, theBuilder.getArrayAttr(newPortDomains)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -464,7 +456,8 @@ struct LowerSignaturesPass
 
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   // Cached attr
   AttrCache cache(&getContext());
 

@@ -14,6 +14,7 @@
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -22,7 +23,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
@@ -33,6 +34,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "lower-arc-to-llvm"
 
@@ -533,25 +535,53 @@ struct SimEmitValueOpLowering
     if (!moduleOp)
       return failure();
 
-    // Cast the value to a size_t.
-    // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
-    // sizeof(size_t) on the target architecture.
-    Value toPrint = adaptor.getValue();
-    DataLayout layout = DataLayout::closest(op);
-    llvm::TypeSize sizeOfSizeT =
-        layout.getTypeSizeInBits(rewriter.getIndexType());
-    assert(!sizeOfSizeT.isScalable() &&
-           sizeOfSizeT.getFixedValue() <= std::numeric_limits<unsigned>::max());
-    bool truncated = false;
-    if (valueType.getWidth() > sizeOfSizeT) {
-      toPrint = LLVM::TruncOp::create(
-          rewriter, loc,
-          IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()), toPrint);
-      truncated = true;
-    } else if (valueType.getWidth() < sizeOfSizeT)
-      toPrint = LLVM::ZExtOp::create(
-          rewriter, loc,
-          IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()), toPrint);
+    SmallVector<Value> printfVariadicArgs;
+    SmallString<16> printfFormatStr;
+    int remainingBits = valueType.getWidth();
+    Value value = adaptor.getValue();
+
+    // Assumes the target platform uses 64bit for long long ints (%llx
+    // formatter).
+    constexpr llvm::StringRef intFormatter = "llx";
+    auto intType = IntegerType::get(getContext(), 64);
+    Value shiftValue = LLVM::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(valueType, intType.getWidth()));
+
+    if (valueType.getWidth() < intType.getWidth()) {
+      int width = llvm::divideCeil(valueType.getWidth(), 4);
+      printfFormatStr = llvm::formatv("%0{0}{1}", width, intFormatter);
+      printfVariadicArgs.push_back(
+          LLVM::ZExtOp::create(rewriter, loc, intType, value));
+    } else {
+      // Process the value in 64 bit chunks, starting from the least significant
+      // bits. Since we append chunks in low-to-high order, we reverse the
+      // vector to print them in the correct high-to-low order.
+      int otherChunkWidth = intType.getWidth() / 4;
+      int firstChunkWidth =
+          llvm::divideCeil(valueType.getWidth() % intType.getWidth(), 4);
+      if (firstChunkWidth == 0) { // print the full 64-bit hex or a subset.
+        firstChunkWidth = otherChunkWidth;
+      }
+
+      std::string firstChunkFormat =
+          llvm::formatv("%0{0}{1}", firstChunkWidth, intFormatter);
+      std::string otherChunkFormat =
+          llvm::formatv("%0{0}{1}", otherChunkWidth, intFormatter);
+
+      for (int i = 0; remainingBits > 0; ++i) {
+        // Append 64-bit chunks to the printf arguments, in low-to-high
+        // order. The integer is printed in hex format with zero padding.
+        printfVariadicArgs.push_back(
+            LLVM::TruncOp::create(rewriter, loc, intType, value));
+
+        // Zero-padded format specifier for fixed width, e.g. %01llx for 4 bits.
+        printfFormatStr.append(i == 0 ? firstChunkFormat : otherChunkFormat);
+
+        value =
+            LLVM::LShrOp::create(rewriter, loc, value, shiftValue).getResult();
+        remainingBits -= intType.getWidth();
+      }
+    }
 
     // Lookup of create printf function symbol.
     auto printfFunc = LLVM::lookupOrCreateFn(
@@ -562,7 +592,6 @@ struct SimEmitValueOpLowering
 
     // Insert the format string if not already available.
     SmallString<16> formatStrName{"_arc_sim_emit_"};
-    formatStrName.append(truncated ? "trunc_" : "full_");
     formatStrName.append(adaptor.getValueName());
     LLVM::GlobalOp formatStrGlobal;
     if (!(formatStrGlobal =
@@ -571,9 +600,8 @@ struct SimEmitValueOpLowering
 
       SmallString<16> formatStr = adaptor.getValueName();
       formatStr.append(" = ");
-      if (truncated)
-        formatStr.append("(truncated) ");
-      formatStr.append("%zx\n");
+      formatStr.append(printfFormatStr);
+      formatStr.append("\n");
       SmallVector<char> formatStrVec{formatStr.begin(), formatStr.end()};
       formatStrVec.push_back(0);
 
@@ -589,14 +617,67 @@ struct SimEmitValueOpLowering
 
     Value formatStrGlobalPtr =
         LLVM::AddressOfOp::create(rewriter, loc, formatStrGlobal);
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, printfFunc.value(), ValueRange{formatStrGlobalPtr, toPrint});
+
+    // Add the format string to the end, and reverse the vector to print them in
+    // the correct high-to-low order with the format string at the beginning.
+    printfVariadicArgs.push_back(formatStrGlobalPtr);
+    std::reverse(printfVariadicArgs.begin(), printfVariadicArgs.end());
+
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, printfFunc.value(),
+                                              printfVariadicArgs);
 
     return success();
   }
 };
 
 } // namespace
+
+static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &converter) {
+  // Convert the argument types in the body blocks.
+  if (failed(rewriter.convertRegionTypes(&op.getBody(), converter)))
+    return failure();
+
+  // Split the block at the current insertion point such that we can branch into
+  // the `arc.execute` body region, and have `arc.output` branch back to the
+  // point after the `arc.execute`.
+  auto *blockBefore = rewriter.getInsertionBlock();
+  auto *blockAfter =
+      rewriter.splitBlock(blockBefore, rewriter.getInsertionPoint());
+
+  // Branch to the entry block.
+  rewriter.setInsertionPointToEnd(blockBefore);
+  mlir::cf::BranchOp::create(rewriter, op.getLoc(), &op.getBody().front(),
+                             adaptor.getInputs());
+
+  // Make all `arc.output` terminators branch to the block after the
+  // `arc.execute` op.
+  for (auto &block : op.getBody()) {
+    auto outputOp = dyn_cast<arc::OutputOp>(block.getTerminator());
+    if (!outputOp)
+      continue;
+    rewriter.setInsertionPointToEnd(&block);
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(outputOp, blockAfter,
+                                                    outputOp.getOperands());
+  }
+
+  // Inline the body region between the before and after blocks.
+  rewriter.inlineRegionBefore(op.getBody(), blockAfter);
+
+  // Add arguments to the block after the `arc.execute`, replace the op's
+  // results with the arguments, then perform block signature conversion.
+  SmallVector<Value> args;
+  args.reserve(op.getNumResults());
+  for (auto result : op.getResults())
+    args.push_back(blockAfter->addArgument(result.getType(), result.getLoc()));
+  rewriter.replaceOp(op, args);
+  auto conversion = converter.convertBlockSignature(blockAfter);
+  if (!conversion)
+    return failure();
+  rewriter.applySignatureConversion(blockAfter, *conversion, &converter);
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
@@ -610,6 +691,29 @@ struct LowerArcToLLVMPass
 } // namespace
 
 void LowerArcToLLVMPass::runOnOperation() {
+  // Replace any `i0` values with an `hw.constant 0 : i0` to avoid later issues
+  // in LLVM conversion.
+  {
+    DenseMap<Region *, hw::ConstantOp> zeros;
+    getOperation().walk([&](Operation *op) {
+      if (op->hasTrait<OpTrait::ConstantLike>())
+        return;
+      for (auto result : op->getResults()) {
+        auto type = dyn_cast<IntegerType>(result.getType());
+        if (!type || type.getWidth() != 0)
+          continue;
+        auto *region = op->getParentRegion();
+        auto &zero = zeros[region];
+        if (!zero) {
+          auto builder = OpBuilder::atBlockBegin(&region->front());
+          zero = hw::ConstantOp::create(builder, result.getLoc(),
+                                        APInt::getZero(0));
+        }
+        result.replaceAllUsesWith(zero);
+      }
+    });
+  }
+
   // Collect the symbols in the root op such that the HW-to-LLVM lowering can
   // create LLVM globals with non-colliding names.
   Namespace globals;
@@ -644,7 +748,7 @@ void LowerArcToLLVMPass::runOnOperation() {
   });
 
   // Setup the conversion patterns.
-  RewritePatternSet patterns(&getContext());
+  ConversionPatternSet patterns(&getContext(), converter);
 
   // MLIR patterns.
   populateSCFToControlFlowConversionPatterns(patterns);
@@ -656,9 +760,16 @@ void LowerArcToLLVMPass::runOnOperation() {
 
   // CIRCT patterns.
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
-  populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap);
   populateHWToLLVMTypeConversions(converter);
+  std::optional<HWToLLVMArraySpillCache> spillCacheOpt =
+      HWToLLVMArraySpillCache();
+  {
+    OpBuilder spillBuilder(getOperation());
+    spillCacheOpt->spillNonHWOps(spillBuilder, converter, getOperation());
+  }
+  populateHWToLLVMConversionPatterns(converter, patterns, globals,
+                                     constAggregateGlobalsMap, spillCacheOpt);
+
   populateCombToArithConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
 
@@ -685,6 +796,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     ZeroCountOpLowering
   >(converter, &getContext());
   // clang-format on
+  patterns.add<ExecuteOp>(convert);
 
   SmallVector<ModelInfo> models;
   if (failed(collectModels(getOperation(), models))) {
@@ -708,7 +820,10 @@ void LowerArcToLLVMPass::runOnOperation() {
       converter, &getContext(), modelMap);
 
   // Apply the conversion.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns),
+                                 config)))
     signalPassFailure();
 }
 

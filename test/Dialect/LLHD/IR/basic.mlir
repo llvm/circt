@@ -1,5 +1,12 @@
 // RUN: circt-opt --verify-roundtrip %s | FileCheck %s
 
+// CHECK: to !llhd.time
+builtin.unrealized_conversion_cast to !llhd.time
+// CHECK: to !llhd.ref<i42>
+builtin.unrealized_conversion_cast to !llhd.ref<i42>
+// CHECK: to !llhd.ref<!llhd.time>
+builtin.unrealized_conversion_cast to !llhd.ref<!llhd.time>
+
 // CHECK-LABEL: @basic
 // CHECK-SAME: (in [[IN0:%.+]] : i32, out out0 : i32)
 hw.module @basic(in %in0 : i32, out out0 : i32) {
@@ -9,74 +16,25 @@ hw.module @basic(in %in0 : i32, out out0 : i32) {
 }
 
 // CHECK-LABEL: @sigExtract
-hw.module @sigExtract(inout %arg0 : i32, in %arg1 : i5) {
-  // CHECK-NEXT: %{{.*}} = llhd.sig.extract %arg0 from %arg1 : (!hw.inout<i32>) -> !hw.inout<i5>
-  %1 = llhd.sig.extract %arg0 from %arg1 : (!hw.inout<i32>) -> !hw.inout<i5>
+hw.module @sigExtract(in %arg0 : !llhd.ref<i32>, in %arg1 : i5) {
+  // CHECK-NEXT: %{{.*}} = llhd.sig.extract %arg0 from %arg1 : <i32> -> <i5>
+  %1 = llhd.sig.extract %arg0 from %arg1 : <i32> -> <i5>
 }
 
 // CHECK-LABEL: @sigArray
-hw.module @sigArray(inout %arg0 : !hw.array<5xi1>, in %arg1 : i3) {
-  // CHECK-NEXT: %{{.*}} = llhd.sig.array_slice %arg0 at %arg1 : (!hw.inout<array<5xi1>>) -> !hw.inout<array<3xi1>>
-  %0 = llhd.sig.array_slice %arg0 at %arg1 : (!hw.inout<array<5xi1>>) -> !hw.inout<array<3xi1>>
-  // CHECK-NEXT: %{{.*}} = llhd.sig.array_get %arg0[%arg1] : !hw.inout<array<5xi1>>
-  %1 = llhd.sig.array_get %arg0[%arg1] : !hw.inout<array<5xi1>>
+hw.module @sigArray(in %arg0 : !llhd.ref<!hw.array<5xi1>>, in %arg1 : i3) {
+  // CHECK-NEXT: %{{.*}} = llhd.sig.array_slice %arg0 at %arg1 : <!hw.array<5xi1>> -> <!hw.array<3xi1>>
+  %0 = llhd.sig.array_slice %arg0 at %arg1 : <!hw.array<5xi1>> -> <!hw.array<3xi1>>
+  // CHECK-NEXT: %{{.*}} = llhd.sig.array_get %arg0[%arg1] : <!hw.array<5xi1>>
+  %1 = llhd.sig.array_get %arg0[%arg1] : <!hw.array<5xi1>>
 }
 
 // CHECK-LABEL: @sigStructExtract
-hw.module @sigStructExtract(inout %arg0 : !hw.struct<foo: i1, bar: i2, baz: i3>) {
-  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["foo"] : !hw.inout<struct<foo: i1, bar: i2, baz: i3>>
-  %0 = llhd.sig.struct_extract %arg0["foo"] : !hw.inout<struct<foo: i1, bar: i2, baz: i3>>
-  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["baz"] : !hw.inout<struct<foo: i1, bar: i2, baz: i3>>
-  %1 = llhd.sig.struct_extract %arg0["baz"] : !hw.inout<struct<foo: i1, bar: i2, baz: i3>>
-}
-
-// CHECK-LABEL: @check_var
-// CHECK-SAME: %[[INT:.*]]: i32
-// CHECK-SAME: %[[ARRAY:.*]]: !hw.array<3xi1>
-// CHECK-SAME: %[[TUP:.*]]: !hw.struct<foo: i1, bar: i2, baz: i3>
-func.func @check_var(%int : i32, %array : !hw.array<3xi1>, %tup : !hw.struct<foo: i1, bar: i2, baz: i3>) {
-  // CHECK-NEXT: %{{.*}} = llhd.var %[[INT]] : i32
-  %0 = llhd.var %int : i32
-  // CHECK-NEXT: %{{.*}} = llhd.var %[[ARRAY]] : !hw.array<3xi1>
-  %1 = llhd.var %array : !hw.array<3xi1>
-  // CHECK-NEXT: %{{.*}} = llhd.var %[[TUP]] : !hw.struct<foo: i1, bar: i2, baz: i3>
-  %2 = llhd.var %tup : !hw.struct<foo: i1, bar: i2, baz: i3>
-
-  return
-}
-
-// CHECK-LABEL: @check_load
-// CHECK-SAME: %[[INT:.*]]: !llhd.ptr<i32>
-// CHECK-SAME: %[[ARRAY:.*]]: !llhd.ptr<!hw.array<3xi1>>
-// CHECK-SAME: %[[TUP:.*]]: !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>
-func.func @check_load(%int : !llhd.ptr<i32>, %array : !llhd.ptr<!hw.array<3xi1>>, %tup : !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>) {
-  // CHECK-NEXT: %{{.*}} = llhd.load %[[INT]] : !llhd.ptr<i32>
-  %0 = llhd.load %int : !llhd.ptr<i32>
-  // CHECK-NEXT: %{{.*}} = llhd.load %[[ARRAY]] : !llhd.ptr<!hw.array<3xi1>>
-  %1 = llhd.load %array : !llhd.ptr<!hw.array<3xi1>>
-  // CHECK-NEXT: %{{.*}} = llhd.load %[[TUP]] : !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>
-  %2 = llhd.load %tup : !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>
-
-  return
-
-}
-
-// CHECK-LABEL: @check_store
-// CHECK-SAME: %[[INT:.*]]: !llhd.ptr<i32>
-// CHECK-SAME: %[[INTC:.*]]: i32
-// CHECK-SAME: %[[ARRAY:.*]]: !llhd.ptr<!hw.array<3xi1>>
-// CHECK-SAME: %[[ARRAYC:.*]]: !hw.array<3xi1>
-// CHECK-SAME: %[[TUP:.*]]: !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>
-// CHECK-SAME: %[[TUPC:.*]]: !hw.struct<foo: i1, bar: i2, baz: i3>
-func.func @check_store(%int : !llhd.ptr<i32>, %intC : i32 , %array : !llhd.ptr<!hw.array<3xi1>>, %arrayC : !hw.array<3xi1>, %tup : !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>, %tupC : !hw.struct<foo: i1, bar: i2, baz: i3>) {
-  // CHECK-NEXT: llhd.store %[[INT]], %[[INTC]] : !llhd.ptr<i32>
-  llhd.store %int, %intC : !llhd.ptr<i32>
-  // CHECK-NEXT: llhd.store %[[ARRAY]], %[[ARRAYC]] : !llhd.ptr<!hw.array<3xi1>>
-  llhd.store %array, %arrayC : !llhd.ptr<!hw.array<3xi1>>
-  // CHECK-NEXT: llhd.store %[[TUP]], %[[TUPC]] : !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>
-  llhd.store %tup, %tupC : !llhd.ptr<!hw.struct<foo: i1, bar: i2, baz: i3>>
-
-  return
+hw.module @sigStructExtract(in %arg0 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i3>>) {
+  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["foo"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
+  %0 = llhd.sig.struct_extract %arg0["foo"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
+  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["baz"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
+  %1 = llhd.sig.struct_extract %arg0["baz"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
 }
 
 // CHECK-LABEL: @checkSigInst
@@ -102,15 +60,20 @@ hw.module @checkSigInst() {
 }
 
 // CHECK-LABEL: @checkPrb
-hw.module @checkPrb(inout %arg0 : i1, inout %arg1 : i64, inout %arg2 : !hw.array<3xi8>, inout %arg3 : !hw.struct<foo: i1, bar: i2, baz: i4>) {
-  // CHECK: %{{.*}} = llhd.prb %arg0 : !hw.inout<i1>
-  %0 = llhd.prb %arg0 : !hw.inout<i1>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %arg1 : !hw.inout<i64>
-  %1 = llhd.prb %arg1 : !hw.inout<i64>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %arg2 : !hw.inout<array<3xi8>>
-  %2 = llhd.prb %arg2 : !hw.inout<array<3xi8>>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %arg3 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
-  %3 = llhd.prb %arg3 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
+hw.module @checkPrb(
+  in %arg0 : !llhd.ref<i1>,
+  in %arg1 : !llhd.ref<i64>,
+  in %arg2 : !llhd.ref<!hw.array<3xi8>>,
+  in %arg3 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i4>>
+) {
+  // CHECK: %{{.*}} = llhd.prb %arg0 : i1
+  %0 = llhd.prb %arg0 : i1
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg1 : i64
+  %1 = llhd.prb %arg1 : i64
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg2 : !hw.array<3xi8>
+  %2 = llhd.prb %arg2 : !hw.array<3xi8>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg3 : !hw.struct<foo: i1, bar: i2, baz: i4>
+  %3 = llhd.prb %arg3 : !hw.struct<foo: i1, bar: i2, baz: i4>
 }
 
 // CHECK-LABEL: @checkOutput
@@ -123,26 +86,31 @@ hw.module @checkOutput(in %arg0 : i32) {
 }
 
 // CHECK-LABEL: @checkDrv
-hw.module @checkDrv(inout %arg0 : i1, inout %arg1 : i64, in %arg2 : i1,
-    in %arg3 : i64, inout %arg5 : !hw.array<3xi8>,
-    inout %arg6 : !hw.struct<foo: i1, bar: i2, baz: i4>,
-    in %arg7 : !hw.array<3xi8>, in %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>) {
-
+hw.module @checkDrv(
+  in %arg0 : !llhd.ref<i1>,
+  in %arg1 : !llhd.ref<i64>,
+  in %arg2 : i1,
+  in %arg3 : i64,
+  in %arg5 : !llhd.ref<!hw.array<3xi8>>,
+  in %arg6 : !llhd.ref<!hw.struct<foo: i1, bar: i2, baz: i4>>,
+  in %arg7 : !hw.array<3xi8>,
+  in %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>
+) {
   %t = llhd.constant_time <0ns, 1d, 0e>
-  // CHECK: llhd.drv %arg0, %arg2 after %{{.*}} : !hw.inout<i1>
-  llhd.drv %arg0, %arg2 after %t : !hw.inout<i1>
-  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %{{.*}} : !hw.inout<i64>
-  llhd.drv %arg1, %arg3 after %t : !hw.inout<i64>
-  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %{{.*}} if %arg2 : !hw.inout<i64>
-  llhd.drv %arg1, %arg3 after %t if %arg2 : !hw.inout<i64>
-  // CHECK-NEXT: llhd.drv %arg5, %arg7 after %{{.*}} : !hw.inout<array<3xi8>>
-  llhd.drv %arg5, %arg7 after %t : !hw.inout<array<3xi8>>
-  // CHECK-NEXT: llhd.drv %arg6, %arg8 after %{{.*}} : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
-  llhd.drv %arg6, %arg8 after %t : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
+  // CHECK: llhd.drv %arg0, %arg2 after %{{.*}} : i1
+  llhd.drv %arg0, %arg2 after %t : i1
+  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %{{.*}} : i64
+  llhd.drv %arg1, %arg3 after %t : i64
+  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %{{.*}} if %arg2 : i64
+  llhd.drv %arg1, %arg3 after %t if %arg2 : i64
+  // CHECK-NEXT: llhd.drv %arg5, %arg7 after %{{.*}} : !hw.array<3xi8>
+  llhd.drv %arg5, %arg7 after %t : !hw.array<3xi8>
+  // CHECK-NEXT: llhd.drv %arg6, %arg8 after %{{.*}} : !hw.struct<foo: i1, bar: i2, baz: i4>
+  llhd.drv %arg6, %arg8 after %t : !hw.struct<foo: i1, bar: i2, baz: i4>
 }
 
 // CHECK-LABEL: @check_wait_0
-hw.module @check_wait_0 () {
+hw.module @check_wait_0() {
   // CHECK-NEXT: llhd.process
   llhd.process {
     // CHECK: llhd.wait ^[[BB:.*]]
@@ -154,7 +122,7 @@ hw.module @check_wait_0 () {
 }
 
 // CHECK-LABEL: @check_wait_1
-hw.module @check_wait_1 () {
+hw.module @check_wait_1() {
   // CHECK-NEXT: llhd.process
   llhd.process {
     // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
@@ -167,36 +135,36 @@ hw.module @check_wait_1 () {
   }
 }
 
-// CHECK: @check_wait_2(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
-hw.module @check_wait_2 (inout %arg0 : i64, inout %arg1 : i1) {
+// CHECK-LABEL: @check_wait_2
+hw.module @check_wait_2(in %arg0 : !llhd.ref<i64>, in %arg1 : !llhd.ref<i1>) {
   // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
-  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
+  %prb0 = llhd.prb %arg0 : i64
   // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
-  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
+  %prb1 = llhd.prb %arg1 : i1
   // CHECK-NEXT: llhd.process
   llhd.process {
-    // CHECK-NEXT: llhd.wait ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]] : !hw.inout<i1>)
-    llhd.wait (%prb0, %prb1 : i64, i1), ^bb1(%arg1 : !hw.inout<i1>)
-    // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>):
-  ^bb1(%a: !hw.inout<i1>):
+    // CHECK-NEXT: llhd.wait ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%arg1 : !llhd.ref<i1>)
+    llhd.wait (%prb0, %prb1 : i64, i1), ^bb1(%arg1 : !llhd.ref<i1>)
+    // CHECK: ^[[BB]](%[[A:.*]]: !llhd.ref<i1>):
+  ^bb1(%a: !llhd.ref<i1>):
     llhd.halt
   }
 }
 
-// CHECK: hw.module @check_wait_3(inout %[[ARG0:.*]] : i64, inout %[[ARG1:.*]] : i1) {
-hw.module @check_wait_3 (inout %arg0 : i64, inout %arg1 : i1) {
+// CHECK-LABEL: @check_wait_3
+hw.module @check_wait_3(in %arg0 : !llhd.ref<i64>, in %arg1 : !llhd.ref<i1>) {
   // CHECK: [[PRB0:%.+]] = llhd.prb %arg0
-  %prb0 = llhd.prb %arg0 : !hw.inout<i64>
+  %prb0 = llhd.prb %arg0 : i64
   // CHECK: [[PRB1:%.+]] = llhd.prb %arg1
-  %prb1 = llhd.prb %arg1 : !hw.inout<i1>
+  %prb1 = llhd.prb %arg1 : i1
   // CHECK-NEXT: llhd.process
   llhd.process {
     // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
     %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
-    // CHECK-NEXT: llhd.wait delay %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !hw.inout<i1>, !hw.inout<i64>)
-    llhd.wait delay %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !hw.inout<i1>, !hw.inout<i64>)
-    // CHECK: ^[[BB]](%[[A:.*]]: !hw.inout<i1>, %[[B:.*]]: !hw.inout<i64>):
-  ^bb1(%a: !hw.inout<i1>, %b: !hw.inout<i64>):
+    // CHECK-NEXT: llhd.wait delay %[[TIME]], ([[PRB0]], [[PRB1]] : i64, i1), ^[[BB:.*]](%arg1, %arg0 : !llhd.ref<i1>, !llhd.ref<i64>)
+    llhd.wait delay %time, (%prb0, %prb1 : i64, i1), ^bb1(%arg1, %arg0 : !llhd.ref<i1>, !llhd.ref<i64>)
+    // CHECK: ^[[BB]](%[[A:.*]]: !llhd.ref<i1>, %[[B:.*]]: !llhd.ref<i64>):
+  ^bb1(%a: !llhd.ref<i1>, %b: !llhd.ref<i64>):
     llhd.halt
   }
 }

@@ -131,6 +131,23 @@ mapfile -t OPT_OS < <(echo "${OPT_OS[@]}" | tr ' ' '\n' | sort -u)
 # JSON snippets used to configure downstream workflows
 #-------------------------------------------------------------------------------
 
+# For non-full installs, install the following tools.
+binaries=(
+    circt-opt
+    circt-reduce
+    circt-synth
+    circt-test
+    circt-translate
+    circt-verilog
+    domaintool
+    firtool
+    om-linker
+)
+binaryTargets=
+for bin in "${binaries[@]}"; do
+  binaryTargets="$binaryTargets install-$bin"
+done
+
 # Configuration for a run of the static UBTI script.
 configStatic=$(cat <<EOF
 [
@@ -139,7 +156,7 @@ configStatic=$(cat <<EOF
     "llvm_enable_assertions": "$OPT_ASSERTIONS",
     "llvm_force_enable_stats": "ON",
     "run_tests": $OPT_RUN_TESTS,
-    "install_target": "install-firtool install-om-linker",
+    "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin"
   }
 ]
@@ -160,7 +177,7 @@ EOF
 configMacOsRunner=$(cat <<EOF
 [
   {
-    "runner": "macos-13",
+    "runner": "macos-15-intel",
     "cmake_c_compiler": "clang",
     "cmake_cxx_compiler": "clang++"
   }
@@ -213,7 +230,7 @@ configNativeFirtool=$(cat <<EOF
 [
   {
     "name": "firtool",
-    "install_target": "install-firtool install-om-linker",
+    "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",

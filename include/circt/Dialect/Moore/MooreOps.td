@@ -20,6 +20,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -40,6 +41,13 @@ class TypeDomainsMatch<list<string> values> :
   AllMatchSameOperatorTrait<values, [{
     cast<moore::UnpackedType>($_self.getType()).getDomain()
   }], "domain">;
+
+class TypeIsSimpleBitVectorOf<string sbvType, string packedType> :
+  TypesMatchWith<
+    sbvType # " type is simple bit vector equivalent of " # packedType,
+    sbvType, packedType, [{
+      cast<PackedType>($_self).getSimpleBitVector()
+    }]>;
 
 //===----------------------------------------------------------------------===//
 // Structure
@@ -317,6 +325,50 @@ def ReadOp : MooreOp<"read", [
   }];
 }
 
+def GlobalVariableOp : MooreOp<"global_variable", [
+  IsolatedFromAbove,
+  NoRegionArguments,
+  SingleBlock,
+  Symbol,
+]> {
+  let summary = "A global variable declaration";
+  let description = [{
+    Defines a global or package variable.
+
+    See IEEE 1800-2017 § 6.8 "Variable declarations".
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<UnpackedType>:$type
+  );
+  let regions = (region MaxSizedRegion<1>:$initRegion);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` $type (`init` $initRegion^)?
+  }];
+  let hasRegionVerifier = 1;
+  let extraClassDeclaration = [{
+    Block *getInitBlock();
+  }];
+}
+
+def GetGlobalVariableOp : MooreOp<"get_global_variable", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  Pure,
+]> {
+  let summary = "Get a reference to a global variable";
+  let arguments = (ins FlatSymbolRefAttr:$global_name);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $global_name attr-dict `:` type($result)
+  }];
+  let builders = [
+    OpBuilder<(ins "moore::GlobalVariableOp":$global), [{
+      build($_builder, $_state,
+        RefType::get(global.getType()), global.getSymName());
+    }]>,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // Assignments
 //===----------------------------------------------------------------------===//
@@ -330,6 +382,16 @@ class AssignOpBase<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
+class DelayedAssignOpBase<string mnemonic, list<Trait> traits = []> :
+    AssignOpBase<mnemonic, traits> {
+  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+  let assemblyFormat = [{
+    $dst `,` $src `,` $delay attr-dict `:` type($src)
+  }];
+}
+
+// Continuous assignment
+
 def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   let summary = "Continuous assignment within a module";
   let description = [{
@@ -340,6 +402,19 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
     See IEEE 1800-2017 § 10.3 "Continuous assignments".
   }];
 }
+
+def DelayedContinuousAssignOp :
+    DelayedAssignOpBase<"delayed_assign", [HasParent<"SVModuleOp">]> {
+  let summary = "Delayed continuous assignment within a module";
+  let description = [{
+    A continuous assignment with a delay.
+
+    See the `moore.assign` op.
+    See IEEE 1800-2017 § 10.3 "Continuous assignments".
+  }];
+}
+
+// Blocking assignment
 
 def BlockingAssignOp : AssignOpBase<"blocking_assign", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>
@@ -358,6 +433,8 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
   );
 }
 
+// Non-blocking assignment
+
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
@@ -368,6 +445,17 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
     in a subsequent time step as dictated by the delay or event control.
 
     See IEEE 1800-2017 § 10.4.2 "Nonblocking procedural assignments".
+  }];
+}
+
+def DelayedNonBlockingAssignOp :
+    DelayedAssignOpBase<"delayed_nonblocking_assign"> {
+  let summary = "Delayed nonblocking procedural assignment";
+  let description = [{
+    A nonblocking procedural assignment with an intra-assignment delay control.
+
+    See the `moore.nonblocking_assign` op.
+    See IEEE 1800-2017 § 9.4.5 "Intra-assignment timing controls".
   }];
 }
 
@@ -474,6 +562,19 @@ def DetectEventOp : MooreOp<"detect_event", [
   }];
 }
 
+def WaitDelayOp : MooreOp<"wait_delay"> {
+  let summary = "Suspend execution for a given amount of time";
+  let description = [{
+    The `moore.wait_delay` op suspends execution of the current process for the
+    amount of time specified by its operand. Corresponds to the `#` delay
+    control in SystemVerilog.
+
+    See IEEE 1800-2017 § 9.4.1 "Delay control".
+  }];
+  let arguments = (ins TimeType:$delay);
+  let assemblyFormat = [{ $delay attr-dict }];
+}
+
 //===----------------------------------------------------------------------===//
 // Constants
 //===----------------------------------------------------------------------===//
@@ -488,51 +589,63 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   let builders = [
     OpBuilder<(ins "IntType":$type, "const FVInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
-    OpBuilder<(ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
+    OpBuilder<(
+      ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
   ];
 }
 
-def ConstantTimeOp : MooreOp<"constant_time", [Pure]> {
+def ConstantTimeOp : MooreOp<"constant_time", [Pure, ConstantLike]> {
   let summary = "A constant time value in femtoseconds";
   let arguments = (ins UI64Attr:$value);
   let results = (outs TimeType:$result);
   let assemblyFormat = "$value `fs` attr-dict";
+  let hasFolder = 1;
 }
 
-def StringConstantOp : MooreOp<"string_constant", [Pure]> {
-  let summary = "Produce a constant string value";
+def ConstantStringOp : MooreOp<"constant_string", [Pure]> {
+  let summary = "A constant integer value defined by a string of bytes";
   let description = [{
-    Produces a constant value of string type.
+    Defines a constant integer value based on the bytes of a string. The
+    resulting integer contains 8 bits for each byte in the string. The first,
+    left-most character is placed in the most significnat bits; the last,
+    right-most character is placed in the least significant bits.
 
-    Example:
-    ```mlir
-    %0 = moore.string "hello world"
-    ```
+    Constant strings are represented as integers since they have a known width
+    and bit-pattern, which is often used in SV to assign strings to parameters,
+    or store strings in bit vectors. In contrast, the `string` type is a dynamic
+    string with runtime-known length. To obtain a constant `string` value, the
+    resulting integer should be converted to a `string`.
+
+    See IEEE 1800-2017 § 5.9 "String literals".
   }];
   let arguments = (ins StrAttr:$value);
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
-def RealLiteralOp : MooreOp<"real_constant", [Pure]> {
-  let summary = "Produce a constant real value";
+def APFloatAttr : Attr<CPred<"isa<FloatAttr>($_self)">,
+                        "arbitrary float attribute"> {
+  let storageType = [{ mlir::FloatAttr }];
+  let returnType = [{ llvm::APFloat }];
+}
+
+def ConstantRealOp : MooreOp<"constant_real", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+  Pure,
+]> {
+  let summary = "A constant real value";
   let description = [{
-    Produces a constant value of real type.
-    
-    Example:
-    ```mlir
-    %0 = moore.real_constant 1.23
-    ```
-    The real type has fixed-point(1.2) and exponent(2.0e10) formats.
+    Produces a constant value of a real type.
+
     See IEEE 1800-2017 § 5.7.2 "Real literal constants".
   }];
-  let arguments = (ins F64Attr:$value);
+  let arguments = (ins APFloatAttr:$value);
   let results = (outs RealType:$result);
-  let assemblyFormat = "$value attr-dict `:` type($result)";
+  let assemblyFormat = "$value attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
-// Casting and Resizing
+// Casting
 //===----------------------------------------------------------------------===//
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
@@ -566,6 +679,133 @@ def ConversionOp : MooreOp<"conversion", [Pure]> {
   let hasFolder = 1;
 }
 
+def PackedToSBVOp : MooreOp<"packed_to_sbv", [
+  Pure,
+  TypeIsSimpleBitVectorOf<"input", "result">,
+]> {
+  let summary = "Convert a packed type to its simple bit vector equivalent";
+  let arguments = (ins PackedTypeWithKnownSize:$input);
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def SBVToPackedOp : MooreOp<"sbv_to_packed", [
+  Pure,
+  TypeIsSimpleBitVectorOf<"result", "input">,
+]> {
+  let summary = "Convert a simple bit vector to an equivalent packed type";
+  let arguments = (ins IntType:$input);
+  let results = (outs PackedTypeWithKnownSize:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
+  }];
+}
+
+def LogicToIntOp : MooreOp<"logic_to_int", [
+  Pure,
+  TypesMatchWith<"result matches input with two-valued domain",
+    "input", "result", "cast<IntType>($_self).getTwoValued()">
+]> {
+  let summary = "Convert a four-valued to a two-valued integer";
+  let arguments = (ins FourValuedIntType:$input);
+  let results = (outs TwoValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+}
+
+def IntToLogicOp : MooreOp<"int_to_logic", [
+  Pure,
+  TypesMatchWith<"result matches input with four-valued domain",
+    "input", "result", "cast<IntType>($_self).getFourValued()">
+]> {
+  let summary = "Convert a two-valued to a four-valued integer";
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs FourValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+}
+
+def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
+  let summary = "Convert a `!moore.l1` or `!moore.i1` to a builtin `i1`";
+  let description = [{
+    Maps `X` and `Z` to 0, and passes through 1 and 0 unchanged.
+  }];
+  let arguments = (ins AnySingleBitType:$input);
+  let results = (outs I1:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def TimeToLogicOp : MooreOp<"time_to_logic", [Pure]> {
+  let summary = "Convert a time type to an integer number of femtoseconds";
+  let arguments = (ins TimeType:$input);
+  let results = (outs FourValuedI64:$result);
+  let assemblyFormat = "$input attr-dict";
+  let hasFolder = 1;
+}
+
+def LogicToTimeOp : MooreOp<"logic_to_time", [Pure]> {
+  let summary = "Convert an integer number of femtoseconds to a time type";
+  let arguments = (ins FourValuedI64:$input);
+  let results = (outs TimeType:$result);
+  let assemblyFormat = "$input attr-dict";
+  let hasFolder = 1;
+}
+
+def RealToIntOp : MooreOp<"real_to_int", [
+  Pure
+]> {
+  let summary = "Convert a real value to a two-valued integer";
+  let description = [{
+    See IEEE 1800-2023 Section 6.24.1: "Cast operator" and 6.12:
+    "Real, shortreal and realtime data types". Accordingly,
+    output values are rounded.
+  }];
+  let arguments = (ins RealType:$input);
+  let results = (outs TwoValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def IntToRealOp : MooreOp<"int_to_real", [
+  Pure
+]> {
+  let summary = "Convert an integer value to a real";
+  let description = [{
+    See IEEE 1800-2023 Section 6.24.1: "Cast operator" and 6.12:
+    "Real, shortreal and realtime data types".
+  }];
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def IntToStringOp : MooreOp<"int_to_string", [
+  Pure
+]> {
+  let summary = "Convert an integer to a string";
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs StringType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
+// Resizing
+//===----------------------------------------------------------------------===//
+
 def TruncOp : MooreOp<"trunc", [
   Pure,
   TypeDomainsMatch<["input", "result"]>,
@@ -584,6 +824,7 @@ def TruncOp : MooreOp<"trunc", [
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasFolder = 1;
 }
 
 class ExtOpBase<string mnemonic> : MooreOp<mnemonic, [
@@ -599,6 +840,7 @@ class ExtOpBase<string mnemonic> : MooreOp<mnemonic, [
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasFolder = 1;
 }
 
 def ZExtOp : ExtOpBase<"zext"> {
@@ -653,6 +895,21 @@ def NegOp : MooreOp<"neg", [Pure, SameOperandsAndResultType]> {
   }];
   let arguments = (ins SimpleBitVectorType:$input);
   let results = (outs SimpleBitVectorType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def NegRealOp : MooreOp<"fneg", [Pure, SameOperandsAndResultType]> {
+  let summary = "Arithmetic negation";
+  let description = [{
+    Negate a real value.
+
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators" and § 11.3.1 "Operators
+    with real operands"
+  }];
+  let arguments = (ins RealType:$input);
+  let results = (outs RealType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
   }];
@@ -753,7 +1010,6 @@ def SubOp : BinaryOpBase<"sub"> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
-
   let hasFolder = 1;
 }
 
@@ -765,6 +1021,7 @@ def MulOp : BinaryOpBase<"mul", [Commutative]> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+  let hasFolder = 1;
 }
 
 class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
@@ -777,6 +1034,7 @@ class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+  let hasFolder = 1;
 }
 
 def DivUOp : DivOpBase<"divu">;
@@ -1183,6 +1441,113 @@ def ReplicateOp : MooreOp<"replicate", [
 }
 
 //===----------------------------------------------------------------------===//
+// Real Binary Operations
+//===----------------------------------------------------------------------===//
+
+class BinaryRealOpBase<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [Pure, SameOperandsAndResultType]> {
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let description = [{
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators" and § 11.3.1 "Operators
+    with real operands"
+  }];
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($result)
+  }];
+}
+
+def AddRealOp : BinaryRealOpBase<"fadd"> {
+  let summary = "Addition; add two real operands.";
+}
+
+def SubRealOp : BinaryRealOpBase<"fsub"> {
+  let summary = [{Subtraction; subtract the RHS real operand from the LHS
+  real operand.}];
+}
+
+def DivRealOp : BinaryRealOpBase<"fdiv"> {
+  let summary = [{Division; Divide the LHS real operand by the LHS
+  real operand.}];
+}
+
+def MulRealOp : BinaryRealOpBase<"fmul"> {
+  let summary = [{Multiplication; Multiply the RHS real operand with the LHS
+  real operand.}];
+}
+
+def PowRealOp : BinaryRealOpBase<"fpow"> {
+  let summary = [{Power; Exponentiate the LHS real base with the RHS real
+  exponent.}];
+}
+
+class LogicalEqRealOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  Commutative,
+  SameTypeOperands,
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
+]> {
+  let description = [{
+    Compares the bits in the left- and right-hand side operand and returns a
+    single bit 0 or 1. If all corresponding bits in the left- and
+    right-hand side are equal, and all are 0 or 1, the two operands
+    are considered equal (`eq` returns 1, `ne` returns 0). If any bits are not
+    equal, but all are 0 or 1, the two operands are considered not equal (`eq`
+    returns 0, `ne` returns 1). `eq` corresponds to the `==` operator and `ne`
+    to the `!=` operator.
+
+    See IEEE 1800-2017 § 11.4.5 "Equality operators" and § 11.3.1 "Operators
+    with real operands".
+  }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];
+}
+
+def EqRealOp : LogicalEqRealOpBase<"feq"> { let summary = "Logical equality"; }
+def NeRealOp : LogicalEqRealOpBase<"fne"> { let summary = "Logical inequality"; }
+
+
+class RelationalRealOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  SameTypeOperands,
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
+]> {
+  let description = [{
+    Compares the left- and right-hand side operand and returns a single bit 0,
+    or 1 result. If all bits are 0 or 1, `flt`, `fle`, `fgt`, and
+    `fge` return whether the left-hand side is less than, less than or equal
+    to, greater than, or greater than or equal to the right-hand side,
+    respectively. `flt` corresponds to the `<` operator, `fle` to `<=`,
+    `fgt` to `>`, and `fge` to `>=`.
+
+    See IEEE 1800-2017 § 11.4.4 "Relational operators" and § 11.3.1 "Operators
+    with real operands".
+  }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];
+}
+
+
+def FltOp : RelationalRealOpBase<"flt"> {
+  let summary = "Real-valued less than comparison";
+}
+def FleOp : RelationalRealOpBase<"fle"> {
+  let summary = "Real-valued less than or equal comparison";
+}
+def FgtOp : RelationalRealOpBase<"fgt"> {
+  let summary = "Real-valued greater than comparison";
+}
+def FgeOp : RelationalRealOpBase<"fge"> {
+  let summary = "Real-valued greater than or equal comparison";
+}
+
+//===----------------------------------------------------------------------===//
 // Bit/Element Extraction
 //===----------------------------------------------------------------------===//
 
@@ -1457,7 +1822,7 @@ def ConditionalOp : MooreOp<"conditional",[
 def YieldOp : MooreOp<"yield", [
   Pure,
   Terminator,
-  HasParent<"ConditionalOp">
+  ParentOneOf<["ConditionalOp", "GlobalVariableOp"]>,
 ]> {
   let summary = "conditional yield and termination operation";
   let description = [{
@@ -1537,6 +1902,17 @@ def FormatLiteralOp : MooreOp<"fmt.literal", [Pure]> {
   let assemblyFormat = "$literal attr-dict";
 }
 
+def FormatStringToStringOp : MooreOp<"fstring_to_string", [Pure]> {
+  let summary = "A dynamic string created through formatting";
+  let description = [{
+    Creates a dynamic string from a format string.
+    Translates into a no-op.
+  }];
+  let arguments = (ins FormatStringType:$fmtstring);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$fmtstring attr-dict";
+}
+
 def FormatConcatOp : MooreOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate string fragments";
   let description = [{
@@ -1599,12 +1975,211 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
   }];
 }
 
+def FmtFlt:I32EnumAttrCase<"Float", 0, "float">;
+def FmtExp:I32EnumAttrCase<"Exponential", 1, "exponential">;
+def FmtGen:I32EnumAttrCase<"General", 2, "general">;
+
+def RealFormatAttr : I32EnumAttr<"RealFormat", "Real format",
+                               [FmtFlt, FmtExp, FmtGen]> {
+  let cppNamespace = "circt::moore";
+}
+
+def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
+  let summary = "Format a real number value";
+  let description = [{
+  Format a real value as a string according to the specified format.
+
+  See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
+  }];
+  let arguments = (ins
+  RealType:$value,
+  RealFormatAttr:$format
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+      $format $value `,`
+      attr-dict `:` type($value)
+  }];
+}
+
+def FormatTimeOp : MooreOp<"fmt.time", [Pure]> {
+  let summary = "Format a time value";
+  let description = [{
+  Format a time value as a string according to the format specified by the most recent
+  invocation of `$timeformat`.
+
+  See IEEE 1800-2023 § 21.2.1.1 "Format specifications" and
+  IEEE 1800-2023 § 20.4.3 "$timeformat".
+  }];
+  let arguments = (ins
+  TimeType:$value,
+  OptionalAttr<I32Attr>:$width
+  );
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+      $value
+      (`,` `width` $width^)?
+      attr-dict
+  }];
+}
+
+def FormatStringOp : MooreOp<"fmt.string", [Pure]> {
+  let summary = "A dynamic string fragment";
+  let description = [{
+    Creates a dynamic string fragment to be used as a format string. The
+    string is printed as is, without any further escaping or processing of its
+    characters.
+
+    Use fmt.literal over this operator for any constant strings / literals.
+  }];
+  let arguments = (ins
+    StringType:$string,
+    OptionalAttr<I32Attr>:$width,
+    OptionalAttr<IntAlignAttr>:$alignment,
+    OptionalAttr<IntPaddingAttr>:$padding);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = [{
+    $string
+    (`,` `width` $width^)?
+    (`,` `alignment` $alignment^)?
+    (`,` `padding` $padding^)?
+    attr-dict
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//
 
 class Builtin<string mnemonic, list<Trait> traits = []> :
     MooreOp<"builtin." # mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// Conversion Builtins
+//===----------------------------------------------------------------------===//
+
+def RealtobitsBIOp : Builtin<"realtobits"> {
+  let summary = "Convert a real-valued number to its logic vector representation";
+  let description = [{
+    Corresponds to the `$realtobits` system function. Returns a 64-bit
+    logic vector corresponding to the bit representation of the real number.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins RealF64:$value);
+  let results = (outs TwoValuedI64:$result);
+  let assemblyFormat = "$value attr-dict";
+}
+
+def BitstorealBIOp : Builtin<"bitstoreal"> {
+  let summary = "Convert a logic vector representation to its real-valued number";
+  let description = [{
+    Corresponds to the `$bitstoreal` system function. Returns a real number
+    corresponding to the real number representation of the logic vector.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins TwoValuedI64:$value);
+  let results = (outs RealF64:$result);
+  let assemblyFormat = "$value attr-dict`:` type($value)";
+}
+
+
+def ShortrealtobitsBIOp : Builtin<"shortrealtobits"> {
+  let summary = "Convert a real-valued number to its logic vector representation";
+  let description = [{
+    Corresponds to the `$shortrealtobits` system function. Returns a 64-bit
+    logic vector corresponding to the bit representation of the real number.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins RealF32:$value);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$value attr-dict";
+}
+
+def BitstoshortrealBIOp : Builtin<"bitstoshortreal"> {
+  let summary = "Convert a logic vector representation to its real-valued number";
+  let description = [{
+    Corresponds to the `$bitstoshortreal` system function. Returns a real number
+    corresponding to the real number representation of the logic vector.
+    Note that this does not correspond to a cast to another type, but rather a no-op.
+
+    See IEEE 1800-2023 § 20.5 "Conversion functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins TwoValuedI32:$value);
+  let results = (outs RealF32:$result);
+  let assemblyFormat = "$value attr-dict `:` type($value)";
+}
+
+//===----------------------------------------------------------------------===//
+// True-Random and Pseudo-Random Generators
+//===----------------------------------------------------------------------===//
+
+def RandomBIOp : Builtin<"random"> {
+  let summary = "Generate a true random signed integer (optionally seeded)";
+  let description = [{
+    Corresponds to the `$random` system function. Returns a 32-bit
+    true random integer. The seed is optional; when provided, it initializes
+    the generator. If not provided, treat it as 0 in semantics/lowering.
+
+    `$random` is largely considered to be deprecated since it leads to
+    non-reproducible simulation results. Consider using `$urandom` instead.
+
+    See IEEE 1800-2023 § 20.14 "Probablistic distribution functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins Optional<TwoValuedI32>:$seed);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "($seed^)? attr-dict";
+}
+
+def UrandomBIOp : Builtin<"urandom"> {
+  let summary = "Generate a pseudo-random unsigned integer (optionally seeded)";
+  let description = [{
+    Corresponds to the `$urandom` system function. Returns a 32-bit
+    pseudo-random integer. The seed is optional; when provided, it initializes
+    the generator. If not provided, treat it as 0 in semantics/lowering.
+
+    See IEEE 1800-2023 § 18.13 "Random number system functions and methods".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins Optional<TwoValuedI32>:$seed);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "($seed^)? attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Time Measurement Builtins
+//===----------------------------------------------------------------------===//
+
+def TimeBIOp : Builtin<"time"> {
+  let summary = "Return the current simulation time";
+  let description = [{
+    Corresponds to the `$time` system function. Returns a int-rounded 64-bit
+    integer corresponding to the elapsed simulation time scaled by the
+    simulation's timescale.
+
+    See IEEE 1800-2023 § 20.3 "Simulation time system functions".
+  }];
+
+  // Optional positional attribute for the seed
+  let results = (outs TimeType:$result);
+  let assemblyFormat = "attr-dict";
+}
 
 //===----------------------------------------------------------------------===//
 // Simulation Control Builtins
@@ -1721,8 +2296,8 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
 
     See IEEE 1800-2017 § 20.8.2 "Real math functions".
    }];
-  let arguments = (ins RealType:$value);
-  let results = (outs RealType:$result);
+  let arguments = (ins RealF64:$value);
+  let results = (outs RealF64:$result);
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
@@ -1814,6 +2389,218 @@ def AcoshBIOp : RealMathFunc<"acosh"> {
 
 def AtanhBIOp : RealMathFunc<"atanh"> {
   let summary = "Arc-hyperbolic tangent";
+}
+
+//===----------------------------------------------------------------------===//
+// Classes
+//===----------------------------------------------------------------------===//
+
+def ClassPropertyDeclOp
+    : MooreOp<"class.propertydecl", [Symbol, HasParent<"ClassDeclOp">]> {
+  let summary = "Declare a class property";
+  let description = [{
+  Declares a property within a class declaration.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+
+  let results = (outs);
+  let assemblyFormat = [{
+     $sym_name `:` $type  attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    ::mlir::Type getPropertyType() { return getTypeAttr().getValue(); }
+  }];
+}
+
+
+def ClassMethodDeclOp
+    : MooreOp<"class.methoddecl", [Symbol, HasParent<"ClassDeclOp">]> {
+  let summary = "Declare a class method";
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      TypeAttrOf<FunctionType>:$function_type,
+      OptionalAttr<SymbolRefAttr>:$impl);
+  let results = (outs);
+  let assemblyFormat = [{
+      $sym_name (`->` $impl^)? `:` $function_type attr-dict
+  }];
+}
+
+def ClassDeclOp
+    : MooreOp<"class.classdecl", [Symbol, SymbolTable, IsolatedFromAbove,
+    NoTerminator, SingleBlock]> {
+  let summary = "Class declaration";
+  let arguments = (ins SymbolNameAttr:$sym_name,
+      OptionalAttr<SymbolRefAttr>:$base,
+      OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = [{
+    $sym_name
+    (`extends` $base^)?
+    (`implements` $implementedInterfaces^)?
+    attr-dict-with-keyword $body
+  }];
+  let hasVerifier = 1;
+}
+
+def ClassNewOp
+    : MooreOp<
+          "class.new", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let summary = "Allocate a new class instance";
+  let description = [{
+    Allocates a new instance of class @C. This op does not call the constructor.
+    The result is a non-null `!moore.class.object<@C>` handle.
+  }];
+
+  let arguments = (ins);
+  let results = (outs ClassHandleType:$result);
+
+  let assemblyFormat = [{
+     `:` type($result) attr-dict
+  }];
+  let hasVerifier = 1;
+}
+
+
+def ClassPropertyRefOp
+    : MooreOp<"class.property_ref", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
+  let summary = "Get a !moore.ref to a class property";
+  let description = [{
+    Construct a reference to a class instance's property field. Translates
+    to a fixed offset from the the class handle into its data struct.
+  }];
+  let arguments = (ins ClassHandleType:$instance,
+      FlatSymbolRefAttr:$property);
+  let results = (outs RefType:$propertyRef);
+  let assemblyFormat = "$instance`[`$property`]` `:` type($instance) `->` "
+                       "type($propertyRef) attr-dict";
+}
+
+def ClassUpcastOp
+    : MooreOp<"class.upcast", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
+  let summary = "Upcast a derived handle to a base handle (zero-cost)";
+  let description = [{
+    Casts an instance of a class to one of its base classes.
+    The created instance points to the same underlying data struct as the original
+    instance, and modifying it will modify the spawning instance's data as well.
+  }];
+  let arguments = (ins ClassHandleType:$instance);
+  let results = (outs ClassHandleType:$result);
+  let assemblyFormat =
+      "$instance `:` type($instance) `to` type($result) attr-dict";
+}
+
+def VTableLoadMethodOp
+    : MooreOp<"vtable.load_method", [Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Load a virtual method entry from a vtable.";
+  let description = [{
+    Loads a virtual method function pointer from a vtable.
+    The verifier resolves the symbols in the symbol table and ensures that the
+    result function type matches the erased ABI.
+  }];
+
+  let arguments = (ins
+    ClassHandleType:$object,
+    SymbolRefAttr:$methodSym
+  );
+
+  let results = (outs
+      Type<CPred<"::llvm::isa<mlir::FunctionType>($_self)">>:$result
+  );
+
+  let assemblyFormat =
+    "$object `:` $methodSym `of` type($object) `->` type($result) attr-dict";
+}
+
+def VTableOp : MooreOp<"vtable",
+    [NoTerminator, SingleBlock, IsolatedFromAbove,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Virtual dispatch table";
+  let description = [{
+    Lives at module top-level. Contains `moore.vtable_entry` and nested
+    `moore.vtable` ops for base segments. Holds the dispatch targets for every
+    possible virtual method call of a class and its ancestors.
+  }];
+  let arguments = (ins
+    SymbolRefAttr:$sym_name
+  );
+
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+  let hasRegionVerifier = 1;
+}
+
+def VTableEntryOp : MooreOp<"vtable_entry", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "One vtable slot pointing to the selected implementation";
+  let description = [{
+    Each entry references the resolved implementation with a SymbolRefAttr.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$name,
+    SymbolRefAttr:$target
+  );
+
+  let assemblyFormat = [{
+    $name `->` $target attr-dict
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
+// String Builtins
+//===----------------------------------------------------------------------===//
+
+class StringBuiltin<string mnemonic, list<Trait> traits = []> :
+    MooreOp<"string." # mnemonic, traits>;
+
+def StringLenOp : StringBuiltin<"len"> {
+  let summary = "Get the length of a string";
+  let description = [{
+    Returns the number of characters in the given string.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringToUpperOp : StringBuiltin<"toupper"> {
+  let summary = "Convert a string to uppercase";
+  let description = [{
+    Converts all characters in the given string to uppercase.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringToLowerOp : StringBuiltin<"tolower"> {
+  let summary = "Convert a string to lowercase";
+  let description = [{
+    Converts all characters in the given string to lowercase.
+  }];
+  let arguments = (ins StringType:$str);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "$str attr-dict";
+}
+
+def StringGetCOp : StringBuiltin<"getc"> {
+  let summary = "Get a character from a string";
+  let description = [{
+    Returns the character at the specified index in the given string.
+  }];
+  let arguments = (ins StringType:$str, TwoValuedI32:$index);
+  let results = (outs TwoValuedI8:$result);
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

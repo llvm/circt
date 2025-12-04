@@ -14,8 +14,10 @@ unrealized_conversion_cast to !moore.i42
 // CHECK: !moore.l42
 unrealized_conversion_cast to !moore.l42
 
-// CHECK: !moore.real
-unrealized_conversion_cast to !moore.real
+// CHECK: !moore.f64
+unrealized_conversion_cast to !moore.f64
+// CHECK: !moore.f32
+unrealized_conversion_cast to !moore.f32
 
 // Packed Arrays
 // CHECK: !moore.array<4 x i42>

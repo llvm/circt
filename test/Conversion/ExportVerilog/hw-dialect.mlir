@@ -171,12 +171,12 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
 // CHECK-NEXT:      assign r2 = a - b;
 // CHECK-NEXT:      assign r4 = a * b;
 // CHECK-NEXT:      assign r6 = a / b;
-// CHECK-NEXT:      assign r7 = $signed($signed(a) / $signed(b));
+// CHECK-NEXT:      assign r7 = $unsigned($signed($signed(a) / $signed(b)));
 // CHECK-NEXT:      assign r8 = a % b;
-// CHECK-NEXT:      assign r9 = $signed($signed(a) % $signed(b));
+// CHECK-NEXT:      assign r9 = $unsigned($signed($signed(a) % $signed(b)));
 // CHECK-NEXT:      assign r10 = a << b;
 // CHECK-NEXT:      assign r11 = a >> b;
-// CHECK-NEXT:      assign r12 = $signed($signed(a) >>> b);
+// CHECK-NEXT:      assign r12 = $unsigned($signed($signed(a) >>> b));
 // CHECK-NEXT:      assign r13 = a | b;
 // CHECK-NEXT:      assign r14 = a & b;
 // CHECK-NEXT:      assign r15 = a ^ b;
@@ -458,7 +458,7 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   sv.assign %awire, %b4: i4
 
   // https://github.com/llvm/circt/issues/369
-  // CHECK: assign awire = $signed(4'sh5 / -4'sh3);
+  // CHECK: assign awire = $unsigned($signed(4'sh5 / -4'sh3));
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
@@ -972,7 +972,7 @@ hw.module @ShiftAmountZext(in %a: i8, in %b1: i4, in %b2: i4, in %b3: i4,
   // CHECK: assign o2 = a >> b2;
   %r2 = comb.shru %a, %B2 : i8
 
-  // CHECK: assign o3 = $signed($signed(a) >>> b3);
+  // CHECK: assign o3 = $unsigned($signed($signed(a) >>> b3));
   %r3 = comb.shrs %a, %B3 : i8
   hw.output %r1, %r2, %r3 : i8, i8, i8
 }
@@ -997,7 +997,7 @@ hw.module @SignedshiftResultSign(in %a: i18, out b: i18) {
 }
 // CHECK-LABEL: module SignedShiftRightPrecendence
 hw.module @SignedShiftRightPrecendence(in %p: i1, in %x: i45, out o: i45) {
-  // CHECK: assign o = $signed($signed(x) >>> (p ? 45'h5 : 45'h8))
+  // CHECK: assign o = $unsigned($signed($signed(x) >>> (p ? 45'h5 : 45'h8)))
   %c5_i45 = hw.constant 5 : i45
   %c8_i45 = hw.constant 8 : i45
   %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
@@ -1253,7 +1253,7 @@ hw.module @UseParameterValue<xx: i42>(in %arg0: i8,
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
 
-  // CHECK-NEXT: assign out4 = $signed(42'd4) >>> $signed(xx);
+  // CHECK-NEXT: assign out4 = $unsigned($signed(42'd4) >>> $signed(xx));
   %g = hw.param.value i42 = #hw.param.expr.shrs<4, #hw.param.decl.ref<"xx">>
 
   hw.output %a, %b, %f, %g : i8, i8, i8, i42
@@ -1363,7 +1363,7 @@ hw.module @ParamsParensPrecedence<param: i32>(out a:i32, out b:i32, out c:i32) {
   // CHECK: = $clog2($unsigned($clog2($unsigned(param + 8))));
   %3 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.expr.clog2<#hw.param.expr.add<#hw.param.decl.ref<"param">,8>>>
 
-  // CHECK: = $signed(param) >>> $signed(param & 8);
+  // CHECK: = $unsigned($signed(param) >>> $signed(param & 8));
   %4 = hw.param.value i32 = #hw.param.expr.shrs<#hw.param.decl.ref<"param">,#hw.param.expr.and<8,#hw.param.decl.ref<"param">>>
   hw.output %1, %3, %4: i32, i32, i32
 }

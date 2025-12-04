@@ -452,6 +452,7 @@ class System:
       "builtin.module(lower-esi-to-physical)",
       "builtin.module(lower-esi-bundles, lower-esi-ports)",
       "builtin.module(lower-esi-to-hw{{platform={platform}}})",
+      "builtin.module(lower-esi-types)",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(hw.module(lower-seq-fifo))",
@@ -568,17 +569,13 @@ class _OpCache:
       proxy.clear_op_refs()
 
     gc.collect()
-    # Pending https://github.com/llvm/llvm-project/pull/78663
-    # live_ops = ir.Context.current._get_live_operation_objects()
-    # for op in live_ops:
-    #   sys.stderr.write(f"Warning: {op} is still live. Referrers:\n")
-    #   for referrer in gc.get_referrers(op)[0]:
-    #     sys.stderr.write(f"  {referrer}\n")
-    num_ops_live = ir.Context.current._clear_live_operations()
-    if num_ops_live > 0:
-      sys.stderr.write(
-          f"Warning: something is holding references to {num_ops_live} " +
-          " MLIR ops\n")
+    # TODO: This was broken by MLIR. When we have a replacement, use that instead.
+    #  https://github.com/llvm/circt/issues/9008
+    # num_ops_live = ir.Context.current._clear_live_operations()
+    # if num_ops_live > 0:
+    #   sys.stderr.write(
+    #       f"Warning: something is holding references to {num_ops_live} " +
+    #       " MLIR ops\n")
 
   @property
   def symbols(self):

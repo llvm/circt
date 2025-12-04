@@ -14,6 +14,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -42,12 +43,17 @@ struct HWLegalizeModulesPass
 private:
   void processPostOrder(Block &block);
   bool tryLoweringPackedArrayOp(Operation &op);
+  template <typename ElementType>
+  SmallVector<std::pair<Value, Value>>
+  createIndexValuePairs(OpBuilder &builder, LocationAttr loc, hw::ArrayType ty,
+                        Value array);
   Value lowerLookupToCasez(Operation &op, Value input, Value index,
                            mlir::Type elementType,
                            SmallVector<Value> caseValues);
   bool processUsers(Operation &op, Value value, ArrayRef<Value> mapping);
   std::optional<std::pair<uint64_t, unsigned>>
   tryExtractIndexAndBitWidth(Value value);
+  bool tryLoweringClockedAssertLike(Operation &op);
 
   /// This is the current hw.module being processed.
   hw::HWModuleOp thisHWModule;
@@ -88,43 +94,20 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
       })
       .Case<hw::ArrayConcatOp>([&](hw::ArrayConcatOp concatOp) {
         // Redirect individual element uses (if any) to the input arguments.
-        SmallVector<std::pair<Value, uint64_t>> arrays;
+        SmallVector<Value> values;
+        OpBuilder builder(concatOp);
         for (auto array : llvm::reverse(concatOp.getInputs())) {
           auto ty = hw::type_cast<hw::ArrayType>(array.getType());
-          arrays.emplace_back(array, ty.getNumElements());
+          const auto indexValues = createIndexValuePairs<hw::ArrayGetOp>(
+              builder, concatOp.getLoc(), ty, array);
+          for (const auto &[_, value] : indexValues) {
+            values.push_back(value);
+          }
         }
-        for (auto *user :
-             llvm::make_early_inc_range(concatOp.getResult().getUsers())) {
-          if (TypeSwitch<Operation *, bool>(user)
-                  .Case<hw::ArrayGetOp>([&](hw::ArrayGetOp getOp) {
-                    if (auto indexAndBitWidth =
-                            tryExtractIndexAndBitWidth(getOp.getIndex())) {
-                      auto [indexValue, bitWidth] = *indexAndBitWidth;
-                      // FIXME: More efficient search
-                      for (const auto &[array, size] : arrays) {
-                        if (indexValue >= size) {
-                          indexValue -= size;
-                          continue;
-                        }
-                        OpBuilder builder(getOp);
-                        getOp.getInputMutable().set(array);
-                        getOp.getIndexMutable().set(
-                            builder.createOrFold<hw::ConstantOp>(
-                                getOp.getLoc(), APInt(bitWidth, indexValue)));
-                        return true;
-                      }
-                    }
+        if (!processUsers(op, concatOp.getResult(), values))
+          return false;
 
-                    return false;
-                  })
-                  .Default([](auto op) { return false; }))
-            continue;
-
-          op.emitError("unsupported packed array expression");
-          signalPassFailure();
-        }
-
-        // Remove the original op.
+        // Remove original op.
         return true;
       })
       .Case<hw::ArrayCreateOp>([&](hw::ArrayCreateOp createOp) {
@@ -146,15 +129,12 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Generate case value element lookups.
         auto ty = hw::type_cast<hw::ArrayType>(getOp.getInput().getType());
         OpBuilder builder(getOp);
+        auto loc = op.getLoc();
+        const auto indexValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, loc, ty, getOp.getInput());
         SmallVector<Value> caseValues;
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto index = builder.createOrFold<hw::ConstantOp>(
-              loc, APInt(llvm::Log2_64_Ceil(e), i));
-          auto element =
-              hw::ArrayGetOp::create(builder, loc, getOp.getInput(), index);
-          caseValues.push_back(element);
-        }
+        for (const auto &[_, value] : indexValues)
+          caseValues.push_back(value);
 
         // Transform array index op into casez statement.
         auto theWire = lowerLookupToCasez(op, getOp.getInput(), index,
@@ -182,13 +162,11 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Generate case value element lookups.
         auto ty = hw::type_cast<hw::ArrayType>(inout.getElementType());
         OpBuilder builder(&op);
+        auto loc = op.getLoc();
+        const auto indexValues = createIndexValuePairs<sv::ArrayIndexInOutOp>(
+            builder, loc, ty, indexOp.getInput());
         SmallVector<Value> caseValues;
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto index = builder.createOrFold<hw::ConstantOp>(
-              loc, APInt(llvm::Log2_64_Ceil(e), i));
-          auto element = sv::ArrayIndexInOutOp::create(
-              builder, loc, indexOp.getInput(), index);
+        for (const auto &[_, element] : indexValues) {
           auto readElement = sv::ReadInOutOp::create(builder, loc, element);
           caseValues.push_back(readElement);
         }
@@ -210,14 +188,12 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
           return false;
 
         OpBuilder builder(assignOp);
-        for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
-          auto loc = op.getLoc();
-          auto index = builder.createOrFold<hw::ConstantOp>(
-              loc, APInt(llvm::Log2_64_Ceil(e), i));
+        auto loc = op.getLoc();
+        const auto indexValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, loc, ty, assignOp.getSrc());
+        for (const auto &[index, srcElement] : indexValues) {
           auto dstElement = sv::ArrayIndexInOutOp::create(
               builder, loc, assignOp.getDest(), index);
-          auto srcElement =
-              hw::ArrayGetOp::create(builder, loc, assignOp.getSrc(), index);
           sv::PAssignOp::create(builder, loc, dstElement, srcElement);
         }
 
@@ -250,7 +226,51 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         // Remove original reg.
         return true;
       })
+      .Case<comb::MuxOp>([&](comb::MuxOp muxOp) {
+        // Transform array mux into individual element muxes.
+        auto ty = hw::type_dyn_cast<hw::ArrayType>(muxOp.getType());
+        if (!ty)
+          return false;
+
+        OpBuilder builder(muxOp);
+
+        auto trueValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, muxOp.getLoc(), ty, muxOp.getTrueValue());
+        auto falseValues = createIndexValuePairs<hw::ArrayGetOp>(
+            builder, muxOp.getLoc(), ty, muxOp.getFalseValue());
+
+        SmallVector<Value> muxedValues;
+
+        for (size_t i = 0, e = trueValues.size(); i < e; i++) {
+          const auto &[trueIndex, trueValue] = trueValues[i];
+          const auto &[falseIndex, falseValue] = falseValues[i];
+          muxedValues.push_back(
+              comb::MuxOp::create(builder, muxOp.getLoc(), muxOp.getCond(),
+                                  trueValue, falseValue, muxOp.getTwoState()));
+        }
+
+        if (!processUsers(op, muxOp.getResult(), muxedValues))
+          return false;
+
+        // Remove original mux.
+        return true;
+      })
       .Default([&](auto op) { return false; });
+}
+
+template <typename ElementType>
+SmallVector<std::pair<Value, Value>>
+HWLegalizeModulesPass::createIndexValuePairs(OpBuilder &builder,
+                                             LocationAttr loc, hw::ArrayType ty,
+                                             Value array) {
+  SmallVector<std::pair<Value, Value>> result;
+  for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
+    auto index = builder.createOrFold<hw::ConstantOp>(
+        loc, APInt(llvm::Log2_64_Ceil(e), i));
+    auto element = ElementType::create(builder, loc, array, index);
+    result.emplace_back(index, element);
+  }
+  return result;
 }
 
 Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
@@ -352,6 +372,34 @@ HWLegalizeModulesPass::tryExtractIndexAndBitWidth(Value value) {
   return std::nullopt;
 }
 
+namespace {
+template <typename Op>
+bool tryLoweringClockedAssertLike(Op &op) {
+  auto event = op.getEvent();
+  if (!event.has_value())
+    return false;
+
+  OpBuilder builder(op);
+
+  sv::AlwaysOp::create(builder, op->getLoc(), *event, op.getClock(), [&] {
+    Op::create(builder, op.getLoc(), op.getProperty(), op.getDisable(),
+               op.getLabelAttr());
+  });
+  return true;
+}
+} // namespace
+
+bool HWLegalizeModulesPass::tryLoweringClockedAssertLike(Operation &op) {
+  return TypeSwitch<Operation *, bool>(&op)
+      .Case<sv::AssertPropertyOp>(
+          ::tryLoweringClockedAssertLike<sv::AssertPropertyOp>)
+      .Case<sv::AssumePropertyOp>(
+          ::tryLoweringClockedAssertLike<sv::AssumePropertyOp>)
+      .Case<sv::CoverPropertyOp>(
+          ::tryLoweringClockedAssertLike<sv::CoverPropertyOp>)
+      .Default([&](auto op) { return false; });
+}
+
 void HWLegalizeModulesPass::processPostOrder(Block &body) {
   if (body.empty())
     return;
@@ -390,6 +438,14 @@ void HWLegalizeModulesPass::processPostOrder(Block &body) {
           op.emitError("unsupported packed array expression");
           signalPassFailure();
         }
+      }
+    }
+
+    if (options.disallowClockedAssertions) {
+      if (tryLoweringClockedAssertLike(op)) {
+        op.erase();
+        anythingChanged = true;
+        continue;
       }
     }
   }

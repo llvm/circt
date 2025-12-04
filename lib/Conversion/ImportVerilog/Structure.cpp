@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/symbols/ClassSymbols.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace circt;
@@ -51,6 +52,19 @@ struct BaseVisitor {
   // Skip members that are implicitly imported from some other scope for the
   // sake of name resolution, such as enum variant names.
   LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Handle classes without parameters or specialized generic classes
+  LogicalResult visit(const slang::ast::ClassType &classdecl) {
+    return context.convertClassDeclaration(classdecl);
+  }
+
+  // GenericClassDefSymbol represents parameterized (template) classes, which
+  // per IEEE 1800-2023 §8.25 are abstract and not instantiable. Slang models
+  // concrete specializations as ClassType, so we skip GenericClassDefSymbol
+  // entirely.
+  LogicalResult visit(const slang::ast::GenericClassDefSymbol &) {
     return success();
   }
 
@@ -134,6 +148,11 @@ struct RootVisitor : public BaseVisitor {
     return context.convertFunction(subroutine);
   }
 
+  // Handle global variables.
+  LogicalResult visit(const slang::ast::VariableSymbol &var) {
+    return context.convertGlobalVariable(var);
+  }
+
   // Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
@@ -156,6 +175,11 @@ struct PackageVisitor : public BaseVisitor {
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
     return context.convertFunction(subroutine);
+  }
+
+  // Handle global variables.
+  LogicalResult visit(const slang::ast::VariableSymbol &var) {
+    return context.convertGlobalVariable(var);
   }
 
   /// Emit an error for all other members.
@@ -407,9 +431,8 @@ struct ModuleVisitor : public BaseVisitor {
     // Insert conversions for input ports.
     for (auto [value, type] :
          llvm::zip(inputValues, moduleType.getInputTypes()))
-      if (value.getType() != type)
-        value =
-            moore::ConversionOp::create(builder, value.getLoc(), type, value);
+      // TODO: This should honor signedness in the conversion.
+      value = context.materializeConversion(type, value, false, value.getLoc());
 
     // Here we use the hierarchical value recorded in `Context::valueSymbols`.
     // Then we pass it as the input port with the ref<T> type of the instance.
@@ -439,8 +462,8 @@ struct ModuleVisitor : public BaseVisitor {
         continue;
       Value rvalue = output;
       auto dstType = cast<moore::RefType>(lvalue.getType()).getNestedType();
-      if (dstType != rvalue.getType())
-        rvalue = moore::ConversionOp::create(builder, loc, dstType, rvalue);
+      // TODO: This should honor signedness in the conversion.
+      rvalue = context.materializeConversion(dstType, rvalue, false, loc);
       moore::ContinuousAssignOp::create(builder, loc, lvalue, rvalue);
     }
 
@@ -499,12 +522,6 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle continuous assignments.
   LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
-    if (const auto *delay = assignNode.getDelay()) {
-      auto loc = context.convertLocation(delay->sourceRange);
-      return mlir::emitError(loc,
-                             "delayed continuous assignments not supported");
-    }
-
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
     auto lhs = context.convertLvalueExpression(expr.left());
@@ -516,6 +533,19 @@ struct ModuleVisitor : public BaseVisitor {
     if (!rhs)
       return failure();
 
+    // Handle delayed assignments.
+    if (auto *timingCtrl = assignNode.getDelay()) {
+      auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>();
+      assert(ctrl && "slang guarantees this to be a simple delay");
+      auto delay = context.convertRvalueExpression(
+          ctrl->expr, moore::TimeType::get(builder.getContext()));
+      if (!delay)
+        return failure();
+      moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
+      return success();
+    }
+
+    // Otherwise this is a regular assignment.
     moore::ContinuousAssignOp::create(builder, loc, lhs, rhs);
     return success();
   }
@@ -556,13 +586,12 @@ struct ModuleVisitor : public BaseVisitor {
       return success();
 
     // If the block has a name, add it to the list of block name prefices.
-    SmallString<64> prefixBuffer;
-    auto prefix = blockNamePrefix;
-    if (!genNode.name.empty()) {
-      prefixBuffer += blockNamePrefix;
-      prefixBuffer += genNode.name;
-      prefixBuffer += '.';
-      prefix = prefixBuffer;
+    SmallString<64> prefix = blockNamePrefix;
+    if (!genNode.name.empty() ||
+        genNode.getParentScope()->asSymbol().kind !=
+            slang::ast::SymbolKind::GenerateBlockArray) {
+      prefix += genNode.getExternalName();
+      prefix += '.';
     }
 
     // Visit each member of the generate block.
@@ -576,27 +605,20 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
     // If the block has a name, add it to the list of block name prefices and
     // prepare to append the array index and a `.` in each iteration.
-    SmallString<64> prefixBuffer;
-    if (!genArrNode.name.empty()) {
-      prefixBuffer += blockNamePrefix;
-      prefixBuffer += genArrNode.name;
-    }
-    auto prefixBufferBaseLen = prefixBuffer.size();
+    SmallString<64> prefix = blockNamePrefix;
+    prefix += genArrNode.getExternalName();
+    prefix += '_';
+    auto prefixBaseLen = prefix.size();
 
     // Visit each iteration entry of the generate block.
     for (const auto *entry : genArrNode.entries) {
-      // Append the index to the prefix if this block has a name.
-      auto prefix = blockNamePrefix;
-      if (prefixBufferBaseLen > 0) {
-        prefixBuffer.resize(prefixBufferBaseLen);
-        prefixBuffer += '_';
-        if (entry->arrayIndex)
-          prefixBuffer += entry->arrayIndex->toString();
-        else
-          Twine(entry->constructIndex).toVector(prefixBuffer);
-        prefixBuffer += '.';
-        prefix = prefixBuffer;
-      }
+      // Append the index to the prefix.
+      prefix.resize(prefixBaseLen);
+      if (entry->arrayIndex)
+        prefix += entry->arrayIndex->toString();
+      else
+        Twine(entry->constructIndex).toVector(prefix);
+      prefix += '.';
 
       // Visit this iteration entry.
       if (failed(entry->asSymbol().visit(ModuleVisitor(context, loc, prefix))))
@@ -688,6 +710,20 @@ LogicalResult Context::convertCompilation() {
     if (failed(convertModuleBody(module)))
       return failure();
   }
+
+  // Convert the initializers of global variables.
+  for (auto *var : globalVariableWorklist) {
+    auto varOp = globalVariables.at(var);
+    auto &block = varOp.getInitRegion().emplaceBlock();
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(&block);
+    auto value =
+        convertRvalueExpression(*var->getInitializer(), varOp.getType());
+    if (!value)
+      return failure();
+    moore::YieldOp::create(builder, varOp.getLoc(), value);
+  }
+  globalVariableWorklist.clear();
 
   return success();
 }
@@ -975,8 +1011,6 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
 /// This does not convert the function body.
 FunctionLowering *
 Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
-  using slang::ast::ArgumentDirection;
-
   // Check if there already is a declaration for this function.
   auto &lowering = functions[&subroutine];
   if (lowering) {
@@ -984,8 +1018,97 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
       return {};
     return lowering.get();
   }
-  lowering = std::make_unique<FunctionLowering>();
+
+  if (!subroutine.thisVar) {
+
+    SmallString<64> name;
+    guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), name);
+    name += subroutine.name;
+
+    SmallVector<Type, 1> noThis = {};
+    return declareCallableImpl(subroutine, name, noThis);
+  }
+
   auto loc = convertLocation(subroutine.location);
+
+  // Extract 'this' type and ensure it's a class.
+  const slang::ast::Type &thisTy = subroutine.thisVar->getType();
+  moore::ClassDeclOp ownerDecl;
+
+  if (auto *classTy = thisTy.as_if<slang::ast::ClassType>()) {
+    auto &ownerLowering = classes[classTy];
+    ownerDecl = ownerLowering->op;
+  } else {
+    mlir::emitError(loc) << "expected 'this' to be a class type, got "
+                         << thisTy.toString();
+    return {};
+  }
+
+  // Build qualified name: @"Pkg::Class"::subroutine
+  SmallString<64> qualName;
+  qualName += ownerDecl.getSymName(); // already qualified
+  qualName += "::";
+  qualName += subroutine.name;
+
+  // %this : class<@C>
+  SmallVector<Type, 1> extraParams;
+  {
+    auto classSym = mlir::FlatSymbolRefAttr::get(ownerDecl.getSymNameAttr());
+    auto handleTy = moore::ClassHandleType::get(getContext(), classSym);
+    extraParams.push_back(handleTy);
+  }
+
+  auto *fLowering = declareCallableImpl(subroutine, qualName, extraParams);
+  return fLowering;
+}
+
+/// Helper function to generate the function signature from a SubroutineSymbol
+/// and optional extra arguments (used for %this argument)
+static FunctionType
+getFunctionSignature(Context &context,
+                     const slang::ast::SubroutineSymbol &subroutine,
+                     llvm::SmallVectorImpl<Type> &extraParams) {
+  using slang::ast::ArgumentDirection;
+
+  SmallVector<Type> inputTypes;
+  inputTypes.append(extraParams.begin(), extraParams.end());
+  SmallVector<Type, 1> outputTypes;
+
+  for (const auto *arg : subroutine.getArguments()) {
+    auto type = context.convertType(arg->getType());
+    if (!type)
+      return {};
+    if (arg->direction == ArgumentDirection::In) {
+      inputTypes.push_back(type);
+    } else {
+      inputTypes.push_back(
+          moore::RefType::get(cast<moore::UnpackedType>(type)));
+    }
+  }
+
+  if (!subroutine.getReturnType().isVoid()) {
+    auto type = context.convertType(subroutine.getReturnType());
+    if (!type)
+      return {};
+    outputTypes.push_back(type);
+  }
+
+  auto funcType =
+      FunctionType::get(context.getContext(), inputTypes, outputTypes);
+
+  // Create a function declaration.
+  return funcType;
+}
+
+/// Convert a function and its arguments to a function declaration in the IR.
+/// This does not convert the function body.
+FunctionLowering *
+Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
+                             mlir::StringRef qualifiedName,
+                             llvm::SmallVectorImpl<Type> &extraParams) {
+  auto loc = convertLocation(subroutine.location);
+  std::unique_ptr<FunctionLowering> lowering =
+      std::make_unique<FunctionLowering>();
 
   // Pick an insertion point for this function according to the source file
   // location.
@@ -996,44 +1119,9 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   else
     builder.setInsertionPoint(it->second);
 
-  // Class methods are currently not supported.
-  if (subroutine.thisVar) {
-    mlir::emitError(loc) << "unsupported class method";
-    return {};
-  }
+  auto funcTy = getFunctionSignature(*this, subroutine, extraParams);
+  auto funcOp = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
 
-  // Determine the function type.
-  SmallVector<Type> inputTypes;
-  SmallVector<Type, 1> outputTypes;
-
-  for (const auto *arg : subroutine.getArguments()) {
-    auto type = cast<moore::UnpackedType>(convertType(arg->getType()));
-    if (!type)
-      return {};
-    if (arg->direction == ArgumentDirection::In) {
-      inputTypes.push_back(type);
-    } else {
-      inputTypes.push_back(moore::RefType::get(type));
-    }
-  }
-
-  if (!subroutine.getReturnType().isVoid()) {
-    auto type = convertType(subroutine.getReturnType());
-    if (!type)
-      return {};
-    outputTypes.push_back(type);
-  }
-
-  auto funcType = FunctionType::get(getContext(), inputTypes, outputTypes);
-
-  // Prefix the function name with the surrounding namespace to create somewhat
-  // sane names in the IR.
-  SmallString<64> funcName;
-  guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), funcName);
-  funcName += subroutine.name;
-
-  // Create a function declaration.
-  auto funcOp = mlir::func::FuncOp::create(builder, loc, funcName, funcType);
   SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
   orderedRootOps.insert(it, {subroutine.location, funcOp});
   lowering->op = funcOp;
@@ -1041,8 +1129,70 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // Add the function to the symbol table of the MLIR module, which uniquifies
   // its name.
   symbolTable.insert(funcOp);
+  functions[&subroutine] = std::move(lowering);
 
-  return lowering.get();
+  return functions[&subroutine].get();
+}
+
+/// Special case handling for recursive functions with captures;
+/// this function fixes the in-body call of the recursive function with
+/// the captured arguments.
+static LogicalResult rewriteCallSitesToPassCaptures(mlir::func::FuncOp callee,
+                                                    ArrayRef<Value> captures) {
+  if (captures.empty())
+    return success();
+
+  mlir::ModuleOp module = callee->getParentOfType<mlir::ModuleOp>();
+  if (!module)
+    return callee.emitError("expected callee to be nested under ModuleOp");
+
+  auto usesOpt = mlir::SymbolTable::getSymbolUses(callee, module);
+  if (!usesOpt)
+    return callee.emitError("failed to compute symbol uses");
+
+  // Snapshot the relevant users before we mutate IR.
+  SmallVector<mlir::func::CallOp, 8> callSites;
+  callSites.reserve(std::distance(usesOpt->begin(), usesOpt->end()));
+  for (const mlir::SymbolTable::SymbolUse &use : *usesOpt) {
+    if (auto call = llvm::dyn_cast<mlir::func::CallOp>(use.getUser()))
+      callSites.push_back(call);
+  }
+  if (callSites.empty())
+    return success();
+
+  Block &entry = callee.getBody().front();
+  const unsigned numCaps = captures.size();
+  const unsigned numEntryArgs = entry.getNumArguments();
+  if (numEntryArgs < numCaps)
+    return callee.emitError("entry block has fewer args than captures");
+  const unsigned capArgStart = numEntryArgs - numCaps;
+
+  // Current (finalized) function type.
+  auto fTy = callee.getFunctionType();
+
+  for (auto call : callSites) {
+    SmallVector<Value> newOperands(call.getArgOperands().begin(),
+                                   call.getArgOperands().end());
+
+    const bool inSameFunc = callee->isProperAncestor(call);
+    if (inSameFunc) {
+      // Append the function’s *capture block arguments* in order.
+      for (unsigned i = 0; i < numCaps; ++i)
+        newOperands.push_back(entry.getArgument(capArgStart + i));
+    } else {
+      // External call site: pass the captured SSA values.
+      newOperands.append(captures.begin(), captures.end());
+    }
+
+    OpBuilder b(call);
+    auto flatRef = mlir::FlatSymbolRefAttr::get(callee);
+    auto newCall = mlir::func::CallOp::create(
+        b, call.getLoc(), fTy.getResults(), flatRef, newOperands);
+    call->replaceAllUsesWith(newCall.getOperation());
+    call->erase();
+  }
+
+  return success();
 }
 
 /// Convert a function.
@@ -1059,21 +1209,43 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   auto *lowering = declareFunction(subroutine);
   if (!lowering)
     return failure();
+
+  // If function already has been finalized, or is already being converted
+  // (recursive/re-entrant calls) stop here.
+  if (lowering->capturesFinalized || lowering->isConverting)
+    return success();
+
+  const bool isMethod = (subroutine.thisVar != nullptr);
+
   ValueSymbolScope scope(valueSymbols);
 
   // Create a function body block and populate it with block arguments.
   SmallVector<moore::VariableOp> argVariables;
   auto &block = lowering->op.getBody().emplaceBlock();
-  for (auto [astArg, type] :
-       llvm::zip(subroutine.getArguments(),
-                 lowering->op.getFunctionType().getInputs())) {
+
+  // If this is a class method, the first input is %this :
+  // !moore.class<@C>
+  if (isMethod) {
+    auto thisLoc = convertLocation(subroutine.location);
+    auto thisType = lowering->op.getFunctionType().getInput(0);
+    auto thisArg = block.addArgument(thisType, thisLoc);
+
+    // Bind `this` so NamedValue/MemberAccess can find it.
+    valueSymbols.insert(subroutine.thisVar, thisArg);
+  }
+
+  // Add user-defined block arguments
+  auto inputs = lowering->op.getFunctionType().getInputs();
+  auto astArgs = subroutine.getArguments();
+  auto valInputs = llvm::ArrayRef<Type>(inputs).drop_front(isMethod ? 1 : 0);
+
+  for (auto [astArg, type] : llvm::zip(astArgs, valInputs)) {
     auto loc = convertLocation(astArg->location);
     auto blockArg = block.addArgument(type, loc);
 
     if (isa<moore::RefType>(type)) {
       valueSymbols.insert(astArg, blockArg);
     } else {
-      // Convert the body of the function.
       OpBuilder::InsertionGuard g(builder);
       builder.setInsertionPointToEnd(&block);
 
@@ -1101,7 +1273,94 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     valueSymbols.insert(subroutine.returnValVar, returnVar);
   }
 
+  // Save previous callbacks
+  auto prevRCb = rvalueReadCallback;
+  auto prevWCb = variableAssignCallback;
+  auto prevRCbGuard = llvm::make_scope_exit([&] {
+    rvalueReadCallback = prevRCb;
+    variableAssignCallback = prevWCb;
+  });
+
+  // Capture this function's captured context directly
+  rvalueReadCallback = [lowering, prevRCb](moore::ReadOp rop) {
+    mlir::Value ref = rop.getInput();
+
+    // Don't capture anything that's not a reference
+    mlir::Type ty = ref.getType();
+    if (!ty || !(isa<moore::RefType>(ty)))
+      return;
+
+    // Don't capture anything that's a local reference
+    mlir::Region *defReg = ref.getParentRegion();
+    if (defReg && lowering->op.getBody().isAncestor(defReg))
+      return;
+
+    // If we've already recorded this capture, skip.
+    if (lowering->captureIndex.count(ref))
+      return;
+
+    // Only capture refs defined outside this function’s region
+    auto [it, inserted] =
+        lowering->captureIndex.try_emplace(ref, lowering->captures.size());
+    if (inserted) {
+      lowering->captures.push_back(ref);
+      // Propagate over outer scope
+      if (prevRCb)
+        prevRCb(rop); // chain previous callback
+    }
+  };
+  // Capture this function's captured context directly
+  variableAssignCallback = [lowering, prevWCb](mlir::Operation *op) {
+    mlir::Value dstRef =
+        llvm::TypeSwitch<mlir::Operation *, mlir::Value>(op)
+            .Case<moore::BlockingAssignOp, moore::NonBlockingAssignOp,
+                  moore::DelayedNonBlockingAssignOp>(
+                [](auto op) { return op.getDst(); })
+            .Default([](auto) -> mlir::Value { return {}; });
+
+    // Don't capture anything that's not a reference
+    mlir::Type ty = dstRef.getType();
+    if (!ty || !(isa<moore::RefType>(ty)))
+      return;
+
+    // Don't capture anything that's a local reference
+    mlir::Region *defReg = dstRef.getParentRegion();
+    if (defReg && lowering->op.getBody().isAncestor(defReg))
+      return;
+
+    // If we've already recorded this capture, skip.
+    if (lowering->captureIndex.count(dstRef))
+      return;
+
+    // Only capture refs defined outside this function’s region
+    auto [it, inserted] =
+        lowering->captureIndex.try_emplace(dstRef, lowering->captures.size());
+    if (inserted) {
+      lowering->captures.push_back(dstRef);
+      // Propagate over outer scope
+      if (prevWCb)
+        prevWCb(op); // chain previous callback
+    }
+  };
+
+  auto savedThis = currentThisRef;
+  currentThisRef = valueSymbols.lookup(subroutine.thisVar);
+  auto restoreThis = llvm::make_scope_exit([&] { currentThisRef = savedThis; });
+
+  lowering->isConverting = true;
+  auto convertingGuard =
+      llvm::make_scope_exit([&] { lowering->isConverting = false; });
+
   if (failed(convertStatement(subroutine.getBody())))
+    return failure();
+
+  // Plumb captures into the function as extra block arguments
+  if (failed(finalizeFunctionBodyCaptures(*lowering)))
+    return failure();
+
+  // For the special case of recursive functions, fix the call sites within the
+  // body
+  if (failed(rewriteCallSitesToPassCaptures(lowering->op, lowering->captures)))
     return failure();
 
   // If there was no explicit return statement provided by the user, insert a
@@ -1129,5 +1388,399 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
       var->erase();
     }
   }
+
+  lowering->capturesFinalized = true;
+  return success();
+}
+
+LogicalResult
+Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
+  if (lowering.captures.empty())
+    return success();
+
+  MLIRContext *ctx = getContext();
+
+  // Build new input type list: existing inputs + capture ref types.
+  SmallVector<Type> newInputs(lowering.op.getFunctionType().getInputs().begin(),
+                              lowering.op.getFunctionType().getInputs().end());
+
+  for (Value cap : lowering.captures) {
+    // Expect captures to be refs.
+    Type capTy = cap.getType();
+    if (!isa<moore::RefType>(capTy)) {
+      return lowering.op.emitError(
+          "expected captured value to be a ref-like type");
+    }
+    newInputs.push_back(capTy);
+  }
+
+  // Results unchanged.
+  auto newFuncTy = FunctionType::get(
+      ctx, newInputs, lowering.op.getFunctionType().getResults());
+  lowering.op.setFunctionType(newFuncTy);
+
+  // Add the new block arguments to the entry block.
+  Block &entry = lowering.op.getBody().front();
+  SmallVector<Value> capArgs;
+  capArgs.reserve(lowering.captures.size());
+  for (Type t :
+       llvm::ArrayRef<Type>(newInputs).take_back(lowering.captures.size())) {
+    capArgs.push_back(entry.addArgument(t, lowering.op.getLoc()));
+  }
+
+  // Replace uses of each captured Value *inside the function body* with the new
+  // arg. Keep uses outside untouched (e.g., in callers).
+  for (auto [cap, idx] : lowering.captureIndex) {
+    Value arg = capArgs[idx];
+    cap.replaceUsesWithIf(arg, [&](OpOperand &use) {
+      return lowering.op->isProperAncestor(use.getOwner());
+    });
+  }
+
+  return success();
+}
+
+namespace {
+
+/// Construct a fully qualified class name containing the instance hierarchy
+/// and the class name formatted as H1::H2::@C
+mlir::StringAttr fullyQualifiedClassName(Context &ctx,
+                                         const slang::ast::Type &ty) {
+  SmallString<64> name;
+  SmallVector<llvm::StringRef, 8> parts;
+
+  const slang::ast::Scope *scope = ty.getParentScope();
+  while (scope) {
+    const auto &sym = scope->asSymbol();
+    switch (sym.kind) {
+    case slang::ast::SymbolKind::Root:
+      scope = nullptr; // stop at $root
+      continue;
+    case slang::ast::SymbolKind::InstanceBody:
+    case slang::ast::SymbolKind::Instance:
+    case slang::ast::SymbolKind::Package:
+    case slang::ast::SymbolKind::ClassType:
+      if (!sym.name.empty())
+        parts.push_back(sym.name); // keep packages + outer classes
+      break;
+    default:
+      break;
+    }
+    scope = sym.getParentScope();
+  }
+
+  for (auto p : llvm::reverse(parts)) {
+    name += p;
+    name += "::";
+  }
+  name += ty.name; // class’s own name
+  return mlir::StringAttr::get(ctx.getContext(), name);
+}
+
+/// Helper function to construct the classes fully qualified base class name
+/// and the name of all implemented interface classes
+std::pair<mlir::SymbolRefAttr, mlir::ArrayAttr>
+buildBaseAndImplementsAttrs(Context &context,
+                            const slang::ast::ClassType &cls) {
+  mlir::MLIRContext *ctx = context.getContext();
+
+  // Base class (if any)
+  mlir::SymbolRefAttr base;
+  if (const auto *b = cls.getBaseClass())
+    base = mlir::SymbolRefAttr::get(fullyQualifiedClassName(context, *b));
+
+  // Implemented interfaces (if any)
+  SmallVector<mlir::Attribute> impls;
+  if (auto ifaces = cls.getDeclaredInterfaces(); !ifaces.empty()) {
+    impls.reserve(ifaces.size());
+    for (const auto *iface : ifaces)
+      impls.push_back(mlir::FlatSymbolRefAttr::get(
+          fullyQualifiedClassName(context, *iface)));
+  }
+
+  mlir::ArrayAttr implArr =
+      impls.empty() ? mlir::ArrayAttr() : mlir::ArrayAttr::get(ctx, impls);
+
+  return {base, implArr};
+}
+
+/// Visit a slang::ast::ClassType and populate the body of an existing
+/// moore::ClassDeclOp with field/method decls.
+struct ClassDeclVisitor {
+  Context &context;
+  OpBuilder &builder;
+  ClassLowering &classLowering;
+
+  ClassDeclVisitor(Context &ctx, ClassLowering &lowering)
+      : context(ctx), builder(ctx.builder), classLowering(lowering) {}
+
+  LogicalResult run(const slang::ast::ClassType &classAST) {
+    if (!classLowering.op.getBody().empty())
+      return success();
+
+    OpBuilder::InsertionGuard ig(builder);
+
+    Block *body = &classLowering.op.getBody().emplaceBlock();
+    builder.setInsertionPointToEnd(body);
+
+    for (const auto &mem : classAST.members())
+      if (failed(mem.visit(*this)))
+        return failure();
+
+    return success();
+  }
+
+  // Properties: ClassPropertySymbol
+  LogicalResult visit(const slang::ast::ClassPropertySymbol &prop) {
+    auto loc = convertLocation(prop.location);
+    auto ty = context.convertType(prop.getType());
+    if (!ty)
+      return failure();
+
+    moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+    return success();
+  }
+
+  // Parameters in specialized classes hold no further information; slang
+  // already elaborates them in all relevant places.
+  LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
+
+  // Parameters in specialized classes hold no further information; slang
+  // already elaborates them in all relevant places.
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
+    return success();
+  }
+
+  // Type aliases in specialized classes hold no further information; slang
+  // already elaborates them in all relevant places.
+  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+
+  // Fully-fledged functions - SubroutineSymbol
+  LogicalResult visit(const slang::ast::SubroutineSymbol &fn) {
+    if (fn.flags & slang::ast::MethodFlags::BuiltIn) {
+      static bool remarkEmitted = false;
+      if (remarkEmitted)
+        return success();
+
+      mlir::emitRemark(classLowering.op.getLoc())
+          << "Class builtin functions (needed for randomization, constraints, "
+             "and covergroups) are not yet supported and will be dropped "
+             "during lowering.";
+      remarkEmitted = true;
+      return success();
+    }
+
+    const mlir::UnitAttr isVirtual =
+        (fn.flags & slang::ast::MethodFlags::Virtual)
+            ? UnitAttr::get(context.getContext())
+            : nullptr;
+
+    auto loc = convertLocation(fn.location);
+    // Pure virtual functions regulate inheritance rules during parsing.
+    // They don't emit any code, so we don't need to convert them, we only need
+    // to register them for the purpose of stable VTable construction.
+    if (fn.flags & slang::ast::MethodFlags::Pure) {
+      // Add an extra %this argument.
+      SmallVector<Type, 1> extraParams;
+      auto classSym =
+          mlir::FlatSymbolRefAttr::get(classLowering.op.getSymNameAttr());
+      auto handleTy =
+          moore::ClassHandleType::get(context.getContext(), classSym);
+      extraParams.push_back(handleTy);
+
+      auto funcTy = getFunctionSignature(context, fn, extraParams);
+      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
+      return success();
+    }
+
+    auto *lowering = context.declareFunction(fn);
+    if (!lowering)
+      return failure();
+
+    if (failed(context.convertFunction(fn)))
+      return failure();
+
+    if (!lowering->capturesFinalized)
+      return failure();
+
+    // We only emit methoddecls for virtual methods.
+    if (!isVirtual)
+      return success();
+
+    // Grab the finalized function type from the lowered func.op.
+    FunctionType fnTy = lowering->op.getFunctionType();
+    // Emit the method decl into the class body, preserving source order.
+    moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy,
+                                     SymbolRefAttr::get(lowering->op));
+
+    return success();
+  }
+
+  // A method prototype corresponds to the forward declaration of a concrete
+  // method, the forward declaration of a virtual method, or the defintion of an
+  // interface method meant to be implemented by classes implementing the
+  // interface class.
+  // In the first two cases, the best thing to do is to look up the actual
+  // implementation and translate it when reading the method prototype, so we
+  // can insert the MethodDeclOp in the correct order in the ClassDeclOp.
+  // The latter case requires support for virtual interface methods, which is
+  // currently not implemented. Since forward declarations of non-interface
+  // methods must be followed by an implementation within the same compilation
+  // unit, we can simply return a failure if we can't find a unique
+  // implementation until we implement support for interface methods.
+  LogicalResult visit(const slang::ast::MethodPrototypeSymbol &fn) {
+    const auto *externImpl = fn.getSubroutine();
+    // We needn't convert a forward declaration without a unique implementation.
+    if (!externImpl) {
+      mlir::emitError(convertLocation(fn.location))
+          << "Didn't find an implementation matching the forward declaration "
+             "of "
+          << fn.name;
+      return failure();
+    }
+    return visit(*externImpl);
+  }
+
+  // Nested class definition, skip
+  LogicalResult visit(const slang::ast::GenericClassDefSymbol &) {
+    return success();
+  }
+
+  // Nested class definition, convert
+  LogicalResult visit(const slang::ast::ClassType &cls) {
+    return context.convertClassDeclaration(cls);
+  }
+
+  // Transparent members: ignore (inherited names pulled in by slang)
+  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Empty members: ignore
+  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
+    return success();
+  }
+
+  // Emit an error for all other members.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    Location loc = UnknownLoc::get(context.getContext());
+    if constexpr (requires { node.location; })
+      loc = convertLocation(node.location);
+    mlir::emitError(loc) << "unsupported construct in ClassType members: "
+                         << slang::ast::toString(node.kind);
+    return failure();
+  }
+
+private:
+  Location convertLocation(const slang::SourceLocation &sloc) {
+    return context.convertLocation(sloc);
+  }
+};
+} // namespace
+
+ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
+  // Check if there already is a declaration for this class.
+  auto &lowering = classes[&cls];
+  if (lowering) {
+    if (!lowering->op)
+      return {};
+    return lowering.get();
+  }
+
+  lowering = std::make_unique<ClassLowering>();
+  auto loc = convertLocation(cls.location);
+
+  // Pick an insertion point for this function according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(cls.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  auto symName = fullyQualifiedClassName(*this, cls);
+
+  // Force build of base here.
+  if (const auto *maybeBaseClass = cls.getBaseClass())
+    if (const auto *baseClass = maybeBaseClass->as_if<slang::ast::ClassType>())
+      if (!classes.contains(baseClass) &&
+          failed(convertClassDeclaration(*baseClass))) {
+        mlir::emitError(loc) << "Failed to convert base class "
+                             << baseClass->name << " of class " << cls.name;
+        return {};
+      }
+
+  auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
+  auto classDeclOp =
+      moore::ClassDeclOp::create(builder, loc, symName, base, impls);
+
+  SymbolTable::setSymbolVisibility(classDeclOp,
+                                   SymbolTable::Visibility::Public);
+  orderedRootOps.insert(it, {cls.location, classDeclOp});
+  lowering->op = classDeclOp;
+
+  symbolTable.insert(classDeclOp);
+  return lowering.get();
+}
+
+LogicalResult
+Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
+
+  // Keep track of local time scale.
+  auto prevTimeScale = timeScale;
+  timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
+  auto timeScaleGuard =
+      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+
+  // Check if there already is a declaration for this class.
+  if (classes.contains(&classdecl))
+    return success();
+
+  auto *lowering = declareClass(classdecl);
+  if (failed(ClassDeclVisitor(*this, *lowering).run(classdecl)))
+    return failure();
+
+  return success();
+}
+
+/// Convert a variable to a `moore.global_variable` operation.
+LogicalResult
+Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
+  auto loc = convertLocation(var.location);
+
+  // Pick an insertion point for this variable according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(var.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  // Prefix the variable name with the surrounding namespace to create somewhat
+  // sane names in the IR.
+  SmallString<64> symName;
+  guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
+  symName += var.name;
+
+  // Determine the type of the variable.
+  auto type = convertType(var.getType());
+  if (!type)
+    return failure();
+
+  // Create the variable op itself.
+  auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
+                                               cast<moore::UnpackedType>(type));
+  orderedRootOps.insert({var.location, varOp});
+  globalVariables.insert({&var, varOp});
+
+  // If the variable has an initializer expression, remember it for later such
+  // that we can convert the initializers once we have seen all global
+  // variables.
+  if (var.getInitializer())
+    globalVariableWorklist.push_back(&var);
+
   return success();
 }

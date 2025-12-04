@@ -272,9 +272,9 @@ zero of a list is the leftmost operand in assembly, which is the most
 significant value.
 
 ```cpp
-ConcatOp result = builder.create<ConcatOp>(..., {msb, lsb});
+ConcatOp result = ConcatOp::create(builder, ..., {msb, lsb});
 // Is equivalent to the above integer concatenation example.
-ArrayConcatOp arr = builder.create<ArrayConcatOp>(..., {arr123, arr456});
+ArrayConcatOp arr = ArrayConcatOp::create(builder, ..., {arr123, arr456});
 // Is equivalent to the above array example.
 ```
 

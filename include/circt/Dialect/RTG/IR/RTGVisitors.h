@@ -42,7 +42,7 @@ public:
             // Labels
             LabelDeclOp, LabelUniqueDeclOp, LabelOp,
             // Registers
-            FixedRegisterOp, VirtualRegisterOp,
+            VirtualRegisterOp,
             // RTG tests
             TestOp, TargetOp, YieldOp, ValidateOp, TestSuccessOp, TestFailureOp,
             // Integers
@@ -64,7 +64,7 @@ public:
             // Memory Blocks
             MemoryBlockDeclareOp,
             // Misc ops
-            CommentOp>([&](auto expr) -> ResultType {
+            CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -126,6 +126,7 @@ public:
   HANDLE(TupleCreateOp, Unhandled);
   HANDLE(TupleExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);
+  HANDLE(ConstraintOp, Unhandled);
   HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
@@ -135,7 +136,6 @@ public:
   HANDLE(ValidateOp, Unhandled);
   HANDLE(TestSuccessOp, Unhandled);
   HANDLE(TestFailureOp, Unhandled);
-  HANDLE(FixedRegisterOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);
   HANDLE(ConcatImmediateOp, Unhandled);

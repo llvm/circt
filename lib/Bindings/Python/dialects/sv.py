@@ -10,6 +10,8 @@ from ..ir import ArrayAttr, Attribute, FlatSymbolRefAttr, OpView, StringAttr
 from ._sv_ops_gen import *
 from ._sv_ops_gen import _Dialect
 
+from typing import List, Optional
+
 
 @_ods_cext.register_operation(_Dialect, replace=True)
 class IfDefOp(IfDefOp):
@@ -107,3 +109,109 @@ class ReadInOutOp(ReadInOutOp):
     value = support.get_value(value)
     type = support.get_self_or_inner(value.type).element_type
     return sv.ReadInOutOp(value)
+
+
+@_ods_cext.register_operation(_Dialect, replace=True)
+class SVVerbatimSourceOp(SVVerbatimSourceOp):
+
+  def __init__(self,
+               sym_name,
+               content,
+               output_file,
+               *,
+               parameters=None,
+               additional_files=None,
+               verilog_name=None,
+               loc=None,
+               ip=None):
+    attributes = {}
+    attributes["sym_name"] = StringAttr.get(str(sym_name))
+    attributes["content"] = StringAttr.get(str(content))
+    attributes["output_file"] = output_file
+
+    if parameters is not None:
+      attributes["parameters"] = parameters
+    else:
+      attributes["parameters"] = ArrayAttr.get([])
+
+    if additional_files is not None:
+      attributes["additional_files"] = additional_files
+
+    if verilog_name is not None:
+      attributes["verilogName"] = StringAttr.get(str(verilog_name))
+    else:
+      # Default to using the symbol name without file extension
+      name = str(sym_name)
+      if name.endswith('.v'):
+        attributes["verilogName"] = StringAttr.get(name[:-2])
+      else:
+        attributes["verilogName"] = StringAttr.get(name)
+
+    OpView.__init__(
+        self,
+        self.build_generic(attributes=attributes,
+                           results=[],
+                           operands=[],
+                           successors=None,
+                           regions=0,
+                           loc=loc,
+                           ip=ip))
+
+
+@_ods_cext.register_operation(_Dialect, replace=True)
+class SVVerbatimModuleOp(SVVerbatimModuleOp):
+
+  def __init__(self,
+               name,
+               source,
+               input_ports=[],
+               output_ports=[],
+               *,
+               parameters=None,
+               verilog_name=None,
+               attributes={},
+               loc=None,
+               ip=None):
+    attributes = dict(attributes)
+    attributes["source"] = source
+
+    if parameters is not None:
+      attributes["parameters"] = parameters
+    else:
+      attributes["parameters"] = ArrayAttr.get([])
+
+    if verilog_name is not None:
+      attributes["verilogName"] = StringAttr.get(str(verilog_name))
+
+    hw.ModuleLike.init(self,
+                       name,
+                       input_ports,
+                       output_ports,
+                       parameters=parameters if parameters is not None else [],
+                       attributes=attributes,
+                       body_builder=None,
+                       loc=loc,
+                       ip=ip)
+
+  def instantiate(self, *args, **kwargs):
+    return hw.ModuleLike.instantiate(self, *args, **kwargs)
+
+  @property
+  def type(self):
+    return hw.ModuleLike.type(self)
+
+  @property
+  def name(self):
+    return hw.ModuleLike.name(self)
+
+  @property
+  def is_external(self):
+    return True
+
+  @property
+  def parameters(self) -> list[hw.ParamDeclAttr]:
+    return hw.ModuleLike.parameters(self)
+
+
+VerbatimSourceOp = SVVerbatimSourceOp
+VerbatimModuleOp = SVVerbatimModuleOp

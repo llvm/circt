@@ -141,3 +141,25 @@ OpFoldResult GoToRepeatOp::fold(FoldAdaptor adaptor) {
 OpFoldResult NonConsecutiveRepeatOp::fold(FoldAdaptor adaptor) {
   return RepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(), getInput());
 }
+
+//===----------------------------------------------------------------------===//
+// Properties
+//===----------------------------------------------------------------------===//
+
+OpFoldResult BooleanConstantOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
+OpFoldResult ImplicationOp::fold(FoldAdaptor adaptor) {
+  // implication(false, x) -> true (false implies anything)
+  if (auto antecedent = dyn_cast_or_null<IntegerAttr>(adaptor.getAntecedent()))
+    if (antecedent.getValue().isZero())
+      return BoolAttr::get(getContext(), true);
+
+  // implication(x, true) -> true (anything implies true)
+  if (auto consequent = dyn_cast_or_null<IntegerAttr>(adaptor.getConsequent()))
+    if (consequent.getValue().isOne())
+      return BoolAttr::get(getContext(), true);
+
+  return {};
+}

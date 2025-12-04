@@ -282,6 +282,33 @@ MlirAttribute rtgAnyContextAttrGet(MlirContext ctxt, MlirType type) {
   return wrap(AnyContextAttr::get(unwrap(ctxt), unwrap(type)));
 }
 
+// VirtualRegConfigAttr
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsAVirtualRegisterConfig(MlirAttribute attr) {
+  return isa<VirtualRegisterConfigAttr>(unwrap(attr));
+}
+
+MlirAttribute
+rtgVirtualRegisterConfigAttrGet(MlirContext ctxt, intptr_t numRegs,
+                                MlirAttribute const *allowedRegs) {
+  SmallVector<rtg::RegisterAttrInterface> regs;
+  for (intptr_t i = 0; i < numRegs; ++i)
+    regs.push_back(cast<rtg::RegisterAttrInterface>(unwrap(allowedRegs[i])));
+  return wrap(VirtualRegisterConfigAttr::get(unwrap(ctxt), regs));
+}
+
+intptr_t rtgVirtualRegisterConfigAttrGetNumRegisters(MlirAttribute attr) {
+  return cast<VirtualRegisterConfigAttr>(unwrap(attr)).getAllowedRegs().size();
+}
+
+MlirAttribute rtgVirtualRegisterConfigAttrGetRegister(MlirAttribute attr,
+                                                      intptr_t index) {
+  auto allowedRegs =
+      cast<VirtualRegisterConfigAttr>(unwrap(attr)).getAllowedRegs();
+  return wrap(allowedRegs[index]);
+}
+
 //===----------------------------------------------------------------------===//
 // Passes
 //===----------------------------------------------------------------------===//

@@ -49,6 +49,15 @@ struct ModuleLowering {
 /// Function lowering information.
 struct FunctionLowering {
   mlir::func::FuncOp op;
+  llvm::SmallVector<Value, 4> captures;
+  llvm::DenseMap<Value, unsigned> captureIndex;
+  bool capturesFinalized = false;
+  bool isConverting = false;
+};
+
+// Class lowering information.
+struct ClassLowering {
+  circt::moore::ClassDeclOp op;
 };
 
 /// Information about a loops continuation and exit blocks relevant while
@@ -110,7 +119,25 @@ struct Context {
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
+  LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
+  LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
+  ClassLowering *declareClass(const slang::ast::ClassType &cls);
+  LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
 
+  /// Checks whether one class (actualTy) is derived from another class
+  /// (baseTy). True if it's a subclass, false otherwise.
+  bool isClassDerivedFrom(const moore::ClassHandleType &actualTy,
+                          const moore::ClassHandleType &baseTy);
+
+  /// Tries to find the closest base class of actualTy that carries
+  /// a property with name fieldName.
+  moore::ClassHandleType
+  getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
+                               StringRef fieldName);
+
+  Value getImplicitThisRef() const {
+    return currentThisRef; // block arg added in declareFunction
+  }
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
@@ -123,13 +150,25 @@ struct Context {
   Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
                                    Location loc);
 
+  // Convert an assertion expression AST node to MLIR ops.
+  Value convertAssertionCallExpression(
+      const slang::ast::CallExpression &expr,
+      const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
+
   // Traverse the whole AST to collect hierarchical names.
   LogicalResult
   collectHierarchicalValues(const slang::ast::Expression &expr,
                             const slang::ast::Symbol &outermostModule);
   LogicalResult traverseInstanceBody(const slang::ast::Symbol &symbol);
 
-  // Convert a slang timing control into an MLIR timing control.
+  // Convert timing controls into a corresponding set of ops that delay
+  // execution of the current block. Produces an error if the implicit event
+  // control `@*` or `@(*)` is used.
+  LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl);
+  // Convert timing controls into a corresponding set of ops that delay
+  // execution of the current block. Then converts the given statement, taking
+  // note of the rvalues it reads and adding them to a wait op in case an
+  // implicit event control `@*` or `@(*)` is used.
   LogicalResult convertTimingControl(const slang::ast::TimingControl &ctrl,
                                      const slang::ast::Statement &stmt);
 
@@ -161,6 +200,20 @@ struct Context {
   Value materializeSVInt(const slang::SVInt &svint,
                          const slang::ast::Type &type, Location loc);
 
+  /// Helper function to materialize a real value as an SSA value.
+  Value materializeSVReal(const slang::ConstantValue &svreal,
+                          const slang::ast::Type &type, Location loc);
+
+  /// Helper function to materialize a string as an SSA value.
+  Value materializeString(const slang::ConstantValue &string,
+                          const slang::ast::Type &astType, Location loc);
+
+  /// Helper function to materialize an unpacked array of `SVInt`s as an SSA
+  /// value.
+  Value materializeFixedSizeUnpackedArrayType(
+      const slang::ConstantValue &constant,
+      const slang::ast::FixedSizeUnpackedArrayType &astType, Location loc);
+
   /// Helper function to materialize a `ConstantValue` as an SSA value. Returns
   /// null if the constant cannot be materialized.
   Value materializeConstant(const slang::ConstantValue &constant,
@@ -175,10 +228,26 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
+  /// Convert system function calls only have arity-0.
+  FailureOr<Value>
+  convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc);
+
   /// Convert system function calls only have arity-1.
   FailureOr<Value>
   convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                           Location loc, Value value);
+
+  /// Convert system function calls with arity-2.
+  FailureOr<Value>
+  convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc, Value value1, Value value2);
+
+  /// Convert system function calls within properties and assertion with a
+  /// single argument.
+  FailureOr<Value> convertAssertionSystemCallArity1(
+      const slang::ast::SystemSubroutine &subroutine, Location loc,
+      Value value);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
@@ -210,6 +279,10 @@ struct Context {
            std::unique_ptr<FunctionLowering>>
       functions;
 
+  /// Classes that have already been converted.
+  DenseMap<const slang::ast::ClassType *, std::unique_ptr<ClassLowering>>
+      classes;
+
   /// A table of defined values, such as variables, that may be referred to by
   /// name in expressions. The expressions use this table to lookup the MLIR
   /// value that was created for a given declaration in the Slang AST node.
@@ -217,6 +290,14 @@ struct Context {
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
+
+  /// A table of defined global variables that may be referred to by name in
+  /// expressions.
+  DenseMap<const slang::ast::ValueSymbol *, moore::GlobalVariableOp>
+      globalVariables;
+  /// A list of global variables that still need their initializers to be
+  /// converted.
+  SmallVector<const slang::ast::ValueSymbol *> globalVariableWorklist;
 
   /// Collect all hierarchical names used for the per module/instance.
   DenseMap<const slang::ast::InstanceBodySymbol *, SmallVector<HierPathInfo>>
@@ -246,12 +327,26 @@ struct Context {
   /// example to populate the list of observed signals in an implicit event
   /// control `@*`.
   std::function<void(moore::ReadOp)> rvalueReadCallback;
+  /// A listener called for every variable or net being assigned. This can be
+  /// used to collect all variables assigned in a task scope.
+  std::function<void(mlir::Operation *)> variableAssignCallback;
 
   /// The time scale currently in effect.
   slang::TimeScale timeScale;
+
+  /// Variable to track the value of the current function's implicit `this`
+  /// reference
+  Value currentThisRef = {};
+
+private:
+  /// Helper function to extract the commonalities in lowering of functions and
+  /// methods
+  FunctionLowering *
+  declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
+                      mlir::StringRef qualifiedName,
+                      llvm::SmallVectorImpl<Type> &extraParams);
 };
 
 } // namespace ImportVerilog
 } // namespace circt
-
 #endif // CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H

@@ -103,7 +103,8 @@ bool Lowering::matchControlFlow() {
   auto skipToMergePoint = [&](Block *block) -> std::pair<Block *, ValueRange> {
     ValueRange operands;
     while (auto branchOp = dyn_cast<cf::BranchOp>(block->getTerminator())) {
-      if (!block->without_terminator().empty())
+      if (llvm::any_of(block->without_terminator(),
+                       [](auto &op) { return !isMemoryEffectFree(&op); }))
         break;
       block = branchOp.getDest();
       operands = branchOp.getDestOperands();
@@ -115,8 +116,7 @@ bool Lowering::matchControlFlow() {
     return {block, operands};
   };
 
-  // Ensure that the entry block and wait op converge on the same block and with
-  // the same block arguments.
+  // Ensure that the entry block and wait op converge on the same block.
   auto &entry = processOp.getBody().front();
   auto [entryMergeBlock, entryMergeArgs] = skipToMergePoint(&entry);
   auto [waitMergeBlock, waitMergeArgs] = skipToMergePoint(waitOp.getDest());
@@ -126,7 +126,24 @@ bool Lowering::matchControlFlow() {
                << ": control from entry and wait does not converge\n");
     return false;
   }
-  if (entryMergeArgs != waitMergeArgs) {
+
+  // Helper function to check if two values are equivalent.
+  auto areValuesEquivalent = [](std::tuple<Value, Value> values) {
+    auto [a, b] = values;
+    if (a == b)
+      return true;
+    auto *opA = a.getDefiningOp();
+    auto *opB = b.getDefiningOp();
+    if (!opA || !opB)
+      return false;
+    return OperationEquivalence::isEquivalentTo(
+        opA, opB, OperationEquivalence::IgnoreLocations);
+  };
+
+  // Ensure that the entry block and wait op converge with equivalent block
+  // arguments.
+  if (!llvm::all_of(llvm::zip(entryMergeArgs, waitMergeArgs),
+                    areValuesEquivalent)) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping process " << processOp.getLoc()
                             << ": control from entry and wait converges with "
                                "different block arguments\n");
@@ -169,7 +186,7 @@ void Lowering::markObservedValues() {
 
     // Look through probe ops to mark the probe signal as well, just in case
     // there may be multiple probes of the same signal.
-    if (auto probeOp = dyn_cast<PrbOp>(op))
+    if (auto probeOp = dyn_cast<ProbeOp>(op))
       markObserved(probeOp.getSignal());
 
     // Look through operations that simply reshape incoming values into an
@@ -249,7 +266,7 @@ bool Lowering::isObserved(Value value) {
     for (auto operand : op->getOperands()) {
       if (observedValues.contains(operand))
         continue;
-      if (isa<hw::InOutType>(operand.getType()))
+      if (isa<RefType>(operand.getType()))
         return false;
       auto *defOp = operand.getDefiningOp();
       if (!defOp || !isMemoryEffectFree(defOp))

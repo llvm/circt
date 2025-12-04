@@ -10,6 +10,7 @@ set(libs
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
+  CIRCTArcilator
   CIRCTCombToArith
   CIRCTConvertToArcs
   CIRCTEmitTransforms

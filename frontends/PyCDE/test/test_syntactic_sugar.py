@@ -1,7 +1,8 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Clock, Output, Input, generator, types, dim, Module)
+from pycde import (Clock, Output, Input, generator, dim, Module)
 from pycde.testing import unittestmodule
+from pycde.types import Bits, StructType, TypeAlias
 
 # CHECK-LABEL:  hw.module @Top()
 # CHECK:    %c7_i12 = hw.constant 7 : i12
@@ -30,7 +31,7 @@ class Taps(Module):
     ports.taps = [203, 100, 23]
 
 
-BarType = types.struct({"foo": types.i12}, "bar")
+BarType = TypeAlias(StructType({"foo": Bits(12)}), "bar")
 
 
 @unittestmodule()
@@ -38,9 +39,9 @@ class Top(Module):
 
   @generator
   def build(_):
-    types.struct({"foo": types.i12})({"foo": 7})
-    dim(types.i8, 2)([42, 45])
-    types.i8(5)
+    StructType({"foo": Bits(12)})({"foo": 7})
+    dim(8, 2)([42, 45])
+    Bits(8)(5)
 
     BarType({"foo": 7})
 
@@ -64,12 +65,12 @@ class Top(Module):
 class ComplexPorts(Module):
   clk = Clock()
   data_in = Input(dim(32, 3))
-  sel = Input(types.i2)
-  struct_data_in = Input(types.struct({"foo": types.i36}))
+  sel = Input(Bits(2))
+  struct_data_in = Input(StructType({"foo": Bits(36)}))
 
-  a = Output(types.i32)
-  b = Output(types.i32)
-  c = Output(types.i32)
+  a = Output(Bits(32))
+  b = Output(Bits(32))
+  c = Output(Bits(32))
 
   @generator
   def build(self):

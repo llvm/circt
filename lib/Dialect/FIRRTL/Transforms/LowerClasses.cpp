@@ -1,4 +1,4 @@
-//===- LowerClasses.cpp - Lower to OM classes and objects -----------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -1050,7 +1050,7 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
       formalParamNames.push_back(port.name);
 
       // Check if we have a 'containingModule' field.
-      if (port.name.strref().starts_with(kContainingModuleName))
+      if (port.name.strref().contains(kContainingModuleName))
         hasContainingModule = true;
     }
   }
@@ -1066,8 +1066,7 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation()))
-    if (auto defname = externMod.getDefname())
-      className = defname.value();
+    className = externMod.getExtModuleName();
 
   // If the op is a Module or ExtModule, the OM Class would conflict with the HW
   // Module, so give it a suffix. There is no formal ABI for this yet.
@@ -1118,7 +1117,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       inputProperties.push_back({index, port.name, port.type, port.loc});
 
       // Check if we have a 'containingModule' field.
-      if (port.name.strref().starts_with(kContainingModuleName))
+      if (port.name.strref().contains(kContainingModuleName))
         hasContainingModule = true;
     }
 
@@ -1297,7 +1296,7 @@ static LogicalResult updateObjectInClass(
             opsToErase.push_back(propassign);
 
             // Check if we have a 'containingModule' field.
-            if (firrtlClassType.getElement(index).name.strref().starts_with(
+            if (firrtlClassType.getElement(index).name.strref().contains(
                     kContainingModuleName)) {
               assert(!containingModuleRef &&
                      "expected exactly one containingModule");
@@ -1343,7 +1342,9 @@ static LogicalResult updateObjectInClass(
 
   // Replace uses of the FIRRTL Object with the OM Object. The later dialect
   // conversion will take care of converting the types.
-  firrtlObject.replaceAllUsesWith(object.getResult());
+  auto cast = UnrealizedConversionCastOp::create(
+      builder, object.getLoc(), firrtlObject.getType(), object.getResult());
+  firrtlObject.replaceAllUsesWith(cast.getResult(0));
 
   // Erase the original Object, now that we're done with it.
   opsToErase.push_back(firrtlObject);
@@ -1408,8 +1409,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(referencedModule.getOperation()))
-    if (auto defname = externMod.getDefname())
-      moduleName = defname.value();
+    moduleName = externMod.getExtModuleName();
 
   // Convert the FIRRTL Module name to an OM Class type.
   auto className = FlatSymbolRefAttr::get(
@@ -1437,7 +1437,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
 
     // The path to the field is just this output's name.
     auto objectFieldPath = builder.getArrayAttr({FlatSymbolRefAttr::get(
-        firrtlInstance.getPortName(result.getResultNumber()))});
+        firrtlInstance.getPortNameAttr(result.getResultNumber()))});
 
     // Create the field access.
     auto objectField = ObjectFieldOp::create(
@@ -1467,8 +1467,8 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
     return success();
 
   // Create a new instance with the property ports removed.
-  OpBuilder builder(firrtlInstance);
-  InstanceOp newInstance = firrtlInstance.erasePorts(builder, portsToErase);
+  InstanceOp newInstance =
+      firrtlInstance.cloneWithErasedPortsAndReplaceUses(portsToErase);
 
   // Replace the instance in the instance graph. This is called from multiple
   // threads, but because the instance graph data structure is not mutated, and
@@ -1580,7 +1580,11 @@ void LowerClassesPass::createAllRtlPorts(
                    builder);
 }
 
-// Pattern rewriters for dialect conversion.
+//===----------------------------------------------------------------------===//
+// Conversion Patterns
+//===----------------------------------------------------------------------===//
+
+namespace {
 
 struct FIntegerConstantOpConversion
     : public OpConversionPattern<FIntegerConstantOp> {
@@ -1837,6 +1841,8 @@ struct WireOpConversion : public OpConversionPattern<WireOp> {
 
     // Find the assignment to the wire.
     PropAssignOp propAssign = getPropertyAssignment(wireValue);
+    if (!propAssign)
+      return failure();
 
     // Use the source of the assignment instead of the wire.
     rewriter.replaceOp(wireOp, propAssign.getSrc());
@@ -1994,7 +2000,29 @@ struct ObjectFieldOpConversion : public OpConversionPattern<ObjectFieldOp> {
   }
 };
 
-// Helpers for dialect conversion setup.
+/// Replace OM-to-FIRRTL casts with the OM value.
+struct UnrealizedConversionCastOpConversion
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+      return failure();
+    auto type = typeConverter->convertType(op.getResult(0));
+    if (!type || type != adaptor.getOperands()[0].getType())
+      return failure();
+    rewriter.replaceOp(op, adaptor.getOperands()[0]);
+    return success();
+  }
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Conversion Setup
+//===----------------------------------------------------------------------===//
 
 static void populateConversionTarget(ConversionTarget &target) {
   // FIRRTL dialect operations inside ClassOps or not using only OM types must
@@ -2156,6 +2184,8 @@ static void populateRewritePatterns(
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
+  patterns.add<UnrealizedConversionCastOpConversion>(converter,
+                                                     patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.

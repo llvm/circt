@@ -24,10 +24,8 @@ using namespace mlir;
 using namespace llhd;
 
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
-  if (auto sig = dyn_cast<hw::InOutType>(type))
-    type = sig.getElementType();
-  else if (auto ptr = dyn_cast<llhd::PtrType>(type))
-    type = ptr.getElementType();
+  if (auto sig = dyn_cast<RefType>(type))
+    type = sig.getNestedType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
   if (auto tup = dyn_cast<hw::StructType>(type))
@@ -36,10 +34,8 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 }
 
 Type circt::llhd::getLLHDElementType(Type type) {
-  if (auto sig = dyn_cast<hw::InOutType>(type))
-    type = sig.getElementType();
-  else if (auto ptr = dyn_cast<llhd::PtrType>(type))
-    type = ptr.getElementType();
+  if (auto sig = dyn_cast<RefType>(type))
+    type = sig.getNestedType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
   return type;
@@ -88,7 +84,7 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 SmallVector<DestructurableMemorySlot> SignalOp::getDestructurableSlots() {
-  auto type = getType().getElementType();
+  auto type = getType().getNestedType();
 
   auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(type);
   if (!destructurable)
@@ -109,7 +105,7 @@ DenseMap<Attribute, MemorySlot> SignalOp::destructure(
   builder.setInsertionPointAfter(*this);
 
   auto destructurableType =
-      cast<DestructurableTypeInterface>(getType().getElementType());
+      cast<DestructurableTypeInterface>(getType().getNestedType());
   DenseMap<Attribute, MemorySlot> slotMap;
   SmallVector<std::pair<unsigned, Type>> indices;
   for (auto attr : usedIndices) {
@@ -142,7 +138,7 @@ SignalOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
-// SigExtractOp and PtrExtractOp
+// SigExtractOp
 //===----------------------------------------------------------------------===//
 
 template <class Op>
@@ -163,34 +159,20 @@ OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
   return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrExtractOp::fold(FoldAdaptor adaptor) {
-  return foldSigPtrExtractOp(*this, adaptor.getOperands());
-}
-
 //===----------------------------------------------------------------------===//
-// SigArraySliceOp and PtrArraySliceOp
+// SigArraySliceOp
 //===----------------------------------------------------------------------===//
-
-template <class Op>
-static OpFoldResult foldSigPtrArraySliceOp(Op op,
-                                           ArrayRef<Attribute> operands) {
-  if (!operands[1])
-    return nullptr;
-
-  // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
-  if (op.getResultWidth() == op.getInputWidth() &&
-      cast<IntegerAttr>(operands[1]).getValue().isZero())
-    return op.getInput();
-
-  return nullptr;
-}
 
 OpFoldResult llhd::SigArraySliceOp::fold(FoldAdaptor adaptor) {
-  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
-}
+  auto lowIndex = dyn_cast_or_null<IntegerAttr>(adaptor.getLowIndex());
+  if (!lowIndex)
+    return {};
 
-OpFoldResult llhd::PtrArraySliceOp::fold(FoldAdaptor adaptor) {
-  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
+  // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
+  if (getResultWidth() == getInputWidth() && lowIndex.getValue().isZero())
+    return getInput();
+
+  return {};
 }
 
 template <class Op>
@@ -224,11 +206,6 @@ LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
   return canonicalizeSigPtrArraySliceOp(op, rewriter);
 }
 
-LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
-                                                  PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArraySliceOp(op, rewriter);
-}
-
 //===----------------------------------------------------------------------===//
 // SigArrayGetOp
 //===----------------------------------------------------------------------===//
@@ -248,8 +225,7 @@ bool SigArrayGetOp::canRewire(const DestructurableMemorySlot &slot,
     return false;
   usedIndices.insert(index);
   mustBeSafelyUsed.emplace_back<MemorySlot>(
-      {getResult(),
-       cast<hw::InOutType>(getResult().getType()).getElementType()});
+      {getResult(), cast<RefType>(getResult().getType()).getNestedType()});
   return true;
 }
 
@@ -276,45 +252,26 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
 }
 
 //===----------------------------------------------------------------------===//
-// SigStructExtractOp and PtrStructExtractOp
+// SigStructExtractOp
 //===----------------------------------------------------------------------===//
 
-template <class OpType, class SigPtrType>
-static LogicalResult inferReturnTypesOfStructExtractOp(
+LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  typename OpType::Adaptor adaptor(operands, attrs, properties, regions);
-  Type type =
-      cast<hw::StructType>(
-          cast<SigPtrType>(adaptor.getInput().getType()).getElementType())
-          .getFieldType(adaptor.getField());
+  typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
+                                               regions);
+  Type type = cast<hw::StructType>(
+                  cast<RefType>(adaptor.getInput().getType()).getNestedType())
+                  .getFieldType(adaptor.getField());
   if (!type) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(SigPtrType::get(type));
+  results.push_back(RefType::get(type));
   return success();
-}
-
-LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::SigStructExtractOp,
-                                           hw::InOutType>(
-      context, loc, operands, attrs, properties, regions, results);
-}
-
-LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::PtrStructExtractOp,
-                                           llhd::PtrType>(
-      context, loc, operands, attrs, properties, regions, results);
 }
 
 bool SigStructExtractOp::canRewire(
@@ -324,9 +281,9 @@ bool SigStructExtractOp::canRewire(
     const DataLayout &dataLayout) {
   if (slot.ptr != getInput())
     return false;
-  auto index = cast<hw::StructType>(
-                   cast<hw::InOutType>(getInput().getType()).getElementType())
-                   .getFieldIndex(getFieldAttr());
+  auto index =
+      cast<hw::StructType>(cast<RefType>(getInput().getType()).getNestedType())
+          .getFieldIndex(getFieldAttr());
   if (!index)
     return false;
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
@@ -334,8 +291,7 @@ bool SigStructExtractOp::canRewire(
     return false;
   usedIndices.insert(indexAttr);
   mustBeSafelyUsed.emplace_back<MemorySlot>(
-      {getResult(),
-       cast<hw::InOutType>(getResult().getType()).getElementType()});
+      {getResult(), cast<RefType>(getResult().getType()).getNestedType()});
   return true;
 }
 
@@ -343,9 +299,9 @@ DeletionKind
 SigStructExtractOp::rewire(const DestructurableMemorySlot &slot,
                            DenseMap<Attribute, MemorySlot> &subslots,
                            OpBuilder &builder, const DataLayout &dataLayout) {
-  auto index = cast<hw::StructType>(
-                   cast<hw::InOutType>(getInput().getType()).getElementType())
-                   .getFieldIndex(getFieldAttr());
+  auto index =
+      cast<hw::StructType>(cast<RefType>(getInput().getType()).getNestedType())
+          .getFieldIndex(getFieldAttr());
   assert(index.has_value());
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
   auto it = subslots.find(indexAttr);
@@ -361,7 +317,7 @@ LogicalResult SigStructExtractOp::ensureOnlySafeAccesses(
 }
 
 //===----------------------------------------------------------------------===//
-// PrbOp
+// ProbeOp
 //===----------------------------------------------------------------------===//
 
 static void getSortedPtrs(DenseMap<Attribute, MemorySlot> &subslots,
@@ -374,24 +330,24 @@ static void getSortedPtrs(DenseMap<Attribute, MemorySlot> &subslots,
   llvm::sort(sorted, [](auto a, auto b) { return a.first < b.first; });
 }
 
-bool PrbOp::canRewire(const DestructurableMemorySlot &slot,
-                      SmallPtrSetImpl<Attribute> &usedIndices,
-                      SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                      const DataLayout &dataLayout) {
+bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
+                        SmallPtrSetImpl<Attribute> &usedIndices,
+                        SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                        const DataLayout &dataLayout) {
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
   return isa<hw::StructType, hw::ArrayType>(slot.elemType);
 }
 
-DeletionKind PrbOp::rewire(const DestructurableMemorySlot &slot,
-                           DenseMap<Attribute, MemorySlot> &subslots,
-                           OpBuilder &builder, const DataLayout &dataLayout) {
+DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
+                             DenseMap<Attribute, MemorySlot> &subslots,
+                             OpBuilder &builder, const DataLayout &dataLayout) {
   SmallVector<std::pair<unsigned, Value>> elements;
   SmallVector<Value> probed;
   getSortedPtrs(subslots, elements);
   for (auto [_, val] : elements)
-    probed.push_back(PrbOp::create(builder, getLoc(), val));
+    probed.push_back(ProbeOp::create(builder, getLoc(), val));
 
   Value repl =
       TypeSwitch<Type, Value>(getType())
@@ -408,13 +364,13 @@ DeletionKind PrbOp::rewire(const DestructurableMemorySlot &slot,
 }
 
 LogicalResult
-PrbOp::ensureOnlySafeAccesses(const MemorySlot &slot,
-                              SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                              const DataLayout &dataLayout) {
+ProbeOp::ensureOnlySafeAccesses(const MemorySlot &slot,
+                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                const DataLayout &dataLayout) {
   return success();
 }
 
-void PrbOp::getEffects(
+void ProbeOp::getEffects(
     SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
         &effects) {
   if (mayHaveSSADominance(*getOperation()->getParentRegion()))
@@ -422,11 +378,11 @@ void PrbOp::getEffects(
 }
 
 //===----------------------------------------------------------------------===//
-// DrvOp
+// DriveOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::DrvOp::fold(FoldAdaptor adaptor,
-                                SmallVectorImpl<OpFoldResult> &result) {
+LogicalResult llhd::DriveOp::fold(FoldAdaptor adaptor,
+                                  SmallVectorImpl<OpFoldResult> &result) {
   if (!getEnable())
     return failure();
 
@@ -438,8 +394,8 @@ LogicalResult llhd::DrvOp::fold(FoldAdaptor adaptor,
   return failure();
 }
 
-LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
-                                        PatternRewriter &rewriter) {
+LogicalResult llhd::DriveOp::canonicalize(llhd::DriveOp op,
+                                          PatternRewriter &rewriter) {
   if (!op.getEnable())
     return failure();
 
@@ -451,34 +407,34 @@ LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
   return failure();
 }
 
-bool DrvOp::canRewire(const DestructurableMemorySlot &slot,
-                      SmallPtrSetImpl<Attribute> &usedIndices,
-                      SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                      const DataLayout &dataLayout) {
+bool DriveOp::canRewire(const DestructurableMemorySlot &slot,
+                        SmallPtrSetImpl<Attribute> &usedIndices,
+                        SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                        const DataLayout &dataLayout) {
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
   return isa<hw::StructType, hw::ArrayType>(slot.elemType);
 }
 
-DeletionKind DrvOp::rewire(const DestructurableMemorySlot &slot,
-                           DenseMap<Attribute, MemorySlot> &subslots,
-                           OpBuilder &builder, const DataLayout &dataLayout) {
+DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,
+                             DenseMap<Attribute, MemorySlot> &subslots,
+                             OpBuilder &builder, const DataLayout &dataLayout) {
   SmallVector<std::pair<unsigned, Value>> driven;
   getSortedPtrs(subslots, driven);
 
   for (auto [idx, sig] : driven)
-    DrvOp::create(builder, getLoc(), sig,
-                  getValueAtIndex(builder, getLoc(), getValue(), idx),
-                  getTime(), getEnable());
+    DriveOp::create(builder, getLoc(), sig,
+                    getValueAtIndex(builder, getLoc(), getValue(), idx),
+                    getTime(), getEnable());
 
   return DeletionKind::Delete;
 }
 
 LogicalResult
-DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
-                              SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                              const DataLayout &dataLayout) {
+DriveOp::ensureOnlySafeAccesses(const MemorySlot &slot,
+                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                const DataLayout &dataLayout) {
   return success();
 }
 
@@ -487,11 +443,85 @@ DrvOp::ensureOnlySafeAccesses(const MemorySlot &slot,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
-  if (op.getBody().hasOneBlock() && op.getNumResults() == 0) {
-    auto &block = op.getBody().front();
-    if (block.getOperations().size() == 1 && isa<HaltOp>(block.getTerminator()))
-      rewriter.eraseOp(op);
+  if (!op.getBody().hasOneBlock())
+    return failure();
+
+  auto &block = op.getBody().front();
+  auto haltOp = dyn_cast<HaltOp>(block.getTerminator());
+  if (!haltOp)
+    return failure();
+
+  if (op.getNumResults() == 0 && block.getOperations().size() == 1) {
+    rewriter.eraseOp(op);
+    return success();
   }
+
+  // Only constants and halt terminator are expected in a single block.
+  if (!llvm::all_of(block.without_terminator(), [](auto &bodyOp) {
+        return bodyOp.template hasTrait<OpTrait::ConstantLike>();
+      }))
+    return failure();
+
+  auto yieldOperands = haltOp.getYieldOperands();
+  llvm::SmallDenseMap<Value, unsigned> uniqueOperands;
+  llvm::SmallDenseMap<unsigned, unsigned> origToNewPos;
+  llvm::BitVector operandsToErase(yieldOperands.size());
+
+  for (auto [operandNo, operand] : llvm::enumerate(yieldOperands)) {
+    auto *defOp = operand.getDefiningOp();
+    if (defOp && defOp->hasTrait<OpTrait::ConstantLike>()) {
+      // If the constant is available outside the process, use it directly;
+      // otherwise move it outside.
+      if (!defOp->getParentRegion()->isProperAncestor(&op.getBody())) {
+        defOp->moveBefore(op);
+      }
+      rewriter.replaceAllUsesWith(op.getResult(operandNo), operand);
+      operandsToErase.set(operandNo);
+      continue;
+    }
+
+    // Identify duplicate operands to merge and compute updated result
+    // positions for the process operation.
+    if (!uniqueOperands.contains(operand)) {
+      const auto newPos = uniqueOperands.size();
+      uniqueOperands.insert(std::make_pair(operand, newPos));
+      origToNewPos.insert(std::make_pair(operandNo, newPos));
+    } else {
+      auto firstOccurrencePos = uniqueOperands.lookup(operand);
+      origToNewPos.insert(std::make_pair(operandNo, firstOccurrencePos));
+      operandsToErase.set(operandNo);
+    }
+  }
+
+  const auto countOperandsToErase = operandsToErase.count();
+  if (countOperandsToErase == 0)
+    return failure();
+
+  // Remove the process operation if all its results have been replaced with
+  // constants.
+  if (countOperandsToErase == op.getNumResults()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  rewriter.modifyOpInPlace(haltOp,
+                           [&] { haltOp->eraseOperands(operandsToErase); });
+
+  SmallVector<Type> resultTypes = llvm::to_vector(haltOp->getOperandTypes());
+  auto newProcessOp = ProcessOp::create(rewriter, op.getLoc(), resultTypes,
+                                        op->getOperands(), op->getAttrs());
+  newProcessOp.getBody().takeBody(op.getBody());
+
+  // Update old results with new values, accounting for pruned halt operands.
+  for (auto oldResult : op.getResults()) {
+    auto newResultPos = origToNewPos.find(oldResult.getResultNumber());
+    if (newResultPos == origToNewPos.end())
+      continue;
+    auto newResult = newProcessOp.getResult(newResultPos->getSecond());
+    rewriter.replaceAllUsesWith(oldResult, newResult);
+  }
+
+  rewriter.eraseOp(op);
   return success();
 }
 

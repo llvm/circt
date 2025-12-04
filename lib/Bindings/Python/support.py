@@ -99,6 +99,8 @@ def type_to_pytype(t) -> ir.Type:
     return hw.ArrayType(t)
   if hw.StructType.isinstance(t):
     return hw.StructType(t)
+  if hw.UnionType.isinstance(t):
+    return hw.UnionType(t)
   if hw.TypeAliasType.isinstance(t):
     return hw.TypeAliasType(t)
   if hw.InOutType.isinstance(t):
@@ -111,6 +113,14 @@ def type_to_pytype(t) -> ir.Type:
     return esi.AnyType(t)
   if esi.BundleType.isinstance(t):
     return esi.BundleType(t)
+  if esi.ListType.isinstance(t):
+    return esi.ListType(t)
+  if esi.WindowType.isinstance(t):
+    return esi.WindowType(t)
+  if esi.WindowFrameType.isinstance(t):
+    return esi.WindowFrameType(t)
+  if esi.WindowFieldType.isinstance(t):
+    return esi.WindowFieldType(t)
   if rtg.LabelType.isinstance(t):
     return rtg.LabelType(t)
   if rtg.SetType.isinstance(t):

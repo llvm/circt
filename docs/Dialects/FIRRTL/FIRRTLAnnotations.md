@@ -305,6 +305,38 @@ Example:
 }
 ```
 
+### VerbatimBlackBoxAnno
+
+| Property   | Type   | Description                          |
+| ---------- | ------ | -------------                        |
+| class      | string | `circt.VerbatimBlackBoxAnno`         |
+| target     | string | An ExtModule name target             |
+| files      | array  | Array of file objects                |
+
+Specifies verbatim black box source code with one or more files. Each file
+object in the `files` array contains:
+
+- `content`: The literal source code content
+- `output_file`: Path to the output file
+
+This annotation is used internally by CIRCT to represent partially lowered
+FIRRTL extmodules with verbatim content.
+
+Example:
+
+```json
+{
+  "class": "circt.VerbatimBlackBoxAnno",
+  "target": "~Foo|MyBlackBox",
+  "files": [
+    {
+      "content": "module MyBlackBox(\n  input clk,\n  output out\n);\n  assign out = clk;\nendmodule",
+      "output_file": "blackbox.v"
+    }
+  ]
+}
+```
+
 ### Convention
 
 | Property   | Type   | Description                             |
@@ -1259,85 +1291,6 @@ This will produce the following YAML representation:
   instances: []
 ```
 
-### Data Taps
-
-Grand Central Taps are a tool for representing cross module references. They
-enable users to "tap" into signal anywhere in the module hierarchy and treat
-them as local, read-only signals.
-
-`DataTaps` annotations are used to fill in the body of a FIRRTL external module
-with cross-module references to other modules.  Each `DataTapKey` corresponds
-to one output port on the `DataTapsAnnotation` external module.
-
-#### ReferenceDataTapKey
-
-| Property    | Type     | Description                                          |
-| ----------- | -------- | ------------------                                   |
-| class       | string   | `sifive.enterprise.grandcentral.ReferenceDataTapKey` |
-| source      | string   | Reference target of the source signal.               |
-| portName    | string   | Reference target of the data tap black box port      |
-
-This key allows tapping a target in FIRRTL.
-
-#### DataTapModuleSignalKey
-
-| Property     | Type     | Description                                           |
-| -----------  | -------- | ------------------                                    |
-| class        | string   | sifive.enterprise.grandcentral.DataTapModuleSignalKey |
-| module       | string   | ExtModule name of the target black box                |
-| internalPath | string   | The path within the module                            |
-| portName     | string   | Reference target of the data tap black box port       |
-
-This key allows tapping a point by name in a blackbox.
-
-#### LiteralDataTapKey
-
-| Property    | Type     | Description                                      |
-| ----------- | -------- | ------------------                               |
-| class       | string   | sifive.enterprise.grandcentral.LiteralDataTapKey |
-| literal     | string   | FIRRTL constant literal                          |
-| portName    | string   | Reference target of the data tap black box port  |
-
-This key allows the creation of a FIRRTL literal.
-
-#### DataTapsAnnotation
-
-| Property    | Type     | Description                                                       |
-| ----------- | -------- | ------------------                                                |
-| class       | string   | sifive.enterprise.grandcentral.DataTapsAnnotation                 |
-| blackbox    | string   | ExtModule name of the black box with ports referenced by the keys |
-| keys        | array    | List of DataTapKeys                                               |
-
-The `DataTapsAnnotation` is a collection of all the data taps in a circuit.
-This will cause a data tap module to be emitted.  The `DataTapsAnnotation`
-implies `DontTouchAnnotation` on any `ReferenceDataTapKey.source` target.
-
-Example:
-
-```json
-{
-  "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
-  "blackBox": "~GCTDataTap|DataTap",
-  "keys": [
-    {
-      "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      "source": "~GCTDataTap|GCTDataTap>r",
-      "portName": "~GCTDataTap|DataTap>_0"
-    },
-    {
-      "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
-      "module":"~GCTDataTap|BlackBox",
-      "internalPath":"baz.qux",
-      "portName":"~GCTDataTap|DataTap>_1"
-    },
-    {
-      "class":"sifive.enterprise.grandcentral.LiteralDataTapKey",
-      "literal":"UInt<16>(\"h2a\")",
-      "portName":"~GCTDataTap|DataTap>_3"
-    }
-  ]
-}
-```
 
 ### Memory Taps
 

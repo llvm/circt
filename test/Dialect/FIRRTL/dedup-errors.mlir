@@ -681,3 +681,28 @@ firrtl.circuit "VisibilityDoesNotBlockDedup" attributes {annotations = [{
     firrtl.instance test1 @Test1()
   }
 }
+
+// -----
+// When reporting on a dedup failure, use `data.map.lookup()` on the correct
+// copy of the target operation. This used to trigger an assertion failure when
+// comparing the rwprobes even though the dedup failure was a trivial mismatch
+// in the number of operations.
+// See https://github.com/llvm/circt/issues/9102
+
+// expected-error @below {{module "Bar" not deduplicated with "Foo"}}
+firrtl.circuit "Foo" attributes {annotations = [{
+  class = "firrtl.transforms.MustDeduplicateAnnotation",
+  modules = ["~Foo|Foo", "~Foo|Bar"]
+}]} {
+  // expected-note @below {{first block here}}
+  firrtl.module @Foo() {
+    %0 = firrtl.wire sym @sym : !firrtl.uint<42>
+    %1 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<42>>
+  }
+  firrtl.module private @Bar() {
+    %0 = firrtl.wire sym @sym : !firrtl.uint<42>
+    %1 = firrtl.ref.rwprobe <@Bar::@sym> : !firrtl.rwprobe<uint<42>>
+    // expected-note @below {{second block has more operations}}
+    %2 = firrtl.wire : !firrtl.uint<42>
+  }
+}

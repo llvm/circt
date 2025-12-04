@@ -1,7 +1,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s --hw-aggregate-to-comb --convert-comb-to-aig --convert-aig-to-comb -o %t.mlir
+// RUN: circt-opt %s --hw-aggregate-to-comb --convert-comb-to-synth --convert-synth-to-comb -o %t.mlir
 // RUN: circt-lec %t.mlir %s -c1=add16 -c2=add16 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ADD_16
 // COMB_ADD_16: c1 == c2
 hw.module @add16(in %arg0: i16, in %arg1: i16, in %arg2: i16,  out add: i16) {

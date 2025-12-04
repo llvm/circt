@@ -123,6 +123,10 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       emitVerilogLocations = true;
     } else if (option == "fixUpEmptyModules") {
       fixUpEmptyModules = true;
+    } else if (option == "disallowClockedAssertions") {
+      disallowClockedAssertions = true;
+    } else if (option == "disallowDeclAssignments") {
+      disallowDeclAssignments = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -184,6 +188,10 @@ std::string LoweringOptions::toString() const {
     options += "emitVerilogLocations,";
   if (fixUpEmptyModules)
     options += "fixUpEmptyModules,";
+  if (disallowClockedAssertions)
+    options += "disallowClockedAssertions,";
+  if (disallowDeclAssignments)
+    options += "disallowDeclAssignments,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {

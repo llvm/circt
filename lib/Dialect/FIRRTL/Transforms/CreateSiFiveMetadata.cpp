@@ -497,7 +497,7 @@ struct ObjectModelIR {
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[3] = {"moduleName", "inDut", "libraries"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
-}; // namespace
+};
 
 class CreateSiFiveMetadataPass
     : public circt::firrtl::impl::CreateSiFiveMetadataBase<
@@ -525,7 +525,7 @@ public:
     this->replSeqMemFile = replSeqMemFile.str();
   }
 };
-} // end anonymous namespace
+} // namespace
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
@@ -836,9 +836,11 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
   // Any extmodule with these annotations should be excluded from the blackbox
   // list if it doesn't declare any additional libraries.
-  std::array<StringRef, 6> blackListedAnnos = {
-      blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
-      dataTapsBlackboxClass, memTapBlackboxClass};
+  std::array<StringRef, 3> blackListedAnnos = {
+      blackBoxAnnoClass,
+      blackBoxInlineAnnoClass,
+      blackBoxPathAnnoClass,
+  };
 
   auto *context = &getContext();
 

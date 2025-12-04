@@ -141,9 +141,9 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
 }
 
 void RegisterOptimizerPass::runOnOperation() {
-  auto mod = getOperation();
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
+  auto mod = getOperation();
   SmallVector<Operation *> toErase;
   mlir::DominanceInfo dom(mod);
 

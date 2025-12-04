@@ -107,6 +107,8 @@ To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
 you want debug info to go with it.  `Release` mode makes a very large difference
 in performance.
 
+To use the verilog frontend add `-DCIRCT_SLANG_FRONTEND_ENABLED=ON`.
+
 If you plan to use the Python bindings, you should also specify
 `-DCIRCT_BINDINGS_PYTHON_ENABLED=ON`.
 

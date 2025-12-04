@@ -51,6 +51,52 @@ def AnyContextAttr : RTGAttrDef<"AnyContext", [
   let assemblyFormat = "";
 }
 
+// The accessor type is a pointer instead of a reference because references
+// cannot be reassigned (in the attribute 'construct' function).
+class DenseSetParameter<string setOf, string desc = "">
+    : AttrOrTypeParameter<"const ::llvm::DenseSet<" # setOf # "> *", desc> {
+  let allocator = [{
+    $_dst = new ($_allocator.allocate<DenseSet<}] # setOf # [{>>())
+      DenseSet<}] # setOf # [{>($_self->begin(), $_self->end());
+  }];
+  let cppStorageType = "::llvm::DenseSet<" # setOf # ">";
+}
+
+def SetAttr : RTGAttrDef<"Set", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an unordered set of elements";
+
+  let parameters = (ins
+      AttributeSelfTypeParameter<"", "rtg::SetType">:$type,
+      DenseSetParameter<"TypedAttr", "elements">:$elements);
+
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "rtg::SetType":$type,
+           "const ::llvm::DenseSet<::mlir::TypedAttr> *":$elements), [{
+      return $_get(type.getContext(), type, elements);
+    }]>
+  ];
+
+  let mnemonic = "set";
+  let hasCustomAssemblyFormat = true;
+
+  let genVerifyDecl = true;
+}
+
+def TupleAttr : RTGAttrDef<"Tuple", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "a tuple";
+
+  let parameters =
+      (ins ArrayRefParameter<"::mlir::TypedAttr", "elements">:$elements);
+
+  let mnemonic = "tuple";
+  let assemblyFormat = "`<` $elements `>`";
+}
+
 //===----------------------------------------------------------------------===//
 // Attributes for ISA targets
 //===----------------------------------------------------------------------===//
@@ -71,6 +117,20 @@ def ImmediateAttr : RTGISAAttrDef<"Immediate", [
 
   let hasCustomAssemblyFormat = true;
   let genStorageClass = false;
+}
+
+def VirtualRegisterConfigAttr : RTGISAAttrDef<"VirtualRegisterConfig", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an allowed register configuration for a virtual register";
+
+  let parameters = (ins ArrayRefParameter<"rtg::RegisterAttrInterface",
+                                          "allowed registers">:$allowedRegs);
+
+  let mnemonic = "virtual_register_config";
+  let assemblyFormat = "`[` $allowedRegs `]`";
+
+  let genVerifyDecl = true;
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD

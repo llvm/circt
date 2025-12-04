@@ -20,7 +20,6 @@
 #include <sstream>
 
 using namespace ::esi;
-using ServiceTable = AcceleratorConnection::ServiceTable;
 
 // This is a proxy class to the manifest JSON. It is used to avoid having to
 // include the JSON parser in the header. Forward references don't work since
@@ -575,6 +574,31 @@ ArrayType *parseArray(const nlohmann::json &typeJson, Context &cache) {
                        parseType(typeJson.at("element"), cache), size);
 }
 
+WindowType *parseWindow(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "window");
+  std::string name = typeJson.at("name");
+  const Type *intoType = parseType(typeJson.at("into"), cache);
+  const Type *loweredType = parseType(typeJson.at("loweredType"), cache);
+
+  // Parse the frames information.
+  std::vector<WindowType::Frame> frames;
+  for (auto &frameJson : typeJson.at("frames")) {
+    WindowType::Frame frame;
+    frame.name = frameJson.at("name");
+    for (auto &fieldName : frameJson.at("fields"))
+      frame.fields.push_back(fieldName.at("name"));
+    frames.push_back(frame);
+  }
+
+  return new WindowType(typeJson.at("id"), name, intoType, loweredType, frames);
+}
+
+ListType *parseList(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "list");
+  return new ListType(typeJson.at("id"),
+                      parseType(typeJson.at("element"), cache));
+}
+
 using TypeParser = std::function<Type *(const nlohmann::json &, Context &)>;
 const std::map<std::string_view, TypeParser> typeParsers = {
     {"bundle", parseBundleType},
@@ -584,6 +608,8 @@ const std::map<std::string_view, TypeParser> typeParsers = {
     {"int", parseInt},
     {"struct", parseStruct},
     {"array", parseArray},
+    {"window", parseWindow},
+    {"list", parseList},
 
 };
 
@@ -665,7 +691,7 @@ const std::vector<const Type *> &Manifest::getTypeTable() const {
 // Print a module info, including the extra metadata.
 std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   auto printAny = [&os](std::any a) {
-    if (auto *c = std::any_cast<Constant>(&a))
+    if (std::any_cast<Constant>(&a))
       a = std::any_cast<Constant>(a).value;
 
     const std::type_info &t = a.type();
@@ -756,7 +782,6 @@ bool operator<(const AppIDPath &a, const AppIDPath &b) {
       return a[i] < b[i];
   return false;
 }
-} // namespace esi
 
 std::ostream &operator<<(std::ostream &os, const AppID &id) {
   os << id.name;
@@ -772,3 +797,5 @@ std::ostream &operator<<(std::ostream &os, const AppIDPath &path) {
   }
   return os;
 }
+
+} // namespace esi

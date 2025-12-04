@@ -26,31 +26,31 @@ hw.module @basic(in %init : i32, in %cond : i1, in %in0 : i32, in %in1 : i32, ou
   // Not promoted because of multiple drivers
   %sig7 = llhd.sig %init : i32
 
-  llhd.drv %sig1, %in0 after %epsilon : !hw.inout<i32>
+  llhd.drv %sig1, %in0 after %epsilon : i32
   // CHECK: [[DELAY:%.+]] = llhd.delay %in0 by <0ns, 1d, 0e> : i32
-  llhd.drv %sig2, %in0 after %delta : !hw.inout<i32>
-  llhd.drv %sig3, %in0 after %opaque_time : !hw.inout<i32>
+  llhd.drv %sig2, %in0 after %delta : i32
+  llhd.drv %sig3, %in0 after %opaque_time : i32
 
-  llhd.drv %sig5, %in0 after %epsilon if %cond : !hw.inout<i32>
+  llhd.drv %sig5, %in0 after %epsilon if %cond : i32
 
   scf.if %cond {
-    llhd.drv %sig6, %in0 after %epsilon : !hw.inout<i32>
+    llhd.drv %sig6, %in0 after %epsilon : i32
   }
   
-  llhd.drv %sig7, %in0 after %epsilon : !hw.inout<i32>
-  llhd.drv %sig7, %in1 after %delta : !hw.inout<i32>
+  llhd.drv %sig7, %in0 after %epsilon : i32
+  llhd.drv %sig7, %in1 after %delta : i32
 
-  %prb1 = llhd.prb %sig1 : !hw.inout<i32>
-  %prb2 = llhd.prb %sig2 : !hw.inout<i32>
+  %prb1 = llhd.prb %sig1 : i32
+  %prb2 = llhd.prb %sig2 : i32
   // CHECK: [[PRB3:%.+]] = llhd.prb %sig3
-  %prb3 = llhd.prb %sig3 : !hw.inout<i32>
-  %prb4 = llhd.prb %sig4 : !hw.inout<i32>
+  %prb3 = llhd.prb %sig3 : i32
+  %prb4 = llhd.prb %sig4 : i32
   // CHECK: [[PRB5:%.+]] = llhd.prb %sig5
-  %prb5 = llhd.prb %sig5 : !hw.inout<i32>
+  %prb5 = llhd.prb %sig5 : i32
   // CHECK: [[PRB6:%.+]] = llhd.prb %sig6
-  %prb6 = llhd.prb %sig6 : !hw.inout<i32>
+  %prb6 = llhd.prb %sig6 : i32
   // CHECK: [[PRB7:%.+]] = llhd.prb %sig7
-  %prb7 = llhd.prb %sig7 : !hw.inout<i32>
+  %prb7 = llhd.prb %sig7 : i32
 
   // CHECK: hw.output %in0, [[DELAY]], [[PRB3]], %init, [[PRB5]], [[PRB6]], [[PRB7]] :
   hw.output %prb1, %prb2, %prb3, %prb4, %prb5, %prb6, %prb7 : i32, i32, i32, i32, i32, i32, i32
@@ -82,14 +82,14 @@ hw.module @aliasStatic(in %init : i4, in %in0 : i1, in %in1 : i1, out out: i4) {
   %c0_c2 = hw.constant 0 : i2
   %false = hw.constant false
   %out = llhd.sig %init : i4
-  %3 = llhd.sig.extract %out from %c1_c2 : (!hw.inout<i4>) -> !hw.inout<i2>
-  %6 = llhd.sig.extract %3 from %false : (!hw.inout<i2>) -> !hw.inout<i1>
-  %7 = llhd.sig.extract %3 from %true : (!hw.inout<i2>) -> !hw.inout<i1>
-  llhd.drv %6, %in0 after %0 : !hw.inout<i1>
-  llhd.drv %7, %in1 after %0 : !hw.inout<i1>
-  %4 = llhd.sig.extract %out from %c0_c2 : (!hw.inout<i4>) -> !hw.inout<i1>
-  llhd.drv %4, %in1 after %0 : !hw.inout<i1>
-  %5 = llhd.prb %out : !hw.inout<i4>
+  %3 = llhd.sig.extract %out from %c1_c2 : <i4> -> <i2>
+  %6 = llhd.sig.extract %3 from %false : <i2> -> <i1>
+  %7 = llhd.sig.extract %3 from %true : <i2> -> <i1>
+  llhd.drv %6, %in0 after %0 : i1
+  llhd.drv %7, %in1 after %0 : i1
+  %4 = llhd.sig.extract %out from %c0_c2 : <i4> -> <i1>
+  llhd.drv %4, %in1 after %0 : i1
+  %5 = llhd.prb %out : i4
   hw.output %5 : i4
 }
 
@@ -124,14 +124,14 @@ hw.module @aliasDynamicSuccess(in %init : i8, in %in0 : i1, in %in1 : i1, in %id
   %c4_c3 = hw.constant 4 : i3
   %c0_c3 = hw.constant 0 : i3
   %out = llhd.sig %init : i8
-  %3 = llhd.sig.extract %out from %c0_c3 : (!hw.inout<i8>) -> !hw.inout<i4>
-  %4 = llhd.sig.extract %out from %c4_c3 : (!hw.inout<i8>) -> !hw.inout<i4>
-  %5 = llhd.sig.extract %3 from %idx0 : (!hw.inout<i4>) -> !hw.inout<i2>
-  %6 = llhd.sig.extract %5 from %idx1 : (!hw.inout<i2>) -> !hw.inout<i1>
-  %7 = llhd.sig.extract %4 from %idx0 : (!hw.inout<i4>) -> !hw.inout<i1>
-  llhd.drv %6, %in0 after %0 : !hw.inout<i1>
-  llhd.drv %7, %in1 after %0 : !hw.inout<i1>
-  %8 = llhd.prb %out : !hw.inout<i8>
+  %3 = llhd.sig.extract %out from %c0_c3 : <i8> -> <i4>
+  %4 = llhd.sig.extract %out from %c4_c3 : <i8> -> <i4>
+  %5 = llhd.sig.extract %3 from %idx0 : <i4> -> <i2>
+  %6 = llhd.sig.extract %5 from %idx1 : <i2> -> <i1>
+  %7 = llhd.sig.extract %4 from %idx0 : <i4> -> <i1>
+  llhd.drv %6, %in0 after %0 : i1
+  llhd.drv %7, %in1 after %0 : i1
+  %8 = llhd.prb %out : i8
   hw.output %8 : i8
 }
 
@@ -141,30 +141,30 @@ hw.module @aliasDynamicFailure(in %init : i4, in %in0 : i1, in %in1 : i1, in %id
   // CHECK-NEXT: [[C_2_I2:%.+]] = hw.constant -2 : i2
   // CHECK-NEXT: [[C0_I2:%.+]] = hw.constant 0 : i2
   // CHECK-NEXT: [[OUT:%.+]] = llhd.sig %init : i4
-  // CHECK-NEXT: [[V1:%.+]] = llhd.sig.extract [[OUT]] from [[C0_I2]] : (!hw.inout<i4>) -> !hw.inout<i2>
-  // CHECK-NEXT: [[V2:%.+]] = llhd.sig.extract [[OUT]] from [[C_2_I2]] : (!hw.inout<i4>) -> !hw.inout<i2>
-  // CHECK-NEXT: [[V3:%.+]] = llhd.sig.extract [[V1]] from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
-  // CHECK-NEXT: [[V4:%.+]] = llhd.sig.extract [[V2]] from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
-  // CHECK-NEXT: [[V5:%.+]] = llhd.sig.extract [[V2]] from %idx1 : (!hw.inout<i2>) -> !hw.inout<i1>
-  // CHECK-NEXT: llhd.drv [[V3]], %in0 after [[TIME]] : !hw.inout<i1>
-  // CHECK-NEXT: llhd.drv [[V4]], %in1 after [[TIME]] : !hw.inout<i1>
-  // CHECK-NEXT: llhd.drv [[V5]], %in0 after [[TIME]] : !hw.inout<i1>
-  // CHECK-NEXT: [[V6:%.+]] = llhd.prb [[OUT]] : !hw.inout<i4>
+  // CHECK-NEXT: [[V1:%.+]] = llhd.sig.extract [[OUT]] from [[C0_I2]] : <i4> -> <i2>
+  // CHECK-NEXT: [[V2:%.+]] = llhd.sig.extract [[OUT]] from [[C_2_I2]] : <i4> -> <i2>
+  // CHECK-NEXT: [[V3:%.+]] = llhd.sig.extract [[V1]] from %idx0 : <i2> -> <i1>
+  // CHECK-NEXT: [[V4:%.+]] = llhd.sig.extract [[V2]] from %idx0 : <i2> -> <i1>
+  // CHECK-NEXT: [[V5:%.+]] = llhd.sig.extract [[V2]] from %idx1 : <i2> -> <i1>
+  // CHECK-NEXT: llhd.drv [[V3]], %in0 after [[TIME]] : i1
+  // CHECK-NEXT: llhd.drv [[V4]], %in1 after [[TIME]] : i1
+  // CHECK-NEXT: llhd.drv [[V5]], %in0 after [[TIME]] : i1
+  // CHECK-NEXT: [[V6:%.+]] = llhd.prb [[OUT]] : i4
   // CHECK-NEXT: hw.output [[V6]] : i4
 
   %0 = llhd.constant_time <0ns, 0d, 1e>
   %c2_c2 = hw.constant 2 : i2
   %c0_c2 = hw.constant 0 : i2
   %out = llhd.sig %init : i4
-  %3 = llhd.sig.extract %out from %c0_c2 : (!hw.inout<i4>) -> !hw.inout<i2>
-  %4 = llhd.sig.extract %out from %c2_c2 : (!hw.inout<i4>) -> !hw.inout<i2>
-  %5 = llhd.sig.extract %3 from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
-  %6 = llhd.sig.extract %4 from %idx0 : (!hw.inout<i2>) -> !hw.inout<i1>
-  %7 = llhd.sig.extract %4 from %idx1 : (!hw.inout<i2>) -> !hw.inout<i1>
-  llhd.drv %5, %in0 after %0 : !hw.inout<i1>
-  llhd.drv %6, %in1 after %0 : !hw.inout<i1>
-  llhd.drv %7, %in0 after %0 : !hw.inout<i1>
-  %8 = llhd.prb %out : !hw.inout<i4>
+  %3 = llhd.sig.extract %out from %c0_c2 : <i4> -> <i2>
+  %4 = llhd.sig.extract %out from %c2_c2 : <i4> -> <i2>
+  %5 = llhd.sig.extract %3 from %idx0 : <i2> -> <i1>
+  %6 = llhd.sig.extract %4 from %idx0 : <i2> -> <i1>
+  %7 = llhd.sig.extract %4 from %idx1 : <i2> -> <i1>
+  llhd.drv %5, %in0 after %0 : i1
+  llhd.drv %6, %in1 after %0 : i1
+  llhd.drv %7, %in0 after %0 : i1
+  %8 = llhd.prb %out : i4
   hw.output %8 : i4
 }
 
@@ -176,7 +176,7 @@ hw.module @RemoveDriveOnlySignals(in %d: i42, in %e: i1) {
   %a = llhd.sig %0 : i42
   %b = llhd.sig %0 : i42
   // CHECK-NOT: llhd.drv
-  llhd.drv %a, %d after %1 : !hw.inout<i42>
-  llhd.drv %b, %d after %1 if %e : !hw.inout<i42>
+  llhd.drv %a, %d after %1 : i42
+  llhd.drv %b, %d after %1 if %e : i42
   // CHECK: hw.output
 }

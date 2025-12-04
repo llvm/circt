@@ -14,23 +14,24 @@ set(LLVM_OPTIONAL_SOURCES
 )
 
 set(PYTHON_BINDINGS_SOURCES
-  AIGModule.cpp
+  ArcModule.cpp
   CIRCTModule.cpp
   ESIModule.cpp
   HWModule.cpp
   MSFTModule.cpp
   OMModule.cpp
+  PipelineModule.cpp
   RTGModule.cpp
   SeqModule.cpp
   SupportModule.cpp
   SVModule.cpp
+  SynthModule.cpp
   # Headers must be included explicitly so they are installed.
   CIRCTModules.h
   NanobindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
-  CIRCTCAPIAIG
   CIRCTCAPIArc
   CIRCTCAPIComb
   CIRCTCAPIConversion
@@ -38,6 +39,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIDebug
   CIRCTCAPIEmit
   CIRCTCAPIESI
+  CIRCTCAPIExportLLVM
   CIRCTCAPIExportVerilog
   CIRCTCAPIFSM
   CIRCTCAPIHandshake
@@ -117,6 +119,14 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources.Dialects
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/ArcOps.td
+  SOURCES
+    dialects/arc.py
+  DIALECT_NAME arc)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/CombOps.td
   SOURCES
     dialects/comb.py
@@ -125,10 +135,10 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
-  TD_FILE dialects/AIGOps.td
+  TD_FILE dialects/SynthOps.td
   SOURCES
-    dialects/aig.py
-  DIALECT_NAME aig)
+    dialects/synth.py
+  DIALECT_NAME synth)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -198,6 +208,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/om.py
   DIALECT_NAME om)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/PipelineOps.td
+  SOURCES
+    dialects/pipeline.py
+  DIALECT_NAME pipeline)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects

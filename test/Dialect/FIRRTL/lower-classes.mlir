@@ -552,21 +552,21 @@ firrtl.circuit "RTLPorts" {
     // CHECK: [[PORTS_LIST:%.+]] = om.list_create [[INPUT_OBJ]], [[OUTPUT_OBJ]]
 
     // CHECK: om.object @NeedsRTLPorts(%basepath, [[MODULE_PATH]], [[PORTS_LIST]])
-    %object = firrtl.object @NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)
-    %field = firrtl.object.subfield %object[containingModule_in] : !firrtl.class<@NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)>
+    %object = firrtl.object @NeedsRTLPorts(in __in_containingModule: !firrtl.path, out containingModule: !firrtl.path)
+    %field = firrtl.object.subfield %object[__in_containingModule] : !firrtl.class<@NeedsRTLPorts(in __in_containingModule: !firrtl.path, out containingModule: !firrtl.path)>
     firrtl.propassign %field, %path : !firrtl.path
 
     // Add a second instance to ensure the RtlPorts class is only declared once.
-    %object2 = firrtl.object @NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)
-    %field2 = firrtl.object.subfield %object2[containingModule_in] : !firrtl.class<@NeedsRTLPorts(in containingModule_in: !firrtl.path, out containingModule: !firrtl.path)>
+    %object2 = firrtl.object @NeedsRTLPorts(in __in_containingModule: !firrtl.path, out containingModule: !firrtl.path)
+    %field2 = firrtl.object.subfield %object2[__in_containingModule] : !firrtl.class<@NeedsRTLPorts(in __in_containingModule: !firrtl.path, out containingModule: !firrtl.path)>
     firrtl.propassign %field2, %path : !firrtl.path
   }
 
-  // CHECK: om.class @NeedsRTLPorts(%basepath: !om.basepath, %containingModule_in: !om.path, %ports: !om.list<!om.class.type<@RtlPort>>)
+  // CHECK: om.class @NeedsRTLPorts(%basepath: !om.basepath, %__in_containingModule: !om.path, %ports: !om.list<!om.class.type<@RtlPort>>)
   // CHECK-SAME: -> (containingModule: !om.path, ports: !om.list<!om.class.type<@RtlPort>>)
-  firrtl.class @NeedsRTLPorts(in %containingModule_in: !firrtl.path, out %containingModule: !firrtl.path) {
-    // CHECK: om.class.fields  %containingModule_in, %ports : !om.path, !om.list<!om.class.type<@RtlPort>>
-    firrtl.propassign %containingModule, %containingModule_in : !firrtl.path
+  firrtl.class @NeedsRTLPorts(in %__in_containingModule: !firrtl.path, out %containingModule: !firrtl.path) {
+    // CHECK: om.class.fields  %__in_containingModule, %ports : !om.path, !om.list<!om.class.type<@RtlPort>>
+    firrtl.propassign %containingModule, %__in_containingModule : !firrtl.path
   }
 
   // CHECK: om.class @RtlPort(%ref: !om.path, %direction: !om.string, %width: !om.integer)  -> (ref: !om.path, direction: !om.string, width: !om.integer)
@@ -585,5 +585,29 @@ firrtl.circuit "DuplicateButEqualTrackers" {
   } {
     // CHECK: om.path_create reference %basepath [[NLA]]
     firrtl.path reference distinct[0]<>
+  }
+}
+
+// The following used to crash due to a missing `unrealized_conversion_cast`
+// between the `!om.class.type<@Bar>` value directly replacing the
+// `!firrtl.class<@Bar()>` result of `firrtl.object`.
+// CHECK-LABEL: firrtl.circuit "MissingConversionCastRegression"
+firrtl.circuit "MissingConversionCastRegression" {
+  // CHECK: firrtl.module @MissingConversionCastRegression() {
+  // CHECK-NEXT: }
+
+  // CHECK: om.class @MissingConversionCastRegression_Class
+  firrtl.module @MissingConversionCastRegression(out %z: !firrtl.class<@Bar()>) {
+    // CHECK-NEXT: [[TMP:%.+]] = om.object @Bar
+    %obj = firrtl.object @Bar()
+    // CHECK-NOT: firrtl.wire
+    // CHECK-NOT: firrtl.propassign
+    %wire = firrtl.wire : !firrtl.class<@Bar()>
+    firrtl.propassign %z, %wire : !firrtl.class<@Bar()>
+    firrtl.propassign %wire, %obj : !firrtl.class<@Bar()>
+    // CHECK-NEXT: om.class.fields [[TMP]]
+  }
+
+  firrtl.class private @Bar() {
   }
 }

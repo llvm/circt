@@ -1,5 +1,7 @@
 // RUN: circt-opt --llhd-lower-processes %s | FileCheck %s
 
+func.func private @dummy()
+
 // CHECK-LABEL: @Trivial(
 hw.module @Trivial() {
   // CHECK:      llhd.combinational {
@@ -54,8 +56,8 @@ hw.module @SupportYieldOperands(in %a: i42) {
 hw.module @SupportSeparateProbesOfSameValue() {
   %c0_i42 = hw.constant 0 : i42
   %a = llhd.sig %c0_i42 : i42
-  %0 = llhd.prb %a : !hw.inout<i42>
-  %1 = llhd.prb %a : !hw.inout<i42>
+  %0 = llhd.prb %a : i42
+  %1 = llhd.prb %a : i42
   // CHECK: llhd.combinational
   llhd.process -> i42 {
     cf.br ^bb1
@@ -200,5 +202,38 @@ hw.module @SkipIfValueUnobserved(in %a: i42) {
   ^bb1:
     %0 = comb.add %a, %a : i42
     llhd.wait ^bb1
+  }
+}
+
+// CHECK-LABEL: @AllowEntryAndWaitToConvergeWithEquivalentBlockArgs(
+hw.module @AllowEntryAndWaitToConvergeWithEquivalentBlockArgs(in %a : i42) {
+  // CHECK:      llhd.combinational -> i42 {
+  // CHECK-NEXT:   [[ADD:%.+]] = comb.add %a, %a : i42
+  // CHECK-NEXT:   cf.br ^bb1
+  // CHECK-NEXT: ^bb1:
+  // CHECK-NEXT:   llhd.yield [[ADD]] : i42
+  // CHECK-NEXT: }
+  %0 = llhd.process -> i42 {
+    %1 = comb.add %a, %a : i42
+    cf.br ^bb2(%1 : i42)
+  ^bb1:
+    %2 = comb.add %a, %a : i42
+    cf.br ^bb2(%2 : i42)
+  ^bb2(%3: i42):
+    llhd.wait yield (%3 : i42), (%a : i42), ^bb1
+  }
+}
+
+// CHECK-LABEL: @SkipIfEntryAndWaitConvergeWithSideEffectingOps(
+hw.module @SkipIfEntryAndWaitConvergeWithSideEffectingOps(in %a : i42) {
+  // CHECK: llhd.process
+  %0 = llhd.process -> i42 {
+    func.call @dummy() : () -> ()
+    cf.br ^bb2
+  ^bb1:
+    func.call @dummy() : () -> ()
+    cf.br ^bb2
+  ^bb2:
+    llhd.wait yield (%a : i42), (%a : i42), ^bb1
   }
 }

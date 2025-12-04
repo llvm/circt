@@ -13,6 +13,10 @@
 using namespace circt;
 using namespace igraph;
 
+//===----------------------------------------------------------------------===//
+// Instance Node
+//===----------------------------------------------------------------------===//
+
 void InstanceRecord::erase() {
   // Update the prev node to point to the next node.
   if (prevUse)
@@ -24,6 +28,10 @@ void InstanceRecord::erase() {
     nextUse->prevUse = prevUse;
   getParent()->instances.erase(this);
 }
+
+//===----------------------------------------------------------------------===//
+// Module Node
+//===----------------------------------------------------------------------===//
 
 InstanceRecord *InstanceGraphNode::addInstance(InstanceOpInterface instance,
                                                InstanceGraphNode *target) {
@@ -39,6 +47,10 @@ void InstanceGraphNode::recordUse(InstanceRecord *record) {
     firstUse->prevUse = record;
   firstUse = record;
 }
+
+//===----------------------------------------------------------------------===//
+// Instance Graph
+//===----------------------------------------------------------------------===//
 
 InstanceGraphNode *InstanceGraph::getOrAddNode(StringAttr name) {
   // Try to insert an InstanceGraphNode. If its not inserted, it returns
@@ -222,6 +234,10 @@ InstanceGraph::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
+//===----------------------------------------------------------------------===//
+// Instance Paths
+//===----------------------------------------------------------------------===//
+
 static InstancePath empty{};
 
 ArrayRef<InstancePath>
@@ -378,5 +394,9 @@ void InstancePathCache::replaceInstance(InstanceOpInterface oldOp,
   for (auto &iter : relativePathsCache)
     updateCache(iter.getSecond());
 }
+
+//===----------------------------------------------------------------------===//
+// Generated
+//===----------------------------------------------------------------------===//
 
 #include "circt/Support/InstanceGraphInterface.cpp.inc"

@@ -306,71 +306,70 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     SmallVector<FModuleOp> publicModules;
 
     // Traverse the modules in post order.
+    auto result = instanceGraph.walkPostOrder([&](auto &node) -> LogicalResult {
+      auto module = dyn_cast<FModuleOp>(*node.getModule());
+      if (!module)
+        return success();
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Traversing module:" << module.getModuleNameAttr() << "\n");
 
-    DenseSet<InstanceGraphNode *> visited;
-    for (auto *root : instanceGraph) {
-      for (auto *node : llvm::post_order_ext(root, visited)) {
-        auto module = dyn_cast<FModuleOp>(*node->getModule());
-        if (!module)
-          continue;
-        LLVM_DEBUG(llvm::dbgs() << "Traversing module:"
-                                << module.getModuleNameAttr() << "\n");
+      moduleStates.insert({module, ModuleState(module)});
 
-        moduleStates.insert({module, ModuleState(module)});
+      if (module.isPublic())
+        publicModules.push_back(module);
 
-        if (module.isPublic())
-          publicModules.push_back(module);
+      auto result = module.walk([&](Operation *op) {
+        if (transferFunc(op).failed())
+          return WalkResult::interrupt();
+        return WalkResult::advance();
+      });
 
-        auto result = module.walk([&](Operation *op) {
-          if (transferFunc(op).failed())
-            return WalkResult::interrupt();
-          return WalkResult::advance();
-        });
+      if (result.wasInterrupted())
+        return failure();
 
-        if (result.wasInterrupted())
-          return signalPassFailure();
+      // Since we walk operations pre-order and not along dataflow edges,
+      // ref.sub may not be resolvable when we encounter them (they're not
+      // just unification). This can happen when refs go through an output
+      // port or input instance result and back into the design. Handle these
+      // by walking them, resolving what we can, until all are handled or
+      // nothing can be resolved.
+      while (!indexingOps.empty()) {
+        // Grab the set of unresolved ref.sub's.
+        decltype(indexingOps) worklist;
+        worklist.swap(indexingOps);
 
-        // Since we walk operations pre-order and not along dataflow edges,
-        // ref.sub may not be resolvable when we encounter them (they're not
-        // just unification). This can happen when refs go through an output
-        // port or input instance result and back into the design. Handle these
-        // by walking them, resolving what we can, until all are handled or
-        // nothing can be resolved.
-        while (!indexingOps.empty()) {
-          // Grab the set of unresolved ref.sub's.
-          decltype(indexingOps) worklist;
-          worklist.swap(indexingOps);
-
-          for (auto op : worklist) {
-            auto inputEntry =
-                getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
-            // If we can't resolve, add back and move on.
-            if (!inputEntry)
-              indexingOps.push_back(op);
-            else
-              addReachingSendsEntry(op.getResult(), op.getOperation(),
-                                    inputEntry);
-          }
-          // If nothing was resolved, give up.
-          if (worklist.size() == indexingOps.size()) {
-            auto op = worklist.front();
-            getRemoteRefSend(op.getInput());
-            op.emitError(
-                  "indexing through probe of unknown origin (input probe?)")
-                .attachNote(op.getInput().getLoc())
-                .append("indexing through this reference");
-            return signalPassFailure();
-          }
+        for (auto op : worklist) {
+          auto inputEntry =
+              getRemoteRefSend(op.getInput(), /*errorIfNotFound=*/false);
+          // If we can't resolve, add back and move on.
+          if (!inputEntry)
+            indexingOps.push_back(op);
+          else
+            addReachingSendsEntry(op.getResult(), op.getOperation(),
+                                  inputEntry);
         }
-
-        // Record all the RefType ports to be removed later.
-        size_t numPorts = module.getNumPorts();
-        for (size_t portNum = 0; portNum < numPorts; ++portNum)
-          if (isa<RefType>(module.getPortType(portNum))) {
-            setPortToRemove(module, portNum, numPorts);
-          }
+        // If nothing was resolved, give up.
+        if (worklist.size() == indexingOps.size()) {
+          auto op = worklist.front();
+          getRemoteRefSend(op.getInput());
+          op.emitError(
+                "indexing through probe of unknown origin (input probe?)")
+              .attachNote(op.getInput().getLoc())
+              .append("indexing through this reference");
+          return failure();
+        }
       }
-    }
+
+      // Record all the RefType ports to be removed later.
+      size_t numPorts = module.getNumPorts();
+      for (size_t portNum = 0; portNum < numPorts; ++portNum)
+        if (isa<RefType>(module.getPortType(portNum)))
+          setPortToRemove(module, portNum, numPorts);
+
+      return success();
+    });
+    if (failed(result))
+      return signalPassFailure();
 
     LLVM_DEBUG({
       for (const auto &I :
@@ -417,11 +416,8 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
   /// Generate the ABI ref_<module> prefix string into `prefix`.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
     auto modName = mod.getModuleName();
-    if (auto ext = dyn_cast<FExtModuleOp>(*mod)) {
-      // Use defName for module portion, if set.
-      if (auto defname = ext.getDefname(); defname && !defname->empty())
-        modName = *defname;
-    }
+    if (auto ext = dyn_cast<FExtModuleOp>(*mod))
+      modName = ext.getExtModuleName();
     (Twine("ref_") + modName).toVector(prefix);
   }
 
@@ -588,22 +584,11 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                                  InstanceGraph &instanceGraph) {
     Operation *mod = inst.getReferencedModule(instanceGraph);
     if (auto extRefMod = dyn_cast<FExtModuleOp>(mod)) {
-      // Extern modules can generate RefType ports, they have an attached
-      // attribute which specifies the internal path into the extern module.
-      // This string attribute will be used to generate the final xmr.
-      auto internalPaths = extRefMod.getInternalPaths();
       auto numPorts = inst.getNumResults();
       SmallString<128> circuitRefPrefix;
 
       /// Get the resolution string for this ref-type port.
       auto getPath = [&](size_t portNo) {
-        // If there's an internal path specified (with path), use that.
-        if (internalPaths)
-          if (auto path =
-                  cast<InternalPathAttr>(internalPaths->getValue()[portNo])
-                      .getPath())
-            return path;
-
         // Otherwise, we're using the ref ABI.  Generate the prefix string
         // and return the macro for the specified port.
         if (circuitRefPrefix.empty())
@@ -795,8 +780,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
       else if (auto mod = dyn_cast<FExtModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
       else if (auto inst = dyn_cast<InstanceOp>(iter.getFirst())) {
-        ImplicitLocOpBuilder b(inst.getLoc(), inst);
-        inst.erasePorts(b, iter.getSecond());
+        inst.cloneWithErasedPortsAndReplaceUses(iter.getSecond());
         inst.erase();
       } else if (auto mem = dyn_cast<MemOp>(iter.getFirst())) {
         // Remove all debug ports of the memory.
@@ -808,7 +792,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
         for (const auto &res : llvm::enumerate(mem.getResults())) {
           if (isa<RefType>(mem.getResult(res.index()).getType()))
             continue;
-          resultNames.push_back(mem.getPortName(res.index()));
+          resultNames.push_back(mem.getPortNameAttr(res.index()));
           resultTypes.push_back(res.value().getType());
           portAnnotations.push_back(mem.getPortAnnotation(res.index()));
           oldResults.push_back(res.value());

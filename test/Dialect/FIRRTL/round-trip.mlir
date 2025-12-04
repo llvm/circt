@@ -196,4 +196,84 @@ firrtl.module @Fprintf(
   firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.domain @ClockDomain
+firrtl.domain @ClockDomain
+
+// CHECK-LABEL: firrtl.domain @PowerDomain [
+// CHECK-SAME:    #firrtl.domain.field<"name", !firrtl.string>
+// CHECK-SAME:    #firrtl.domain.field<"voltage", !firrtl.integer>
+// CHECK-SAME:    #firrtl.domain.field<"alwaysOn", !firrtl.bool>
+// CHECK-SAME:  ]
+firrtl.domain @PowerDomain [
+  #firrtl.domain.field<"name", !firrtl.string>,
+  #firrtl.domain.field<"voltage", !firrtl.integer>,
+  #firrtl.domain.field<"alwaysOn", !firrtl.bool>
+]
+
+firrtl.module @DomainsSubmodule(
+  in %A: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%A]
+) {}
+
+// CHECK-LABEL: firrtl.module @Domains(
+// CHECK-SAME:    in %A: !firrtl.domain
+// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
+// CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
+firrtl.module @Domains(
+  in %A: !firrtl.domain of @ClockDomain,
+  in %B: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%A],
+  out %b: !firrtl.uint<1> domains [%B]
+) {
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+
+  // CHECK:      %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
+  // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in a: !firrtl.uint<1> domains [A]
+  %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
+    in A: !firrtl.domain of @ClockDomain,
+    in a: !firrtl.uint<1> domains [A]
+  )
+}
+
+// CHECK-LABEL: firrtl.module @AnonymousDomains
+// CHECK-SAME:    in %arg0: !firrtl.domain
+// CHECK-SAME:    in %a: !firrtl.uint<1> domains [%arg0]
+// CHECK-SAME:    portNames = ["", "a"]
+firrtl.module @AnonymousDomains(
+  in %arg0: !firrtl.domain of @ClockDomain,
+  in %a: !firrtl.uint<1> domains [%arg0]
+) attributes {
+  portNames = ["", "a"]
+} {
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
+  %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @DomainDefine
+firrtl.module @DomainDefine(
+  in  %x : !firrtl.domain of @ClockDomain,
+  out %y : !firrtl.domain of @ClockDomain
+) {
+  // CHECK: firrtl.domain.define %y, %x
+  firrtl.domain.define %y, %x
+}
+
+firrtl.module private @DefaultTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @FPGATargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @ASICTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
+
+// CHECK-LABEL: firrtl.module @InstanceChoiceWithDomain
+firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {
+  // CHECK:      %inst_A, %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTargetWithDomain alternatives @Platform
+  // CHECK-SAME:   { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+  %inst_A, %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTargetWithDomain alternatives @Platform
+    { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+  firrtl.matchingconnect %inst_clock, %clock : !firrtl.clock
+  firrtl.domain.define %inst_A, %A
+}
+
 }

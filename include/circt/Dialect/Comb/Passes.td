@@ -34,4 +34,44 @@ def CombIntRangeNarrowing : Pass<"comb-int-range-narrowing"> {
   }];
 }
 
+def CombOverflowAnnotating : Pass<"comb-overflow-annotating"> {
+  let summary = "Annotate comb ops with no overflow signal (nuw).";
+  let description = [{
+    Using integer range analysis, annotate comb ops which cannot overflow with
+    LLVMs no unsigned wrap (nuw) signal. This is useful for downstream passes 
+    which need to handle overflow conditions.
+  }];
+}
+
+def BalanceMux : Pass<"comb-balance-mux"> {
+  let summary = "Balance and optimize mux chains";
+  let description = [{
+    Optimizes mux chains through enhanced folding and priority mux
+    rebalancing. Converts index comparisons to arrays and rebalances
+    linear chains into balanced trees, reducing depth from O(n) to O(log n).
+  }];
+  let options = [Option<
+      "muxChainThreshold", "mux-chain-threshold", "unsigned", "16",
+      "Minimum number of linear mux chains to trigger rebalancing">];
+}
+
+def AssumeTwoValued : Pass<"comb-assume-two-valued"> {
+  let summary = "Simplify under assumption of two-valued logic";
+  let description = [{
+    Performs simplifying transformations that are valid if all integer values
+    are always two-valued (i.e., all bits are either 1 or 0).
+  }];
+}
+
+
+def SimplifyTruthTable : Pass<"comb-simplify-tt"> {
+  let summary = "Simplify truth tables that depend on 1 or less inputs";
+  let description = [{
+    Simplifies truth tables that are constant or depend only on single input.
+    For truth tables that depend on no input, reduce them to hw.constant. For
+    truth tables that depend on single input, reduce to identity of input or
+    negation of input.
+  }];
+}
+
 #endif // CIRCT_DIALECT_COMB_PASSES_TD

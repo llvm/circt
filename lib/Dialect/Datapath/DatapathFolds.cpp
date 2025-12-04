@@ -7,10 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Datapath/DatapathDialect.h"
 #include "circt/Dialect/Datapath/DatapathOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/KnownBits.h"
 #include <algorithm>
 
@@ -18,6 +20,26 @@ using namespace mlir;
 using namespace circt;
 using namespace datapath;
 using namespace matchers;
+
+//===----------------------------------------------------------------------===//
+// Utility Functions
+//===----------------------------------------------------------------------===//
+static FailureOr<size_t> calculateNonZeroBits(Value operand,
+                                              size_t numResults) {
+  // If the extracted bits are all known, then return the result.
+  auto knownBits = comb::computeKnownBits(operand);
+  if (knownBits.isUnknown())
+    return failure(); // Skip if we don't know anything about the bits
+
+  size_t nonZeroBits = operand.getType().getIntOrFloatBitWidth() -
+                       knownBits.Zero.countLeadingOnes();
+
+  // If all bits non-zero we will not reduce the number of results
+  if (nonZeroBits == numResults)
+    return failure();
+
+  return nonZeroBits;
+}
 
 //===----------------------------------------------------------------------===//
 // Compress Operation
@@ -97,6 +119,9 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
   using OpRewritePattern::OpRewritePattern;
 
   // add(compress(a,b,c),d) -> add(compress(a,b,c,d))
+  // FIXME: This should be implemented as a canonicalization pattern for
+  // compress op. Currently `hasDatapathOperand` flag prevents introducing
+  // datapath operations from comb operations.
   LogicalResult matchAndRewrite(comb::AddOp addOp,
                                 PatternRewriter &rewriter) const override {
     // comb.add canonicalization patterns handle folding add operations
@@ -108,14 +133,19 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
     llvm::SmallSetVector<Value, 8> processedCompressorResults;
     SmallVector<Value, 8> newCompressOperands;
     // Only construct compressor if can form a larger compressor than what
-    // is currently an input of this add
-    bool shouldFold = false;
+    // is currently an input of this add. Also check that there is at least
+    // one datapath operand.
+    bool shouldFold = false, hasDatapathOperand = false;
 
     for (Value operand : operands) {
 
       // Skip if already processed this compressor
       if (processedCompressorResults.contains(operand))
         continue;
+
+      if (auto *op = operand.getDefiningOp())
+        if (isa_and_nonnull<datapath::DatapathDialect>(op->getDialect()))
+          hasDatapathOperand = true;
 
       // If the operand has multiple uses, we do not fold it into a compress
       // operation, so we treat it as a regular operand.
@@ -154,7 +184,7 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 
     // Only fold if we have constructed a larger compressor than what was
     // already there
-    if (!shouldFold)
+    if (!shouldFold || !hasDatapathOperand)
       return failure();
 
     // Create a new CompressOp with all collected operands
@@ -219,21 +249,14 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
 
     // TODO: implement a constant multiplication for the PartialProductOp
 
-    size_t maxNonZeroBits = 0;
-    for (Value operand : operands) {
-      // If the extracted bits are all known, then return the result.
-      auto knownBits = comb::computeKnownBits(operand);
-      if (knownBits.isUnknown())
-        return failure(); // Skip if we don't know anything about the bits
+    auto op0NonZeroBits = calculateNonZeroBits(operands[0], op.getNumResults());
+    auto op1NonZeroBits = calculateNonZeroBits(operands[1], op.getNumResults());
 
-      size_t nonZeroBits = inputWidth - knownBits.Zero.countLeadingOnes();
+    if (failed(op0NonZeroBits) || failed(op1NonZeroBits))
+      return failure();
 
-      // If all bits non-zero we will not reduce the number of results
-      if (nonZeroBits == op.getNumResults())
-        return failure();
-
-      maxNonZeroBits = std::max(maxNonZeroBits, nonZeroBits);
-    }
+    // Need the +1 for the carry-out
+    size_t maxNonZeroBits = std::max(*op0NonZeroBits, *op1NonZeroBits);
 
     auto newPP = datapath::PartialProductOp::create(
         rewriter, op.getLoc(), op.getOperands(), maxNonZeroBits);
@@ -252,8 +275,86 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
   }
 };
 
+struct PosPartialProducts : public OpRewritePattern<PartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // pp(add(a,b),c) -> pos_pp(a,b,c)
+  LogicalResult matchAndRewrite(PartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+    auto width = op.getType(0).getIntOrFloatBitWidth();
+
+    assert(op.getNumOperands() == 2);
+
+    // Detect if any input is an AddOp
+    auto lhsAdder = op.getOperand(0).getDefiningOp<comb::AddOp>();
+    auto rhsAdder = op.getOperand(1).getDefiningOp<comb::AddOp>();
+    if ((lhsAdder && rhsAdder) || !(lhsAdder || rhsAdder))
+      return failure();
+    auto addInput = lhsAdder ? lhsAdder : rhsAdder;
+    auto otherInput = lhsAdder ? op.getOperand(1) : op.getOperand(0);
+
+    if (addInput->getNumOperands() != 2)
+      return failure();
+
+    Value addend0 = addInput->getOperand(0);
+    Value addend1 = addInput->getOperand(1);
+
+    rewriter.replaceOpWithNewOp<PosPartialProductOp>(
+        op, ValueRange{addend0, addend1, otherInput}, width);
+    return success();
+  }
+};
+
 void PartialProductOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
 
-  results.add<ReduceNumPartialProducts>(context);
+  results.add<ReduceNumPartialProducts, PosPartialProducts>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// Pos Partial Product Operation
+//===----------------------------------------------------------------------===//
+struct ReduceNumPosPartialProducts
+    : public OpRewritePattern<PosPartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // pos_pp(concat(0,a), concat(0,b), c) -> reduced number of results
+  LogicalResult matchAndRewrite(PosPartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+    unsigned inputWidth = op.getAddend0().getType().getIntOrFloatBitWidth();
+    auto addend0NonZero =
+        calculateNonZeroBits(op.getAddend0(), op.getNumResults());
+    auto addend1NonZero =
+        calculateNonZeroBits(op.getAddend1(), op.getNumResults());
+
+    if (failed(addend0NonZero) || failed(addend1NonZero))
+      return failure();
+
+    // Need the +1 for the carry-out
+    size_t maxNonZeroBits = std::max(*addend0NonZero, *addend1NonZero) + 1;
+
+    if (maxNonZeroBits >= op.getNumResults())
+      return failure();
+
+    auto newPP = datapath::PosPartialProductOp::create(
+        rewriter, op.getLoc(), op.getOperands(), maxNonZeroBits);
+
+    auto zero = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       APInt::getZero(inputWidth));
+
+    // Collect newPP results and pad with zeros if needed
+    SmallVector<Value> newResults(newPP.getResults().begin(),
+                                  newPP.getResults().end());
+
+    newResults.append(op.getNumResults() - newResults.size(), zero);
+
+    rewriter.replaceOp(op, newResults);
+    return success();
+  }
+};
+
+void PosPartialProductOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+
+  results.add<ReduceNumPosPartialProducts>(context);
 }

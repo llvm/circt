@@ -61,6 +61,7 @@ public:
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
+            UnsafeDomainCastOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
@@ -206,6 +207,7 @@ public:
   HANDLE(RWProbeOp, Unhandled);
   HANDLE(XMRRefOp, Unhandled);
   HANDLE(XMRDerefOp, Unhandled);
+  HANDLE(UnsafeDomainCastOp, Unhandled);
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
@@ -242,10 +244,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, FPrintFOp, FFlushOp, SkipOp, StopOp,
-                       WhenOp, AssertOp, AssumeOp, CoverOp, PropAssignOp,
-                       RefForceOp, RefForceInitialOp, RefReleaseOp,
-                       RefReleaseInitialOp, FPGAProbeIntrinsicOp,
+                       DomainDefineOp, ForceOp, PrintFOp, FPrintFOp, FFlushOp,
+                       SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
+                       PropAssignOp, RefForceOp, RefForceInitialOp,
+                       RefReleaseOp, RefReleaseInitialOp, FPGAProbeIntrinsicOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
                        UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp,
                        VerifRequireIntrinsicOp, VerifEnsureIntrinsicOp,
@@ -279,6 +281,7 @@ public:
   HANDLE(ConnectOp);
   HANDLE(MatchingConnectOp);
   HANDLE(RefDefineOp);
+  HANDLE(DomainDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(FPrintFOp);

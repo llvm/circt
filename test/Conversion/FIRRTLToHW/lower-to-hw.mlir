@@ -20,7 +20,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME:             static int global_id [string];
   // CHECK-SAME:             static function int get(string name);
   // CHECK-SAME:               if (global_id.exists(name) == 32'h0)
-  // CHECK-SAME:                 global_id[name] = $fopen(name);
+  // CHECK-SAME:                 global_id[name] = $fopen(name, \22w\22);
   // CHECK-SAME:               return global_id[name];
   // CHECK-SAME:             endfunction
   // CHECK-SAME:           endclass
@@ -461,12 +461,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
-    // CHECK-NEXT: sim.fatal %clock1, [[COND]]
+    // CHECK-NEXT: sim.clocked_terminate %clock1, [[COND]], failure
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
     // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_2:%.+]], %reset : i1
-    // CHECK-NEXT: sim.finish %clock2, [[COND]]
+    // CHECK-NEXT: sim.clocked_terminate %clock2, [[COND]], success
     firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
   }
 

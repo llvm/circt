@@ -1,12 +1,8 @@
-//===- SimOps.td - `sim` dialect ops -----------------------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This describes the MLIR ops for `sim`.
 //
 //===----------------------------------------------------------------------===//
 
@@ -40,24 +36,6 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
   let arguments = (ins StrAttr:$formatString);
   let results = (outs I1:$found, AnyType:$result);
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
-}
-
-def FinishOp : SimOp<"finish"> {
-  let summary = "Simulation finish condition";
-
-  let arguments = (ins ClockType:$clk, I1:$cond);
-  let results = (outs);
-
-  let assemblyFormat = "$clk `,` $cond attr-dict";
-}
-
-def FatalOp : SimOp<"fatal"> {
-  let summary = "Simulation failure condition";
-
-  let arguments = (ins ClockType:$clk, I1:$cond);
-  let results = (outs);
-
-  let assemblyFormat = "$clk `,` $cond attr-dict";
 }
 
 def DPIFuncOp : SimOp<"func.dpi",
@@ -169,7 +147,11 @@ def DPICallOp : SimOp<"func.dpi.call",
 
 }
 
-def FormatLitOp : SimOp<"fmt.lit", [Pure, ConstantLike]> {
+//===----------------------------------------------------------------------===//
+// String Formatting
+//===----------------------------------------------------------------------===//
+
+def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let summary = "Literal string fragment";
   let description = [{
     Creates a constant, raw ASCII string literal for formatted printing.
@@ -255,7 +237,9 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
 
   let hasFolder = true;
 
-  let assemblyFormat = "(`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    (`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))
+  }];
 
   let extraClassDeclaration = [{
       static inline unsigned getDecimalWidth(unsigned bits, bool isSigned) {
@@ -268,7 +252,8 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
           bits--;
 
         // Should be precise up until bits = 13301
-        const double baseConversionFactor = 0.30103; // log(2) / log(10) + epsilon
+        // log(2) / log(10) + epsilon
+        const double baseConversionFactor = 0.30103;
         unsigned digits = std::ceil(bits * baseConversionFactor);
 
         return isSigned ? digits + 1 : digits;
@@ -337,13 +322,13 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
     /// On encountering a cycle, the result of the concat operation
     /// forming the cycle is pushed into the list of flattened values
     /// and flattening continues without recursing into the cycle.
-    LogicalResult getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands);
+    LogicalResult getFlattenedInputs(
+      llvm::SmallVectorImpl<Value> &flatOperands);
   }];
 }
 
 def PrintFormattedOp : SimOp<"print"> {
   let summary = "Print a formatted string on a given clock and condition";
-
   let description = [{
     Evaluate a format string and print it to the simulation console on the
     rising edge of the given clock, if, and only if, the condition argument
@@ -354,29 +339,118 @@ def PrintFormattedOp : SimOp<"print"> {
     of printing for operations in different modules, instances or on different
     clocks is undefined.
   }];
-
-
-  let arguments = (ins FormatStringType:$input, ClockType:$clock, I1:$condition);
-
+  let arguments = (ins
+    FormatStringType:$input,
+    ClockType:$clock,
+    I1:$condition
+  );
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
 }
 
 def PrintFormattedProcOp : SimOp<"proc.print"> {
   let summary = "Print a formatted string within a procedural region";
-
   let description = [{
     Evaluate a format string and print it to the simulation console.
 
     This operation must be within a procedural region.
   }];
-
   let arguments = (ins FormatStringType:$input);
-
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
-
   let assemblyFormat = "$input attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Control
+//===----------------------------------------------------------------------===//
+
+def ClockedTerminateOp : SimOp<"clocked_terminate"> {
+  let summary = "Terminate the simulation";
+  let description = [{
+    Implements the semantics of `sim.terminate` if the given condition is true
+    on the rising edge of the clock operand.
+  }];
+  let arguments = (ins
+    ClockType:$clock,
+    I1:$condition,
+    BoolAttr:$success,
+    BoolAttr:$verbose
+  );
+  let assemblyFormat = [{
+    $clock `,` $condition `,`
+    custom<KeywordBool>($success, "\"success\"", "\"failure\"") `,`
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
+}
+
+def ClockedPauseOp : SimOp<"clocked_pause"> {
+  let summary = "Pause the simulation";
+  let description = [{
+    Implements the semantics of `sim.pause` if the given condition is true on
+    the rising edge of the clock operand.
+  }];
+  let arguments = (ins
+    ClockType:$clock,
+    I1:$condition,
+    BoolAttr:$verbose
+  );
+  let assemblyFormat = [{
+    $clock `,` $condition `,`
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
+}
+
+def TerminateOp : SimOp<"terminate"> {
+  let summary = "Terminate the simulation";
+  let description = [{
+    Terminate the simulation with a success or failure exit code. Depending on
+    the `verbose` operand, simulators may print additional information about the
+    current simulation time and hierarchical location of the op.
+
+    This op correpsonds to the following SystemVerilog constructs:
+
+    | Operation                        | SystemVerilog             |
+    |----------------------------------|---------------------------|
+    | `sim.terminate success, quiet`   | `$finish(0)`              |
+    | `sim.terminate success, verbose` | `$finish` or `$finish(1)` |
+    | `sim.terminate failure, quiet`   | `$fatal(0)`               |
+    | `sim.terminate failure, verbose` | `$fatal` or `$fatal(1)`   |
+
+    Note that this op does not match the behavior of the `$exit` system task in
+    SystemVerilog, which blocks execution of the calling process until all
+    `program` instances have terminated, and then calls `$finish`.
+  }];
+  let arguments = (ins
+    BoolAttr:$success,
+    BoolAttr:$verbose
+  );
+  let assemblyFormat = [{
+    custom<KeywordBool>($success, "\"success\"", "\"failure\"") `,`
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
+}
+
+def PauseOp : SimOp<"pause"> {
+  let summary = "Pause the simulation";
+  let description = [{
+    Interrupt the simulation and give control back to the user in case of an
+    interactive simulation. Non-interactive simulations may choose to terminate
+    instead. Depending on the `verbose` operand, simulators may print additional
+    information about the current simulation time and hierarchical location of
+    the op.
+
+    This op corresponds to the following SystemVerilog constructs:
+
+    | Operation           | SystemVerilog          |
+    |---------------------|------------------------|
+    | `sim.pause quiet`   | `$stop(0)`             |
+    | `sim.pause verbose` | `$stop` or `$stop(1)`  |
+  }];
+  let arguments = (ins BoolAttr:$verbose);
+  let assemblyFormat = [{
+    custom<KeywordBool>($verbose, "\"verbose\"" , "\"quiet\"") attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

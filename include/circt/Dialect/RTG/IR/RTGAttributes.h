@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_H
 
 #include "circt/Dialect/RTG/IR/RTGAttrInterfaces.h"
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"

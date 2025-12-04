@@ -1,4 +1,6 @@
 add_circt_unittest(CIRCTFIRRTLTests
+  AttributesTest.cpp
+  PortsTest.cpp
   TypesTest.cpp
 )
 

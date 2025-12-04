@@ -39,7 +39,7 @@ MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetInt(MlirContext ctx, unsigned width);
 MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx,
                                                  unsigned width);
 /// Create a real type.
-MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx, unsigned width);
 /// Create a packed open array type.
 MLIR_CAPI_EXPORTED MlirType mooreOpenArrayTypeGet(MlirType elementType);
 /// Create a packed array type.

@@ -136,11 +136,11 @@ struct FlattenMemoryPass
         // memory with the wire.  We will be reconstructing the original type
         // in the wire from the bitvector of the flattened memory.
         auto result = memOp.getResult(index);
-        auto wire = WireOp::create(builder, result.getType(),
-                                   (memOp.getName() + "_" +
-                                    memOp.getPortName(index).getValue())
-                                       .str())
-                        .getResult();
+        auto wire =
+            WireOp::create(
+                builder, result.getType(),
+                (memOp.getName() + "_" + memOp.getPortName(index)).str())
+                .getResult();
         result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);
@@ -244,9 +244,9 @@ private:
 
   Value getSubWhatever(ImplicitLocOpBuilder *builder, Value val, size_t index) {
     if (BundleType bundle = type_dyn_cast<BundleType>(val.getType()))
-      return builder->create<SubfieldOp>(val, index);
+      return SubfieldOp::create(*builder, val, index);
     if (FVectorType fvector = type_dyn_cast<FVectorType>(val.getType()))
-      return builder->create<SubindexOp>(val, index);
+      return SubindexOp::create(*builder, val, index);
 
     llvm_unreachable("Unknown aggregate type");
     return nullptr;

@@ -704,8 +704,7 @@ static bool getDeclName(Value value, SmallString<32> &string) {
       .Case<InstanceOp, MemOp>([&](auto op) {
         string += op.getName();
         string += ".";
-        string +=
-            op.getPortName(cast<OpResult>(value).getResultNumber()).getValue();
+        string += op.getPortName(cast<OpResult>(value).getResultNumber());
         return true;
       })
       .Case<WireOp, NodeOp, RegOp, RegResetOp>([&](auto op) {
@@ -1856,15 +1855,11 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     Value instReset;
     if (!domain.localReset) {
       LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
-
-      auto newInstOp = instOp.cloneAndInsertPorts(
+      auto newInstOp = instOp.cloneWithInsertedPortsAndReplaceUses(
           {{/*portIndex=*/0,
             {domain.resetName, type_cast<FIRRTLBaseType>(actualReset.getType()),
              Direction::In}}});
       instReset = newInstOp.getResult(0);
-
-      // Update the uses over to the new instance and drop the old instance.
-      instOp.replaceAllUsesWith(newInstOp.getResults().drop_front());
       instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
       instOp = newInstOp;

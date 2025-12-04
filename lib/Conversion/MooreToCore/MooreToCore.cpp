@@ -1,12 +1,8 @@
-//===- MooreToCore.cpp - Moore To Core Conversion Pass --------------------===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This is the main Moore to Core Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,10 +16,14 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -33,6 +33,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/IR/DerivedTypes.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
@@ -47,6 +48,158 @@ using comb::ICmpPredicate;
 using llvm::SmallDenseSet;
 
 namespace {
+
+/// Cache for identified structs and field GEP paths keyed by class symbol.
+struct ClassTypeCache {
+  struct ClassStructInfo {
+    LLVM::LLVMStructType classBody;
+
+    // field name -> GEP path inside ident (excluding the leading pointer index)
+    DenseMap<StringRef, SmallVector<unsigned, 2>> propertyPath;
+
+    // TODO: Add classVTable in here.
+    /// Record/overwrite the field path to a single property for a class.
+    void setFieldPath(StringRef propertyName, ArrayRef<unsigned> path) {
+      this->propertyPath[propertyName] =
+          SmallVector<unsigned, 2>(path.begin(), path.end());
+    }
+
+    /// Lookup the full GEP path for a (class, field).
+    std::optional<ArrayRef<unsigned>>
+    getFieldPath(StringRef propertySym) const {
+      if (auto prop = this->propertyPath.find(propertySym);
+          prop != this->propertyPath.end())
+        return ArrayRef<unsigned>(prop->second);
+      return std::nullopt;
+    }
+  };
+
+  /// Record the identified struct body for a class.
+  /// Implicitly finalizes the class to struct conversion.
+  void setClassInfo(SymbolRefAttr classSym, const ClassStructInfo &info) {
+    auto &dst = classToStructMap[classSym];
+    dst = info;
+  }
+
+  /// Lookup the identified struct body for a class.
+  std::optional<ClassStructInfo> getStructInfo(SymbolRefAttr classSym) const {
+    if (auto it = classToStructMap.find(classSym); it != classToStructMap.end())
+      return it->second;
+    return std::nullopt;
+  }
+
+private:
+  // Keyed by the SymbolRefAttr of the class.
+  // Kept private so all accesses are done with helpers which preserve
+  // invariants
+  DenseMap<Attribute, ClassStructInfo> classToStructMap;
+};
+
+/// Ensure we have `declare i8* @malloc(i64)` (opaque ptr prints as !llvm.ptr).
+static LLVM::LLVMFuncOp getOrCreateMalloc(ModuleOp mod, OpBuilder &b) {
+  if (auto f = mod.lookupSymbol<LLVM::LLVMFuncOp>("malloc"))
+    return f;
+
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToStart(mod.getBody());
+
+  auto i64Ty = IntegerType::get(mod.getContext(), 64);
+  auto ptrTy = LLVM::LLVMPointerType::get(mod.getContext()); // opaque pointer
+  auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {i64Ty}, false);
+
+  auto fn = LLVM::LLVMFuncOp::create(b, mod.getLoc(), "malloc", fnTy);
+  // Link this in from somewhere else.
+  fn.setLinkage(LLVM::Linkage::External);
+  return fn;
+}
+
+/// Helper function to create an opaque LLVM Struct Type which corresponds
+/// to the sym
+static LLVM::LLVMStructType getOrCreateOpaqueStruct(MLIRContext *ctx,
+                                                    SymbolRefAttr className) {
+  return LLVM::LLVMStructType::getIdentified(ctx, className.getRootReference());
+}
+
+static LogicalResult resolveClassStructBody(ClassDeclOp op,
+                                            TypeConverter const &typeConverter,
+                                            ClassTypeCache &cache) {
+
+  auto classSym = SymbolRefAttr::get(op.getSymNameAttr());
+  auto structInfo = cache.getStructInfo(classSym);
+  if (structInfo)
+    // We already have a resolved class struct body.
+    return success();
+
+  // Otherwise we need to resolve.
+  ClassTypeCache::ClassStructInfo structBody;
+  SmallVector<Type> structBodyMembers;
+
+  // Base-first (prefix) layout for single inheritance.
+  unsigned derivedStartIdx = 0;
+
+  if (auto baseClass = op.getBaseAttr()) {
+
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    auto *opSym = mod.lookupSymbol(baseClass);
+    auto classDeclOp = cast<ClassDeclOp>(opSym);
+
+    if (failed(resolveClassStructBody(classDeclOp, typeConverter, cache)))
+      return failure();
+
+    // Process base class' struct layout first
+    auto baseClassStruct = cache.getStructInfo(baseClass);
+    structBodyMembers.push_back(baseClassStruct->classBody);
+    derivedStartIdx = 1;
+
+    // Inherit base field paths with a leading 0.
+    for (auto &kv : baseClassStruct->propertyPath) {
+      SmallVector<unsigned, 2> path;
+      path.push_back(0); // into base subobject
+      path.append(kv.second.begin(), kv.second.end());
+      structBody.setFieldPath(kv.first, path);
+    }
+  }
+
+  // Properties in source order.
+  unsigned iterator = derivedStartIdx;
+  auto &block = op.getBody().front();
+  for (Operation &child : block) {
+    if (auto prop = dyn_cast<ClassPropertyDeclOp>(child)) {
+      Type mooreTy = prop.getPropertyType();
+      Type llvmTy = typeConverter.convertType(mooreTy);
+      if (!llvmTy)
+        return prop.emitOpError()
+               << "failed to convert property type " << mooreTy;
+
+      structBodyMembers.push_back(llvmTy);
+
+      // Derived field path: either {i} or {1+i} if base is present.
+      SmallVector<unsigned, 2> path{iterator};
+      structBody.setFieldPath(prop.getSymName(), path);
+      ++iterator;
+    }
+  }
+
+  // TODO: Handle vtable generation over ClassMethodDeclOp here.
+  auto llvmStructTy = getOrCreateOpaqueStruct(op.getContext(), classSym);
+  // Empty structs may be kept opaque
+  if (!structBodyMembers.empty() &&
+      failed(llvmStructTy.setBody(structBodyMembers, false)))
+    return op.emitOpError() << "Failed to set LLVM Struct body";
+
+  structBody.classBody = llvmStructTy;
+  cache.setClassInfo(classSym, structBody);
+
+  return success();
+}
+
+/// Convenience overload that looks up ClassDeclOp
+static LogicalResult resolveClassStructBody(ModuleOp mod, SymbolRefAttr op,
+                                            TypeConverter const &typeConverter,
+                                            ClassTypeCache &cache) {
+  auto classDeclOp = cast<ClassDeclOp>(*mod.lookupSymbol(op));
+  return resolveClassStructBody(classDeclOp, typeConverter, cache);
+}
 
 /// Returns the passed value if the integer width is already correct.
 /// Zero-extends if it is too narrow.
@@ -87,14 +240,6 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
 
   for (auto port : moduleTy.getPorts()) {
     Type portTy = typeConverter.convertType(port.type);
-    if (auto ioTy = dyn_cast_or_null<hw::InOutType>(portTy)) {
-      ports.push_back(hw::PortInfo(
-          {{port.name, ioTy.getElementType(), hw::ModulePort::InOut},
-           inputNum++,
-           {}}));
-      continue;
-    }
-
     if (port.dir == hw::ModulePort::Direction::Output) {
       ports.push_back(
           hw::PortInfo({{port.name, portTy, port.dir}, resultNum++, {}}));
@@ -189,9 +334,9 @@ static void getValuesToObserve(Region *region,
   Location loc = region->getLoc();
 
   auto probeIfSignal = [&](Value value) -> Value {
-    if (!isa<hw::InOutType>(value.getType()))
+    if (!isa<llhd::RefType>(value.getType()))
       return value;
-    return llhd::PrbOp::create(rewriter, loc, value);
+    return llhd::ProbeOp::create(rewriter, loc, value);
   };
 
   region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
@@ -508,9 +653,211 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
   }
 };
 
+// moore.wait_delay -> llhd.wait
+static LogicalResult convert(WaitDelayOp op, WaitDelayOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  auto *resumeBlock =
+      rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+  rewriter.setInsertionPoint(op);
+  rewriter.replaceOpWithNewOp<llhd::WaitOp>(op, ValueRange{},
+                                            adaptor.getDelay(), ValueRange{},
+                                            ValueRange{}, resumeBlock);
+  rewriter.setInsertionPointToStart(resumeBlock);
+  return success();
+}
+
+// moore.unreachable -> llhd.halt
+static LogicalResult convert(UnreachableOp op, UnreachableOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declaration Conversion
 //===----------------------------------------------------------------------===//
+
+static Value createZeroValue(Type type, Location loc,
+                             ConversionPatternRewriter &rewriter) {
+  // Handle pointers.
+  if (isa<mlir::LLVM::LLVMPointerType>(type))
+    return mlir::LLVM::ZeroOp::create(rewriter, loc, type);
+
+  // Handle time values.
+  if (isa<llhd::TimeType>(type)) {
+    auto timeAttr =
+        llhd::TimeAttr::get(type.getContext(), 0U, llvm::StringRef("ns"), 0, 0);
+    return llhd::ConstantTimeOp::create(rewriter, loc, timeAttr);
+  }
+
+  // Handle real values.
+  if (auto floatType = dyn_cast<FloatType>(type)) {
+    auto floatAttr = rewriter.getFloatAttr(floatType, 0.0);
+    return mlir::arith::ConstantOp::create(rewriter, loc, floatAttr);
+  }
+
+  // Otherwise try to create a zero integer and bitcast it to the result type.
+  int64_t width = hw::getBitWidth(type);
+  if (width == -1)
+    return {};
+
+  // TODO: Once the core dialects support four-valued integers, this code
+  // will additionally need to generate an all-X value for four-valued
+  // variables.
+  Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+  return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
+}
+
+struct ClassPropertyRefOpConversion
+    : public OpConversionPattern<circt::moore::ClassPropertyRefOp> {
+  ClassPropertyRefOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                               ClassTypeCache &cache)
+      : OpConversionPattern(tc, ctx), cache(cache) {}
+
+  LogicalResult
+  matchAndRewrite(circt::moore::ClassPropertyRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    // Convert result type; we expect !llhd.ref<someT>.
+    Type dstTy = getTypeConverter()->convertType(op.getPropertyRef().getType());
+    // Operand is a !llvm.ptr
+    Value instRef = adaptor.getInstance();
+
+    // Resolve identified struct from cache.
+    auto classRefTy =
+        cast<circt::moore::ClassHandleType>(op.getInstance().getType());
+    SymbolRefAttr classSym = classRefTy.getClassSym();
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+    if (failed(resolveClassStructBody(mod, classSym, *typeConverter, cache)))
+      return rewriter.notifyMatchFailure(op,
+                                         "Could not resolve class struct for " +
+                                             classSym.getRootReference().str());
+
+    auto structInfo = cache.getStructInfo(classSym);
+    assert(structInfo && "class struct info must exist");
+    auto structTy = structInfo->classBody;
+
+    // Look up cached GEP path for the property.
+    auto propSym = op.getProperty();
+    auto pathOpt = structInfo->getFieldPath(propSym);
+    if (!pathOpt)
+      return rewriter.notifyMatchFailure(op,
+                                         "no GEP path for property " + propSym);
+
+    auto i32Ty = IntegerType::get(ctx, 32);
+    SmallVector<Value> idxVals;
+    for (unsigned idx : *pathOpt)
+      idxVals.push_back(LLVM::ConstantOp::create(
+          rewriter, loc, i32Ty, rewriter.getI32IntegerAttr(idx)));
+
+    // GEP to the field (opaque ptr mode requires element type).
+    auto ptrTy = LLVM::LLVMPointerType::get(ctx);
+    auto gep =
+        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, instRef, idxVals);
+
+    // Wrap pointer back to !llhd.ref<someT>.
+    Value fieldRef = UnrealizedConversionCastOp::create(rewriter, loc, dstTy,
+                                                        gep.getResult())
+                         .getResult(0);
+
+    rewriter.replaceOp(op, fieldRef);
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache;
+};
+
+struct ClassUpcastOpConversion : public OpConversionPattern<ClassUpcastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClassUpcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Expect lowered types like !llvm.ptr
+    Type dstTy = getTypeConverter()->convertType(op.getResult().getType());
+    Type srcTy = adaptor.getInstance().getType();
+
+    if (!dstTy)
+      return rewriter.notifyMatchFailure(op, "failed to convert result type");
+
+    // If the types are already identical (opaque pointer mode), just forward.
+    if (dstTy == srcTy && isa<LLVM::LLVMPointerType>(srcTy)) {
+      rewriter.replaceOp(op, adaptor.getInstance());
+      return success();
+    }
+    return rewriter.notifyMatchFailure(
+        op, "Upcast applied to non-opaque pointers!");
+  }
+};
+
+/// moore.class.new lowering: heap-allocate storage for the class object.
+struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
+  ClassNewOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                       ClassTypeCache &cache)
+      : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache) {}
+
+  LogicalResult
+  matchAndRewrite(ClassNewOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    MLIRContext *ctx = rewriter.getContext();
+
+    auto handleTy = cast<ClassHandleType>(op.getResult().getType());
+    auto sym = handleTy.getClassSym();
+
+    ModuleOp mod = op->getParentOfType<ModuleOp>();
+
+    if (failed(resolveClassStructBody(mod, sym, *typeConverter, cache)))
+      return op.emitError() << "Could not resolve class struct for " << sym;
+
+    auto structTy = cache.getStructInfo(sym)->classBody;
+
+    DataLayout dl(mod);
+    // DataLayout::getTypeSize gives a byte count for LLVM types.
+    uint64_t byteSize = dl.getTypeSize(structTy);
+    auto i64Ty = IntegerType::get(ctx, 64);
+    auto cSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
+                                          rewriter.getI64IntegerAttr(byteSize));
+
+    // Get or declare malloc and call it.
+    auto mallocFn = getOrCreateMalloc(mod, rewriter);
+    auto ptrTy = LLVM::LLVMPointerType::get(ctx); // opaque pointer result
+    auto call =
+        LLVM::CallOp::create(rewriter, loc, TypeRange{ptrTy},
+                             SymbolRefAttr::get(mallocFn), ValueRange{cSize});
+
+    // Replace the new op with the malloc pointer (no cast needed with opaque
+    // ptrs).
+    rewriter.replaceOp(op, call.getResult());
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache; // shared, owned by the pass
+};
+
+struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
+  ClassDeclOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                        ClassTypeCache &cache)
+      : OpConversionPattern<ClassDeclOp>(tc, ctx), cache(cache) {}
+
+  LogicalResult
+  matchAndRewrite(ClassDeclOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    if (failed(resolveClassStructBody(op, *typeConverter, cache)))
+      return failure();
+    // The declaration itself is a no-op
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache; // shared, owned by the pass
+};
 
 struct VariableOpConversion : public OpConversionPattern<VariableOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -518,24 +865,18 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
   LogicalResult
   matchAndRewrite(VariableOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Location loc = op.getLoc();
-    Type resultType = typeConverter->convertType(op.getResult().getType());
+    auto loc = op.getLoc();
+    auto resultType = typeConverter->convertType(op.getResult().getType());
     if (!resultType)
       return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
 
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
     if (!init) {
-      Type elementType = cast<hw::InOutType>(resultType).getElementType();
-      int64_t width = hw::getBitWidth(elementType);
-      if (width == -1)
+      auto elementType = cast<llhd::RefType>(resultType).getNestedType();
+      init = createZeroValue(elementType, loc, rewriter);
+      if (!init)
         return failure();
-
-      // TODO: Once the core dialects support four-valued integers, this code
-      // will additionally need to generate an all-X value for four-valued
-      // variables.
-      Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-      init = rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
     }
 
     rewriter.replaceOpWithNewOp<llhd::SignalOp>(op, resultType,
@@ -560,7 +901,7 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
 
     // TODO: Once the core dialects support four-valued integers, this code
     // will additionally need to generate an all-X value for four-valued nets.
-    auto elementType = cast<hw::InOutType>(resultType).getElementType();
+    auto elementType = cast<llhd::RefType>(resultType).getNestedType();
     int64_t width = hw::getBitWidth(elementType);
     if (width == -1)
       return failure();
@@ -575,7 +916,8 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
       auto timeAttr = llhd::TimeAttr::get(resultType.getContext(), 0U,
                                           llvm::StringRef("ns"), 0, 1);
       auto time = llhd::ConstantTimeOp::create(rewriter, loc, timeAttr);
-      llhd::DrvOp::create(rewriter, loc, signal, assignedValue, time, Value{});
+      llhd::DriveOp::create(rewriter, loc, signal, assignedValue, time,
+                            Value{});
     }
 
     return success();
@@ -601,6 +943,17 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct ConstantRealOpConv : public OpConversionPattern<ConstantRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConstantRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, op.getValueAttr());
+    return success();
+  }
+};
+
 struct ConstantTimeOpConv : public OpConversionPattern<ConstantTimeOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -614,10 +967,10 @@ struct ConstantTimeOpConv : public OpConversionPattern<ConstantTimeOp> {
   }
 };
 
-struct StringConstantOpConv : public OpConversionPattern<StringConstantOp> {
+struct ConstantStringOpConv : public OpConversionPattern<ConstantStringOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(moore::StringConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(moore::ConstantStringOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     const auto resultType =
         typeConverter->convertType(op.getResult().getType());
@@ -714,7 +1067,8 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       int32_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
       int32_t inputWidth = arrTy.getNumElements();
 
-      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType)) {
+      if (auto resArrTy = dyn_cast<hw::ArrayType>(resultType);
+          resArrTy && resArrTy != arrTy.getElementType()) {
         int32_t elementWidth = hw::getBitWidth(arrTy.getElementType());
         if (elementWidth < 0)
           return failure();
@@ -796,7 +1150,7 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType =
-        cast<hw::InOutType>(adaptor.getInput().getType()).getElementType();
+        cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
@@ -818,8 +1172,10 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
           rewriter.getIntegerType(llvm::Log2_64_Ceil(arrType.getNumElements())),
           adaptor.getLowBit());
 
-      if (isa<hw::ArrayType>(
-              cast<hw::InOutType>(resultType).getElementType())) {
+      // If the result type is not the same as the array's element type, then
+      // it has to be a slice.
+      if (arrType.getElementType() !=
+          cast<llhd::RefType>(resultType).getNestedType()) {
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), lowBit);
         return success();
@@ -858,13 +1214,15 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
                                      op->getLoc());
 
-      if (isa<hw::ArrayType>(resultType)) {
+      bool isSingleElementExtract = arrType.getElementType() == resultType;
+
+      if (isSingleElementExtract)
+        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(),
+                                                    idx);
+      else
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
-        return success();
-      }
 
-      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
       return success();
     }
 
@@ -881,7 +1239,7 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType =
-        cast<hw::InOutType>(adaptor.getInput().getType()).getElementType();
+        cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
@@ -901,15 +1259,17 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
           rewriter, adaptor.getLowBit(),
           llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
 
-      if (isa<hw::ArrayType>(
-              cast<hw::InOutType>(resultType).getElementType())) {
+      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
+      bool isSingleElementExtract =
+          arrType.getElementType() == resultNestedType;
+
+      if (isSingleElementExtract)
+        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                         idx);
+      else
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), idx);
-        return success();
-      }
 
-      rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
-                                                       idx);
       return success();
     }
 
@@ -1139,6 +1499,10 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType) {
+      op.emitError("conversion result type is not currently supported");
+      return failure();
+    }
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
     if (inputBw == -1 || resultBw == -1)
@@ -1151,6 +1515,24 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
     Value result =
         rewriter.createOrFold<hw::BitcastOp>(loc, resultType, amount);
     rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+template <typename SourceOp>
+struct BitcastConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+  using ConversionPattern::typeConverter;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto type = typeConverter->convertType(op.getResult().getType());
+    if (type == adaptor.getInput().getType())
+      rewriter.replaceOp(op, adaptor.getInput());
+    else
+      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, type, adaptor.getInput());
     return success();
   }
 };
@@ -1231,32 +1613,6 @@ struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOperands());
-    return success();
-  }
-};
-
-struct CondBranchOpConversion : public OpConversionPattern<cf::CondBranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(cf::CondBranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<cf::CondBranchOp>(
-        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
-        adaptor.getFalseDestOperands(), /*branch_weights=*/nullptr,
-        op.getTrueDest(), op.getFalseDest());
-    return success();
-  }
-};
-
-struct BranchOpConversion : public OpConversionPattern<cf::BranchOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(cf::BranchOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<cf::BranchOp>(op, op.getDest(),
-                                              adaptor.getDestOperands());
     return success();
   }
 };
@@ -1400,7 +1756,7 @@ struct ReadOpConversion : public OpConversionPattern<ReadOp> {
   LogicalResult
   matchAndRewrite(ReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<llhd::PrbOp>(op, adaptor.getInput());
+    rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, adaptor.getInput());
     return success();
   }
 };
@@ -1418,7 +1774,7 @@ struct AssignedVariableOpConversion
   }
 };
 
-template <typename OpTy, unsigned DeltaTime, unsigned EpsilonTime>
+template <typename OpTy>
 struct AssignOpConversion : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
   using OpAdaptor = typename OpTy::Adaptor;
@@ -1426,13 +1782,26 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
   LogicalResult
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: When we support delay control in Moore dialect, we need to update
-    // this conversion.
-    auto timeAttr = llhd::TimeAttr::get(
-        op->getContext(), 0U, llvm::StringRef("ns"), DeltaTime, EpsilonTime);
-    auto time = llhd::ConstantTimeOp::create(rewriter, op->getLoc(), timeAttr);
-    rewriter.replaceOpWithNewOp<llhd::DrvOp>(op, adaptor.getDst(),
-                                             adaptor.getSrc(), time, Value{});
+    // Determine the delay for the assignment.
+    Value delay;
+    if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
+                  std::is_same_v<OpTy, BlockingAssignOp>) {
+      // Blocking and continuous assignments get a 0ns 0d 1e delay.
+      delay = llhd::ConstantTimeOp::create(
+          rewriter, op->getLoc(),
+          llhd::TimeAttr::get(op->getContext(), 0U, "ns", 0, 1));
+    } else if constexpr (std::is_same_v<OpTy, NonBlockingAssignOp>) {
+      // Non-blocking assignments get a 0ns 1d 0e delay.
+      delay = llhd::ConstantTimeOp::create(
+          rewriter, op->getLoc(),
+          llhd::TimeAttr::get(op->getContext(), 0U, "ns", 1, 0));
+    } else {
+      // Delayed assignments have a delay operand.
+      delay = adaptor.getDelay();
+    }
+
+    rewriter.replaceOpWithNewOp<llhd::DriveOp>(
+        op, adaptor.getDst(), adaptor.getSrc(), delay, Value{});
     return success();
   }
 };
@@ -1549,7 +1918,7 @@ struct FormatLiteralOpConversion : public OpConversionPattern<FormatLiteralOp> {
   LogicalResult
   matchAndRewrite(FormatLiteralOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::FormatLitOp>(op, adaptor.getLiteral());
+    rewriter.replaceOpWithNewOp<sim::FormatLiteralOp>(op, adaptor.getLiteral());
     return success();
   }
 };
@@ -1605,6 +1974,62 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Simulation Control Conversion
+//===----------------------------------------------------------------------===//
+
+// moore.builtin.stop -> sim.pause
+static LogicalResult convert(StopBIOp op, StopBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<sim::PauseOp>(op, /*verbose=*/false);
+  return success();
+}
+
+// moore.builtin.finish -> sim.terminate
+static LogicalResult convert(FinishBIOp op, FinishBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<sim::TerminateOp>(op, op.getExitCode() == 0,
+                                                /*verbose=*/false);
+  return success();
+}
+
+// moore.builtin.severity -> sim.proc.print
+static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+
+  std::string severityString;
+
+  switch (op.getSeverity()) {
+  case (Severity::Fatal):
+    severityString = "Fatal: ";
+    break;
+  case (Severity::Error):
+    severityString = "Error: ";
+    break;
+  case (Severity::Warning):
+    severityString = "Warning: ";
+    break;
+  default:
+    return failure();
+  }
+
+  auto prefix =
+      sim::FormatLiteralOp::create(rewriter, op.getLoc(), severityString);
+  auto message = sim::FormatStringConcatOp::create(
+      rewriter, op.getLoc(), ValueRange{prefix, adaptor.getMessage()});
+  rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(op, message);
+  return success();
+}
+
+// moore.builtin.finish_message
+static LogicalResult convert(FinishMessageBIOp op,
+                             FinishMessageBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  // We don't support printing termination/pause messages yet.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -1619,14 +2044,16 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<mlir::math::MathDialect>();
   target.addLegalDialect<sim::SimDialect>();
+  target.addLegalDialect<mlir::LLVM::LLVMDialect>();
   target.addLegalDialect<verif::VerifDialect>();
+  target.addLegalDialect<arith::ArithDialect>();
 
   target.addLegalOp<debug::ScopeOp>();
 
-  target.addDynamicallyLegalOp<
-      cf::CondBranchOp, cf::BranchOp, scf::YieldOp, func::CallOp,
-      func::ReturnOp, UnrealizedConversionCastOp, hw::OutputOp, hw::InstanceOp,
-      debug::ArrayOp, debug::StructOp, debug::VariableOp>(
+  target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
+                               UnrealizedConversionCastOp, hw::OutputOp,
+                               hw::InstanceOp, debug::ArrayOp, debug::StructOp,
+                               debug::VariableOp>(
       [&](Operation *op) { return converter.isLegal(op); });
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
@@ -1635,8 +2062,7 @@ static void populateLegality(ConversionTarget &target,
   });
 
   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
-    return converter.isSignatureLegal(op.getFunctionType()) &&
-           converter.isLegal(&op.getFunctionBody());
+    return converter.isSignatureLegal(op.getFunctionType());
   });
 
   target.addDynamicallyLegalOp<hw::HWModuleOp>([&](hw::HWModuleOp op) {
@@ -1648,6 +2074,16 @@ static void populateLegality(ConversionTarget &target,
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
     return IntegerType::get(type.getContext(), type.getWidth());
+  });
+
+  typeConverter.addConversion([&](RealType type) -> mlir::Type {
+    MLIRContext *ctx = type.getContext();
+    switch (type.getWidth()) {
+    case moore::RealWidth::f32:
+      return mlir::Float32Type::get(ctx);
+    case moore::RealWidth::f64:
+      return mlir::Float64Type::get(ctx);
+    }
   });
 
   typeConverter.addConversion(
@@ -1705,10 +2141,23 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
         return hw::StructType::get(type.getContext(), fields);
       });
 
+  // Conversion of CHandle to LLVMPointerType
+  typeConverter.addConversion([&](ChandleType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
+  // Explicitly mark LLVMPointerType as a legal target
+  typeConverter.addConversion(
+      [](LLVM::LLVMPointerType t) -> std::optional<Type> { return t; });
+
+  // ClassHandleType  ->  !llvm.ptr
+  typeConverter.addConversion([&](ClassHandleType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
-      if (hw::isHWValueType(innerType))
-        return hw::InOutType::get(innerType);
+      return llhd::RefType::get(innerType);
     return {};
   });
 
@@ -1719,9 +2168,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
   typeConverter.addConversion([](debug::StructType type) { return type; });
 
-  typeConverter.addConversion([&](hw::InOutType type) -> std::optional<Type> {
-    if (auto innerType = typeConverter.convertType(type.getElementType()))
-      return hw::InOutType::get(innerType);
+  typeConverter.addConversion([&](llhd::RefType type) -> std::optional<Type> {
+    if (auto innerType = typeConverter.convertType(type.getNestedType()))
+      return llhd::RefType::get(innerType);
     return {};
   });
 
@@ -1765,33 +2214,62 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
       });
 }
 
-static void populateOpConversion(RewritePatternSet &patterns,
-                                 TypeConverter &typeConverter) {
-  auto *context = patterns.getContext();
+static void populateOpConversion(ConversionPatternSet &patterns,
+                                 TypeConverter &typeConverter,
+                                 ClassTypeCache &classCache) {
+
+  patterns.add<ClassDeclOpConversion>(typeConverter, patterns.getContext(),
+                                      classCache);
+  patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
+                                     classCache);
+  patterns.add<ClassPropertyRefOpConversion>(typeConverter,
+                                             patterns.getContext(), classCache);
+
   // clang-format off
   patterns.add<
+    ClassUpcastOpConversion,
     // Patterns of declaration operations.
     VariableOpConversion,
     NetOpConversion,
 
     // Patterns for conversion operations.
     ConversionOpConversion,
+    BitcastConversion<PackedToSBVOp>,
+    BitcastConversion<SBVToPackedOp>,
+    BitcastConversion<LogicToIntOp>,
+    BitcastConversion<IntToLogicOp>,
+    BitcastConversion<ToBuiltinBoolOp>,
     TruncOpConversion,
     ZExtOpConversion,
     SExtOpConversion,
 
     // Patterns of miscellaneous operations.
-    ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
+    ConstantOpConv,
+    ConstantRealOpConv,
+    ConcatOpConversion,
+    ReplicateOpConversion,
     ConstantTimeOpConv,
-    ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
+    ExtractOpConversion,
+    DynExtractOpConversion,
+    DynExtractRefOpConversion,
     ReadOpConversion,
-    StructExtractOpConversion, StructExtractRefOpConversion,
-    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion, ArrayCreateOpConversion,
-    YieldOpConversion, OutputOpConversion, StringConstantOpConv,
+    StructExtractOpConversion,
+    StructExtractRefOpConversion,
+    ExtractRefOpConversion,
+    StructCreateOpConversion,
+    ConditionalOpConversion,
+    ArrayCreateOpConversion,
+    YieldOpConversion,
+    OutputOpConversion,
+    ConstantStringOpConv,
 
     // Patterns of unary operations.
-    ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
-    BoolCastOpConversion, NotOpConversion, NegOpConversion,
+    ReduceAndOpConversion,
+    ReduceOrOpConversion,
+    ReduceXorOpConversion,
+    BoolCastOpConversion,
+    NotOpConversion,
+    NegOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,
@@ -1827,23 +2305,29 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
 
     // Patterns of structural operations.
-    SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion, WaitEventOpConversion,
+    SVModuleOpConversion,
+    InstanceOpConversion,
+    ProcedureOpConversion,
+    WaitEventOpConversion,
 
     // Patterns of shifting operations.
-    ShrOpConversion, ShlOpConversion, AShrOpConversion,
+    ShrOpConversion,
+    ShlOpConversion,
+    AShrOpConversion,
 
     // Patterns of assignment operations.
-    AssignOpConversion<ContinuousAssignOp, 0, 1>,
-    AssignOpConversion<BlockingAssignOp, 0, 1>,
-    AssignOpConversion<NonBlockingAssignOp, 1, 0>,
+    AssignOpConversion<ContinuousAssignOp>,
+    AssignOpConversion<DelayedContinuousAssignOp>,
+    AssignOpConversion<BlockingAssignOp>,
+    AssignOpConversion<NonBlockingAssignOp>,
+    AssignOpConversion<DelayedNonBlockingAssignOp>,
     AssignedVariableOpConversion,
 
-    // Patterns of branch operations.
-    CondBranchOpConversion, BranchOpConversion,
-
     // Patterns of other operations outside Moore dialect.
-    HWInstanceOpConversion, ReturnOpConversion,
-    CallOpConversion, UnrealizedConversionCastConversion,
+    HWInstanceOpConversion,
+    ReturnOpConversion,
+    CallOpConversion,
+    UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,
     InPlaceOpConversion<debug::VariableOp>,
@@ -1858,8 +2342,18 @@ static void populateOpConversion(RewritePatternSet &patterns,
     FormatConcatOpConversion,
     FormatIntOpConversion,
     DisplayBIOpConversion
-  >(typeConverter, context);
+  >(typeConverter, patterns.getContext());
   // clang-format on
+
+  // Structural operations
+  patterns.add<WaitDelayOp>(convert);
+  patterns.add<UnreachableOp>(convert);
+
+  // Simulation control
+  patterns.add<StopBIOp>(convert);
+  patterns.add<SeverityBIOp>(convert);
+  patterns.add<FinishBIOp>(convert);
+  patterns.add<FinishMessageBIOp>(convert);
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
@@ -1889,16 +2383,21 @@ std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
 void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
+  ClassTypeCache classCache;
 
   IRRewriter rewriter(module);
   (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
 
-  ConversionTarget target(context);
   TypeConverter typeConverter;
-  RewritePatternSet patterns(&context);
   populateTypeConversion(typeConverter);
+
+  ConversionTarget target(context);
   populateLegality(target, typeConverter);
-  populateOpConversion(patterns, typeConverter);
+
+  ConversionPatternSet patterns(&context, typeConverter);
+  populateOpConversion(patterns, typeConverter, classCache);
+  mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
+                                                           patterns, target);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();

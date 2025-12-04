@@ -21,7 +21,6 @@ target_link_libraries(circt-opt
 
   CIRCTAnalysisTestPasses
   CIRCTBMCTransforms
-  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTLECTransforms
   CIRCTCoreToFSM
@@ -40,6 +39,7 @@ target_link_libraries(circt-opt
   MLIRFuncInlinerExtension
   MLIRVectorDialect
   MLIRIndexDialect
+  MLIRLLVMIRTransforms
 )
 
 export_executable_symbols_for_plugins(circt-opt)

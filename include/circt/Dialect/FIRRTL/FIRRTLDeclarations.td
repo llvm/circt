@@ -66,9 +66,9 @@ def InstanceOp : HardwareDeclOp<"instance", [
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
       NameKindAttr:$nameKind, DenseBoolArrayAttr:$portDirections,
-      StrArrayAttr:$portNames, AnnotationArrayAttr:$annotations,
-      PortAnnotationsAttr:$portAnnotations, LayerArrayAttr:$layers,
-      UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
+      StrArrayAttr:$portNames, DomainInfoAttr:$domainInfo,
+      AnnotationArrayAttr:$annotations, PortAnnotationsAttr:$portAnnotations,
+      LayerArrayAttr:$layers, UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
       OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<AnyType>:$results);
@@ -81,6 +81,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
            "::circt::firrtl::NameKindEnum":$nameKind,
            "::mlir::ArrayRef<Direction>":$portDirections,
            "::mlir::ArrayRef<Attribute>":$portNames,
+           "::mlir::ArrayRef<Attribute>":$domainInfo,
            CArg<"ArrayRef<Attribute>", "{}">:$annotations,
            CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
            CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
@@ -92,6 +93,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
            "::circt::firrtl::NameKindEnum":$nameKind,
            "::mlir::ArrayRef<Direction>":$portDirections,
            "::mlir::ArrayRef<Attribute>":$portNames,
+           "::mlir::ArrayRef<Attribute>":$domainInfo,
            "ArrayRef<Attribute>":$annotations,
            "ArrayRef<Attribute>":$portAnnotations,
            "::mlir::ArrayRef<Attribute>":$layers, "bool":$lowerToBind,
@@ -117,31 +119,51 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
+    StringAttr getPortNameAttr(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    /// Returns the port location for the specified result number.
+    Location getPortLocation(size_t) {
+      return getLoc();
     }
 
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
-    /// Builds a new instance with the ports listed in `portIndices` erased, and
-    /// updates any users of the remaining ports to point at the new instance.
-    InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
+    /// Hooks for domain information.
+    ArrayAttr getPortDomain(unsigned portIdx);
 
-    /// Clone the instance op and add ports.  This is usually used in
-    /// conjuction with adding ports to the referenced module. This will emit
-    /// the new InstanceOp to the same location.
-    InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+    /// Clone this instance with inserted ports.
+    InstanceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
 
     //===------------------------------------------------------------------===//
     // Instance graph methods
@@ -185,6 +207,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                        SymbolRefArrayAttr:$caseNames,
                        StrAttr:$name, NameKindAttr:$nameKind,
                        DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
+                       DomainInfoAttr:$domainInfo,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
@@ -196,20 +219,29 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
+    StringAttr getPortNameAttr(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
 
-    /// Builds a new instance with the ports listed in `portIndices` erased, and
-    /// updates any users of the remaining ports to point at the new instance.
-    InstanceChoiceOp erasePorts(OpBuilder &builder,
-                                const llvm::BitVector &portIndices);
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    /// Returns the port location for the specified result number.
+    Location getPortLocation(size_t resultNo) {
+      return getLoc();
+    }
 
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
@@ -227,6 +259,21 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     /// Return the list of case-module mappings.
     SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
     getTargetChoices();
+
+    /// Clone this instance with inserted ports.
+    InstanceChoiceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceChoiceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceChoiceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceChoiceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
   }];
 
   let builders = [
@@ -292,9 +339,10 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
     size_t getMaskBits();
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
+    StringAttr getPortNameAttr(size_t resultNo);
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
     }
 
     /// Return the port type for the specified result number.

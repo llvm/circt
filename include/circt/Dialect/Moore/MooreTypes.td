@@ -52,6 +52,19 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
   let summary = "the SystemVerilog `event` type";
 }
 
+//===----------------------------------------------------------------------===//
+// ClassHandleType
+//===----------------------------------------------------------------------===//
+
+def ClassHandleType : MooreTypeDef<"ClassHandle", [], "moore::UnpackedType"> {
+  let mnemonic = "class";
+  let summary = "Class object handle type, pointing to an object on the heap.";
+  let description = [{
+      The `!moore.class<@C>` type represents a handle of a class instance of class `@C` living on the program's heap.
+  }];
+  let parameters = (ins AttrParameter<"::mlir::SymbolRefAttr", "class symbol">:$classSym);
+  let assemblyFormat = "`<` $classSym `>`";
+}
 
 //===----------------------------------------------------------------------===//
 // TimeType
@@ -115,6 +128,20 @@ def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
     static IntType getLogic(MLIRContext *context, unsigned width) {
       return get(context, width, Domain::FourValued);
     }
+
+    /// Get a two-valued version of this integer.
+    IntType getTwoValued() {
+      if (getDomain() == Domain::TwoValued)
+        return *this;
+      return getInt(getContext(), getWidth());
+    }
+
+    /// Get a four-valued version of this integer.
+    IntType getFourValued() {
+      if (getDomain() == Domain::FourValued)
+        return *this;
+      return getLogic(getContext(), getWidth());
+    }
   }];
 }
 
@@ -124,21 +151,25 @@ def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
 //===----------------------------------------------------------------------===//
 
 def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
-  let mnemonic = "real";
+  let typeName = "moore.real";
   let summary = "a SystemVerilog real type";
+  let parameters = (ins "RealWidth":$width);
   let description = [{
-    This type represents the SystemVerilog real type. Since the Moore dialect
-    does not fully handle real-valued expressions properly yet, we coalesce the
-    `shortreal`, `real`, and `realtime` types in the SystemVerilgo standard to
+    This type represents the SystemVerilog real type. We coalesce the
+    `f32`, `f64`, and `realtime` types in the SystemVerilog standard to
     this common `!moore.real` type. The standard specifies these types to be of
-    at least 32, 64, and 64 bits, respectively. The `!moore.real` type is 64
-    bits wide.
+    at least 32, 64, and 64 bits, respectively.
 
-    | Verilog     | Moore Dialect |
-    |-------------|---------------|
-    | `shortreal` | `!moore.real` |
-    | `real`      | `!moore.real` |
-    | `realtime`  | `!moore.time` |
+    | Verilog     | Moore Dialect      |
+    |-------------|--------------------|
+    | `shortreal` | `!moore.f32`       |
+    | `real`      | `!moore.f64`       |
+    | `realtime`  | `!moore.time`      |
+  }];
+  let extraClassDeclaration = [{
+    // Convenience helpers
+    static RealType getShortReal(MLIRContext *ctx) { return get(ctx, RealWidth::f32); }
+    static RealType getReal     (MLIRContext *ctx) { return get(ctx, RealWidth::f64); }
   }];
 }
 
@@ -421,8 +452,17 @@ def FormatStringType : MooreTypeDef<"FormatString"> {
 def ModuleType : MooreType<CPred<"llvm::isa<hw::ModuleType>($_self)">,
   "module type", "hw::ModuleType">;
 
+def PackedType : MooreType<CPred<"llvm::isa<moore::PackedType>($_self)">,
+  "packed type", "moore::PackedType">;
+
 def UnpackedType : MooreType<CPred<"llvm::isa<moore::UnpackedType>($_self)">,
   "unpacked type", "moore::UnpackedType">;
+
+/// A packed type with a known bit size.
+def PackedTypeWithKnownSize : MooreType<CPred<[{
+    llvm::isa<moore::PackedType>($_self) &&
+    llvm::cast<moore::PackedType>($_self).getBitSize().has_value()
+  }]>, "packed type with known size", "moore::PackedType">;
 
 /// A simple bit vector type.
 def SimpleBitVectorType : MooreType<CPred<[{
@@ -431,19 +471,75 @@ def SimpleBitVectorType : MooreType<CPred<[{
 
 /// A single two or four-valued bit.
 def AnySingleBitType : MooreType<CPred<[{
-    llvm::isa<moore::IntType>($_self) &&
-    llvm::cast<moore::IntType>($_self).getWidth() == 1
+    moore::isIntType($_self, 1)
   }]>, "single bit type", "moore::IntType">;
 
 /// A single two-valued bit.
 def BitType : MooreType<CPred<[{
-    llvm::isa<moore::IntType>($_self) &&
-    llvm::cast<moore::IntType>($_self).getWidth() == 1 &&
-    llvm::cast<moore::IntType>($_self).getDomain() == moore::Domain::TwoValued
+    moore::isIntType($_self, 1, moore::Domain::TwoValued)
   }]>, "`bit` type", "moore::IntType"> {
   let builderCall = [{
     IntType::getInt($_builder.getContext(), 1)
   }];
+}
+
+/// A two-valued integer.
+def TwoValuedIntType : MooreType<CPred<[{
+    moore::isIntType($_self, moore::Domain::TwoValued)
+  }]>, "two-valued integer type", "moore::IntType">;
+
+/// A four-valued integer.
+def FourValuedIntType : MooreType<CPred<[{
+    moore::isIntType($_self, moore::Domain::FourValued)
+  }]>, "four-valued integer type", "moore::IntType">;
+
+/// A 64-bit four-valued integer.
+def FourValuedI64 : MooreType<CPred<[{
+    moore::isIntType($_self, 64, moore::Domain::FourValued)
+  }]>, "64-bit four-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getLogic($_builder.getContext(), 64)";
+}
+
+/// A 32-bit four-valued integer.
+def FourValuedI32 : MooreType<CPred<[{
+    moore::isIntType($_self, 32, moore::Domain::FourValued)
+  }]>, "32-bit four-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getLogic($_builder.getContext(), 32)";
+}
+
+// A 64-bit two-valued integer.
+def TwoValuedI64 : MooreType<CPred<[{
+    moore::isIntType($_self, 64, moore::Domain::TwoValued)
+  }]>, "64-bit two-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getInt($_builder.getContext(), 64)";
+}
+
+// A 32-bit two-valued integer.
+def TwoValuedI32 : MooreType<CPred<[{
+    moore::isIntType($_self, 32, moore::Domain::TwoValued)
+  }]>, "32-bit two-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getInt($_builder.getContext(), 32)";
+}
+
+// A 32-bit two-valued integer.
+def TwoValuedI8 : MooreType<CPred<[{
+    moore::isIntType($_self, 8, moore::Domain::TwoValued)
+  }]>, "8-bit two-valued integer type", "moore::IntType"> {
+  let builderCall = "IntType::getInt($_builder.getContext(), 8)";
+}
+
+// A 32-bit real value.
+def RealF32 : MooreType<CPred<[{
+    moore::isRealType($_self, 32)
+  }]>, "32-bit real type, aka. shortreal", "moore::RealType"> {
+  let builderCall = "RealType::getShortReal($_builder.getContext())";
+}
+
+// A 64-bit real value.
+def RealF64 : MooreType<CPred<[{
+    moore::isRealType($_self, 64)
+  }]>, "64-bit real type, aka. real", "moore::RealType"> {
+  let builderCall = "RealType::getReal($_builder.getContext())";
 }
 
 /// A packed or unpacked array type with a fixed size.
@@ -483,4 +579,6 @@ def UnionRefType : SpecificRefType<UnionType>;
 def UnpackedUnionRefType : SpecificRefType<UnpackedUnionType>;
 def AnyUnionRefType : SpecificRefType<AnyUnionType>;
 
+/// Class references.
+def ClassHandleRefType : SpecificRefType<ClassHandleType>;
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

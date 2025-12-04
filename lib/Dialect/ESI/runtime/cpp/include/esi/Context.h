@@ -20,23 +20,30 @@
 #include "esi/Types.h"
 
 #include <exception>
+#include <map>
 #include <memory>
-#include <optional>
+#include <vector>
 
 namespace esi {
 class AcceleratorConnection;
 
 /// AcceleratorConnections, Accelerators, and Manifests must all share a
-/// context. It owns all the types, uniquifying them.
+/// context. It owns all the types, uniquifying them. It also owns the
+/// connections (which own the Accelerators). When it is destroyed, all
+/// connections are disconnected and the objects are destroyed.
 class Context {
 public:
-  Context() : logger(std::make_unique<ConsoleLogger>(Logger::Level::Warning)) {}
-  Context(std::unique_ptr<Logger> logger) : logger(std::move(logger)) {}
+  Context();
+  Context(std::unique_ptr<Logger> logger);
+  ~Context();
+
+  /// Disconnect from all accelerators associated with this context.
+  void disconnectAll();
 
   /// Create a context with a specific logger type.
   template <typename T, typename... Args>
-  static Context withLogger(Args &&...args) {
-    return Context(std::make_unique<T>(args...));
+  static std::unique_ptr<Context> withLogger(Args &&...args) {
+    return std::make_unique<Context>(std::make_unique<T>(args...));
   }
 
   /// Resolve a type id to the type.
@@ -49,9 +56,9 @@ public:
   /// Register a type with the context. Takes ownership of the pointer type.
   void registerType(Type *type);
 
-  /// Connect to an accelerator backend.
-  std::unique_ptr<AcceleratorConnection> connect(std::string backend,
-                                                 std::string connection);
+  /// Connect to an accelerator backend. Retains ownership internally and
+  /// returns a non-owning pointer.
+  AcceleratorConnection *connect(std::string backend, std::string connection);
 
   /// Register a logger with the accelerator. Assumes ownership of the logger.
   void setLogger(std::unique_ptr<Logger> logger) {
@@ -63,6 +70,7 @@ public:
 
 private:
   std::unique_ptr<Logger> logger;
+  std::vector<std::unique_ptr<AcceleratorConnection>> connections;
 
 private:
   using TypeCache = std::map<Type::ID, std::unique_ptr<Type>>;

@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Arc/ArcReductions.h"
+#include "circt/Dialect/Emit/EmitReductions.h"
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWReductions.h"
@@ -20,13 +21,16 @@
 #include "circt/Reduce/Tester.h"
 #include "circt/Support/Version.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Tools/Plugins/DialectPlugin.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
@@ -103,6 +107,12 @@ static cl::opt<bool> verbose("v", cl::init(true),
                              cl::desc("Print reduction progress to stderr"),
                              cl::cat(mainCategory));
 
+cl::opt<int64_t> maxNumRewrites(
+    "max-num-rewrites", cl::init(-1),
+    cl::desc("Maximum number of rewrites GreedyPatternRewriteDriver may "
+             "apply (negative value keeps the default)"),
+    cl::cat(mainCategory));
+
 static cl::opt<unsigned>
     maxChunks("max-chunks", cl::init(0),
               cl::desc("Stop increasing granularity beyond this number of "
@@ -131,6 +141,11 @@ static cl::opt<bool> testMustFail(
     "test-must-fail", cl::init(false),
     cl::desc("Consider an input to be interesting on non-zero exit status."),
     cl::cat(mainCategory));
+
+static cl::list<std::string>
+    dialectPlugins("load-dialect-plugin",
+                   cl::desc("Load dialects from plugin library"),
+                   cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Tool Implementation
@@ -192,7 +207,10 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Gather a list of reduction patterns that we should try.
   ReducePatternSet patterns;
-  populateGenericReducePatterns(&context, patterns);
+  std::optional<int64_t> maxNumRewritesOpt;
+  if (maxNumRewrites >= 0)
+    maxNumRewritesOpt = maxNumRewrites;
+  populateGenericReducePatterns(&context, patterns, maxNumRewritesOpt);
   ReducePatternInterfaceCollection reducePatternCollection(&context);
   reducePatternCollection.populateReducePatterns(patterns);
   auto reductionFilter = [&](const Reduction &reduction) {
@@ -284,7 +302,7 @@ static LogicalResult execute(MLIRContext &context) {
 
       // Sort the matches by benefit. This will cause us to try the most
       // beneficial matches first.
-      llvm::sort(matches, [](auto &a, auto &b) {
+      llvm::stable_sort(matches, [](auto &a, auto &b) {
         if (a.benefit > b.benefit)
           return true;
         if (a.benefit < b.benefit)
@@ -305,8 +323,8 @@ static LogicalResult execute(MLIRContext &context) {
       while (remaining > 0 && !matches.empty()) {
         // Group the matches by op to make applying them in batch easier.
         remaining = std::min(remaining, matches.size());
-        std::sort(matches.begin(), matches.begin() + remaining,
-                  [](auto &a, auto &b) { return a.op < b.op; });
+        std::stable_sort(matches.begin(), matches.begin() + remaining,
+                         [](auto &a, auto &b) { return a.op < b.op; });
 
         // Apply the first `remaining` matches.
         for (size_t idx = 0; idx < remaining;) {
@@ -366,14 +384,14 @@ static LogicalResult execute(MLIRContext &context) {
       // Reduce the chunk size to achieve the minimum number of chunks requested
       // by the user.
       if (minChunks > 0)
-        rangeLength = std::min<size_t>(rangeLength,
-                                       std::max<size_t>(opIdx / minChunks, 1));
+        rangeLength = std::clamp<size_t>(llvm::divideCeil(opIdx, minChunks), 1,
+                                         rangeLength);
 
       // Show some progress indication.
       VERBOSE({
         size_t boundLength = std::min(rangeLength, opIdx);
         size_t numDone = rangeBase / boundLength + 1;
-        size_t numTotal = (opIdx + boundLength - 1) / boundLength;
+        size_t numTotal = llvm::divideCeil(opIdx, boundLength);
         clearSummary();
         llvm::errs() << "  [" << numDone << "/" << numTotal << "; "
                      << (numDone * 100 / numTotal) << "%; " << opIdx << " ops, "
@@ -446,7 +464,7 @@ static LogicalResult execute(MLIRContext &context) {
           // Stop increasing granularity if the number of chunks has increased
           // beyond the upper limit set by the user.
           if (rangeLength > 0 && maxChunks > 0 &&
-              (opIdx + rangeLength - 1) / rangeLength > maxChunks)
+              llvm::divideCeil(opIdx, rangeLength) > maxChunks)
             rangeLength = 0;
 
           if (rangeLength > 0) {
@@ -481,10 +499,16 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Write the reduced test case to the output.
   clearSummary();
-  VERBOSE(llvm::errs() << "All reduction strategies exhausted\n");
-  VERBOSE(llvm::errs() << "Final size: " << bestSize << " ("
-                       << (100 - bestSize * 100 / initialTest.getSize())
-                       << "% reduction)\n");
+  VERBOSE({
+    llvm::errs() << "All reduction strategies exhausted\n";
+    llvm::errs() << "Final size: " << bestSize << " (";
+    if (bestSize > initialTest.getSize())
+      llvm::errs() << (bestSize * 100 / initialTest.getSize() - 100)
+                   << "% increase)\n";
+    else
+      llvm::errs() << (100 - bestSize * 100 / initialTest.getSize())
+                   << "% reduction)\n";
+  });
   return writeOutput(module.get());
 }
 
@@ -498,6 +522,28 @@ int main(int argc, char **argv) {
   // llvm/circt and not llvm/llvm-project.
   setBugReportMsg(circtBugReportMsg);
 
+  // Register all the dialects.
+  mlir::DialectRegistry registry;
+  registerAllDialects(registry);
+  registry
+      .insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
+              LLVM::LLVMDialect, index::IndexDialect, arith::ArithDialect>();
+  arc::registerReducePatternDialectInterface(registry);
+  emit::registerReducePatternDialectInterface(registry);
+  firrtl::registerReducePatternDialectInterface(registry);
+  hw::registerReducePatternDialectInterface(registry);
+
+  // Set up dialect plugin loading callback
+  dialectPlugins.setCallback([&](const std::string &pluginPath) {
+    auto plugin = mlir::DialectPlugin::load(pluginPath);
+    if (!plugin) {
+      llvm::errs() << "Failed to load dialect plugin from '" << pluginPath
+                   << "'. Request ignored.\n";
+      return;
+    }
+    plugin.get().registerDialectRegistryCallbacks(registry);
+  });
+
   // Register and hide default LLVM options, other than for this tool.
   registerMLIRContextCLOptions();
   registerAsmPrinterCLOptions();
@@ -505,15 +551,6 @@ int main(int argc, char **argv) {
 
   // Parse the command line options provided by the user.
   cl::ParseCommandLineOptions(argc, argv, "CIRCT test case reduction tool\n");
-
-  // Register all the dialects.
-  mlir::DialectRegistry registry;
-  registerAllDialects(registry);
-  registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
-                  LLVM::LLVMDialect>();
-  arc::registerReducePatternDialectInterface(registry);
-  firrtl::registerReducePatternDialectInterface(registry);
-  hw::registerReducePatternDialectInterface(registry);
 
   // Create a context.
   mlir::MLIRContext context(registry);

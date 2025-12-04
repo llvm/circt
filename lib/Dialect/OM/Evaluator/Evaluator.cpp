@@ -15,6 +15,7 @@
 #include "mlir/IR/Location.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "om-evaluator"
@@ -50,7 +51,8 @@ LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
   assert(isFullyEvaluated());
   return llvm::TypeSwitch<EvaluatorValue *, LogicalResult>(this)
       .Case<AttributeValue, ObjectValue, ListValue, ReferenceValue,
-            BasePathValue, PathValue>([](auto v) { return v->finalizeImpl(); });
+            BasePathValue, PathValue, UnknownValue>(
+          [](auto v) { return v->finalizeImpl(); });
 }
 
 Type circt::om::evaluator::EvaluatorValue::getType() const {
@@ -61,8 +63,8 @@ Type circt::om::evaluator::EvaluatorValue::getType() const {
       .Case<ReferenceValue>([](auto *ref) { return ref->getValueType(); })
       .Case<BasePathValue>(
           [this](auto *tuple) { return FrozenBasePathType::get(ctx); })
-      .Case<PathValue>(
-          [this](auto *tuple) { return FrozenPathType::get(ctx); });
+      .Case<PathValue>([this](auto *tuple) { return FrozenPathType::get(ctx); })
+      .Case<UnknownValue>([this](auto _) { return AnyType::get(ctx); });
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
@@ -218,7 +220,8 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
 
     assert(actualParamType && "actualParamType must be non-null!");
 
-    if (actualParamType != formalParamType) {
+    if (!isa<evaluator::UnknownValue>(actualParam.get()) &&
+        actualParamType != formalParamType) {
       auto error = cls.emitError("actual parameter for ")
                    << formalParamName << " has invalid type";
       error.attachNote() << "actual parameter: " << *actualParam;
@@ -413,6 +416,12 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
   if (!rhsResult.value()->isFullyEvaluated())
     return handle;
 
+  // Short circuit if this is an UnknownValue.
+  if (isa<evaluator::UnknownValue>(*lhsResult.value()))
+    return lhsResult;
+  if (isa<evaluator::UnknownValue>(*rhsResult.value()))
+    return rhsResult;
+
   // Extract the integer attributes.
   auto extractAttr = [](evaluator::EvaluatorValue *value) {
     return std::move(
@@ -514,8 +523,13 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
   if (failed(currentObjectResult))
     return currentObjectResult;
 
-  auto *currentObject =
-      llvm::cast<evaluator::ObjectValue>(currentObjectResult.value().get());
+  auto result = currentObjectResult.value();
+
+  // If the field is an unknown value, return that.
+  if (isa<evaluator::UnknownValue>(result.get()))
+    return result;
+
+  auto *currentObject = llvm::cast<evaluator::ObjectValue>(result.get());
 
   auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
 
@@ -556,6 +570,9 @@ circt::om::Evaluator::evaluateListCreate(ListCreateOp op,
       return result;
     if (!result.value()->isFullyEvaluated())
       return list;
+    // If any operand is an unknown value, directly return that.
+    if (isa<evaluator::UnknownValue>(result.value().get()))
+      return result;
     values.push_back(result.value());
   }
 
@@ -591,6 +608,9 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
       return result;
     if (!result.value()->isFullyEvaluated())
       return list;
+    // Return an unknown value if any unknown value is observed.
+    if (isa<evaluator::UnknownValue>(result.value().get()))
+      return result;
 
     // Extract this sublist and ensure it's done evaluating.
     evaluator::ListValue *subList = extractList(result.value().get());
@@ -621,6 +641,11 @@ circt::om::Evaluator::evaluateBasePathCreate(FrozenBasePathCreateOp op,
   auto &value = result.value();
   if (!value->isFullyEvaluated())
     return valueResult;
+
+  // Return an unknown value if any unknown value is observed.
+  if (isa<evaluator::UnknownValue>(result.value().get()))
+    return result;
+
   path->setBasepath(*llvm::cast<evaluator::BasePathValue>(value.get()));
   return valueResult;
 }
@@ -638,6 +663,11 @@ circt::om::Evaluator::evaluatePathCreate(FrozenPathCreateOp op,
   auto &value = result.value();
   if (!value->isFullyEvaluated())
     return valueResult;
+
+  // Return an unknown value if any unknown value is observed.
+  if (isa<evaluator::UnknownValue>(result.value().get()))
+    return result;
+
   path->setBasepath(*llvm::cast<evaluator::BasePathValue>(value.get()));
   return valueResult;
 }

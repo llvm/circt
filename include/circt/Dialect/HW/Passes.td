@@ -48,7 +48,26 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
     degenerate into a purely cosmetic construct, at which point it is beneficial
     to fully flatten the module hierarchy to simplify further analysis and
     optimization of state transfer arcs.
+
+    By default, all private modules are inlined. The pass supports heuristics to
+    control which modules are inlined based on their characteristics.
   }];
+  let options = [
+    Option<"inlineEmpty", "hw-inline-empty", "bool", "true",
+           "Inline modules that are empty (only contain hw.output)">,
+    Option<"inlineNoOutputs", "hw-inline-no-outputs", "bool", "true",
+           "Inline modules that have no output ports">,
+    Option<"inlineSingleUse", "hw-inline-single-use", "bool", "true",
+           "Inline modules that have only one use">,
+    Option<"inlineSmall", "hw-inline-small", "bool", "true",
+           "Inline modules that are small (fewer than smallThreshold operations)">,
+    Option<"smallThreshold", "hw-small-threshold", "unsigned", "8",
+           "Maximum number of operations for a module to be considered small">,
+    Option<"inlineWithState", "hw-inline-with-state", "bool", "false",
+           "Allow inlining of modules that contain state (seq.firreg operations)">,
+    Option<"inlineAll", "hw-inline-all", "bool", "true",
+           "Inline all private modules regardless of heuristics (default behavior)">
+  ];
 }
 
 def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
@@ -90,6 +109,21 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
     out-of-bounds access.
   }];
   let dependentDialects = ["comb::CombDialect"];
+}
+
+def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
+                                       "mlir::ModuleOp"> {
+  let summary = "Parametize constant ports on private modules";
+  let description = [{
+    This pass converts input ports on private modules into parameters when all
+    instances pass constant values (or parameter values) to those ports.
+
+    By converting constant ports to parameters, synthesis pipelines can
+    recognize these values as compile-time constants through local analysis
+    alone, without requiring inter-module analysis. This enables more precise
+    timing information and better optimization of each instance independently,
+    since the constant values are immediately visible at the module interface.
+  }];
 }
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD

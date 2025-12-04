@@ -43,6 +43,7 @@ class UnpackedArrayType;
 class UnpackedStructType;
 class UnpackedUnionType;
 class VoidType;
+class ClassHandleType;
 
 /// The number of values each bit of a type can assume.
 enum class Domain {
@@ -51,6 +52,23 @@ enum class Domain {
   /// Four-valued types such as `logic` or `integer`.
   FourValued,
 };
+
+/// The type of floating point / real number behind a RealType
+enum class RealWidth {
+  /// A standard 32-Bit floating point number ("float")
+  f32 = 32,
+  /// A 64-bit double-precision floation point number ("double")
+  f64 = 64
+};
+
+/// Check if a type is an `IntType` type of the given width.
+bool isIntType(Type type, unsigned width);
+/// Check if a type is an `IntType` type of the given domain.
+bool isIntType(Type type, Domain domain);
+/// Check if a type is an `IntType` type of the given width and domain.
+bool isIntType(Type type, unsigned width, Domain domain);
+/// Check if a type is a `RealType` type of the given width.
+bool isRealType(Type type, unsigned width);
 
 //===----------------------------------------------------------------------===//
 // Unpacked Type
@@ -85,7 +103,8 @@ public:
   static bool classof(Type type) {
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
-                     QueueType, UnpackedStructType, UnpackedUnionType>(type);
+                     QueueType, UnpackedStructType, UnpackedUnionType,
+                     ClassHandleType>(type);
   }
 
   /// Get the value domain of this type.
@@ -145,6 +164,14 @@ public:
   ///
   /// Returns `None` if any of the type's dimensions is unsized.
   std::optional<unsigned> getBitSize() const;
+
+  /// Get the simple bit vector type equivalent to this packed type. Returns
+  /// null if the type does not have a known bit size.
+  IntType getSimpleBitVector() const;
+
+  /// Check if this is a `TimeType`, or an aggregate that contains a nested
+  /// `TimeType`.
+  bool containsTimeType() const;
 
 protected:
   using UnpackedType::UnpackedType;

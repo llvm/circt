@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
@@ -86,7 +87,8 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
   SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
   SmallVector<RegisterLiveRange *> active;
   for (auto &op : getOperation()->getRegion(0).getBlocks().front()) {
-    if (!isa<rtg::FixedRegisterOp, rtg::VirtualRegisterOp>(&op))
+    if (!isa<rtg::ConstantOp, rtg::VirtualRegisterOp>(&op) ||
+        !isa<rtg::RegisterTypeInterface>(op.getResult(0).getType()))
       continue;
 
     RegisterLiveRange lr;
@@ -96,8 +98,14 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
     if (auto regOp = dyn_cast<rtg::VirtualRegisterOp>(&op))
       lr.regOp = regOp;
 
-    if (auto regOp = dyn_cast<rtg::FixedRegisterOp>(&op))
-      lr.fixedReg = regOp.getReg();
+    if (auto regOp = dyn_cast<rtg::ConstantOp>(&op)) {
+      auto reg = dyn_cast<rtg::RegisterAttrInterface>(regOp.getValue());
+      if (!reg) {
+        op.emitError("expected register attribute");
+        return signalPassFailure();
+      }
+      lr.fixedReg = reg;
+    }
 
     for (auto *user : op.getUsers()) {
       if (!isa<rtg::InstructionOpInterface, rtg::ValidateOp>(user)) {
@@ -137,8 +145,10 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       continue;
 
     // Handle virtual registers.
+    auto configAttr =
+        cast<rtg::VirtualRegisterConfigAttr>(lr->regOp.getAllowedRegsAttr());
     rtg::RegisterAttrInterface availableReg;
-    for (auto reg : lr->regOp.getAllowedRegs()) {
+    for (auto reg : configAttr.getAllowedRegs()) {
       if (llvm::none_of(active, [&](auto *r) { return r->fixedReg == reg; })) {
         availableReg = cast<rtg::RegisterAttrInterface>(reg);
         break;
@@ -170,7 +180,6 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       continue;
 
     IRRewriter rewriter(reg->regOp);
-    rewriter.replaceOpWithNewOp<rtg::FixedRegisterOp>(reg->regOp,
-                                                      reg->fixedReg);
+    rewriter.replaceOpWithNewOp<rtg::ConstantOp>(reg->regOp, reg->fixedReg);
   }
 }

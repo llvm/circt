@@ -12,8 +12,7 @@ from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
 from .support import clog2, optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
-                    ChannelDirection, StructType, Type, UInt, types,
-                    _FromCirctType)
+                    ChannelDirection, StructType, Type, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -209,7 +208,7 @@ class _OutputBundleSetter(AssignableSignal):
   def client_name_str(self) -> str:
     return "_".join([str(appid) for appid in self.client_name])
 
-  def assign(self, new_value: ChannelSignal):
+  def assign(self, new_value: BundleSignal):
     """Assign the generated channel to this request."""
     if self._bundle_to_replace is None:
       name_str = ".".join(self.client_name)
@@ -908,7 +907,7 @@ class _Telemetry(ServiceDecl):
                     data: Signal) -> None:
     """Report a value to the telemetry service. 'data' is the value to report."""
     bundle_type = Bundle([
-        BundledChannel("get", ChannelDirection.TO, Bits(1)),
+        BundledChannel("get", ChannelDirection.TO, Bits(0)),
         BundledChannel("data", ChannelDirection.FROM, data.type)
     ])
 
@@ -927,6 +926,73 @@ class _Telemetry(ServiceDecl):
 
 
 Telemetry = _Telemetry()
+
+
+class TelemetryMMIO(ServiceImplementation):
+  """An ESI service implementation which provides telemetry data through an MMIO
+  region. Each client request is assigned a register in the MMIO space. When a
+  read request is received for the assigned address, it gets routed to the
+  assigned client. When a write request is received, it is discarded. The
+  assignment table is stored in the manifest."""
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def generate(ports, bundles: _ServiceGeneratorBundles) -> bool:
+    if len(bundles.to_client_reqs) == 0:
+      # No clients to connect to, so we don't need to do anything.
+      return True
+
+    mmio_cmd = MMIO.read_write(AppID("__telemetry_mmio"))
+    # Assign each telemetry client a register offset in MMIO space.
+
+    offset = 0
+    table: Dict[int, AssignableSignal] = {}
+    for bundle in bundles.to_client_reqs:
+      # Only support 'report' port for telemetry.
+      if bundle.port == 'report':
+        table[offset] = bundle
+        bundle.add_record(details={"offset": offset, "type": "mmio"})
+        offset += 8
+      else:
+        raise ValueError(f"Unrecognized port name: {bundle.port}")
+
+    # Unpack the cmd bundle.
+    data_resp_channel = Wire(Channel(MMIODataType), "telemetry_data_resp")
+    counted_output = Wire(Channel(MMIODataType), "telemetry_counted_output")
+    cmd_channel = mmio_cmd.unpack(data=counted_output)["cmd"]
+    counted_output.assign(data_resp_channel)
+
+    # Decode the address to select the client.
+    cmd_ready_wire = Wire(Bits(1), "telemetry_cmd_ready")
+    cmd, cmd_valid = cmd_channel.unwrap(cmd_ready_wire)
+    client_addr_chan, client_addr_ready = Channel(Bits(0)).wrap(
+        Bits(0)(0), cmd_valid)
+    cmd_ready_wire.assign(client_addr_ready)
+
+    # Build the demux/mux and assign the results of each appropriately.
+    read_clients_clog2 = clog2(len(table))
+    chan_sel = cmd.offset.as_bits()[3:read_clients_clog2 + 3]
+    client_cmd_channels = ChannelDemux(
+        sel=chan_sel,
+        input=client_addr_chan,
+        num_outs=len(table),
+        instance_name="telemetry_client_cmd_demux")
+    client_data_channels = []
+    for (idx, offset) in enumerate(sorted(table.keys())):
+      bundle_wire = table[offset]
+      bundle_type = bundle_wire.type
+      # For telemetry, the client expects a 'get' channel and returns 'data'.
+      offset_chan = client_cmd_channels[idx]
+      bundle, bundle_froms = bundle_type.pack(get=offset_chan)
+
+      bundle_wire.assign(bundle)
+      client_data_channels.append(
+          bundle_froms["data"].transform(lambda m: m.as_bits(64)))
+    resp_channel = ChannelMux(client_data_channels)
+    data_resp_channel.assign(resp_channel)
+    return True
 
 
 def package(sys: System):

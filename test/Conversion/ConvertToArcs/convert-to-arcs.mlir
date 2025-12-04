@@ -279,7 +279,7 @@ hw.module @NonTrivial(in %clock: !seq.clock, in %i0: i4, in %reset1: i1, in %res
 hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
   %c-1_i32 = hw.constant -1 : i32
   %0 = comb.and %in1, %in2 : i32
-  arc.tap %0 {name = "z"} : i32
+  arc.tap %0 {names = ["z"]} : i32
   %1 = comb.xor %0, %c-1_i32 : i32
   hw.output %1 : i32
 }
@@ -289,5 +289,29 @@ hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
 //       CHECK:   arc.output [[V0]], [[V1]] :
 //       CHECK: hw.module @ObserveWires
 //   CHECK-DAG:   [[RES:%.+]]:2 = arc.call @[[ARC_NAME]]({{.*}}) :
-//   CHECK-DAG:   arc.tap [[RES]]#0 {name = "z"} : i32
+//   CHECK-DAG:   arc.tap [[RES]]#0 {names = ["z"]} : i32
 //       CHECK:   hw.output %0#1 : i32
+
+// CHECK: arc.define [[ARC_ADD:@OpsWithRegions.+]](
+// CHECK-NEXT: comb.add
+
+// CHECK: arc.define [[ARC_SUB:@OpsWithRegions.+]](
+// CHECK-NEXT: comb.sub
+
+// CHECK: hw.module @OpsWithRegions
+hw.module @OpsWithRegions(in %a: i42, in %b: i42, in %c: i42, in %d: i42, out z: i42) {
+  // CHECK-DAG: [[ADD:%.+]] = arc.call [[ARC_ADD]](%a, %b)
+  %0 = comb.add %a, %b : i42
+  // CHECK-DAG: [[COMB:%.+]] = arc.execute ([[ADD]], %c : i42, i42) -> (i42) {
+  // CHECK-DAG: ^bb0(%arg0: i42, %arg1: i42):
+  // CHECK-DAG:   [[MUL:%.+]] = comb.mul %arg0, %arg1
+  // CHECK-DAG:   arc.output [[MUL]]
+  %1 = llhd.combinational -> i42 {
+    %3 = comb.mul %0, %c : i42
+    llhd.yield %3 : i42
+  }
+  // CHECK-DAG: [[SUB:%.+]] = arc.call [[ARC_SUB]]([[COMB]], %d)
+  %2 = comb.sub %1, %d : i42
+  // CHECK: hw.output [[SUB]]
+  hw.output %2 : i42
+}

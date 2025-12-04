@@ -1207,8 +1207,9 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.probe<uint<1>>)
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %y : !firrtl.probe<uint<1>>
   }
 }
@@ -1221,9 +1222,10 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -1237,8 +1239,9 @@ firrtl.circuit "Bar" {
     %y = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %2 : !firrtl.probe<uint<1>>
   }
 }
@@ -1329,8 +1332,9 @@ firrtl.circuit "PropertyDriveSource" {
 firrtl.circuit "PropertyDoubleDrive" {
   firrtl.module @PropertyDriveSource(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{destination property cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.propassign %out, %0 : !firrtl.string
+    // expected-note @below {{other driver is here}}
     firrtl.propassign %out, %0 : !firrtl.string
   }
 }
@@ -2184,23 +2188,6 @@ firrtl.circuit "ObjectFieldDoesntExist" {
 }
 
 // -----
-
-firrtl.circuit "WrongInternalPathCount" {
-  // expected-error @below {{module has inconsistent internal path array with 1 entries for 0 ports}}
-  firrtl.extmodule @WrongInternalPathCount() attributes { internalPaths = [ #firrtl.internalpath ] }
-}
-
-// -----
-
-firrtl.circuit "InternalPathForNonRefType" {
-  // expected-error @below {{module has internal path for non-ref-type port "in"}}
-  firrtl.extmodule @WrongInternalPathCount(
-    // expected-note @below {{this port}}
-    in in : !firrtl.uint<1>
-    ) attributes { internalPaths = [ #firrtl.internalpath<"x.y"> ] }
-}
-
-// -----
 // Try to read from an output object's input ports.
 
 firrtl.circuit "Top" {
@@ -2455,6 +2442,7 @@ firrtl.circuit "NoCases" {
       nameKind = #firrtl<name_kind interesting_name>,
       portDirections = array<i1>,
       portNames = [],
+      domainInfo = [],
       annotations = [],
       portAnnotations = [],
       layers = []
@@ -2486,6 +2474,7 @@ firrtl.circuit "MismatchedCases" {
       nameKind = #firrtl<name_kind interesting_name>,
       portDirections = array<i1>,
       portNames = [],
+      domainInfo = [],
       annotations = [],
       portAnnotations = [],
       layers = []
@@ -3020,5 +3009,192 @@ firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
   firrtl.module @XMRDerefOpTargetsNonHierPath() {
     // expected-error @below {{op does not target a hierpath op}}
     %0 = firrtl.xmr.deref @Target : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "UndefinedDomainKind" {
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "WrongDomainKind" {
+  firrtl.module @ClockDomain() {}
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "DomainInfoNotArray" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{requires valid port domains}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {domainInfo = 0 : i32} {}
+}
+
+// -----
+
+firrtl.circuit "WrongDomainPortInfo" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {domainInfo = [0 : i32]} {}
+}
+
+// -----
+
+firrtl.circuit "WrongNonDomainPortInfo" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
+  firrtl.module @WrongNonDomainPortInfo(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [["hello"]]} {}
+}
+
+// -----
+
+// Output domain ports on modules can only be driven once.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.module @Top(
+    in  %i: !firrtl.domain of @ClockDomain,
+    out %o: !firrtl.domain of @ClockDomain
+  ) {
+    // expected-error @below {{destination cannot be driven by multiple operations}}
+    firrtl.domain.define %o, %i
+    // expected-note @below {{other driver is here}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Input domain ports on instances can only be driven once.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Ext(in i: !firrtl.domain of @ClockDomain)
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
+    %ext_i = firrtl.instance ext @Ext(in  i: !firrtl.domain of @ClockDomain)
+    // expected-error @below {{destination cannot be driven by multiple operations}}
+    firrtl.domain.define %ext_i, %i
+    // expected-note @below {{other driver is here}}
+    firrtl.domain.define %ext_i, %i
+  }
+}
+
+// -----
+
+// No-crossing of domain types.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain, out %o : !firrtl.domain of @PowerDomain) {
+    // expected-error @below {{source domain type @ClockDomain does not match destination domain type @PowerDomain}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Unable to determine domain type of destination.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
+    %o = firrtl.wire : !firrtl.domain
+    // expected-error @below {{could not determine domain-type of destination}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Unable to determine domain type of source.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(out %o : !firrtl.domain of @PowerDomain) {
+    %i = firrtl.wire : !firrtl.domain
+    // expected-error @below {{could not determine domain-type of source}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// The type of a domain field must be a PropertyType.
+firrtl.circuit "NonPropertyTypeInDomainField" {
+  // expected-error @below {{an array of domain fields}}
+  firrtl.domain @Foo ["bar", !firrtl.uint<1>]
+  firrtl.module @NonPropertyTypeInDomainField() {}
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceDomainInfo" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(in %a: !firrtl.uint<1>) {}
+  firrtl.module @WrongInstanceDomainInfo() {
+    // expected-error @below {{'firrtl.instance' op has a wrong number of port domain info attributes; expected 1, got 0}}
+    %a = firrtl.instance foo  {domainInfo = []} @Foo(in a: !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceDomainInfo" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain,
+    in %B : !firrtl.domain of @ClockDomain,
+    in %a : !firrtl.uint<1> domains [%A]
+  ) {}
+  firrtl.module @WrongInstanceDomainInfo() {
+  // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
+      in A : !firrtl.domain of @ClockDomain,
+      in B : !firrtl.domain of @ClockDomain,
+      in a : !firrtl.uint<1> domains [B]
+    )
+  }
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceChoiceDomainInfo" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain,
+    in %B : !firrtl.domain of @ClockDomain,
+    in %a : !firrtl.uint<1> domains [%A]
+  ) {}
+  firrtl.module @WrongInstanceChoiceDomainInfo() {
+    // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
+      in A : !firrtl.domain of @ClockDomain,
+      in B : !firrtl.domain of @ClockDomain,
+      in a : !firrtl.uint<1> domains [B]
+    )
   }
 }

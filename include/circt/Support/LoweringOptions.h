@@ -170,6 +170,16 @@ struct LoweringOptions {
   /// If true, add a dummy wire to empty modules to prevent tools from regarding
   /// the module as blackbox.
   bool fixUpEmptyModules = false;
+
+  // If true, wrap concurrent assertions with explicit clocking events into
+  // procedural form, by hoisting the clock event into an enclosing always
+  // block. The same transformation is applied to `assume property` and `cover
+  // property`.
+  bool disallowClockedAssertions = false;
+
+  // If true, always emit assignments (both continuous and blocking) separately
+  // rather than inlining them in net and variable declarations
+  bool disallowDeclAssignments = false;
 };
 } // namespace circt
 

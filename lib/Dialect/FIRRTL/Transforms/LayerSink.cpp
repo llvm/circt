@@ -12,14 +12,11 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/ControlFlowSinkUtils.h"
-#include "llvm/ADT/PostOrderIterator.h"
 
 #define DEBUG_TYPE "firrtl-layer-sink"
 
@@ -88,13 +85,8 @@ namespace {
 class EffectInfo {
 public:
   EffectInfo(CircuitOp circuit, InstanceGraph &instanceGraph) {
-    DenseSet<InstanceGraphNode *> visited;
-    for (auto *root : instanceGraph) {
-      for (auto *node : llvm::post_order_ext(root, visited)) {
-        auto *op = node->getModule().getOperation();
-        update(op);
-      }
-    }
+    instanceGraph.walkPostOrder(
+        [&](auto &node) { update(node.getModule().getOperation()); });
   }
 
   /// True if the given operation is NOT moveable due to some effect.
@@ -486,10 +478,11 @@ struct LayerSinkPass final
 } // namespace
 
 void LayerSinkPass::runOnOperation() {
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   auto circuit = getOperation();
-  LLVM_DEBUG(debugPassHeader(this)
-                 << "\n"
-                 << "Circuit: '" << circuit.getName() << "'\n";);
+  LLVM_DEBUG(llvm::dbgs() << "Circuit: '" << circuit.getName() << "'\n");
+
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   EffectInfo effectInfo(circuit, instanceGraph);
 

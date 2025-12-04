@@ -16,11 +16,11 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
-#include "circt/Dialect/AIG/AIGPasses.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/DC/DCPasses.h"
+#include "circt/Dialect/Datapath/DatapathPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -63,10 +63,10 @@ inline void registerAllPasses() {
   registerBMCTransformsPasses();
 
   // Standard Passes
-  aig::registerPasses();
   arc::registerPasses();
   calyx::registerPasses();
   comb::registerPasses();
+  datapath::registerPasses();
   dc::registerPasses();
   emit::registerPasses();
   esi::registerESIPasses();

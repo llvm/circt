@@ -10,12 +10,14 @@ set(LIBS
   ${mlir_dialect_libs}
 
   CIRCTArcReductions
+  CIRCTEmitReductions
   CIRCTHWReductions
   CIRCTFIRRTLReductions
   CIRCTReduceLib
   MLIRIR
   MLIRBytecodeWriter
   MLIRParser
+  MLIRPluginsLib
   MLIRSupport
   MLIRTransforms
   MLIRReduceLib

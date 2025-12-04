@@ -8,11 +8,12 @@
 # PY: from dot_prod_system import run_cosim
 # PY: run_cosim(tmpdir, rpcschemapath, simhostport)
 
-from pycde import Input, Module, generator, types
+from pycde import Input, Module, generator
 from pycde.common import Clock
 from pycde.system import System
 from pycde.esi import FromServer, ToFromServer, ServiceDecl, CosimBSP
 from pycde.constructs import Wire
+from pycde.types import Bit, Bits
 
 # import torch
 # import torch_mlir
@@ -47,7 +48,7 @@ class Gasket(Module):
   memories to the host and the host to the module control signals."""
 
   clk = Clock()
-  rst = Input(types.i1)
+  rst = Input(Bit)
 
   @generator
   def generate(ports):
@@ -91,7 +92,7 @@ if __name__ == "__main__":
   # Define an interface (API) for software.
   @ServiceDecl
   class TorchControl:
-    go = FromServer(types.i0)
+    go = FromServer(Bits(0))
     a_write = FromServer(dot_a.write.to_server_type)
     b_write = FromServer(dot_b.write.to_server_type)
     x_read = ToFromServer(dot_x.read.to_client_type, dot_x.read.to_server_type)

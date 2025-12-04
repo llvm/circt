@@ -113,7 +113,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp"]>,
+  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp", "ExecuteOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -600,6 +600,35 @@ def StateWriteOp : ArcOp<"state_write", [
 }
 
 //===----------------------------------------------------------------------===//
+// Procedural Ops
+//===----------------------------------------------------------------------===//
+
+def ExecuteOp : ArcOp<"execute", [
+  IsolatedFromAbove,
+  RecursiveMemoryEffects,
+]> {
+  let summary = "Execute an SSACFG region";
+  let description = [{
+    The `arc.execute` op allows an SSACFG region to be embedded in a parent
+    graph region, or another SSACFG region. Whenever execution reaches this op,
+    its body region is executed and the results yielded from the body are
+    produced as the `arc.execute` op's results. The op is isolated from above.
+    Any SSA values defined outside the op that are used inside the body have to
+    be captured as operands and then referred to as entry block arguments in the
+    body.
+  }];
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region MinSizedRegion<1>:$body);
+  let assemblyFormat = [{
+    (` ` `(` $inputs^ `:` type($inputs) `)`)?
+    (`->` `(` type($results)^ `)`)?
+    attr-dict-with-keyword $body
+  }];
+  let hasRegionVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Orchestration
 //===----------------------------------------------------------------------===//
 
@@ -678,9 +707,14 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
 //===----------------------------------------------------------------------===//
 
 def TapOp : ArcOp<"tap"> {
-  let summary = "A tracker op to observe a value under a given name";
-  let arguments = (ins AnyType:$value, StrAttr:$name);
+  let summary = "A tracker op to observe a value under one or more given names";
+  let arguments = (ins AnyType:$value, StrArrayAttr:$names);
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
+  let builders = [OpBuilder<(ins "mlir::Value":$val, "mlir::StringRef":$name),
+                            [{
+      build($_builder, $_state, val,
+       $_builder.getArrayAttr({$_builder.getStringAttr(name)}));
+    }]>];
 }
 
 def ModelOp : ArcOp<"model", [

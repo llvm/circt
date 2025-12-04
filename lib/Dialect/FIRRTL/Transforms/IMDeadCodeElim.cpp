@@ -313,7 +313,8 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   auto circuits = getOperation().getOps<CircuitOp>();
   if (circuits.empty())
     return;
@@ -750,7 +751,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       liveElements.erase(oldResult);
 
     // Create a new instance op without dead ports.
-    auto newInstance = instance.erasePorts(builder, deadPortIndexes);
+    auto newInstance =
+        instance.cloneWithErasedPortsAndReplaceUses(deadPortIndexes);
 
     // Mark new results as alive.
     for (auto newResult : newInstance.getResults())

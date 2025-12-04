@@ -74,7 +74,7 @@ TGroup createGroup(OpBuilder &builder, calyx::ComponentOp compOp, Location loc,
                    Twine uniqueName) {
   mlir::IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToEnd(compOp.getWiresOp().getBodyBlock());
-  return builder.create<TGroup>(loc, uniqueName.str());
+  return TGroup::create(builder, loc, uniqueName.str());
 }
 
 /// Creates register assignment operations within the provided groupOp.
@@ -468,7 +468,7 @@ public:
       }
       }
     }
-    return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
+    return TLibraryOp::create(builder, loc, getUniqueName(name), resTypes);
   }
 
   llvm::json::Value &getExtMemData() { return extMemData; }

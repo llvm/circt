@@ -458,6 +458,7 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
 
   Value toHost = adaptor.getToHost();
   Type type = toHost.getType();
+  auto chanTy = dyn_cast<ChannelType>(type);
   uint64_t width = getWidth(type);
 
   // Set all the parameters.
@@ -471,11 +472,17 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
       UnwrapValidReadyOp::create(rewriter, loc, toHost, sendReady);
+
+  Value rawSendData = unwrapSend.getRawOutput();
+  // For windows, we need to extract the lowered data from the window type.
+  if (chanTy)
+    if (WindowType windowType = dyn_cast_or_null<WindowType>(chanTy.getInner()))
+      rawSendData = UnwrapWindow::create(rewriter, loc, rawSendData);
+
   Value castedSendData;
   if (width > 0)
-    castedSendData =
-        hw::BitcastOp::create(rewriter, loc, rewriter.getIntegerType(width),
-                              unwrapSend.getRawOutput());
+    castedSendData = hw::BitcastOp::create(
+        rewriter, loc, rewriter.getIntegerType(width), rawSendData);
   else
     castedSendData = hw::ConstantOp::create(
         rewriter, loc, rewriter.getIntegerType(1), rewriter.getBoolAttr(false));
@@ -531,6 +538,7 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
   circt::BackedgeBuilder bb(rewriter, loc);
 
   ChannelType type = ep.getFromHost().getType();
+  WindowType windowType = dyn_cast<WindowType>(type.getInner());
   uint64_t width = getWidth(type);
 
   // Set all the parameters.
@@ -559,13 +567,20 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
   Value castedRecvData;
+  Type castToType = windowType ? windowType.getLoweredType() : type.getInner();
   if (width > 0)
-    castedRecvData = hw::BitcastOp::create(rewriter, loc, type.getInner(),
-                                           recvDataFromCosim);
+    castedRecvData =
+        hw::BitcastOp::create(rewriter, loc, castToType, recvDataFromCosim);
   else
     castedRecvData = hw::ConstantOp::create(
         rewriter, loc, rewriter.getIntegerType(0),
         rewriter.getIntegerAttr(rewriter.getIntegerType(0), 0));
+  if (windowType) {
+    // For windows, we need to reconstruct the window type from the lowered
+    // data.
+    castedRecvData =
+        WrapWindow::create(rewriter, loc, windowType, castedRecvData);
+  }
   WrapValidReadyOp wrapRecv = WrapValidReadyOp::create(
       rewriter, loc, castedRecvData, recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
@@ -785,7 +800,7 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalDialect<seq::SeqDialect>();
   pass1Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp, WrapFIFOOp,
-                         UnwrapFIFOOp>();
+                         UnwrapFIFOOp, WrapWindow, UnwrapWindow>();
   pass1Target.addLegalOp<SnoopTransactionOp, SnoopValidReadyOp>();
 
   pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();
@@ -839,6 +854,7 @@ void ESItoHWPass::runOnOperation() {
   pass3Target.addLegalDialect<HWDialect>();
   pass3Target.addLegalDialect<SVDialect>();
   pass3Target.addIllegalDialect<ESIDialect>();
+  pass3Target.addLegalOp<WrapWindow, UnwrapWindow>();
 
   RewritePatternSet pass3Patterns(ctxt);
   pass3Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);

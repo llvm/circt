@@ -140,7 +140,7 @@ hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   // CHECK-DAG: assign out1g = in4 !=? 4'h0;
   %cmp6 = comb.icmp wne %in4, %c0_i4 : i4
 
-  // CHECK-DAG: assign out4s = $signed($signed(in4) >>> in4);
+  // CHECK-DAG: assign out4s = $unsigned($signed($signed(in4) >>> in4));
   // CHECK-DAG: assign sext17 = {w3[15], w3};
   %36 = comb.extract %w3_use from 15 : (i16) -> i1
   %35 = comb.concat %36, %w3_use : i1, i16

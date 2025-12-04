@@ -1118,7 +1118,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     release_initial(rc2.rw)
 
   ; CHECK-LABEL: extmodule private @RefExtABI
-  ; CHECK-NOT: internalPaths
   extmodule RefExtABI :
     input in : UInt<1>
     output r : Probe<UInt<1>>
@@ -2015,25 +2014,20 @@ circuit Foo:
 
   ; CHECK-LABEL: extmodule private @RefExt(
   ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"in">]
   extmodule RefExt :
     input in : UInt<1>
     output r : Probe<UInt<1>>
-    ref r is "in"
 
   ; CHECK-LABEL: extmodule private @RefExtMore(
   ; CHECK-SAME:  in in: !firrtl.uint<1>
   ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out data: !firrtl.uint<3>
   ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
-  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]
   extmodule RefExtMore :
     input in : UInt<1>
     output r : Probe<UInt<1>>
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
-    ref r2 is "in"
-    ref r is "path.to.internal.signal"
 
   ; CHECK-LABEL: module @Foo(
   ; CHECK-SAME:    out %out: !firrtl.uint,
@@ -2191,3 +2185,51 @@ circuit NullaryCat:
     input a: UInt<1>
     ; CHECK: firrtl.cat : () -> !firrtl.uint<0>
     node b = cat()
+
+;// -----
+FIRRTL version 5.1.0
+circuit Domains:
+  ; CHECK-LABEL: firrtl.domain @ClockDomain
+  domain ClockDomain:
+
+  ; CHECK-LABEL: firrtl.domain @PowerDomain [
+  ; CHECK-SAME:    #firrtl.domain.field<"name", !firrtl.string>
+  ; CHECK-SAME:    #firrtl.domain.field<"voltage", !firrtl.integer>
+  ; CHECK-SAME:    #firrtl.domain.field<"alwaysOn", !firrtl.bool>
+  ; CHECK-SAME:  ]
+  domain PowerDomain:
+    name : String
+    voltage : Integer
+    alwaysOn : Bool
+
+  module Foo:
+    input A: Domain of ClockDomain
+    input a: UInt<1> domains [A]
+
+  ; CHECK-LABEL: firrtl.module @Domains
+  ; CHECK-SAME:    in %A: !firrtl.domain of @ClockDomain
+  ; CHECK-SAME:    in %B: !firrtl.domain of @ClockDomain
+  ; CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
+  ; CHECK-SAME:    in %ab: !firrtl.uint<1> domains [%A, %B]
+  public module Domains:
+    input A: Domain of ClockDomain
+    input B: Domain of ClockDomain
+    input a: UInt<1> domains [A]
+    input ab: UInt<1> domains [A, B]
+    output C: Domain of ClockDomain
+
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
+    node noDomains = unsafe_domain_cast(a)
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
+    node oneDomain = unsafe_domain_cast(a, A)
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains %A, %B : !firrtl.uint<1>
+    node twoDomains = unsafe_domain_cast(a, A, B)
+
+    ; CHECK %foo_A, %foo_a = firrtl.instance foo @Foo(in A: !firrtl.domain of @ClockDomain, in a: !firrtl.uint<1> domains [A])
+    inst foo of Foo
+  
+    ; CHECK: firrtl.domain.define %foo_A, %A
+    domain_define foo.A = A
+
+    ; CHECK: firrtl.domain.define %C, %foo_A
+    domain_define C = foo.A

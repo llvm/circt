@@ -6,16 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Main entry function for circt-verilog-lsp-server for when built as standalone
-// binary.
+// VerilogServer.h
+//
+// This header declares VerilogServer, the top-level coordinator of the CIRCT
+// Verilog LSP server. It manages all open files and acts as the entry point for
+// language server operations such as “didOpen”, “didChange”, “didClose”,
+// “definition”, and “references”.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_VERILOGSERVER_H_
 #define LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_VERILOGSERVER_H_
 
-#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/LSP/Protocol.h"
+
 #include <memory>
 #include <optional>
 #include <vector>
@@ -23,6 +28,8 @@
 namespace mlir {
 namespace lsp {
 struct Diagnostic;
+struct Position;
+struct Location;
 struct TextDocumentContentChangeEvent;
 class URIForFile;
 } // namespace lsp
@@ -32,9 +39,9 @@ namespace circt {
 namespace lsp {
 struct VerilogServerOptions;
 using TextDocumentContentChangeEvent =
-    mlir::lsp::TextDocumentContentChangeEvent;
-using URIForFile = mlir::lsp::URIForFile;
-using Diagnostic = mlir::lsp::Diagnostic;
+    llvm::lsp::TextDocumentContentChangeEvent;
+using URIForFile = llvm::lsp::URIForFile;
+using Diagnostic = llvm::lsp::Diagnostic;
 
 /// This class implements all of the Verilog related functionality necessary for
 /// a language server. This class allows for keeping the Verilog specific logic
@@ -60,6 +67,14 @@ public:
   /// within the server.
   std::optional<int64_t> removeDocument(const URIForFile &uri);
 
+  /// Return the locations of the object pointed at by the given position.
+  void getLocationsOf(const URIForFile &uri, const llvm::lsp::Position &defPos,
+                      std::vector<llvm::lsp::Location> &locations);
+
+  /// Find all references of the object pointed at by the given position.
+  void findReferencesOf(const URIForFile &uri, const llvm::lsp::Position &pos,
+                        std::vector<llvm::lsp::Location> &references);
+
 private:
   struct Impl;
   std::unique_ptr<Impl> impl;
@@ -68,4 +83,4 @@ private:
 } // namespace lsp
 } // namespace circt
 
-#endif // LIB_CIRCT_TOOLS_CIRCT_VERILOG_LSP_SERVER_VERILOGSERVER_H_
+#endif

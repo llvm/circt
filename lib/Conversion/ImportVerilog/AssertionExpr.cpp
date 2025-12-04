@@ -13,6 +13,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
+#include "slang/ast/SystemSubroutine.h"
 
 #include <optional>
 #include <utility>
@@ -115,7 +116,7 @@ struct AssertionExprVisitor {
       if (!sequenceValue)
         return {};
 
-      Type valueType = sequenceValue.getType();
+      [[maybe_unused]] Type valueType = sequenceValue.getType();
       assert(valueType.isInteger(1) || mlir::isa<ltl::SequenceType>(valueType));
 
       auto [delayMin, delayRange] =
@@ -292,6 +293,96 @@ struct AssertionExprVisitor {
 };
 } // namespace
 
+FailureOr<Value> Context::convertAssertionSystemCallArity1(
+    const slang::ast::SystemSubroutine &subroutine, Location loc, Value value) {
+
+  auto systemCallRes =
+      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          // Translate $fell to ¬x[0] ∧ x[-1]
+          .Case("$fell",
+                [&]() -> Value {
+                  auto current = value;
+                  auto past =
+                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  auto notCurrent =
+                      ltl::NotOp::create(builder, loc, current).getResult();
+                  auto pastAndNotCurrent =
+                      ltl::AndOp::create(builder, loc, {notCurrent, past})
+                          .getResult();
+                  return pastAndNotCurrent;
+                })
+          // Translate $rose to x[0] ∧ ¬x[-1]
+          .Case("$rose",
+                [&]() -> Value {
+                  auto past =
+                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  auto notPast =
+                      ltl::NotOp::create(builder, loc, past).getResult();
+                  auto current = value;
+                  auto notPastAndCurrent =
+                      ltl::AndOp::create(builder, loc, {current, notPast})
+                          .getResult();
+                  return notPastAndCurrent;
+                })
+          // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
+          .Case("$stable",
+                [&]() -> Value {
+                  auto past =
+                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  auto notPast =
+                      ltl::NotOp::create(builder, loc, past).getResult();
+                  auto current = value;
+                  auto notCurrent =
+                      ltl::NotOp::create(builder, loc, value).getResult();
+                  auto pastAndCurrent =
+                      ltl::AndOp::create(builder, loc, {current, past})
+                          .getResult();
+                  auto notPastAndNotCurrent =
+                      ltl::AndOp::create(builder, loc, {notCurrent, notPast})
+                          .getResult();
+                  auto stable =
+                      ltl::OrOp::create(builder, loc,
+                                        {pastAndCurrent, notPastAndNotCurrent})
+                          .getResult();
+                  return stable;
+                })
+          .Default([&]() -> Value { return {}; });
+  return systemCallRes();
+}
+
+Value Context::convertAssertionCallExpression(
+    const slang::ast::CallExpression &expr,
+    const slang::ast::CallExpression::SystemCallInfo &info, Location loc) {
+
+  const auto &subroutine = *info.subroutine;
+  auto args = expr.arguments();
+
+  FailureOr<Value> result;
+  Value value;
+  Value boolVal;
+
+  switch (args.size()) {
+  case (1):
+    value = this->convertRvalueExpression(*args[0]);
+    boolVal = builder.createOrFold<moore::ToBuiltinBoolOp>(loc, value);
+    if (!boolVal)
+      return {};
+    result = this->convertAssertionSystemCallArity1(subroutine, loc, boolVal);
+    break;
+
+  default:
+    break;
+  }
+
+  if (failed(result))
+    return {};
+  if (*result)
+    return *result;
+
+  mlir::emitError(loc) << "unsupported system call `" << subroutine.name << "`";
+  return {};
+}
+
 Value Context::convertAssertionExpression(const slang::ast::AssertionExpr &expr,
                                           Location loc) {
   AssertionExprVisitor visitor{*this, loc};
@@ -309,6 +400,5 @@ Value Context::convertToI1(Value value) {
     return {};
   }
 
-  return moore::ConversionOp::create(builder, value.getLoc(),
-                                     builder.getI1Type(), value);
+  return moore::ToBuiltinBoolOp::create(builder, value.getLoc(), value);
 }

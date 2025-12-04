@@ -98,22 +98,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
 
-  if (opt.shouldExportChiselInterface()) {
-    StringRef outdir = opt.getChiselInterfaceOutputDirectory();
-    if (opt.isDefaultOutputFilename() && outdir.empty()) {
-      pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
-    } else {
-      if (outdir.empty())
-        outdir = opt.getOutputFilename();
-      pm.nest<firrtl::CircuitOp>().addPass(
-          createExportSplitChiselInterfacePass(outdir));
-    }
-  }
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConst());
 
-  if (opt.shouldDedup())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup());
+  if (opt.shouldDedup()) {
+    firrtl::DedupOptions opts;
+    opts.dedupClasses = opt.shouldDedupClasses();
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedup(opts));
+  }
 
   if (opt.shouldConvertVecOfBundle()) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypes(
@@ -250,7 +241,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // TODO: Improve LowerLayers to avoid the need for canonicalization. See:
   //   https://github.com/llvm/circt/issues/7896
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayers());
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createLowerLayers({opt.getEmitAllBindFiles()}));
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
@@ -284,6 +276,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       firrtl::createResolveTraces({opt.getOutputAnnotationFilename().str()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPI());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDomains());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClasses());
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
@@ -316,7 +309,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   pm.nestAny().addPass(verif::createStripContractsPass());
-  pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(verif::createLowerTestsPass());
   pm.addPass(
       verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
@@ -552,18 +545,6 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable optimizations"),
   };
 
-  llvm::cl::opt<bool> exportChiselInterface{
-      "export-chisel-interface",
-      llvm::cl::desc("Generate a Scala Chisel interface to the top level "
-                     "module of the firrtl circuit"),
-      llvm::cl::init(false)};
-
-  llvm::cl::opt<std::string> chiselInterfaceOutDirectory{
-      "chisel-interface-out-dir",
-      llvm::cl::desc(
-          "The output directory for generated Chisel interface files"),
-      llvm::cl::init("")};
-
   llvm::cl::opt<bool> vbToBV{
       "vb-to-bv",
       llvm::cl::desc("Transform vectors of bundles to bundles of vectors"),
@@ -573,6 +554,12 @@ struct FirtoolCmdOptions {
       "no-dedup",
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> dedupClasses{
+      "dedup-classes",
+      llvm::cl::desc(
+          "Deduplicate FIRRTL classes, violating their nominal typing"),
+      llvm::cl::init(true)};
 
   llvm::cl::opt<firrtl::CompanionMode> companionMode{
       "grand-central-companion-mode",
@@ -766,6 +753,11 @@ struct FirtoolCmdOptions {
       "disable-wire-elimination", llvm::cl::desc("Disable wire elimination"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> emitAllBindFiles{
+      "emit-all-bind-files",
+      llvm::cl::desc("Emit bindfiles for private modules"),
+      llvm::cl::init(false)};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -799,9 +791,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
-      disableOptimization(false), exportChiselInterface(false),
-      chiselInterfaceOutDirectory(""), vbToBV(false), noDedup(false),
-      companionMode(firrtl::CompanionMode::Bind),
+      disableOptimization(false), vbToBV(false), noDedup(false),
+      dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false), lowerMemories(false),
       blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
       extractTestCode(false), ignoreReadEnableMem(false),
@@ -818,7 +809,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
-      lintXmrsInDesign(true) {
+      lintXmrsInDesign(true), emitAllBindFiles(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -833,10 +824,9 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   buildMode = clOptions->buildMode;
   disableLayerSink = clOptions->disableLayerSink;
   disableOptimization = clOptions->disableOptimization;
-  exportChiselInterface = clOptions->exportChiselInterface;
-  chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
+  dedupClasses = clOptions->dedupClasses;
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
@@ -871,4 +861,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableWireElimination = clOptions->disableWireElimination;
   lintStaticAsserts = clOptions->lintStaticAsserts;
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
+  emitAllBindFiles = clOptions->emitAllBindFiles;
 }

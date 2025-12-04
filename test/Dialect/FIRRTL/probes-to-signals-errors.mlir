@@ -1,15 +1,5 @@
 // RUN: circt-opt --firrtl-probes-to-signals --verify-diagnostics --split-input-file %s
 
-firrtl.circuit "InternalPath" {
-  // expected-error @below {{cannot convert module with internal path}}
-  firrtl.extmodule @InternalPath(
-      out x: !firrtl.probe<bundle<a: uint<5>, b: uint<3>>>
-    ) attributes { internalPaths = [#firrtl.internalpath<"a.b.c">] }
-}
-
-
-// -----
-
 // Sending probe out from under a when is not possible without encompassing ExpandWhens.
 // Detect and diagnose, and in practice use ExpandWhens first to ensure success.
 firrtl.circuit "RefProducer" {

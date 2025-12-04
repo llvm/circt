@@ -16,10 +16,17 @@
 #ifndef ESI_TYPES_H
 #define ESI_TYPES_H
 
+#include <algorithm>
+#include <any>
 #include <cstdint>
 #include <map>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "esi/Common.h"
+#include "esi/Values.h" // For BitVector / Int / UInt
 
 namespace esi {
 
@@ -32,6 +39,52 @@ public:
 
   ID getID() const { return id; }
   virtual std::ptrdiff_t getBitWidth() const { return -1; }
+
+  /// Serialize an object to a MutableBitVector (LSB-first stream). The object
+  /// should be passed via std::any. Implementations append fields in the order
+  /// they are iterated (the first serialized field occupies the
+  /// least-significant bits of the result).
+  virtual MutableBitVector serialize(const std::any &obj) const {
+    throw std::runtime_error("Serialization not implemented for type " + id);
+  }
+
+  /// Deserialize from a BitVector stream (LSB-first). Implementations consume
+  /// bits from 'data' in-place (via logical right shifts) and return the
+  /// reconstructed value. Remaining bits stay in 'data'.
+  virtual std::any deserialize(BitVector &data) const {
+    throw std::runtime_error("Deserialization not implemented for type " + id);
+  }
+
+  // Deserialize from a MessageData buffer. Maps the MessageData onto a
+  // MutableBitVector, and proceeds with regular MutableBitVector
+  // deserialization.
+  std::any deserialize(const MessageData &data) const {
+    auto bv = MutableBitVector(std::vector<uint8_t>(data.getData()));
+    return deserialize(bv);
+  }
+
+  /// Ensure that a std::any object is valid for this type. Throws
+  /// std::runtime_error if the object is not valid.
+  virtual void ensureValid(const std::any &obj) const {
+    throw std::runtime_error("Validation not implemented for type " + id);
+  }
+
+  // Check if a std::any object is valid for this type. Returns an optional
+  // error message if the object is not valid, else, std::nullopt.
+  std::optional<std::string> isValid(const std::any &obj) const {
+    try {
+      ensureValid(obj);
+      return std::nullopt;
+    } catch (const std::runtime_error &e) {
+      return e.what();
+    }
+  }
+
+  // Dump a textual representation of this type to the provided stream.
+  void dump(std::ostream &os) const;
+
+  // Return a textual representation of this type.
+  std::string toString() const;
 
 protected:
   ID id;
@@ -54,12 +107,7 @@ public:
   const ChannelVector &getChannels() const { return channels; }
   std::ptrdiff_t getBitWidth() const override { return -1; };
 
-  std::pair<const Type *, Direction> findChannel(std::string name) const {
-    for (auto [channelName, dir, type] : channels)
-      if (channelName == name)
-        return std::make_pair(type, dir);
-    throw std::runtime_error("Channel '" + name + "' not found in bundle");
-  }
+  std::pair<const Type *, Direction> findChannel(std::string name) const;
 
 protected:
   ChannelVector channels;
@@ -69,9 +117,14 @@ protected:
 /// carry one values of one type.
 class ChannelType : public Type {
 public:
+  using Type::deserialize;
   ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
   const Type *getInner() const { return inner; }
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 
 private:
   const Type *inner;
@@ -80,9 +133,14 @@ private:
 /// The "void" type is a special type which can be used to represent no type.
 class VoidType : public Type {
 public:
+  using Type::deserialize;
   VoidType(const ID &id) : Type(id) {}
   // 'void' is 1 bit by convention.
   std::ptrdiff_t getBitWidth() const override { return 1; };
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// The "any" type is a special type which can be used to represent any type, as
@@ -112,6 +170,11 @@ private:
 class BitsType : public BitVectorType {
 public:
   using BitVectorType::BitVectorType;
+  using Type::deserialize;
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// Integers are bit vectors which may be signed or unsigned and are interpreted
@@ -125,21 +188,32 @@ public:
 class SIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
+  using Type::deserialize;
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// Unsigned integer.
 class UIntType : public IntegerType {
 public:
   using IntegerType::IntegerType;
+  using Type::deserialize;
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
 };
 
 /// Structs are an ordered collection of fields, each with a name and a type.
 class StructType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;
+  using Type::deserialize;
 
-  StructType(const ID &id, const FieldVector &fields)
-      : Type(id), fields(fields) {}
+  StructType(const ID &id, const FieldVector &fields, bool reverse = true)
+      : Type(id), fields(fields), reverse(reverse) {}
 
   const FieldVector &getFields() const { return fields; }
   std::ptrdiff_t getBitWidth() const override {
@@ -153,18 +227,33 @@ public:
     return size;
   }
 
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
+
+  // Returns whether this struct type should be reversed when
+  // serializing/deserializing.
+  // By default, a truthy value here makes StructType's compatible with system
+  // verilog, which has reversed struct field ordering, wrt. C/software struct
+  // ordering.
+  bool isReverse() const { return reverse; }
+
 private:
   FieldVector fields;
+  bool reverse;
 };
 
 /// Arrays have a compile time specified (static) size and an element type.
 class ArrayType : public Type {
 public:
-  ArrayType(const ID &id, const Type *elementType, uint64_t size)
-      : Type(id), elementType(elementType), size(size) {}
+  ArrayType(const ID &id, const Type *elementType, uint64_t size,
+            bool reverse = true)
+      : Type(id), elementType(elementType), size(size), reverse(reverse) {}
+  using Type::deserialize;
 
   const Type *getElementType() const { return elementType; }
   uint64_t getSize() const { return size; }
+  bool isReverse() const { return reverse; }
   std::ptrdiff_t getBitWidth() const override {
     std::ptrdiff_t elementSize = elementType->getBitWidth();
     if (elementSize < 0)
@@ -172,9 +261,65 @@ public:
     return elementSize * size;
   }
 
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
+
 private:
   const Type *elementType;
   uint64_t size;
+  // 'reverse' controls whether array elements are reversed during
+  // serialization/deserialization (to match SystemVerilog/Python ordering
+  // expectations).
+  bool reverse;
+};
+
+/// Windows represent a fixed-size sliding window over a stream of data.
+/// They define an "into" type (the data structure being windowed) and a
+/// "loweredType" (the hardware representation including control signals).
+class WindowType : public Type {
+public:
+  /// Frame information describing which fields are included in a particular
+  /// frame.
+  struct Frame {
+    std::string name;
+    std::vector<std::string> fields;
+  };
+
+  WindowType(const ID &id, const std::string &name, const Type *intoType,
+             const Type *loweredType, const std::vector<Frame> &frames)
+      : Type(id), name(name), intoType(intoType), loweredType(loweredType),
+        frames(frames) {}
+
+  const std::string &getName() const { return name; }
+  const Type *getIntoType() const { return intoType; }
+  const Type *getLoweredType() const { return loweredType; }
+  const std::vector<Frame> &getFrames() const { return frames; }
+
+  std::ptrdiff_t getBitWidth() const override {
+    return loweredType->getBitWidth();
+  }
+
+private:
+  std::string name;
+  const Type *intoType;
+  const Type *loweredType;
+  std::vector<Frame> frames;
+};
+
+/// Lists represent variable-length sequences of elements of a single type.
+/// Unlike arrays which have a fixed size, lists can have any length.
+class ListType : public Type {
+public:
+  ListType(const ID &id, const Type *elementType)
+      : Type(id), elementType(elementType) {}
+
+  const Type *getElementType() const { return elementType; }
+
+  std::ptrdiff_t getBitWidth() const override { return -1; }
+
+private:
+  const Type *elementType;
 };
 
 } // namespace esi

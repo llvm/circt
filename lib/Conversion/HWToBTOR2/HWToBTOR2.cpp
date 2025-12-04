@@ -274,12 +274,6 @@ private:
   // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
-    // TODO: adding support for most variadic ops shouldn't be too hard
-    if (binop->getNumOperands() != 2) {
-      binop->emitError("variadic operations not are not currently supported");
-      return;
-    }
-
     // Set the LID for this operation
     size_t opLID = getOpLID(binop);
 
@@ -294,6 +288,59 @@ private:
     // Build and return the string
     os << opLID << " " << inst << " " << sid << " " << op1LID << " " << op2LID
        << "\n";
+  }
+
+  // Expands a variadic operation into multiple binary operation instructions
+  void genVariadicOp(StringRef inst, Operation *op, size_t width) {
+    auto operands = op->getOperands();
+    size_t sid = sortToLIDMap.at(width);
+
+    if (operands.size() == 0) {
+      op->emitError("variadic operations with no operands are not supported");
+      return;
+    }
+
+    // If there's only one operand, then we don't generate a BTOR2 instruction,
+    // we just reuse the operand's existing LID
+    if (operands.size() == 1) {
+      auto existingLID = getOpLID(operands[0]);
+      // Check that we haven't somehow got a value that doesn't have a
+      // corresponding LID
+      assert(existingLID != noLID);
+      opLIDMap[op] = existingLID;
+      return;
+    }
+
+    // Special case for concat since intermediate results need different sorts
+    auto isConcat = isa<comb::ConcatOp>(op);
+
+    // Unroll variadic op into series of binary ops
+    // This will represent the previous operand in the chain:
+    auto prevOperandLID = getOpLID(operands[0]);
+
+    // Track the current width so we can work out new types if this is a concat
+    auto currentWidth = operands[0].getType().getIntOrFloatBitWidth();
+
+    for (auto operand : operands.drop_front()) {
+      // Manually increment lid since we need multiple per op
+
+      if (isConcat) {
+        // For concat, the sort width increases with each operand
+        currentWidth += operand.getType().getIntOrFloatBitWidth();
+        // Ensure that the sort exists
+        genSort("bitvec", currentWidth);
+      }
+
+      auto thisLid = lid++;
+      auto thisOperandLID = getOpLID(operand);
+      os << thisLid << " " << inst << " "
+         << (isConcat ? sortToLIDMap.at(currentWidth) : sid) << " "
+         << prevOperandLID << " " << thisOperandLID << "\n";
+      prevOperandLID = thisLid;
+    }
+
+    // Send lookups of the op's LID to the final binary op in the chain
+    opLIDMap[op] = prevOperandLID;
   }
 
   // Generates a slice instruction given an operand, the lowbit, and the width
@@ -313,6 +360,29 @@ private:
        << "slice"
        << " " << sid << " " << op0LID << " " << (lowbit + width - 1) << " "
        << lowbit << "\n";
+  }
+
+  /// Generates a chain of concats to represent a replicate op
+  void genReplicateAsConcats(Operation *srcop, Value op0, size_t count,
+                             unsigned int inputWidth) {
+    auto currentWidth = inputWidth;
+
+    auto prevOperandLID = getOpLID(op0);
+    for (size_t i = 1; i < count; ++i) {
+      currentWidth += inputWidth;
+      // Ensure that the sort exists
+      genSort("bitvec", currentWidth);
+
+      auto thisLid = lid++;
+      os << thisLid << " "
+         << "concat"
+         << " " << sortToLIDMap.at(currentWidth) << " " << prevOperandLID << " "
+         << getOpLID(op0) << "\n";
+      prevOperandLID = thisLid;
+    }
+
+    // Link LID of final instruction to original operation
+    opLIDMap[srcop] = prevOperandLID;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -592,6 +662,10 @@ private:
   }
 
 public:
+  // Ignore all other explicitly mentioned operations
+  // ** Purposefully left empty **
+  void ignore(Operation *op) {}
+
   /// Visitor Methods used later on for pattern matching
 
   // Visitor for the inputs of the module.
@@ -658,7 +732,7 @@ public:
   // a single method.
   template <typename Op>
   void visitBinOp(Op op, StringRef inst) {
-    // Generete the sort
+    // Generate the sort
     int64_t w = requireSort(op.getType());
 
     // Start by extracting the operands
@@ -669,20 +743,29 @@ public:
     genBinOp(inst, op, op1, op2, w);
   }
 
+  template <typename Op>
+  void visitVariadicOp(Op op, StringRef inst) {
+    // Generate the sort
+    int64_t w = requireSort(op.getType());
+
+    // Generate the line
+    genVariadicOp(inst, op, w);
+  }
+
   // Visitors for the binary ops
-  void visitComb(comb::AddOp op) { visitBinOp(op, "add"); }
+  void visitComb(comb::AddOp op) { visitVariadicOp(op, "add"); }
   void visitComb(comb::SubOp op) { visitBinOp(op, "sub"); }
-  void visitComb(comb::MulOp op) { visitBinOp(op, "mul"); }
+  void visitComb(comb::MulOp op) { visitVariadicOp(op, "mul"); }
   void visitComb(comb::DivSOp op) { visitBinOp(op, "sdiv"); }
   void visitComb(comb::DivUOp op) { visitBinOp(op, "udiv"); }
   void visitComb(comb::ModSOp op) { visitBinOp(op, "smod"); }
   void visitComb(comb::ShlOp op) { visitBinOp(op, "sll"); }
   void visitComb(comb::ShrUOp op) { visitBinOp(op, "srl"); }
   void visitComb(comb::ShrSOp op) { visitBinOp(op, "sra"); }
-  void visitComb(comb::AndOp op) { visitBinOp(op, "and"); }
-  void visitComb(comb::OrOp op) { visitBinOp(op, "or"); }
-  void visitComb(comb::XorOp op) { visitBinOp(op, "xor"); }
-  void visitComb(comb::ConcatOp op) { visitBinOp(op, "concat"); }
+  void visitComb(comb::AndOp op) { visitVariadicOp(op, "and"); }
+  void visitComb(comb::OrOp op) { visitVariadicOp(op, "or"); }
+  void visitComb(comb::XorOp op) { visitVariadicOp(op, "xor"); }
+  void visitComb(comb::ConcatOp op) { visitVariadicOp(op, "concat"); }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one
   // manner
@@ -742,6 +825,16 @@ public:
 
     // Generate the ite instruction
     genIte(op, pred, tval, fval, w);
+  }
+
+  // Replicate ops are expanded as a series of concats
+  void visitComb(comb::ReplicateOp op) {
+    Value op0 = op.getOperand();
+    auto count = op.getMultiple();
+    auto inputWidth = op0.getType().getIntOrFloatBitWidth();
+
+    // Generate the concat chain
+    genReplicateAsConcats(op, op0, count, inputWidth);
   }
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
@@ -844,11 +937,13 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
+  // Error out on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
     op->emitError("not supported in btor2!");
     return signalPassFailure();
   }
 
+  // Dispatch next visitors
   void visitInvalidVerif(Operation *op) { visit(op); }
 
   // Seq operation visitor, that dispatches to other seq ops
@@ -925,10 +1020,6 @@ public:
     regOps.push_back(reg);
   }
 
-  // Ignore all other explicitly mentionned operations
-  // ** Purposefully left empty **
-  void ignore(Operation *op) {}
-
   // Tail method that handles all operations that weren't handled by previous
   // visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
@@ -939,8 +1030,11 @@ public:
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              seq::InitialOp, sv::AlwaysFFOp, seq::FromClockOp, seq::InitialOp,
-              seq::YieldOp, hw::OutputOp, hw::HWModuleOp>(
+              seq::InitialOp, sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp,
+              hw::OutputOp, hw::HWModuleOp,
+              // Specifically ignore printfs, as we can't do anything with them
+              // in btor2
+              verif::FormatVerilogStringOp, verif::PrintOp>(
             [&](auto expr) { ignore(op); })
 
         // Make sure that the design only contains one clock

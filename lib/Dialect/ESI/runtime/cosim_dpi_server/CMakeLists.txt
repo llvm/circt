@@ -66,7 +66,7 @@ foreach (cf ${cosim_collateral})
   add_custom_command(TARGET esi-cosim POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               ${CMAKE_CURRENT_SOURCE_DIR}/${cf}
-              ${CMAKE_BINARY_DIR}/cosim/${cf}
+              ${CMAKE_CURRENT_BINARY_DIR}/../python/esiaccel/cosim/${cf}
   )
 endforeach()
 

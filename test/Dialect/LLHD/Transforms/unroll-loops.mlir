@@ -1,5 +1,7 @@
 // RUN: circt-opt --llhd-unroll-loops %s | FileCheck %s
 
+func.func private @marker()
+
 // CHECK-LABEL: @SimpleLoop
 hw.module @SimpleLoop(out x : i42) {
   %c0_i42 = hw.constant 0 : i42
@@ -347,6 +349,59 @@ hw.module @SkipLoopWithUnsupportedBounds() {
 // CHECK-LABEL: @DontCrashOnSingleBlocks
 hw.module @DontCrashOnSingleBlocks() {
   llhd.combinational {
+    llhd.yield
+  }
+}
+
+// CHECK-LABEL: @DegenerateSingleTripLoopWithEq
+hw.module @DegenerateSingleTripLoopWithEq() {
+  %c0_i32 = hw.constant 0 : i32
+  %c1_i32 = hw.constant 1 : i32
+  // CHECK: llhd.combinational
+  llhd.combinational {
+    // CHECK-NEXT: cf.br ^bb1
+    // CHECK-NEXT: ^bb1:
+    // CHECK-NEXT: func.call @marker()
+    // CHECK-NEXT: cf.br ^bb2
+    // CHECK-NEXT: ^bb2:
+    // CHECK-NEXT: llhd.yield
+    cf.br ^bb1(%c0_i32 : i32)
+  ^bb1(%1: i32):
+    %2 = comb.icmp eq %1, %c0_i32 : i32
+    cf.cond_br %2, ^bb2, ^bb3
+  ^bb2:
+    func.call @marker() : () -> ()
+    %4 = comb.add %1, %c1_i32 : i32
+    cf.br ^bb1(%4 : i32)
+  ^bb3:
+    llhd.yield
+  }
+}
+
+// CHECK-LABEL: @LoopWithUlt
+hw.module @LoopWithUlt() {
+  %c0_i32 = hw.constant 0 : i32
+  %c1_i32 = hw.constant 1 : i32
+  %c3_i32 = hw.constant 3 : i32
+  // CHECK: llhd.combinational
+  llhd.combinational {
+    // CHECK-NEXT: cf.br ^bb1
+    // CHECK-NEXT: ^bb1:
+    // CHECK-NEXT: func.call @marker()
+    // CHECK-NEXT: func.call @marker()
+    // CHECK-NEXT: func.call @marker()
+    // CHECK-NEXT: cf.br ^bb2
+    // CHECK-NEXT: ^bb2:
+    // CHECK-NEXT: llhd.yield
+    cf.br ^bb1(%c0_i32 : i32)
+  ^bb1(%1: i32):
+    %2 = comb.icmp ult %1, %c3_i32 : i32
+    cf.cond_br %2, ^bb2, ^bb3
+  ^bb2:
+    func.call @marker() : () -> ()
+    %4 = comb.add %1, %c1_i32 : i32
+    cf.br ^bb1(%4 : i32)
+  ^bb3:
     llhd.yield
   }
 }

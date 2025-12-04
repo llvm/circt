@@ -28,3 +28,14 @@ arc.define @sub1(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
   // CHECK-NEXT: return %arg0 : i32
 }
+
+// CHECK-LABEL: hw.module @DontConvertExecuteOps
+hw.module @DontConvertExecuteOps(in %arg0: i32, out out0: i32) {
+  // CHECK: arc.execute
+  // CHECK: arc.output
+  %0 = arc.execute (%arg0 : i32) -> (i32) {
+  ^bb0(%1: i32):
+    arc.output %1 : i32
+  }
+  hw.output %0 : i32
+}

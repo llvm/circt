@@ -31,6 +31,7 @@ using namespace circt;
 using namespace llhd;
 using llvm::PointerIntPair;
 using llvm::SmallDenseSet;
+using llvm::SmallSetVector;
 using llvm::SpecificBumpPtrAllocator;
 
 /// Check whether a value is defined by `llhd.constant_time <0ns, 0d, 1e>`.
@@ -54,7 +55,7 @@ static bool isDeltaDelay(Value value) {
 /// Check whether an operation is a `llhd.drive` with an epsilon delay. This
 /// corresponds to a blocking assignment in Verilog.
 static bool isBlockingDrive(Operation *op) {
-  if (auto driveOp = dyn_cast<DrvOp>(op))
+  if (auto driveOp = dyn_cast<DriveOp>(op))
     return isEpsilonDelay(driveOp.getTime());
   return false;
 }
@@ -62,7 +63,7 @@ static bool isBlockingDrive(Operation *op) {
 /// Check whether an operation is a `llhd.drive` with a delta delay. This
 /// corresponds to a non-blocking assignment in Verilog.
 static bool isDeltaDrive(Operation *op) {
-  if (auto driveOp = dyn_cast<DrvOp>(op))
+  if (auto driveOp = dyn_cast<DriveOp>(op))
     return isDeltaDelay(driveOp.getTime());
   return false;
 }
@@ -207,7 +208,7 @@ static DefSlot delayedSlot(Value slot) { return {slot, 1}; }
 static Value getSlot(DefSlot slot) { return slot.getPointer(); }
 static bool isDelayed(DefSlot slot) { return slot.getInt(); }
 static Type getStoredType(Value slot) {
-  return cast<hw::InOutType>(slot.getType()).getElementType();
+  return cast<RefType>(slot.getType()).getNestedType();
 }
 static Type getStoredType(DefSlot slot) {
   return getStoredType(slot.getPointer());
@@ -220,6 +221,7 @@ struct LatticeNode;
 struct BlockExit;
 struct ProbeNode;
 struct DriveNode;
+struct SignalNode;
 
 struct LatticeValue {
   LatticeNode *nodeBefore = nullptr;
@@ -229,7 +231,7 @@ struct LatticeValue {
 };
 
 struct LatticeNode {
-  enum class Kind { BlockEntry, BlockExit, Probe, Drive };
+  enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
   const Kind kind;
   LatticeNode(Kind kind) : kind(kind) {}
 };
@@ -288,14 +290,14 @@ struct OpNode : public LatticeNode {
   }
 
   static bool classof(const LatticeNode *n) {
-    return isa<ProbeNode, DriveNode>(n);
+    return isa<ProbeNode, DriveNode, SignalNode>(n);
   }
 };
 
 struct ProbeNode : public OpNode {
   Value slot;
 
-  ProbeNode(PrbOp op, Value slot, LatticeValue *valueBefore,
+  ProbeNode(ProbeOp op, Value slot, LatticeValue *valueBefore,
             LatticeValue *valueAfter)
       : OpNode(Kind::Probe, op, valueBefore, valueAfter), slot(slot) {}
 
@@ -306,7 +308,7 @@ struct DriveNode : public OpNode {
   DefSlot slot;
   Def *def;
 
-  DriveNode(DrvOp op, Value slot, Def *def, LatticeValue *valueBefore,
+  DriveNode(DriveOp op, Value slot, Def *def, LatticeValue *valueBefore,
             LatticeValue *valueAfter)
       : OpNode(Kind::Drive, op, valueBefore, valueAfter),
         slot(isDeltaDrive(op) ? delayedSlot(slot) : blockingSlot(slot)),
@@ -319,9 +321,22 @@ struct DriveNode : public OpNode {
   bool drivesProjection() const { return op->getOperand(0) != getSlot(slot); }
 
   /// Return the drive op.
-  DrvOp getDriveOp() const { return cast<DrvOp>(op); }
+  DriveOp getDriveOp() const { return cast<DriveOp>(op); }
 
   static bool classof(const LatticeNode *n) { return n->kind == Kind::Drive; }
+};
+
+struct SignalNode : public OpNode {
+  Def *def;
+
+  SignalNode(SignalOp op, Def *def, LatticeValue *valueBefore,
+             LatticeValue *valueAfter)
+      : OpNode(Kind::Signal, op, valueBefore, valueAfter), def(def) {}
+
+  SignalOp getSignalOp() const { return cast<SignalOp>(op); }
+  DefSlot getSlot() const { return blockingSlot(getSignalOp()); }
+
+  static bool classof(const LatticeNode *n) { return n->kind == Kind::Signal; }
 };
 
 /// A lattice of block entry and exit nodes, nodes for relevant operations such
@@ -383,6 +398,7 @@ private:
   SpecificBumpPtrAllocator<BlockExit> blockExitAllocator;
   SpecificBumpPtrAllocator<ProbeNode> probeAllocator;
   SpecificBumpPtrAllocator<DriveNode> driveAllocator;
+  SpecificBumpPtrAllocator<SignalNode> signalAllocator;
 
   // Helper function to get the correct allocator given a lattice node class.
   template <class T>
@@ -406,6 +422,10 @@ SpecificBumpPtrAllocator<ProbeNode> &Lattice::getAllocator() {
 template <>
 SpecificBumpPtrAllocator<DriveNode> &Lattice::getAllocator() {
   return driveAllocator;
+}
+template <>
+SpecificBumpPtrAllocator<SignalNode> &Lattice::getAllocator() {
+  return signalAllocator;
 }
 
 } // namespace
@@ -489,6 +509,8 @@ void Lattice::dump(llvm::raw_ostream &os) {
         os << "    probe " << memName(blockingSlot(node->slot)) << "\n";
       else if (auto *node = dyn_cast<DriveNode>(value->nodeAfter))
         os << "    drive " << memName(node->slot) << "\n";
+      else if (auto *node = dyn_cast<SignalNode>(value->nodeAfter))
+        os << "    signal " << memName(node->getSlot()) << "\n";
       else
         os << "    unknown\n";
 
@@ -565,18 +587,21 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                                ProjectionStack &projections) {
   for (auto &projection : llvm::reverse(projections)) {
     projection.into = value;
-    value =
-        TypeSwitch<Operation *, Value>(projection.op)
-            .Case<SigArrayGetOp>([&](auto op) {
-              return builder.createOrFold<hw::ArrayGetOp>(op.getLoc(), value,
-                                                          op.getIndex());
-            })
-            .Case<SigExtractOp>([&](auto op) {
-              auto type = cast<hw::InOutType>(op.getType()).getElementType();
-              auto width = type.getIntOrFloatBitWidth();
-              return comb::createDynamicExtract(builder, op.getLoc(), value,
-                                                op.getLowBit(), width);
-            });
+    value = TypeSwitch<Operation *, Value>(projection.op)
+                .Case<SigArrayGetOp>([&](auto op) {
+                  return builder.createOrFold<hw::ArrayGetOp>(
+                      op.getLoc(), value, op.getIndex());
+                })
+                .Case<SigStructExtractOp>([&](auto op) {
+                  return builder.createOrFold<hw::StructExtractOp>(
+                      op.getLoc(), value, op.getFieldAttr());
+                })
+                .Case<SigExtractOp>([&](auto op) {
+                  auto type = cast<RefType>(op.getType()).getNestedType();
+                  auto width = type.getIntOrFloatBitWidth();
+                  return comb::createDynamicExtract(builder, op.getLoc(), value,
+                                                    op.getLowBit(), width);
+                });
   }
   return value;
 }
@@ -601,6 +626,10 @@ static Value packProjections(OpBuilder &builder, Value value,
                   return builder.createOrFold<hw::ArrayInjectOp>(
                       op.getLoc(), projection.into, op.getIndex(), value);
                 })
+                .Case<SigStructExtractOp>([&](auto op) {
+                  return builder.createOrFold<hw::StructInjectOp>(
+                      op.getLoc(), projection.into, op.getFieldAttr(), value);
+                })
                 .Case<SigExtractOp>([&](auto op) {
                   return comb::createDynamicInject(builder, op.getLoc(),
                                                    projection.into,
@@ -624,7 +653,7 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
 
   void captureAcrossWait();
-  void captureAcrossWait(PrbOp probeOp, ArrayRef<WaitOp> waitOps,
+  void captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
                          Liveness &liveness, DominanceInfo &dominance);
 
   void constructLattice();
@@ -654,6 +683,9 @@ struct Promoter {
   void insertBlockArgs();
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
+
+  void removeUnusedLocalSignals();
+  void removeUnusedLocalSignal(SignalNode *signal);
 
   /// The region we are promoting in.
   Region &region;
@@ -731,6 +763,9 @@ LogicalResult Promoter::promote() {
   // Insert the necessary block arguments.
   insertBlockArgs();
 
+  // Remove local signals that are never probed.
+  removeUnusedLocalSignals();
+
   // Erase operations that have become unused.
   pruner.eraseNow();
 
@@ -762,19 +797,16 @@ void Promoter::findPromotableSlots() {
         // Ignore uses outside of the region.
         if (user->getParentRegion() != &region)
           return true;
-        // Projection operations are okay as long as they are in the same block
-        // as any of their users.
-        if (isa<SigArrayGetOp, SigExtractOp>(user)) {
-          for (auto *projectionUser : user->getUsers()) {
-            if (projectionUser->getBlock() != user->getBlock())
-              return false;
+        // Projection operations are okay.
+        if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
+          for (auto *projectionUser : user->getUsers())
             if (checkedUsers.insert(projectionUser).second)
               userWorklist.push_back(projectionUser);
-          }
           projections.insert({user->getResult(0), operand});
           return true;
         }
-        return isa<PrbOp>(user) || isBlockingDrive(user) || isDeltaDrive(user);
+        return isa<ProbeOp>(user) || isBlockingDrive(user) ||
+               isDeltaDrive(user);
       };
       checkedUsers.clear();
       if (!llvm::all_of(operand.getUsers(), [&](auto *user) {
@@ -830,7 +862,7 @@ void Promoter::captureAcrossWait() {
 
   SmallVector<WaitOp> crossingWaitOps;
   for (auto &block : region) {
-    for (auto probeOp : block.getOps<PrbOp>()) {
+    for (auto probeOp : block.getOps<ProbeOp>()) {
       for (auto waitOp : waitOps)
         if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(probeOp))
           crossingWaitOps.push_back(waitOp);
@@ -846,7 +878,7 @@ void Promoter::captureAcrossWait() {
 /// probe to use the added block arguments as appropriate. This may insert
 /// additional block arguments in case the probe and added block arguments both
 /// reach the same block.
-void Promoter::captureAcrossWait(PrbOp probeOp, ArrayRef<WaitOp> waitOps,
+void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
                                  Liveness &liveness, DominanceInfo &dominance) {
   LLVM_DEBUG({
     llvm::dbgs() << "Capture " << probeOp << "\n";
@@ -946,7 +978,7 @@ void Promoter::constructLattice() {
     // Handle operations.
     for (auto &op : block.without_terminator()) {
       // Handle probes.
-      if (auto probeOp = dyn_cast<PrbOp>(op)) {
+      if (auto probeOp = dyn_cast<ProbeOp>(op)) {
         if (!promotable.contains(probeOp.getSignal()))
           continue;
         auto *node = lattice.createNode<ProbeNode>(
@@ -957,7 +989,7 @@ void Promoter::constructLattice() {
       }
 
       // Handle drives.
-      if (auto driveOp = dyn_cast<DrvOp>(op)) {
+      if (auto driveOp = dyn_cast<DriveOp>(op)) {
         if (!isBlockingDrive(&op) && !isDeltaDrive(&op))
           continue;
         if (!promotable.contains(driveOp.getSignal()))
@@ -975,6 +1007,18 @@ void Promoter::constructLattice() {
                                             getStoredType(slot), condition);
         auto *node = lattice.createNode<DriveNode>(
             driveOp, slot, def, valueBefore, lattice.createValue());
+        valueBefore = node->valueAfter;
+        continue;
+      }
+
+      // Handle local signals.
+      if (auto signalOp = dyn_cast<SignalOp>(op)) {
+        if (!promotable.contains(signalOp))
+          continue;
+        auto *def =
+            lattice.createDef(signalOp.getInit(), DriveCondition::never());
+        auto *node = lattice.createNode<SignalNode>(signalOp, def, valueBefore,
+                                                    lattice.createValue());
         valueBefore = node->valueAfter;
         continue;
       }
@@ -1033,6 +1077,16 @@ void Promoter::propagateBackward(LatticeNode *node) {
     else if (!isDelayed(drive->slot) && !drive->getDriveOp().getEnable())
       needed.erase(getSlot(drive->slot));
     update(drive->valueBefore, needed);
+    return;
+  }
+
+  // Local signal declarations kill the need for a definition to be available,
+  // since the op is the first time a signal becomes available and the op
+  // provides an initial value as a definition.
+  if (auto *signal = dyn_cast<SignalNode>(node)) {
+    auto needed = signal->valueAfter->neededDefs;
+    needed.erase(signal->getSignalOp());
+    update(signal->valueBefore, needed);
     return;
   }
 
@@ -1132,6 +1186,17 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
     if (!isDelayed(drive->slot))
       reaching.erase(delayedSlot(getSlot(drive->slot)));
     update(drive->valueAfter, reaching);
+    return;
+  }
+
+  // Signals propagate their initial value as a reaching def. They also kill any
+  // earlier definitions, which should not be able to reach the signal in the
+  // first place.
+  if (auto *signal = dyn_cast<SignalNode>(node)) {
+    auto reaching = signal->valueBefore->reachingDefs;
+    reaching[signal->getSlot()] = signal->def;
+    reaching.erase(delayedSlot(signal->getSignalOp()));
+    update(signal->valueAfter, reaching);
     return;
   }
 
@@ -1321,7 +1386,7 @@ void Promoter::insertProbes(BlockEntry *node) {
       if (op->getBlock() == node->block)
         builder.setInsertionPointAfterValue(neededDef);
     }
-    auto value = PrbOp::create(builder, neededDef.getLoc(), neededDef);
+    auto value = ProbeOp::create(builder, neededDef.getLoc(), neededDef);
     auto *def = lattice.createDef(value, DriveCondition::never());
     node->insertedProbes.push_back({neededDef, def});
   }
@@ -1431,7 +1496,7 @@ void Promoter::insertDrives(BlockExit *node) {
     auto enable = reachingDef->condition.isConditional()
                       ? reachingDef->getConditionOrPlaceholder()
                       : Value{};
-    DrvOp::create(builder, getLoc(slot), getSlot(slot), value, time, enable);
+    DriveOp::create(builder, getLoc(slot), getSlot(slot), value, time, enable);
   };
 
   for (auto slot : slots)
@@ -1715,6 +1780,43 @@ void Promoter::replaceValueWith(Value oldValue, Value newValue) {
         def->condition.getCondition() == oldValue)
       def->condition.setCondition(newValue);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Cleanup
+//===----------------------------------------------------------------------===//
+
+/// Remove all unused local signals.
+void Promoter::removeUnusedLocalSignals() {
+  for (auto *node : lattice.nodes)
+    if (auto *signal = dyn_cast<SignalNode>(node))
+      removeUnusedLocalSignal(signal);
+}
+
+/// Remove a local signal if it is only used by projection ops and drives, but
+/// never probed. Since the signal is local and cannot be observed in any other
+/// way, we can safely remove it along with any projection ops and drives.
+void Promoter::removeUnusedLocalSignal(SignalNode *signal) {
+  // Check if the signal is only ever projected into and driven, but never
+  // probed.
+  SmallSetVector<Operation *, 8> users;
+  SmallVector<Operation *> worklist;
+  worklist.push_back(signal->op);
+  while (!worklist.empty()) {
+    auto *op = worklist.pop_back_val();
+    if (!isa<SignalOp, DriveOp, SigArrayGetOp, SigArraySliceOp, SigExtractOp,
+             SigStructExtractOp>(op))
+      return;
+    for (auto *user : op->getUsers())
+      if (users.insert(user))
+        worklist.push_back(user);
+  }
+
+  // If we get here, the local signal is never probed. This means we can safely
+  // remove it.
+  LLVM_DEBUG(llvm::dbgs() << "- Removing local signal " << *signal->op << "\n");
+  for (auto *op : llvm::reverse(users))
+    pruner.eraseNow(op);
 }
 
 //===----------------------------------------------------------------------===//

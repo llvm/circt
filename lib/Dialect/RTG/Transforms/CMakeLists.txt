@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTRTGTransforms
   LinearScanRegisterAllocationPass.cpp
   LowerUniqueLabelsPass.cpp
   LowerValidateToLabelsPass.cpp
+  MaterializeConstraintsPass.cpp
   MemoryAllocationPass.cpp
   PrintTestNamesPass.cpp
   RTGPassPipelines.cpp

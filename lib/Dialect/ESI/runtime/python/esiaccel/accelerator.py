@@ -15,19 +15,51 @@ from typing import Dict, List, Optional
 from .types import BundlePort
 from . import esiCppAccel as cpp
 
-# Global context for the C++ side.
-ctxt = cpp.Context()
+LogLevel = cpp.LogLevel
+
+
+class Context:
+  """A context for ESI accelerator connections. The underlying C++ context owns
+  everything assocated with it including types, accelerator connections, and
+  the accelerator facade/interface (aka Accelerator) itself. It must not be
+  garbage collected while any accelerators or connections that it owns are still
+  in use as they will be disconnected and destroyed when the context is
+  destroyed."""
+
+  _default: Optional["Context"] = None
+
+  def __init__(self, log_level: cpp.LogLevel = cpp.LogLevel.Warning):
+    self.cpp_ctxt = cpp.Context()
+    self.set_stdio_logger(log_level)
+
+  @staticmethod
+  def default() -> "Context":
+    if Context._default is None:
+      Context._default = Context()
+    return Context._default
+
+  def set_stdio_logger(self, level: cpp.LogLevel):
+    self.cpp_ctxt.set_stdio_logger(level)
+
+  def connect(self, platform: str,
+              connection_str: str) -> "AcceleratorConnection":
+    return AcceleratorConnection(
+        self, self.cpp_ctxt.connect(platform, connection_str))
 
 
 class AcceleratorConnection:
   """A connection to an ESI accelerator."""
 
-  def __init__(self, platform: str, connection_str: str):
-    self.cpp_accel = cpp.AcceleratorConnection(ctxt, platform, connection_str)
+  def __init__(self, ctxt: Context, cpp_accel: cpp.AcceleratorConnection):
+    if not isinstance(ctxt, Context):
+      raise TypeError("ctxt must be a Context")
+    self.ctxt = ctxt
+    self.cpp_accel = cpp_accel
 
   def manifest(self) -> cpp.Manifest:
     """Get and parse the accelerator manifest."""
-    return cpp.Manifest(ctxt, self.cpp_accel.sysinfo().json_manifest())
+    return cpp.Manifest(self.ctxt.cpp_ctxt,
+                        self.cpp_accel.sysinfo().json_manifest())
 
   def sysinfo(self) -> cpp.SysInfo:
     return self.cpp_accel.sysinfo()

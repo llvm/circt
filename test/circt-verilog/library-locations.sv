@@ -18,4 +18,4 @@ endmodule
 // CHECK-NEXT: } loc([[LOC2:#.+]])
 
 // CHECK: [[LOC1]] = loc("{{.*}}library-locations.sv"
-// CHECK: [[LOC2]] = loc("{{.*}}include/library_module.sv"
+// CHECK: [[LOC2]] = loc("{{.*}}include{{/|\\\\}}library_module.sv"

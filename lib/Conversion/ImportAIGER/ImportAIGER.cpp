@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ImportAIGER.h"
-#include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -38,7 +38,7 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::hw;
-using namespace circt::aig;
+using namespace circt::synth;
 using namespace circt::seq;
 using namespace circt::aiger;
 
@@ -255,9 +255,6 @@ private:
     return emitError(lexer.getCurrentLoc(), message);
   }
 
-  /// Expect and consume a specific token kind
-  ParseResult expectToken(AIGERTokenKind kind, const Twine &message);
-
   /// Parse a number token into result
   ParseResult parseNumber(unsigned &result, SMLoc *loc = nullptr);
 
@@ -380,14 +377,6 @@ ParseResult AIGERParser::parse() {
     return failure();
   // Create the final module
   return createModule();
-}
-
-ParseResult AIGERParser::expectToken(AIGERTokenKind kind,
-                                     const Twine &message) {
-  AIGERToken token = lexer.nextToken();
-  if (token.kind != kind)
-    return emitError(message);
-  return success();
 }
 
 ParseResult AIGERParser::parseNumber(unsigned &result, SMLoc *loc) {
@@ -768,7 +757,7 @@ Value AIGERParser::getLiteralValue(unsigned literal,
 
   // Apply inversion if needed
   if (inverted) {
-    // Create an inverter using aig.and_inv with single input
+    // Create an inverter using synth.aig.and_inv with single input
     SmallVector<bool> inverts = {true};
     return aig::AndInverterOp::create(builder, loc, builder.getI1Type(),
                                       ValueRange{baseValue}, inverts);
@@ -942,7 +931,7 @@ LogicalResult circt::aiger::importAIGER(llvm::SourceMgr &sourceMgr,
                                         const ImportAIGEROptions *options) {
   // Load required dialects
   context->loadDialect<hw::HWDialect>();
-  context->loadDialect<aig::AIGDialect>();
+  context->loadDialect<synth::SynthDialect>();
   context->loadDialect<seq::SeqDialect>();
 
   // Use default options if none provided

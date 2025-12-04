@@ -12,6 +12,27 @@ rtg.test @constants() {
 
   // CHECK-NEXT: rtg.comment "this is a comment"
   rtg.comment "this is a comment"
+
+  // CHECK-NEXT: rtg.isa.space [[V0]]
+  rtg.isa.space %1
+
+  // CHECK-NEXT: rtg.constant #rtg.set<> : !rtg.set<i32>
+  rtg.constant #rtg.set<> : !rtg.set<i32>
+
+  // Test that set elements are printed in lexicographic order
+  // CHECK-NEXT: rtg.constant #rtg.set<#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg> : !rtg.set<!rtgtest.ireg>
+  rtg.constant #rtg.set<#rtgtest.a1, #rtgtest.a0, #rtgtest.a2> : !rtg.set<!rtgtest.ireg>
+
+  // Test set type inference 
+  // CHECK-NEXT: rtg.constant #rtg.set<0 : i32, 1 : i32, 2 : i32> : !rtg.set<i32>
+  rtg.constant #rtg.set<1 : i32, 0 : i32, 2 : i32>
+
+  // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
+  rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
+
+  // Test set type inference 
+  // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
+  rtg.constant #rtg.tuple<0 : i32, 1 : index>
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
@@ -220,9 +241,9 @@ rtg.test @template() template "temp_name" target @target { }
 
 // CHECK-LABEL: rtg.test @validation()
 rtg.test @validation() {
-  // CHECK: [[V0:%.+]] = rtg.fixed_reg #rtgtest.t0
+  // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.t0
   // CHECK: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
-  %0 = rtg.fixed_reg #rtgtest.t0
+  %0 = rtg.constant #rtgtest.t0
   %1 = rtg.constant #rtg.isa.immediate<32, 0>
   // CHECK: rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
@@ -254,4 +275,12 @@ rtg.test @testReportOps() {
   rtg.test.success
   // CHECK-NEXT: rtg.test.failure "error message"
   rtg.test.failure "error message"
+}
+
+// CHECK-LABEL: rtg.test @testConstraints
+rtg.test @testConstraints() {
+  // CHECK-NEXT: [[V0:%.+]] = index.bool.constant true
+  // CHECK-NEXT: rtg.constraint [[V0]]
+  %0 = index.bool.constant 1
+  rtg.constraint %0
 }

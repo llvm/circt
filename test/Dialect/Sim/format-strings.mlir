@@ -1,10 +1,10 @@
 // RUN: circt-opt %s --canonicalize | FileCheck --strict-whitespace %s
 
 // CHECK-LABEL: hw.module @constant_fold0
-// CHECK: sim.fmt.lit ",0,0,;0,0, 0,0;1,1,-1,1;0011, 3, 3,3;01010,10, 10,0a;10000000,128,-128,80;0000001100101011111110,  51966,   51966,00cafe"
+// CHECK: sim.fmt.literal ",0,0,;0,0, 0,0;1,1,-1,1;0011, 3, 3,3;01010,10, 10,0a;10000000,128,-128,80;0000001100101011111110,  51966,   51966,00cafe"
 hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
-  %comma = sim.fmt.lit ","
-  %semicolon = sim.fmt.lit ";"
+  %comma = sim.fmt.literal ","
+  %semicolon = sim.fmt.literal ";"
 
   %nocat = sim.fmt.concat ()
 
@@ -62,13 +62,13 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 }
 
 // CHECK-LABEL: hw.module @constant_fold1
-// CHECK: sim.fmt.lit " %b: '111111111111111111111111111111111111111111111111111000110100000010010001001010111001101011110010101010110010011011001001110' %u: '10633823966279322740806214058000332366' %d: '               -4242424242424242424242' %x: '7ffffffffffff1a04895cd79559364e'"
+// CHECK: sim.fmt.literal " %b: '111111111111111111111111111111111111111111111111111000110100000010010001001010111001101011110010101010110010011011001001110' %u: '10633823966279322740806214058000332366' %d: '               -4242424242424242424242' %x: '7ffffffffffff1a04895cd79559364e'"
 hw.module @constant_fold1(out res: !sim.fstring) {
-  %preb = sim.fmt.lit " %b: '"
-  %preu = sim.fmt.lit " %u: '"
-  %pres = sim.fmt.lit " %d: '"
-  %preh = sim.fmt.lit " %x: '"
-  %q = sim.fmt.lit "'"
+  %preb = sim.fmt.literal " %b: '"
+  %preu = sim.fmt.literal " %u: '"
+  %pres = sim.fmt.literal " %d: '"
+  %preh = sim.fmt.literal " %x: '"
+  %q = sim.fmt.literal "'"
 
   %cst42_123 = hw.constant -4242424242424242424242 : i123
   %w123b42 = sim.fmt.bin %cst42_123 : i123
@@ -82,14 +82,14 @@ hw.module @constant_fold1(out res: !sim.fstring) {
 
 // CHECK-LABEL: hw.module @constant_fold2
 hw.module @constant_fold2(in %foo: i1027, out res: !sim.fstring) {
-  // CHECK: [[SDS:%.+]] = sim.fmt.lit " - "
+  // CHECK: [[SDS:%.+]] = sim.fmt.literal " - "
   // CHECK: [[HEX:%.+]] = sim.fmt.hex %foo : i1027
   // CHECK: [[CAT:%.+]] = sim.fmt.concat ([[SDS]], [[HEX]], [[SDS]])
   // CHECK: hw.output [[CAT]] : !sim.fstring
 
-  %space = sim.fmt.lit " "
-  %dash = sim.fmt.lit "-"
-  %spaceDashSpace = sim.fmt.lit " - "
+  %space = sim.fmt.literal " "
+  %dash = sim.fmt.literal "-"
+  %spaceDashSpace = sim.fmt.literal " - "
   %hex = sim.fmt.hex %foo : i1027
 
   %res = sim.fmt.concat (%spaceDashSpace, %hex, %space, %dash, %space)
@@ -97,7 +97,7 @@ hw.module @constant_fold2(in %foo: i1027, out res: !sim.fstring) {
 }
 
 // CHECK-LABEL: hw.module @constant_fold3
-// CHECK: sim.fmt.lit "Foo\0A\0D\00Foo\00\C8"
+// CHECK: sim.fmt.literal "Foo\0A\0D\00Foo\00\C8"
 hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
   %F = hw.constant 70 : i7
   %o = hw.constant 111 : i8
@@ -120,9 +120,9 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
 
 
 // CHECK-LABEL: hw.module @flatten_concat1
-// CHECK-DAG:   %[[LH:.+]] = sim.fmt.lit "Hex: "
-// CHECK-DAG:   %[[LD:.+]] = sim.fmt.lit "Dec: "
-// CHECK-DAG:   %[[LB:.+]] = sim.fmt.lit "Bin: "
+// CHECK-DAG:   %[[LH:.+]] = sim.fmt.literal "Hex: "
+// CHECK-DAG:   %[[LD:.+]] = sim.fmt.literal "Dec: "
+// CHECK-DAG:   %[[LB:.+]] = sim.fmt.literal "Bin: "
 // CHECK-DAG:   %[[FH:.+]] = sim.fmt.hex %val : i8
 // CHECK-DAG:   %[[FD:.+]] = sim.fmt.dec %val : i8
 // CHECK-DAG:   %[[FB:.+]] = sim.fmt.bin %val : i8
@@ -130,17 +130,17 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
 // CHECK:       hw.output %[[CAT]] : !sim.fstring
 
 hw.module @flatten_concat1(in %val : i8, out res: !sim.fstring) {
-  %binLit = sim.fmt.lit "Bin: "
+  %binLit = sim.fmt.literal "Bin: "
   %binVal = sim.fmt.bin %val : i8
   %binCat = sim.fmt.concat (%binLit, %binVal)
 
-  %decLit = sim.fmt.lit "Dec: "
+  %decLit = sim.fmt.literal "Dec: "
   %decVal = sim.fmt.dec %val : i8
   %decCat = sim.fmt.concat (%decLit, %decVal, %nocat)
 
   %nocat = sim.fmt.concat ()
 
-  %hexLit = sim.fmt.lit "Hex: "
+  %hexLit = sim.fmt.literal "Hex: "
   %hexVal = sim.fmt.hex %val : i8
   %hexCat = sim.fmt.concat (%hexLit, %hexVal)
 
@@ -149,14 +149,14 @@ hw.module @flatten_concat1(in %val : i8, out res: !sim.fstring) {
 }
 
 // CHECK-LABEL: hw.module @flatten_concat2
-// CHECK-DAG:   %[[F:.+]] = sim.fmt.lit "Foo"
-// CHECK-DAG:   %[[FF:.+]] = sim.fmt.lit "FooFoo"
+// CHECK-DAG:   %[[F:.+]] = sim.fmt.literal "Foo"
+// CHECK-DAG:   %[[FF:.+]] = sim.fmt.literal "FooFoo"
 // CHECK-DAG:   %[[CHR:.+]] = sim.fmt.char %val : i8
 // CHECK-DAG:   %[[CAT:.+]] = sim.fmt.concat (%[[F]], %[[CHR]], %[[FF]], %[[CHR]], %[[FF]], %[[CHR]], %[[FF]], %[[CHR]], %[[FF]], %[[CHR]], %[[F]])
 // CHECK:       hw.output %[[CAT]] : !sim.fstring
 
 hw.module @flatten_concat2(in %val : i8, out res: !sim.fstring) {
-  %foo = sim.fmt.lit "Foo"
+  %foo = sim.fmt.literal "Foo"
   %char = sim.fmt.char %val : i8
 
   %c = sim.fmt.concat (%foo, %char, %foo)

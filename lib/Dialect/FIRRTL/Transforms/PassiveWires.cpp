@@ -51,7 +51,8 @@ struct PassiveWiresPass
 
 // This is the main entrypoint for the lowering pass.
 void PassiveWiresPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   auto module = getOperation();
 
   // First, expand any connects to resolve flips.

@@ -518,37 +518,6 @@ firrtl.circuit "Top" {
 }
 
 // -----
-// Check resolving XMR's to internalPaths
-
-// CHECK-LABEL: firrtl.circuit "InternalPaths"
-firrtl.circuit "InternalPaths" {
-  firrtl.extmodule private @RefExtMore(in in: !firrtl.uint<1>,
-                                       out r: !firrtl.probe<uint<1>>,
-                                       out data: !firrtl.uint<3>,
-                                       out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>) attributes {convention = #firrtl<convention scalarized>, internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]}
-  // CHECK: hw.hierpath private @xmrPath [@InternalPaths::@[[EXT_SYM:.+]]]
-  // CHECK: module public @InternalPaths(
-  firrtl.module public @InternalPaths(in %in: !firrtl.uint<1>) {
-    // CHECK: firrtl.instance ext sym @[[EXT_SYM]] @RefExtMore
-    %ext_in, %ext_r, %ext_data, %ext_r2 =
-      firrtl.instance ext @RefExtMore(in in: !firrtl.uint<1>,
-                                      out r: !firrtl.probe<uint<1>>,
-                                      out data: !firrtl.uint<3>,
-                                      out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>)
-   firrtl.matchingconnect %ext_in, %in : !firrtl.uint<1>
-
-   // CHECK: %[[XMR_R:.+]] = firrtl.xmr.deref @xmrPath, ".path.to.internal.signal" : !firrtl.uint<1>
-   // CHECK: %node_r = firrtl.node %[[XMR_R]]
-   %read_r  = firrtl.ref.resolve %ext_r : !firrtl.probe<uint<1>>
-   %node_r = firrtl.node %read_r : !firrtl.uint<1>
-   // CHECK: %[[XMR_R2:.+]] = firrtl.xmr.deref @xmrPath, ".in" : !firrtl.vector<bundle<a: uint<3>>, 3>
-   // CHECK: %node_r2 = firrtl.node %[[XMR_R2]]
-   %read_r2  = firrtl.ref.resolve %ext_r2 : !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
-   %node_r2 = firrtl.node %read_r2 : !firrtl.vector<bundle<a: uint<3>>, 3>
-  }
-}
-
-// -----
 // Check resolving XMR's to use macro ABI.
 
 // CHECK-LABEL: firrtl.circuit "RefABI"

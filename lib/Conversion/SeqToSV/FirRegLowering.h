@@ -164,7 +164,7 @@ private:
       return constant;
     }
 
-    constant = builder.create<hw::ConstantOp>(loc, value);
+    constant = hw::ConstantOp::create(builder, loc, value);
     return constant;
   }
 

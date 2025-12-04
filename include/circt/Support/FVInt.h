@@ -44,6 +44,10 @@ public:
       : FVInt(APInt(numBits, value, isSigned)) {}
 
   /// Construct an `FVInt` from an `APInt`. The result has no X or Z bits.
+  FVInt(APInt &&value)
+      : value(value), unknown(APInt::getZero(value.getBitWidth())) {}
+
+  /// Construct an `FVInt` from an `APInt`. The result has no X or Z bits.
   FVInt(const APInt &value)
       : value(value), unknown(APInt::getZero(value.getBitWidth())) {}
 
@@ -541,6 +545,36 @@ public:
     auto v = *this;
     v *= other;
     return v;
+  }
+
+  /// Compute an unsigned division. If any bits in either integer are unknown,
+  /// the entire result is X. On division by zero the entire result is X. See
+  /// IEEE 1800-2017 § 11.4.3 Arithmetic operators.
+  FVInt udiv(const FVInt &other) const {
+    if (hasUnknown() || other.hasUnknown() || other.isZero())
+      return getAllX(getBitWidth());
+    return value.udiv(other.value);
+  }
+
+  FVInt udiv(uint64_t other) const {
+    if (hasUnknown() || other == 0)
+      return getAllX(getBitWidth());
+    return value.udiv(other);
+  }
+
+  /// Compute a signed division. If any bits in either integer are unknown,
+  /// the entire result is X. On division by zero the entire result is X. See
+  /// IEEE 1800-2017 § 11.4.3 Arithmetic operators.
+  FVInt sdiv(const FVInt &other) const {
+    if (hasUnknown() || other.hasUnknown() || other.isZero())
+      return getAllX(getBitWidth());
+    return value.sdiv(other.value);
+  }
+
+  FVInt sdiv(int64_t other) const {
+    if (hasUnknown() || other == 0)
+      return getAllX(getBitWidth());
+    return value.sdiv(other);
   }
 
   //===--------------------------------------------------------------------===//

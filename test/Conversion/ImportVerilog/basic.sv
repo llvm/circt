@@ -168,13 +168,13 @@ module Basic;
   MyEnum ev1 = VariantA;
   MyEnum ev2 = VariantB;
 
-  // CHECK: [[STR_WELCOME:%.+]] = moore.string_constant "Welcome to Moore" : i128
+  // CHECK: [[STR_WELCOME:%.+]] = moore.constant_string "Welcome to Moore" : i128
   // CHECK: [[CONV_WELCOME:%.+]] = moore.conversion [[STR_WELCOME]] : !moore.i128 -> !moore.string
   // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
   string s = "Welcome to Moore";
 
   // CHECK: [[VAR_S1:%.+]] = moore.variable : <string>
-  // CHECK: [[STR_HELLO:%.+]] = moore.string_constant "Hello World" : i88
+  // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello World" : i88
   // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i88 -> !moore.string
   // CHECK: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
   string s1; 
@@ -184,15 +184,15 @@ module Basic;
   // CHECK: [[VAR_S2:%.+]] = moore.variable : <struct<{x: i1, y: i1}>>
   MyStruct s2;
   // CHECK: [[TMP1:%.+]] = moore.read [[VAR_S2]]
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.struct<{x: i1, y: i1}> -> !moore.i2
+  // CHECK: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : struct<{x: i1, y: i1}>
   // CHECK: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
-  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i2 -> !moore.struct<{x: i1, y: i1}>
+  // CHECK: [[TMP4:%.+]] = moore.sbv_to_packed [[TMP3]] : struct<{x: i1, y: i1}>
   // CHECK: moore.assign [[VAR_S2]], [[TMP4]]
   assign s2 = ~s2;
   // CHECK: [[TMP1:%.+]] = moore.read [[VAR_S2]]
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.struct<{x: i1, y: i1}> -> !moore.i2
+  // CHECK: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : struct<{x: i1, y: i1}>
   // CHECK: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
-  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i2 -> !moore.struct<{x: i1, y: i1}>
+  // CHECK: [[TMP4:%.+]] = moore.sbv_to_packed [[TMP3]] : struct<{x: i1, y: i1}>
   // CHECK: [[VAR_S3:%.+]] = moore.variable [[TMP4]] : <struct<{x: i1, y: i1}>>
   MyStruct s3 = ~s2;
 endmodule
@@ -262,7 +262,7 @@ endmodule
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void ConditionalStatements(bit x, bit y);
-  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -271,7 +271,7 @@ function void ConditionalStatements(bit x, bit y);
   if (x) dummyA();
 
   // CHECK: [[COND1:%.+]] = moore.and %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -279,7 +279,7 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: ^[[BB2]]:
   if (x &&& y) dummyA();
 
-  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -293,13 +293,13 @@ function void ConditionalStatements(bit x, bit y);
   else
     dummyB();
 
-  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
   // CHECK: cf.br ^[[BB6:.+]]
   // CHECK: ^[[BB2]]:
-  // CHECK: [[COND:%.+]] = moore.conversion %arg1 : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg1 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB3:.+]], ^[[BB4:.+]]
   // CHECK: ^[[BB3]]:
   // CHECK: call @dummyB()
@@ -317,7 +317,7 @@ function void ConditionalStatements(bit x, bit y);
   else
     dummyC();
 
-  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: return
@@ -334,7 +334,7 @@ function void CaseStatements(int x, int a, int b, int c);
   // CHECK: [[FLAG:%.+]] = moore.add %arg0, %arg0
   case (x + x)
     // CHECK: [[COND1:%.+]] = moore.case_eq [[FLAG]], %arg1
-    // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+    // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
     // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
     // CHECK: ^[[BB1]]:
     // CHECK: call @dummyA()
@@ -348,12 +348,12 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 
   // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB1:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: [[TMP:%.+]] = moore.add %arg2, %arg3
   // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, [[TMP]]
-  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB_MATCH]]:
   // CHECK: call @dummyA()
@@ -368,7 +368,7 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 
   // CHECK: [[COND1:%.+]] = moore.casez_eq %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -381,7 +381,7 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 
   // CHECK: [[COND1:%.+]] = moore.casexz_eq %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -406,7 +406,7 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP1:%.+]] = moore.read %x
   // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
-  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: [[TMP3:%.+]] = moore.to_builtin_bool [[TMP2]] : i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -422,7 +422,7 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP1:%.+]] = moore.read %y
   // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
-  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: [[TMP3:%.+]] = moore.to_builtin_bool [[TMP2]] : i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -435,10 +435,10 @@ function void ForLoopStatements(int a, int b, bit c);
 
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg2 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg2 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_TRUE:.+]], ^[[BB_FALSE:.+]]
   // CHECK: ^[[BB_TRUE]]:
   // CHECK: cf.br ^[[BB_STEP:.+]]
@@ -494,7 +494,7 @@ function void ForeachStatements(int x, bit y);
 // CHECK: %[[C4:.*]] = moore.constant 4 : i32
 // CHECK: %[[I_VAL:.*]] = moore.read %[[I]] : <i32>
 // CHECK: %[[CMP1:.*]] = moore.sle %[[I_VAL]], %[[C4]] : i32 -> i1
-// CHECK: %[[CONV1:.*]] = moore.conversion %[[CMP1]] : !moore.i1 -> i1
+// CHECK: %[[CONV1:.*]] = moore.to_builtin_bool %[[CMP1]] : i1
 // CHECK: cf.cond_br %[[CONV1]], ^[[BB2:.*]], ^[[BB10:.*]]
 // CHECK: ^[[BB2]]:
 // CHECK: %[[CM1:.*]] = moore.constant -1 : i32
@@ -504,11 +504,11 @@ function void ForeachStatements(int x, bit y);
 // CHECK: %[[C6:.*]] = moore.constant 6 : i32
 // CHECK: %[[J_VAL:.*]] = moore.read %[[J]] : <i32>
 // CHECK: %[[CMP2:.*]] = moore.sle %[[J_VAL]], %[[C6]] : i32 -> i1
-// CHECK: %[[CONV2:.*]] = moore.conversion %[[CMP2]] : !moore.i1 -> i1
+// CHECK: %[[CONV2:.*]] = moore.to_builtin_bool %[[CMP2]] : i1
 // CHECK: cf.cond_br %[[CONV2]], ^[[BB4:.*]], ^[[BB8:.*]]
   foreach (array[, i, ,j]) begin
 // CHECK: ^[[BB4]]:
-// CHECK: %[[CONV3:.*]] = moore.conversion %[[ARG1]] : !moore.i1 -> i1
+// CHECK: %[[CONV3:.*]] = moore.to_builtin_bool %[[ARG1]] : i1
 // CHECK: cf.cond_br %[[CONV3]], ^[[BB5:.*]], ^[[BB6:.*]]
     if (y) begin
 // CHECK: ^[[BB5]]:
@@ -549,7 +549,7 @@ endfunction
 function void WhileLoopStatements(bit x, bit y);
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -562,14 +562,14 @@ function void WhileLoopStatements(bit x, bit y);
   // CHECK: call @dummyA()
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_EXIT]]:
   do dummyA(); while (x);
 
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   while (x) begin
@@ -596,7 +596,7 @@ function void RepeatLoopStatements(int x, bit y);
   repeat (x) begin
     // CHECK: ^[[BB_CHECK]]([[COUNT:%.+]]: !moore.i32):
     // CHECK: [[TMP1:%.+]] = moore.bool_cast [[COUNT]] : i32 -> i1
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i1 -> i1
+    // CHECK: [[TMP2:%.+]] = moore.to_builtin_bool [[TMP1]] : i1
     // CHECK: cf.cond_br [[TMP2]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
     // CHECK: ^[[BB_BODY]]:
     if (y) begin
@@ -652,10 +652,10 @@ module Statements(
 
   initial begin
     // CHECK: [[CONCAT1:%.+]] = moore.concat {{.*}} : (!moore.l64, !moore.l64, !moore.l64, !moore.l64) -> l256
-    // CHECK: [[CON1A:%.+]] = moore.conversion [[CONCAT1]] : !moore.l256 -> !moore.array<4 x l64>
+    // CHECK: [[CON1A:%.+]] = moore.sbv_to_packed [[CONCAT1]] : array<4 x l64>
     // CHECK: [[PACK1:%.+]] = moore.variable [[CON1A]] : <array<4 x l64>>
     // CHECK: [[TMP1:%.+]] = moore.read [[PACK1]] : <array<4 x l64>>
-    // CHECK: [[CON1B:%.+]] = moore.conversion [[TMP1]] : !moore.array<4 x l64> -> !moore.l256
+    // CHECK: [[CON1B:%.+]] = moore.packed_to_sbv [[TMP1]] : array<4 x l64>
     // moore.blocking_assign %out0, [[CON1B]] : l256
     automatic logic [3:0][63:0] pack = {
         r,
@@ -742,8 +742,8 @@ module Expressions;
       int a, b;
     } c, d;
   } union1;
-  // CHECK: %r1 = moore.variable : <real>
-  // CHECK: %r2 = moore.variable : <real>
+  // CHECK: %r1 = moore.variable : <f64>
+  // CHECK: %r2 = moore.variable : <f64>
   real r1,r2;
   // CHECK: %arrayInt = moore.variable : <array<2 x i32>>
   bit [1:0][31:0] arrayInt;
@@ -755,11 +755,11 @@ module Expressions;
   bit [31:0] arr2 [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
-  // CHECK: [[STR_HELLO:%.+]] = moore.string_constant "Hello" : i40
+  // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello" : i40
   // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i40 -> !moore.string
   // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
   string s = "Hello";
-  // CHECK: [[STR_WORLD:%.+]] = moore.string_constant "World" : i40
+  // CHECK: [[STR_WORLD:%.+]] = moore.constant_string "World" : i40
   // CHECK: [[CONV_WORLD:%.+]] = moore.conversion [[STR_WORLD]] : !moore.i40 -> !moore.string
   // CHECK: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
   string s1 = "World";
@@ -833,9 +833,8 @@ module Expressions;
     // CHECK: [[TMP5:%.+]] = moore.zext [[TMP4]] : i6 -> i32
     // CHECK: moore.blocking_assign %a, [[TMP5]] : i32
     a = { << 4 { 6'b11_0101 }};
-    // CHECK: [[TMP1:%.+]] = moore.constant -11 : i6
-    // CHECK: [[TMP2:%.+]] = moore.zext [[TMP1]] : i6 -> i32
-    // CHECK: moore.blocking_assign %a, [[TMP2]] : i32
+    // CHECK: [[TMP1:%.+]] = moore.constant 53 : i32
+    // CHECK: moore.blocking_assign %a, [[TMP1]] : i32
     a = { >> 4 { 6'b11_0101 }};
     // CHECK: [[TMP1:%.+]] = moore.constant -3 : i4
     // CHECK: [[TMP2:%.+]] = moore.extract [[TMP1]] from 0 : i4 -> i1
@@ -867,9 +866,8 @@ module Expressions;
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 96'b1;
     // CHECK: [[TMP1:%.+]] = moore.concat_ref %a, %b, %c : (!moore.ref<i32>, !moore.ref<i32>, !moore.ref<i32>) -> <i96>
-    // CHECK: [[TMP2:%.+]] = moore.constant 31 : i100
-    // CHECK: [[TMP3:%.+]] = moore.trunc [[TMP2]] : i100 -> i96
-    // CHECK: moore.blocking_assign [[TMP1]], [[TMP3]] : i96
+    // CHECK: [[TMP2:%.+]] = moore.constant 31 : i96
+    // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i96
     {>>{ a, b, c }} = 100'b11111;
     // CHECK: [[TMP1:%.+]] = moore.concat_ref %p1, %p2, %p3, %p4 : (!moore.ref<l11>, !moore.ref<l11>, !moore.ref<l11>, !moore.ref<l11>) -> <l44>
     // CHECK: [[TMP2:%.+]] = moore.read %up : <uarray<4 x l11>>
@@ -921,11 +919,13 @@ module Expressions;
     a = {a, {0{b}}, {0{a, {0{b}}, c}}, c};
     // CHECK: [[TMP1:%.+]] = moore.read %d : <l32>
     // CHECK: [[TMP2:%.+]] = moore.read %x : <i1>
-    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP2]] : l32, i1 -> l1
+    // CHECK: [[TMP3:%.+]] = moore.zext [[TMP2]] : i1 -> i5
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP3]] : l32, i5 -> l1
     y = d[x];
     // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
     // CHECK: [[TMP2:%.+]] = moore.read %x : <i1>
-    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP2]] : i32, i1 -> i1
+    // CHECK: [[TMP3:%.+]] = moore.zext [[TMP2]] : i1 -> i5
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP3]] : i32, i5 -> i1
     x = a[x];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
     // CHECK: moore.extract [[TMP1]] from 15 : l32 -> l1
@@ -949,7 +949,7 @@ module Expressions;
     y = vec_1b[vec_1];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1a : <l17> 
     // CHECK: [[TMP2:%.+]] = moore.read %x : <i1> 
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> !moore.i5
+    // CHECK: [[TMP3:%.+]] = moore.zext [[TMP2]] : i1 -> i5
     // CHECK: [[TMP4:%.+]] = moore.constant 15 : i5
     // CHECK: [[TMP5:%.+]] = moore.sub [[TMP3]], [[TMP4]] : i5
     // CHECK: moore.dyn_extract [[TMP1]] from [[TMP5]] : l17, i5 -> l1
@@ -972,7 +972,8 @@ module Expressions;
     vec_1[2:1] = y;
 
     // CHECK: [[X_READ:%.+]] = moore.read %x : <i1>
-    // CHECK: moore.dyn_extract_ref %vec_1 from [[X_READ]] : <l32>, i1 -> <l1>
+    // CHECK: [[X_ZEXT:%.+]] = moore.zext [[X_READ]] : i1 -> i5
+    // CHECK: moore.dyn_extract_ref %vec_1 from [[X_ZEXT]] : <l32>, i5 -> <l1>
     vec_1[x] = y;
     
     // CHECK: moore.extract_ref %vec_1 from 13 : <l32> -> <l3>
@@ -988,7 +989,7 @@ module Expressions;
     // CHECK: moore.neg [[TMP1]] : i32
     c = -a;
     // CHECK: [[TMP1:%.+]] = moore.read %v
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.array<2 x i4> -> !moore.i8
+    // CHECK: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : array<2 x i4>
     // CHECK: [[TMP3:%.+]] = moore.zext [[TMP2]] : i8 -> i32
     // CHECK: moore.neg [[TMP3]] : i32
     c = -v;
@@ -1061,7 +1062,7 @@ module Expressions;
     c = a + b;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %v
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.array<2 x i4> -> !moore.i8
+    // CHECK: [[TMP3:%.+]] = moore.packed_to_sbv [[TMP2]] : array<2 x i4>
     // CHECK: [[TMP4:%.+]] = moore.zext [[TMP3]] : i8 -> i32
     // CHECK: moore.add [[TMP1]], [[TMP4]] : i32
     c = a + v;
@@ -1090,18 +1091,18 @@ module Expressions;
     // CHECK: moore.mods [[TMP1]], [[TMP2]] : l32
     f = d % e;
     // CHECK: [[TMP1:%.+]] = moore.read %a
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP2:%.+]] = moore.int_to_logic [[TMP1]] : i32
     // CHECK: [[TMP1:%.+]] = moore.read %b
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP3:%.+]] = moore.int_to_logic [[TMP1]] : i32
     // CHECK: [[TMP1:%.+]] = moore.pows [[TMP2]], [[TMP3]] : l32
-    // CHECK: moore.conversion [[TMP1]] : !moore.l32 -> !moore.i32
+    // CHECK: moore.logic_to_int [[TMP1]] : l32
     c = a ** b;
     // CHECK: [[TMP1:%.+]] = moore.read %u
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP2:%.+]] = moore.int_to_logic [[TMP1]] : i32
     // CHECK: [[TMP1:%.+]] = moore.read %w
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP3:%.+]] = moore.int_to_logic [[TMP1]] : i32
     // CHECK: [[TMP1:%.+]] = moore.powu [[TMP2]], [[TMP3]] : l32
-    // CHECK: moore.conversion [[TMP1]] : !moore.l32 -> !moore.i32
+    // CHECK: moore.logic_to_int [[TMP1]] : l32
     u = u ** w;
 
     // CHECK: [[TMP1:%.+]] = moore.read %a
@@ -1195,13 +1196,13 @@ module Expressions;
     // CHECK: moore.wildcard_eq [[TMP1]], [[TMP2]] : i32 -> i1
     x = a ==? b;
     // CHECK: [[TMP1:%.+]] = moore.read %a
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP2:%.+]] = moore.int_to_logic [[TMP1]] : i32
     // CHECK: [[TMP3:%.+]] = moore.read %d
     // CHECK: moore.wildcard_eq [[TMP2]], [[TMP3]] : l32 -> l1
     y = a ==? d;
     // CHECK: [[TMP1:%.+]] = moore.read %d
     // CHECK: [[TMP2:%.+]] = moore.read %b
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP3:%.+]] = moore.int_to_logic [[TMP2]] : i32
     // CHECK: moore.wildcard_eq [[TMP1]], [[TMP3]] : l32 -> l1
     y = d ==? b;
     // CHECK: [[TMP1:%.+]] = moore.read %d
@@ -1277,12 +1278,12 @@ module Expressions;
     c = a <-> b;
     // CHECK: [[TMP:%.+]] = moore.read %x : <i1>
     // CHECK: [[Y:%.+]] = moore.read %y : <l1>
-    // CHECK: [[X:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> !moore.l1
+    // CHECK: [[X:%.+]] = moore.int_to_logic [[TMP]] : i1
     // CHECK: moore.and [[X]], [[Y]] : l1
     y = x && y;
     // CHECK: [[Y:%.+]] = moore.read %y : <l1>
     // CHECK: [[TMP:%.+]] = moore.read %x : <i1>
-    // CHECK: [[X:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> !moore.l1
+    // CHECK: [[X:%.+]] = moore.int_to_logic [[TMP]] : i1
     // CHECK: moore.and [[Y]], [[X]] : l1
     y = y && x;
 
@@ -1362,12 +1363,12 @@ module Expressions;
     c = x ? a : b;
 
     // CHECK: [[X_COND:%.+]] = moore.read %x
-    // CHECK: moore.conditional [[X_COND]] : i1 -> real {
+    // CHECK: moore.conditional [[X_COND]] : i1 -> f64 {
     // CHECK:   [[R1_READ:%.+]] = moore.read %r1
-    // CHECK:   moore.yield [[R1_READ]] : real
+    // CHECK:   moore.yield [[R1_READ]] : f64
     // CHECK: } {
     // CHECK:   [[R2_READ:%.+]] = moore.read %r2
-    // CHECK:   moore.yield [[R2_READ]] : real
+    // CHECK:   moore.yield [[R2_READ]] : f64
     // CHECK: }
     r1 = x ? r1 : r2;
 
@@ -1522,15 +1523,12 @@ module Expressions;
     struct0 = '{43, 9002};
 
 
-    // CHECK: [[TMP0:%.+]] = moore.constant 43 : i32
-    // CHECK: [[TMP1:%.+]] = moore.sext [[TMP0]] : i32 -> i64
+    // CHECK: [[TMP1:%.+]] = moore.constant 43 : i64
     // CHECK: [[TMP2:%.+]] = moore.read %struct0 : <struct<{a: i32, b: i32}>>
-    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.struct<{a: i32, b: i32}> -> !moore.i64
+    // CHECK: [[TMP3:%.+]] = moore.packed_to_sbv [[TMP2]] : struct<{a: i32, b: i32}>
     // CHECK: [[TMP4:%.+]] = moore.wildcard_eq [[TMP1]], [[TMP3]] : i64 -> i1
     // CHECK: [[TMP5:%.+]] = moore.zext [[TMP4]] : i1 -> i32
-    // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.i32 -> !moore.l32
-    // CHECK: [[TMP7:%.+]] = moore.conversion [[TMP6]] : !moore.l32 -> !moore.i32
-    // CHECK: moore.blocking_assign %c, [[TMP7]] : i32
+    // CHECK: moore.blocking_assign %c, [[TMP5]] : i32
     c = 43 inside {struct0};
 
     // CHECK: [[TMP0:%.+]] = moore.constant 44
@@ -1619,9 +1617,31 @@ module Conversion;
 
   // Implicit conversion for literals.
   // CHECK: [[TMP1:%.+]] = moore.constant 0 : i64
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
+  // CHECK: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : struct<{a: i32, b: i32}>
   // CHECK: %f = moore.variable [[TMP2]]
   struct packed { int a; int b; } f = '0;
+endmodule
+
+// CHECK-LABEL: moore.module @TimeConversion1
+module TimeConversion1;
+  timeunit 10fs / 1fs;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant_time 12340 fs
+  // CHECK: moore.variable [[TMP]] : <time>
+  time t = 1234;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant 1234 : i32
+  // CHECK: moore.variable [[TMP]] : <i32>
+  int i = 12.34ps;
+endmodule
+
+// CHECK-LABEL: moore.module @TimeConversion2
+module TimeConversion2;
+  timeunit 100fs / 1fs;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant_time 123400 fs
+  // CHECK: moore.variable [[TMP]] : <time>
+  time t = 1234;
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant 123 : i32
+  // CHECK: moore.variable [[TMP]] : <i32>
+  int i = 12.34ps;
 endmodule
 
 // CHECK-LABEL: moore.module @PortsTop
@@ -1859,17 +1879,17 @@ module GenerateConstructs;
     // CHECK: [[TMP:%.+]] = moore.constant 0
     // CHECK: dbg.variable "i", [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 0
-    // CHECK: %g1 = moore.variable [[TMP]]
+    // CHECK: %genblk1_0.g1 = moore.variable [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 1
     // CHECK: dbg.variable "i", [[TMP]]
     // CHECK: [[TMP:%.+]] = moore.constant 1
-    // CHECK: moore.variable name "g1" [[TMP]]
+    // CHECK: %genblk1_1.g1 = moore.variable [[TMP]]
     for (i = 0; i < 2; i = i + 1) begin
       integer g1 = i;
     end
 
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %g2 = moore.variable [[TMP]] : <i32>
+    // CHECK: %genblk2.g2 = moore.variable [[TMP]] : <i32>
     if (p == 2) begin
       int g2 = 2;
     end else begin
@@ -1877,7 +1897,7 @@ module GenerateConstructs;
     end
     
     // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %g3 = moore.variable [[TMP]] : <i32>
+    // CHECK: %genblk3.g3 = moore.variable [[TMP]] : <i32>
     case (p)
       2: begin
         int g3 = 2;
@@ -2035,12 +2055,12 @@ function void ConvertConditionalExprsToResultType(bit [15:0] x, struct packed { 
   // CHECK: moore.conditional %arg2 : i1 -> i16 {
   // CHECK:   moore.yield %arg0
   // CHECK: } {
-  // CHECK:   [[TMP:%.+]] = moore.conversion %arg1
+  // CHECK:   [[TMP:%.+]] = moore.packed_to_sbv %arg1
   // CHECK:   moore.yield [[TMP]]
   // CHECK: }
   r = z ? x : y;
   // CHECK: moore.conditional %arg2 : i1 -> i16 {
-  // CHECK:   [[TMP:%.+]] = moore.conversion %arg1
+  // CHECK:   [[TMP:%.+]] = moore.packed_to_sbv %arg1
   // CHECK:   moore.yield [[TMP]]
   // CHECK: } {
   // CHECK:   moore.yield %arg0
@@ -2076,6 +2096,19 @@ task automatic ImplicitEventControl(ref int x, ref int y);
   // CHECK: [[TMP3:%.+]] = moore.add [[TMP1]], [[TMP2]]
   // CHECK: call @dummyD([[TMP3]])
   @* dummyD(x + y);
+endtask
+
+// CHECK-LABEL: func.func private @DelayControl(
+// CHECK-SAME: [[X:%[^:]+]]: !moore.time
+task automatic DelayControl(time x);
+  // CHECK: [[TMP:%.+]] = moore.constant_time 1234000 fs
+  // CHECK: moore.wait_delay [[TMP]]
+  // CHECK: call @dummyA()
+  #1.234ns dummyA();
+
+  // CHECK: moore.wait_delay [[X]]
+  // CHECK: call @dummyA()
+  #x dummyA();
 endtask
 
 // CHECK-LABEL: func.func private @SignalEventControl(
@@ -2131,7 +2164,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP1:%.+]] = moore.read [[T]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[V]] : <l1>
-  // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.l1 -> !moore.i1
+  // CHECK:   [[TMP3:%.+]] = moore.logic_to_int [[TMP2]] : l1
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
   // CHECK: }
   // CHECK: call @dummyA()
@@ -2170,7 +2203,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP2]]
   // CHECK:   [[TMP1:%.+]] = moore.read [[U]]
   // CHECK:   [[TMP2:%.+]] = moore.read [[V]]
-  // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.l1 -> !moore.i1
+  // CHECK:   [[TMP3:%.+]] = moore.logic_to_int [[TMP2]] : l1
   // CHECK:   moore.detect_event negedge [[TMP1]] if [[TMP3]]
   // CHECK: }
   // CHECK: call @dummyA()
@@ -2297,7 +2330,7 @@ module ImmediateAssertiWithActionBlock;
   int a;
 // CHECK: moore.procedure always {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHECK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_bool [[READ_X]] : l1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: [[C1:%.+]] = moore.constant 1 : i32
@@ -2310,7 +2343,7 @@ module ImmediateAssertiWithActionBlock;
 
 // CHECK: moore.procedure always {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHECK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_bool [[READ_X]] : l1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: cf.br ^bb3
@@ -2325,7 +2358,7 @@ module ImmediateAssertiWithActionBlock;
 
 // CHECK: moore.procedure always {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHECK: [[CONV_X:%.+]] = moore.conversion [[READ_X]] : !moore.l1 -> i1
+  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_bool [[READ_X]] : l1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: [[C1:%.+]] = moore.constant 1 : i32
@@ -2352,7 +2385,7 @@ module ConcurrentAssert(input clk);
   // Simple
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: verif.assert [[CONV_A]] : i1
     // CHECK: moore.return
   // CHECK: }
@@ -2361,7 +2394,7 @@ module ConcurrentAssert(input clk);
   // Sequence Concat
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 1 : i1
     // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2369,7 +2402,7 @@ module ConcurrentAssert(input clk);
   assert property (a [+]);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[NONCONCATREPEAT_OP:%.+]] = ltl.non_consecutive_repeat [[CONV_A]], 2, 0 : i1
     // CHECK: verif.assert [[NONCONCATREPEAT_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2377,7 +2410,7 @@ module ConcurrentAssert(input clk);
   assert property (a [= 2]);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[GOTO_OP:%.+]] = ltl.goto_repeat [[CONV_A]], 2, 2 : i1
     // CHECK: verif.assert [[GOTO_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2385,10 +2418,10 @@ module ConcurrentAssert(input clk);
   assert property (a [-> 2:4]);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 0, 0 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]] : !ltl.sequence, !ltl.sequence
     // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
@@ -2397,13 +2430,13 @@ module ConcurrentAssert(input clk);
   assert property (a ##0 b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 1 : i1
     // CHECK: [[READ_A2:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A2:%.+]] = moore.conversion [[READ_A2]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_bool [[READ_A2]] : i1
     // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_A2]], 3, 2 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]], [[DELAY_A2]] : !ltl.sequence, !ltl.sequence, !ltl.sequence
     // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
@@ -2414,7 +2447,7 @@ module ConcurrentAssert(input clk);
   // Unary
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
     // CHECK: verif.assert [[NOT_OP]] : !ltl.property
     // CHECK: moore.return
@@ -2422,7 +2455,7 @@ module ConcurrentAssert(input clk);
   assert property (not a);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[EVEN_OP:%.+]] = ltl.eventually [[CONV_A]] : i1
     // CHECK: verif.assert [[EVEN_OP]] : !ltl.property
     // CHECK: moore.return
@@ -2430,7 +2463,7 @@ module ConcurrentAssert(input clk);
   assert property (s_eventually a);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
     // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2438,7 +2471,7 @@ module ConcurrentAssert(input clk);
   assert property (always a);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 2, 1 : i1
     // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2446,7 +2479,7 @@ module ConcurrentAssert(input clk);
   assert property (always [2:3] a);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
     // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2454,7 +2487,7 @@ module ConcurrentAssert(input clk);
   assert property (nexttime a);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 5, 0 : i1
     // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2464,9 +2497,9 @@ module ConcurrentAssert(input clk);
   // Binary
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: verif.assert [[AND_OP]] : i1
     // CHECK: moore.return
@@ -2474,9 +2507,9 @@ module ConcurrentAssert(input clk);
   assert property (a and b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: verif.assert [[OR_OP]] : i1
     // CHECK: moore.return
@@ -2484,9 +2517,9 @@ module ConcurrentAssert(input clk);
   assert property (a or b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: verif.assert [[INTER_OP]] : i1
     // CHECK: moore.return
@@ -2494,9 +2527,9 @@ module ConcurrentAssert(input clk);
   assert property (a intersect b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[REPEAT_A:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
     // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[REPEAT_A]], [[CONV_B]] : !ltl.sequence, i1
     // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
@@ -2505,9 +2538,9 @@ module ConcurrentAssert(input clk);
   assert property (a throughout b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[CONST_T:%.+]] = hw.constant true
     // CHECK: [[REPEAT_T:%.+]] = ltl.repeat [[CONST_T]], 0 : i1
     // CHECK: [[DELAY_RT:%.+]] = ltl.delay [[REPEAT_T]], 1, 0 : !ltl.sequence
@@ -2520,9 +2553,9 @@ module ConcurrentAssert(input clk);
   assert property (a within b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[OR_OP]] : i1
     // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
@@ -2533,9 +2566,9 @@ module ConcurrentAssert(input clk);
   assert property (a iff b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: verif.assert [[UNTIL_OP]] : !ltl.property
     // CHECK: moore.return
@@ -2543,9 +2576,9 @@ module ConcurrentAssert(input clk);
   assert property (a until b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[UNTIL_OP]] : !ltl.property
@@ -2556,9 +2589,9 @@ module ConcurrentAssert(input clk);
   assert property (a until_with b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
     // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[CONV_B]] : !ltl.property, i1
     // CHECK: verif.assert [[OR_OP]] : !ltl.property
@@ -2567,9 +2600,9 @@ module ConcurrentAssert(input clk);
   assert property (a implies b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[CONV_B]] : i1, i1
     // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
     // CHECK: moore.return
@@ -2577,9 +2610,9 @@ module ConcurrentAssert(input clk);
   assert property (a |-> b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[CONST_T:%.+]] = hw.constant true
     // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
@@ -2590,9 +2623,9 @@ module ConcurrentAssert(input clk);
   assert property (a |=> b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
     // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[NOT_OP]] : i1, !ltl.property
     // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
@@ -2602,9 +2635,9 @@ module ConcurrentAssert(input clk);
   assert property (a #-# b);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.conversion [[READ_B]] : !moore.l1 -> i1
+    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[CONST_T:%.+]] = hw.constant true
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
     // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
@@ -2619,9 +2652,9 @@ module ConcurrentAssert(input clk);
   // Clocking
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.conversion [[READ_A]] : !moore.i1 -> i1
+    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
     // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
-    // CHECK: [[CONV_CLK:%.+]] = moore.conversion [[READ_CLK]] : !moore.l1 -> i1
+    // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_bool [[READ_CLK]] : l1
     // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_A]], posedge [[CONV_CLK]] : i1
     // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2631,10 +2664,10 @@ module ConcurrentAssert(input clk);
   // Sequence declaration
   // CHECK: moore.procedure always {
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
     // CHECK: [[RES:%.+]] = ltl.concat %6, %9 : !ltl.sequence, !ltl.sequence
     // CHECK: verif.assert [[RES]] : !ltl.sequence
@@ -2647,9 +2680,9 @@ module ConcurrentAssert(input clk);
 
   // CHECK: moore.procedure always {
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[TRUE:%.+]] = hw.constant true
     // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
     // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
@@ -2666,14 +2699,14 @@ module ConcurrentAssert(input clk);
 
   // CHECK: moore.procedure always {
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
     // CHECK: [[OP1:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B2:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[RES:%.+]] = ltl.implication [[OP1]], [[B2]] : !ltl.sequence, i1
     // CHECK: verif.assert [[RES]] : !ltl.property
     // CHECK: moore.return
@@ -2685,11 +2718,11 @@ module ConcurrentAssert(input clk);
 
   // CHECK: moore.procedure always {
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A1:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[A1:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A2:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[A2:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B1:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B1:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[TRUE:%.+]] = hw.constant true
     // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
     // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
@@ -2703,14 +2736,14 @@ module ConcurrentAssert(input clk);
     // CHECK: [[OP9:%.+]] = ltl.concat [[OP7]], [[OP8]], [[TRUE1]] : !ltl.sequence, !ltl.sequence, i1
     // CHECK: [[OP10:%.+]] = ltl.intersect [[OP9]], [[OP5]] : !ltl.sequence, !ltl.sequence
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A3:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK: [[A3:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[DA3:%.+]] = ltl.delay [[A3]], 0, 0 : i1
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B2:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[DB2:%.+]] = ltl.delay [[B2]], 1, 0 : i1
     // CHECK: [[OP11:%.+]] = ltl.concat [[DA3]], [[DB2]] : !ltl.sequence, !ltl.sequence
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B3:%.+]] = moore.conversion [[TMP]] : !moore.l1 -> i1
+    // CHECK: [[B3:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[OP12:%.+]] = ltl.implication [[OP11]], [[B3]] : !ltl.sequence, i1
     // CHECK: [[TRUE2:%.+]] = hw.constant true
     // CHECK: [[OP13:%.+]] = ltl.delay [[OP10]], 1, 0 : !ltl.sequence
@@ -2748,9 +2781,9 @@ endpackage
 module PortCastA;
   bit [31:0] a, b;
   // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.array<1 x i32>
+  // CHECK: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : array<1 x i32>
   // CHECK: [[TMP3:%.+]] = moore.instance "sub" @PortCastB(a: [[TMP2]]: !moore.array<1 x i32>)
-  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.array<1 x i32> -> !moore.i32
+  // CHECK: [[TMP4:%.+]] = moore.packed_to_sbv [[TMP3]] : array<1 x i32>
   // CHECK: moore.assign %b, [[TMP4]] : i32
   PortCastB sub(a, b);
 endmodule
@@ -2827,7 +2860,8 @@ module RangeElementSelection(
       // CHECK: [[EXTRACT:%.+]] = moore.extract [[READ_C_1]] from 0 : l2 -> l1
       // CHECK: [[ONE:%.+]] = moore.constant 1 : l1
       // CHECK: [[SUB_2:%.+]] = moore.add [[EXTRACT]], [[ONE]] : l1
-      // CHECK: [[DYN_EXT_2:%.+]] = moore.dyn_extract [[READ_B]] from [[SUB_2]] : l4, l1 -> l2
+      // CHECK: [[SUB_2EXT:%.+]] = moore.zext [[SUB_2]] : l1 -> l2
+      // CHECK: [[DYN_EXT_2:%.+]] = moore.dyn_extract [[READ_B]] from [[SUB_2EXT]] : l4, l2 -> l2
       b = a[c];
       b[3:0] = b[c[0]-:2];
     end
@@ -3109,3 +3143,593 @@ module PackedLvalue5(input logic [1023:0] x);
   logic [7:0][63:0] a, b;
   always_comb {a, b[0]} = x;
 endmodule
+
+// CHECK-LABEL: moore.module @UnarySingleBitIncrement(
+module UnarySingleBitIncrement (
+    input  logic  clk_i,
+    input  logic  rst_ni
+);
+  // CHECK: [[IQ:%.+]] = moore.variable : <l1>
+  logic i_q;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      i_q <= '0;
+    end else begin
+      // CHECK: [[PRE:%.+]] = moore.read [[IQ]] : <l1>
+      // CHECK-NEXT: [[OUT:%.+]] = moore.not [[PRE]]
+      i_q <= ++i_q;
+    end
+  end
+
+endmodule // UnarySingleBitIncrement
+
+// CHECK-LABEL: func.func private @returnParameterArrayElement(
+function automatic int unsigned returnParameterArrayElement (int idx);
+  localparam int unsigned ParameterArray [2] = '{42, 9001};
+  // CHECK: [[CONST0:%.+]] = moore.constant 42 : i32
+  // CHECK-NEXT: [[CONST1:%.+]] = moore.constant 9001 : i32
+  // CHECK-NEXT: [[ARR:%.+]] = moore.array_create [[CONST0]], [[CONST1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+  // CHECK: [[RETURN:%.+]] = moore.dyn_extract [[ARR]] from {{%.+}} : uarray<2 x i32>, i32 -> i32
+  return ParameterArray[idx];
+endfunction
+
+// CHECK-LABEL: func.func private @TimeFormat(
+function void TimeFormat();
+  // CHECK: [[TIME:%.+]] = moore.constant_time 100000000 fs
+  localparam time TestTime = 100ns;
+  // CHECK-NEXT: [[FMT:%.+]] = moore.fmt.time [[TIME]]
+  // CHECK-NEXT: [[LINEBREAK:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMT]], [[LINEBREAK]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT]]
+  $display("%t", TestTime);
+  // CHECK: [[SIMTIME:%.+]] = moore.builtin.time
+  // CHECK-NEXT: [[FMT2:%.+]] = moore.fmt.time [[SIMTIME]]
+  // CHECK-NEXT: [[LINEBREAK2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMT2]], [[LINEBREAK2]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT2]]
+  $display("%t", $time());
+  // CHECK: [[SIMTIME3:%.+]] = moore.builtin.time
+  // CHECK-NEXT: [[FMT3:%.+]] = moore.fmt.time [[SIMTIME3]], width 4
+  // CHECK-NEXT: [[LINEBREAK3:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMT3]], [[LINEBREAK3]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT3]]
+  $display("%4t", $time());
+endfunction
+
+// CHECK-LABEL: func.func private @StructCreateConversion(
+// CHECK-SAME: [[ARRAY:%.+]]: !moore.array<8 x l8>
+// CHECK-SAME: [[IMM:%.+]]: !moore.l64
+function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immediate);
+
+   typedef struct packed {
+      logic [63:0] structField;
+   } testStruct;
+
+    // CHECK: [[TS:%.+]] = moore.struct_create [[IMM]] : !moore.l64 -> struct<{structField: l64}>
+   testStruct ts = '{structField: immediate};
+    // CHECK: [[CAST:%.+]] = moore.packed_to_sbv [[ARRAY]] : array<8 x l8>
+    // CHECK-NEXT: [[TS2:%.+]] = moore.struct_create [[CAST]] : !moore.l64 -> struct<{structField: l64}>
+   testStruct ts2 = '{structField: array};
+
+endfunction
+
+// CHECK-LABEL: func.func private @ConcatSformatf(
+// CHECK-SAME: [[STR1:%[^,]+]]: !moore.string
+// CHECK-SAME: [[STR2:%[^,]+]]: !moore.string
+// CHECK-SAME: [[STR3:%[^,]+]]: !moore.ref<string>
+function automatic void ConcatSformatf(string testStr, string otherString, ref string outputString);
+   // CHECK: [[LV:%.+]] = moore.variable : <l64>
+   logic [63:0] logicVector;
+   // CHECK: [[FMTSTR1:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR2:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMTSTR1]], [[SPC]], [[FMTSTR2]])
+   // CHECK-NEXT: [[STROUT:%.+]] = moore.fstring_to_string [[CONCAT]]
+    string test = $sformatf("%s %s", testStr, otherString);
+
+   // CHECK: [[FMTSTR3:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC2:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR4:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMTSTR3]], [[SPC2]], [[FMTSTR4]])
+   // CHECK-NEXT: [[STROUT2:%.+]] = moore.fstring_to_string [[CONCAT2]]
+   // CHECK-NEXT: moore.blocking_assign [[STR3]], [[STROUT2]] : string
+   $sformat(outputString, "%s %s", testStr, otherString);
+
+   // CHECK: [[FMTSTR5:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC3:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR6:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMTSTR5]], [[SPC3]], [[FMTSTR6]])
+   // CHECK-NEXT: [[STROUT3:%.+]] = moore.fstring_to_string [[CONCAT3]]
+   // CHECK-NEXT: [[CONV:%.+]] = moore.conversion [[STROUT3]] : !moore.string -> !moore.l64
+   // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
+   $sformat(logicVector, "%s %s", testStr, otherString);
+endfunction
+
+// CHECK-LABEL: moore.module @ContinuousAssignment(
+module ContinuousAssignment;
+  // CHECK-NEXT: [[A:%.+]] = moore.variable
+  // CHECK-NEXT: [[B:%.+]] = moore.variable
+  bit [41:0] a;
+  bit [41:0] b;
+
+  // CHECK-NEXT: [[TMP:%.+]] = moore.read [[B]]
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[TMP]]
+  // CHECK-NEXT: moore.assign [[A]], [[NOTB]]
+  assign a = ~b;
+
+  // CHECK-NEXT: [[TMP:%.+]] = moore.read [[B]]
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[TMP]]
+  // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
+  // CHECK-NEXT: moore.delayed_assign [[A]], [[NOTB]], [[TIME]]
+  assign #1ns a = ~b;
+endmodule
+
+// CHECK-LABEL: func.func private @BlockingAssignment(
+// CHECK-SAME: [[A:%.+]]: !moore.ref<i42>
+// CHECK-SAME: [[B:%.+]]: !moore.i42
+// CHECK-SAME: [[C:%.+]]: !moore.i1
+task BlockingAssignment(
+  output bit [41:0] a,
+  input  bit [41:0] b,
+  input  bit c
+);
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: moore.blocking_assign [[A]], [[NOTB]]
+  a = ~b;
+
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
+  // CHECK-NEXT: moore.wait_delay [[TIME]]
+  // CHECK-NEXT: moore.blocking_assign [[A]], [[NOTB]]
+  a = #1ns ~b;
+
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   moore.detect_event posedge [[C]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: moore.blocking_assign [[A]], [[NOTB]]
+  a = @(posedge c) ~b;
+endtask
+
+// CHECK-LABEL: func.func private @NonBlockingAssignment(
+// CHECK-SAME: [[A:%.+]]: !moore.ref<i42>
+// CHECK-SAME: [[B:%.+]]: !moore.i42
+task NonBlockingAssignment(
+  output bit [41:0] a,
+  input  bit [41:0] b
+);
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: moore.nonblocking_assign [[A]], [[NOTB]]
+  a <= ~b;
+
+  // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[B]]
+  // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
+  // CHECK-NEXT: moore.delayed_nonblocking_assign [[A]], [[NOTB]], [[TIME]]
+  a <= #1ns ~b;
+endtask
+
+// CHECK-LABEL: func.func private @RealConversion(
+// CHECK-SAME: [[SR:%[^,]+]]: !moore.f32
+// CHECK-SAME: [[LR:%[^,]+]]: !moore.f64
+// CHECK-SAME: [[INT:%[^,]+]]: !moore.i42
+// CHECK-SAME: [[LINT:%[^,]+]]: !moore.i64
+function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longint longi);
+   // CHECK: [[INTTEST:%.+]] = moore.real_to_int [[SR]] : f32 -> i32
+   int intTest = int'(sr);
+    // CHECK: [[INTTEST2:%.+]] = moore.real_to_int [[LR]] : f64 -> i32
+   int intTest2 = int'(r);
+   // CHECK: [[LINTTEST:%.+]] = moore.real_to_int [[SR]] : f32 -> i64
+   longint longIntTest = longint'(sr);
+   // CHECK: [[LINTTEST2:%.+]] = moore.real_to_int [[LR]] : f64 -> i64
+   longint longIntTest2 = longint'(r);
+
+
+   // CHECK: [[SRTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f32
+   shortreal srTest = shortreal'(i);
+   // CHECK: [[SRTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f32
+   shortreal srTest2 = shortreal'(longi);
+   // CHECK: [[RTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f64
+   real rTest = real'(i);
+   // CHECK: [[RTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f64
+   real rTest2 = real'(longi);
+
+   // CHECK: [[IMM:%.+]] = moore.real_to_int [[LR]] : f64 -> i32
+   // CHECK-NEXT: [[F:%.+]] = moore.int_to_logic [[IMM]] : i32
+   // CHECK-NEXT: [[logicTest:%.+]] = moore.variable [[F]] : <l32>
+   logic [31:0] logicTest = r;
+
+   // CHECK: [[R:%.+]] = moore.read [[logicTest]] : <l32>
+   // CHECK-NEXT: [[IMM2:%.+]] = moore.logic_to_int [[R]] : l32
+   // CHECK-NEXT: [[F2:%.+]] = moore.int_to_real [[IMM2]] : i32 -> f64
+   real realTest = real'(logicTest);
+endfunction
+
+// CHECK: func.func private @testRealLiteral() -> !moore.f64 {
+function automatic real testRealLiteral();
+   // CHECK: [[TMP:%.+]] = moore.constant_real 1.234500e+00 : f64
+   localparam test = 1.2345;
+    // CHECK-NEXT: return [[TMP]] : !moore.f64
+   return test;
+endfunction
+
+// CHECK: func.func private @testShortrealLiteral() -> !moore.f32 {
+function automatic shortreal testShortrealLiteral();
+   // CHECK: [[TMP:%.+]] = moore.constant_real 1.234500e+00 : f32
+   localparam test = shortreal'(1.2345);
+    // CHECK-NEXT: return [[TMP]] : !moore.f32
+   return test;
+endfunction
+
+// CHECK: moore.module @testFunctionCapture() {
+module testFunctionCapture();
+
+    // CHECK: [[A:%.+]] = moore.variable : <l1>
+    logic a;
+
+    function logic testCapture;
+        return a;
+    endfunction
+
+    // CHECK: [[RETURNEDA:%.+]] = func.call @testCapture([[A]]) : (!moore.ref<l1>) -> !moore.l1
+    // CHECK: [[B:%.+]] = moore.variable [[RETURNEDA]] : <l1>
+    logic b = testCapture();
+
+    // These checks need to be here since testCapture gets moved to after the variable decl,
+    // and file check only checks forward.
+    // CHECK: func.func private @testCapture(%arg0: !moore.ref<l1>) -> !moore.l1 {
+    // CHECK: [[CAPTUREDA:%.+]] = moore.read %arg0 : <l1>
+    // CHECK: return [[CAPTUREDA]] : !moore.l1
+endmodule
+
+// CHECK: moore.module @testLHSTaskCapture() {
+module testLHSTaskCapture();
+
+    // CHECK: [[A:%.+]] = moore.variable : <l1>
+    logic a;
+
+    task testTaskCapture;
+        a = 0;
+    endtask
+
+    always @(posedge a) begin
+        // CHECK: func.call @testTaskCapture([[A]]) : (!moore.ref<l1>) -> ()
+        testTaskCapture;
+    end
+
+    // CHECK: func.func private @testTaskCapture(%arg0: !moore.ref<l1>) {
+    // CHECK: [[CONST:%.+]] = moore.constant 0 : l1
+    // CHECK: moore.blocking_assign %arg0, [[CONST]] : l1
+
+
+endmodule
+
+// CHECK-LABEL: @testRecursive
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: -> !moore.i32
+function int testRecursive(input int n);
+    if (n <= 1) return 1;
+    // CHECK: [[REC:%.+]] = call @testRecursive({{.*}}) : (!moore.i32) -> !moore.i32
+    return n * testRecursive(n - 1);
+endfunction
+
+// CHECK-LABEL: moore.module @testRecursiveCaptureFunction() {
+module testRecursiveCaptureFunction();
+  // CHECK: [[CAPTUREME:%.+]] = moore.variable : <i32>
+  int captureMe;
+  int r;
+  initial begin
+    // CHECK: func.call @fact({{.*}}, [[CAPTUREME]]) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
+    r = fact(5);
+  end
+
+  // CHECK: func.func private @fact(%arg0: !moore.i32, %arg1: !moore.ref<i32>) -> !moore.i32 {
+  function int fact(input int n);
+    // CHECK: [[CAPTUREDVALUE:%.*]] = moore.read %arg1 : <i32>
+    // CHECK: return [[CAPTUREDVALUE]] : !moore.i32
+    if (n <= 1) return captureMe;
+    // CHECK: [[REC_CALL:%.*]] = call @fact({{.*}}, %arg1) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
+    return n * fact(n - 1);
+  endfunction
+endmodule
+
+// CHECK-LABEL: moore.module @RealLiteral() {
+module RealLiteral();
+   // CHECK-NEXT:  [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
+   // CHECK-NEXT: [[A:%.+]] = moore.variable [[REALCONSTANT]] : <f64>
+   real a = 0.5;
+   // CHECK-NEXT: [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
+   // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.conversion [[REALCONSTANT]] : !moore.f64 -> !moore.f32
+   // CHECK-NEXT: [[B:%.+]] = moore.variable [[SHORTREALCONSTANT]] : <f32>
+   shortreal b = 0.5;
+
+endmodule
+
+// CHECK-LABEL: moore.module @partselect_index_pos_be() {
+module partselect_index_pos_be;
+
+  // Big-endian [1:4] => offset = 4 (positive), needs 3 bits
+  logic [1:4] c = 4'he;
+  logic [0:0] s = 1;
+
+  // CHECK: [[ZEXT:%.+]] = moore.zext {{.*}} : l1 -> l3
+  // CHECK-NEXT: [[MCONST:%.+]] = moore.constant -4 : l3
+  // CHECK-NEXT: [[SUB:%.+]] = moore.sub [[MCONST]], [[ZEXT]] : l3
+  // CHECK-NEXT: [[EXTR:%.+]] = moore.dyn_extract {{.*}} from [[SUB]] : l4, l3 -> l2
+  logic [1:0] res = c[s-:2];
+
+endmodule
+
+// CHECK-LABEL: moore.module @partselect_index_neg_le() {
+module partselect_index_neg_le;
+
+  // Little-endian [0:-3] => offset = -3 (negative)
+  // We expect a constant -3 typed wide enough (i3 is sufficient)
+  logic [0:-3] c = 4'h8;
+  logic [0:0] s = 1;
+
+  // CHECK: [[SEXT:%.+]] = moore.sext {{.*}} : l1 -> l3
+  // CHECK-NEXT: [[MCONST:%.+]] = moore.constant -3 : l3
+  // CHECK-NEXT: [[SUB:%.+]] = moore.sub [[SEXT]], [[MCONST]] : l3
+  // CHECK-NEXT: [[EXTR:%.+]] = moore.dyn_extract {{.*}} from [[SUB]] : l4, l3 -> l2
+  logic [1:0] res = c[s-:2];
+
+endmodule
+
+// CHECK-LABEL: func.func private @testStrLiteralReturn()
+// CHECK-SAME: -> !moore.string {
+function string testStrLiteralReturn;
+    // CHECK-NEXT: [[INT:%.+]] = moore.constant_string "\22A string literal\22" : i127
+    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[INT]] : i127
+    parameter string testStrLiteral = "A string literal";
+    // CHECK-NEXT: return [[STR]] : !moore.string
+    return testStrLiteral;
+endfunction // testStrLiteralReturn
+
+// CHECK-LABEL: func.func private @testRealOps()
+function void testRealOps;
+    // CHECK-NEXT: [[A:%.+]] = moore.variable : <f64>
+    // CHECK-NEXT: [[B:%.+]] = moore.variable : <f64>
+    // CHECK-NEXT: [[RESR:%.+]] = moore.variable : <f64>
+    real a, b, resr;
+    // CHECK-NEXT: [[C:%.+]] = moore.variable : <f32>
+    // CHECK-NEXT: [[D:%.+]] = moore.variable : <f32>
+    // CHECK-NEXT: [[RESSR:%.+]] = moore.variable : <f32>
+    shortreal c, d, ressr;
+    // CHECK-NEXT: [[TEST:%.+]] = moore.variable : <i1>
+    bit        test;
+
+
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fadd [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a + b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fsub [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a - b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fmul [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a * b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fdiv [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a / b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fpow [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[RESR]], [[OUT]] : f64
+    resr = a ** b;
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.feq [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a == b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fne [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a != b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.flt [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a < b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fle [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a <= b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fgt [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a > b);
+    // CHECK: [[LHS:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fge [[LHS]], [[RHS]] : f64
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (a >= b);
+
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f64
+    // CHECK-NEXT: [[ANEW:%.+]] = moore.fadd [[OP]], [[ONE]] : f64
+    a++;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f64
+    // CHECK-NEXT: [[ANEW:%.+]] = moore.fsub [[OP]], [[ONE]] : f64
+    a--;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[ANEW:%.+]] = moore.fneg [[OP]] : f64
+    a = -a;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: moore.blocking_assign [[A]], [[OP]] : f64
+    a = +a;
+    // CHECK: [[OP:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[BOOL:%.+]] = moore.bool_cast [[OP]] : f64 -> i1
+    // CHECK-NEXT: [[NOT:%.+]] = moore.not [[BOOL]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[NOT]] : i1
+    test = !a;
+    // CHECK: [[RHS1:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f64 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f64 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.and [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = a && b;
+    // CHECK: [[RHS1:%.+]] = moore.read [[A]] : <f64>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[B]] : <f64>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f64 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f64 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.or [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = a || b;
+
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fadd [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c + d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fsub [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c - d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fmul [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c * d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fdiv [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c / d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fpow [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[RESSR]], [[OUT]] : f32
+    ressr = c ** d;
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.feq [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c == d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fne [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c != d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.flt [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c < d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fle [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c <= d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fgt [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c > d);
+    // CHECK: [[LHS:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[OUT:%.+]] = moore.fge [[LHS]], [[RHS]] : f32
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = (c >= d);
+
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f32
+    // CHECK-NEXT: [[CNEW:%.+]] = moore.fadd [[OP]], [[ONE]] : f32
+    c++;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f32
+    // CHECK-NEXT: [[CNEW:%.+]] = moore.fsub [[OP]], [[ONE]] : f32
+    c--;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[CNEW:%.+]] = moore.fneg [[OP]] : f32
+    c = -c;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: moore.blocking_assign [[C]], [[OP]] : f32
+    c = +c;
+    // CHECK: [[OP:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[BOOL:%.+]] = moore.bool_cast [[OP]] : f32 -> i1
+    // CHECK-NEXT: [[NOT:%.+]] = moore.not [[BOOL]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[NOT]] : i1
+    test = !c;
+    // CHECK: [[RHS1:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f32 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f32 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.and [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = c && d;
+    // CHECK: [[RHS1:%.+]] = moore.read [[C]] : <f32>
+    // CHECK-NEXT: [[RHS2:%.+]] = moore.read [[D]] : <f32>
+    // CHECK-NEXT: [[B1:%.+]] = moore.bool_cast [[RHS1]] : f32 -> i1
+    // CHECK-NEXT: [[B2:%.+]] = moore.bool_cast [[RHS2]] : f32 -> i1
+    // CHECK-NEXT: [[OUT:%.+]] = moore.or [[B1]], [[B2]] : i1
+    // CHECK-NEXT: moore.blocking_assign [[TEST]], [[OUT]] : i1
+    test = c || d;
+
+endfunction // testStrLiteralReturn
+
+// CHECK-LABEL:  moore.module @RejectInnerCapture(in %u : !moore.i1, out v : !moore.i1) {
+// CHECK:    [[UVAR:%.*]] = moore.variable name "u" : <i1>
+// CHECK:    [[VVAR:%.*]] = moore.variable : <i1>
+// CHECK:    [[READU:%.*]] = moore.read [[UVAR]] : <i1>
+// CHECK:    [[CALLBAR:%.*]] = func.call @bar([[READU]]) : (!moore.i1) -> !moore.i1
+// CHECK:    moore.assign [[VVAR]], [[CALLBAR]] : i1
+// CHECK:    moore.assign [[UVAR]], %u : i1
+// CHECK:    [[READV:%.*]] = moore.read [[VVAR]] : <i1>
+// CHECK:    moore.output [[READV]] : !moore.i1
+// CHECK:  }
+// CHECK:  func.func private @bar(%arg0: !moore.i1) -> !moore.i1 {
+// CHECK:    [[BVAR:%.*]] = moore.variable : <i1>
+// CHECK:    [[CALLFOO:%.*]] = call @foo(%arg0) : (!moore.i1) -> !moore.i1
+// CHECK:    moore.blocking_assign [[BVAR]], [[CALLFOO]] : i1
+// CHECK:    [[READB:%.*]] = moore.read [[BVAR]] : <i1>
+// CHECK:    return [[READB]] : !moore.i1
+// CHECK:  }
+// CHECK:  func.func private @foo(%arg0: !moore.i1) -> !moore.i1 {
+// CHECK:    [[FVAR:%.*]] = moore.variable : <i1>
+// CHECK:    moore.blocking_assign [[FVAR]], %arg0 : i1
+// CHECK:    [[READF:%.*]] = moore.read [[FVAR]] : <i1>
+// CHECK:    return [[READF]] : !moore.i1
+// CHECK:  }
+
+module RejectInnerCapture(input bit u, output bit v);
+  assign v = bar(u);
+  function automatic bit bar(input bit b);
+    bar = foo(b);
+  endfunction
+  function automatic bit foo(input bit a);
+    foo = a;
+  endfunction
+endmodule
+
+// CHECK-LABEL: moore.global_variable @rootGlobal1 : !moore.i42
+bit [41:0] rootGlobal1;
+// CHECK-LABEL: moore.global_variable @rootGlobal2 : !moore.i42 init {
+// CHECK-NEXT: [[TMP1:%.+]] = moore.get_global_variable @"PackageGlobal::packageGlobal2" : <i42>
+// CHECK-NEXT: [[TMP2:%.+]] = moore.read [[TMP1]] : <i42>
+// CHECK-NEXT: moore.yield [[TMP2]] : i42
+bit [41:0] rootGlobal2 = PackageGlobal::packageGlobal2;
+
+package PackageGlobal;
+  // CHECK-LABEL: moore.global_variable @"PackageGlobal::packageGlobal1" : !moore.i42
+  bit [41:0] packageGlobal1;
+  // CHECK-LABEL: moore.global_variable @"PackageGlobal::packageGlobal2" : !moore.i42 init {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.get_global_variable @"PackageGlobal::packageGlobal1" : <i42>
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.read [[TMP1]] : <i42>
+  // CHECK-NEXT: moore.yield [[TMP2]] : i42
+  bit [41:0] packageGlobal2 = packageGlobal1;
+endpackage

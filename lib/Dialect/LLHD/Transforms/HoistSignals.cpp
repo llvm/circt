@@ -50,7 +50,7 @@ struct ProbeHoister {
   DenseSet<Value> liveAcrossWait;
 
   /// A lookup table of probes we have already hoisted, for deduplication.
-  DenseMap<Value, PrbOp> hoistedProbes;
+  DenseMap<Value, ProbeOp> hoistedProbes;
 };
 } // namespace
 
@@ -120,10 +120,10 @@ void ProbeHoister::findValuesLiveAcrossWait(Liveness &liveness) {
 void ProbeHoister::hoistProbes() {
   auto findExistingProbe = [&](Value signal) {
     for (auto *user : signal.getUsers())
-      if (auto probeOp = dyn_cast<PrbOp>(user))
+      if (auto probeOp = dyn_cast<ProbeOp>(user))
         if (probeOp->getParentRegion()->isProperAncestor(&region))
           return probeOp;
-    return PrbOp{};
+    return ProbeOp{};
   };
 
   for (auto &block : region) {
@@ -135,7 +135,7 @@ void ProbeHoister::hoistProbes() {
       continue;
 
     for (auto &op : llvm::make_early_inc_range(block)) {
-      auto probeOp = dyn_cast<PrbOp>(op);
+      auto probeOp = dyn_cast<ProbeOp>(op);
 
       // We can only hoist probes that have no side-effecting ops between
       // themselves and the beginning of a block. If we see a side-effecting op,
@@ -308,7 +308,7 @@ void DriveHoister::hoist() {
 /// cannot reason about.
 void DriveHoister::findHoistableSlots() {
   SmallPtrSet<Value, 8> seenSlots;
-  processOp.walk([&](DrvOp op) {
+  processOp.walk([&](DriveOp op) {
     auto slot = op.getSignal();
     if (!seenSlots.insert(slot).second)
       return;
@@ -325,7 +325,7 @@ void DriveHoister::findHoistableSlots() {
           // Ignore uses outside of the region.
           if (!processOp.getBody().isAncestor(user->getParentRegion()))
             return true;
-          return isa<PrbOp, DrvOp>(user);
+          return isa<ProbeOp, DriveOp>(user);
         }))
       return;
 
@@ -353,7 +353,7 @@ void DriveHoister::collectDriveSets() {
     SmallPtrSet<Value, 8> drivenSlots;
     for (auto &op : llvm::make_early_inc_range(
              llvm::reverse(block.without_terminator()))) {
-      auto driveOp = dyn_cast<DrvOp>(op);
+      auto driveOp = dyn_cast<DriveOp>(op);
 
       // We can only hoist drives that have no side-effecting ops between
       // themselves and the terminator of the block. If we see a side-effecting
@@ -405,8 +405,7 @@ void DriveHoister::finalizeDriveSets() {
     // terminator.
     for (auto *suspendOp : suspendOps) {
       auto operands = DriveOperands{
-          DriveValue::dontCare(
-              cast<hw::InOutType>(slot.getType()).getElementType()),
+          DriveValue::dontCare(cast<RefType>(slot.getType()).getNestedType()),
           DriveValue::dontCare(TimeType::get(processOp.getContext())),
           DriveValue(falseAttr),
       };
@@ -588,13 +587,13 @@ void DriveHoister::hoistDrives() {
     auto enable = driveSet.uniform.enable != DriveValue(trueAttr)
                       ? useResultValue(driveSet.uniform.enable)
                       : Value{};
-    auto newDrive =
-        DrvOp::create(builder, slot.getLoc(), slot, value, delay, enable);
+    [[maybe_unused]] auto newDrive =
+        DriveOp::create(builder, slot.getLoc(), slot, value, delay, enable);
     LLVM_DEBUG(llvm::dbgs() << "- Add " << newDrive << "\n");
 
     // Remove the old drives inside of the process.
     for (auto *oldOp : driveSet.ops) {
-      auto oldDrive = cast<DrvOp>(oldOp);
+      auto oldDrive = cast<DriveOp>(oldOp);
       LLVM_DEBUG(llvm::dbgs() << "- Remove " << oldDrive << "\n");
       auto delay = oldDrive.getTime();
       auto enable = oldDrive.getEnable();

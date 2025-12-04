@@ -31,7 +31,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "lower-annos"
+#define DEBUG_TYPE "firrtl-lower-annotations"
 
 namespace circt {
 namespace firrtl {
@@ -603,20 +603,8 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {viewAnnoClass, {noResolve, applyGCTView}},
     {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
     {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
-    // Grand Central Data Tap Annotations
-    {dataTapsClass, {noResolve, applyGCTDataTaps}},
-    {dataTapsBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
-    {referenceKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {referenceKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {internalKeySourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {internalKeyPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {deletedKeyClass, {stdResolve, applyWithoutTarget<true>}},
-    {literalKeyClass, {stdResolve, applyWithoutTarget<true>}},
     // Grand Central Mem Tap Annotations
     {memTapClass, {noResolve, applyGCTMemTaps}},
-    {memTapSourceClass, {stdResolve, applyWithoutTarget<true>}},
-    {memTapPortClass, {stdResolve, applyWithoutTarget<true>}},
-    {memTapBlackboxClass, {stdResolve, applyWithoutTarget<true>}},
     // Miscellaneous Annotations
     {conventionAnnoClass, {stdResolve, applyConventionAnno}},
     {typeLoweringAnnoClass, {stdResolve, applyBodyTypeLoweringAnno}},
@@ -1177,12 +1165,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     for (auto *inst : instanceGraph.lookup(fmodule)->uses()) {
       InstanceOp useInst = cast<InstanceOp>(inst->getInstance());
       auto enclosingModule = useInst->getParentOfType<FModuleOp>();
-      auto clonedInst = useInst.cloneAndInsertPorts(newPorts);
+      auto clonedInst = useInst.cloneWithInsertedPortsAndReplaceUses(newPorts);
       state.instancePathCache.replaceInstance(useInst, clonedInst);
-      // When RAUW-ing, ignore the new ports that we added when replacing (they
-      // cannot have uses).
-      useInst->replaceAllUsesWith(
-          clonedInst.getResults().drop_back(newPorts.size()));
       useInst->erase();
       // Record information in the moduleModifications strucutre for the module
       // _where this is instantiated_.  This is done so that when that module is
@@ -1210,10 +1194,10 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
 // This is the main entrypoint for the lowering pass.
 void LowerAnnotationsPass::runOnOperation() {
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);
-
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
 
   // Grab the annotations from a non-standard attribute called "rawAnnotations".
   // This is a temporary location for all annotations that are earmarked for

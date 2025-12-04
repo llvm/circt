@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ImportVerilog.h"
-#include "circt/Conversion/MooreToCore.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -23,32 +22,30 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/Seq/SeqPasses.h"
-#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
-#include "circt/Transforms/Passes.h"
-#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
+namespace cl = llvm::cl;
+using llvm::WithColor;
 
 //===----------------------------------------------------------------------===//
 // Command Line Options
@@ -267,120 +264,30 @@ struct CLOptions {
           "One or more library files, which are separate compilation units "
           "where modules are not automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
+
+  cl::list<std::string> commandFiles{
+      "C",
+      cl::desc(
+          "One or more command files, which are independent compilation units "
+          "where modules are automatically instantiated."),
+      cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
 };
 } // namespace
 
 static CLOptions opts;
 
-//===----------------------------------------------------------------------===//
-// Pass Pipeline
-//===----------------------------------------------------------------------===//
-
-/// Optimize and simplify the Moore dialect IR.
-static void populateMooreTransforms(PassManager &pm) {
-  {
-    // Perform an initial cleanup and preprocessing across all
-    // modules/functions.
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
-  }
-
-  // Remove unused symbols.
-  pm.addPass(mlir::createSymbolDCEPass());
-
-  {
-    // Perform module-specific transformations.
-    auto &modulePM = pm.nest<moore::SVModuleOp>();
-    modulePM.addPass(moore::createLowerConcatRefPass());
-    // TODO: Enable the following once it not longer interferes with @(...)
-    // event control checks. The introduced dummy variables make the event
-    // control observe a static local variable that never changes, instead of
-    // observing a module-wide signal.
-    // modulePM.addPass(moore::createSimplifyProceduresPass());
-    modulePM.addPass(mlir::createSROA());
-  }
-
-  {
-    // Perform a final cleanup across all modules/functions.
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createMem2Reg());
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
-  }
-}
-
-/// Convert Moore dialect IR into core dialect IR
-static void populateMooreToCoreLowering(PassManager &pm) {
-  // Perform the conversion.
-  pm.addPass(createConvertMooreToCorePass());
-
-  {
-    // Conversion to the core dialects likely uncovers new canonicalization
-    // opportunities.
-    auto &anyPM = pm.nestAny();
-    anyPM.addPass(mlir::createCSEPass());
-    anyPM.addPass(mlir::createCanonicalizerPass());
-  }
-}
-
-/// Convert LLHD dialect IR into core dialect IR
-static void populateLLHDLowering(PassManager &pm) {
-  // Inline function calls and lower SCF to CF.
-  pm.addNestedPass<hw::HWModuleOp>(llhd::createWrapProceduralOpsPass());
-  pm.addPass(mlir::createSCFToControlFlowPass());
-  pm.addPass(llhd::createInlineCallsPass());
-  pm.addPass(mlir::createSymbolDCEPass());
-
-  // Simplify processes, replace signals with process results, and detect
-  // registers.
-  auto &modulePM = pm.nest<hw::HWModuleOp>();
-  // See https://github.com/llvm/circt/issues/8804.
-  // modulePM.addPass(mlir::createSROA());
-  modulePM.addPass(llhd::createMem2RegPass());
-  modulePM.addPass(llhd::createHoistSignalsPass());
-  modulePM.addPass(llhd::createDeseqPass());
-  modulePM.addPass(llhd::createLowerProcessesPass());
-  modulePM.addPass(mlir::createCSEPass());
-  modulePM.addPass(mlir::createCanonicalizerPass());
-
-  // Unroll loops and remove control flow.
-  modulePM.addPass(llhd::createUnrollLoopsPass());
-  modulePM.addPass(mlir::createCSEPass());
-  modulePM.addPass(mlir::createCanonicalizerPass());
-  modulePM.addPass(llhd::createRemoveControlFlowPass());
-  modulePM.addPass(mlir::createCSEPass());
-  modulePM.addPass(mlir::createCanonicalizerPass());
-
-  // Convert `arith.select` generated by some of the control flow canonicalizers
-  // to `comb.mux`.
-  modulePM.addPass(createMapArithToCombPass());
-
-  // Simplify module-level signals.
-  modulePM.addPass(llhd::createCombineDrivesPass());
-  modulePM.addPass(llhd::createSig2Reg());
-  modulePM.addPass(mlir::createCSEPass());
-  modulePM.addPass(mlir::createCanonicalizerPass());
-
-  // Map `seq.firreg` with array type and `hw.array_inject` self-feedback to
-  // `seq.firmem` ops.
-  if (opts.detectMemories) {
-    modulePM.addPass(seq::createRegOfVecToMem());
-    modulePM.addPass(mlir::createCSEPass());
-    modulePM.addPass(mlir::createCanonicalizerPass());
-  }
-}
-
 /// Populate the given pass manager with transformations as configured by the
 /// command line options.
 static void populatePasses(PassManager &pm) {
-  populateMooreTransforms(pm);
+  populateVerilogToMoorePipeline(pm);
   if (opts.loweringMode == LoweringMode::OutputIRMoore)
     return;
-  populateMooreToCoreLowering(pm);
+  populateMooreToCorePipeline(pm);
   if (opts.loweringMode == LoweringMode::OutputIRLLHD)
     return;
-  populateLLHDLowering(pm);
+  LlhdToCorePipelineOptions options;
+  options.detectMemories = opts.detectMemories;
+  populateLlhdToCorePipeline(pm, options);
 }
 
 //===----------------------------------------------------------------------===//
@@ -430,6 +337,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
 
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
+  options.commandFiles = opts.commandFiles;
 
   // Open the output file.
   std::string errorMessage;
@@ -497,9 +405,11 @@ static LogicalResult executeWithSources(MLIRContext *context,
 }
 
 static LogicalResult execute(MLIRContext *context) {
-  // Default to reading from stdin if no files were provided.
-  if (opts.inputFilenames.empty())
+  // Default to reading from stdin if no files were provided except if
+  // commandfiles were.
+  if (opts.inputFilenames.empty() && opts.commandFiles.empty()) {
     opts.inputFilenames.push_back("-");
+  }
 
   // Auto-detect the input format if it was not explicitly specified.
   if (opts.format.getNumOccurrences() == 0) {
@@ -521,15 +431,27 @@ static LogicalResult execute(MLIRContext *context) {
       detectedFormat = format;
     }
     if (!detectedFormat) {
-      WithColor::error() << "cannot auto-detect input format; use --format\n";
-      return failure();
+      if (!opts.commandFiles.empty()) {
+        detectedFormat = Format::SV;
+      } else {
+        WithColor::error() << "cannot auto-detect input format; use --format\n";
+        return failure();
+      }
     }
     opts.format = *detectedFormat;
   }
 
   // Open the input files.
   llvm::SourceMgr sourceMgr;
+  DenseSet<StringRef> seenInputFilenames;
   for (const auto &inputFilename : opts.inputFilenames) {
+    // Don't add the same file multiple times.
+    if (!seenInputFilenames.insert(inputFilename).second) {
+      WithColor::warning() << "redundant input file `" << inputFilename
+                           << "`\n";
+      continue;
+    }
+
     std::string errorMessage;
     auto buffer = openInputFile(inputFilename, &errorMessage);
     if (!buffer) {
@@ -552,11 +474,11 @@ static LogicalResult execute(MLIRContext *context) {
 }
 
 int main(int argc, char **argv) {
-  InitLLVM y(argc, argv);
+  llvm::InitLLVM y(argc, argv);
 
   // Set the bug report message to indicate users should file issues on
   // llvm/circt and not llvm/llvm-project.
-  setBugReportMsg(circtBugReportMsg);
+  llvm::setBugReportMsg(circtBugReportMsg);
 
   // Print the CIRCT and Slang versions when requested.
   cl::AddExtraVersionPrinter([](raw_ostream &os) {
@@ -589,13 +511,15 @@ int main(int argc, char **argv) {
     moore::MooreDialect,
     scf::SCFDialect,
     seq::SeqDialect,
-    sim::SimDialect,
-    verif::VerifDialect
+    verif::VerifDialect,
+    mlir::LLVM::LLVMDialect
   >();
   // clang-format on
 
   // Perform the actual work and use "exit" to avoid slow context teardown.
   mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
+
   MLIRContext context(registry);
   exit(failed(execute(&context)));
 }

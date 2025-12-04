@@ -24,24 +24,6 @@ class LLHDType<string name> : TypeDef<LLHDDialect, name> { }
 // Type declarations
 //===----------------------------------------------------------------------===//
 
-def LLHDPtrType : LLHDType<"Ptr"> {
-  let summary = "pointer type";
-  let description = [{
-    Represents a pointer to a memory location holding a value of its element
-    type. May be used to load and store data in distinct memory slots.
-  }];
-
-  let mnemonic = "ptr";
-  let parameters = (ins "::mlir::Type":$elementType);
-  let assemblyFormat = "`<` $elementType `>`";
-
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
-      return $_get(elementType.getContext(), elementType);
-    }]>
-  ];
-}
-
 def LLHDTimeType : LLHDType<"Time"> {
   let summary = "time type";
   let description = [{
@@ -50,19 +32,48 @@ def LLHDTimeType : LLHDType<"Time"> {
     infinitesimal time steps, and an epsilon value representing an absolute time
     slot within a delta step (used to model SystemVerilog scheduling regions).
   }];
-
   let mnemonic = "time";
+}
+
+def RefType : LLHDType<"Ref"> {
+  let summary = "a reference to a signal or variable";
+  let description = [{
+    Represents a reference to a value. Signals return a reference to the
+    underlying value, which allows them to be probed or driven.
+  }];
+  let mnemonic = "ref";
+  let parameters = (ins "Type":$nestedType);
+  let assemblyFormat = "`<` $nestedType `>`";
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
 }
 
 //===----------------------------------------------------------------------===//
 // Type Constraints
 //===----------------------------------------------------------------------===//
 
-class LLHDPtrTypeOf<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<PtrType>($_self)">,
-    "llvm::cast<PtrType>($_self).getElementType()", "LLHD pointer type">;
 
-def LLHDAnySigOrPtrType : AnyTypeOf<[LLHDPtrType, InOutType]>;
+/// A ref type with a specific nested type.
+class RefTypeOf<Type type> : ConfinedType<RefType,
+  [SubstLeaves<"$_self", "cast<llhd::RefType>($_self).getNestedType()",
+               type.predicate>],
+  "ref of " # type.summary, "llhd::RefType"
+> {
+  Type nestedType = type;
+}
+
+class TypeMatchesRefNestedType<string type, string refType> : TypesMatchWith<
+  type # " type must match " # refType # " ref element type",
+  type, refType, "RefType::get($_self)"
+>;
+
+class RefNestedTypeMatchesType<string refType, string type> : TypesMatchWith<
+  refType # " ref element type must match " # type # " type",
+  refType, type, "cast<RefType>($_self).getNestedType()"
+>;
 
 //===----------------------------------------------------------------------===//
 // Attribute declarations

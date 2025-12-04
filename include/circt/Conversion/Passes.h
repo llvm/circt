@@ -13,23 +13,22 @@
 #ifndef CIRCT_CONVERSION_PASSES_H
 #define CIRCT_CONVERSION_PASSES_H
 
-#include "circt/Conversion/AIGToComb.h"
 #include "circt/Conversion/AffineToLoopSchedule.h"
 #include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CFToHandshake.h"
 #include "circt/Conversion/CalyxNative.h"
 #include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/CalyxToHW.h"
-#include "circt/Conversion/CombToAIG.h"
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToDatapath.h"
 #include "circt/Conversion/CombToSMT.h"
+#include "circt/Conversion/CombToSynth.h"
 #include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/ConvertToLLVM.h"
 #include "circt/Conversion/CoreToFSM.h"
 #include "circt/Conversion/DCToHW.h"
 #include "circt/Conversion/DatapathToComb.h"
 #include "circt/Conversion/DatapathToSMT.h"
-#include "circt/Conversion/ExportChiselInterface.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Conversion/FSMToSV.h"
@@ -50,6 +49,7 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/SeqToSV.h"
 #include "circt/Conversion/SimToSV.h"
+#include "circt/Conversion/SynthToComb.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/VerifToSV.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -57,6 +57,10 @@
 #include "mlir/Pass/PassRegistry.h"
 
 namespace circt {
+
+// Generate pass declarations.
+#define GEN_PASS_DECL_CONVERTTOLLVM
+#include "circt/Conversion/Passes.h.inc"
 
 // Generate the code for registering conversion passes.
 #define GEN_PASS_REGISTRATION

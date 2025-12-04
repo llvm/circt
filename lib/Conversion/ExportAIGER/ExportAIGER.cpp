@@ -13,12 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportAIGER.h"
-#include "circt/Dialect/AIG/AIGOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOpInterfaces.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Version.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
@@ -42,7 +42,7 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::hw;
-using namespace circt::aig;
+using namespace circt::synth;
 using namespace circt::seq;
 using namespace circt::aiger;
 
@@ -437,7 +437,7 @@ unsigned AIGERExporter::getLiteral(Object obj, bool inverted) {
                << pos << "]\n";
 
   // This should not happen if analysis was done correctly
-  assert(false && "Value not found in literal map");
+  llvm_unreachable("Value not found in literal map");
 }
 
 LogicalResult AIGERExporter::analyzePorts(hw::HWModuleOp hwModule) {
@@ -717,7 +717,7 @@ void circt::aiger::registerExportAIGERTranslation() {
         return exportAIGER(*ops.begin(), os, &options);
       },
       [](DialectRegistry &registry) {
-        registry.insert<aig::AIGDialect, hw::HWDialect, seq::SeqDialect,
+        registry.insert<synth::SynthDialect, hw::HWDialect, seq::SeqDialect,
                         comb::CombDialect>();
       });
 }

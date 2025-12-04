@@ -86,18 +86,30 @@ Value createDynamicInject(OpBuilder &builder, Location loc, Value value,
 Value createInject(OpBuilder &builder, Location loc, Value value,
                    unsigned offset, Value replacement);
 
-/// Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> fullAdder(OpBuilder &builder, Location loc, Value a,
-                                  Value b, Value c);
+/// Replace a subtraction with an addition of the two's complement.
+LogicalResult convertSubToAdd(comb::SubOp subOp,
+                              mlir::PatternRewriter &rewriter);
 
-/// Perform Wallace tree reduction on partial products.
-/// See https://en.wikipedia.org/wiki/Wallace_tree
-/// \param targetAddends The number of addends to reduce to (2 for carry-save).
-/// \param inputAddends The rows of bits to be summed.
-SmallVector<Value> wallaceReduction(OpBuilder &builder, Location loc,
-                                    size_t width, size_t targetAddends,
-                                    SmallVector<SmallVector<Value>> &addends);
+/// Convert unsigned division or modulo by a power of two.
+/// For division: divu(x, 2^n) -> concat(0...0, extract(x, n, width-n)).
+/// For modulo: modu(x, 2^n) -> concat(0...0, extract(x, 0, n))
+/// TODO: Support signed division and modulo.
+LogicalResult convertDivUByPowerOfTwo(DivUOp divOp,
+                                      mlir::PatternRewriter &rewriter);
+LogicalResult convertModUByPowerOfTwo(ModUOp modOp,
+                                      mlir::PatternRewriter &rewriter);
 
+/// Enum for mux chain folding styles.
+enum MuxChainWithComparisonFoldingStyle { None, BalancedMuxTree, ArrayGet };
+/// Mux chain folding that converts chains of muxes with index
+/// comparisons into array operations or balanced mux trees. `styleFn` is a
+/// callback that returns the desired folding style based on the index
+/// width and number of entries.
+bool foldMuxChainWithComparison(
+    PatternRewriter &rewriter, MuxOp rootMux, bool isFalseSide,
+    llvm::function_ref<MuxChainWithComparisonFoldingStyle(size_t indexWidth,
+                                                          size_t numEntries)>
+        styleFn);
 } // namespace comb
 } // namespace circt
 

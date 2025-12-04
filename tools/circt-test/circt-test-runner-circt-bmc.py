@@ -17,7 +17,7 @@ args = parser.parse_args()
 # Use circt-opt to lower any `verif.formal` ops to `hw.module`s. Once circt-bmc
 # natively supports `verif.formal`, we can directly run it on the input MLIR.
 lowered_mlir = Path(args.directory) / "lowered.mlir"
-cmd = ["circt-opt", args.mlir, "-o", lowered_mlir, "--lower-formal-to-hw"]
+cmd = ["circt-opt", args.mlir, "-o", lowered_mlir, "--verif-lower-tests"]
 sys.stderr.write("# " + shlex.join(str(c) for c in cmd) + "\n")
 sys.stderr.flush()
 result = subprocess.call(cmd)

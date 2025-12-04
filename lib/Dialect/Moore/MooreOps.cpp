@@ -16,8 +16,10 @@
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <mlir/Dialect/Func/IR/FuncOps.h>
 
 using namespace circt;
 using namespace circt::moore;
@@ -536,6 +538,54 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// GlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalVariableOp::verifyRegions() {
+  if (auto *block = getInitBlock()) {
+    auto &terminator = block->back();
+    if (!isa<YieldOp>(terminator))
+      return emitOpError() << "must have a 'moore.yield' terminator";
+  }
+  return success();
+}
+
+Block *GlobalVariableOp::getInitBlock() {
+  if (getInitRegion().empty())
+    return nullptr;
+  return &getInitRegion().front();
+}
+
+//===----------------------------------------------------------------------===//
+// GetGlobalVariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GetGlobalVariableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Resolve the target symbol.
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  // Check that the symbol is a global variable.
+  auto var = dyn_cast<GlobalVariableOp>(symbol);
+  if (!var)
+    return emitOpError() << "must reference a 'moore.global_variable', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  // Check that the types match.
+  auto expType = var.getType();
+  auto actType = getType().getNestedType();
+  if (expType != actType)
+    return emitOpError() << "returns a " << actType << " reference, but "
+                         << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -631,6 +681,29 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantTimeOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConstantTimeOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantRealOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConstantRealOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  ConstantRealOp::Adaptor adaptor(operands, attrs, properties);
+  results.push_back(RealType::get(
+      context, static_cast<RealWidth>(
+                   adaptor.getValueAttr().getType().getIntOrFloatBitWidth())));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1003,22 +1076,21 @@ LogicalResult UnionExtractRefOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult YieldOp::verify() {
-  // Check that YieldOp's parent operation is ConditionalOp.
-  auto cond = dyn_cast<ConditionalOp>(*(*this).getParentOp());
-  if (!cond) {
-    emitOpError("must have a conditional parent");
-    return failure();
+  Type expType;
+  auto *parentOp = getOperation()->getParentOp();
+  if (auto cond = dyn_cast<ConditionalOp>(parentOp)) {
+    expType = cond.getType();
+  } else if (auto varOp = dyn_cast<GlobalVariableOp>(parentOp)) {
+    expType = varOp.getType();
+  } else {
+    llvm_unreachable("all in ParentOneOf handled");
   }
 
-  // Check that the operand matches the parent operation's result.
-  auto condType = cond.getType();
-  auto yieldType = getOperand().getType();
-  if (condType != yieldType) {
-    emitOpError("yield type must match conditional. Expected ")
-        << condType << ", but got " << yieldType << ".";
-    return failure();
+  auto actType = getOperand().getType();
+  if (expType != actType) {
+    return emitOpError() << "yields " << actType << ", but parent expects "
+                         << expType;
   }
-
   return success();
 }
 
@@ -1045,6 +1117,113 @@ OpFoldResult ConversionOp::fold(FoldAdaptor adaptor) {
     // Otherwise map all unknown bits to zero (the default in SystemVerilog) and
     // return a new constant.
     return FVIntegerAttr::get(getContext(), intInput.getValue().toAPInt(false));
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// LogicToIntOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult LogicToIntOp::fold(FoldAdaptor adaptor) {
+  // logic_to_int(int_to_logic(x)) -> x
+  if (auto reverseOp = getInput().getDefiningOp<IntToLogicOp>())
+    return reverseOp.getInput();
+
+  // Map all unknown bits to zero (the default in SystemVerilog) and return a
+  // new constant.
+  if (auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
+    return FVIntegerAttr::get(getContext(), intInput.getValue().toAPInt(false));
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// IntToLogicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntToLogicOp::fold(FoldAdaptor adaptor) {
+  // Cannot fold int_to_logic(logic_to_int(x)) -> x since that would lose
+  // information.
+
+  // Simply pass through constants.
+  if (auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
+    return intInput;
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// TimeToLogicOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult TimeToLogicOp::fold(FoldAdaptor adaptor) {
+  // time_to_logic(logic_to_time(x)) -> x
+  if (auto reverseOp = getInput().getDefiningOp<LogicToTimeOp>())
+    return reverseOp.getInput();
+
+  // Convert constants.
+  if (auto attr = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
+    return FVIntegerAttr::get(getContext(), attr.getValue());
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// LogicToTimeOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult LogicToTimeOp::fold(FoldAdaptor adaptor) {
+  // logic_to_time(time_to_logic(x)) -> x
+  if (auto reverseOp = getInput().getDefiningOp<TimeToLogicOp>())
+    return reverseOp.getInput();
+
+  // Convert constants.
+  if (auto attr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
+    return IntegerAttr::get(getContext(), APSInt(attr.getValue().toAPInt(false),
+                                                 /*isUnsigned=*/true));
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// TruncOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult TruncOp::fold(FoldAdaptor adaptor) {
+  // Truncate constants.
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput())) {
+    auto width = getType().getWidth();
+    return FVIntegerAttr::get(getContext(), intAttr.getValue().trunc(width));
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ZExtOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ZExtOp::fold(FoldAdaptor adaptor) {
+  // Zero-extend constants.
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput())) {
+    auto width = getType().getWidth();
+    return FVIntegerAttr::get(getContext(), intAttr.getValue().zext(width));
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// SExtOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult SExtOp::fold(FoldAdaptor adaptor) {
+  // Sign-extend constants.
+  if (auto intAttr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput())) {
+    auto width = getType().getWidth();
+    return FVIntegerAttr::get(getContext(), intAttr.getValue().sext(width));
   }
 
   return {};
@@ -1210,6 +1389,351 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
       return getLhs();
 
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// MulOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs());
+  if (lhs && rhs)
+    return FVIntegerAttr::get(getContext(), lhs.getValue() * rhs.getValue());
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// DivUOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult DivUOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs());
+  if (lhs && rhs)
+    return FVIntegerAttr::get(getContext(),
+                              lhs.getValue().udiv(rhs.getValue()));
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// DivSOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<FVIntegerAttr>(adaptor.getRhs());
+  if (lhs && rhs)
+    return FVIntegerAttr::get(getContext(),
+                              lhs.getValue().sdiv(rhs.getValue()));
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Classes
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClassDeclOp::verify() {
+  mlir::Region &body = getBody();
+  if (body.empty())
+    return mlir::success();
+
+  auto &block = body.front();
+  for (mlir::Operation &op : block) {
+
+    // allow only property and method decls and terminator
+    if (llvm::isa<circt::moore::ClassPropertyDeclOp,
+                  circt::moore::ClassMethodDeclOp>(&op))
+      continue;
+
+    return emitOpError()
+           << "body may only contain 'moore.class.propertydecl' operations";
+  }
+  return mlir::success();
+}
+
+LogicalResult ClassNewOp::verify() {
+  // The result is constrained to ClassHandleType in ODS, so this cast should be
+  // safe.
+  auto handleTy = cast<ClassHandleType>(getResult().getType());
+  mlir::SymbolRefAttr classSym = handleTy.getClassSym();
+  if (!classSym)
+    return emitOpError("result type is missing a class symbol");
+
+  // Resolve the referenced symbol starting from the nearest symbol table.
+  mlir::Operation *sym =
+      mlir::SymbolTable::lookupNearestSymbolFrom(getOperation(), classSym);
+  if (!sym)
+    return emitOpError("referenced class symbol `")
+           << classSym << "` was not found";
+
+  if (!llvm::isa<ClassDeclOp>(sym))
+    return emitOpError("symbol `")
+           << classSym << "` does not name a `moore.class.classdecl`";
+
+  return mlir::success();
+}
+
+void ClassNewOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  // Always allocates heap memory.
+  effects.emplace_back(MemoryEffects::Allocate::get());
+}
+
+LogicalResult
+ClassUpcastOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // 1) Type checks.
+  auto srcTy = dyn_cast<ClassHandleType>(getOperand().getType());
+  if (!srcTy)
+    return emitOpError() << "operand must be !moore.class<...>; got "
+                         << getOperand().getType();
+
+  auto dstTy = dyn_cast<ClassHandleType>(getResult().getType());
+  if (!dstTy)
+    return emitOpError() << "result must be !moore.class<...>; got "
+                         << getResult().getType();
+
+  if (srcTy == dstTy)
+    return success();
+
+  auto *op = getOperation();
+
+  auto *srcDeclOp =
+      symbolTable.lookupNearestSymbolFrom(op, srcTy.getClassSym());
+  auto *dstDeclOp =
+      symbolTable.lookupNearestSymbolFrom(op, dstTy.getClassSym());
+  if (!srcDeclOp || !dstDeclOp)
+    return emitOpError() << "failed to resolve class symbol(s): src="
+                         << srcTy.getClassSym()
+                         << ", dst=" << dstTy.getClassSym();
+
+  auto srcDecl = dyn_cast<ClassDeclOp>(srcDeclOp);
+  auto dstDecl = dyn_cast<ClassDeclOp>(dstDeclOp);
+  if (!srcDecl || !dstDecl)
+    return emitOpError()
+           << "symbol(s) do not name `moore.class.classdecl` ops: src="
+           << srcTy.getClassSym() << ", dst=" << dstTy.getClassSym();
+
+  auto cur = srcDecl;
+  while (cur) {
+    if (cur == dstDecl)
+      return success(); // legal upcast: dst is src or an ancestor
+
+    auto baseSym = cur.getBaseAttr();
+    if (!baseSym)
+      break;
+
+    auto *baseOp = symbolTable.lookupNearestSymbolFrom(op, baseSym);
+    cur = llvm::dyn_cast_or_null<ClassDeclOp>(baseOp);
+  }
+
+  return emitOpError() << "cannot upcast from " << srcTy.getClassSym() << " to "
+                       << dstTy.getClassSym()
+                       << " (destination is not a base class)";
+}
+
+LogicalResult
+ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // The operand is constrained to ClassHandleType in ODS; unwrap it.
+  Type instTy = getInstance().getType();
+  auto handleTy = dyn_cast<moore::ClassHandleType>(instTy);
+  if (!handleTy)
+    return emitOpError() << "instance must be a !moore.class<@C> value, got "
+                         << instTy;
+
+  // Extract the referenced class symbol from the handle type.
+  SymbolRefAttr classSym = handleTy.getClassSym();
+  if (!classSym)
+    return emitOpError("instance type is missing a class symbol");
+
+  // Resolve the class symbol starting from the nearest symbol table.
+  Operation *clsSym =
+      symbolTable.lookupNearestSymbolFrom(getOperation(), classSym);
+  if (!clsSym)
+    return emitOpError("referenced class symbol `")
+           << classSym << "` was not found";
+  auto classDecl = dyn_cast<ClassDeclOp>(clsSym);
+  if (!classDecl)
+    return emitOpError("symbol `")
+           << classSym << "` does not name a `moore.class.classdecl`";
+
+  // Look up the field symbol inside the class declaration's symbol table.
+  FlatSymbolRefAttr fieldSym = getPropertyAttr();
+  if (!fieldSym)
+    return emitOpError("missing field symbol");
+
+  Operation *fldSym = symbolTable.lookupSymbolIn(classDecl, fieldSym.getAttr());
+  if (!fldSym)
+    return emitOpError("no field `") << fieldSym << "` in class " << classSym;
+
+  auto fieldDecl = dyn_cast<ClassPropertyDeclOp>(fldSym);
+  if (!fieldDecl)
+    return emitOpError("symbol `")
+           << fieldSym << "` is not a `moore.class.propertydecl`";
+
+  // Result must be !moore.ref<T> where T matches the field's declared type.
+  auto resRefTy = cast<RefType>(getPropertyRef().getType());
+  if (!resRefTy)
+    return emitOpError("result must be a !moore.ref<T>");
+
+  Type expectedElemTy = fieldDecl.getPropertyType();
+  if (resRefTy.getNestedType() != expectedElemTy)
+    return emitOpError("result element type (")
+           << resRefTy.getNestedType() << ") does not match field type ("
+           << expectedElemTy << ")";
+
+  return success();
+}
+
+LogicalResult
+VTableLoadMethodOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *op = getOperation();
+
+  auto object = getObject();
+  auto implSym = object.getType().getClassSym();
+
+  // Check that classdecl of class handle exists
+  Operation *implOp = symbolTable.lookupNearestSymbolFrom(op, implSym);
+  if (!implOp)
+    return emitOpError() << "implementing class " << implSym << " not found";
+  auto implClass = cast<moore::ClassDeclOp>(implOp);
+
+  StringAttr methodName = getMethodSymAttr().getLeafReference();
+  if (!methodName || methodName.getValue().empty())
+    return emitOpError() << "empty method name";
+
+  moore::ClassDeclOp cursor = implClass;
+  Operation *methodDeclOp = nullptr;
+
+  // Find method in class decl or parents' class decl
+  while (cursor && !methodDeclOp) {
+    methodDeclOp = symbolTable.lookupSymbolIn(cursor, methodName);
+    if (methodDeclOp)
+      break;
+    SymbolRefAttr baseSym = cursor.getBaseAttr();
+    if (!baseSym)
+      break;
+    Operation *baseOp = symbolTable.lookupNearestSymbolFrom(op, baseSym);
+    cursor = baseOp ? cast<moore::ClassDeclOp>(baseOp) : moore::ClassDeclOp();
+  }
+
+  if (!methodDeclOp)
+    return emitOpError() << "no method `" << methodName << "` found in "
+                         << implClass.getSymName() << " or its bases";
+
+  // Make sure method decl is a ClassMethodDeclOp
+  auto methodDecl = dyn_cast<moore::ClassMethodDeclOp>(methodDeclOp);
+  if (!methodDecl)
+    return emitOpError() << "`" << methodName
+                         << "` is not a method declaration";
+
+  // Make sure method signature matches
+  auto resFnTy = cast<FunctionType>(getResult().getType());
+  auto declFnTy = cast<FunctionType>(methodDecl.getFunctionType());
+  if (resFnTy != declFnTy)
+    return emitOpError() << "result type " << resFnTy
+                         << " does not match method erased ABI " << declFnTy;
+
+  return success();
+}
+
+LogicalResult VTableOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *self = getOperation();
+
+  // sym_name's root must be a ClassDeclOp
+  SymbolRefAttr name = getSymNameAttr();
+  if (!name)
+    return emitOpError("requires 'sym_name' SymbolRefAttr");
+
+  // Root symbol must resolve (from the nearest symbol table) to a ClassDeclOp.
+  Operation *rootDef = symbolTable.lookupNearestSymbolFrom(
+      self, SymbolRefAttr::get(name.getRootReference()));
+  if (!rootDef)
+    return emitOpError() << "cannot resolve root class symbol '"
+                         << name.getRootReference() << "' for sym_name "
+                         << name;
+
+  if (!isa<ClassDeclOp>(rootDef))
+    return emitOpError()
+           << "root of sym_name must name a 'moore.class.classdecl', got "
+           << name;
+
+  // All good.
+  return success();
+}
+
+LogicalResult VTableOp::verifyRegions() {
+  // Ensure only allowed ops appear inside.
+  for (Operation &op : getBody().front()) {
+    if (!isa<VTableOp, VTableEntryOp>(op))
+      return emitOpError(
+          "body may only contain 'moore.vtable' or 'moore.vtable_entry' ops");
+  }
+  return mlir::success();
+}
+
+LogicalResult
+VTableEntryOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *self = getOperation();
+
+  // 'target' must exist and resolve from the top-level symbol table of a func
+  // op
+  SymbolRefAttr target = getTargetAttr();
+  func::FuncOp def =
+      symbolTable.lookupNearestSymbolFrom<func::FuncOp>(self, target);
+  if (!def)
+    return emitOpError()
+           << "cannot resolve target symbol to a function operation " << target;
+
+  // VTableEntries may only exist in VTables.
+  if (!isa<VTableOp>(self->getParentOp()))
+    return emitOpError("must be nested directly inside a 'moore.vtable' op");
+
+  Operation *currentOp = self;
+  VTableOp currentVTable;
+  bool defined = false;
+
+  // Walk up the VTable tree and check whether the corresponding classDeclOp
+  // declares a method with the same implementation. Further checks all the way
+  // up the tree if another classdeclop overrides the implementation.
+  // The entry is correct iff the impl matches the most derived classdeclop's
+  // methoddeclop implementing the virtual method.
+  while (auto parentOp = dyn_cast<VTableOp>(currentOp->getParentOp())) {
+    currentOp = parentOp;
+    currentVTable = cast<VTableOp>(currentOp);
+
+    auto classSymName = currentVTable.getSymName();
+    ClassDeclOp parentClassDecl =
+        symbolTable.lookupNearestSymbolFrom<ClassDeclOp>(
+            parentOp, classSymName.getRootReference());
+    assert(parentClassDecl && "VTableOp must point to a classdeclop");
+
+    for (auto method : parentClassDecl.getBody().getOps<ClassMethodDeclOp>()) {
+      // A virtual interface declaration. Ignore.
+      if (!method.getImpl())
+        continue;
+
+      // A matching definition.
+      if (method.getSymName() == getName() && method.getImplAttr() == target)
+        defined = true;
+
+      // All definitions of the same method up the tree must be the same as the
+      // current definition, there is no shadowing.
+      // Hence, if we encounter a methoddeclop that has the same name but a
+      // different implementation that means this vtableentry should point to
+      // the op's implementation - that's an error.
+      else if (method.getSymName() == getName() &&
+               method.getImplAttr() != target && defined)
+        return emitOpError() << "Target " << target
+                             << " should be overridden by " << classSymName;
+    }
+  }
+  if (!defined)
+    return emitOpError()
+           << "Parent class does not point to any implementation!";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

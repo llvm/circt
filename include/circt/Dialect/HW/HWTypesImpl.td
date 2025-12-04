@@ -53,7 +53,8 @@ def IntTypeImpl : HWType<"Int"> {
 // A simple fixed size array. Declares the hw::ArrayType in C++.
 def ArrayTypeImpl : HWType<"Array", [
   DeclareTypeInterfaceMethods<DestructurableTypeInterface>,
-  DeclareTypeInterfaceMethods<FieldIDTypeInterface>
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>,
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
 ]> {
   let summary = "fixed-sized array";
   let description = [{
@@ -84,7 +85,10 @@ def ArrayTypeImpl : HWType<"Array", [
 }
 
 // An 'unpacked' array of fixed size.
-def UnpackedArrayTypeImpl : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def UnpackedArrayTypeImpl : HWType<"UnpackedArray", [
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>,
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "SystemVerilog 'unpacked' fixed-sized array";
   let description = [{
     Unpacked arrays are a more flexible array representation than packed arrays,
@@ -134,7 +138,8 @@ def InOutTypeImpl : HWType<"InOut"> {
 // A packed struct. Declares the hw::StructType in C++.
 def StructTypeImpl : HWType<"Struct", [
   DeclareTypeInterfaceMethods<DestructurableTypeInterface>,
-  DeclareTypeInterfaceMethods<FieldIDTypeInterface>
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>,
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
 ]> {
   let summary = "HW struct type";
   let description = [{
@@ -163,7 +168,9 @@ def StructTypeImpl : HWType<"Struct", [
 }
 
 // An enum type. Declares the hw::EnumType in C++.
-def EnumTypeImpl : HWType<"Enum"> {
+def EnumTypeImpl : HWType<"Enum", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "HW Enum type";
   let description = [{
     Represents an enumeration of values. Enums are interpreted as integers with
@@ -181,9 +188,6 @@ def EnumTypeImpl : HWType<"Enum"> {
     /// Returns true if the requested field is part of this enum
     bool contains(mlir::StringRef field);
 
-    /// Returns the number of bits used by the enum
-    size_t getBitWidth();
-
     /// Returns the index of the requested field, or a nullopt if the field is
     // not part of this enum.
     std::optional<size_t> indexOf(mlir::StringRef field);
@@ -193,7 +197,9 @@ def EnumTypeImpl : HWType<"Enum"> {
 }
 
 // An untagged union. Declares the hw::UnionType in C++.
-def UnionTypeImpl : HWType<"Union"> {
+def UnionTypeImpl : HWType<"Union", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An untagged union of types";
   let parameters = (
     ins ArrayRefParameter<
@@ -215,7 +221,9 @@ def UnionTypeImpl : HWType<"Union"> {
   }];
 }
 
-def TypeAliasType : HWType<"TypeAlias"> {
+def TypeAliasType : HWType<"TypeAlias", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An symbolic reference to a type declaration";
   let description = [{
     A TypeAlias is parameterized by a SymbolRefAttr, which points to a

@@ -209,7 +209,7 @@ def LowerVectorizations : Pass<"arc-lower-vectorizations", "mlir::ModuleOp"> {
     This pass lowers `arc.vectorize` operations. By default, the operation will
     be fully lowered (i.e., the op disappears in the IR). Alternatively, it can
     be partially lowered.
-    
+
     The "mode" pass option allows to only lower the boundary, only the body, or
     only inline the body given that both the boundary and the body are already
     lowered.
@@ -309,6 +309,11 @@ def MergeIfsPass : Pass<"arc-merge-ifs"> {
     Statistic<"numIterations", "iterations",
       "Number of iterations until no more ops were sunk/merged">,
   ];
+}
+
+def MergeTaps : Pass<"arc-merge-taps", "hw::HWModuleOp"> {
+  let summary = "Merge TapOps observing the same value in the same Block.";
+  let dependentDialects = ["arc::ArcDialect"];
 }
 
 def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {

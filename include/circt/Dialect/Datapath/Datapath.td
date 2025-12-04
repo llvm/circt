@@ -17,5 +17,6 @@ include "mlir/IR/OpBase.td"
 
 include "circt/Dialect/Datapath/DatapathDialect.td"
 include "circt/Dialect/Datapath/DatapathOps.td"
+include "circt/Dialect/Datapath/DatapathPasses.td"
 
 #endif // CIRCT_DIALECT_DATAPATH_DATAPATH_TD

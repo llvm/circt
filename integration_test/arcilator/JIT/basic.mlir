@@ -1,7 +1,7 @@
-// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
 // REQUIRES: arcilator-jit
 
-// CHECK: output = 5
+// CHECK: output = 05
 
 hw.module @adder(in %a: i8, in %b: i8, out c: i8) {
   %res = comb.add %a, %b : i8

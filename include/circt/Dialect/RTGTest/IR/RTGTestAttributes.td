@@ -89,4 +89,26 @@ def RegT4Attr   : IntegerRegisterAttrBase<"RegT4", "t4", 29>;
 def RegT5Attr   : IntegerRegisterAttrBase<"RegT5", "t5", 30>;
 def RegT6Attr   : IntegerRegisterAttrBase<"RegT6", "t6", 31>;
 
+class FloatRegisterAttrBase<string cppName, string name, int classIndex>
+  : RTGTestAttrDef<cppName, [RegisterAttrInterface]> {
+
+  let mnemonic = name;
+
+  let extraClassDeclaration = [{
+    unsigned getClassIndex() const {
+      return }] # classIndex # [{;
+    }
+
+    llvm::StringLiteral getRegisterAssembly() const {
+      return "}] # name # [{";
+    }
+
+    Type getType() const {
+      return FloatRegisterType::get(getContext());
+    }
+  }];
+}
+
+def RegF0Attr   : FloatRegisterAttrBase<"RegF0", "f0", 0>;
+
 #endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTATTRIBUTES_TD

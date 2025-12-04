@@ -379,9 +379,10 @@ struct SpecializeLayers {
     for (auto result : instance->getResults())
       if (!specializeValue(result))
         disabledPorts.set(result.getResultNumber());
+
     if (disabledPorts.any()) {
-      OpBuilder builder(instance);
-      auto newInstance = instance.erasePorts(builder, disabledPorts);
+      auto newInstance =
+          instance.cloneWithErasedPortsAndReplaceUses(disabledPorts);
       instance->erase();
       instance = newInstance;
     }
@@ -405,9 +406,8 @@ struct SpecializeLayers {
       if (!specializeValue(result))
         disabledPorts.set(result.getResultNumber());
     if (disabledPorts.any()) {
-      OpBuilder builder(instanceChoice);
       auto newInstanceChoice =
-          instanceChoice.erasePorts(builder, disabledPorts);
+          instanceChoice.cloneWithErasedPortsAndReplaceUses(disabledPorts);
       instanceChoice->erase();
       instanceChoice = newInstanceChoice;
     }

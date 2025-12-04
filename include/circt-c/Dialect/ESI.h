@@ -62,6 +62,41 @@ MLIR_CAPI_EXPORTED CirctESIBundleTypeBundleChannel
 circtESIBundleTypeGetChannel(MlirType bundle, size_t idx);
 
 //===----------------------------------------------------------------------===//
+// Window types
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGet(MlirContext cctxt,
+                                                  MlirAttribute name,
+                                                  MlirType into,
+                                                  size_t numFrames,
+                                                  const MlirType *frames);
+MLIR_CAPI_EXPORTED MlirAttribute circtESIWindowTypeGetName(MlirType window);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetInto(MlirType window);
+MLIR_CAPI_EXPORTED size_t circtESIWindowTypeGetNumFrames(MlirType window);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetFrame(MlirType window,
+                                                       size_t idx);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetLoweredType(MlirType window);
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFrameType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGet(MlirContext cctxt,
+                                                       MlirAttribute name,
+                                                       size_t numMembers,
+                                                       const MlirType *members);
+MLIR_CAPI_EXPORTED MlirAttribute circtESIWindowFrameTypeGetName(MlirType frame);
+MLIR_CAPI_EXPORTED size_t circtESIWindowFrameTypeGetNumMembers(MlirType frame);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGetMember(MlirType frame,
+                                                             size_t idx);
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFieldType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowFieldTypeGet(MlirContext cctxt,
+                                                       MlirAttribute fieldName,
+                                                       uint64_t numItems);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtESIWindowFieldTypeGetFieldName(MlirType field);
+MLIR_CAPI_EXPORTED uint64_t circtESIWindowFieldTypeGetNumItems(MlirType field);
+
+//===----------------------------------------------------------------------===//
 // Services
 //===----------------------------------------------------------------------===//
 

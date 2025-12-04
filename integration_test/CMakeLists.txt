@@ -49,7 +49,7 @@ endif()
 get_target_property(ESI_PrimsDir ESIPrimitives SOURCE_DIR)
 set(ESI_Prims "${ESI_PrimsDir}/ESIPrimitives.sv")
 
-set(CIRCT_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
+set(CIRCT_INTEGRATION_TIMEOUT 120) # Set a 120s timeout on individual tests.
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py

@@ -263,22 +263,6 @@ firrtl.circuit "BasicBlackboxes" attributes {
     ],
     defname = "ignored1"
   }
-  firrtl.extmodule @ignored2() attributes {
-    annotations = [
-      {
-        class = "sifive.enterprise.grandcentral.DataTapsAnnotation.blackbox"
-      }
-    ],
-    defname = "ignored2"
-  }
-  firrtl.extmodule @ignored3() attributes {
-    annotations = [
-      {
-        class = "sifive.enterprise.grandcentral.MemTapAnnotation.blackbox", id = 4 : i64
-      }
-    ],
-    defname = "ignored3"
-  }
   firrtl.extmodule @ignored4() attributes {
     annotations = [
       {

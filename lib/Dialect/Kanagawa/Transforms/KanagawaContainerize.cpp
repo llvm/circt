@@ -46,7 +46,7 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
         dyn_cast_or_null<ClassOp>(op.getOperation()->getParentOp());
     assert(parentClass && "This pattern should never be called on a container"
                           "that is not nested within a class.");
-    auto design = parentClass.getParentOp<DesignOp>();
+    [[maybe_unused]] auto design = parentClass.getParentOp<DesignOp>();
     assert(design && "Parent class should be nested within a design.");
 
     rewriter.setInsertionPoint(parentClass);

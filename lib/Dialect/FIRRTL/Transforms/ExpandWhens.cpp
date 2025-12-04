@@ -374,6 +374,10 @@ public:
     recordConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
+  void visitStmt(DomainDefineOp op) {
+    recordConnect(getFieldRefFromValue(op.getDest()), op);
+  }
+
   void processWhenOp(WhenOp whenOp, Value outerCondition);
 
   /// Combine the connect statements from each side of the block. There are 5

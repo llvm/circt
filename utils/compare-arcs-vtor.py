@@ -97,6 +97,7 @@ def run(args: argparse.Namespace, dir: Path):
   # Generate the main file that instantiates both models and runs the
   # simulation.
   main_cpp = dir / "main.cpp"
+  top = state["name"]
   with open(main_cpp, "w") as out:
     generate_main(out, state)
 
@@ -106,23 +107,44 @@ def run(args: argparse.Namespace, dir: Path):
   stubs_sv = Path(__file__).with_name("compare-arcs-vtor-stubs.sv")
   subprocess.check_call(
       [
-          firtool, "--lowering-options=disallowLocalVariables",
-          input.absolute(), "-o", vtor_sv
+          firtool,
+          "--lowering-options=disallowLocalVariables",
+          input.absolute(),
+          "-o",
+          vtor_sv,
       ],
       cwd=dir,
   )
   subprocess.check_output(
       [
-          verilator, "-O3", "--noassert", "--x-assign", "fast", "--x-initial",
-          "fast", "--threads", "1", "--sv", "-CFLAGS", f"-I{arcilator.parent}",
-          "--cc", "--exe", "--build", vtor_sv, stubs_sv, arc_o, main_cpp
+          verilator,
+          "-O3",
+          "--noassert",
+          "--x-assign",
+          "fast",
+          "--x-initial",
+          "fast",
+          "--threads",
+          "1",
+          "--sv",
+          "-CFLAGS",
+          f"-I{arcilator.parent}",
+          "--top",
+          top,
+          "--cc",
+          "--exe",
+          "--build",
+          vtor_sv,
+          stubs_sv,
+          arc_o,
+          main_cpp,
       ],
       cwd=dir,
   )
 
   # Execute the simulation.
   print("Running simulation")
-  status = subprocess.run(["obj_dir/Vvtor"], cwd=dir)
+  status = subprocess.run([f"obj_dir/V{top}"], cwd=dir)
   sys.exit(status.returncode)
 
 
@@ -138,7 +160,8 @@ unsigned check(unsigned cycle, const char *name, T &vtor, T &arcs) {
   if (vtor == arcs)
     return 0;
   std::cout << "Cycle " << cycle << ": Mismatch in " << name << ": "
-            << "vtor = " << vtor << ", arcs = " << arcs << "\\n";
+            << "vtor = " << uint64_t(vtor) << ", arcs = "
+            << uint64_t(arcs) << "\\n";
   return 1;
 }
 
@@ -153,14 +176,14 @@ void update(T &vtor, T &arcs, std::mt19937_64 &gen) {
 def generate_main(out, info):
   top = info["name"]
   out.write(f"// Top-level module: {top}\n")
-  out.write("#include \"Vvtor.h\"\n")
+  out.write(f"#include \"V{top}.h\"\n")
   out.write(MAIN_COMMON.strip() + "\n")
   out.write("\n")
   out.write("int main(int argc, char **argv) {\n")
   out.write("  Verilated::commandArgs(argc, argv);\n")
   out.write("  std::random_device rd;\n")
   out.write("  std::mt19937_64 gen(rd());\n")
-  out.write("  auto vtor = std::make_unique<Vvtor>();\n")
+  out.write(f"  auto vtor = std::make_unique<V{top}>();\n")
   out.write(f"  {top} arcs;\n")
   out.write("  unsigned e = 0;\n")
   out.write("  unsigned i = 0;\n")

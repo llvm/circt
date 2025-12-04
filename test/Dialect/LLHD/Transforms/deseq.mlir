@@ -20,7 +20,7 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockNegEdge(
@@ -44,7 +44,7 @@ hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockPosEdgeWithActiveLowReset(
@@ -74,7 +74,7 @@ hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockNegEdgeWithActiveHighReset(
@@ -104,7 +104,7 @@ hw.module @ClockNegEdgeWithActiveHighReset(in %clock: i1, in %reset: i1, in %d: 
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockWithEnable(
@@ -135,7 +135,7 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockWithEnableAndReset(
@@ -172,7 +172,7 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ChasePastValuesThroughControlFlow(
@@ -195,7 +195,7 @@ hw.module @ChasePastValuesThroughControlFlow(in %clock: i1, in %d: i42) {
     cf.cond_br %clock, ^bb1(%d, %true, %true : i42, i1, i1), ^bb1(%d, %true, %false : i42, i1, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AbortIfPastValueUnobserved(
@@ -216,7 +216,7 @@ hw.module @AbortIfPastValueUnobserved(in %clock: i1, in %d: i42) {
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AbortIfPastValueNotI1(
@@ -237,7 +237,7 @@ hw.module @AbortIfPastValueNotI1(in %clock: i1, in %d: i42) {
     cf.cond_br %8, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AbortIfPastValueLocal(
@@ -258,7 +258,7 @@ hw.module @AbortIfPastValueLocal(in %clock: i1, in %d: i42) {
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AbortIfMultipleClocks(
@@ -282,7 +282,7 @@ hw.module @AbortIfMultipleClocks(in %clock1: i1, in %clock2: i1, in %d: i42) {
     cf.cond_br %11, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AbortIfMultipleResets(
@@ -314,7 +314,7 @@ hw.module @AbortIfMultipleResets(in %clock: i1, in %reset1: i1, in %reset2: i1, 
     cf.cond_br %reset2, ^bb1(%c43_i42, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AbortOnAndOfMultipleEdges(
@@ -341,7 +341,7 @@ hw.module @AbortOnAndOfMultipleEdges(in %clock: i1, in %reset: i1, in %d: i42, i
     cf.cond_br %reset, ^bb1(%c42_i42, %true : i42, i1), ^bb1(%d, %true : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @AcceptMuxForReset(
@@ -371,7 +371,7 @@ hw.module @AcceptMuxForReset(in %clock: i1, in %reset: i1, in %d: i42) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ComplexControlFlow(
@@ -425,7 +425,7 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
   // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockAndResetSameConst(
@@ -454,7 +454,7 @@ hw.module @ClockAndResetSameConst(in %clock: i1, in %reset: i1) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @ClockAndResetDifferentConst(
@@ -483,7 +483,7 @@ hw.module @ClockAndResetDifferentConst(in %clock: i1, in %reset: i1) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }
 
 // CHECK-LABEL: @NonConstButStaticReset(
@@ -514,7 +514,7 @@ hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
   }
   %5 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %5, %3 after %0 if %4 : !hw.inout<i42>
+  llhd.drv %5, %3 after %0 if %4 : i42
 }
 
 // The following example of a dual-port memory caused excessive memory usage and
@@ -894,41 +894,41 @@ hw.module @LargeControlFlowRegression(in %clk: i1, in %rstn: i1, in %a: i6, in %
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
   // CHECK: [[TMP:%.+]] = comb.mux bin [[ER]]#69, [[ER]]#68, {{%.+}}
   // CHECK: seq.firreg [[TMP]] clock [[CLK]] reset async [[RST]], %c0_i15
-  llhd.drv %mem0, %1#0 after %0 if %1#1 : !hw.inout<i15>
-  llhd.drv %mem1, %1#2 after %0 if %1#3 : !hw.inout<i15>
-  llhd.drv %mem2, %1#4 after %0 if %1#5 : !hw.inout<i15>
-  llhd.drv %mem3, %1#6 after %0 if %1#7 : !hw.inout<i15>
-  llhd.drv %mem4, %1#8 after %0 if %1#9 : !hw.inout<i15>
-  llhd.drv %mem5, %1#10 after %0 if %1#11 : !hw.inout<i15>
-  llhd.drv %mem6, %1#12 after %0 if %1#13 : !hw.inout<i15>
-  llhd.drv %mem7, %1#14 after %0 if %1#15 : !hw.inout<i15>
-  llhd.drv %mem8, %1#16 after %0 if %1#17 : !hw.inout<i15>
-  llhd.drv %mem9, %1#18 after %0 if %1#19 : !hw.inout<i15>
-  llhd.drv %mem10, %1#20 after %0 if %1#21 : !hw.inout<i15>
-  llhd.drv %mem11, %1#22 after %0 if %1#23 : !hw.inout<i15>
-  llhd.drv %mem12, %1#24 after %0 if %1#25 : !hw.inout<i15>
-  llhd.drv %mem13, %1#26 after %0 if %1#27 : !hw.inout<i15>
-  llhd.drv %mem14, %1#28 after %0 if %1#29 : !hw.inout<i15>
-  llhd.drv %mem15, %1#30 after %0 if %1#31 : !hw.inout<i15>
-  llhd.drv %mem16, %1#32 after %0 if %1#33 : !hw.inout<i15>
-  llhd.drv %mem17, %1#34 after %0 if %1#35 : !hw.inout<i15>
-  llhd.drv %mem18, %1#36 after %0 if %1#37 : !hw.inout<i15>
-  llhd.drv %mem19, %1#38 after %0 if %1#39 : !hw.inout<i15>
-  llhd.drv %mem20, %1#40 after %0 if %1#41 : !hw.inout<i15>
-  llhd.drv %mem21, %1#42 after %0 if %1#43 : !hw.inout<i15>
-  llhd.drv %mem22, %1#44 after %0 if %1#45 : !hw.inout<i15>
-  llhd.drv %mem23, %1#46 after %0 if %1#47 : !hw.inout<i15>
-  llhd.drv %mem24, %1#48 after %0 if %1#49 : !hw.inout<i15>
-  llhd.drv %mem25, %1#50 after %0 if %1#51 : !hw.inout<i15>
-  llhd.drv %mem26, %1#52 after %0 if %1#53 : !hw.inout<i15>
-  llhd.drv %mem27, %1#54 after %0 if %1#55 : !hw.inout<i15>
-  llhd.drv %mem28, %1#56 after %0 if %1#57 : !hw.inout<i15>
-  llhd.drv %mem29, %1#58 after %0 if %1#59 : !hw.inout<i15>
-  llhd.drv %mem30, %1#60 after %0 if %1#61 : !hw.inout<i15>
-  llhd.drv %mem31, %1#62 after %0 if %1#63 : !hw.inout<i15>
-  llhd.drv %mem32, %1#64 after %0 if %1#65 : !hw.inout<i15>
-  llhd.drv %mem33, %1#66 after %0 if %1#67 : !hw.inout<i15>
-  llhd.drv %mem34, %1#68 after %0 if %1#69 : !hw.inout<i15>
+  llhd.drv %mem0, %1#0 after %0 if %1#1 : i15
+  llhd.drv %mem1, %1#2 after %0 if %1#3 : i15
+  llhd.drv %mem2, %1#4 after %0 if %1#5 : i15
+  llhd.drv %mem3, %1#6 after %0 if %1#7 : i15
+  llhd.drv %mem4, %1#8 after %0 if %1#9 : i15
+  llhd.drv %mem5, %1#10 after %0 if %1#11 : i15
+  llhd.drv %mem6, %1#12 after %0 if %1#13 : i15
+  llhd.drv %mem7, %1#14 after %0 if %1#15 : i15
+  llhd.drv %mem8, %1#16 after %0 if %1#17 : i15
+  llhd.drv %mem9, %1#18 after %0 if %1#19 : i15
+  llhd.drv %mem10, %1#20 after %0 if %1#21 : i15
+  llhd.drv %mem11, %1#22 after %0 if %1#23 : i15
+  llhd.drv %mem12, %1#24 after %0 if %1#25 : i15
+  llhd.drv %mem13, %1#26 after %0 if %1#27 : i15
+  llhd.drv %mem14, %1#28 after %0 if %1#29 : i15
+  llhd.drv %mem15, %1#30 after %0 if %1#31 : i15
+  llhd.drv %mem16, %1#32 after %0 if %1#33 : i15
+  llhd.drv %mem17, %1#34 after %0 if %1#35 : i15
+  llhd.drv %mem18, %1#36 after %0 if %1#37 : i15
+  llhd.drv %mem19, %1#38 after %0 if %1#39 : i15
+  llhd.drv %mem20, %1#40 after %0 if %1#41 : i15
+  llhd.drv %mem21, %1#42 after %0 if %1#43 : i15
+  llhd.drv %mem22, %1#44 after %0 if %1#45 : i15
+  llhd.drv %mem23, %1#46 after %0 if %1#47 : i15
+  llhd.drv %mem24, %1#48 after %0 if %1#49 : i15
+  llhd.drv %mem25, %1#50 after %0 if %1#51 : i15
+  llhd.drv %mem26, %1#52 after %0 if %1#53 : i15
+  llhd.drv %mem27, %1#54 after %0 if %1#55 : i15
+  llhd.drv %mem28, %1#56 after %0 if %1#57 : i15
+  llhd.drv %mem29, %1#58 after %0 if %1#59 : i15
+  llhd.drv %mem30, %1#60 after %0 if %1#61 : i15
+  llhd.drv %mem31, %1#62 after %0 if %1#63 : i15
+  llhd.drv %mem32, %1#64 after %0 if %1#65 : i15
+  llhd.drv %mem33, %1#66 after %0 if %1#67 : i15
+  llhd.drv %mem34, %1#68 after %0 if %1#69 : i15
   hw.output
 }
 
@@ -958,5 +958,5 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
   }
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
-  llhd.drv %3, %1 after %0 if %2 : !hw.inout<i42>
+  llhd.drv %3, %1 after %0 if %2 : i42
 }

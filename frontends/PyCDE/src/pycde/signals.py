@@ -5,21 +5,21 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import (Bundle, BundledChannel, Channel, ChannelDirection,
-                    ChannelSignaling, Type)
+from .types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, ChannelSignaling, Type)
 
 from .circt.dialects import esi, sv
 from .circt import support
 from .circt import ir
 
 from contextvars import ContextVar
-from functools import singledispatchmethod
+from functools import cached_property, singledispatchmethod
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 import re
 import numpy as np
 
 
-def _FromCirctValue(value: ir.Value, type: Type = None) -> Signal:
+def _FromCirctValue(value: ir.Value, type: Type | None = None) -> Signal:
   from .types import _FromCirctType
   assert isinstance(value, ir.Value)
   if type is None:
@@ -75,7 +75,6 @@ class Signal:
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
     from .dialects import seq, hw
-    from .types import types, Bits
     if name is None:
       basename = None
       if self.name is not None:
@@ -93,7 +92,7 @@ class Signal:
     with get_user_loc():
       # If rst without reset value, provide a default '0'.
       if rst_value is None and rst is not None:
-        rst_value = types.int(self.type.bitwidth)(0)
+        rst_value = Bits(self.type.bitwidth)(0)
         if not isinstance(self.type, Bits):
           rst_value = hw.BitcastOp(self.type, rst_value)
       elif rst_value is not None and not isinstance(rst_value, Signal):
@@ -318,9 +317,8 @@ class BitsSignal(BitVectorSignal):
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
 
-    from .types import Bits, types
     from .dialects import comb
-    ret_type = types.int(hi - lo)
+    ret_type = Bits(hi - lo)
     # Corner case: empty slice. ExtractOp doesn't support this.
     if hi - lo == 0:
       return Bits(0)(0)
@@ -375,15 +373,13 @@ class BitsSignal(BitVectorSignal):
     return v
 
   def and_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return And(*bits)
 
   def or_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return Or(*bits)
 
   # === Infix operators ===
@@ -433,8 +429,7 @@ class BitsSignal(BitVectorSignal):
     return self.__exec_signless_binop_nocast__(other, comb.XorOp, "^", "xor")
 
   def __invert__(self):
-    from .types import types
-    ret = self ^ types.int(self.type.width)(-1)
+    ret = self ^ Bits(self.type.width)(-1)
     if self.name is not None:
       ret.name = f"inv_{self.name}"
     return ret
@@ -540,8 +535,7 @@ class UIntSignal(IntSignal):
 class SIntSignal(IntSignal):
 
   def __neg__(self):
-    from .types import types
-    return self * types.int(self.type.width)(-1).as_sint()
+    return self * Bits(self.type.width)(-1).as_sint()
 
 
 class ArraySignal(Signal):
@@ -566,9 +560,8 @@ class ArraySignal(Signal):
     if not isinstance(idxs[0], int) or not isinstance(idxs[1], int):
       raise ValueError("Array slices must be constant ints")
 
-    from .types import types
     from .dialects import hw
-    ret_type = types.array(self.type.element_type, idxs[1] - idxs[0])
+    ret_type = Array(self.type.element_type, idxs[1] - idxs[0])
 
     with get_user_loc():
       ret = hw.ArraySliceOp(self.value, idxs[0], ret_type)
@@ -597,15 +590,13 @@ class ArraySignal(Signal):
       return v
 
   def and_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return And(*bits)
 
   def or_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return Or(*bits)
 
   def __len__(self):
@@ -717,6 +708,27 @@ class Struct(StructSignal, metaclass=StructMetaType):
   # All the work is done in the metaclass.
 
 
+class UnionSignal(Signal):
+
+  @cached_property
+  def field_indices(self) -> Dict[str, int]:
+    return {
+        name: idx for idx, (name, _, _) in enumerate(self.type.strip.fields)
+    }
+
+  def __getitem__(self, sub):
+    if sub not in self.field_indices:
+      raise LookupError(f"Union field '{sub}' not found in {self.type}")
+    from .dialects import hw
+    with get_user_loc():
+      return hw.UnionExtractOp(self.value, self.field_indices[sub])
+
+  def __getattr__(self, attr):
+    if attr not in self.field_indices:
+      raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
+    return self.__getitem__(attr)
+
+
 class ChannelSignal(Signal):
 
   def reg(self, clk, rst=None, name=None):
@@ -724,15 +736,14 @@ class ChannelSignal(Signal):
 
   def unwrap(self, readyOrRden):
     from .dialects import esi
-    from .types import types
     signaling = self.type.signaling
     if signaling == ChannelSignaling.ValidReady:
-      ready = types.i1(readyOrRden)
-      unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
-                                         self.value, ready.value)
+      ready = Bit(readyOrRden)
+      unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, Bit, self.value,
+                                         ready.value)
       return unwrap_op[0], unwrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
-      rden = types.i1(readyOrRden)
+      rden = Bit(readyOrRden)
       wrap_op = esi.UnwrapFIFOOp(self.value, rden.value)
       return wrap_op[0], wrap_op[1]
     else:
@@ -1044,6 +1055,21 @@ class BundleSignal(Signal):
 
 class ListSignal(Signal):
   pass
+
+
+class WindowSignal(Signal):
+  """A signal representing a Window.
+
+  Windows are a way to view a struct as a set of frames. Each frame is a
+  collection of fields from the struct.
+  """
+
+  def unwrap(self) -> UnionSignal | StructSignal:
+    """Unwrap the window into either a struct (if the window has one unnamed
+    frame) or a union of frames."""
+
+    from .dialects import esi
+    return esi.UnwrapWindow(self.value)
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):

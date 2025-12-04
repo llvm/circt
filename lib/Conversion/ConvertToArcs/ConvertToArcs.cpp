@@ -9,11 +9,15 @@
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "convert-to-arcs"
@@ -22,13 +26,18 @@ using namespace circt;
 using namespace arc;
 using namespace hw;
 using llvm::MapVector;
+using llvm::SmallSetVector;
+using mlir::ConversionConfig;
 
 static bool isArcBreakingOp(Operation *op) {
+  if (isa<TapOp>(op))
+    return false;
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
              ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,
              sim::DPICallOp>(op) ||
-         op->getNumResults() > 1;
+         op->getNumResults() > 1 || op->getNumRegions() > 0 ||
+         !mlir::isMemoryEffectFree(op);
 }
 
 static LogicalResult convertInitialValue(seq::CompRegOp reg,
@@ -102,8 +111,6 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
   for (Operation &op : *module.getBodyBlock()) {
     if (isa<seq::InitialOp>(&op))
       continue;
-    if (op.getNumRegions() > 0)
-      return op.emitOpError("has regions; not supported by ConvertToArcs");
     if (!isArcBreakingOp(&op) && !isa<hw::OutputOp>(&op))
       continue;
     arcBreakerIndices[&op] = arcBreakers.size();
@@ -132,7 +139,15 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
 }
 
 LogicalResult Converter::analyzeFanIn() {
-  SmallVector<std::tuple<Operation *, unsigned>> worklist;
+  SmallVector<std::tuple<Operation *, SmallVector<Value, 2>>> worklist;
+  SetVector<Value> seenOperands;
+  auto addToWorklist = [&](Operation *op) {
+    seenOperands.clear();
+    for (auto operand : op->getOperands())
+      seenOperands.insert(operand);
+    mlir::getUsedValuesDefinedAbove(op->getRegions(), seenOperands);
+    worklist.emplace_back(op, seenOperands.getArrayRef());
+  };
 
   // Seed the worklist and fanin masks with the arc breaking operations.
   faninMasks.clear();
@@ -140,7 +155,7 @@ LogicalResult Converter::analyzeFanIn() {
     unsigned index = arcBreakerIndices.lookup(op);
     auto mask = APInt::getOneBitSet(arcBreakers.size(), index);
     faninMasks[op] = mask;
-    worklist.push_back({op, 0});
+    addToWorklist(op);
   }
 
   // Establish a post-order among the operations.
@@ -148,8 +163,8 @@ LogicalResult Converter::analyzeFanIn() {
   DenseSet<Operation *> finished;
   postOrder.clear();
   while (!worklist.empty()) {
-    auto &[op, operandIdx] = worklist.back();
-    if (operandIdx == op->getNumOperands()) {
+    auto &[op, operands] = worklist.back();
+    if (operands.empty()) {
       if (!isArcBreakingOp(op) && !isa<hw::OutputOp>(op))
         postOrder.push_back(op);
       finished.insert(op);
@@ -157,7 +172,7 @@ LogicalResult Converter::analyzeFanIn() {
       worklist.pop_back();
       continue;
     }
-    auto operand = op->getOperand(operandIdx++); // advance to next operand
+    auto operand = operands.pop_back_val(); // advance to next operand
     auto *definingOp = operand.getDefiningOp();
     if (!definingOp || isArcBreakingOp(definingOp) ||
         finished.contains(definingOp))
@@ -166,7 +181,7 @@ LogicalResult Converter::analyzeFanIn() {
       definingOp->emitError("combinational loop detected");
       return failure();
     }
-    worklist.push_back({definingOp, 0});
+    addToWorklist(definingOp);
   }
   LLVM_DEBUG(llvm::dbgs() << "- Sorted " << postOrder.size() << " ops\n");
 
@@ -177,6 +192,8 @@ LogicalResult Converter::analyzeFanIn() {
   for (auto *op : llvm::reverse(postOrder)) {
     auto mask = APInt::getZero(arcBreakers.size());
     for (auto *user : op->getUsers()) {
+      while (user->getParentOp() != op->getParentOp())
+        user = user->getParentOp();
       auto it = faninMasks.find(user);
       if (it != faninMasks.end())
         mask |= it->second;
@@ -495,28 +512,94 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
 }
 
 //===----------------------------------------------------------------------===//
+// LLHD Conversion
+//===----------------------------------------------------------------------===//
+
+/// `llhd.combinational` -> `arc.execute`
+static LogicalResult convert(llhd::CombinationalOp op,
+                             llhd::CombinationalOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &converter) {
+  // Convert the result types.
+  SmallVector<Type> resultTypes;
+  if (failed(converter.convertTypes(op.getResultTypes(), resultTypes)))
+    return failure();
+
+  // Collect the SSA values defined outside but used inside the body region.
+  auto cloneIntoBody = [](Operation *op) {
+    return op->hasTrait<OpTrait::ConstantLike>();
+  };
+  auto operands =
+      mlir::makeRegionIsolatedFromAbove(rewriter, op.getBody(), cloneIntoBody);
+
+  // Create a replacement `arc.execute` op.
+  auto executeOp =
+      ExecuteOp::create(rewriter, op.getLoc(), resultTypes, operands);
+  executeOp.getBody().takeBody(op.getBody());
+  rewriter.replaceOp(op, executeOp.getResults());
+  return success();
+}
+
+/// `llhd.yield` -> `arc.output`
+static LogicalResult convert(llhd::YieldOp op, llhd::YieldOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<arc::OutputOp>(op, adaptor.getOperands());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
 namespace circt {
-#define GEN_PASS_DEF_CONVERTTOARCS
+#define GEN_PASS_DEF_CONVERTTOARCSPASS
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
 namespace {
-struct ConvertToArcsPass : public impl::ConvertToArcsBase<ConvertToArcsPass> {
-  using ConvertToArcsBase::ConvertToArcsBase;
-
-  void runOnOperation() override {
-    Converter converter;
-    converter.tapRegisters = tapRegisters;
-    if (failed(converter.run(getOperation())))
-      signalPassFailure();
-  }
+struct ConvertToArcsPass
+    : public circt::impl::ConvertToArcsPassBase<ConvertToArcsPass> {
+  using ConvertToArcsPassBase::ConvertToArcsPassBase;
+  void runOnOperation() override;
 };
 } // namespace
 
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::createConvertToArcsPass(const ConvertToArcsOptions &options) {
-  return std::make_unique<ConvertToArcsPass>(options);
+void ConvertToArcsPass::runOnOperation() {
+  // Setup the type conversion.
+  TypeConverter converter;
+
+  // Define legal types.
+  converter.addConversion([](Type type) -> std::optional<Type> {
+    if (isa<llhd::LLHDDialect>(type.getDialect()))
+      return std::nullopt;
+    return type;
+  });
+
+  // Gather the conversion patterns.
+  ConversionPatternSet patterns(&getContext(), converter);
+  patterns.add<llhd::CombinationalOp>(convert);
+  patterns.add<llhd::YieldOp>(convert);
+
+  // Setup the legal ops. (Sort alphabetically.)
+  ConversionTarget target(getContext());
+  target.addIllegalDialect<llhd::LLHDDialect>();
+  target.markUnknownOpDynamicallyLegal(
+      [](Operation *op) { return !isa<llhd::LLHDDialect>(op->getDialect()); });
+
+  // Disable pattern rollback to use the faster one-shot dialect conversion.
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+
+  // Apply the dialect conversion patterns.
+  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns),
+                                    config))) {
+    emitError(getOperation().getLoc()) << "conversion to arcs failed";
+    return signalPassFailure();
+  }
+
+  // Outline operations into arcs.
+  Converter outliner;
+  outliner.tapRegisters = tapRegisters;
+  if (failed(outliner.run(getOperation())))
+    return signalPassFailure();
 }

@@ -194,8 +194,12 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, FuncOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp,
+            sv::SVVerbatimModuleOp, FuncOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
+      .Case<SVVerbatimSourceOp>([](SVVerbatimSourceOp op) {
+        return op.getVerilogNameAttr().getValue();
+      })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
@@ -823,7 +827,8 @@ enum class BlockStatementCount { Zero, One, TwoOrMore };
 static BlockStatementCount countStatements(Block &block) {
   unsigned numStatements = 0;
   block.walk([&](Operation *op) {
-    if (isVerilogExpression(op) || isa<ltl::LTLDialect>(op->getDialect()))
+    if (isVerilogExpression(op) ||
+        isa_and_nonnull<ltl::LTLDialect>(op->getDialect()))
       return WalkResult::advance();
     numStatements +=
         TypeSwitch<Operation *, unsigned>(op)
@@ -1741,9 +1746,11 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitAsTwoStateType);
       })
       .Case<EnumType>([&](EnumType enumType) {
+        assert(enumType.getBitWidth().has_value() &&
+               "enum type must have bitwidth");
         os << "enum ";
         if (enumType.getBitWidth() != 32)
-          os << "bit [" << enumType.getBitWidth() - 1 << ":0] ";
+          os << "bit [" << *enumType.getBitWidth() - 1 << ":0] ";
         os << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
@@ -2167,8 +2174,11 @@ public:
     assert(localTokens.empty());
     // Wrap to this column.
     ps.scopedBox(PP::ibox0, [&]() {
+      // Require unsigned in an assignment context since every wire is
+      // declared as unsigned.
       emitSubExpr(exp, parenthesizeIfLooserThan,
-                  /*signRequirement*/ NoRequirement,
+                  /*signRequirement*/
+                  isAssignmentLikeContext ? RequireUnsigned : NoRequirement,
                   /*isSelfDeterminedUnsignedValue*/ false,
                   isAssignmentLikeContext);
     });
@@ -3568,6 +3578,7 @@ private:
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
   EmittedProperty visitUnhandledLTL(Operation *op);
+  EmittedProperty visitLTL(ltl::BooleanConstantOp op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
   EmittedProperty visitLTL(ltl::IntersectOp op);
@@ -3705,6 +3716,12 @@ EmittedProperty PropertyEmitter::emitNestedProperty(
 EmittedProperty PropertyEmitter::visitUnhandledLTL(Operation *op) {
   emitOpError(op, "emission as Verilog property or sequence not supported");
   ps << "<<unsupported: " << PPExtString(op->getName().getStringRef()) << ">>";
+  return {PropertyPrecedence::Symbol};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::BooleanConstantOp op) {
+  // Emit the boolean constant value as a literal.
+  ps << (op.getValueAttr().getValue() ? "1'h1" : "1'h0");
   return {PropertyPrecedence::Symbol};
 }
 
@@ -4105,6 +4122,7 @@ private:
 
   LogicalResult visitSV(BindOp op);
   LogicalResult visitSV(InterfaceOp op);
+  LogicalResult visitSV(sv::SVVerbatimSourceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
@@ -5405,6 +5423,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   });
   emitLocationInfoAndNewLine(ops);
 
+  size_t caseValueIndex = 0;
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &caseInfo : op.getCases()) {
       startStatement();
@@ -5423,6 +5442,9 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
           .Case<CaseEnumPattern>([&](auto enumPattern) {
             ps << PPExtString(emitter.fieldNameResolver.getEnumFieldName(
                 cast<hw::EnumFieldAttr>(enumPattern->attr())));
+          })
+          .Case<CaseExprPattern>([&](auto) {
+            emitExpression(op.getCaseValues()[caseValueIndex++], ops);
           })
           .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
           .Default([&](auto) { assert(false && "unhandled case pattern"); });
@@ -5684,6 +5706,18 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(sv::SVVerbatimSourceOp op) {
+  emitSVAttributes(op);
+  startStatement();
+  ps.addCallback({op, true});
+
+  ps << op.getContent();
+
+  ps.addCallback({op, false});
+  setPendingNewline();
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   // Emit SV attributes.
   emitSVAttributes(op);
@@ -5777,7 +5811,7 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   // Ignore LTL expressions as they are emitted as part of verification
   // statements. Ignore debug ops as they are emitted as part of debug info.
-  if (isa<ltl::LTLDialect, debug::DebugDialect>(op->getDialect()))
+  if (isa_and_nonnull<ltl::LTLDialect, debug::DebugDialect>(op->getDialect()))
     return;
 
   // Handle HW statements, SV statements.
@@ -6013,7 +6047,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining an assignment into declarations.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (isa<sv::WireOp>(op) &&
+    if (!state.options.disallowDeclAssignments && isa<sv::WireOp>(op) &&
         !op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignments if any.
@@ -6038,7 +6072,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>() &&
+    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+        op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.
       if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {
@@ -6826,7 +6861,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<HWModuleExternOp>([&](HWModuleExternOp op) {
+        .Case<sv::SVVerbatimSourceOp>([&](sv::SVVerbatimSourceOp op) {
+          symbolCache.addDefinition(op.getNameAttr(), op);
+          separateFile(op, op.getOutputFile().getFilename().getValue());
+        })
+        .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
           collectPorts(op);
@@ -6960,14 +6999,14 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWModuleExternOp>([&](auto op) {
+      .Case<HWModuleExternOp, sv::SVVerbatimModuleOp>([&](auto op) {
         // External modules are _not_ emitted.
       })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefOp>(
+      .Case<InterfaceOp, VerbatimOp, IfDefOp, sv::SVVerbatimSourceOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);

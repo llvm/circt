@@ -226,14 +226,25 @@ bool Loop::match() {
   }
 
   // Determine the trip count and loop behavior. We're very picky for now.
+  // for (unsigned i = 0; i < N; i += 1) with N < 1024
+  if (predicate == comb::ICmpPredicate::ult && indVarIncrement == 1 &&
+      beginBound == 0 && endBound.ult(1024)) {
+    tripCount = endBound.getZExtValue();
+    return true;
+  }
+  // for (signed i = 0; i < N; i += 1) with 0 <= N < 1024
   if (predicate == comb::ICmpPredicate::slt && indVarIncrement == 1 &&
       beginBound == 0 && !endBound.isNegative() && endBound.slt(1024)) {
     tripCount = endBound.getZExtValue();
-  } else {
-    return failMatch("unsupported loop bounds");
+    return true;
   }
-
-  return true;
+  // for (signless i = N; i == N; i += S) with S != 0
+  if (predicate == comb::ICmpPredicate::eq && indVarIncrement != 0 &&
+      beginBound == endBound) {
+    tripCount = 1;
+    return true;
+  }
+  return failMatch("unsupported loop bounds");
 }
 
 /// Unroll the loop by cloning its body blocks and replacing the induction

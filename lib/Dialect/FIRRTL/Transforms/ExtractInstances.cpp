@@ -563,7 +563,7 @@ void ExtractInstancesPass::extractInstances() {
     for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
       // Assemble the new port name as "<prefix>_<name>", where the prefix is
       // provided by the extraction annotation.
-      auto name = inst.getPortNameStr(portIdx);
+      auto name = inst.getPortName(portIdx);
       auto nameAttr = StringAttr::get(
           &getContext(),
           prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
@@ -623,19 +623,12 @@ void ExtractInstancesPass::extractInstances() {
       auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
       LLVM_DEBUG(llvm::dbgs() << "- Updating " << oldParentInst << "\n");
-      auto newParentInst = oldParentInst.cloneAndInsertPorts(newPorts);
+      auto newParentInst =
+          oldParentInst.cloneWithInsertedPortsAndReplaceUses(newPorts);
       if (newParentInst.getInnerSymAttr())
         innerRefToInstances[getInnerRefTo(newParentInst)] = newParentInst;
 
-      // Migrate connections to existing ports.
-      for (unsigned portIdx = 0; portIdx < numParentPorts; ++portIdx)
-        oldParentInst.getResult(portIdx).replaceAllUsesWith(
-            newParentInst.getResult(portIdx));
-
-      // Clone the existing instance and remove it from its current parent, such
-      // that we can insert it at its extracted location.
-      auto newInst = inst.cloneAndInsertPorts({});
-      newInst->remove();
+      auto newInst = cast<InstanceOp>(inst->clone());
 
       // Ensure that the `inner_sym` of the instance is unique within the parent
       // module we're extracting it to.
@@ -920,7 +913,7 @@ void ExtractInstancesPass::groupInstances() {
       StringRef prefix(instPrefixNamesPair[inst].first);
       unsigned portNum = inst.getNumResults();
       for (unsigned portIdx = 0; portIdx < portNum; ++portIdx) {
-        auto name = inst.getPortNameStr(portIdx);
+        auto name = inst.getPortName(portIdx);
         auto nameAttr = builder.getStringAttr(
             prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
         PortInfo port{nameAttr,

@@ -244,9 +244,9 @@ bool MergeConnection::peelConnect(MatchingConnectOp connect) {
   // Emit strict connect if possible, fallback to normal connect.
   // Don't use emitConnect(), will split the connect apart.
   if (!parentBaseTy.hasUninferredWidth())
-    builder->create<MatchingConnectOp>(connect.getLoc(), parent, merged);
+    MatchingConnectOp::create(*builder, connect.getLoc(), parent, merged);
   else
-    builder->create<ConnectOp>(connect.getLoc(), parent, merged);
+    ConnectOp::create(*builder, connect.getLoc(), parent, merged);
 
   return true;
 }
@@ -332,9 +332,8 @@ struct MergeConnectionsPass
 } // namespace
 
 void MergeConnectionsPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this)
-             << "\n"
-             << "Module: '" << getOperation().getName() << "'\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+  LLVM_DEBUG(llvm::dbgs() << "Module: '" << getOperation().getName() << "'\n");
 
   MergeConnection mergeConnection(getOperation(), enableAggressiveMerging);
   bool changed = mergeConnection.run();

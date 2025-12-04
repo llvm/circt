@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
@@ -217,84 +218,86 @@ Value comb::createInject(OpBuilder &builder, Location loc, Value value,
   return builder.createOrFold<comb::ConcatOp>(loc, fragments);
 }
 
-// Construct a full adder for three 1-bit inputs.
-std::pair<Value, Value> comb::fullAdder(OpBuilder &builder, Location loc,
-                                        Value a, Value b, Value c) {
-  auto aXorB = builder.createOrFold<comb::XorOp>(loc, a, b, true);
-  Value sum = builder.createOrFold<comb::XorOp>(loc, aXorB, c, true);
-
-  auto carry = builder.createOrFold<comb::OrOp>(
-      loc,
-      ArrayRef<Value>{builder.createOrFold<comb::AndOp>(loc, a, b, true),
-                      builder.createOrFold<comb::AndOp>(loc, aXorB, c, true)},
-      true);
-
-  return {sum, carry};
+llvm::LogicalResult comb::convertSubToAdd(comb::SubOp subOp,
+                                          mlir::PatternRewriter &rewriter) {
+  auto lhs = subOp.getLhs();
+  auto rhs = subOp.getRhs();
+  // Since `-rhs = ~rhs + 1` holds, rewrite `sub(lhs, rhs)` to:
+  // sub(lhs, rhs) => add(lhs, -rhs) => add(lhs, add(~rhs, 1))
+  // => add(lhs, ~rhs, 1)
+  auto notRhs =
+      comb::createOrFoldNot(subOp.getLoc(), rhs, rewriter, subOp.getTwoState());
+  auto one =
+      hw::ConstantOp::create(rewriter, subOp.getLoc(), subOp.getType(), 1);
+  replaceOpWithNewOpAndCopyNamehint<comb::AddOp>(
+      rewriter, subOp, ValueRange{lhs, notRhs, one}, subOp.getTwoState());
+  return success();
 }
 
-// Perform Wallace tree reduction on partial products.
-// See https://en.wikipedia.org/wiki/Wallace_tree
-SmallVector<Value>
-comb::wallaceReduction(OpBuilder &builder, Location loc, size_t width,
-                       size_t targetAddends,
-                       SmallVector<SmallVector<Value>> &addends) {
-  auto falseValue = hw::ConstantOp::create(builder, loc, APInt(1, 0));
-  SmallVector<SmallVector<Value>> newAddends;
-  newAddends.reserve(addends.size());
-  // Continue reduction until we have only two rows. The length of
-  // `addends` is reduced by 1/3 in each iteration.
-  while (addends.size() > targetAddends) {
-    newAddends.clear();
-    // Take three rows at a time and reduce to two rows(sum and carry).
-    for (unsigned i = 0; i < addends.size(); i += 3) {
-      if (i + 2 < addends.size()) {
-        // We have three rows to reduce
-        auto &row1 = addends[i];
-        auto &row2 = addends[i + 1];
-        auto &row3 = addends[i + 2];
+static llvm::LogicalResult convertDivModUByPowerOfTwo(PatternRewriter &rewriter,
+                                                      Operation *op, Value lhs,
+                                                      Value rhs, bool isDiv) {
+  // Check if the divisor is a power of two constant.
+  auto rhsConstantOp = rhs.getDefiningOp<hw::ConstantOp>();
+  if (!rhsConstantOp)
+    return failure();
 
-        assert(row1.size() == width && row2.size() == width &&
-               row3.size() == width);
+  APInt rhsValue = rhsConstantOp.getValue();
+  if (!rhsValue.isPowerOf2())
+    return failure();
 
-        SmallVector<Value> sumRow, carryRow;
-        sumRow.reserve(width);
-        carryRow.reserve(width);
-        carryRow.push_back(falseValue);
+  Location loc = op->getLoc();
 
-        // Process each bit position
-        for (unsigned j = 0; j < width; ++j) {
-          // Full adder logic
-          auto [sum, carry] =
-              comb::fullAdder(builder, loc, row1[j], row2[j], row3[j]);
-          sumRow.push_back(sum);
-          if (j + 1 < width)
-            carryRow.push_back(carry);
-        }
+  unsigned width = lhs.getType().getIntOrFloatBitWidth();
+  unsigned bitPosition = rhsValue.ceilLogBase2();
 
-        newAddends.push_back(std::move(sumRow));
-        newAddends.push_back(std::move(carryRow));
-      } else {
-        // Add remaining rows as is
-        newAddends.append(addends.begin() + i, addends.end());
-      }
-    }
-    std::swap(newAddends, addends);
+  if (isDiv) {
+    // divu(x, 2^n) -> concat(0...0, extract(x, n, width-n))
+    // This is equivalent to a right shift by n bits.
+
+    // Extract the upper bits (equivalent to right shift).
+    Value upperBits = rewriter.createOrFold<comb::ExtractOp>(
+        loc, lhs, bitPosition, width - bitPosition);
+
+    // Concatenate with zeros on the left.
+    Value zeros =
+        hw::ConstantOp::create(rewriter, loc, APInt::getZero(bitPosition));
+
+    // use replaceOpWithNewOpAndCopyNamehint?
+    replaceOpAndCopyNamehint(
+        rewriter, op,
+        comb::ConcatOp::create(rewriter, loc,
+                               ArrayRef<Value>{zeros, upperBits}));
+    return success();
   }
 
-  assert(addends.size() <= targetAddends);
-  SmallVector<Value> carrySave;
-  for (auto &addend : addends) {
-    // Reverse the order of the bits
-    std::reverse(addend.begin(), addend.end());
-    carrySave.push_back(comb::ConcatOp::create(builder, loc, addend));
-  }
+  // modu(x, 2^n) -> concat(0...0, extract(x, 0, n))
+  // This extracts the lower n bits (equivalent to bitwise AND with 2^n - 1).
 
-  // Pad with zeros
-  auto zero = hw::ConstantOp::create(builder, loc, APInt(width, 0));
-  while (carrySave.size() < targetAddends)
-    carrySave.push_back(zero);
+  // Extract the lower bits.
+  Value lowerBits =
+      rewriter.createOrFold<comb::ExtractOp>(loc, lhs, 0, bitPosition);
 
-  return carrySave;
+  // Concatenate with zeros on the left.
+  Value zeros = hw::ConstantOp::create(rewriter, loc,
+                                       APInt::getZero(width - bitPosition));
+
+  replaceOpAndCopyNamehint(
+      rewriter, op,
+      comb::ConcatOp::create(rewriter, loc, ArrayRef<Value>{zeros, lowerBits}));
+  return success();
+}
+
+LogicalResult comb::convertDivUByPowerOfTwo(DivUOp divOp,
+                                            mlir::PatternRewriter &rewriter) {
+  return convertDivModUByPowerOfTwo(rewriter, divOp, divOp.getLhs(),
+                                    divOp.getRhs(), /*isDiv=*/true);
+}
+
+LogicalResult comb::convertModUByPowerOfTwo(ModUOp modOp,
+                                            mlir::PatternRewriter &rewriter) {
+  return convertDivModUByPowerOfTwo(rewriter, modOp, modOp.getLhs(),
+                                    modOp.getRhs(), /*isDiv=*/false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -460,8 +463,8 @@ LogicalResult OrOp::verify() { return verifyUTBinOp(*this); }
 
 LogicalResult XorOp::verify() { return verifyUTBinOp(*this); }
 
-/// Return true if this is a two operand xor with an all ones constant as its
-/// RHS operand.
+/// Return true if this is a two operand xor with an all ones constant as
+/// its RHS operand.
 bool XorOp::isBinaryNot() {
   if (getNumOperands() != 2)
     return false;
@@ -498,6 +501,56 @@ LogicalResult ConcatOp::inferReturnTypes(
   unsigned resultWidth = getTotalWidth(operands);
   results.push_back(IntegerType::get(context, resultWidth));
   return success();
+}
+
+/// Parse a ConcatOp that can either follow the format:
+/// $inputs attr-dict `:` qualified(type($inputs))
+/// or have no operands, colon and typelist.
+ParseResult ConcatOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  SmallVector<Type, 4> types;
+
+  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+
+  // Parse the operand list, attributes and colon
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+    return failure();
+
+  // Parse an optional list of types
+  Type parsedType;
+  auto parseResult = parser.parseOptionalType(parsedType);
+  if (parseResult.has_value()) {
+    if (failed(parseResult.value()))
+      return failure();
+    types.push_back(parsedType);
+    while (succeeded(parser.parseOptionalComma())) {
+      if (parser.parseType(parsedType))
+        return failure();
+      types.push_back(parsedType);
+    }
+  }
+
+  if (parser.resolveOperands(operands, types, allOperandLoc, result.operands))
+    return failure();
+
+  SmallVector<Type, 1> inferredTypes;
+  if (failed(ConcatOp::inferReturnTypes(
+          parser.getContext(), result.location, result.operands,
+          result.attributes.getDictionary(parser.getContext()),
+          result.getRawProperties(), {}, inferredTypes)))
+    return failure();
+
+  result.addTypes(inferredTypes);
+  return success();
+}
+
+void ConcatOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperands(getOperands());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : ";
+  llvm::interleaveComma(getOperandTypes(), p);
 }
 
 //===----------------------------------------------------------------------===//

@@ -48,6 +48,9 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
                type_isa<PropertyType>(srcFType)) {
       // Properties use propassign.
       PropAssignOp::create(builder, dst, src);
+    } else if (type_isa<DomainType>(dstFType) &&
+               type_isa<DomainType>(srcFType)) {
+      DomainDefineOp::create(builder, dst, src);
     } else {
       // Other types, give up and leave a connect
       ConnectOp::create(builder, dst, src);
@@ -568,8 +571,7 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
         .Case<InstanceOp, MemOp>([&](auto op) {
           string += op.getName();
           string += nameSafe ? "_" : ".";
-          string += op.getPortName(cast<OpResult>(value).getResultNumber())
-                        .getValue();
+          string += op.getPortName(cast<OpResult>(value).getResultNumber());
           value = nullptr;
         })
         .Case<FNamableOp>([&](auto op) {

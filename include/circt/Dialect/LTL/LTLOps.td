@@ -54,9 +54,9 @@ def OrOp : AssocLTLOp<"or"> {
 def IntersectOp : AssocLTLOp<"intersect"> {
   let summary = "The intersection of booleans sequences or properties.";
   let description = [{
-    The intersection of two properties. This checks that both properties both hold 
-    and have the same start and end times. This differs from `ltl.and` which doesn't 
-    consider the timings of each operand, only their results. 
+    The intersection of two properties. This checks that both properties both hold
+    and have the same start and end times. This differs from `ltl.and` which doesn't
+    consider the timings of each operand, only their results.
   }];
   let hasCanonicalizeMethod = 1;
 }
@@ -101,6 +101,21 @@ def DelayOp : LTLOp<"delay", [Pure]> {
     event is not directly specified by the delay operation itself. Instead, the
     [`ltl.clock`](#ltlclock-circtltlclockop) operation can be used to associate
     all delays within a sequence with a clock.
+  }];
+}
+
+def PastOp : LTLOp<"past", [Pure]> {
+  let arguments = (ins
+    I1:$input,
+    I64Attr:$delay);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $delay attr-dict `:` type($input)
+  }];
+
+  let summary = "Observe the sequence $delay cycles earlier.";
+  let description = [{
+      Semantically works like `ltl.delay %seq, -$delay, 0`
   }];
 }
 
@@ -202,10 +217,10 @@ def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
 
   let summary = "`goto`-style non-consecutively repeating sequence.";
   let description = [{
-    Non-consecutive repetition of the `$input` sequence. This must hold between `$base` 
-    and `$base + $more` times in a finite number of evaluations. The final evaluation 
-    in the sequence has to match. The `$base` must be greater than or equal to zero 
-    and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents 
+    Non-consecutive repetition of the `$input` sequence. This must hold between `$base`
+    and `$base + $more` times in a finite number of evaluations. The final evaluation
+    in the sequence has to match. The `$base` must be greater than or equal to zero
+    and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents
     a matching observation of `ltl.goto_repeat %b, 1, 2`, but a !b b b !b !b b !b c doesn't.
   }];
 }
@@ -224,11 +239,11 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
 
   let summary = "`goto`-style non-consecutively repeating sequence.";
   let description = [{
-    Non-consecutive repetition of the `$input` sequence. This must hold between `$base` 
-    and `$base + $more` times in a finite number of evaluations. The final evaluation 
-    in the sequence does not have to match. The `$base` must be greater than or equal to zero 
-    and the range `$more` can't be omitted. For example, both a !b b b !b !b b c and 
-    a !b b b !b !b b !b c represent matching observations of 
+    Non-consecutive repetition of the `$input` sequence. This must hold between `$base`
+    and `$base + $more` times in a finite number of evaluations. The final evaluation
+    in the sequence does not have to match. The `$base` must be greater than or equal to zero
+    and the range `$more` can't be omitted. For example, both a !b b b !b !b b c and
+    a !b b b !b !b b !b c represent matching observations of
     `ltl.non_consecutive_repeat %b, 1, 2`.
   }];
 }
@@ -237,6 +252,28 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
 //===----------------------------------------------------------------------===//
 // Properties
 //===----------------------------------------------------------------------===//
+
+def BooleanConstantOp : LTLOp<"boolean_constant", [Pure, ConstantLike]> {
+  let summary = "A constant boolean property value.";
+  let description = [{
+    Represents a constant boolean value as an LTL property. This operation
+    takes a boolean attribute and produces an `!ltl.property` result. This is
+    useful for representing constant property values in canonicalization patterns.
+
+    Example:
+    ```mlir
+    %prop = ltl.boolean_constant true
+    ```
+  }];
+
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    $value attr-dict
+  }];
+
+  let hasFolder = 1;
+}
 
 def NotOp : LTLOp<"not", [Pure]> {
   let arguments = (ins LTLAnyPropertyType:$input);
@@ -260,6 +297,8 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
+
+  let hasFolder = 1;
 
   let summary = "Only check a property after a sequence matched.";
   let description = [{

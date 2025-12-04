@@ -5,6 +5,7 @@ add_circt_conversion_library(CIRCTDatapathToComb
   CIRCTConversionPassIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTSynthAnalysis
   CIRCTComb
   CIRCTDatapath
   CIRCTHW

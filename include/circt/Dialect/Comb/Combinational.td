@@ -68,11 +68,11 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
 def AddOp : UTVariadicOp<"add", [Commutative]>;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
 let hasFolder = true in {
-  def DivUOp : UTBinOp<"divu">;
   def DivSOp : UTBinOp<"divs">;
-  def ModUOp : UTBinOp<"modu">;
   def ModSOp : UTBinOp<"mods">;
   let hasCanonicalizeMethod = true in {
+    def DivUOp : UTBinOp<"divu">;
+    def ModUOp : UTBinOp<"modu">;
     def ShlOp : UTBinOp<"shl">;
     def ShrUOp : UTBinOp<"shru">;
     def ShrSOp : UTBinOp<"shrs">;
@@ -227,7 +227,7 @@ def ConcatOp : CombOp<"concat",
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 
-  let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{

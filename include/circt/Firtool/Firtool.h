@@ -54,9 +54,6 @@ public:
 
   StringRef getOutputFilename() const { return outputFilename; }
   StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
-  StringRef getChiselInterfaceOutputDirectory() const {
-    return chiselInterfaceOutDirectory;
-  }
   StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
   StringRef getOutputAnnotationFilename() const {
     return outputAnnotationFilename;
@@ -101,9 +98,9 @@ public:
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
+  bool shouldDedupClasses() const { return dedupClasses; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
-  bool shouldExportChiselInterface() const { return exportChiselInterface; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldEtcDisableInstanceExtraction() const {
     return etcDisableInstanceExtraction;
@@ -144,6 +141,8 @@ public:
   bool getLintStaticAsserts() const { return lintStaticAsserts; }
 
   bool getLintXmrsInDesign() const { return lintXmrsInDesign; }
+
+  bool getEmitAllBindFiles() const { return emitAllBindFiles; }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -208,16 +207,6 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setExportChiselInterface(bool value) {
-    exportChiselInterface = value;
-    return *this;
-  }
-
-  FirtoolOptions &setChiselInterfaceOutDirectory(StringRef value) {
-    chiselInterfaceOutDirectory = value;
-    return *this;
-  }
-
   FirtoolOptions &setVbToBV(bool value) {
     vbToBV = value;
     return *this;
@@ -225,6 +214,11 @@ public:
 
   FirtoolOptions &setNoDedup(bool value) {
     noDedup = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDedupClasses(bool value) {
+    dedupClasses = value;
     return *this;
   }
 
@@ -394,6 +388,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setEmitAllBindFiles(bool value) {
+    emitAllBindFiles = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -410,10 +409,9 @@ private:
   BuildMode buildMode;
   bool disableLayerSink;
   bool disableOptimization;
-  bool exportChiselInterface;
-  std::string chiselInterfaceOutDirectory;
   bool vbToBV;
   bool noDedup;
+  bool dedupClasses;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
   bool lowerMemories;
@@ -448,6 +446,7 @@ private:
   bool disableWireElimination;
   bool lintStaticAsserts;
   bool lintXmrsInDesign;
+  bool emitAllBindFiles;
 };
 
 void registerFirtoolCLOptions();

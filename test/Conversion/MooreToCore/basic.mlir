@@ -167,13 +167,13 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.extract %arg5 from 6 : !moore.array<5 x i32> -> i32
 
   // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i0
-  // CHECK-NEXT: llhd.sig.extract %arg6 from [[V0]] : (!hw.inout<i1>) -> !hw.inout<i1>
+  // CHECK-NEXT: llhd.sig.extract %arg6 from [[V0]] : <i1> -> <i1>
   moore.extract_ref %arg6 from 0 : !moore.ref<!moore.i1> -> !moore.ref<!moore.i1>
   // CHECK-NEXT: [[V0:%.+]] = hw.constant 2 : i3
-  // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V0]] : (!hw.inout<array<5xi32>>) -> !hw.inout<array<2xi32>>
+  // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V0]] : <!hw.array<5xi32>> -> <!hw.array<2xi32>>
   moore.extract_ref %arg7 from 2 : !moore.ref<!moore.array<5 x i32>> -> !moore.ref<!moore.array<2 x i32>>
   // CHECK-NEXT: [[V0:%.+]] = hw.constant 2 : i3
-  // CHECK-NEXT: llhd.sig.array_get %arg7[[[V0]]] : !hw.inout<array<5xi32>>
+  // CHECK-NEXT: llhd.sig.array_get %arg7[[[V0]]] : <!hw.array<5xi32>>
   moore.extract_ref %arg7 from 2 : !moore.ref<!moore.array<5 x i32>> -> !moore.ref<i32>
 
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 6 : (i32) -> i26
@@ -208,7 +208,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V23:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i0
   // CHECK-NEXT: [[MAX:%.+]] = hw.constant 0 : i0
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i0
-  // CHECK-NEXT: llhd.sig.extract %arg6 from [[V24]] : (!hw.inout<i1>) -> !hw.inout<i1>
+  // CHECK-NEXT: llhd.sig.extract %arg6 from [[V24]] : <i1> -> <i1>
   moore.dyn_extract_ref %arg6 from %c0 : !moore.ref<!moore.i1>, !moore.i32 -> !moore.ref<!moore.i1>
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
   // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
@@ -216,7 +216,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
   // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
-  // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V24]] : (!hw.inout<array<5xi32>>) -> !hw.inout<array<2xi32>>
+  // CHECK-NEXT: llhd.sig.array_slice %arg7 at [[V24]] : <!hw.array<5xi32>> -> <!hw.array<2xi32>>
   moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.array<2 x i32>>
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
   // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i29
@@ -224,7 +224,7 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
   // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i3
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
-  // CHECK-NEXT: llhd.sig.array_get %arg7[[[V24]]] : !hw.inout<array<5xi32>>
+  // CHECK-NEXT: llhd.sig.array_get %arg7[[[V24]]] : <!hw.array<5xi32>>
   moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.i32>
 
   // CHECK-NEXT: [[V26:%.+]] = hw.constant -1 : i6
@@ -338,14 +338,35 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   return
 }
 
+// CHECK-LABEL: ExtractRefArrayElement
+func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (!moore.ref<array<1 x l3>>) {
+  // CHECK: llhd.sig.array_get
+  %0 = moore.extract_ref %j from 0 : <array<1 x array<1 x l3>>> -> <array<1 x l3>>
+  return %0 : !moore.ref<array<1 x l3>>
+}
+
+// CHECK-LABEL: DynExtractArrayElement
+func.func @DynExtractArrayElement(%j: !moore.array<2 x array<1 x l3>>, %idx: !moore.l1) -> (!moore.array<1 x l3>) {
+  // CHECK: hw.array_get
+  %0 = moore.dyn_extract %j from %idx : !moore.array<2 x array<1 x l3>>, !moore.l1 -> !moore.array<1 x l3>
+  return %0 : !moore.array<1 x l3>
+}
+
+// CHECK-LABEL: DynExtractRefArrayElement
+func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %idx: !moore.l1) -> (!moore.ref<array<1 x l3>>) {
+  // CHECK: llhd.sig.array_get
+  %0 = moore.dyn_extract_ref %j from %idx : <array<2 x array<1 x l3>>>, !moore.l1 -> <array<1 x l3>>
+  return %0 : !moore.ref<array<1 x l3>>
+}
+
 // CHECK-LABEL: func @AdvancedConversion
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
   %0 = moore.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
   // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>> 
-  %1 = moore.conversion %0 : !moore.i320 -> !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>
+  %1 = moore.sbv_to_packed %0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
   // CHECK: [[V2:%.+]] = hw.bitcast %arg0 : (!hw.array<5xstruct<exp_bits: i32, man_bits: i32>>) -> i320
-  %2 = moore.conversion %arg0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>> -> !moore.i320  
+  %2 = moore.packed_to_sbv %arg0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
   // CHECK: return [[V1]], [[V2]]
   return %1, %2 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320
 }
@@ -355,10 +376,10 @@ func.func @Statements(%arg0: !moore.i42) {
   // CHECK: %x = llhd.sig
   %x = moore.variable : <i42>
   // CHECK: [[TMP:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %x, %arg0 after [[TMP]] : !hw.inout<i42>
+  // CHECK: llhd.drv %x, %arg0 after [[TMP]] : i42
   moore.blocking_assign %x, %arg0 : i42
   // CHECK: [[TMP:%.+]] = llhd.constant_time <0ns, 1d, 0e>
-  // CHECK: llhd.drv %x, %arg0 after [[TMP]] : !hw.inout<i42>
+  // CHECK: llhd.drv %x, %arg0 after [[TMP]] : i42
   moore.nonblocking_assign %x, %arg0 : i42
   // CHECK-NEXT: return
   return
@@ -366,7 +387,7 @@ func.func @Statements(%arg0: !moore.i42) {
 
 // CHECK-LABEL: func @FormatStrings
 func.func @FormatStrings(%arg0: !moore.i42) {
-  // CHECK: [[TMP:%.+]] = sim.fmt.lit "hello"
+  // CHECK: [[TMP:%.+]] = sim.fmt.literal "hello"
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
   %1 = moore.fmt.concat (%0, %0)
@@ -455,7 +476,7 @@ moore.module @Variable() {
   // CHECK: %b1 = llhd.sig [[TMP1]] : i8
   %b1 = moore.variable : <i8>
 
-  // CHECK: [[PRB:%.+]] = llhd.prb %b1 : !hw.inout<i8>
+  // CHECK: [[PRB:%.+]] = llhd.prb %b1 : i8
   %0 = moore.read %b1 : <i8>
   // CHECK: %b2 = llhd.sig [[PRB]] : i8
   %b2 = moore.variable %0 : <i8>
@@ -472,8 +493,29 @@ moore.module @Variable() {
   %3 = moore.constant 10 : i32
   
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %a, [[TMP2]] after [[TIME]] : !hw.inout<i32>
+  // CHECK: llhd.drv %a, [[TMP2]] after [[TIME]] : i32
   moore.assign %a, %3 : i32
+
+  // CHECK: [[TMP:%.+]] = llvm.mlir.zero : !llvm.ptr
+  // CHECK: llhd.sig [[TMP]] : !llvm.ptr
+  moore.variable : <!moore.chandle>
+
+  // CHECK: [[TMP:%.+]] = llhd.constant_time <0
+  // CHECK: llhd.sig [[TMP]] : !llhd.time
+  moore.variable : <!moore.time>
+
+  // CHECK: [[TMP:%.+]] = llhd.constant_time
+  // CHECK: llhd.sig [[TMP]] : !llhd.time
+  %c42_fs = moore.constant_time 42 fs
+  moore.variable %c42_fs : <!moore.time>
+
+  // CHECK: [[TMP:%.+]] = arith.constant {{0.*}} : f32
+  // CHECK: llhd.sig [[TMP]] : f32
+  moore.variable : <!moore.f32>
+
+  // CHECK: [[TMP:%.+]] = arith.constant {{0.*}} : f64
+  // CHECK: llhd.sig [[TMP]] : f64
+  moore.variable : <!moore.f64>
 
   // CHECK: hw.output
   moore.output
@@ -485,19 +527,19 @@ moore.module @Net() {
   // CHECK: %a = llhd.sig [[TMP]] : i32
   %a = moore.net wire : <i32>
 
-  // CHECK: [[PRB:%.+]] = llhd.prb %a : !hw.inout<i32>
+  // CHECK: [[PRB:%.+]] = llhd.prb %a : i32
   %0 = moore.read %a : <i32>
 
   // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
   // CHECK: %b = llhd.sig [[TMP]] : i32
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %b, [[PRB]] after [[TIME]] : !hw.inout<i32>
+  // CHECK: llhd.drv %b, [[PRB]] after [[TIME]] : i32
   %b = moore.net wire %0 : <i32>
 
   // CHECK: [[TMP:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: llhd.drv %a, [[TMP]] after [[TIME]] : !hw.inout<i32>
+  // CHECK: llhd.drv %a, [[TMP]] after [[TIME]] : i32
   moore.assign %a, %3 : i32
 }
 
@@ -516,7 +558,7 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   %2 = moore.variable : <uarray<4 x i32>>
 
   // CHECK: [[C1:%.+]] = hw.constant 1 : i2
-  // CHECK: llhd.sig.array_get [[SIG_0]][[[C1]]] : !hw.inout<array<4xi32>>
+  // CHECK: llhd.sig.array_get [[SIG_0]][[[C1]]] : <!hw.array<4xi32>>
   %3 = moore.extract_ref %2 from 1 : !moore.ref<!moore.uarray<4 x i32>> -> !moore.ref<!moore.i32>
   moore.assign %3, %0 : i32
 
@@ -533,7 +575,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
 
-  // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : !hw.inout<struct<exp_bits: i32, man_bits: i32>>
+  // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
   %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
   moore.assign %ref, %0 : !moore.i32
   
@@ -593,18 +635,18 @@ moore.module @UnpackedStruct() {
     %2 = moore.struct_create %1, %0 : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
 
     // CHECK: %[[TIME_0:.*]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_0]] after %[[TIME_0]] : !hw.inout<struct<a: i32, b: i32>>
+    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_0]] after %[[TIME_0]] : !hw.struct<a: i32, b: i32>
     moore.blocking_assign %ms, %2 : ustruct<{a: i32, b: i32}>
 
     // CHECK: %[[STRUCT_1:.*]] = hw.struct_create (%[[C1_32]], %[[C1_32]]) : !hw.struct<a: i32, b: i32>
     %3 = moore.struct_create %0, %0 : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
 
     // CHECK: %[[TIME_1:.*]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_1]] : !hw.inout<struct<a: i32, b: i32>>
+    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_1]] : !hw.struct<a: i32, b: i32>
     moore.blocking_assign %ms, %3 : ustruct<{a: i32, b: i32}>
 
     // CHECK: %[[TIME_2:.*]] = llhd.constant_time <0ns, 0d, 1e>
-    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_2]] : !hw.inout<struct<a: i32, b: i32>>
+    // CHECK: llhd.drv %[[USTRUCT]], %[[STRUCT_1]] after %[[TIME_2]] : !hw.struct<a: i32, b: i32>
     moore.blocking_assign %ms, %3 : ustruct<{a: i32, b: i32}>
 
     // CHECK: llhd.halt
@@ -987,7 +1029,7 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
   // CHECK:   llhd.halt
   // CHECK: ^bb{{.*}} // no predecessors
   // CHECK: }
-  // CHECK: [[PRB:%.+]] = llhd.prb [[OUT]] : !hw.inout<i32>
+  // CHECK: [[PRB:%.+]] = llhd.prb [[OUT]] : i32
   // CHECK: hw.output [[PRB]] : i32
   %0 = moore.constant 0 : l32
   %out = moore.variable : <l32>
@@ -999,6 +1041,31 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
   }
   %1 = moore.read %out : <l32>
   moore.output %1 : !moore.l32
+}
+
+
+// CHECK-LABEL: hw.module @WaitDelay
+moore.module @WaitDelay(in %d: !moore.time) {
+  // CHECK: llhd.process {
+  // CHECK:   [[TMP:%.+]] = llhd.constant_time <1000000fs, 0d, 0e>
+  // CHECK:   func.call @dummyA()
+  // CHECK:   llhd.wait delay [[TMP]], ^[[RESUME1:.+]]
+  // CHECK: ^[[RESUME1]]:
+  // CHECK:   func.call @dummyB()
+  // CHECK:   llhd.wait delay %d, ^[[RESUME2:.+]]
+  // CHECK: ^[[RESUME2]]:
+  // CHECK:   func.call @dummyC()
+  // CHECK:   llhd.halt
+  // CHECK: }
+  moore.procedure initial {
+    %0 = moore.constant_time 1000000 fs
+    func.call @dummyA() : () -> ()
+    moore.wait_delay %0
+    func.call @dummyB() : () -> ()
+    moore.wait_delay %d
+    func.call @dummyC() : () -> ()
+    moore.return
+  }
 }
 
 // Just check that block without predecessors are handled without crashing
@@ -1062,25 +1129,23 @@ moore.module @Assert(in %cond : !moore.l1)  {
   }
 }
 
-// CHECK-LABEL: hw.module @StringConstant
-moore.module @StringConstant() {
-  moore.procedure initial {
-    // CHECK: hw.constant 1415934836 : i32
-    %str = moore.string_constant "Test" : i32
-    // CHECK: hw.constant 1415934836 : i36
-    %str1 = moore.string_constant "Test" : i36
-    // CHECK: hw.constant 116 : i8
-    %str2 = moore.string_constant "Test" : i8
-    // CHECK: hw.constant 0 : i7
-    %str_trunc = moore.string_constant "Test" : i7
-    // CHECK: hw.constant 29556 : i17
-    %str_trunc1 = moore.string_constant "Test" : i17
-    // CHECK: hw.constant 0 : i0
-    %str_empty = moore.string_constant "" : i0
-    // CHECK: hw.constant 0 : i8
-    %str_empty_zext = moore.string_constant "" : i8
-    moore.return
-  }
+// CHECK-LABEL: func.func @ConstantString
+func.func @ConstantString() {
+  // CHECK: hw.constant 1415934836 : i32
+  %str = moore.constant_string "Test" : i32
+  // CHECK: hw.constant 1415934836 : i36
+  %str1 = moore.constant_string "Test" : i36
+  // CHECK: hw.constant 116 : i8
+  %str2 = moore.constant_string "Test" : i8
+  // CHECK: hw.constant 0 : i7
+  %str_trunc = moore.constant_string "Test" : i7
+  // CHECK: hw.constant 29556 : i17
+  %str_trunc1 = moore.constant_string "Test" : i17
+  // CHECK: hw.constant 0 : i0
+  %str_empty = moore.constant_string "" : i0
+  // CHECK: hw.constant 0 : i8
+  %str_empty_zext = moore.constant_string "" : i8
+  return
 }
 
 // CHECK-LABEL: func.func @RecurciveConditional
@@ -1109,7 +1174,7 @@ func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
 }
 
 // CHECK-LABEL: func.func @Conversions
-func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
+func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
   // CHECK: dbg.variable "trunc", [[TMP]]
   %0 = moore.trunc %arg0 : i16 -> i8
@@ -1129,12 +1194,16 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   dbg.variable "sext", %2 : !moore.i32
 
   // CHECK: dbg.variable "i2l", %arg0 : i16
-  %3 = moore.conversion %arg0 : !moore.i16 -> !moore.l16
+  %3 = moore.int_to_logic %arg0 : i16
   dbg.variable "i2l", %3 : !moore.l16
 
   // CHECK: dbg.variable "l2i", %arg1 : i16
-  %4 = moore.conversion %arg1 : !moore.l16 -> !moore.i16
+  %4 = moore.logic_to_int %arg1 : l16
   dbg.variable "l2i", %4 : !moore.i16
+
+  // CHECK: dbg.variable "builtin_bool", %arg2 : i1
+  %5 = moore.to_builtin_bool %arg2 : l1
+  dbg.variable "builtin_bool", %5 : i1
 
   return
 }
@@ -1172,7 +1241,7 @@ moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
 // CHECK-LABEL: @blockArgAsObservedValue
 moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) {
   %var = moore.variable : <!moore.i32>
-  // CHECK: [[PRB:%.+]] = llhd.prb %var : !hw.inout<i32>
+  // CHECK: [[PRB:%.+]] = llhd.prb %var : i32
   // CHECK: llhd.process
   moore.procedure always_comb {
       %0 = moore.add %in0, %in1 : !moore.i32
@@ -1189,4 +1258,104 @@ func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
   %0 = moore.constant_time 1234000 fs
   // CHECK-NEXT: return %arg0, [[TMP]] : !llhd.time, !llhd.time
   return %arg0, %0 : !moore.time, !moore.time
+}
+
+// CHECK-LABEL: @Unreachable
+moore.module @Unreachable() {
+  // CHECK: llhd.process
+  moore.procedure initial {
+    // CHECK-NEXT: llhd.halt
+    moore.unreachable
+  }
+}
+
+// CHECK-LABEL: @SimulationControl
+func.func @SimulationControl() {
+  // CHECK-NOT: moore.builtin.finish_message
+  moore.builtin.finish_message false
+  moore.builtin.finish_message true
+
+  // CHECK-NEXT: sim.pause quiet
+  moore.builtin.stop
+
+  // CHECK-NEXT: sim.terminate success, quiet
+  moore.builtin.finish 0
+  // CHECK-NEXT: sim.terminate failure, quiet
+  moore.builtin.finish 42
+
+  return
+}
+
+// CHECK-LABEL: @SeverityToPrint
+func.func @SeverityToPrint() {
+  // CHECK: [[MSG:%.*]] = sim.fmt.literal "Fatal condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.literal "Fatal: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %0 = moore.fmt.literal "Fatal condition met!"
+  moore.builtin.severity fatal %0
+
+  // CHECK: [[MSG:%.*]] = sim.fmt.literal "Error condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.literal "Error: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %1 = moore.fmt.literal "Error condition met!"
+  moore.builtin.severity error %1
+
+  // CHECK: [[MSG:%.*]] = sim.fmt.literal "Warning condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.literal "Warning: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %2 = moore.fmt.literal "Warning condition met!"
+  moore.builtin.severity warning %2
+
+  return
+}
+
+// CHECK-LABEL: func.func @CHandle(%arg0: !llvm.ptr)
+func.func @CHandle(%arg0: !moore.chandle) {
+    return
+}
+
+// CHECK-LABEL: @MultiDimensionalSlice
+moore.module @MultiDimensionalSlice(in %in : !moore.array<2 x array<2 x l2>>, out out : !moore.array<2 x l2>) {
+  // CHECK-NEXT: [[IDX:%.*]] = hw.constant false
+  // CHECK-NEXT: [[V:%.*]] = hw.array_get %in[[[IDX]]]
+  // CHECK-NEXT: hw.output [[V]] : !hw.array<2xi2>
+  %0 = moore.extract %in from 0 : array<2 x array<2 x l2>> -> array<2 x l2>
+  moore.output %0 : !moore.array<2 x l2>
+}
+
+// CHECK-LABEL: hw.module @ContinuousAssignment
+// CHECK-SAME: in %a : !llhd.ref<i42>
+// CHECK-SAME: in %b : i42
+// CHECK-SAME: in %c : !llhd.time
+moore.module @ContinuousAssignment(in %a: !moore.ref<i42>, in %b: !moore.i42, in %c: !moore.time) {
+  // CHECK-NEXT: [[DELTA:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK-NEXT: llhd.drv %a, %b after [[DELTA]]
+  moore.assign %a, %b : i42
+  // CHECK-NEXT: llhd.drv %a, %b after %c
+  moore.delayed_assign %a, %b, %c : i42
+}
+
+// CHECK-LABEL: func.func @NonBlockingAssignment
+// CHECK-SAME: %arg0: !llhd.ref<i42>
+// CHECK-SAME: %arg1: i42
+// CHECK-SAME: %arg2: !llhd.time
+func.func @NonBlockingAssignment(%arg0: !moore.ref<i42>, %arg1: !moore.i42, %arg2: !moore.time) {
+  // CHECK-NEXT: [[DELTA:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NEXT: llhd.drv %arg0, %arg1 after [[DELTA]]
+  moore.nonblocking_assign %arg0, %arg1 : i42
+  // CHECK-NEXT: llhd.drv %arg0, %arg1 after %arg2
+  moore.delayed_nonblocking_assign %arg0, %arg1, %arg2 : i42
+  return
+}
+
+// CHECK-LABEL: func.func @ConstantReals
+func.func @ConstantReals() {
+  // CHECK: arith.constant 1.234500e+00 : f32
+  moore.constant_real 1.234500e+00 : f32
+  // CHECK: arith.constant 1.234500e+00 : f64
+  moore.constant_real 1.234500e+00 : f64
+  return
 }
