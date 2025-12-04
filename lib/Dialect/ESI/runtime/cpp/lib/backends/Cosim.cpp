@@ -393,7 +393,7 @@ public:
 
   // Call the read function and wait for a response.
   uint64_t read(uint32_t addr) const override {
-    MMIOCmd cmd{.offset = addr, .write = false};
+    MMIOCmd cmd{.data = 0, .offset = addr, .write = false};
     auto arg = MessageData::from(cmd);
     std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();
