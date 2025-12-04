@@ -28,6 +28,16 @@ void LTLDialect::initialize() {
       >();
 }
 
+Operation *LTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                           Type type, Location loc) {
+  // Materialize boolean constants as ltl.boolean_constant for property types.
+  if (auto boolAttr = dyn_cast<BoolAttr>(value))
+    if (isa<PropertyType>(type))
+      return BooleanConstantOp::create(builder, loc, boolAttr);
+
+  return nullptr;
+}
+
 #include "circt/Dialect/LTL/LTLDialect.cpp.inc"
 #include "circt/Dialect/LTL/LTLEnums.cpp.inc"
 
