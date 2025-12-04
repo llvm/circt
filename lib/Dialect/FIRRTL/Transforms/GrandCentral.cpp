@@ -2128,17 +2128,16 @@ void GrandCentralPass::runOnOperation() {
                   if (maybeExtractInfo->bindFilename) {
                     bindFilename = maybeExtractInfo->bindFilename.getValue();
                   } else {
-                    bindFilename = "grandcentral-" +
+                    bindFilename =
+                        "grandcentral-" +
                         i->getParent()->getModule().getModuleName().str() +
                         ".sv";
                   }
 
-                  instance->setAttr(
-                      "output_file",
-                      hw::OutputFileAttr::getFromFilename(
-                          &getContext(),
-                          bindFilename,
-                          /*excludeFromFileList=*/true));
+                  instance->setAttr("output_file",
+                                    hw::OutputFileAttr::getFromFilename(
+                                        &getContext(), bindFilename,
+                                        /*excludeFromFileList=*/true));
                 }
               }
 
