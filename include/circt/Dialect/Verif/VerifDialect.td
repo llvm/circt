@@ -19,7 +19,9 @@ def VerifDialect : Dialect {
   let hasConstantMaterializer = 1;
 
   let dependentDialects = [
-    "circt::seq::SeqDialect", "circt::hw::HWDialect"
+    "circt::hw::HWDialect",
+    "circt::ltl::LTLDialect",
+    "circt::seq::SeqDialect"
   ];
 }
 

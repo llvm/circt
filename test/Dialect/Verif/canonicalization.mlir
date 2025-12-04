@@ -63,3 +63,89 @@ hw.module @RemoveUnusedSymbolicValues() {
   // CHECK: hw.output
   %0 = verif.symbolic_value : i32
 }
+
+// CHECK-LABEL: @AssertEnableTrue
+hw.module @AssertEnableTrue(in %a : i1) {
+  %true = hw.constant true
+  // CHECK: verif.assert
+  // CHECK-NOT: if
+  verif.assert %a if %true : i1
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @AssertEnableFalse
+hw.module @AssertEnableFalse(in %a : i1) {
+  %false = hw.constant false
+  // CHECK-NOT: verif.assert
+  // CHECK: hw.output
+  verif.assert %a if %false : i1
+}
+
+// CHECK-LABEL: @AssertBooleanConstantTrue
+hw.module @AssertBooleanConstantTrue() {
+  %prop = ltl.boolean_constant true
+  // CHECK-NOT: verif.assert
+  verif.assert %prop : !ltl.property
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @AssumeEnableTrue
+hw.module @AssumeEnableTrue(in %a : i1) {
+  %true = hw.constant true
+  // CHECK: verif.assume
+  // CHECK-NOT: if
+  verif.assume %a if %true : i1
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @AssumeEnableFalse
+hw.module @AssumeEnableFalse(in %a : i1) {
+  %false = hw.constant false
+  // CHECK-NOT: verif.assume
+  // CHECK: hw.output
+  verif.assume %a if %false : i1
+}
+
+// CHECK-LABEL: @AssumeBooleanConstantTrue
+hw.module @AssumeBooleanConstantTrue() {
+  %prop = ltl.boolean_constant true
+  // CHECK-NOT: verif.assume
+  verif.assume %prop : !ltl.property
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @CoverEnableTrue
+hw.module @CoverEnableTrue(in %a : i1) {
+  %true = hw.constant true
+  // CHECK: verif.cover
+  // CHECK-NOT: if
+  verif.cover %a if %true : i1
+  // CHECK: hw.output
+}
+
+// Cover operations are NOT canonicalized like asserts and assumes.  Covers are
+// part of the verification contract around a module and serve as documentation
+// of what properties are expected to be exercised during verification.  Even
+// if a cover is trivially true or has a constant enable condition, it should
+// be preserved because:
+// 1. It documents the verification intent.
+// 2. It may be used by verification tools to track coverage metrics.
+// 3. Removing "trivial" covers would silently change the verification
+//    contract.
+
+// CHECK-LABEL: @CoverEnableFalse
+hw.module @CoverEnableFalse(in %a : i1) {
+  %false = hw.constant false
+  // CHECK: verif.cover
+  // CHECK-SAME: if %false
+  verif.cover %a if %false : i1
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @CoverBooleanConstantTrue
+hw.module @CoverBooleanConstantTrue() {
+  %prop = ltl.boolean_constant true
+  // CHECK: verif.cover
+  verif.cover %prop : !ltl.property
+  // CHECK: hw.output
+}
