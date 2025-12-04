@@ -270,7 +270,7 @@ hw.module @MultiFrameWindowModule(in %a: !MultiFrameWindow, out x: !hw.typealias
 // Bulk transfer uses countWidth to specify the width of a 'count' field in the
 // header frame. This count indicates how many items will be transmitted in
 // subsequent data frames. Unlike streaming mode, no 'last' or '_size' fields
-// are added to the header frame.
+// are added to the data frames.
 !BulkTransferStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
 !BulkTransferWindow = !esi.window<"BulkTransfer", !BulkTransferStruct, [
   <"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>,
