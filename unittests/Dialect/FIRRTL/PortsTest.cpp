@@ -51,7 +51,7 @@ protected:
       EXPECT_EQ(fport.isInOut(), hwport.isInOut());
       EXPECT_EQ(fport.loc, hwport.loc);
       EXPECT_EQ(fport.sym, hwport.getSym());
-      EXPECT_EQ(hwport.attrs.size(), (fport.sym ? 1 : 0))
+      EXPECT_EQ(hwport.attrs.size(), (size_t)(fport.sym ? 1 : 0))
           << "hw::PortInfo attributes should only contain inner symbol?";
 
       if (fport.isInput())
