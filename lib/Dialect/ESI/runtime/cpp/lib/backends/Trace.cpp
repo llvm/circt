@@ -181,16 +181,16 @@ public:
                         const AppIDPath &id, const std::string &portName)
       : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
-  virtual void write(const MessageData &data) override {
+protected:
+  void writeImpl(const MessageData &data) override {
     impl.write(id, portName, data.getBytes(), data.getSize());
   }
 
-  bool tryWrite(const MessageData &data) override {
+  bool tryWriteImpl(const MessageData &data) override {
     impl.write(id, portName, data.getBytes(), data.getSize(), "try");
     return true;
   }
 
-protected:
   TraceAccelerator::Impl &impl;
   AppIDPath id;
   std::string portName;

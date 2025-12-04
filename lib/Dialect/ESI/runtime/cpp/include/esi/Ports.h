@@ -130,6 +130,7 @@ public:
   using ChannelPort::ChannelPort;
 
   virtual void connect(const ConnectOptions &options = {}) override {
+    translateMessages = options.translateMessage && translationType;
     connectImpl(options);
     connected = true;
   }
@@ -138,12 +139,69 @@ public:
 
   /// A very basic blocking write API. Will likely change for performance
   /// reasons.
-  virtual void write(const MessageData &) = 0;
+  void write(const MessageData &data) {
+    if (translateMessages) {
+      assert(translationBuffer.empty() &&
+             "Cannot call write() with pending translated messages");
+      translateOutgoing(data);
+      for (auto &msg : translationBuffer)
+        writeImpl(msg);
+      translationBuffer.clear();
+    } else {
+      writeImpl(data);
+    }
+  }
 
-  /// A basic non-blocking write API. Returns true if the data was written.
-  /// It is invalid for backends to always return false (i.e. backends must
-  /// eventually ensure that writes may succeed).
-  virtual bool tryWrite(const MessageData &data) = 0;
+  /// A basic non-blocking write API. Returns true if any of the data was queued
+  /// and/or sent. If the data type is a window a 'true' return does not
+  /// indicate that the message has been completely written. The 'flush' method
+  /// can be used to check that the entire buffer has been written. It is
+  /// invalid for backends to always return false (i.e. backends must eventually
+  /// ensure that writes may succeed).
+  bool tryWrite(const MessageData &data) {
+    if (translateMessages) {
+      // Do not accept a new message if there are pending messages to flush.
+      if (!flush())
+        return false;
+      assert(translationBuffer.empty() &&
+             "Translation buffer should be empty after successful flush");
+      translateOutgoing(data);
+      flush();
+      return true;
+    } else {
+      return tryWriteImpl(data);
+    }
+  }
+  /// Flush any buffered data. Returns true if all data was flushed.
+  bool flush() {
+    while (translationBufferIdx < translationBuffer.size()) {
+      if (!tryWriteImpl(translationBuffer[translationBufferIdx]))
+        return false;
+      ++translationBufferIdx;
+    }
+    translationBuffer.clear();
+    translationBufferIdx = 0;
+    return true;
+  }
+
+protected:
+  /// Implementation for write(). Subclasses must implement this.
+  virtual void writeImpl(const MessageData &) = 0;
+
+  /// Implementation for tryWrite(). Subclasses must implement this.
+  virtual bool tryWriteImpl(const MessageData &data) = 0;
+
+  /// Whether to translate outgoing data if the port type is a window type. Set
+  /// by the connect() method.
+  bool translateMessages;
+  /// If tryWrite cannot write all the messages of a windowed type at once, it
+  /// stores them here and writes them out one by one on subsequent calls.
+  std::vector<MessageData> translationBuffer;
+  /// Index of the next message to write in translationBuffer.
+  size_t translationBufferIdx = 0;
+  /// Translate outgoing data if the port type is a window type. Append the new
+  /// message 'chunks' to translationBuffer.
+  void translateOutgoing(const MessageData &data);
 
 private:
   volatile bool connected = false;
@@ -158,12 +216,15 @@ public:
   void connect(const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
-  void write(const MessageData &) override { throw std::runtime_error(errmsg); }
-  bool tryWrite(const MessageData &) override {
+
+protected:
+  void writeImpl(const MessageData &) override {
+    throw std::runtime_error(errmsg);
+  }
+  bool tryWriteImpl(const MessageData &) override {
     throw std::runtime_error(errmsg);
   }
 
-protected:
   std::string errmsg;
 };
 

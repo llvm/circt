@@ -244,3 +244,104 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
 
   return false;
 }
+
+//===----------------------------------------------------------------------===//
+// Translation of outgoing data for window types.
+//===----------------------------------------------------------------------===//
+
+void WriteChannelPort::translateOutgoing(const MessageData &data) {
+  assert(translationType &&
+         "Translation type must be set for window translation.");
+
+  const auto &frames = translationType->getFrames();
+  const Type *intoType = translationType->getIntoType();
+
+  // Get the intoType as a struct to find field offsets.
+  const StructType *intoStruct = dynamic_cast<const StructType *>(intoType);
+  if (!intoStruct)
+    throw std::runtime_error(
+        "Window intoType must be a struct for translation");
+
+  // Build a map of field name to (offset, type) in the intoType.
+  // Offset is in bytes from the start of the struct.
+  // SystemVerilog ordering: last field is at LSB (offset 0).
+  const auto &intoFields = intoStruct->getFields();
+  std::map<std::string, std::pair<size_t, const Type *>> fieldInfo;
+  size_t currentOffset = 0;
+
+  // If the struct is reversed (SV ordering), iterate in reverse to compute
+  // offsets.
+  if (intoStruct->isReverse()) {
+    for (auto it = intoFields.rbegin(); it != intoFields.rend(); ++it) {
+      const auto &[name, fieldType] = *it;
+      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
+      if (fieldBits < 0)
+        throw std::runtime_error("Cannot translate field with dynamic size: " +
+                                 name);
+      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+      fieldInfo[name] = {currentOffset, fieldType};
+      currentOffset += fieldBytes;
+    }
+  } else {
+    for (const auto &[name, fieldType] : intoFields) {
+      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
+      if (fieldBits < 0)
+        throw std::runtime_error("Cannot translate field with dynamic size: " +
+                                 name);
+      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+      fieldInfo[name] = {currentOffset, fieldType};
+      currentOffset += fieldBytes;
+    }
+  }
+
+  // Get the source data.
+  const uint8_t *srcData = data.getBytes();
+  size_t srcDataSize = data.size();
+
+  // Generate each frame.
+  for (const WindowType::Frame &frame : frames) {
+    // Calculate the size of this frame.
+    size_t frameSize = 0;
+    for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
+         ++fieldIt) {
+      const WindowType::Field &field = *fieldIt;
+      auto infoIt = fieldInfo.find(field.name);
+      if (infoIt == fieldInfo.end())
+        throw std::runtime_error("Frame field '" + field.name +
+                                 "' not found in intoType");
+      const auto &[srcOffset, fieldType] = infoIt->second;
+      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
+      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+      frameSize += fieldBytes;
+    }
+
+    // Create the frame buffer.
+    std::vector<uint8_t> frameBuffer(frameSize, 0);
+
+    // Copy each field from the source data into the frame.
+    // Frame fields are in SV ordering (last field at LSB).
+    size_t frameOffset = 0;
+    for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
+         ++fieldIt) {
+      const WindowType::Field &field = *fieldIt;
+      auto infoIt = fieldInfo.find(field.name);
+      // Already checked above, so this should not fail.
+      const auto &[srcOffset, fieldType] = infoIt->second;
+      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
+      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+
+      // Check bounds.
+      if (srcOffset + fieldBytes > srcDataSize)
+        throw std::runtime_error("Source data too small for field: " +
+                                 field.name);
+
+      // Copy the field data.
+      std::memcpy(frameBuffer.data() + frameOffset, srcData + srcOffset,
+                  fieldBytes);
+      frameOffset += fieldBytes;
+    }
+
+    // Add the frame to the translation buffer.
+    translationBuffer.push_back(MessageData(std::move(frameBuffer)));
+  }
+}
