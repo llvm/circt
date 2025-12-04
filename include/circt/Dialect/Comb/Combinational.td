@@ -227,7 +227,7 @@ def ConcatOp : CombOp<"concat",
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 
-  let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
