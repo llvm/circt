@@ -301,9 +301,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return py::bytearray((const char *)data->getBytes(), data->getSize());
       });
 
+  py::class_<ChannelPort::ConnectOptions>(m, "ConnectOptions")
+      .def(py::init<>())
+      .def_readwrite("buffer_size", &ChannelPort::ConnectOptions::bufferSize)
+      .def_readwrite("translate_message",
+                     &ChannelPort::ConnectOptions::translateMessage);
+
   py::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", &ChannelPort::connect,
-           py::arg("buffer_size") = std::nullopt)
+      .def("connect", (void (ChannelPort::*)())&ChannelPort::connect,
+           "Connect with default options")
+      .def("connect",
+           (void (ChannelPort::*)(
+               const ChannelPort::ConnectOptions &))&ChannelPort::connect,
+           py::arg("connect_ops"), "Connect with specified options")
       .def("disconnect", &ChannelPort::disconnect)
       .def_property_readonly("type", &ChannelPort::getType,
                              py::return_value_policy::reference);

@@ -342,7 +342,9 @@ class Port:
     if not supports_host:
       raise TypeError(f"unsupported type: {reason}")
 
-    self.cpp_port.connect(buffer_size)
+    opts = cpp.ConnectOptions()
+    opts.buffer_size = buffer_size
+    self.cpp_port.connect(opts)
     return self
 
   def disconnect(self):

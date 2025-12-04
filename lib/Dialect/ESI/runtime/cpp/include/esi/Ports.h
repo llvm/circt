@@ -35,13 +35,67 @@ using PortMap = std::map<std::string, ChannelPort &>;
 /// but used by higher level APIs which add types.
 class ChannelPort {
 public:
-  ChannelPort(const Type *type) : type(type) {}
+  ChannelPort(const Type *type);
   virtual ~ChannelPort() {}
 
-  /// Set up a connection to the accelerator. The buffer size is optional and
-  /// should be considered merely a hint. Individual implementations use it
-  /// however they like. The unit is number of messages of the port type.
-  virtual void connect(std::optional<unsigned> bufferSize = std::nullopt) = 0;
+  struct ConnectOptions {
+    /// The buffer size is optional and should be considered merely a hint.
+    /// Individual implementations use it however they like. The unit is number
+    /// of messages of the port type.
+    std::optional<unsigned> bufferSize = std::nullopt;
+
+    /// If the type of this port is a window, translate the incoming/outgoing
+    /// data into its underlying ('into') type. For 'into' types without lists,
+    /// just re-arranges the data fields from the lowered type to the 'into'
+    /// type.
+    ///
+    /// If this option is false, no translation is done and the data is
+    /// passed through as-is. Same is true for non-windowed types.
+    ///
+    /// For messages with lists, only two types are supported:
+    ///   1) Parallel encoding includes any 'header' data with each frame. Said
+    ///      header data is the same across all frames, so this encoding is
+    ///      inefficient but is commonly used for on-chip streaming interfaces.
+    ///      Each frame contains a 'last' field to indicate the end of the list.
+    ///      In cases where 'numItems' is greater than 1, a field named
+    ///      '<listField>_size' indicates the number of valid items in that
+    ///      frame.
+    ///   2) Serial (bulk transfer) encoding, where a 'header' frame precedes
+    ///      the list data frame. Said header frame contains a 'count' field
+    ///      indicating the number of items in the list.  Importantly, the
+    ///      header frame is always re-transmitted after the specified number of
+    ///      list items have been sent. If the 'count' field is zero, the end of
+    ///      the list has been reached. If it is non-zero, the message has not
+    ///      been completely transmitted and reading should continue until a
+    ///      'count' of zero is received.
+    ///
+    /// In both cases, the returned MessageData contains the complete header
+    /// followed by the list data. In other words, header data is not duplicated
+    /// in the returned message.
+    ///
+    /// Important note: for consistency, preserves SystemVerilog struct field
+    /// ordering! So it's the opposite of C struct ordering.
+    ///
+    /// Implementation status:
+    ///   - Lists are not yet supported.
+    ///   - Write ports are not yet supported.
+    ///   - Fields that are not 8-byte-aligned are not supported.
+    ///
+    /// See the CIRCT documentation (or td files) for more details on windowed
+    /// messages.
+    bool translateMessage = true;
+
+    ConnectOptions(std::optional<unsigned> bufferSize = std::nullopt,
+                   bool translateMessage = true)
+        : bufferSize(bufferSize), translateMessage(translateMessage) {}
+  };
+
+  /// Set up a connection to the accelerator.
+  // virtual void connect() {
+  //   ConnectOptions options;
+  //   connect(options);
+  // }
+  virtual void connect(const ConnectOptions &options = ConnectOptions()) = 0;
   virtual void disconnect() = 0;
   virtual bool isConnected() const = 0;
 
@@ -63,6 +117,7 @@ public:
 
 protected:
   const Type *type;
+  const WindowType *translationType;
 
   /// Method called by poll() to actually poll the channel if the channel is
   /// connected.
@@ -70,7 +125,7 @@ protected:
 
   /// Called by all connect methods to let backends initiate the underlying
   /// connections.
-  virtual void connectImpl(std::optional<unsigned> bufferSize) {}
+  virtual void connectImpl(const ConnectOptions &options) {}
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -78,9 +133,8 @@ class WriteChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
 
-  virtual void
-  connect(std::optional<unsigned> bufferSize = std::nullopt) override {
-    connectImpl(bufferSize);
+  virtual void connect(const ConnectOptions &options = {}) override {
+    connectImpl(options);
     connected = true;
   }
   virtual void disconnect() override { connected = false; }
@@ -105,7 +159,7 @@ public:
   UnknownWriteChannelPort(const Type *type, std::string errmsg)
       : WriteChannelPort(type), errmsg(errmsg) {}
 
-  void connect(std::optional<unsigned> bufferSize = std::nullopt) override {
+  void connect(const ConnectOptions &options = {}) override {
     throw std::runtime_error(errmsg);
   }
   void write(const MessageData &) override { throw std::runtime_error(errmsg); }
@@ -143,7 +197,7 @@ public:
   //===--------------------------------------------------------------------===//
 
   virtual void connect(std::function<bool(MessageData)> callback,
-                       std::optional<unsigned> bufferSize = std::nullopt);
+                       const ConnectOptions &options = {});
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -154,8 +208,7 @@ public:
   static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
 
   /// Connect to the channel in polling mode.
-  virtual void
-  connect(std::optional<unsigned> bufferSize = std::nullopt) override;
+  virtual void connect(const ConnectOptions &options = {}) override;
 
   /// Asynchronous read.
   virtual std::future<MessageData> readAsync();
@@ -184,6 +237,14 @@ protected:
   /// Backends call this callback when new data is available.
   std::function<bool(MessageData)> callback;
 
+  /// Window translation support.
+  std::vector<uint8_t> translationBuffer;
+  /// Index of the next expected frame (for multi-frame windows).
+  size_t nextFrameIndex = 0;
+  /// Translate incoming data if the port type is a window type. Returns true if
+  /// the message has been completely received.
+  bool translateIncoming(MessageData &data);
+
   //===--------------------------------------------------------------------===//
   // Polling mode members.
   //===--------------------------------------------------------------------===//
@@ -206,10 +267,10 @@ public:
       : ReadChannelPort(type), errmsg(errmsg) {}
 
   void connect(std::function<bool(MessageData)> callback,
-               std::optional<unsigned> bufferSize = std::nullopt) override {
+               const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
-  void connect(std::optional<unsigned> bufferSize = std::nullopt) override {
+  void connect(const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
   std::future<MessageData> readAsync() override {

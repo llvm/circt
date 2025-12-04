@@ -1264,8 +1264,8 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
   WriteChannelPort &argPort = addIter->second.getRawWrite("arg");
   ReadChannelPort &resultPort = addIter->second.getRawRead("result");
 
-  argPort.connect();
-  resultPort.connect();
+  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
 
   // Send each list element with add_amt repeated in every message.
   for (size_t i = 0; i < inputData.size(); ++i) {
