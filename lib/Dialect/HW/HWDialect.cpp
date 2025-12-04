@@ -106,6 +106,8 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
   if (!block)
     return nullptr;
   auto *parentOp = block->getParentOp();
+  if (!parentOp)
+    return nullptr;
   auto curModule = dyn_cast<HWModuleOp>(parentOp);
   if (!curModule)
     curModule = parentOp->getParentOfType<HWModuleOp>();
