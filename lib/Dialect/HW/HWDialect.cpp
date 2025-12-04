@@ -88,8 +88,8 @@ void HWDialect::initialize() {
 /// like, i.e. single result, zero operands, non side-effecting, etc. On
 /// success, this hook should return the value generated to represent the
 /// constant value. Otherwise, it should return null on failure.
-Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
-                                          Type type, Location loc) {
+Operation *hw::materializeConstant(OpBuilder &builder, Attribute value,
+                                   Type type, Location loc) {
   // Integer constants can materialize into hw.constant
   if (auto intType = dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
@@ -113,6 +113,10 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
     curModule = parentOp->getParentOfType<HWModuleOp>();
   if (curModule && isValidParameterExpression(value, curModule))
     return ParamValueOp::create(builder, loc, type, value);
-
   return nullptr;
+}
+
+Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                          Type type, Location loc) {
+  return hw::materializeConstant(builder, value, type, loc);
 }

@@ -43,9 +43,7 @@ Operation *ESIDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
   if (isa<mlir::UnitAttr>(value))
     return hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
-  return builder.getContext()
-      ->getOrLoadDialect<hw::HWDialect>()
-      ->materializeConstant(builder, value, type, loc);
+  return hw::materializeConstant(builder, value, type, loc);
 }
 
 // Provide implementations for the enums we use.

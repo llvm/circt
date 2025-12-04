@@ -33,14 +33,12 @@ void CombDialect::initialize() {
 }
 
 /// Registered hook to materialize a single constant operation from a given
-/// attribute value with the desired resultant type. Reuse the materialization
-/// from the HW dialect. See the documentation in HWDialect.cpp for more
-/// information.
+/// attribute value with the desired resultant type. This implementation
+/// delegates to the HW dialect's materializeConstant function. See the
+/// documentation in HWDialect for more information.
 Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                             Type type, Location loc) {
-  return builder.getContext()
-      ->getLoadedDialect<hw::HWDialect>()
-      ->materializeConstant(builder, value, type, loc);
+  return hw::materializeConstant(builder, value, type, loc);
 }
 
 // Provide implementations for the enums we use.
