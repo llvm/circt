@@ -35,10 +35,12 @@ def VerifyClockedAssertLikePass : Pass<"verify-clocked-assert-like",
   }];
 }
 
-def LowerFormalToHWPass : Pass<"lower-formal-to-hw", "mlir::ModuleOp"> {
-  let summary = "Lower verif.formal ops to hw.module ops";
+def LowerTestsPass : Pass<"verif-lower-tests", "mlir::ModuleOp"> {
+  let summary = "Convert Verif tests into HW modules";
   let description = [{
-    Converts `verif.formal` ops into `hw.module` ops.
+    Converts `verif.formal` and `verif.simulation` operations into top-level
+    `hw.module` operations that can be fed to formal verification and simulation
+    tools.
   }];
 }
 
