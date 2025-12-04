@@ -183,7 +183,6 @@ NB_MODULE(_circt, m) {
 
   m.def("export_verilog", [](MlirModule mod, nb::object fileObject) {
     circt::python::PyFileAccumulator accum(fileObject, false);
-    nb::gil_scoped_release();
     mlirExportVerilog(mod, accum.getCallback(), accum.getUserData());
   });
 
