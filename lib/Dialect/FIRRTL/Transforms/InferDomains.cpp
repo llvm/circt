@@ -714,7 +714,6 @@ template <typename T>
 LogicalResult processInstancePorts(const DomainInfo &info,
                                    TermAllocator &allocator, DomainTable &table,
                                    T op) {
-  llvm::errs() << "ins=" << op << "\n";
   auto numDomainTypes = info.getNumDomains();
   DenseMap<unsigned, DomainTypeID> domainPortTypeIDTable;
   auto domainInfo = op.getDomainInfoAttr();
@@ -833,7 +832,6 @@ LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
 LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
                         DomainTable &table,
                         const ModuleUpdateTable &updateTable, Operation *op) {
-  // LLVM_DEBUG(llvm::errs() << "process op: " << *op << "\n");
   if (auto instance = dyn_cast<InstanceOp>(op))
     return processOp(info, allocator, table, updateTable, instance);
   if (auto instance = dyn_cast<InstanceChoiceOp>(op))
@@ -992,10 +990,6 @@ void ensureExported(const DomainInfo &info, Namespace &ns,
   auto portDomainInfo = FlatSymbolRefAttr::get(domainName);
   PortInfo portInfo(portName, portType, portDirection, portSym, portLoc,
                     portAnnos, portDomainInfo);
-
-  // llvm::errs() << "ensure exported: ip=" << ip
-  //              << " sz=" << pending.insertions.size() << "val=" << value
-  //              << "\n";
   pending.exports[value] = pending.insertions.size() + ip;
   pending.insertions.push_back({ip, portInfo});
 }
@@ -1047,8 +1041,6 @@ template <typename T>
 void getUpdatesForInstance(const DomainInfo &info, const DomainTable &table,
                            Namespace &ns, size_t ip, PendingUpdates &pending,
                            T op) {
-  llvm::errs() << "getUpdatesForInstance ip =" << ip << "op = " << op << "\n";
-
   for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
     auto result = op.getResult(i);
     if (!isa<DomainType>(result.getType()) ||
@@ -1105,16 +1097,9 @@ void applyUpdatesToModule(const DomainInfo &info, TermAllocator &allocator,
   for (auto [var, portIndex] : pending.solutions) {
     auto portValue = module.getArgument(portIndex);
     auto *solution = allocator.allocVal(portValue);
-
-    // The port is a solution to the unsolved domain variable.
     solve(var, solution);
-
-    // The port is a self-export.
-    llvm::errs() << "export of " << portValue << " is " << portValue << "\n";
     exports[portValue].push_back(portValue);
   }
-
-  llvm::errs() << "after adding ports: module=" << module << "\n";
 
   // Drive the output ports, and record the export.
   auto builder = OpBuilder::atBlockEnd(module.getBodyBlock());
@@ -1123,13 +1108,7 @@ void applyUpdatesToModule(const DomainInfo &info, TermAllocator &allocator,
     builder.setInsertionPointAfterValue(domainValue);
     DomainDefineOp::create(builder, portValue.getLoc(), portValue, domainValue);
 
-    llvm::errs() << "drive output " << portValue << " value = " << domainValue
-                 << "\n";
-
-    // The port is an export of the domain.
     exports[domainValue].push_back(portValue);
-
-    // The port is an alias of the domain.
     table.setTermForDomain(portValue, allocator.allocVal(domainValue));
   }
 }
@@ -1244,9 +1223,6 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
 
         auto argument = cast<BlockArgument>(exports[0]);
         auto domainPortIndex = argument.getArgNumber();
-
-        llvm::errs() << "argument = " << argument << "\n";
-
         associations[domainTypeID.index] = IntegerAttr::get(
             IntegerType::get(context, 32, IntegerType::Unsigned),
             domainPortIndex);
@@ -1261,9 +1237,6 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
 
   result = ArrayAttr::get(module.getContext(), newModuleDomainInfo);
   module.setDomainInfoAttr(result);
-
-  llvm::errs() << "new domain info for " << module.getModuleNameAttr() << " = "
-               << result << "\n";
   return success();
 }
 
@@ -1296,7 +1269,6 @@ LogicalResult updateInstance(const DomainTable &table, T op) {
 }
 
 LogicalResult updateOp(const DomainTable &table, Operation *op) {
-  // llvm::errs() << "update op = " << *op << "\n";
   if (auto instance = dyn_cast<InstanceOp>(op))
     return updateInstance(table, instance);
   if (auto instance = dyn_cast<InstanceChoiceOp>(op))
@@ -1330,8 +1302,6 @@ LogicalResult updateModule(const DomainInfo &info, TermAllocator &allocator,
   if (failed(driveModuleOutputDomainPorts(info, table, op)))
     return failure();
 
-  llvm::errs() << "after update interface ***\n" << op << "\n";
-
   // Record the updated interface change in the update table.
   auto &entry = updates[op.getModuleNameAttr()];
   entry.portDomainInfo = portDomainInfo;
@@ -1339,28 +1309,6 @@ LogicalResult updateModule(const DomainInfo &info, TermAllocator &allocator,
 
   return updateModuleBody(table, op);
 }
-
-//====--------------------------------------------------------------------------
-// Domain Inference: solve domains and check for correctness,then update the
-// IR to reflect the solved domains.
-//====--------------------------------------------------------------------------
-
-/// Solve for domains and then write the domain associations back to the IR.
-LogicalResult inferModule(const DomainInfo &info, ModuleUpdateTable &updates,
-                          FModuleOp module) {
-  TermAllocator allocator;
-  DomainTable table;
-  if (failed(processModule(info, allocator, table, updates, module)))
-    return failure();
-
-  return updateModule(info, allocator, table, updates, module);
-}
-
-//====--------------------------------------------------------------------------
-// Domain Inference+Checking: Check that the interface of the module is fully
-// annotated, before proceeding to run domain inference on the body of the
-// module.
-//====--------------------------------------------------------------------------
 
 /// Check that a module's hardware ports have complete domain associations.
 LogicalResult checkModulePorts(const DomainInfo &info, FModuleLike module) {
@@ -1467,6 +1415,21 @@ LogicalResult checkModuleBody(FModuleOp module) {
   return failure(result.wasInterrupted());
 }
 
+//===---------------------------------------------------------------------------
+// InferDomainsPass: Top-level pass implementation.
+//===---------------------------------------------------------------------------
+
+/// Solve for domains and then write the domain associations back to the IR.
+LogicalResult inferModule(const DomainInfo &info, ModuleUpdateTable &updates,
+                          FModuleOp module) {
+  TermAllocator allocator;
+  DomainTable table;
+  if (failed(processModule(info, allocator, table, updates, module)))
+    return failure();
+
+  return updateModule(info, allocator, table, updates, module);
+}
+
 /// Check that a module's ports are fully annotated, before performing domain
 /// inference on the module.
 LogicalResult checkModule(const DomainInfo &info, FModuleOp module) {
@@ -1490,10 +1453,6 @@ LogicalResult checkModule(const DomainInfo &info, FExtModuleOp module) {
   return checkModulePorts(info, module);
 }
 
-//====--------------------------------------------------------------------------
-// Hybrid Mode: Check the interface, then update the body.
-//====--------------------------------------------------------------------------
-
 /// Check that a module's ports are fully annotated, before performing domain
 /// inference on the module. We use this when private module interfaces are
 /// inferred but public module interfaces are checked.
@@ -1502,8 +1461,6 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
                                   FModuleOp module) {
   if (failed(checkModulePorts(info, module)))
     return failure();
-
-  llvm::errs() << "module = " << module << "\n";
 
   TermAllocator allocator;
   DomainTable table;
@@ -1516,13 +1473,9 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
   return updateModuleBody(table, module);
 }
 
-//===---------------------------------------------------------------------------
-// InferDomainsPass: Top-level pass implementation.
-//===---------------------------------------------------------------------------
 
 LogicalResult runOnModuleLike(InferDomainsMode mode, const DomainInfo &info,
                               ModuleUpdateTable &updateTable, Operation *op) {
-  // llvm::errs() << "*******\nmodule=" << *op << "\n";
   if (auto module = dyn_cast<FModuleOp>(op)) {
     if (mode == InferDomainsMode::Check)
       return checkModule(info, module);
