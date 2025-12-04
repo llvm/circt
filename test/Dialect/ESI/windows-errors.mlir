@@ -79,20 +79,31 @@
 
 // -----
 
-// Test: bulk transfer field can only be reused with numItems specified
-!BulkStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
-// expected-error @+1 {{field '"payload"' was introduced as a bulk transfer field and can only be reused with numItems specified}}
-!BulkReuseWithoutNumItems = !esi.window<"invalid", !BulkStruct, [
-  <"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>,
-  <"DataFrame", [<"payload">]>
-]>
-
-// -----
-
 // Test: non-bulk-transfer field cannot be reused with bulk transfer header
 !NonBulkStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
 // expected-error @+1 {{field '"payload"' already consumed by a previous frame}}
 !NonBulkReuse = !esi.window<"invalid", !NonBulkStruct, [
   <"Frame1", [<"payload">]>,
   <"Frame2", [<"payload" countWidth 16>]>
+]>
+
+// -----
+
+// Test: bulk transfer field cannot have countWidth specified twice
+!DuplicateCountWidthStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
+// expected-error @+1 {{field '"payload"' already has countWidth specified}}
+!DuplicateCountWidth = !esi.window<"invalid", !DuplicateCountWidthStruct, [
+  <"HeaderFrame1", [<"dst">, <"payload" countWidth 16>]>,
+  <"HeaderFrame2", [<"payload" countWidth 8>]>
+]>
+
+// -----
+
+// Test: bulk transfer data frame cannot appear twice
+!DuplicateDataFrameStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
+// expected-error @+1 {{field '"payload"' already consumed by a previous frame}}
+!DuplicateDataFrame = !esi.window<"invalid", !DuplicateDataFrameStruct, [
+  <"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>,
+  <"DataFrame1", [<"payload", 4>]>,
+  <"DataFrame2", [<"payload", 2>]>
 ]>

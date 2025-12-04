@@ -293,3 +293,24 @@ hw.module @BulkTransferPassthrough(in %in: !BulkTransferWindow, out out: !BulkTr
   %w = esi.window.wrap %u : !BulkTransferWindow
   hw.output %w : !BulkTransferWindow
 }
+
+// Bulk transfer with single item per frame (no numItems specified, defaults to 1)
+!BulkTransferSingleStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
+!BulkTransferSingleWindow = !esi.window<"BulkTransferSingle", !BulkTransferSingleStruct, [
+  <"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>,
+  <"DataFrame", [<"payload">]>
+]>
+
+// CHECK-LABEL: hw.module.extern @BulkTransferSingleSrc(out windowed : !esi.window<"BulkTransferSingle", !hw.struct<dst: i32, payload: !esi.list<i32>>, [<"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>, <"DataFrame", [<"payload">]>]>)
+hw.module.extern @BulkTransferSingleSrc(out windowed: !BulkTransferSingleWindow)
+
+// The lowered type for bulk transfer with single item should have:
+// - HeaderFrame with dst and payload_count (16-bit from countWidth)
+// - DataFrame with just the payload element (i32) - NO _size or last fields
+// LOW-LABEL: hw.module @BulkTransferSinglePassthrough(in %in : !hw.union<HeaderFrame: !hw.struct<dst: i32, payload_count: i16>, DataFrame: !hw.struct<payload: i32>>
+// LOW-NEXT:    hw.output %in
+hw.module @BulkTransferSinglePassthrough(in %in: !BulkTransferSingleWindow, out out: !BulkTransferSingleWindow) {
+  %u = esi.window.unwrap %in : !BulkTransferSingleWindow
+  %w = esi.window.wrap %u : !BulkTransferSingleWindow
+  hw.output %w : !BulkTransferSingleWindow
+}

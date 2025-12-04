@@ -133,7 +133,6 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
       // but only if the field was first introduced as a bulk transfer field.
       bool isBulkTransferHeader = field.getBulkCountWidth() > 0;
       bool isBulkTransferData =
-          field.getNumItems() > 0 &&
           bulkTransferFields.contains(field.getFieldName());
 
       if (consumedFields.contains(field.getFieldName())) {
@@ -141,16 +140,6 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
         // Cannot reuse it.
         return emitError() << "field '" << field.getFieldName()
                            << "' already consumed by a previous frame";
-      }
-
-      if (bulkTransferFields.contains(field.getFieldName()) &&
-          !isBulkTransferData) {
-        // Field was introduced as a bulk transfer field but is not being
-        // used as bulk transfer data (i.e., doesn't have numItems specified).
-        return emitError()
-               << "field '" << field.getFieldName()
-               << "' was introduced as a bulk transfer field and can only "
-                  "be reused with numItems specified";
       }
 
       // If we encounter an array or list field with numItems, no subsequent
@@ -189,14 +178,24 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
           return emitError() << "bulk transfer (countWidth) only allowed on "
                                 "list fields (in "
                              << field.getFieldName() << ")";
+        // Check that this field hasn't already been declared as a bulk
+        // transfer field (countWidth specified twice).
+        if (bulkTransferFields.contains(field.getFieldName()))
+          return emitError() << "field '" << field.getFieldName()
+                             << "' already has countWidth specified";
         // Mark this field as a bulk transfer field.
         bulkTransferFields.insert(field.getFieldName());
       }
 
-      // Mark this field as consumed (unless it's a bulk transfer header entry
-      // or a bulk transfer data entry, which allows the field to be reused).
-      if (!isBulkTransferHeader && !isBulkTransferData)
+      // Disallow list fields from appearing in multiple data frames.
+      if (isBulkTransferData) {
+        // This is a data frame for a bulk transfer field. Mark it as consumed
+        // so it can't appear in another data frame.
         consumedFields.insert(field.getFieldName());
+      } else if (!isBulkTransferHeader) {
+        // Mark this field as consumed for non-bulk-transfer uses.
+        consumedFields.insert(field.getFieldName());
+      }
     }
   }
   return success();
