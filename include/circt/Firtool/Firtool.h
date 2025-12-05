@@ -64,6 +64,8 @@ public:
   }
   firrtl::CompanionMode getCompanionMode() const { return companionMode; }
 
+  bool getNoViews() const { return noViews; }
+
   seq::ExternalizeClockGateOptions getClockGateOptions() const {
     return {ckgModuleName, ckgInputName,      ckgOutputName,
             ckgEnableName, ckgTestEnableName, ckgInstName};
@@ -224,6 +226,11 @@ public:
 
   FirtoolOptions &setCompanionMode(firrtl::CompanionMode value) {
     companionMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setNoViews(bool value) {
+    noViews = value;
     return *this;
   }
 
@@ -413,6 +420,7 @@ private:
   bool noDedup;
   bool dedupClasses;
   firrtl::CompanionMode companionMode;
+  bool noViews;
   bool disableAggressiveMergeConnections;
   bool lowerMemories;
   std::string blackBoxRootPath;

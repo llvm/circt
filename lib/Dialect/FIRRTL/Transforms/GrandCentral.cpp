@@ -1930,13 +1930,23 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "\n";
   });
 
+  bool changed = false;
+  if (noViews && !views.empty()) {
+    changed = true;
+    for (auto &view : views)
+      view.erase();
+    views.clear();
+  }
+
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
   if (worklist.empty() && views.empty()) {
     for (auto &[yamlPath, intfs] : interfaceYAMLMap)
       emitHierarchyYamlFile(yamlPath.getValue(), intfs);
-    return markAllAnalysesPreserved();
+    if (!changed)
+      markAllAnalysesPreserved();
+    return;
   }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
