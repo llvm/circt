@@ -279,11 +279,18 @@ private:
 /// "loweredType" (the hardware representation including control signals).
 class WindowType : public Type {
 public:
+  /// Field information describing a field within a frame.
+  struct Field {
+    std::string name;
+    uint64_t numItems = 0;       // 0 means not specified (use all items)
+    uint64_t bulkCountWidth = 0; // 0 means parallel encoding, >0 means serial
+  };
+
   /// Frame information describing which fields are included in a particular
   /// frame.
   struct Frame {
     std::string name;
-    std::vector<std::string> fields;
+    std::vector<Field> fields;
   };
 
   WindowType(const ID &id, const std::string &name, const Type *intoType,
