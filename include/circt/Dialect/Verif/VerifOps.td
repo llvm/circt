@@ -76,30 +76,30 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
                       Optional<I1>:$enable,
                       OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property (`if` $enable^)? `,` $edge $clock 
+    $property (`if` $enable^)? `,` $edge $clock
     (`label` $label^)? attr-dict `:` type($property)
   }];
 }
 
 def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
-  let summary = [{ 
-    Assert that a property holds, checked on a given clock's 
+  let summary = [{
+    Assert that a property holds, checked on a given clock's
     ticks and enabled if a given condition holds. Only supports
     a single clock and a single disable.
   }];
 }
 
 def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
-  let summary = [{ 
-    Assume that a property holds, checked on a given clock's 
+  let summary = [{
+    Assume that a property holds, checked on a given clock's
     ticks and enabled if a given condition holds. Only supports
     a single clock and a single disable.
   }];
 }
 
 def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
-  let summary = [{ 
-    Cover on the holding of a property, checked on a given clock's 
+  let summary = [{
+    Cover on the holding of a property, checked on a given clock's
     ticks and enabled if a given condition holds. Only supports
     a single clock and a single disable.
   }];
@@ -383,7 +383,7 @@ def FormalOp : VerifOp<"formal", [
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $parameters attr-dict-with-keyword $body";
   let extraClassDeclaration = [{
-    static RegionKind getRegionKind(unsigned index) { 
+    static RegionKind getRegionKind(unsigned index) {
       return RegionKind::Graph;
     }
   }];
@@ -535,7 +535,7 @@ def ContractOp : VerifOp<"contract", [
     ($inputs^ `:` type($inputs))? attr-dict-with-keyword $body
   }];
   let extraClassDeclaration = [{
-    static RegionKind getRegionKind(unsigned index) { 
+    static RegionKind getRegionKind(unsigned index) {
       return RegionKind::Graph;
     }
   }];
