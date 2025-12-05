@@ -918,7 +918,7 @@ ExportTable initializeExportTable(const DomainTable &table, FModuleOp module) {
 }
 
 //====--------------------------------------------------------------------------
-// Pending Updates: Form a list of updates to the module to be applied later.
+// Updating: write domains back to the IR.
 //====--------------------------------------------------------------------------
 
 /// A map from unsolved variables to a port index, where that port has not yet
@@ -1309,6 +1309,10 @@ LogicalResult updateModule(const DomainInfo &info, TermAllocator &allocator,
 
   return updateModuleBody(table, op);
 }
+
+//===---------------------------------------------------------------------------
+// Checking: Check that a module has complete domain information.
+//===---------------------------------------------------------------------------
 
 /// Check that a module's hardware ports have complete domain associations.
 LogicalResult checkModulePorts(const DomainInfo &info, FModuleLike module) {
