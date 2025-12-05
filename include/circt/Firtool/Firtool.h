@@ -91,9 +91,6 @@ public:
   bool shouldLowerNoRefTypePortAnnotations() const {
     return lowerAnnotationsNoRefTypePorts;
   }
-  bool shouldAllowAddingPortsOnPublic() const {
-    return allowAddingPortsOnPublic;
-  }
   bool shouldConvertProbesToSignals() const { return probesToSignals; }
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
   bool shouldDisableLayerSink() const { return disableLayerSink; }
@@ -164,11 +161,6 @@ public:
 
   FirtoolOptions &setLowerAnnotationsNoRefTypePorts(bool value) {
     lowerAnnotationsNoRefTypePorts = value;
-    return *this;
-  }
-
-  FirtoolOptions &setAllowAddingPortsOnPublic(bool value) {
-    allowAddingPortsOnPublic = value;
     return *this;
   }
 
@@ -407,7 +399,6 @@ private:
   bool disableAnnotationsUnknown;
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
-  bool allowAddingPortsOnPublic;
 
   bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;

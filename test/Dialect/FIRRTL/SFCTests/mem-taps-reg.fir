@@ -1,11 +1,7 @@
-; RUN: firtool --verilog --allow-adding-ports-on-public-modules %s | FileCheck %s
+; RUN: firtool --verilog %s | FileCheck %s
 
 FIRRTL version 4.0.0
 circuit Top : %[[
-  {
-    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
-    "target":"~Top|DUTModule"
-  },
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
     "target":"~Top|Top>memTap"

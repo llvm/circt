@@ -37,8 +37,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotations(
       {/*ignoreAnnotationClassless=*/opt.shouldDisableClasslessAnnotations(),
        /*ignoreAnnotationUnknown=*/opt.shouldDisableUnknownAnnotations(),
-       /*noRefTypePorts=*/opt.shouldLowerNoRefTypePortAnnotations(),
-       /*allowAddingPortsOnPublic=*/opt.shouldAllowAddingPortsOnPublic()}));
+       /*noRefTypePorts=*/opt.shouldLowerNoRefTypePortAnnotations()}));
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
@@ -483,11 +482,6 @@ struct FirtoolCmdOptions {
           "wiring problems inside the LowerAnnotations pass"),
       llvm::cl::init(false), llvm::cl::Hidden};
 
-  llvm::cl::opt<bool> allowAddingPortsOnPublic{
-      "allow-adding-ports-on-public-modules",
-      llvm::cl::desc("Allow adding ports to public modules"),
-      llvm::cl::init(false), llvm::cl::Hidden};
-
   llvm::cl::opt<bool> probesToSignals{
       "probes-to-signals",
       llvm::cl::desc("Convert probes to non-probe signals"),
@@ -795,7 +789,7 @@ void circt::firtool::registerFirtoolCLOptions() {
 circt::firtool::FirtoolOptions::FirtoolOptions()
     : outputFilename("-"), disableAnnotationsUnknown(false),
       disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
-      allowAddingPortsOnPublic(false), probesToSignals(false),
+      probesToSignals(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
@@ -824,7 +818,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
   disableAnnotationsClassless = clOptions->disableAnnotationsClassless;
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
-  allowAddingPortsOnPublic = clOptions->allowAddingPortsOnPublic;
   probesToSignals = clOptions->probesToSignals;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;

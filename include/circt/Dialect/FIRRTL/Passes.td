@@ -39,8 +39,6 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Ignore unknown annotations.">,
     Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
       "Create normal ports, not ref type ports.">,
-    Option<"allowAddingPortsOnPublic", "allow-adding-ports-on-public-modules", "bool", "false",
-      "Allow public modules to gain additional ports as a result of wiring.">,
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [
@@ -54,8 +52,6 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Number of unhandled annotations">,
     Statistic<"numReusedHierPathOps", "num-reused-hierpath",
       "Number of reused HierPathOp's">,
-    Statistic<"numPublicPortsWired", "num-public-ports-wired",
-      "Number of ports on public modules added due to wiring">,
   ];
 }
 
