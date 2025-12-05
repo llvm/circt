@@ -1208,7 +1208,7 @@ will not be prepended to the filename.
 
 The filename is optional. When specified, all binds will be emitted to that
 file. When omitted, each module will have an associated bindfile in `directory`
-named `grandcentral-<module>.sv`.
+named `<module>-bind.sv`.
 
 Example:
 ```json

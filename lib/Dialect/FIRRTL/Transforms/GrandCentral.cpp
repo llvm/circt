@@ -2124,7 +2124,7 @@ void GrandCentralPass::runOnOperation() {
                     instance->setAttr("lowerToBind", builder.getUnitAttr());
 
                   // Determine the bind file name; use
-                  // <directory>/grandcentral-<module>.sv if not specified.
+                  // <directory>/<module>-bind.sv if not specified.
                   SmallString<128> bindFilename;
                   if (maybeExtractInfo->bindFilename) {
                     bindFilename = maybeExtractInfo->bindFilename.getValue();
@@ -2132,8 +2132,8 @@ void GrandCentralPass::runOnOperation() {
                     bindFilename = maybeExtractInfo->directory.getValue();
                     llvm::sys::path::append(
                         bindFilename,
-                        "grandcentral-" +
                             i->getParent()->getModule().getModuleName().str() +
+                            "-bind" +
                             ".sv");
                   }
 
