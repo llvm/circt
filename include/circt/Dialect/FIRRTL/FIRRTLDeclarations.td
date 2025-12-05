@@ -777,4 +777,21 @@ def ObjectOp :  FIRRTLOp<"object", [
   }];
 }
 
+def DomainCreateAnonOp : FIRRTLOp<"domain.anon", [
+    ParentOneOf<[
+      "firrtl::ContractOp",
+      "firrtl::FModuleOp",
+      "firrtl::LayerBlockOp",
+      "firrtl::MatchOp",
+      "firrtl::WhenOp",
+      "sv::IfDefOp"
+    ]>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "Create an anonymous domain, without parameters set";
+  let arguments = (ins FlatSymbolRefAttr:$domain);
+  let results = (outs DomainType:$result);
+  let hasCustomAssemblyFormat = 1;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD
