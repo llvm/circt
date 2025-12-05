@@ -578,7 +578,8 @@ struct FirtoolCmdOptions {
 
   llvm::cl::opt<bool> noViews{
       "no-views",
-      llvm::cl::desc("Disable lowering of FIRRTL view intrinsics (delete them instead)"),
+      llvm::cl::desc(
+          "Disable lowering of FIRRTL view intrinsics (delete them instead)"),
       llvm::cl::init(false),
   };
 
