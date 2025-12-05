@@ -2132,9 +2132,8 @@ void GrandCentralPass::runOnOperation() {
                     bindFilename = maybeExtractInfo->directory.getValue();
                     llvm::sys::path::append(
                         bindFilename,
-                            i->getParent()->getModule().getModuleName().str() +
-                            "-bind" +
-                            ".sv");
+                        i->getParent()->getModule().getModuleName().str() +
+                            "-bind" + ".sv");
                   }
 
                   instance->setAttr("output_file",
