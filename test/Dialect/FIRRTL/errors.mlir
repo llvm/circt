@@ -3205,7 +3205,7 @@ firrtl.circuit "AnonDomainPointingAtNonDomain" {
   firrtl.extmodule @Foo()
   firrtl.module @UndefinedDomainInAnonDomain() {
     // expected-error @below {{references undefined domain '@Foo'}}
-    %0 = firrtl.domain.anon @Foo : !firrtl.domain
+    %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
 
@@ -3214,6 +3214,6 @@ firrtl.circuit "AnonDomainPointingAtNonDomain" {
 firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
     // expected-error @below {{references undefined domain '@Foo'}}
-    %0 = firrtl.domain.anon @Foo : !firrtl.domain
+    %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }

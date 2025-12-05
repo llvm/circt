@@ -1009,4 +1009,20 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %O, %ext_O
   }
 
+  // Test that anonymous domain create ops and their defines are elided.
+  firrtl.extmodule @AnonymousDomains_Foo(
+    in A: !firrtl.domain of @ClockDomain
+  )
+  // CHECK-LABEL: module AnonymousDomains :
+  firrtl.module @AnonymousDomains() {
+    // CHECK-NEXT: inst foo of AnonymousDomains_Foo
+    %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    %foo_A = firrtl.instance foo @AnonymousDomains_Foo(
+      in A: !firrtl.domain of @ClockDomain
+    )
+    firrtl.domain.define %foo_A, %0
+    // CHECK-NEXT: wire end : UInt<1>
+    %end = firrtl.wire : !firrtl.uint<1>
+  }
+
 }

@@ -4250,6 +4250,8 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
     if (auto instance = dyn_cast<InstanceChoiceOp>(op))
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
+    if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
+      return anonDomain.getDomainAttr();
     return {};
   }
 
@@ -7027,6 +7029,30 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 //===----------------------------------------------------------------------===//
 // Domain operations
 //===----------------------------------------------------------------------===//
+
+void DomainCreateAnonOp::print(OpAsmPrinter &p) {
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"domain"});
+  p << " : ";
+  p.printType(getType());
+  p << " of ";
+  p.printAttributeWithoutType(getDomainAttr());
+}
+
+ParseResult DomainCreateAnonOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  Type type;
+  StringAttr domainKind;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type) || parser.parseKeyword("of") ||
+      parser.parseSymbolName(domainKind))
+    return failure();
+
+  auto domain = FlatSymbolRefAttr::get(result.getContext(), domainKind);
+  result.getOrAddProperties<Properties>().setDomain(domain);
+  result.addTypes(type);
+
+  return success();
+}
 
 LogicalResult
 DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {

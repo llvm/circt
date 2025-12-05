@@ -110,6 +110,7 @@ struct Emitter {
   void emitStatement(RefReleaseInitialOp op);
   void emitStatement(LayerBlockOp op);
   void emitStatement(GenericIntrinsicOp op);
+  void emitStatement(DomainCreateAnonOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -755,7 +756,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
               CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
               DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
               RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
-              GenericIntrinsicOp>([&](auto op) { emitStatement(op); })
+              GenericIntrinsicOp, DomainCreateAnonOp>(
+            [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -1285,6 +1287,10 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
 }
 
 void Emitter::emitStatement(DomainDefineOp op) {
+  // If the source is an anonymous domain, then we can skip emitting this op.
+  if (isa_and_nonnull<DomainCreateAnonOp>(op.getSrc().getDefiningOp()))
+    return;
+
   startStatement();
   emitAssignLike([&]() { emitExpression(op.getDest()); },
                  [&]() { emitExpression(op.getSrc()); }, PPExtString("="),
@@ -1390,6 +1396,10 @@ void Emitter::emitStatement(GenericIntrinsicOp op) {
                    [&]() { emitGenericIntrinsic(op); });
   }
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(DomainCreateAnonOp op) {
+  // These ops are not emitted.
 }
 
 void Emitter::emitExpression(Value value) {
