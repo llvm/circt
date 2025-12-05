@@ -51,6 +51,21 @@ using namespace chirrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Helper to print domain kind: " of @Symbol"
+static void printDomainKind(OpAsmPrinter &p, FlatSymbolRefAttr domainKind) {
+  p << " of " << domainKind;
+}
+
+/// Helper to parse domain kind: "of @Symbol"
+static ParseResult parseDomainKind(OpAsmParser &parser,
+                                   FlatSymbolRefAttr &domainKind) {
+  StringAttr domainName;
+  if (parser.parseKeyword("of") || parser.parseSymbolName(domainName))
+    return failure();
+  domainKind = FlatSymbolRefAttr::get(domainName);
+  return success();
+}
+
 /// Remove elements from the input array corresponding to set bits in
 /// `indicesToDrop`, returning the elements not mentioned.
 template <typename T>
@@ -1280,7 +1295,7 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
     // Print domain information.
     if (!domainInfo.empty()) {
       if (auto domainKind = dyn_cast<FlatSymbolRefAttr>(domainInfo[i])) {
-        p << " of " << domainKind;
+        printDomainKind(p, domainKind);
       } else {
         auto domains = cast<ArrayAttr>(domainInfo[i]);
         if (!domains.empty()) {
@@ -1400,12 +1415,10 @@ static ParseResult parseModulePorts(
     SmallVector<Attribute> portDomains;
     if (supportsDomains) {
       if (isa<DomainType>(portType)) {
-        if (parser.parseKeyword("of"))
+        FlatSymbolRefAttr domainKind;
+        if (parseDomainKind(parser, domainKind))
           return failure();
-        StringAttr domainKind;
-        if (parser.parseSymbolName(domainKind))
-          return failure();
-        domainsAttr = FlatSymbolRefAttr::get(context, domainKind);
+        domainsAttr = domainKind;
       } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
         auto result = parser.parseCommaSeparatedList(
             OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
@@ -7034,21 +7047,18 @@ void DomainCreateAnonOp::print(OpAsmPrinter &p) {
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"domain"});
   p << " : ";
   p.printType(getType());
-  p << " of ";
-  p.printAttributeWithoutType(getDomainAttr());
+  printDomainKind(p, getDomainAttr());
 }
 
 ParseResult DomainCreateAnonOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
   Type type;
-  StringAttr domainKind;
+  FlatSymbolRefAttr domainKind;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(type) || parser.parseKeyword("of") ||
-      parser.parseSymbolName(domainKind))
+      parser.parseType(type) || parseDomainKind(parser, domainKind))
     return failure();
 
-  auto domain = FlatSymbolRefAttr::get(result.getContext(), domainKind);
-  result.getOrAddProperties<Properties>().setDomain(domain);
+  result.getOrAddProperties<Properties>().setDomain(domainKind);
   result.addTypes(type);
 
   return success();
