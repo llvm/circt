@@ -138,16 +138,13 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 
 static bool isConstant(mlir::Value value) {
   Operation *definingOp = value.getDefiningOp();
-  if (!definingOp) {
+  if (!definingOp)
     return false;
-  }
-  if (isa<hw::ConstantOp>(definingOp)) {
+  if (isa<hw::ConstantOp>(definingOp))
     return true;
-  }
-  if (auto muxOp = dyn_cast<MuxOp>(definingOp)) {
+  if (auto muxOp = dyn_cast<MuxOp>(definingOp))
     return isConstant(muxOp.getTrueValue()) &&
            isConstant(muxOp.getFalseValue());
-  }
   return false;
 }
 
@@ -309,7 +306,7 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
   return frozenPatterns;
 }
 
-static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
+static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
                                HWModuleOp moduleOp, size_t currentStateIndex,
                                llvm::SmallVector<seq::CompRegOp> registers,
                                OpBuilder opBuilder, bool isInitialState) {
@@ -375,7 +372,7 @@ static void getReachableStates(llvm::DenseSet<size_t> &vistableStates,
     }
 
     int i = regMapToInt(registers, m);
-    vistableStates.insert(i);
+    visitableStates.insert(i);
   }
 
   clonedBody.erase();
@@ -468,7 +465,7 @@ public:
       }
       auto variableOp = opBuilder.create<VariableOp>(
           varReg->getLoc(), varReg.getInput().getType(),
-          definingConstant.getValueAttr(), varReg.getName().value_or("a"));
+          definingConstant.getValueAttr(), varReg.getName().value_or("var"));
       variableMap[varReg] = variableOp;
     }
 
@@ -511,7 +508,7 @@ public:
 
       auto *terminator = outputRegion.front().getTerminator();
       auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
-      assert(hwOutputOp && "expected terminator to be hw.output op");
+      assert(hwOutputOp && "Expected terminator to be hw.output op");
 
       // Position the builder to insert the new terminator right before the
       // old one.
@@ -539,26 +536,23 @@ public:
       for (auto const &[originalRegValue, constStateValue] : stateMap) {
         //  Find the cloned register's result value using the mapping.
         Value clonedRegValue = mapping.lookup(originalRegValue);
-        assert(clonedRegValue && "Original register value not found in "
-                                 "mapping; this is an internal error.");
+        assert(clonedRegValue &&
+               "Original register value not found in mapping");
         Operation *clonedRegOp = clonedRegValue.getDefiningOp();
 
-        assert(clonedRegOp && "Cloned value must have a defining op.");
+        assert(clonedRegOp && "Cloned value must have a defining op");
         opBuilder.setInsertionPoint(clonedRegOp);
         auto r = dyn_cast<seq::CompRegOp>(clonedRegOp);
-        assert(r && "Must be a register.");
+        assert(r && "Must be a register");
         TypedValue<IntegerType> registerReset = r.getReset();
-        if (registerReset) { // Ensure the register has a reset.
+        if (registerReset) {
           if (BlockArgument blockArg =
                   mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
             asyncResetArguments.insert(blockArg.getArgNumber());
-            // blockArg.dump();
             auto falseConst = opBuilder.create<hw::ConstantOp>(
                 blockArg.getLoc(), clonedRegValue.getType(), 0);
             blockArg.replaceAllUsesWith(falseConst.getResult());
-            // Check if this argument belongs to the top-level module block.
           }
-          // also check for rst_ni case, because OpenTitan uses ni.
           if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
             if (xorOp.isBinaryNot()) {
               mlir::Value rhs = xorOp.getOperand(0);
@@ -572,39 +566,26 @@ public:
             }
           }
         }
-        // Create the hw.constant operation for the specific state value.
         auto constantOp = opBuilder.create<hw::ConstantOp>(
             clonedRegValue.getLoc(), clonedRegValue.getType(), constStateValue);
-
-        // Replace all uses of the cloned register's result with the new
-        // constant.
         clonedRegValue.replaceAllUsesWith(constantOp.getResult());
-
-        // Erase the now-dead cloned register operation.
-
         clonedRegOp->erase();
       }
       mlir::GreedyRewriteConfig config;
       SmallVector<Operation *> opsToProcess;
       outputRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
-      // replace references to arguments in the output block with
-      // arguments at the top level
-      // Iterate directly over the block's arguments.
+      // Replace references to arguments in the output block with
+      // arguments at the top level.
       for (auto arg : outputRegion.front().getArguments()) {
         int argIndex = arg.getArgNumber();
         mlir::BlockArgument topLevelArg =
             machine.getBody().getArgument(argIndex);
-        // Replace all uses of the old argument with the new one.
         arg.replaceAllUsesWith(topLevelArg);
       }
-      // delete the arguments from the output block
       outputRegion.front().eraseArguments(
           [](BlockArgument arg) { return true; });
-      FrozenRewritePatternSet patterns(
-          opBuilder.getContext()); // Or add specific patterns
-
-      config.setScope(&outputRegion); // IMPORTANT: Tell the rewriter the
-                                      // boundary of its work.
+      FrozenRewritePatternSet patterns(opBuilder.getContext());
+      config.setScope(&outputRegion);
 
       bool changed = false;
       LogicalResult converged = mlir::applyOpPatternsGreedily(
@@ -615,10 +596,10 @@ public:
         return failure();
       }
       mlir::Region &transitionRegion = stateOp.getTransitions();
-      llvm::DenseSet<size_t> vistableStates;
-      getReachableStates(vistableStates, moduleOp, currentStateIndex, registers,
+      llvm::DenseSet<size_t> visitableStates;
+      getReachableStates(visitableStates, moduleOp, currentStateIndex, registers,
                          opBuilder, currentStateIndex == initialStateIndex);
-      for (size_t j : vistableStates) {
+      for (size_t j : visitableStates) {
         StateOp toState;
         if (!stateToStateOp.contains(j)) {
           opBuilder.setInsertionPointToEnd(&machine.getBody().front());
@@ -645,14 +626,10 @@ public:
         mlir::Block &newGuardBlock = guardRegion.front();
         Operation *terminator = newGuardBlock.getTerminator();
         auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
-        assert(hwOutputOp && "expected terminator to be hw.output op");
-
-        // Position the builder to insert the new terminator right before
-        // the old one.
+        assert(hwOutputOp && "Expected terminator to be hw.output op");
 
         llvm::DenseMap<mlir::Value, int> toStateMap = intToRegMap(registers, j);
         SmallVector<mlir::Value> equalityChecks;
-        // check if the input to each register matches the toState
         for (auto &[originalRegValue, variableOp] : variableMap) {
           opBuilder.setInsertionPointToStart(&newGuardBlock);
           Value clonedRegValue = mapping.lookup(originalRegValue);
@@ -671,14 +648,13 @@ public:
 
           mlir::Value registerInput = r.getInput();
           TypedValue<IntegerType> registerReset = r.getReset();
-          if (registerReset) { // Ensure the register has a reset.
+          if (registerReset) {
             if (BlockArgument blockArg =
                     mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
               auto falseConst = opBuilder.create<hw::ConstantOp>(
                   blockArg.getLoc(), clonedRegValue.getType(), 0);
               blockArg.replaceAllUsesWith(falseConst.getResult());
             }
-            // also check for rst_ni case, because OpenTitan uses ni.
             if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
               if (xorOp.isBinaryNot()) {
                 mlir::Value rhs = xorOp.getOperand(0);
@@ -691,10 +667,7 @@ public:
               }
             }
           }
-          mlir::Type constantType =
-              registerInput.getType(); // Use the type of the value
-                                       // comparing against.
-
+          mlir::Type constantType = registerInput.getType();
           IntegerAttr constantAttr =
               opBuilder.getIntegerAttr(constantType, constStateValue);
           auto otherStateConstant = opBuilder.create<hw::ConstantOp>(
@@ -708,41 +681,29 @@ public:
         opBuilder.setInsertionPoint(hwOutputOp);
         auto allEqualCheck =
             opBuilder.create<AndOp>(hwOutputOp.getLoc(), equalityChecks, false);
-        // return `true` iff all registers match their value in the toState.
         opBuilder.create<fsm::ReturnOp>(hwOutputOp.getLoc(),
                                         allEqualCheck.getResult());
-
-        // Erase the old terminator.
         hwOutputOp.erase();
         for (BlockArgument arg : newGuardBlock.getArguments()) {
           int argIndex = arg.getArgNumber();
           mlir::BlockArgument topLevelArg =
               machine.getBody().getArgument(argIndex);
-          // Replace all uses of the old argument with the new one.
           arg.replaceAllUsesWith(topLevelArg);
         }
-        // delete the arguments from the output block
         newGuardBlock.eraseArguments([](BlockArgument arg) { return true; });
         llvm::DenseMap<mlir::Value, int> fromStateMap =
             intToRegMap(registers, currentStateIndex);
         for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
-          //  Find the cloned register's result value using the mapping.
           Value clonedRegValue = mapping.lookup(originalRegValue);
-          assert(clonedRegValue && "Original register value not found in "
-                                   "mapping; this is an internal error.");
+          assert(clonedRegValue &&
+                 "Original register value not found in mapping");
           Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-          assert(clonedRegOp && "Cloned value must have a defining op.");
+          assert(clonedRegOp && "Cloned value must have a defining op");
           opBuilder.setInsertionPoint(clonedRegOp);
-
-          // Create the hw.constant operation for the specific state value.
           auto constantOp = opBuilder.create<hw::ConstantOp>(
               clonedRegValue.getLoc(), clonedRegValue.getType(),
               constStateValue);
-
-          // Replace all uses of the cloned register's result with the new
-          // constant.
           clonedRegValue.replaceAllUsesWith(constantOp.getResult());
-
           clonedRegOp->erase();
         }
         mlir::Region &actionRegion = transitionOp.getAction();
@@ -762,7 +723,6 @@ public:
           }
           newActionBlock.eraseArguments([](BlockArgument arg) { return true; });
           for (auto &[originalRegValue, variableOp] : variableMap) {
-            //  Find the cloned register's result value using the mapping.
             Value clonedRegValue = mapping.lookup(originalRegValue);
             Operation *clonedRegOp = clonedRegValue.getDefiningOp();
             auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
@@ -775,34 +735,25 @@ public:
           }
           Operation *terminator = actionRegion.back().getTerminator();
           auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
-          assert(hwOutputOp && "expected terminator to be hw.output op");
+          assert(hwOutputOp && "Expected terminator to be hw.output op");
           hwOutputOp.erase();
 
           for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
             Value clonedRegValue = mapping.lookup(originalRegValue);
             Operation *clonedRegOp = clonedRegValue.getDefiningOp();
             opBuilder.setInsertionPoint(clonedRegOp);
-
-            // Create the hw.constant operation for the specific state value.
             auto constantOp = opBuilder.create<hw::ConstantOp>(
                 clonedRegValue.getLoc(), clonedRegValue.getType(),
                 constStateValue);
-
-            // Replace all uses of the cloned register's result with the new
-            // constant.
             clonedRegValue.replaceAllUsesWith(constantOp.getResult());
-
             clonedRegOp->erase();
           }
 
-          // delete the arguments from the output block
-          FrozenRewritePatternSet patterns(
-              opBuilder.getContext()); // Or add specific patterns
+          FrozenRewritePatternSet patterns(opBuilder.getContext());
           mlir::GreedyRewriteConfig config;
           SmallVector<Operation *> opsToProcess;
           actionRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
-          config.setScope(&actionRegion); // IMPORTANT: Tell the rewriter the
-                                          // boundary of its work.
+          config.setScope(&actionRegion);
 
           bool changed = false;
           LogicalResult converged = mlir::applyOpPatternsGreedily(
@@ -893,9 +844,6 @@ public:
     }
     Block &front = machine.getBody().front();
     front.eraseArguments([&](BlockArgument arg) {
-      if (asyncResetBlockArguments.contains(arg)) {
-        arg.dump();
-      }
       return asyncResetBlockArguments.contains(arg);
     });
     machine.getBody().front().eraseArguments([&](BlockArgument arg) {

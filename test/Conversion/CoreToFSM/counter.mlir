@@ -3,7 +3,7 @@
 // Test RTL-to-FSM conversion with a counter that increments based on input
 
 // CHECK-LABEL: fsm.machine @counter
-// CHECK-SAME: (%[[INP:.*]]: i1) -> (i1)
+// CHECK-SAME: (%[[INP:.*]]: i1) -> i1
 // CHECK-SAME: attributes {initialState = "state_0"}
 hw.module @counter(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output : i1){
     %c0_i2 = hw.constant 0 : i2
