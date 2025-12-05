@@ -40,7 +40,7 @@ class AssertLikeOp<string mnemonic, list<Trait> traits = []> :
     $property (`if` $enable^)? (`label` $label^)? attr-dict `:` type($property)
   }];
 
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
 }
 
 def AssertOp : AssertLikeOp<"assert"> {
@@ -79,6 +79,8 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
     $property (`if` $enable^)? `,` $edge $clock
     (`label` $label^)? attr-dict `:` type($property)
   }];
+
+  let hasCanonicalizer = true;
 }
 
 def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
