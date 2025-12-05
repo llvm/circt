@@ -459,7 +459,7 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
               clEnumValN(CompanionMode::Drop, "drop",
                 "Remove companions from the design"))
            }]>,
-    Option<"noViews", "no-views", "bool", "false", "Delete FIRRTL views">,
+    Option<"noViews", "no-views", "bool", "false", "Delete FIRRTL view intrinsics">,
   ];
   let statistics = [
     Statistic<"numViews", "num-views-created",
