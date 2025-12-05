@@ -585,8 +585,15 @@ WindowType *parseWindow(const nlohmann::json &typeJson, Context &cache) {
   for (auto &frameJson : typeJson.at("frames")) {
     WindowType::Frame frame;
     frame.name = frameJson.at("name");
-    for (auto &fieldName : frameJson.at("fields"))
-      frame.fields.push_back(fieldName.at("name"));
+    for (auto &fieldJson : frameJson.at("fields")) {
+      WindowType::Field field;
+      field.name = fieldJson.at("name");
+      if (fieldJson.contains("numItems"))
+        field.numItems = fieldJson.at("numItems");
+      if (fieldJson.contains("bulkCountWidth"))
+        field.bulkCountWidth = fieldJson.at("bulkCountWidth");
+      frame.fields.push_back(field);
+    }
     frames.push_back(frame);
   }
 
