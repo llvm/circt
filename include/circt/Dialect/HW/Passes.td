@@ -141,6 +141,11 @@ def HWBypassInnerSymbols : Pass<"hw-bypass-inner-symbols", "hw::HWModuleOp"> {
     other parts of CIRCT use, so it is opt-in and should only be used when
     the above assumptions hold.
   }];
+
+  let statistics = [
+    Statistic<"numPortsMoved", "num-ports-moved",
+              "Number of inner symbols moved from ports to wires">
+  ];
 }
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD

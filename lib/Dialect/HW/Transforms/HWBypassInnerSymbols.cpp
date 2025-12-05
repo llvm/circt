@@ -37,6 +37,8 @@ namespace {
 struct HWBypassInnerSymbolsPass
     : public impl::HWBypassInnerSymbolsBase<HWBypassInnerSymbolsPass> {
   void runOnOperation() override;
+  using HWBypassInnerSymbolsBase<
+      HWBypassInnerSymbolsPass>::HWBypassInnerSymbolsBase;
 };
 
 /// Pattern to bypass wire operations with inner symbols.
@@ -64,28 +66,36 @@ void HWBypassInnerSymbolsPass::runOnOperation() {
   // First move the inner symbol from the port to allow constprop and other
   // optimizations to cross the boundary.
   hw::ModulePortInfo portList(module.getPortList());
-  size_t outputIndex = 0;
   auto *outputOp = module.getBodyBlock()->getTerminator();
   OpBuilder builder(&getContext());
+  bool hasInnerSym = false;
+  auto moduleType = module.getModuleType();
   for (auto [index, port] : llvm::enumerate(portList)) {
-    if (auto sym = port.getSym()) {
-      // Move the symbol on port to a wire.
-      module.setPortSymbolAttr(index, {});
-      if (port.isOutput()) {
-        auto value = outputOp->getOperand(outputIndex);
-        builder.setInsertionPointAfterValue(value);
-        auto wire = WireOp::create(builder, value.getLoc(), value);
-        wire.setInnerSymAttr(sym);
-      } else {
-        auto arg = module.getBodyBlock()->getArgument(index - outputIndex);
-        builder.setInsertionPointToStart(module.getBodyBlock());
-        auto wire = WireOp::create(builder, arg.getLoc(), arg);
-        wire.setInnerSymAttr(sym);
-      }
+    auto sym = port.getSym();
+    if (!sym)
+      continue;
+    hasInnerSym = true;
+    ++numPortsMoved;
+    if (port.isOutput()) {
+      auto value = outputOp->getOperand(moduleType.getOutputIdForPortId(index));
+      builder.setInsertionPointAfterValue(value);
+      auto wire = WireOp::create(builder, value.getLoc(), value);
+      wire.setInnerSymAttr(sym);
+    } else {
+      auto arg = module.getBodyBlock()->getArgument(
+          moduleType.getInputIdForPortId(index));
+      builder.setInsertionPointToStart(module.getBodyBlock());
+      auto wire = WireOp::create(builder, arg.getLoc(), arg);
+      wire.setInnerSymAttr(sym);
     }
+  }
 
-    if (port.isOutput())
-      outputIndex++;
+  if (hasInnerSym) {
+    // Bulk clear all port symbols.
+    auto innerSymAttr = StringAttr::get(
+        &getContext(), hw::HWModuleLike::getPortSymbolAttrName());
+    SmallVector<Attribute, 0> newAttrs(portList.size(), {});
+    cast<HWModuleLike>(*module).setPortAttrs(innerSymAttr, newAttrs);
   }
 
   RewritePatternSet patterns(&getContext());
