@@ -26,4 +26,3 @@ std::unique_ptr<mlir::Pass> createConvertCoreToFSMPass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_CORETOFSM_H
-

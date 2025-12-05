@@ -597,8 +597,9 @@ public:
       }
       mlir::Region &transitionRegion = stateOp.getTransitions();
       llvm::DenseSet<size_t> visitableStates;
-      getReachableStates(visitableStates, moduleOp, currentStateIndex, registers,
-                         opBuilder, currentStateIndex == initialStateIndex);
+      getReachableStates(visitableStates, moduleOp, currentStateIndex,
+                         registers, opBuilder,
+                         currentStateIndex == initialStateIndex);
       for (size_t j : visitableStates) {
         StateOp toState;
         if (!stateToStateOp.contains(j)) {
