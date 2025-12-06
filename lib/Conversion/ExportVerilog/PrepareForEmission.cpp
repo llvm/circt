@@ -779,8 +779,11 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
 /// After the legalization, we are able to know accurate verilog AST structures.
 /// So this function walks and prettifies verilog IR with a heuristic method
 /// specified by `options.wireSpillingHeuristic` based on the structures.
+/// Also move the declarations to the top of the block when
+/// `disallowDeclAssignments` is set.
 static void prettifyAfterLegalization(
-    Block &block, EmittedExpressionStateManager &expressionStateManager) {
+    Block &block, const LoweringOptions &options,
+    EmittedExpressionStateManager &expressionStateManager) {
   // TODO: Handle procedural regions as well.
   if (block.getParentOp()->hasTrait<ProceduralRegion>())
     return;
@@ -794,11 +797,20 @@ static void prettifyAfterLegalization(
     }
   }
 
-  for (auto &op : block) {
+  // Recursively process nested regions, and move declarations to the top of the
+  // block when `disallowDeclAssignments` is set.
+  Operation *insertionPoint = block.empty() ? nullptr : &block.front();
+  for (auto &op : llvm::make_early_inc_range(block)) {
     // If the operations has regions, visit each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prettifyAfterLegalization(region.front(), expressionStateManager);
+        prettifyAfterLegalization(region.front(), options,
+                                  expressionStateManager);
+    }
+
+    if (options.disallowDeclAssignments && isMovableDeclaration(&op)) {
+      op.moveBefore(insertionPoint);
+      insertionPoint = op.getNextNode();
     }
   }
 }
@@ -1384,7 +1396,8 @@ LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
 
   EmittedExpressionStateManager expressionStateManager(options);
   // Spill wires to prettify verilog outputs.
-  prettifyAfterLegalization(*module.getBodyBlock(), expressionStateManager);
+  prettifyAfterLegalization(*module.getBodyBlock(), options,
+                            expressionStateManager);
 
   return success();
 }
