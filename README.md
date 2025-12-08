@@ -64,12 +64,12 @@ cd circt
 # Configure the build
 cmake -G Ninja llvm/llvm -B build \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
--DLLVM_ENABLE_ASSERTIONS=ON \
--DLLVM_TARGETS_TO_BUILD=host \
--DLLVM_ENABLE_PROJECTS=mlir \
--DLLVM_EXTERNAL_PROJECTS=circt \
--DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
--DLLVM_ENABLE_LLD=ON
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_TARGETS_TO_BUILD=host \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
+    -DLLVM_ENABLE_LLD=ON
 ```
 
 If you want to build everything about the CIRCT tools and libraries, run below command(also runs all tests):
