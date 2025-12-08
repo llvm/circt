@@ -391,8 +391,7 @@ LogicalResult unify(Term *lhs, Term *rhs) {
 }
 
 void solve(Term *lhs, Term *rhs) {
-  auto result = unify(lhs, rhs);
-  (void)result;
+  [[maybe_unused]] auto result = unify(lhs, rhs);
   assert(result.succeeded());
 }
 
@@ -530,6 +529,20 @@ Term *getTermForDomain(TermAllocator &allocator, DomainTable &table,
   auto *term = allocator.allocVar();
   table.setTermForDomain(value, term);
   return term;
+}
+
+void processDomainDefinition(TermAllocator &allocator, DomainTable &table,
+                             Value domain) {
+  assert(isa<DomainType>(domain.getType()));
+  auto *newTerm = allocator.allocVal(domain);
+  auto *oldTerm = table.getOptTermForDomain(domain);
+  if (!oldTerm) {
+    table.setTermForDomain(domain, newTerm);
+    return;
+  }
+
+  [[maybe_unused]] auto result = unify(oldTerm, newTerm);
+  assert(result.succeeded());
 }
 
 /// Get the row of domains that a hardware value in the IR is associated with.
@@ -680,9 +693,8 @@ LogicalResult processModulePorts(const DomainInfo &info,
     if (isa<DomainType>(port.getType())) {
       auto typeID = info.getDomainTypeID(domainInfo, i);
       domainTypeIDTable[i] = typeID;
-      if (module.getPortDirection(i) == Direction::In) {
-        table.setTermForDomain(port, allocator.allocVal(port));
-      }
+      if (module.getPortDirection(i) == Direction::In)
+        processDomainDefinition(allocator, table, port);
       continue;
     }
 
@@ -723,12 +735,8 @@ LogicalResult processInstancePorts(const DomainInfo &info,
     if (isa<DomainType>(port.getType())) {
       auto typeID = info.getDomainTypeID(domainInfo, i);
       domainPortTypeIDTable[i] = typeID;
-      if (op.getPortDirection(i) == Direction::Out) {
-        table.setTermForDomain(port, allocator.allocVal(port));
-      } else {
-        table.setTermForDomain(port, allocator.allocVar());
-      }
-      continue;
+      if (op.getPortDirection(i) == Direction::Out)
+        processDomainDefinition(allocator, table, port);
     }
 
     if (!isa<FIRRTLBaseType>(port.getType()))
@@ -1019,10 +1027,10 @@ void getUpdatesForDomainAssociationOfPort(const DomainInfo &info, Namespace &ns,
                                          ip, loc, find(term), exports);
 }
 
-void getUpdatesForModulePorts(const DomainInfo &info, Namespace &ns,
-                              TermAllocator &allocator,
+void getUpdatesForModulePorts(const DomainInfo &info, TermAllocator &allocator,
                               const ExportTable &exports, DomainTable &table,
-                              FModuleOp module, PendingUpdates &pending) {
+                              Namespace &ns, FModuleOp module,
+                              PendingUpdates &pending) {
   for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
     auto port = module.getArgument(i);
     auto type = port.getType();
@@ -1038,16 +1046,17 @@ void getUpdatesForModulePorts(const DomainInfo &info, Namespace &ns,
 /// is unsolved, solve the variable by adding an input port to the pending
 /// updates.
 template <typename T>
-void getUpdatesForInstance(const DomainInfo &info, const DomainTable &table,
-                           Namespace &ns, size_t ip, PendingUpdates &pending,
-                           T op) {
+void getUpdatesForInstance(const DomainInfo &info, TermAllocator &allocator,
+                           DomainTable &table, Namespace &ns, size_t ip,
+                           PendingUpdates &pending, T op) {
   for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
     auto result = op.getResult(i);
     if (!isa<DomainType>(result.getType()) ||
         op.getPortDirection(i) == Direction::Out)
       continue;
 
-    auto *var = dyn_cast<VariableTerm>(table.getTermForDomain(result));
+    auto *term = getTermForDomain(allocator, table, result);
+    auto *var = dyn_cast<VariableTerm>(term);
     if (!var)
       continue;
 
@@ -1057,21 +1066,21 @@ void getUpdatesForInstance(const DomainInfo &info, const DomainTable &table,
   }
 }
 
-void getUpdatesForOp(const DomainInfo &info, const DomainTable &table,
-                     Namespace &ns, size_t ip, PendingUpdates &pending,
-                     Operation *op) {
+void getUpdatesForOp(const DomainInfo &info, TermAllocator &allocator,
+                     DomainTable &table, Namespace &ns, size_t ip,
+                     PendingUpdates &pending, Operation *op) {
   if (auto inst = dyn_cast<InstanceOp>(op))
-    return getUpdatesForInstance(info, table, ns, ip, pending, inst);
+    return getUpdatesForInstance(info, allocator, table, ns, ip, pending, inst);
   if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return getUpdatesForInstance(info, table, ns, ip, pending, inst);
+    return getUpdatesForInstance(info, allocator, table, ns, ip, pending, inst);
 }
 
-void getUpdatesForModuleBody(const DomainInfo &info, const DomainTable &table,
-                             Namespace &ns, FModuleOp mod,
+void getUpdatesForModuleBody(const DomainInfo &info, TermAllocator &allocator,
+                             DomainTable &table, Namespace &ns, FModuleOp mod,
                              PendingUpdates &pending) {
   auto ip = mod.getNumPorts();
   mod->walk([&](Operation *op) {
-    getUpdatesForOp(info, table, ns, ip, pending, op);
+    getUpdatesForOp(info, allocator, table, ns, ip, pending, op);
   });
 }
 
@@ -1082,9 +1091,8 @@ void getUpdatesForModule(const DomainInfo &info, TermAllocator &allocator,
   auto names = mod.getPortNamesAttr();
   for (auto name : names.getAsRange<StringAttr>())
     ns.add(name);
-
-  getUpdatesForModulePorts(info, ns, allocator, exports, table, mod, pending);
-  getUpdatesForModuleBody(info, table, ns, mod, pending);
+  getUpdatesForModulePorts(info, allocator, exports, table, ns, mod, pending);
+  getUpdatesForModuleBody(info, allocator, table, ns, mod, pending);
 }
 
 void applyUpdatesToModule(const DomainInfo &info, TermAllocator &allocator,
@@ -1476,7 +1484,6 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
 
   return updateModuleBody(table, module);
 }
-
 
 LogicalResult runOnModuleLike(InferDomainsMode mode, const DomainInfo &info,
                               ModuleUpdateTable &updateTable, Operation *op) {
