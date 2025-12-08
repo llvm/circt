@@ -7043,27 +7043,6 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 // Domain operations
 //===----------------------------------------------------------------------===//
 
-void DomainCreateAnonOp::print(OpAsmPrinter &p) {
-  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"domain"});
-  p << " : ";
-  p.printType(getType());
-  printDomainKind(p, getDomainAttr());
-}
-
-ParseResult DomainCreateAnonOp::parse(OpAsmParser &parser,
-                                      OperationState &result) {
-  Type type;
-  FlatSymbolRefAttr domainKind;
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(type) || parseDomainKind(parser, domainKind))
-    return failure();
-
-  result.getOrAddProperties<Properties>().setDomain(domainKind);
-  result.addTypes(type);
-
-  return success();
-}
-
 LogicalResult
 DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
