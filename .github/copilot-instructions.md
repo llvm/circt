@@ -16,4 +16,5 @@
   ```
 - Build everything with `ninja -C build check-circt`; use `ninja -C build bin/circt-opt` or `ninja -C build bin/firtool` for tool-only builds.
 - Keep Python bindings enabled when needed via `-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON`.
+- For PyCDE and the ESI runtime, add `-DCIRCT_ENABLE_FRONTENDS=PyCDE -DESI_RUNTIME=ON` (keep Python bindings on). Test with `ninja -C build check-pycde` and `ninja -C build check-pycde-integration` (the integration tests exercise both PyCDE and the ESI runtime and are the only ESIRuntime tests).
 - Prefer the integration image and the setup steps workflow for reliable dependencies; only fall back to host builds when explicitly requested.
