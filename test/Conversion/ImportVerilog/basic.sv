@@ -2419,10 +2419,10 @@ module ConcurrentAssert(input clk);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
+    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 0, 0 : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
     // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 0, 0 : i1
+    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[PRE:.*]] [[CONV_B]], 0, 0 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]] : !ltl.sequence, !ltl.sequence
     // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2431,13 +2431,13 @@ module ConcurrentAssert(input clk);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
+    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 0, 0 : i1
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
     // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 1 : i1
+    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[PRE:.*]] [[CONV_B]], 1 : i1
     // CHECK: [[READ_A2:%.+]] = moore.read [[A]] : <i1>
     // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_bool [[READ_A2]] : i1
-    // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_A2]], 3, 2 : i1
+    // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A2]], 3, 2 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]], [[DELAY_A2]] : !ltl.sequence, !ltl.sequence, !ltl.sequence
     // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
     // CHECK: moore.return
@@ -2480,7 +2480,7 @@ module ConcurrentAssert(input clk);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 1, 0 : i1
     // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
     // CHECK: moore.return
   // CHECK: }
@@ -2488,7 +2488,7 @@ module ConcurrentAssert(input clk);
   // CHECK: moore.procedure always
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 5, 0 : i1
+    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 5, 0 : i1
     // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
     // CHECK: moore.return
   // CHECK: }
@@ -2543,8 +2543,8 @@ module ConcurrentAssert(input clk);
     // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[CONST_T:%.+]] = hw.constant true
     // CHECK: [[REPEAT_T:%.+]] = ltl.repeat [[CONST_T]], 0 : i1
-    // CHECK: [[DELAY_RT:%.+]] = ltl.delay [[REPEAT_T]], 1, 0 : !ltl.sequence
-    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+    // CHECK: [[DELAY_RT:%.+]] = ltl.delay [[PRE:.*]] [[REPEAT_T]], 1, 0 : !ltl.sequence
+    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 1, 0 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_RT]], [[DELAY_A]], [[CONST_T]] : !ltl.sequence, !ltl.sequence, i1
     // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
     // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
@@ -2614,7 +2614,7 @@ module ConcurrentAssert(input clk);
     // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
     // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[CONST_T:%.+]] = hw.constant true
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 1, 0 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
     // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
     // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
@@ -2640,7 +2640,7 @@ module ConcurrentAssert(input clk);
     // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
     // CHECK: [[CONST_T:%.+]] = hw.constant true
     // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[PRE:.*]] [[CONV_A]], 1, 0 : i1
     // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
     // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[NOT_OP]] : !ltl.sequence, !ltl.property
     // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
@@ -2665,10 +2665,10 @@ module ConcurrentAssert(input clk);
   // CHECK: moore.procedure always {
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
     // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
+    // CHECK: [[DA:%.+]] = ltl.delay [[PRE:.*]] [[A]], 0, 0 : i1
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
     // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
+    // CHECK: [[DB:%.+]] = ltl.delay [[PRE:.*]] [[B]], 1, 0 : i1
     // CHECK: [[RES:%.+]] = ltl.concat %6, %9 : !ltl.sequence, !ltl.sequence
     // CHECK: verif.assert [[RES]] : !ltl.sequence
     // CHECK: moore.return
@@ -2685,8 +2685,8 @@ module ConcurrentAssert(input clk);
     // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
     // CHECK: [[TRUE:%.+]] = hw.constant true
     // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
-    // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP3:%.+]] = ltl.delay [[B]], 1, 0 : i1
+    // CHECK: [[OP2:%.+]] = ltl.delay [[PRE:.*]] [[OP1]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP3:%.+]] = ltl.delay [[PRE:.*]] [[B]], 1, 0 : i1
     // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
     // CHECK: [[RES:%.+]] = ltl.intersect [[OP4]], [[A]] : !ltl.sequence, i1
     // CHECK: verif.assert [[RES]] : !ltl.sequence
@@ -2700,10 +2700,10 @@ module ConcurrentAssert(input clk);
   // CHECK: moore.procedure always {
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
     // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
+    // CHECK: [[DA:%.+]] = ltl.delay [[PRE:.*]] [[A]], 0, 0 : i1
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
     // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
+    // CHECK: [[DB:%.+]] = ltl.delay [[PRE:.*]] [[B]], 1, 0 : i1
     // CHECK: [[OP1:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
     // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
     // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
@@ -2725,14 +2725,14 @@ module ConcurrentAssert(input clk);
     // CHECK: [[B1:%.+]] = moore.to_builtin_bool [[TMP]] : l1
     // CHECK: [[TRUE:%.+]] = hw.constant true
     // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
-    // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP3:%.+]] = ltl.delay [[A2]], 1, 0 : i1
+    // CHECK: [[OP2:%.+]] = ltl.delay [[PRE:.*]] [[OP1]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP3:%.+]] = ltl.delay [[PRE:.*]] [[A2]], 1, 0 : i1
     // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
     // CHECK: [[OP5:%.+]] = ltl.intersect [[OP4]], [[B1]] : !ltl.sequence, i1
     // CHECK: [[TRUE1:%.+]] = hw.constant true
     // CHECK: [[OP6:%.+]] = ltl.repeat [[TRUE1]], 0 : i1
-    // CHECK: [[OP7:%.+]] = ltl.delay [[OP6]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP8:%.+]] = ltl.delay [[A1]], 1, 0 : i1
+    // CHECK: [[OP7:%.+]] = ltl.delay [[PRE:.*]] [[OP6]], 1, 0 : !ltl.sequence
+    // CHECK: [[OP8:%.+]] = ltl.delay [[PRE:.*]] [[A1]], 1, 0 : i1
     // CHECK: [[OP9:%.+]] = ltl.concat [[OP7]], [[OP8]], [[TRUE1]] : !ltl.sequence, !ltl.sequence, i1
     // CHECK: [[OP10:%.+]] = ltl.intersect [[OP9]], [[OP5]] : !ltl.sequence, !ltl.sequence
     // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
