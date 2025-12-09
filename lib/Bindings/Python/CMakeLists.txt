@@ -58,9 +58,11 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPITransforms
   CIRCTCAPISynth
   MLIRCAPIIndex
+  MLIRCAPILLVM
   MLIRCAPISMT
   MLIRCAPIExportSMTLIB
   MLIRCAPISCF
+  MLIRCAPITarget
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -320,6 +322,7 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonSources.Dialects.llvm
     MLIRPythonSources.Dialects.smt
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
