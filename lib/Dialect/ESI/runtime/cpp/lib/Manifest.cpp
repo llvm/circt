@@ -16,7 +16,10 @@
 #include "esi/Accelerator.h"
 #include "esi/Services.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcovered-switch-default"
 #include <nlohmann/json.hpp>
+#pragma GCC diagnostic pop
 #include <sstream>
 
 using namespace ::esi;

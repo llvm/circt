@@ -21,7 +21,10 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcovered-switch-default"
 #include <nlohmann/json.hpp>
+#pragma GCC diagnostic pop
 #include <stdexcept>
 #include <string>
 
