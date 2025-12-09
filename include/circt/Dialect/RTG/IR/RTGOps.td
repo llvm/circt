@@ -1020,6 +1020,14 @@ def SpaceOp : RTGISAOp<"space", []> {
   let assemblyFormat = "$size attr-dict";
 }
 
+def StringDataOp : RTGISAOp<"string_data", []> {
+  let summary = "reserve the given number of bytes";
+
+  let arguments = (ins StrAttr:$data);
+
+  let assemblyFormat = "$data attr-dict";
+}
+
 def SegmentKindAttr : I32EnumAttr<"SegmentKind", "kind of segment", [
   I32EnumAttrCase<"Data", 0, "data">,
   I32EnumAttrCase<"Text", 1, "text">

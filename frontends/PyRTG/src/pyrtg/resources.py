@@ -175,3 +175,13 @@ class IntegerRegisterType(Type):
 
   def _codegen(self):
     return rtgtest.IntegerRegisterType.get()
+
+
+def virtual_register_of_type(ty: Type) -> Value:
+  """
+  Creates a virtual register of the given type.
+  """
+
+  if ty == IntegerRegisterType():
+    return IntegerRegister.virtual() 
+  raise NotImplementedError(f'virtual register of type {ty} not supported')

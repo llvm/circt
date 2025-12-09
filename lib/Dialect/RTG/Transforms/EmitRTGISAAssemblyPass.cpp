@@ -73,7 +73,7 @@ public:
 
       auto res =
           TypeSwitch<Operation *, LogicalResult>(&op)
-              .Case<InstructionOpInterface, LabelDeclOp, LabelOp, CommentOp, SpaceOp, SegmentOp>(
+              .Case<InstructionOpInterface, LabelDeclOp, LabelOp, CommentOp, SpaceOp, StringDataOp, SegmentOp>(
                   [&](auto op) { return emit(op); })
               .Default([](auto op) {
                 return op->emitError("emitter unknown RTG operation");
@@ -155,6 +155,12 @@ private:
   LogicalResult emit(SpaceOp op) {
     os << llvm::indent(4) << ".space "
        << cast<IntegerAttr>(state[op.getSize()]).getValue() << "\n";
+    return success();
+  }
+
+  LogicalResult emit(StringDataOp op) {
+    os << llvm::indent(4) << ".asciz "
+       << op.getDataAttr() << "\n";
     return success();
   }
 

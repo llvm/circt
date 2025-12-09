@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
-from .core import Type
-from .sequences import SequenceDeclaration
+from .core import Value, Type
+from .sequences import SequenceDeclaration, Sequence
 
-from typing import List, Tuple
+from typing import List, Tuple, Callable, Union
 from enum import Enum
 
 
-class SideEffects(Enum):
+class SideEffect(Enum):
   NONE = 0,
   READ = 1,
   WRITE = 2,
@@ -23,8 +23,9 @@ class Instruction(SequenceDeclaration):
   Represents an instruction sequence.
   """
 
-  def __init__(self, sequence_func, arg_types_and_side_effects: List[Tuple[Type, SideEffects]]):
+  def __init__(self, sequence_func, return_val_func: Callable[[Type], Value], arg_types_and_side_effects: List[Tuple[Type, SideEffect]]):
     super().__init__(sequence_func, [t for t, _ in arg_types_and_side_effects])
+    self.return_val_func = return_val_func
     self.side_effects = [se for _, se in arg_types_and_side_effects]
 
   def num_read_effects(self) -> int:
@@ -32,13 +33,34 @@ class Instruction(SequenceDeclaration):
     Returns the number of operands of this instruction.
     """
 
-    return self.side_effects.count(SideEffects.READ)
+    return self.side_effects.count(SideEffect.READ) + self.side_effects.count(SideEffect.READ_WRITE)
 
   def __repr__(self):
     return f"Instruction<{self.name}, {self.arg_types}, {self.side_effects}>"
+  
+  def __call__(self, *args: Value) -> Union[Value, List[Value]]:
+    new_args = []
+    results = []
+    args_iter = iter(args)
+    for arg_type, se in zip(self.arg_types, self.side_effects):
+      if se == SideEffect.WRITE:
+        reg = self.return_val_func(arg_type)
+        new_args.append(reg)
+        results.append(reg)
+      else:
+        new_args.append(next(args_iter))
+    
+    self.sequence_func(*new_args)
+
+    if len(results) == 1:
+      return results[0]
+    return results
+  
+  def as_seq(self) -> Sequence:
+    return super().get()
 
 
-def instruction(args: List[Tuple[Type, SideEffects]], **kwargs):
+def instruction(return_val_func: Callable[[Type], Value], args: List[Tuple[Type, SideEffect]], **kwargs):
   """
   Decorator for defining instructions.
 
@@ -47,6 +69,6 @@ def instruction(args: List[Tuple[Type, SideEffects]], **kwargs):
   """
 
   def wrapper(func):
-    return Instruction(func, args)
+    return Instruction(func, return_val_func, args)
 
   return wrapper

@@ -53,7 +53,7 @@ struct SequenceInliner
 
   SequenceInliner(ModuleOp moduleOp) : table(moduleOp) {}
 
-  LogicalResult inlineSequences(TestOp testOp);
+  LogicalResult inlineSequences(Block &block);
   void materializeInterleavedSequence(Value value, ArrayRef<Block *> blocks,
                                       uint32_t batchSize);
 
@@ -210,12 +210,17 @@ void SequenceInliner::materializeInterleavedSequence(Value value,
   numSequencesInterleaved += blocks.size();
 }
 
-LogicalResult SequenceInliner::inlineSequences(TestOp testOp) {
-  LLVM_DEBUG(llvm::dbgs() << "\n=== Processing test @" << testOp.getSymName()
-                          << "\n\n");
-
+LogicalResult SequenceInliner::inlineSequences(Block &block) {
+  // Make sure we inline sequences in nested regions. Walk doesn't work here
+  // because it uses 'early_inc_range' which means we'd skip sequence
+  // embeddings that we added with the previous inlining.
   SmallVector<Operation *> toDelete;
-  for (auto &op : *testOp.getBody()) {
+  for (auto &op : block) {
+    for (auto &region : op.getRegions())
+      for (auto &block : region)
+        if (failed(inlineSequences(block)))
+          return failure();
+
     auto result = dispatchOpVisitor(&op);
     if (failed(result))
       return failure();
@@ -234,9 +239,14 @@ void InlineSequencesPass::runOnOperation() {
   auto moduleOp = getOperation();
   SequenceInliner inliner(moduleOp);
 
+  // Fast-path: no sequences are defined.
+  if (moduleOp.getOps<SequenceOp>().empty())
+    return;
+
   // Inline all sequences and remove the operations that place the sequences.
+  // TODO: also inline sequences into other sequences
   for (auto testOp : moduleOp.getOps<TestOp>())
-    if (failed(inliner.inlineSequences(testOp)))
+    if (failed(inliner.inlineSequences(*testOp.getBody())))
       return signalPassFailure();
 
   numSequencesInlined = inliner.numSequencesInlined;

@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory, instruction, SideEffect, IntegerRegisterType, virtual_register_of_type
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -93,6 +93,7 @@ def seq2(set):
 
 
 # MLIR-LABEL: rtg.test @test0
+# MLIR-NEXT: rtg.test.success
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test0
@@ -112,6 +113,7 @@ def test0(config):
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
 # MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
 # MLIR-NEXT: rtg.label local
+# MLIR-NEXT: rtg.test.success
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test1_args_Tgt0
@@ -131,8 +133,6 @@ def test1_args(config):
 
 
 # MLIR-LABEL: rtg.test @test2_labels
-# MLIR-NEXT: index.constant 5
-# MLIR-NEXT: index.constant 3
 # MLIR-NEXT: index.constant 2
 # MLIR-NEXT: index.constant 1
 # MLIR-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
@@ -153,9 +153,9 @@ def test1_args(config):
 # MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx5
+# MLIR-NEXT: rtg.label_decl "L_5"
 # MLIR-NEXT: rtg.label local
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
+# MLIR-NEXT: rtg.label_decl "L_3"
 # MLIR-NEXT: rtg.label local
 
 # MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
@@ -185,7 +185,7 @@ def test1_args(config):
 # MLIR-NEXT: rtg.embed_sequence [[RAND4]]
 
 # MLIR-NEXT: rtg.comment "this is a comment"
-
+# MLIR-NEXT: rtg.test.success
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test2_labels
@@ -312,6 +312,7 @@ def test2_labels(config):
 # MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtg.test.success
 # MLIR-NEXT: }
 
 
@@ -481,6 +482,24 @@ def test93_immediate_ops(config):
   concat = Immediate.concat(imm1, imm2, imm2)
   slice = concat[8:12]
   immediate_consumer(slice)
+
+
+@instruction(virtual_register_of_type, [(IntegerRegisterType(), SideEffect.WRITE), (IntegerRegisterType(), SideEffect.READ), (IntegerRegisterType(), SideEffect.READ)])
+def add(a: IntegerRegister, b: IntegerRegister, c: IntegerRegister):
+  rtgtest.ADD(a, b, c)
+
+
+# MLIR-LABEL: rtg.test @test94_instructions
+# MLIR: [[A:%.+]] = rtg.virtual_reg
+# MLIR: rtgtest.rv32i.add [[A]], %t1, %t2
+# MLIR: [[B:%.+]] = rtg.virtual_reg
+# MLIR: rtgtest.rv32i.add [[B]], [[A]], %t3
+
+
+@test(Singleton)
+def test94_instructions(config):
+  res = add(IntegerRegister.t1(), IntegerRegister.t2())
+  add(res, IntegerRegister.t3())
 
 
 # MLIR-LABEL: rtg.sequence @seq0

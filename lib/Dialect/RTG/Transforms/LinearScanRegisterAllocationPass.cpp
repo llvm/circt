@@ -55,46 +55,53 @@ static LogicalResult collectTransitiveRegisterAllocationOperands(
         // follow results further
         LLVM_DEBUG(llvm::dbgs() << "    Found RegisterAllocationOpInterface: "
                                 << *user << "\n");
-        operands.insert({current, cast<rtg::RegisterAttrInterface>(currentAttr)});
+        operands.insert({current, cast_or_null<rtg::RegisterAttrInterface>(currentAttr)});
       } else {
         // Not a RegisterAllocationOpInterface - continue following results
         LLVM_DEBUG(llvm::dbgs() << "    Following non-RegisterAllocationOpInterface: "
                                 << *user << "\n");
         
-        // Check that all additional operands are provided by constant-like operations
-        SmallVector<Attribute> operandAttrs;
-        for (auto operand : user->getOperands()) {
-          if (operand == current) {
-            operandAttrs.push_back(currentAttr);
-            continue;
+        if (reg) {
+          // Check that all additional operands are provided by constant-like operations
+          SmallVector<Attribute> operandAttrs;
+          for (auto operand : user->getOperands()) {
+            if (operand == current) {
+              operandAttrs.push_back(currentAttr);
+              continue;
+            }
+            auto *defOp = operand.getDefiningOp();
+            if (!defOp || !defOp->hasTrait<OpTrait::ConstantLike>())
+              return operand.getDefiningOp()->emitError(
+                  "operand not provided by a constant-like operation");
+            
+            SmallVector<OpFoldResult> operandFoldResults;
+            if (failed(operand.getDefiningOp()->fold(operandFoldResults)))
+              return operand.getDefiningOp()->emitError(
+                  "folding constant like operation failed???");
+
+            operandAttrs.push_back(cast<Attribute>(operandFoldResults[0]));
           }
-          auto *defOp = operand.getDefiningOp();
-          if (!defOp || !defOp->hasTrait<OpTrait::ConstantLike>())
-            return operand.getDefiningOp()->emitError(
-                "operand not provided by a constant-like operation");
-          
-          SmallVector<OpFoldResult> operandFoldResults;
-          if (failed(operand.getDefiningOp()->fold(operandFoldResults)))
-            return operand.getDefiningOp()->emitError(
-                "folding constant like operation failed???");
 
-          operandAttrs.push_back(cast<Attribute>(operandFoldResults[0]));
-        }
-
-        // Fold the operation to get the result attribute
-        SmallVector<OpFoldResult> foldResults;
-        if (failed(user->fold(operandAttrs, foldResults))) {
-          LLVM_DEBUG(llvm::dbgs() << "    Failed to fold operation: " << *user << "\n");
-          return user->emitError("operation could not be folded");
-        }
+          // Fold the operation to get the result attribute
+          SmallVector<OpFoldResult> foldResults;
+          if (failed(user->fold(operandAttrs, foldResults))) {
+            LLVM_DEBUG(llvm::dbgs() << "    Failed to fold operation: " << *user << "\n");
+            return user->emitError("operation could not be folded");
+          }
         
-        for (auto [result, foldResult] : llvm::zip(user->getResults(), foldResults)) {
-          Attribute resultAttr = dyn_cast<Attribute>(foldResult);
-          if (!resultAttr)
-            return user->emitError("fold result is not an attribute");
-          
-          if (visited.insert({result, resultAttr}).second)
-            worklist.push_back({result, resultAttr});
+          for (auto [result, foldResult] : llvm::zip(user->getResults(), foldResults)) {
+            Attribute resultAttr = dyn_cast<Attribute>(foldResult);
+            if (!resultAttr)
+              return user->emitError("fold result is not an attribute");
+            
+            if (visited.insert({result, resultAttr}).second)
+              worklist.push_back({result, resultAttr});
+          }
+        } else {
+          for (auto result : user->getResults()) {
+            if (visited.insert({result, Attribute()}).second)
+              worklist.push_back({result, Attribute()});
+          }
         }
       }
     }
@@ -125,12 +132,40 @@ Overall Algorithm:
 
 */
 
+
 /// Represents a register and its live range.
 struct RegisterLiveRange {
+  SmallVector<std::pair<Value, rtg::RegisterAttrInterface>> dependentRegs;
+  rtg::VirtualRegisterOp virtualReg;
   rtg::RegisterAttrInterface fixedReg;
-  OpResult reg;
   unsigned start;
   unsigned end;
+};
+
+struct RegisterAllocator {
+  RegisterAllocator(rtg::SegmentOp segOp) : segOp(segOp) {}
+
+  LogicalResult allocate();
+
+private:
+  void computeOpIndices();
+  LogicalResult computeLiveRanges();
+  bool hasConflict(Value reg, rtg::RegisterAttrInterface regAttr);
+  rtg::RegisterAttrInterface findAvailableRegister(rtg::VirtualRegisterOp virtualReg);
+  FailureOr<bool> isRegisterAvailable(rtg::VirtualRegisterOp virtualReg, rtg::RegisterAttrInterface reg);
+  void computeOverlappingFixedRegisters(RegisterLiveRange *lr, DenseSet<rtg::RegisterAttrInterface> &fixedRegs);
+  RegisterLiveRange *createRange(rtg::VirtualRegisterOp op);
+  LogicalResult allocateRegisters();
+  void cleanup();
+
+private:
+  rtg::SegmentOp segOp;
+  DenseMap<Operation *, unsigned> opIndices;
+  DenseMap<rtg::VirtualRegisterOp, RegisterLiveRange *> regToLiveRange;
+  SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
+  SmallVector<RegisterLiveRange *> active;
+  DenseSet<rtg::RegisterAttrInterface> reserved;
+  SmallVector<std::pair<unsigned, rtg::RegisterAttrInterface>> reservedEndIndex;
 };
 
 class LinearScanRegisterAllocationPass
@@ -177,201 +212,298 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  DenseMap<Operation *, unsigned> opIndices;
-  unsigned maxIdx;
-  // Find Text segment and walk its operations
-  // FIXME: assumes there is exactly one such segment
-  rtg::SegmentOp textSeg;
-  getOperation()->walk([&](rtg::SegmentOp segOp) {
-    if (segOp.getKind() != rtg::SegmentKind::Text)
-      return;
-
-    LLVM_DEBUG(llvm::dbgs() << "Found text segment: " << segOp << "\n");
-    textSeg = segOp;
-    for (auto [i, op] : llvm::enumerate(*segOp.getBody())) {
-      // TODO: ideally check that the IR is already fully elaborated
-      opIndices[&op] = i;
-      maxIdx = i;
-      LLVM_DEBUG(llvm::dbgs() << "  Op " << i << ": " << op << "\n");
+  for (auto segOp : getOperation()->getRegion(0).getOps<rtg::SegmentOp>()) {
+    // Perform register allocation for all text segments in isolation. There
+    // should usually only be one such segment.
+    if (segOp.getKind() == rtg::SegmentKind::Text) {
+      RegisterAllocator allocator(segOp);
+      if (failed(allocator.allocate()))
+        return signalPassFailure();
     }
-    LLVM_DEBUG(llvm::dbgs() << "Total operations in text segment: " << (maxIdx + 1) << "\n");
-  });
+  }
+}
 
-  if (!textSeg) {
-    getOperation()->emitError("expected a text segment");
-    return signalPassFailure();
+LogicalResult RegisterAllocator::allocate() {
+  computeOpIndices();
+
+  if (failed(computeLiveRanges()) || failed(allocateRegisters()))
+    return failure();
+
+  cleanup();
+  return success();
+}
+
+void RegisterAllocator::computeOpIndices() {
+  for (auto [i, op] : llvm::enumerate(*segOp.getBody())) {
+    // TODO: ideally check that the IR is already fully elaborated
+    opIndices[&op] = i;
+    LLVM_DEBUG(llvm::dbgs() << "  Op " << i << ": " << op << "\n");
   }
 
+  LLVM_DEBUG(llvm::dbgs() << "Total operations in text segment: " << opIndices.size() << "\n");
+}
+
+/// Creates a range if the op result has users that form a range. Returns
+/// 'nullptr' if no range was created.
+RegisterLiveRange *RegisterAllocator::createRange(rtg::VirtualRegisterOp op) {
+  LLVM_DEBUG(llvm::dbgs() << "Processing virtual register: " << op << "\n");
+
+  auto &lr = regRanges.emplace_back(std::make_unique<RegisterLiveRange>());
+  lr->start = opIndices.size();
+  lr->end = 0;
+  lr->virtualReg = op;
+  
+  SetVector<std::pair<Value, rtg::RegisterAttrInterface>> registers;
+  if (failed(collectTransitiveRegisterAllocationOperands(op.getResult(), {}, registers)))
+    return nullptr;
+
+  bool hasUser = false;
+  for (auto *user : op->getUsers()) {
+    if (!isa<rtg::RegisterAllocationOpInterface>(user))
+      continue;
+
+    // TODO: support labels and control-flow loops (jumps in general)
+    unsigned idx = opIndices.at(user);
+    LLVM_DEBUG(llvm::dbgs() << "  User at index " << idx << ": " << *user << "\n");
+    lr->start = std::min(lr->start, idx);
+    lr->end = std::max(lr->end, idx);
+    hasUser = true;
+  }
+  for (auto [reg, regAttr] : registers) {
+    lr->dependentRegs.emplace_back(reg, rtg::RegisterAttrInterface());
+
+    for (auto *user : reg.getUsers()) {
+      if (!isa<rtg::RegisterAllocationOpInterface>(user))
+        continue;
+
+      // TODO: support labels and control-flow loops (jumps in general)
+      unsigned idx = opIndices.at(user);
+      LLVM_DEBUG(llvm::dbgs() << "  User at index " << idx << ": " << *user << "\n");
+      lr->start = std::min(lr->start, idx);
+      lr->end = std::max(lr->end, idx);
+      hasUser = true;
+    }
+  }
+
+  if (!hasUser) {
+    LLVM_DEBUG(llvm::dbgs() << "  No RegisterAllocationOpInterface users, removing range\n");
+    regRanges.pop_back();
+    return nullptr;
+  }
+
+  LLVM_DEBUG(llvm::dbgs() << "  Live range: [" << lr->start << ", " << lr->end << "]\n");
+  return lr.get();
+}
+
+LogicalResult RegisterAllocator::computeLiveRanges() {
   // Collect all the register intervals we have to consider.
   LLVM_DEBUG(llvm::dbgs() << "\nCollecting register live ranges...\n");
-  SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
-  SmallVector<RegisterLiveRange *> active;
-  for (auto &op : *textSeg.getBody()) {
-    for (auto result : op.getResults()) {
-      if (!isa<rtg::RegisterTypeInterface>(result.getType()))
-        continue;
+  for (auto op : segOp.getBody()->getOps<rtg::ConstantOp>()) {
+    auto reg = dyn_cast<rtg::RegisterAttrInterface>(op.getValue());
+    if (!reg)
+      continue;
 
-      LLVM_DEBUG(llvm::dbgs() << "Processing register result: " << result
-                              << " from op: " << op << "\n");
-      auto &lr = regRanges.emplace_back(std::make_unique<RegisterLiveRange>());
-      lr->start = maxIdx;
-      lr->end = 0;
-      lr->reg = result;
-     
-      bool hasUser = false;
-      for (auto *user : op.getUsers()) {
-        if (!isa<rtg::RegisterAllocationOpInterface>(user))
-          continue;
+    reserved.insert(reg);
 
-        // TODO: support labels and control-flow loops (jumps in general)
-        unsigned idx = opIndices.at(user);
-        LLVM_DEBUG(llvm::dbgs() << "  User at index " << idx << ": " << *user << "\n");
-        lr->start = std::min(lr->start, idx);
-        lr->end = std::max(lr->end, idx);
-        hasUser = true;
-      }
+    unsigned maxIdx = 0;
+    for (auto *user : op->getUsers())
+      maxIdx = std::max(maxIdx, opIndices.at(user));
+    reservedEndIndex.emplace_back(maxIdx, reg);
 
-      if (!hasUser) {
-        LLVM_DEBUG(llvm::dbgs() << "  No RegisterAllocationOpInterface users, removing range\n");
-        regRanges.pop_back();
-        continue;
-      }
+    LLVM_DEBUG(llvm::dbgs() << "  Added fixed register to active list: " << reg << "\n");
+  }
 
-      LLVM_DEBUG(llvm::dbgs() << "  Live range: [" << lr->start << ", " << lr->end << "]\n");
+  llvm::sort(reservedEndIndex, [](auto &a, auto &b) { return a.first < b.first; });
 
-      if (auto regOp = dyn_cast<rtg::ConstantOp>(&op)) {
-        auto reg = dyn_cast<rtg::RegisterAttrInterface>(regOp.getValue());
-        if (!reg) {
-          op.emitError("expected register attribute");
-          return signalPassFailure();
-        }
-        lr->fixedReg = reg;
-        LLVM_DEBUG(llvm::dbgs() << "  Fixed register: " << reg << "\n");
+  for (auto op : segOp.getBody()->getOps<rtg::VirtualRegisterOp>()) {
+    auto *lr = createRange(op);
+    if (!lr)
+      continue;
 
-        // Reserve fixed registers from the start. It will be made available again
-        // past the interval end. Not reserving it from the start can lead to the
-        // same register being chosen for a virtual register that overlaps with the
-        // fixed register interval.
-        // TODO: don't overapproximate that much
-        active.push_back(lr.get());
-        LLVM_DEBUG(llvm::dbgs() << "  Added fixed register to active list\n");
-      }
-    }
+    regToLiveRange[op] = lr;
+
+    // if (auto regOp = dyn_cast<rtg::ConstantOp>(op)) {
+    //   auto reg = dyn_cast<rtg::RegisterAttrInterface>(regOp.getValue());
+    //   if (!reg)
+    //     return op.emitError("expected register attribute");
+      
+    //   lr->fixedReg = reg;
+    //   LLVM_DEBUG(llvm::dbgs() << "  Fixed register: " << reg << "\n");
+
+    //   // Reserve fixed registers from the start. It will be made available again
+    //   // past the interval end. Not reserving it from the start can lead to the
+    //   // same register being chosen for a virtual register that overlaps with the
+    //   // fixed register interval.
+    //   // TODO: don't overapproximate that much
+    //   active.push_back(lr);
+    //   LLVM_DEBUG(llvm::dbgs() << "  Added fixed register to active list\n");
+    // }
   }
 
   // Sort such that we can process registers by increasing interval start.
   LLVM_DEBUG(llvm::dbgs() << "\nSorting " << regRanges.size() << " register ranges by start time\n");
   llvm::sort(regRanges, [](const auto &a, const auto &b) {
-    return a->start < b->start || (a->start == b->start && !isa<rtg::VirtualRegisterOp>(a->reg.getOwner()));
+    return a->start < b->start || (a->start == b->start && !a->virtualReg);
   });
 
-  LLVM_DEBUG(llvm::dbgs() << "\nStarting register allocation...\n");
+  return success();
+}
+
+bool RegisterAllocator::hasConflict(Value reg, rtg::RegisterAttrInterface regAttr) {
+  // LLVM_DEBUG(llvm::dbgs() << "      Processing register value: " << reg
+  //                         << " with attr: " << regAttr << "\n");
+  // auto *lr = regToLiveRange[reg];
+  // if (!lr) {
+  //   reg.getDefiningOp()->emitError("register value not found in live ranges");
+  //   return {};
+  // }
+
+  // // Get all live ranges that overlap with the one defined by 'reg'
+  // LLVM_DEBUG(llvm::dbgs() << "      Checking for conflicts with register " << regAttr << "\n");
+  // for (auto &otherLr : regRanges) {
+  //   if (lr == otherLr.get())
+  //     continue;
+
+  //   if (otherLr->start > lr->end)
+  //     break;
+
+  //   if (otherLr->end < lr->start)
+  //     continue;
+
+  //   LLVM_DEBUG(llvm::dbgs() << "        Overlapping range [" << otherLr->start
+  //                           << ", " << otherLr->end << "] with fixed reg: "
+  //                           << otherLr->fixedReg << "\n");
+
+  //   // Check if this overlapping range has its fixed reg set to 'regAttr'
+  //   if (otherLr->fixedReg == regAttr) {
+  //     LLVM_DEBUG(llvm::dbgs() << "      Register " << reg << " has conflicts\n");
+  //     return true;
+  //   }
+  // }
+
+  return false;
+}
+
+FailureOr<bool> RegisterAllocator::isRegisterAvailable(rtg::VirtualRegisterOp virtualReg, rtg::RegisterAttrInterface reg) {
+  LLVM_DEBUG(llvm::dbgs() << "    Trying register: " << reg << "\n");
+  
+  if (reserved.contains(reg)) {
+    LLVM_DEBUG(llvm::dbgs() << "    Register is reserved, skipping\n");
+    return false;
+  }
+
+  SetVector<std::pair<Value, rtg::RegisterAttrInterface>> registers;
+  if (failed(collectTransitiveRegisterAllocationOperands(virtualReg.getResult(), reg, registers)))
+    return failure();
+
+  for (auto [regVal, regAttr] : registers) {
+    if (reserved.contains(regAttr)) {
+      LLVM_DEBUG(llvm::dbgs() << "    Register is reserved, skipping\n");
+      return false;
+    }
+  }
+
+  if (llvm::any_of(active, [&](auto *r) {
+    if (r->fixedReg == reg)
+      return true;
+    for (auto [otherReg, otherRegAttr] : r->dependentRegs) {
+      if (!otherRegAttr)
+        break;
+      if (reg == otherRegAttr)
+        return true;
+    }
+
+    for (auto [reg, regAttr] : registers) {
+      if (regAttr == r->fixedReg)
+        return true;
+
+      for (auto [otherReg, otherRegAttr] : r->dependentRegs) {
+        if (!otherRegAttr)
+          break;
+        if (regAttr == otherRegAttr)
+          return true;
+      }
+    }
+
+    return false;
+  })) {
+    LLVM_DEBUG(llvm::dbgs() << "    Register is already active, checking conflicts\n");
+    return false;
+  }
+
+  LLVM_DEBUG(llvm::dbgs() << "    Found " << registers.size()
+                          << " transitive register allocation operands\n");
+  
+  if (regToLiveRange[virtualReg]->fixedReg && regToLiveRange[virtualReg]->fixedReg != reg)
+    return virtualReg.emitError("register already fixed to other register value ") << regToLiveRange[virtualReg]->fixedReg << " vs " << reg << "\n";
+
+  LLVM_DEBUG(llvm::dbgs() << "      Assigning register " << reg
+                          << " to value " << reg << "\n");
+  auto *lr = regToLiveRange[virtualReg];
+  lr->fixedReg = reg;
+  lr->dependentRegs = SmallVector<std::pair<Value, rtg::RegisterAttrInterface>>(registers.getArrayRef());
+  
+  return true;
+}
+
+void RegisterAllocator::computeOverlappingFixedRegisters(RegisterLiveRange *lr, DenseSet<rtg::RegisterAttrInterface> &fixedRegs) {
+  for (auto &otherLr : regRanges) {
+    if (lr == otherLr.get())
+      continue;
+
+    // Skip if lr and otherLr don't overlap
+    if (otherLr->start > lr->end || otherLr->end < lr->start)
+      continue;
+
+    fixedRegs.insert(otherLr->fixedReg);
+  }
+}
+
+rtg::RegisterAttrInterface RegisterAllocator::findAvailableRegister(rtg::VirtualRegisterOp virtualReg) {
+  auto configAttr =
+      cast<rtg::VirtualRegisterConfigAttr>(virtualReg.getAllowedRegsAttr());
+  LLVM_DEBUG(llvm::dbgs() << "  Allowed registers: " << configAttr.getAllowedRegs().size() << "\n");
+
+  // DenseSet<rtg::RegisterAttrInterface> fixedRegs;
+  // computeOverlappingFixedRegisters(valueToLiveRange[virtualReg.getResult()], fixedRegs);
+
+  for (auto reg : configAttr.getAllowedRegs()) {
+    auto res = isRegisterAvailable(virtualReg, reg);
+    if (failed(res))
+      return {};
+    if (res.value())
+      return reg;
+  }
+
+  return {};
+}
+
+LogicalResult RegisterAllocator::allocateRegisters() {
   for (auto &lr : regRanges) {
     LLVM_DEBUG(llvm::dbgs() << "Processing register range [" << lr->start << ", " << lr->end
-                            << "] for " << lr->reg << "\n");
+                            << "] for " << lr->virtualReg << "\n");
 
     // Make registers out of live range available again.
     expireOldInterval(active, lr.get());
 
-    // Handle already fixed registers.
-    auto virtualReg = dyn_cast<rtg::VirtualRegisterOp>(lr->reg.getOwner());
-    if (lr->fixedReg || !virtualReg) {
-      LLVM_DEBUG(llvm::dbgs() << "  Skipping already fixed or non-virtual register\n");
-      continue;
+    for (auto [idx, reg] : llvm::make_early_inc_range(reservedEndIndex)) {
+      if (idx >= lr->start)
+        break;
+
+      reserved.erase(reg);
     }
+
+    // Handle already fixed registers.
+    // auto virtualReg = dyn_cast<rtg::VirtualRegisterOp>(lr->reg.getOwner());
+    if (lr->fixedReg || !lr->virtualReg)
+      continue;
 
     // Handle virtual registers.
-    LLVM_DEBUG(llvm::dbgs() << "  Processing virtual register\n");
-    auto configAttr =
-        cast<rtg::VirtualRegisterConfigAttr>(virtualReg.getAllowedRegsAttr());
-    LLVM_DEBUG(llvm::dbgs() << "  Allowed registers: " << configAttr.getAllowedRegs().size() << "\n");
-    rtg::RegisterAttrInterface availableReg;
-    for (auto reg : configAttr.getAllowedRegs()) {
-      LLVM_DEBUG(llvm::dbgs() << "    Trying register: " << reg << "\n");
-      if (llvm::any_of(active, [&](auto *r) { return r->fixedReg == reg; })) {
-        LLVM_DEBUG(llvm::dbgs() << "    Register is already active, checking conflicts\n");
-        continue;
-      }
-
-      availableReg = reg;
-
-      LLVM_DEBUG(llvm::dbgs() << "    Register is available (not in active list)\n");
-
-      SetVector<std::pair<Value, rtg::RegisterAttrInterface>> registers;
-      if (failed(collectTransitiveRegisterAllocationOperands(lr->reg, reg, registers)))
-        return signalPassFailure();
-
-      LLVM_DEBUG(llvm::dbgs() << "    Found " << registers.size()
-                              << " transitive register allocation operands\n");
-
-      DenseMap<Value, RegisterLiveRange *> registerToLiveRange;
-      for (auto [reg, regAttr] : registers) {
-        Value registerValue = reg;
-        LLVM_DEBUG(llvm::dbgs() << "      Processing register value: " << registerValue
-                                << " with attr: " << regAttr << "\n");
-        auto *it = llvm::find_if(regRanges, [&](auto &lr) { return lr->reg == registerValue; });
-        if (it == regRanges.end()) {
-          reg.getDefiningOp()->emitError("register value not found in live ranges");
-          return signalPassFailure();
-        }
-
-        RegisterLiveRange *lr = it->get();
-        registerToLiveRange.insert({reg, lr});
-        LLVM_DEBUG(llvm::dbgs() << "      Mapped to live range [" << lr->start << ", " << lr->end << "]\n");
-
-        // Get all live ranges that overlap with the one defined by 'reg'
-        bool hasConflict = false;
-        LLVM_DEBUG(llvm::dbgs() << "      Checking for conflicts with register " << regAttr << "\n");
-        for (auto &otherLr : regRanges) {
-          if (lr == otherLr.get())
-            continue;
-
-          // Skip if lr and otherLr don't overlap
-          if (otherLr->start > lr->end || otherLr->end < lr->start)
-            continue;
-
-          LLVM_DEBUG(llvm::dbgs() << "        Overlapping range [" << otherLr->start
-                                  << ", " << otherLr->end << "] with fixed reg: "
-                                  << otherLr->fixedReg << "\n");
-
-          // Check if this overlapping range has its fixed reg set to 'regAttr'
-          if (otherLr->fixedReg == regAttr) {
-            LLVM_DEBUG(llvm::dbgs() << "        Conflict detected!\n");
-            hasConflict = true;
-            break;
-          }
-        }
-
-        if (hasConflict) {
-          LLVM_DEBUG(llvm::dbgs() << "      Register " << reg << " has conflicts, trying next\n");
-          availableReg = rtg::RegisterAttrInterface();
-          break;
-        }
-      }
-
-      if (!availableReg)
-        continue;
-      
-      for (auto [reg, regAttr] : registers) {
-        if (registerToLiveRange[reg]->fixedReg) {
-          reg.getDefiningOp()->emitError("register already fixed");
-          return signalPassFailure();
-        }
-
-        LLVM_DEBUG(llvm::dbgs() << "      Assigning register " << regAttr
-                                << " to value " << reg << "\n");
-        registerToLiveRange[reg]->fixedReg = regAttr;
-      }
-
-      break;
-    }
-
+    auto availableReg = findAvailableRegister(lr->virtualReg);
     if (!availableReg) {
-      LLVM_DEBUG(llvm::dbgs() << "  No available register found, need to spill\n");
-      ++numRegistersSpilled;
-      virtualReg.emitError(
+      // ++numRegistersSpilled;
+      return lr->virtualReg.emitError(
           "need to spill this register, but not supported yet");
-      return signalPassFailure();
     }
 
     LLVM_DEBUG(llvm::dbgs() << "  Assigned register " << availableReg
@@ -388,21 +520,19 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
     llvm::dbgs() << "\n";
   });
 
+  return success();
+}
+
+void RegisterAllocator::cleanup() {
   LLVM_DEBUG(llvm::dbgs() << "\nReplacing virtual registers with fixed registers...\n");
   circt::UnusedOpPruner operationPruner;
   for (auto &reg : regRanges) {
-    // No need to fix already fixed registers.
-    if (isa<rtg::ConstantOp>(reg->reg.getOwner())) {
-      LLVM_DEBUG(llvm::dbgs() << "Skipping already fixed register: " << reg->fixedReg << "\n");
-      continue;
-    }
-
-    LLVM_DEBUG(llvm::dbgs() << "Replacing virtual register " << reg->reg
+    LLVM_DEBUG(llvm::dbgs() << "Replacing virtual register " << reg->virtualReg
                             << " with fixed register " << reg->fixedReg << "\n");
-    OpBuilder builder(reg->reg.getOwner());
-    auto newFixedReg = rtg::ConstantOp::create(builder, reg->reg.getLoc(), reg->fixedReg);
-    reg->reg.replaceAllUsesWith(newFixedReg);
-    operationPruner.eraseNow(reg->reg.getOwner());
+    OpBuilder builder(reg->virtualReg);
+    auto newFixedReg = rtg::ConstantOp::create(builder, reg->virtualReg.getLoc(), reg->fixedReg);
+    reg->virtualReg.getResult().replaceAllUsesWith(newFixedReg);
+    operationPruner.eraseNow(reg->virtualReg);
   }
 
   // Erase any operations that became unused after erasing the virtual register operations

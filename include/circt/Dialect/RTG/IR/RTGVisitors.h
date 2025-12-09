@@ -63,6 +63,8 @@ public:
             MemoryAllocOp, MemoryBaseAddressOp, MemorySizeOp,
             // Memory Blocks
             MemoryBlockDeclareOp,
+            // Data segment ops
+            SpaceOp, StringDataOp,
             // Misc ops
             CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -144,6 +146,8 @@ public:
   HANDLE(MemoryAllocOp, Unhandled);
   HANDLE(MemoryBaseAddressOp, Unhandled);
   HANDLE(MemorySizeOp, Unhandled);
+  HANDLE(SpaceOp, Unhandled);
+  HANDLE(StringDataOp, Unhandled);
 #undef HANDLE
 };
 
