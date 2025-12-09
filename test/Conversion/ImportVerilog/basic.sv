@@ -3325,13 +3325,13 @@ function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longin
    longint longIntTest2 = longint'(r);
 
 
-   // CHECK: [[SRTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f32
+   // CHECK: [[SRTEST:%.+]] = moore.uint_to_real [[INT]] : i42 -> f32
    shortreal srTest = shortreal'(i);
-   // CHECK: [[SRTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f32
+   // CHECK: [[SRTEST2:%.+]] = moore.sint_to_real [[LINT]] : i64 -> f32
    shortreal srTest2 = shortreal'(longi);
-   // CHECK: [[RTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f64
+   // CHECK: [[RTEST:%.+]] = moore.uint_to_real [[INT]] : i42 -> f64
    real rTest = real'(i);
-   // CHECK: [[RTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f64
+   // CHECK: [[RTEST2:%.+]] = moore.sint_to_real [[LINT]] : i64 -> f64
    real rTest2 = real'(longi);
 
    // CHECK: [[IMM:%.+]] = moore.real_to_int [[LR]] : f64 -> i32
@@ -3341,7 +3341,7 @@ function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longin
 
    // CHECK: [[R:%.+]] = moore.read [[logicTest]] : <l32>
    // CHECK-NEXT: [[IMM2:%.+]] = moore.logic_to_int [[R]] : l32
-   // CHECK-NEXT: [[F2:%.+]] = moore.int_to_real [[IMM2]] : i32 -> f64
+   // CHECK-NEXT: [[F2:%.+]] = moore.uint_to_real [[IMM2]] : i32 -> f64
    real realTest = real'(logicTest);
 endfunction
 
