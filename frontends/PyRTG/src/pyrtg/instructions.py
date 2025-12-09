@@ -7,7 +7,7 @@ from __future__ import annotations
 from .core import Value, Type
 from .sequences import SequenceDeclaration, Sequence
 
-from typing import List, Tuple, Callable, Union
+from typing import List, Tuple, Callable, Union, Optional
 from enum import Enum
 
 
@@ -37,8 +37,13 @@ class Instruction(SequenceDeclaration):
 
   def __repr__(self):
     return f"Instruction<{self.name}, {self.arg_types}, {self.side_effects}>"
-  
-  def __call__(self, *args: Value) -> Union[Value, List[Value]]:
+
+  def __call__(self, *args: Value) -> Optional[Union[Value, List[Value]]]:
+    # Destination registers are passed (reference-style).
+    if len(args) == len(self.arg_types):
+      self.sequence_func(*args)
+      return
+
     new_args = []
     results = []
     args_iter = iter(args)
