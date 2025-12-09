@@ -220,11 +220,15 @@ firrtl.module @DomainsSubmodule(
 // CHECK-SAME:    in %B: !firrtl.domain
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
 // CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
+// CHECK-SAME:    in %c: !firrtl.uint<1> domains [%C]
+// CHECK-SAME:    in %C: !firrtl.domain
 firrtl.module @Domains(
   in %A: !firrtl.domain of @ClockDomain,
   in %B: !firrtl.domain of @ClockDomain,
   in %a: !firrtl.uint<1> domains [%A],
-  out %b: !firrtl.uint<1> domains [%B]
+  out %b: !firrtl.uint<1> domains [%B],
+  in %c: !firrtl.uint<1> domains [%C],
+  in %C: !firrtl.domain of @ClockDomain
 ) {
   // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
   %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>

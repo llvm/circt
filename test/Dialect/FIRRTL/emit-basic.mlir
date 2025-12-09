@@ -984,12 +984,16 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output O : Domain of PowerDomain
     // CHECK-NEXT: input a : UInt<1> domains [A]
     // CHECK-NEXT: input ab : UInt<1> domains [A, B]
+    // CHECK-NEXT: input c : UInt<1> domains [C]
+    // CHECK-NEXT: input C : Domain of ClockDomain
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
     in %I: !firrtl.domain of @PowerDomain,
     out %O: !firrtl.domain of @PowerDomain,
     in %a: !firrtl.uint<1> domains [%A],
-    in %ab: !firrtl.uint<1> domains [%A, %B]
+    in %ab: !firrtl.uint<1> domains [%A, %B],
+    in %c: !firrtl.uint<1> domains [%C],
+    in %C: !firrtl.domain of @ClockDomain
   ) {
     // CHECK: node noDomains = unsafe_domain_cast(a)
     %0 = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
