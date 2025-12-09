@@ -3112,7 +3112,9 @@ LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
 }
 
 LogicalResult BitcastOp::verify() {
-  if (getBitWidth(getInput().getType()) != getBitWidth(getResult().getType()))
+  auto inputWidth = getBitWidth(getInput().getType());
+  auto resultWidth = getBitWidth(getResult().getType());
+  if (!inputWidth || !resultWidth || *inputWidth != *resultWidth)
     return this->emitOpError("Bitwidth of input must match result");
   return success();
 }

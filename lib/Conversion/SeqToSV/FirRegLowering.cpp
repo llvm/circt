@@ -698,7 +698,9 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   RegLowerInfo svReg{nullptr, path, reg.getPresetAttr(), nullptr, nullptr,
                      -1,      0};
   svReg.reg = sv::RegOp::create(builder, loc, regTy, reg.getNameAttr());
-  svReg.width = hw::getBitWidth(regTy);
+  auto width = hw::getBitWidth(regTy);
+  assert(width && "register type must have a known bit width");
+  svReg.width = *width;
 
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();

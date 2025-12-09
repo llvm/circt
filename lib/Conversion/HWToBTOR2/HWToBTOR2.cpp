@@ -555,35 +555,39 @@ private:
 
   // Verifies that the sort required for the given operation's btor2 emission
   // has been generated
-  int64_t requireSort(mlir::Type type) {
+  uint64_t requireSort(mlir::Type type) {
     // Start by figuring out what sort needs to be generated
-    int64_t width = hw::getBitWidth(type);
+    auto width = hw::getBitWidth(type);
 
-    // Sanity check: getBitWidth can technically return -1 it is a type with
+    // Sanity check: getBitWidth can return nullopt for types with
     // no width (like a clock). This shouldn't be allowed as width is required
     // to generate a sort
-    assert(width != noWidth);
+    assert(width && "type must have a known bit width");
 
     // Generate the sort regardles of resulting width (nothing will be added
     // if the sort already exists)
-    genSort("bitvec", width);
-    return width;
+    genSort("bitvec", *width);
+    return *width;
   }
 
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
-    int64_t width;
+    uint64_t width;
     Value next, reset, resetVal;
 
     // Extract the operands depending on the register type
     if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
+      auto w = hw::getBitWidth(reg.getType());
+      assert(w && "register type must have a known bit width");
+      width = *w;
       next = reg.getInput();
       reset = reg.getReset();
       resetVal = reg.getResetValue();
     } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
+      auto w = hw::getBitWidth(reg.getType());
+      assert(w && "register type must have a known bit width");
+      width = *w;
       next = reg.getNext();
       reset = reg.getReset();
       resetVal = reg.getResetValue();

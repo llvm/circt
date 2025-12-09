@@ -93,7 +93,7 @@ def BitWidthTypeInterface : TypeInterface<"BitWidthTypeInterface"> {
       statically-sized type. Reflects the number of wires needed to transmit a
       value of this type. Returns std::nullopt if the type's bit width cannot
       be statically computed.
-    }], "std::optional<int64_t>", "getBitWidth">,
+    }], "std::optional<uint64_t>", "getBitWidth">,
   ];
 }
 

@@ -76,8 +76,8 @@ struct HWAggregateConstantOpConversion
     // Lower to concat.
     SmallVector<Value> results;
     auto bitWidth = hw::getBitWidth(op.getType());
-    assert(bitWidth >= 0 && "bit width must be known for constant");
-    APInt intVal(bitWidth, 0);
+    assert(bitWidth && "bit width must be known for constant");
+    APInt intVal(*bitWidth, 0);
     if (failed(peelAttribute(op.getLoc(), adaptor.getFieldsAttr(), rewriter,
                              intVal)))
       return failure();
@@ -97,13 +97,13 @@ struct HWArrayGetOpConversion : OpConversionPattern<hw::ArrayGetOp> {
     auto elemType = arrayType.getElementType();
     auto numElements = arrayType.getNumElements();
     auto elemWidth = hw::getBitWidth(elemType);
-    if (elemWidth < 0)
+    if (!elemWidth)
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
 
     auto lowered = adaptor.getInput();
     for (size_t i = 0; i < numElements; ++i)
       results.push_back(rewriter.createOrFold<comb::ExtractOp>(
-          op.getLoc(), lowered, i * elemWidth, elemWidth));
+          op.getLoc(), lowered, i * (*elemWidth), *elemWidth));
 
     SmallVector<Value> bits;
     comb::extractBits(rewriter, op.getIndex(), bits);
@@ -125,7 +125,7 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
     auto elemType = arrayType.getElementType();
     auto numElements = arrayType.getNumElements();
     auto elemWidth = hw::getBitWidth(elemType);
-    if (elemWidth < 0)
+    if (!elemWidth)
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
 
     Location loc = op.getLoc();
@@ -135,7 +135,7 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
     auto inputArray = adaptor.getInput();
     for (size_t i = 0; i < numElements; ++i) {
       originalElements.push_back(rewriter.createOrFold<comb::ExtractOp>(
-          loc, inputArray, i * elemWidth, elemWidth));
+          loc, inputArray, i * (*elemWidth), *elemWidth));
     }
 
     // Create 2D array: each row represents what the array would look like
@@ -182,10 +182,14 @@ public:
   AggregateTypeConverter() {
     addConversion([](Type type) -> Type { return type; });
     addConversion([](hw::ArrayType t) -> Type {
-      return IntegerType::get(t.getContext(), hw::getBitWidth(t));
+      auto width = hw::getBitWidth(t);
+      assert(width && "array type must have a known bit width");
+      return IntegerType::get(t.getContext(), *width);
     });
     addConversion([](hw::StructType t) -> Type {
-      return IntegerType::get(t.getContext(), hw::getBitWidth(t));
+      auto width = hw::getBitWidth(t);
+      assert(width && "struct type must have a known bit width");
+      return IntegerType::get(t.getContext(), *width);
     });
     addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
                                 mlir::ValueRange inputs,

@@ -327,8 +327,10 @@ bool ExportVerilog::isZeroBitType(Type type) {
                         [](auto elem) { return isZeroBitType(elem.type); });
   if (auto enumType = dyn_cast<hw::EnumType>(type))
     return enumType.getFields().empty();
-  if (auto unionType = dyn_cast<hw::UnionType>(type))
-    return hw::getBitWidth(unionType) == 0;
+  if (auto unionType = dyn_cast<hw::UnionType>(type)) {
+    auto width = hw::getBitWidth(unionType);
+    return width && *width == 0;
+  }
 
   // We have an open type system, so assume it is ok.
   return false;
@@ -1794,7 +1796,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           return true;
         }
 
-        int64_t unionWidth = hw::getBitWidth(unionType);
+        auto unionWidth = hw::getBitWidth(unionType);
+        assert(unionWidth && "union type must have a known bit width");
         os << "union packed {";
         for (auto &element : unionType.getElements()) {
           if (isZeroBitType(element.type)) {
@@ -1802,8 +1805,9 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                << ": Zero Width;*/ ";
             continue;
           }
-          int64_t elementWidth = hw::getBitWidth(element.type);
-          bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+          auto elementWidth = hw::getBitWidth(element.type);
+          assert(elementWidth && "element type must have a known bit width");
+          bool needsPadding = *elementWidth < *unionWidth || element.offset > 0;
           if (needsPadding) {
             os << " struct packed {";
             if (element.offset) {
@@ -3435,18 +3439,19 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
   // Check if this union type has been padded.
   auto unionType = cast<UnionType>(getCanonicalType(op.getType()));
   auto unionWidth = hw::getBitWidth(unionType);
+  assert(unionWidth && "union type must have a known bit width");
   auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidth = hw::getBitWidth(element.type);
 
   // If the element is 0 width, just fill the union with 0s.
-  if (!elementWidth) {
-    ps.addAsString(unionWidth);
+  if (!elementWidth || *elementWidth == 0) {
+    ps.addAsString(*unionWidth);
     ps << "'h0";
     return {Unary, IsUnsigned};
   }
 
   // If the element has no padding, emit it directly.
-  if (elementWidth == unionWidth) {
+  if (*elementWidth == *unionWidth) {
     emitSubExpr(op.getInput(), LowestPrecedence);
     return {Unary, IsUnsigned};
   }
@@ -3459,7 +3464,7 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
       ps << "'h0," << PP::space;
     }
     emitSubExpr(op.getInput(), Selection);
-    if (auto postPadding = unionWidth - elementWidth - element.offset) {
+    if (auto postPadding = *unionWidth - *elementWidth - element.offset) {
       ps << "," << PP::space;
       ps.addAsString(postPadding);
       ps << "'h0";
@@ -3478,9 +3483,11 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
   // Check if this union type has been padded.
   auto unionType = cast<UnionType>(getCanonicalType(op.getInput().getType()));
   auto unionWidth = hw::getBitWidth(unionType);
+  assert(unionWidth && "union type must have a known bit width");
   auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidth = hw::getBitWidth(element.type);
-  bool needsPadding = elementWidth < unionWidth || element.offset > 0;
+  assert(elementWidth && "element type must have a known bit width");
+  bool needsPadding = *elementWidth < *unionWidth || element.offset > 0;
   auto verilogFieldName = emitter.getVerilogStructFieldName(element.name);
 
   // If the element needs padding then we need to get the actual element out

@@ -35,7 +35,10 @@ void registerHWPasses() { registerPasses(); }
 // Type API.
 //===----------------------------------------------------------------------===//
 
-int64_t hwGetBitWidth(MlirType type) { return getBitWidth(unwrap(type)); }
+int64_t hwGetBitWidth(MlirType type) {
+  auto width = getBitWidth(unwrap(type));
+  return width ? static_cast<int64_t>(*width) : -1;
+}
 
 bool hwTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
 

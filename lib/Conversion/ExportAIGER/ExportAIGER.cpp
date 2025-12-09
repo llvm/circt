@@ -53,8 +53,10 @@ using namespace circt::aiger;
 //===----------------------------------------------------------------------===//
 
 /// Returns the bit width of a value.
-static int64_t getBitWidth(Value value) {
-  return hw::getBitWidth(value.getType());
+static uint64_t getBitWidth(Value value) {
+  auto width = hw::getBitWidth(value.getType());
+  assert(width && "value must have a known bit width");
+  return *width;
 }
 
 //===----------------------------------------------------------------------===//

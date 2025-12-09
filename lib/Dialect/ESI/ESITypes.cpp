@@ -45,11 +45,11 @@ static unsigned getSignalingBitWidth(ChannelSignaling signaling) {
   }
   llvm_unreachable("Unhandled ChannelSignaling");
 }
-std::optional<int64_t> ChannelType::getBitWidth() const {
-  int64_t innerWidth = circt::hw::getBitWidth(getInner());
-  if (innerWidth < 0)
+std::optional<uint64_t> ChannelType::getBitWidth() const {
+  auto innerWidth = circt::hw::getBitWidth(getInner());
+  if (!innerWidth)
     return std::nullopt;
-  return innerWidth + getSignalingBitWidth(getSignaling());
+  return *innerWidth + getSignalingBitWidth(getSignaling());
 }
 
 /// Get the list of users with snoops filtered out. Returns a filtered range
@@ -94,7 +94,7 @@ LogicalResult ChannelType::verifyChannel(mlir::TypedValue<ChannelType> chan) {
   return err;
 }
 
-std::optional<int64_t> WindowType::getBitWidth() const {
+std::optional<uint64_t> WindowType::getBitWidth() const {
   return hw::getBitWidth(getLoweredType());
 }
 
