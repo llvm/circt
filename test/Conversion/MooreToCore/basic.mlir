@@ -1361,12 +1361,10 @@ func.func @ConstantReals() {
 }
 
 // CHECK-LABEL: func.func @IntToRealLowering
-func.func @IntToRealLowering() {
-  %0 = moore.constant -3 : i32
-  %1 = moore.sint_to_real %0 : i32 -> f32
-  // CHECK: arith.sitofp {{%.*}} : i32 to f32
-  %2 = moore.constant 5 : i42
-  %3 = moore.uint_to_real %2 : i42 -> f64
-  // CHECK: arith.uitofp {{%.*}} : i42 to f64
+func.func @IntToRealLowering(%arg0: !moore.i32, %arg1: !moore.i42) {
+  // CHECK-NEXT: arith.sitofp {{%.*}} : i32 to f32
+  // CHECK-NEXT: arith.uitofp {{%.*}} : i42 to f64
+  %0 = moore.sint_to_real %arg0 : i32 -> f32
+  %1 = moore.uint_to_real %arg1 : i42 -> f64
   return
 }
