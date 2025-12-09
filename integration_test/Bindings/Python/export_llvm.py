@@ -1,5 +1,5 @@
 # REQUIRES: bindings_python
-# RUN: %PYTHON% %s | %PYTHON% -m filecheck %s
+# RUN: %PYTHON% %s | FileCheck %s
 
 import circt
 import io
