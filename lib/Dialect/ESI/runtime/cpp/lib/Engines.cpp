@@ -189,7 +189,8 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
                       reinterpret_cast<uint64_t>(buffer->getDevicePtr()));
 }
 
-void OneItemBuffersToHostReadPort::connectImpl(const ChannelPort::ConnectOptions &options) {
+void OneItemBuffersToHostReadPort::connectImpl(
+    const ChannelPort::ConnectOptions &options) {
   engine->connect();
   buffer = engine->hostMem->allocate(bufferSize, {true, false});
   writeBufferPtr();
@@ -382,7 +383,8 @@ void OneItemBuffersFromHost::connect() {
   connected = true;
 }
 
-void OneItemBuffersFromHostWritePort::connectImpl(const ChannelPort::ConnectOptions &options) {
+void OneItemBuffersFromHostWritePort::connectImpl(
+    const ChannelPort::ConnectOptions &options) {
   engine->connect();
   data_buffer = engine->hostMem->allocate(std::max(bufferSize, (size_t)512),
                                           {false, false});

@@ -308,12 +308,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
                      &ChannelPort::ConnectOptions::translateMessage);
 
   py::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", (void (ChannelPort::*)())&ChannelPort::connect,
-           "Connect with default options")
-      .def("connect",
-           (void (ChannelPort::*)(
-               const ChannelPort::ConnectOptions &))&ChannelPort::connect,
-           py::arg("connect_ops"), "Connect with specified options")
+      .def("connect", &ChannelPort::connect, py::arg("options"),
+           "Connect with specified options")
       .def("disconnect", &ChannelPort::disconnect)
       .def_property_readonly("type", &ChannelPort::getType,
                              py::return_value_policy::reference);

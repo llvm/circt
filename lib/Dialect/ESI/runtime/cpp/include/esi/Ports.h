@@ -79,7 +79,7 @@ public:
     /// Implementation status:
     ///   - Lists are not yet supported.
     ///   - Write ports are not yet supported.
-    ///   - Fields that are not 8-byte-aligned are not supported.
+    ///   - Fields must be byte-aligned.
     ///
     /// See the CIRCT documentation (or td files) for more details on windowed
     /// messages.
@@ -91,10 +91,6 @@ public:
   };
 
   /// Set up a connection to the accelerator.
-  // virtual void connect() {
-  //   ConnectOptions options;
-  //   connect(options);
-  // }
   virtual void connect(const ConnectOptions &options = ConnectOptions()) = 0;
   virtual void disconnect() = 0;
   virtual bool isConnected() const = 0;

@@ -20,7 +20,6 @@
 #include <map>
 #include <stdexcept>
 
-#include <iostream>
 using namespace esi;
 
 ChannelPort::ChannelPort(const Type *type) {
@@ -61,7 +60,7 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
     throw std::runtime_error("Channel already connected");
 
   if (options.translateMessage && translationType) {
-    this->callback = [this, cb = std::move(this->callback)](MessageData data) {
+    this->callback = [this, cb = std::move(callback)](MessageData data) {
       if (translateIncoming(data))
         return cb(MessageData(std::move(translationBuffer)));
       return true;
@@ -76,7 +75,6 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
 void ReadChannelPort::connect(const ConnectOptions &options) {
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
   bool translate = options.translateMessage && translationType;
-  printf("ReadChannelPort::connect: translate=%d\n", (int)translate);
   this->callback = [this, translate](MessageData data) {
     if (translate) {
       if (!translateIncoming(data))
