@@ -775,7 +775,7 @@ def RealToIntOp : MooreOp<"real_to_int", [
   }];
 }
 
-def IntToRealOp : MooreOp<"int_to_real", [
+class IntToRealOpBase<string name> : MooreOp<name, [
   Pure
 ]> {
   let summary = "Convert an integer value to a real";
@@ -789,6 +789,10 @@ def IntToRealOp : MooreOp<"int_to_real", [
     $input attr-dict `:` type($input) `->` type($result)
   }];
 }
+
+def SIntToRealOp : IntToRealOpBase<"sint_to_real">;
+def UIntToRealOp : IntToRealOpBase<"uint_to_real">;
+
 
 def IntToStringOp : MooreOp<"int_to_string", [
   Pure
