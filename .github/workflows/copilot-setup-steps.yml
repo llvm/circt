@@ -1,0 +1,28 @@
+name: Copilot setup steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pre-pull integration docker image
+        env:
+          CIRCT_INTEGRATION_IMAGE: ghcr.io/circt/images/circt-integration-test:v19.2
+        run: |
+          echo "CIRCT_INTEGRATION_IMAGE=$CIRCT_INTEGRATION_IMAGE" >> $GITHUB_ENV
+          docker pull "$CIRCT_INTEGRATION_IMAGE"
+      - name: Summarize defaults
+        run: |
+          {
+            echo "### CIRCT Copilot setup"
+            echo "- Integration image: $CIRCT_INTEGRATION_IMAGE"
+            echo "- Default build directory: build"
+          } >> "$GITHUB_STEP_SUMMARY"
