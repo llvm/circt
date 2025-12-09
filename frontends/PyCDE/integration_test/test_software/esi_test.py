@@ -160,3 +160,78 @@ assert data == 42
 # xdata = x.read()
 # print(f"join: {xdata}")
 # assert xdata == 15 + 24
+
+################################################################################
+# StructToWindowFunc tests
+################################################################################
+
+print("Testing StructToWindowFunc...")
+struct_to_window_bundle = d.ports[esi.AppID("struct_to_window")]
+
+# Get the write port for sending the complete struct
+struct_send = struct_to_window_bundle.write_port("arg")
+struct_send.connect()
+
+# Get the read port for receiving the windowed result
+window_recv = struct_to_window_bundle.read_port("result")
+window_recv.connect()
+
+# Create test data - a struct with four 32-bit fields (as bytearrays, little-endian)
+test_struct = {
+    "a": bytearray([0x11, 0x11, 0x11, 0x11]),
+    "b": bytearray([0x22, 0x22, 0x22, 0x22]),
+    "c": bytearray([0x33, 0x33, 0x33, 0x33]),
+    "d": bytearray([0x44, 0x44, 0x44, 0x44])
+}
+
+# Send the complete struct
+struct_send.write(test_struct)
+
+# The windowed result should arrive as two frames
+# Frame 1 contains fields a and b
+# Frame 2 contains fields c and d
+# After translation, we should get back the complete struct
+result = window_recv.read()
+
+print(f"Sent struct: {test_struct}")
+print(f"Received result: {result}")
+
+# Verify the result matches the input
+assert result["a"] == test_struct[
+    "a"], f"Field 'a' mismatch: {result['a']} != {test_struct['a']}"
+assert result["b"] == test_struct[
+    "b"], f"Field 'b' mismatch: {result['b']} != {test_struct['b']}"
+assert result["c"] == test_struct[
+    "c"], f"Field 'c' mismatch: {result['c']} != {test_struct['c']}"
+assert result["d"] == test_struct[
+    "d"], f"Field 'd' mismatch: {result['d']} != {test_struct['d']}"
+
+print("PASS: StructToWindowFunc test passed")
+
+# Test with different values
+test_struct2 = {
+    "a": bytearray([0xEF, 0xBE, 0xAD, 0xDE]),  # 0xDEADBEEF little-endian
+    "b": bytearray([0xBE, 0xBA, 0xFE, 0xCA]),  # 0xCAFEBABE little-endian
+    "c": bytearray([0x78, 0x56, 0x34, 0x12]),  # 0x12345678 little-endian
+    "d":
+        bytearray([0x21, 0x43, 0x65, 0x87])  # 0x87654321 little-endian
+}
+struct_send.write(test_struct2)
+result2 = window_recv.read()
+
+print(f"Sent struct: {test_struct2}")
+print(f"Received result: {result2}")
+
+assert result2["a"] == test_struct2[
+    "a"], f"Field 'a' mismatch: {result2['a']} != {test_struct2['a']}"
+assert result2["b"] == test_struct2[
+    "b"], f"Field 'b' mismatch: {result2['b']} != {test_struct2['b']}"
+assert result2["c"] == test_struct2[
+    "c"], f"Field 'c' mismatch: {result2['c']} != {test_struct2['c']}"
+assert result2["d"] == test_struct2[
+    "d"], f"Field 'd' mismatch: {result2['d']} != {test_struct2['d']}"
+
+print("PASS: StructToWindowFunc test 2 passed")
+
+struct_send.disconnect()
+window_recv.disconnect()

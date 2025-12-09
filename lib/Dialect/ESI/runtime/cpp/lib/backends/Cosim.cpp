@@ -181,7 +181,7 @@ public:
         name(name) {}
   ~WriteCosimChannelPort() = default;
 
-  void connectImpl(std::optional<unsigned> bufferSize) override {
+  void connectImpl(const ChannelPort::ConnectOptions &options) override {
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
@@ -245,7 +245,7 @@ public:
         name(name), context(nullptr) {}
   virtual ~ReadCosimChannelPort() { disconnect(); }
 
-  void connectImpl(std::optional<unsigned> bufferSize) override {
+  void connectImpl(const ChannelPort::ConnectOptions &options) override {
     // Sanity checking.
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
       throw std::runtime_error("Channel '" + name +

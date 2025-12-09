@@ -82,7 +82,7 @@ public:
   // Write the location of the buffer to the MMIO space.
   void writeBufferPtr();
   // Connect allocate a buffer and prime the pump.
-  void connectImpl(std::optional<unsigned>) override;
+  void connectImpl(const ChannelPort::ConnectOptions &options) override;
   // Check for buffer fill.
   bool pollImpl() override;
 
@@ -189,7 +189,8 @@ void OneItemBuffersToHostReadPort::writeBufferPtr() {
                       reinterpret_cast<uint64_t>(buffer->getDevicePtr()));
 }
 
-void OneItemBuffersToHostReadPort::connectImpl(std::optional<unsigned>) {
+void OneItemBuffersToHostReadPort::connectImpl(
+    const ChannelPort::ConnectOptions &options) {
   engine->connect();
   buffer = engine->hostMem->allocate(bufferSize, {true, false});
   writeBufferPtr();
@@ -279,7 +280,7 @@ public:
   }
 
   // Connect allocate a buffer and prime the pump.
-  void connectImpl(std::optional<unsigned>) override;
+  void connectImpl(const ChannelPort::ConnectOptions &options) override;
 
   void write(const MessageData &) override;
   bool tryWrite(const MessageData &data) override;
@@ -382,7 +383,8 @@ void OneItemBuffersFromHost::connect() {
   connected = true;
 }
 
-void OneItemBuffersFromHostWritePort::connectImpl(std::optional<unsigned>) {
+void OneItemBuffersFromHostWritePort::connectImpl(
+    const ChannelPort::ConnectOptions &options) {
   engine->connect();
   data_buffer = engine->hostMem->allocate(std::max(bufferSize, (size_t)512),
                                           {false, false});
