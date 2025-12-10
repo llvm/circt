@@ -323,14 +323,11 @@ LogicalResult unify(RowTerm *lhsRow, Term *rhs) {
     return success();
   }
   if (auto *rhsRow = dyn_cast<RowTerm>(rhs)) {
-    assert(lhsRow->elements.size() == rhsRow->elements.size());
-    for (auto [x, y] : llvm::zip(lhsRow->elements, rhsRow->elements)) {
+    for (auto [x, y] : llvm::zip_equal(lhsRow->elements, rhsRow->elements))
       if (failed(unify(x, y)))
         return failure();
-    }
     return success();
   }
-
   return failure();
 }
 
