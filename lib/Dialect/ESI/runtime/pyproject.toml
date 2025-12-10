@@ -4,7 +4,7 @@ requires = [
   "setuptools_scm>=8.0",
   "wheel",
   "cmake>=3.31",
-  "nanobind>=2.10.1",
+  "nanobind>=2.2",
   "ninja>=1.13.0",
   "typing_extensions",
 ]
