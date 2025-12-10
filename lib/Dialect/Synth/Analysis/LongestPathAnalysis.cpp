@@ -77,12 +77,14 @@
 using namespace circt;
 using namespace synth;
 
-static size_t getBitWidth(Value value) {
+static uint64_t getBitWidth(Value value) {
   if (auto vecType = dyn_cast<seq::ClockType>(value.getType()))
     return 1;
   if (auto memory = dyn_cast<seq::FirMemType>(value.getType()))
     return memory.getWidth();
-  return hw::getBitWidth(value.getType());
+  auto width = hw::getBitWidth(value.getType());
+  assert(width && "value type must have a known bit width");
+  return *width;
 }
 
 template <typename T, typename Key>
@@ -1371,9 +1373,9 @@ OperationAnalyzer::getOrComputeLocalVisitor(Operation *op) {
     if (type.isInteger())
       return type;
     auto bitWidth = hw::getBitWidth(type);
-    if (bitWidth < 0)
+    if (!bitWidth)
       return Type(); // Unsupported type
-    return IntegerType::get(op->getContext(), bitWidth);
+    return IntegerType::get(op->getContext(), *bitWidth);
   };
 
   // Helper to add a port to the module definition

@@ -53,13 +53,13 @@ LogicalResult LowerSymbolicValuesPass::lowerToExtModule() {
   auto result = getOperation().walk([&](SymbolicValueOp op) -> WalkResult {
     // Determine the number of bits needed for the symbolic value.
     auto numBits = hw::getBitWidth(op.getType());
-    if (numBits < 0)
+    if (!numBits)
       return op.emitError() << "symbolic value bit width unknown";
 
     // If we don't already have an extmodule for this number of bits, create
     // one.
     auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
-    auto flatType = builder.getIntegerType(numBits);
+    auto flatType = builder.getIntegerType(*numBits);
     auto &extmoduleOp = extmoduleOps[flatType];
     if (!extmoduleOp) {
       extmoduleOp = HWModuleExternOp::create(

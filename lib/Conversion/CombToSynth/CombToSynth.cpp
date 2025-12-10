@@ -177,7 +177,9 @@ static int64_t getNumUnknownBitsAndPopulateValues(
   // Consider other operations as unknown bits.
   // TODO: We can handle replicate, extract, etc.
   values.push_back(value);
-  return hw::getBitWidth(value.getType());
+  auto width = hw::getBitWidth(value.getType());
+  assert(width && "value type must have a known bit width");
+  return *width;
 }
 
 // Return a value that substitutes the unknown bits with the mask.
@@ -188,13 +190,14 @@ substitueMaskToValues(size_t width,
   uint32_t bitPos = 0, unknownPos = 0;
   APInt result(width, 0);
   for (auto constantOrValue : constantOrValues) {
-    int64_t elemWidth;
+    uint64_t elemWidth;
     if (auto constant = dyn_cast<IntegerAttr>(constantOrValue)) {
       elemWidth = constant.getValue().getBitWidth();
       result.insertBits(constant.getValue(), bitPos);
     } else {
-      elemWidth = hw::getBitWidth(cast<Value>(constantOrValue).getType());
-      assert(elemWidth >= 0 && "unknown bit width");
+      auto width = hw::getBitWidth(cast<Value>(constantOrValue).getType());
+      assert(width && "value type must have a known bit width");
+      elemWidth = *width;
       assert(elemWidth + unknownPos < 32 && "unknown bit width too large");
       // Create a mask for the unknown bits.
       uint32_t usedBits = (mask >> unknownPos) & ((1 << elemWidth) - 1);
@@ -326,9 +329,11 @@ struct CombOrToMIGConversion : OpConversionPattern<OrOp> {
     if (op.getNumOperands() != 2)
       return failure();
     SmallVector<Value, 3> inputs(adaptor.getInputs());
+    auto width = hw::getBitWidth(op.getType());
+    assert(width && "operation type must have a known bit width");
     auto one = hw::ConstantOp::create(
         rewriter, op.getLoc(),
-        APInt::getAllOnes(hw::getBitWidth(op.getType())));
+        APInt::getAllOnes(*width));
     inputs.push_back(one);
     std::array<bool, 3> inverts = {false, false, false};
     replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(

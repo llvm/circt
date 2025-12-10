@@ -93,10 +93,10 @@ public:
           TypeSwitch<Operation *, LogicalResult>(curr)
               .Case<llhd::ProbeOp>([&](llhd::ProbeOp probeOp) {
                 auto bw = hw::getBitWidth(probeOp.getResult().getType());
-                if (bw <= 0)
+                if (!bw || *bw == 0)
                   return failure();
 
-                readIntervals.emplace_back(offset, bw, probeOp.getResult());
+                readIntervals.emplace_back(offset, *bw, probeOp.getResult());
                 return success();
               })
               .Case<llhd::DriveOp>([&](llhd::DriveOp driveOp) {
@@ -115,10 +115,10 @@ public:
                 }
 
                 auto bw = hw::getBitWidth(driveOp.getValue().getType());
-                if (bw <= 0)
+                if (!bw || *bw == 0)
                   return failure();
 
-                intervals.emplace_back(offset, bw, driveOp.getValue(),
+                intervals.emplace_back(offset, *bw, driveOp.getValue(),
                                        timeOp.getValueAttr());
                 return success();
               })
@@ -137,7 +137,7 @@ public:
                 auto bw = hw::getBitWidth(
                     cast<llhd::RefType>(extractOp.getInput().getType())
                         .getNestedType());
-                if (bw <= 0)
+                if (!bw || *bw == 0)
                   return failure();
 
                 SmallVector<Value> indices(offset.dynamic);

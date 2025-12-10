@@ -1888,7 +1888,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
                 hw::type_cast<hw::ArrayType>(prevExtractOpt->input.getType())
                     .getElementType(),
                 extractOpt->width + prevExtractOpt->width);
-            auto resIntType = rewriter.getIntegerType(hw::getBitWidth(resType));
+            auto resWidth = hw::getBitWidth(resType);
+            assert(resWidth && "result type must have a known bit width");
+            auto resIntType = rewriter.getIntegerType(*resWidth);
             Value replacement = hw::BitcastOp::create(
                 rewriter, op.getLoc(), resIntType,
                 hw::ArraySliceOp::create(rewriter, op.getLoc(), resType,
@@ -1938,10 +1940,12 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   // mux(cond, 1, 0) -> cond
   if (getCond().getType() == getTrueValue().getType())
     if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
-      if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue()))
+      if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue())) {
+        auto width = hw::getBitWidth(getType());
         if (tv.getValue().isOne() && fv.getValue().isZero() &&
-            hw::getBitWidth(getType()) == 1 && getCond() != getResult())
+            width && *width == 1 && getCond() != getResult())
           return getCond();
+      }
 
   return {};
 }

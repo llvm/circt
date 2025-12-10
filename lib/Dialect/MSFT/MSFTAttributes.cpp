@@ -76,11 +76,11 @@ void PhysicalBoundsAttr::print(AsmPrinter &p) const {
 LogicalResult LocationVectorAttr::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> emitError, TypeAttr type,
     ArrayRef<PhysLocationAttr> locs) {
-  int64_t typeBitWidth = hw::getBitWidth(type.getValue());
-  if (typeBitWidth < 0)
+  auto typeBitWidth = hw::getBitWidth(type.getValue());
+  if (!typeBitWidth)
     return emitError() << "cannot compute bit width of type '" << type << "'";
-  if ((uint64_t)typeBitWidth != locs.size())
-    return emitError() << "must specify " << typeBitWidth << " locations";
+  if (*typeBitWidth != locs.size())
+    return emitError() << "must specify " << *typeBitWidth << " locations";
   return success();
 }
 

@@ -147,13 +147,14 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
     return it->second;
 
   auto width = hw::getBitWidth(value.getType());
+  assert(width && "value type must have a known bit width");
   auto *op = value.getDefiningOp();
 
   // For block arguments, return unknown bits
   if (!op)
-    return insertKnownBits(value, llvm::KnownBits(width));
+    return insertKnownBits(value, llvm::KnownBits(*width));
 
-  llvm::KnownBits result(width);
+  llvm::KnownBits result(*width);
   if (auto aig = dyn_cast<aig::AndInverterOp>(op)) {
     // Initialize to all ones for AND operation
     result.One = APInt::getAllOnes(width);
@@ -194,7 +195,9 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
 }
 
 Value BitBlaster::extractBit(Value value, size_t index) {
-  if (hw::getBitWidth(value.getType()) <= 1)
+  auto width = hw::getBitWidth(value.getType());
+  assert(width && "value type must have a known bit width");
+  if (*width <= 1)
     return value;
 
   auto *op = value.getDefiningOp();
@@ -207,10 +210,10 @@ Value BitBlaster::extractBit(Value value, size_t index) {
       .Case<comb::ConcatOp>([&](comb::ConcatOp op) {
         for (auto operand : llvm::reverse(op.getOperands())) {
           auto width = hw::getBitWidth(operand.getType());
-          assert(width >= 0 && "operand has zero width");
-          if (index < static_cast<size_t>(width))
+          assert(width && "operand type must have a known bit width");
+          if (index < *width)
             return extractBit(operand, index);
-          index -= static_cast<size_t>(width);
+          index -= *width;
         }
         llvm_unreachable("index out of bounds");
       })
@@ -219,9 +222,9 @@ Value BitBlaster::extractBit(Value value, size_t index) {
                           static_cast<size_t>(ext.getLowBit()) + index);
       })
       .Case<comb::ReplicateOp>([&](comb::ReplicateOp op) {
-        return extractBit(op.getInput(),
-                          index % static_cast<size_t>(hw::getBitWidth(
-                                      op.getOperand().getType())));
+        auto operandWidth = hw::getBitWidth(op.getOperand().getType());
+        assert(operandWidth && "operand type must have a known bit width");
+        return extractBit(op.getInput(), index % *operandWidth);
       })
       .Case<hw::ConstantOp>([&](hw::ConstantOp op) {
         auto value = op.getValue();
@@ -236,7 +239,8 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
     return it->second;
 
   auto width = hw::getBitWidth(value.getType());
-  if (width <= 1)
+  assert(width && "value type must have a known bit width");
+  if (*width <= 1)
     return insertBits(value, {value});
 
   auto *op = value.getDefiningOp();
@@ -287,7 +291,9 @@ LogicalResult BitBlaster::run() {
   // Replace operations with concatenated results if needed
   for (auto &[value, results] :
        llvm::make_early_inc_range(llvm::reverse(loweredValues))) {
-    if (hw::getBitWidth(value.getType()) <= 1)
+    auto width = hw::getBitWidth(value.getType());
+    assert(width && "value type must have a known bit width");
+    if (*width <= 1)
       continue;
 
     auto *op = value.getDefiningOp();
@@ -345,7 +351,8 @@ ArrayRef<Value> BitBlaster::lowerOp(
   auto value = op->getResult(0);
   OpBuilder builder(op);
   auto width = hw::getBitWidth(value.getType());
-  assert(width > 1 && "expected multi-bit operation");
+  assert(width && "value type must have a known bit width");
+  assert(*width > 1 && "expected multi-bit operation");
 
   auto known = computeKnownBits(value);
   APInt knownMask = known.Zero | known.One;
