@@ -1435,7 +1435,7 @@ firrtl.circuit "RemoveNonLocalFromLocal" {
   hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   firrtl.module @Bar() {}
   // CHECK-LABEL: firrtl.module @RemoveNonLocalFromLocal
-  firrtl.module @RemoveNonLocalFromLocal() attributes {convention = #firrtl<convention scalarized>} {
+  firrtl.module @RemoveNonLocalFromLocal() {
     // CHECK: firrtl.instance bar sym @sym {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} @Bar()
     firrtl.instance bar sym @sym {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @Bar()
   }
