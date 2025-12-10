@@ -254,7 +254,10 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
 
   // Check size
   if (frameDataSize < frameInfo.expectedSize)
-    throw std::runtime_error("Frame data too small");
+    throw std::runtime_error("Frame data too small: expected at least " +
+                             std::to_string(frameInfo.expectedSize) +
+                             " bytes, got " + std::to_string(frameDataSize) +
+                             " bytes");
 
   // Check if this is the first frame of a new message.
   // If so, we need to initialize the translation buffer.
@@ -292,17 +295,16 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
   size_t srcDataSize = data.size();
 
   if (srcDataSize < translationInfo->intoTypeBytes)
-    throw std::runtime_error(
-        "Source data too small: expected at least " +
-        std::to_string(translationInfo->intoTypeBytes) +
-        " bytes, got " + std::to_string(srcDataSize) + " bytes");
+    throw std::runtime_error("Source data too small: expected at least " +
+                             std::to_string(translationInfo->intoTypeBytes) +
+                             " bytes, got " + std::to_string(srcDataSize) +
+                             " bytes");
 
-  std::vector<uint8_t> frameBuffer;
   for (const auto &frameInfo : translationInfo->frames) {
-    frameBuffer.resize(frameInfo.expectedSize, 0);
+    std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
     for (const auto &op : frameInfo.copyOps)
       std::memcpy(frameBuffer.data() + op.frameOffset,
                   srcData + op.bufferOffset, op.size);
-    translationBuffer.push_back(MessageData(std::move(frameBuffer)));
+    translationBuffer.emplace_back(std::move(frameBuffer));
   }
 }
