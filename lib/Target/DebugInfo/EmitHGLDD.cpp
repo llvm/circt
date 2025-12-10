@@ -218,8 +218,10 @@ struct EmittedType {
     if (auto inoutType = dyn_cast<hw::InOutType>(type))
       type = hw::getCanonicalType(inoutType.getElementType());
     if (hw::isHWIntegerType(type)) {
+      auto width = hw::getBitWidth(type);
+      assert(width && "hw integer type must have a known bit width");
       name = "logic";
-      addPackedDim(hw::getBitWidth(type));
+      addPackedDim(*width);
     }
   }
 
@@ -717,7 +719,7 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
     // Emit zero-width constants as a 1-bit zero value. This ensures we get a
     // proper Verilog-compatible value as a result. Expressions like
     // concatenation should instead skip zero-width values.
-    if (width < 1)
+    if (!width || *width < 1)
       return {JObject({{"bit_vector", "0"}}),
               IntegerType::get(op->getContext(), 1)};
 

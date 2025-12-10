@@ -69,10 +69,11 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
   auto stageModule = builder.declareStage(symTable, stage);
 
-  size_t width = circt::hw::getBitWidth(chPort.getInner());
+  auto width = circt::hw::getBitWidth(chPort.getInner());
+  assert(width && "channel inner type must have a known bit width");
 
   ArrayAttr stageParams =
-      builder.getStageParameterList(rewriter.getUI32IntegerAttr(width));
+      builder.getStageParameterList(rewriter.getUI32IntegerAttr(*width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet,
   // so create a temp value and replace it later. Give this constant an
@@ -130,14 +131,14 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
     ConversionPatternRewriter &rewriter) const {
   auto innerType = cast<ChannelType>(nullop.getOut().getType()).getInner();
   Location loc = nullop.getLoc();
-  int64_t width = hw::getBitWidth(innerType);
-  if (width == -1)
+  auto width = hw::getBitWidth(innerType);
+  if (!width)
     return rewriter.notifyMatchFailure(
         nullop, "NullOp lowering only supports hw types");
   auto valid = hw::ConstantOp::create(rewriter, nullop.getLoc(),
                                       rewriter.getI1Type(), 0);
   auto zero =
-      hw::ConstantOp::create(rewriter, loc, rewriter.getIntegerType(width), 0);
+      hw::ConstantOp::create(rewriter, loc, rewriter.getIntegerType(*width), 0);
   auto typedZero = hw::BitcastOp::create(rewriter, loc, innerType, zero);
   auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid);
   wrap->setAttr("name", rewriter.getStringAttr("nullsource"));

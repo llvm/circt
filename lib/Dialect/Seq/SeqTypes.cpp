@@ -47,7 +47,8 @@ void SeqDialect::registerTypes() {
 bool circt::seq::isClockOrI1Type(Type ty) {
   if (hw::type_isa<seq::ClockType>(ty))
     return true;
-  if (hw::isHWIntegerType(ty) && hw::getBitWidth(ty) == 1)
+  auto width = hw::getBitWidth(ty);
+  if (hw::isHWIntegerType(ty) && width && *width == 1)
     return true;
   return false;
 }

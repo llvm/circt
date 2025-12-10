@@ -387,9 +387,9 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
     hwType = chanType.getInner();
   if (auto winType = dyn_cast<WindowType>(hwType))
     hwType = winType.getLoweredType();
-  int64_t width = hw::getBitWidth(hwType);
-  if (width >= 0)
-    o["hwBitwidth"] = width;
+  auto width = hw::getBitWidth(hwType);
+  if (width)
+    o["hwBitwidth"] = *width;
 
   o["dialect"] = type.getDialect().getNamespace();
   if (m.length())

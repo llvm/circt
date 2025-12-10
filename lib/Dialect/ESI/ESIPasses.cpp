@@ -34,7 +34,9 @@ uint64_t circt::esi::detail::getWidth(Type t) {
     t = ch.getInner();
   if (auto win = dyn_cast<WindowType>(t))
     t = win.getLoweredType();
-  return hw::getBitWidth(t);
+  auto width = hw::getBitWidth(t);
+  assert(width && "type must have a known bit width");
+  return *width;
 }
 
 //===----------------------------------------------------------------------===//

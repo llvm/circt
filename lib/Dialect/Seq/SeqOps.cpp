@@ -493,11 +493,11 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
     if (hw::type_isa<seq::ClockType>(ty)) {
       width = 1;
     } else {
-      int64_t maybeWidth = hw::getBitWidth(ty);
-      if (maybeWidth < 0)
+      auto maybeWidth = hw::getBitWidth(ty);
+      if (!maybeWidth)
         return parser.emitError(presetValueLoc,
                                 "cannot preset register of unknown width");
-      width = maybeWidth;
+      width = *maybeWidth;
     }
 
     APInt presetResult = presetValue->sextOrTrunc(width);
@@ -566,9 +566,10 @@ LogicalResult FirRegOp::verify() {
       return emitOpError("register with no reset cannot be async");
   }
   if (auto preset = getPresetAttr()) {
-    int64_t presetWidth = hw::getBitWidth(preset.getType());
-    int64_t width = hw::getBitWidth(getType());
-    if (preset.getType() != getType() && presetWidth != width)
+    auto presetWidth = hw::getBitWidth(preset.getType());
+    auto width = hw::getBitWidth(getType());
+    if (preset.getType() != getType() && presetWidth && width && 
+        *presetWidth != *width)
       return emitOpError("preset type width must match register type");
   }
   return success();
