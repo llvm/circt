@@ -56,6 +56,14 @@ hw.module @AssertBooleanConstantTrue() {
   // CHECK: hw.output
 }
 
+// CHECK-LABEL: @AssertHWConstantTrue
+hw.module @AssertHWConstantTrue() {
+  %true = hw.constant true
+  // CHECK-NOT: verif.assert
+  verif.assert %true : i1
+  // CHECK: hw.output
+}
+
 // CHECK-LABEL: @AssertEnableTrue
 hw.module @AssertEnableTrue(in %a : i1) {
   %true = hw.constant true
@@ -89,6 +97,14 @@ hw.module @AssumeBooleanConstantTrue() {
   %prop = ltl.boolean_constant true
   // CHECK-NOT: verif.assume
   verif.assume %prop : !ltl.property
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @AssumeHWConstantTrue
+hw.module @AssumeHWConstantTrue() {
+  %true = hw.constant true
+  // CHECK-NOT: verif.assume
+  verif.assume %true : i1
   // CHECK: hw.output
 }
 
@@ -184,6 +200,14 @@ hw.module @ClockedAssertBooleanConstantTrue(in %clock : i1) {
   // CHECK: hw.output
 }
 
+// CHECK-LABEL: @ClockedAssertHWConstantTrue
+hw.module @ClockedAssertHWConstantTrue(in %clock : i1) {
+  %true = hw.constant true
+  // CHECK-NOT: verif.clocked_assert
+  verif.clocked_assert %true, posedge %clock : i1
+  // CHECK: hw.output
+}
+
 //===----------------------------------------------------------------------===//
 // ClockedAssumeOp
 //===----------------------------------------------------------------------===//
@@ -210,6 +234,14 @@ hw.module @ClockedAssumeBooleanConstantTrue(in %clock : i1) {
   %prop = ltl.boolean_constant true
   // CHECK-NOT: verif.clocked_assume
   verif.clocked_assume %prop, posedge %clock : !ltl.property
+  // CHECK: hw.output
+}
+
+// CHECK-LABEL: @ClockedAssumeHWConstantTrue
+hw.module @ClockedAssumeHWConstantTrue(in %clock : i1) {
+  %true = hw.constant true
+  // CHECK-NOT: verif.clocked_assume
+  verif.clocked_assume %true, posedge %clock : i1
   // CHECK: hw.output
 }
 
