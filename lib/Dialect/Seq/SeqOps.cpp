@@ -568,7 +568,7 @@ LogicalResult FirRegOp::verify() {
   if (auto preset = getPresetAttr()) {
     auto presetWidth = hw::getBitWidth(preset.getType());
     auto width = hw::getBitWidth(getType());
-    if (preset.getType() != getType() && presetWidth && width && 
+    if (preset.getType() != getType() && presetWidth && width &&
         *presetWidth != *width)
       return emitOpError("preset type width must match register type");
   }
