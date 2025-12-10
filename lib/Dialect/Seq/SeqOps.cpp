@@ -268,15 +268,13 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_full"
-      << " " << threshold.getInt();
+    p << "almost_full" << " " << threshold.getInt();
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_empty"
-      << " " << threshold.getInt();
+    p << "almost_empty" << " " << threshold.getInt();
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -1192,8 +1190,8 @@ FailureOr<seq::InitialOp> circt::seq::mergeInitialOps(Block *block) {
       initialOps.push_back(&op);
 
   if (!mlir::computeTopologicalSorting(initialOps, {}))
-    return block->getParentOp()->emitError() << "initial ops cannot be "
-                                             << "topologically sorted";
+    return block->getParentOp()->emitError()
+           << "initial ops cannot be " << "topologically sorted";
 
   // No need to merge if there is only one initial op.
   if (initialOps.size() <= 1)

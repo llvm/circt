@@ -613,9 +613,9 @@ LogicalResult OpLowering::lowerStateful(
       auto type = cast<StateType>(state.getType()).getType();
       auto width = hw::getBitWidth(type);
       assert(width && "state type must have a known bit width");
-      Value value = ConstantOp::create(
-          module.builder, loweredReset.getLoc(),
-          module.builder.getIntegerType(*width), 0);
+      Value value =
+          ConstantOp::create(module.builder, loweredReset.getLoc(),
+                             module.builder.getIntegerType(*width), 0);
       if (value.getType() != type)
         value = BitcastOp::create(module.builder, loweredReset.getLoc(), type,
                                   value);

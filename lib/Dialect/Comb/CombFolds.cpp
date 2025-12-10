@@ -1942,8 +1942,8 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
     if (auto tv = dyn_cast_or_null<IntegerAttr>(adaptor.getTrueValue()))
       if (auto fv = dyn_cast_or_null<IntegerAttr>(adaptor.getFalseValue())) {
         auto width = hw::getBitWidth(getType());
-        if (tv.getValue().isOne() && fv.getValue().isZero() &&
-            width && *width == 1 && getCond() != getResult())
+        if (tv.getValue().isOne() && fv.getValue().isZero() && width &&
+            *width == 1 && getCond() != getResult())
           return getCond();
       }
 

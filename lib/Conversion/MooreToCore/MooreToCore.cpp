@@ -1125,7 +1125,8 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
         if (!bw)
           return failure();
 
-        Value val = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(*bw, 0));
+        Value val =
+            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(*bw, 0));
         Value bitcast =
             rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType, val);
         rewriter.replaceOp(op, bitcast);

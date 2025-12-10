@@ -1134,8 +1134,8 @@ FailureOr<ArrayRef<OpenPath>> LocalVisitor::getOrComputePaths(Value value,
   // Unique the results.
   filterPaths(*results, ctx->doKeepOnlyMaxDelayPaths(), ctx->isLocalScope());
   LLVM_DEBUG({
-    llvm::dbgs() << value << "[" << bitPos << "] "
-                 << "Found " << results->size() << " paths\n";
+    llvm::dbgs() << value << "[" << bitPos << "] " << "Found "
+                 << results->size() << " paths\n";
     llvm::dbgs() << "====Paths:\n";
     for (auto &path : *results) {
       path.print(llvm::dbgs());

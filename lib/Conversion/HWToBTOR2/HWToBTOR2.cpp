@@ -205,9 +205,7 @@ private:
     size_t sortlid = setSortLID(width);
 
     // Build and return a sort declaration
-    os << sortlid << " "
-       << "sort"
-       << " " << type << " " << width << "\n";
+    os << sortlid << " " << "sort" << " " << type << " " << width << "\n";
   }
 
   // Generates an input declaration given a sort lid and a name.
@@ -216,9 +214,7 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Generate input declaration
-    os << inlid << " "
-       << "input"
-       << " " << sid << " " << name << "\n";
+    os << inlid << " " << "input" << " " << sid << " " << name << "\n";
   }
 
   // Generates a constant declaration given a value, a width and a name.
@@ -230,9 +226,7 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    os << opLID << " "
-       << "constd"
-       << " " << sid << " " << value << "\n";
+    os << opLID << " " << "constd" << " " << sid << " " << value << "\n";
   }
 
   // Generates a zero constant expression
@@ -249,9 +243,7 @@ private:
     size_t constlid = setConstLID(0, width);
 
     // Build and return the zero btor instruction
-    os << constlid << " "
-       << "zero"
-       << " " << sid << "\n";
+    os << constlid << " " << "zero" << " " << sid << "\n";
     return constlid;
   }
 
@@ -265,9 +257,8 @@ private:
 
     // Build and emit the string (the lid here doesn't need to be associated
     // to an op as it won't be used)
-    os << lid++ << " "
-       << "init"
-       << " " << sid << " " << regLID << " " << initValLID << "\n";
+    os << lid++ << " " << "init" << " " << sid << " " << regLID << " "
+       << initValLID << "\n";
   }
 
   // Generates a binary operation instruction given an op name, two operands
@@ -356,10 +347,8 @@ private:
     size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    os << opLID << " "
-       << "slice"
-       << " " << sid << " " << op0LID << " " << (lowbit + width - 1) << " "
-       << lowbit << "\n";
+    os << opLID << " " << "slice" << " " << sid << " " << op0LID << " "
+       << (lowbit + width - 1) << " " << lowbit << "\n";
   }
 
   /// Generates a chain of concats to represent a replicate op
@@ -374,10 +363,8 @@ private:
       genSort("bitvec", currentWidth);
 
       auto thisLid = lid++;
-      os << thisLid << " "
-         << "concat"
-         << " " << sortToLIDMap.at(currentWidth) << " " << prevOperandLID << " "
-         << getOpLID(op0) << "\n";
+      os << thisLid << " " << "concat" << " " << sortToLIDMap.at(currentWidth)
+         << " " << prevOperandLID << " " << getOpLID(op0) << "\n";
       prevOperandLID = thisLid;
     }
 
@@ -445,9 +432,7 @@ private:
   void genBad(size_t assertLID) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << " "
-       << "bad"
-       << " " << assertLID << "\n";
+    os << lid++ << " " << "bad" << " " << assertLID << "\n";
   }
 
   // Generate a btor2 constraint given an expression from an assumption
@@ -464,9 +449,7 @@ private:
   void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << " "
-       << "constraint"
-       << " " << exprLID << "\n";
+    os << lid++ << " " << "constraint" << " " << exprLID << "\n";
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
@@ -491,9 +474,8 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the ite instruction
-    os << opLID << " "
-       << "ite"
-       << " " << sid << " " << condLID << " " << tLID << " " << fLID << "\n";
+    os << opLID << " " << "ite" << " " << sid << " " << condLID << " " << tLID
+       << " " << fLID << "\n";
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -516,9 +498,8 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(1);
     // Build and emit the implies operation
-    os << opLID << " "
-       << "implies"
-       << " " << sid << " " << lhsLID << " " << rhsLID << "\n";
+    os << opLID << " " << "implies" << " " << sid << " " << lhsLID << " "
+       << rhsLID << "\n";
     return opLID;
   }
 
@@ -531,9 +512,7 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the state instruction
-    os << opLID << " "
-       << "state"
-       << " " << sid << " " << name << "\n";
+    os << opLID << " " << "state" << " " << sid << " " << name << "\n";
   }
 
   // Generates a next instruction, given a width, a state LID, and a next
@@ -548,9 +527,8 @@ private:
 
     // Build and return the next instruction
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << " "
-       << "next"
-       << " " << sid << " " << regLID << " " << nextLID << "\n";
+    os << lid++ << " " << "next" << " " << sid << " " << regLID << " "
+       << nextLID << "\n";
   }
 
   // Verifies that the sort required for the given operation's btor2 emission

@@ -111,10 +111,9 @@ std::optional<uint64_t> circt::hw::getBitWidth(mlir::Type type) {
   // Handle built-in types that don't implement the interface. Do this first
   // since it is faster than downcasting to an interface.
   return llvm::TypeSwitch<::mlir::Type, std::optional<uint64_t>>(type)
-      .Case<IntegerType>(
-          [](IntegerType t) -> std::optional<uint64_t> {
-            return t.getIntOrFloatBitWidth();
-          })
+      .Case<IntegerType>([](IntegerType t) -> std::optional<uint64_t> {
+        return t.getIntOrFloatBitWidth();
+      })
       .Default([](Type type) -> std::optional<uint64_t> {
         // If type implements the BitWidthTypeInterface, use it.
         if (auto iface = dyn_cast<BitWidthTypeInterface>(type))
