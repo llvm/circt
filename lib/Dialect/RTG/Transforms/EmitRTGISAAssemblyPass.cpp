@@ -17,6 +17,7 @@
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Path.h"
 #include "mlir/Support/FileUtilities.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -159,8 +160,32 @@ private:
   }
 
   LogicalResult emit(StringDataOp op) {
-    os << llvm::indent(4) << ".asciz "
-       << op.getDataAttr() << "\n";
+    os << llvm::indent(4) << ".asciz \"";
+    // NOTE: llvm::printEscapedString does not work because assemblers do not
+    // support the hex escapes (e.g., \0a instead of \n)
+    for (auto c : op.getData()) {
+      switch (c) {
+        case '\n':
+          os << "\\n";
+          break;
+        case '\t':
+          os << "\\t";
+          break;
+        case '\r':
+          os << "\\r";
+          break;
+        case '\\':
+          os << "\\\\";
+          break;
+        case '"':
+          os << "\\\"";
+          break;
+        default:
+          os << c;
+          break;
+      }
+    }
+    os << "\"\n";
     return success();
   }
 
