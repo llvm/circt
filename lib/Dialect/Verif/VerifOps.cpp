@@ -100,20 +100,34 @@ struct EraseIfEnableFalse : public OpRewritePattern<Op> {
   }
 };
 
-/// Delete operation if property is `ltl.boolean_constant true`.
+/// Delete operation if property is `ltl.boolean_constant true` or
+/// `hw.constant true`.
 template <typename Op>
 struct EraseIfPropertyTrue : public OpRewritePattern<Op> {
   using OpRewritePattern<Op>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(Op op,
                                 PatternRewriter &rewriter) const override {
-    auto boolConst =
-        op.getProperty().template getDefiningOp<ltl::BooleanConstantOp>();
-    if (!boolConst || !boolConst.getValueAttr().getValue())
-      return failure();
+    Value property = op.getProperty();
 
-    rewriter.eraseOp(op);
-    return success();
+    // Check for ltl.boolean_constant true
+    if (auto boolConst =
+            property.template getDefiningOp<ltl::BooleanConstantOp>()) {
+      if (boolConst.getValueAttr().getValue()) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+
+    // Check for hw.constant true (for i1 properties)
+    if (auto hwConst = property.template getDefiningOp<hw::ConstantOp>()) {
+      if (hwConst.getValue().isOne()) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+
+    return failure();
   }
 };
 
