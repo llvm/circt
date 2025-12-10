@@ -113,7 +113,41 @@ public:
 
 protected:
   const Type *type;
-  const WindowType *translationType;
+
+  /// Instructions for translating windowed types. Precomputes and optimizes a
+  /// list of copy operations.
+  struct TranslationInfo {
+    TranslationInfo(const WindowType *windowType) : windowType(windowType) {}
+
+    /// Precompute and optimize the copy operations for translating frames.
+    void precomputeFrameInfo();
+
+    /// The window type being translated.
+    const WindowType *windowType;
+
+    /// A copy operation for translating between frame data and the translation.
+    /// Run this during the translation.
+    struct CopyOp {
+      /// Offset in the incoming/outgoing frame data.
+      size_t frameOffset;
+      /// Offset in the translation buffer.
+      size_t bufferOffset;
+      /// Number of bytes to copy.
+      size_t size;
+    };
+    /// Information about each frame in the windowed type.
+    struct FrameInfo {
+      /// The total size of a frame in bytes.
+      size_t expectedSize;
+      /// Precomputed copy operations for translating this frame.
+      std::vector<CopyOp> copyOps;
+    };
+    /// Precomputed information about each frame.
+    std::vector<FrameInfo> frames;
+    /// Size of the 'into' type in bytes.
+    size_t intoTypeBytes = 0;
+  };
+  std::unique_ptr<TranslationInfo> translationInfo;
 
   /// Method called by poll() to actually poll the channel if the channel is
   /// connected.
@@ -130,7 +164,9 @@ public:
   using ChannelPort::ChannelPort;
 
   virtual void connect(const ConnectOptions &options = {}) override {
-    translateMessages = options.translateMessage && translationType;
+    translateMessages = options.translateMessage && translationInfo;
+    if (translateMessages)
+      translationInfo->precomputeFrameInfo();
     connectImpl(options);
     connected = true;
   }
