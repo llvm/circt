@@ -163,6 +163,9 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
       if (fieldBits < 0)
         throw std::runtime_error("Cannot translate field with dynamic size: " +
                                  name);
+      if (fieldBits % 8 != 0)
+        throw std::runtime_error(
+            "Cannot translate field with non-byte-aligned size: " + name);
       size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
       fieldMap[name] = {currentOffset, fieldType};
       currentOffset += fieldBytes;
@@ -173,6 +176,9 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
       if (fieldBits < 0)
         throw std::runtime_error("Cannot translate field with dynamic size: " +
                                  name);
+      if (fieldBits % 8 != 0)
+        throw std::runtime_error(
+            "Cannot translate field with non-byte-aligned size: " + name);
       size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
       fieldMap[name] = {currentOffset, fieldType};
       currentOffset += fieldBytes;
@@ -215,12 +221,11 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
     // Merge adjacent ops
     if (!frameInfo.copyOps.empty()) {
       std::vector<CopyOp> mergedOps;
-      mergedOps.reserve(frameInfo.copyOps.size());
       mergedOps.push_back(frameInfo.copyOps[0]);
 
       for (size_t i = 1; i < frameInfo.copyOps.size(); ++i) {
         CopyOp &last = mergedOps.back();
-        const CopyOp &current = frameInfo.copyOps[i];
+        CopyOp current = frameInfo.copyOps[i];
 
         if (last.frameOffset + last.size == current.frameOffset &&
             last.bufferOffset + last.size == current.bufferOffset) {
