@@ -1560,6 +1560,15 @@ LogicalResult Inliner::run() {
         if (mnla.isDead())
           return true;
 
+        // If the NLA becomes local after mutation (or sometimes an NLA is
+        // annotated even when the annotation is local in the first place),
+        // remove the nonlocal field.
+        if (mnla.isLocal()) {
+          anno.removeMember("circt.nonlocal");
+          newAnnotations.push_back(anno.getAttr());
+          return true;
+        }
+
         // Do nothing if there are no additional NLAs to add or if we're
         // dealing with a root module.  Root modules have already been updated
         // earlier in the pass.  We only need to update NLA paths which are

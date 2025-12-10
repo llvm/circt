@@ -1426,3 +1426,17 @@ firrtl.circuit "FormalMarkerIsUse" {
   // CHECK: firrtl.module private @Foo
   // CHECK: firrtl.module private @Bar
 }
+
+
+// -----
+
+firrtl.circuit "RemoveNonLocalFromLocal" {
+  // CHECK-NOT: @dutNLA
+  hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
+  firrtl.module @Bar() {}
+  // CHECK-LABEL: firrtl.module @RemoveNonLocalFromLocal
+  firrtl.module @RemoveNonLocalFromLocal() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: firrtl.instance bar sym @sym {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} @Bar()
+    firrtl.instance bar sym @sym {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @Bar()
+  }
+}
