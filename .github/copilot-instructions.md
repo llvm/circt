@@ -18,3 +18,12 @@
 - Keep Python bindings enabled when needed via `-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON`.
 - For PyCDE and the ESI runtime, add `-DCIRCT_ENABLE_FRONTENDS=PyCDE -DESI_RUNTIME=ON` (keep Python bindings on). Test with `ninja -C build check-pycde` and `ninja -C build check-pycde-integration` (the integration tests exercise both PyCDE and the ESI runtime and are the only ESIRuntime tests).
 - Prefer the integration image and the setup steps workflow for reliable dependencies; only fall back to host builds when explicitly requested.
+
+## Building and testing PyCDE and the ESI runtime
+
+- Building PyCDE and the ESI runtime requires Python bindings, so ensure that `-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON` are set in your CMake configuration.
+- To enable PyCDE and the ESI runtime specifically, add `-DCIRCT_ENABLE_FRONTENDS=PyCDE -DESI_RUNTIME=ON` to your CMake configuration.
+- To build PyCDE, run `ninja -C build PyCDE`.
+- To run the PyCDE tests, use `ninja -C build check-pycde`. This only tests PyCDE itself.
+- To compile the ESI runtime use `ninja -C build ESIRuntime`.
+- The ESI runtime is tested as part of the PyCDE integration tests, which can be run with `ninja -C build check-pycde-integration`. These tests exercise both PyCDE and the ESI runtime.

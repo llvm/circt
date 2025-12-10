@@ -63,6 +63,12 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
+  // Reset translation state
+  nextFrameIndex = 0;
+  accumulatingListData = false;
+  translationBuffer.clear();
+  listDataBuffer.clear();
+
   if (options.translateMessage && translationInfo) {
     translationInfo->precomputeFrameInfo();
     this->callback = [this, cb = std::move(callback)](MessageData data) {
@@ -79,6 +85,13 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+
+  // Reset translation state
+  nextFrameIndex = 0;
+  accumulatingListData = false;
+  translationBuffer.clear();
+  listDataBuffer.clear();
+
   bool translate = options.translateMessage && translationInfo;
   if (translate)
     translationInfo->precomputeFrameInfo();
@@ -141,49 +154,74 @@ std::future<MessageData> ReadChannelPort::readAsync() {
 void ChannelPort::TranslationInfo::precomputeFrameInfo() {
   const Type *intoType = windowType->getIntoType();
 
-  std::ptrdiff_t intoTypeBits = intoType->getBitWidth();
-  if (intoTypeBits < 0)
-    throw std::runtime_error(
-        "Cannot translate window with dynamically-sized intoType");
-  intoTypeBytes = (static_cast<size_t>(intoTypeBits) + 7) / 8;
-
   const StructType *intoStruct = dynamic_cast<const StructType *>(intoType);
   if (!intoStruct)
     throw std::runtime_error(
         "Window intoType must be a struct for translation");
 
   const auto &intoFields = intoStruct->getFields();
-  std::map<std::string, std::pair<size_t, const Type *>> fieldMap;
+
+  // Build a map from field name to (offset, type, isListField).
+  // For list fields, the offset is where the list_length field will be stored,
+  // and we also track the element type.
+  struct FieldInfo {
+    size_t offset;
+    const Type *type;
+    bool isList;
+    const Type *listElementType; // Only valid if isList is true
+    size_t listElementSize;      // Only valid if isList is true
+  };
+  std::map<std::string, FieldInfo> fieldMap;
   size_t currentOffset = 0;
+  hasListField = false;
+
+  auto processField = [&](const std::string &name, const Type *fieldType) {
+    auto *listType = dynamic_cast<const ListType *>(fieldType);
+    if (listType) {
+      hasListField = true;
+      // For list fields in the intoType:
+      // - We store a list_length (size_t / 8 bytes) followed by the list data
+      // - The offset here is where the list_length goes
+      const Type *elemType = listType->getElementType();
+      std::ptrdiff_t elemBits = elemType->getBitWidth();
+      if (elemBits < 0)
+        throw std::runtime_error(
+            "Cannot translate list with dynamically-sized element type: " +
+            name);
+      if (elemBits % 8 != 0)
+        throw std::runtime_error(
+            "Cannot translate list element with non-byte-aligned size: " +
+            name);
+      size_t elemBytes = (static_cast<size_t>(elemBits) + 7) / 8;
+      fieldMap[name] = {currentOffset, fieldType, true, elemType, elemBytes};
+      // Reserve space for list_length (8 bytes for size_t)
+      currentOffset += sizeof(size_t);
+      // List data will be appended dynamically after the fixed header
+    } else {
+      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
+      if (fieldBits < 0)
+        throw std::runtime_error("Cannot translate field with dynamic size: " +
+                                 name);
+      if (fieldBits % 8 != 0)
+        throw std::runtime_error(
+            "Cannot translate field with non-byte-aligned size: " + name);
+      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+      fieldMap[name] = {currentOffset, fieldType, false, nullptr, 0};
+      currentOffset += fieldBytes;
+    }
+  };
 
   if (intoStruct->isReverse()) {
-    for (auto it = intoFields.rbegin(); it != intoFields.rend(); ++it) {
-      const auto &[name, fieldType] = *it;
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      if (fieldBits < 0)
-        throw std::runtime_error("Cannot translate field with dynamic size: " +
-                                 name);
-      if (fieldBits % 8 != 0)
-        throw std::runtime_error(
-            "Cannot translate field with non-byte-aligned size: " + name);
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      fieldMap[name] = {currentOffset, fieldType};
-      currentOffset += fieldBytes;
-    }
+    for (auto it = intoFields.rbegin(); it != intoFields.rend(); ++it)
+      processField(it->first, it->second);
   } else {
-    for (const auto &[name, fieldType] : intoFields) {
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      if (fieldBits < 0)
-        throw std::runtime_error("Cannot translate field with dynamic size: " +
-                                 name);
-      if (fieldBits % 8 != 0)
-        throw std::runtime_error(
-            "Cannot translate field with non-byte-aligned size: " + name);
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      fieldMap[name] = {currentOffset, fieldType};
-      currentOffset += fieldBytes;
-    }
+    for (const auto &[name, fieldType] : intoFields)
+      processField(name, fieldType);
   }
+
+  // intoTypeBytes is now the size of the fixed header portion
+  // (for types with lists, this excludes the variable-length list data)
+  intoTypeBytes = currentOffset;
 
   const auto &windowFrames = windowType->getFrames();
   frames.clear();
@@ -193,7 +231,33 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
     FrameInfo frameInfo;
     size_t frameOffset = 0;
 
-    // Iterate fields in reverse (SV ordering)
+    // Calculate frame layout in SV memory order.
+    // SV structs are laid out with the last declared field at the lowest
+    // address. So when we iterate fields in reverse order (rbegin to rend),
+    // we get the memory layout order.
+    //
+    // For list fields, the lowered struct in CIRCT adds fields in this order:
+    //   1. list_data[numItems] - array of list elements
+    //   2. list_size - (if numItems > 1) count of valid items
+    //   3. last - indicates end of list
+    //
+    // In SV memory layout (reversed), this becomes:
+    //   offset 0: last (1 byte)
+    //   offset 1: list_size (if present)
+    //   offset after size: list_data[numItems]
+    //   offset after list: header fields...
+    struct FrameFieldLayout {
+      std::string name;
+      size_t frameOffset;
+      size_t size;
+      bool isList;
+      size_t numItems;              // From window spec
+      size_t listElementSize;       // Size of each list element
+      size_t bufferOffset;          // Offset in translation buffer
+      const Type *listElementType;  // Element type for list fields
+    };
+    std::vector<FrameFieldLayout> fieldLayouts;
+
     for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
          ++fieldIt) {
       const WindowType::Field &field = *fieldIt;
@@ -202,23 +266,90 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
         throw std::runtime_error("Frame field '" + field.name +
                                  "' not found in intoType");
 
-      size_t bufferOffset = it->second.first;
-      const Type *fieldType = it->second.second;
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+      const FieldInfo &fieldInfo = it->second;
+      FrameFieldLayout layout;
+      layout.name = field.name;
+      layout.bufferOffset = fieldInfo.offset;
+      layout.isList = fieldInfo.isList;
+      layout.numItems = field.numItems;
+      layout.listElementType = fieldInfo.listElementType;
+      layout.listElementSize = fieldInfo.listElementSize;
 
-      frameInfo.copyOps.push_back({frameOffset, bufferOffset, fieldBytes});
-      frameOffset += fieldBytes;
+      if (fieldInfo.isList) {
+        // For list fields, the frame layout is (in memory order):
+        //   1. 'last' field (1 byte)
+        //   2. '_size' field (if numItems > 1)
+        //   3. list_data array
+        size_t numItems = field.numItems > 0 ? field.numItems : 1;
+
+        // 'last' field comes first in memory
+        size_t lastOffset = frameOffset;
+        frameOffset += 1;
+
+        // '_size' field comes next (if present)
+        size_t sizeOffset = SIZE_MAX;
+        size_t sizeWidth = 0;
+        if (field.numItems > 1) {
+          size_t sizeBits = 64 - __builtin_clzll(field.numItems - 1);
+          if (sizeBits == 0)
+            sizeBits = 1;
+          sizeWidth = (sizeBits + 7) / 8;
+          sizeOffset = frameOffset;
+          frameOffset += sizeWidth;
+        }
+
+        // List data comes after last and _size
+        layout.frameOffset = frameOffset;
+        layout.size = numItems * fieldInfo.listElementSize;
+        fieldLayouts.push_back(layout);
+        frameOffset += layout.size;
+
+        // Store the computed offsets for use in the second pass
+        // We'll use layout.frameOffset for dataOffset and store last/size
+        // info in a temporary way through the layout struct
+        // Actually, we need to save these for the ListFieldInfo, so let's
+        // create it now instead of in the second pass
+        ListFieldInfo listInfo;
+        listInfo.fieldName = layout.name;
+        listInfo.dataOffset = layout.frameOffset;
+        listInfo.numItemsPerFrame = numItems;
+        listInfo.elementSize = fieldInfo.listElementSize;
+        listInfo.listLengthBufferOffset = layout.bufferOffset;
+        listInfo.listDataBufferOffset = intoTypeBytes;
+        listInfo.lastFieldOffset = lastOffset;
+        listInfo.sizeFieldOffset = sizeOffset;
+        listInfo.sizeFieldWidth = sizeWidth;
+        frameInfo.listField = listInfo;
+      } else {
+        // Regular (non-list) field
+        std::ptrdiff_t fieldBits = fieldInfo.type->getBitWidth();
+        layout.frameOffset = frameOffset;
+        layout.size = (static_cast<size_t>(fieldBits) + 7) / 8;
+        fieldLayouts.push_back(layout);
+        frameOffset += layout.size;
+      }
     }
+
     frameInfo.expectedSize = frameOffset;
 
-    // Sort by frameOffset to ensure processing order matches frame layout.
+    // Second pass: build copy ops for non-list fields
+    for (const auto &layout : fieldLayouts) {
+      if (!layout.isList) {
+        // Regular field - add copy op
+        frameInfo.copyOps.push_back(
+            {layout.frameOffset, layout.bufferOffset, layout.size});
+      }
+      // List fields were already handled in the first pass
+    }
+
+    // Sort copy ops by frameOffset to ensure processing order matches frame
+    // layout.
     std::sort(frameInfo.copyOps.begin(), frameInfo.copyOps.end(),
               [](const CopyOp &a, const CopyOp &b) {
                 return a.frameOffset < b.frameOffset;
               });
 
-    // Merge adjacent ops
+    // Merge adjacent copy ops
     if (!frameInfo.copyOps.empty()) {
       std::vector<CopyOp> mergedOps;
       mergedOps.push_back(frameInfo.copyOps[0]);
@@ -246,10 +377,6 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
   assert(translationInfo &&
          "Translation type must be set for window translation.");
 
-  // Frames arrive sequentially in order. We track which frame we're expecting
-  // with nextFrameIndex.
-  size_t numFrames = translationInfo->frames.size();
-
   // Get the frame data directly.
   const uint8_t *frameData = data.getBytes();
   size_t frameDataSize = data.size();
@@ -265,22 +392,80 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
                              " bytes");
 
   // Check if this is the first frame of a new message.
-  // If so, we need to initialize the translation buffer.
-  bool isFirstFrame = (nextFrameIndex == 0);
+  // For list frames, we use accumulatingListData to track whether we're
+  // continuing to accumulate list items.
+  bool isFirstFrame = (nextFrameIndex == 0) && !accumulatingListData;
 
   if (isFirstFrame) {
-    // Initialize the translation buffer to hold the complete intoType.
-    // The buffer will be filled in as frames arrive.
+    // Initialize the translation buffer to hold the fixed header portion.
     translationBuffer.resize(translationInfo->intoTypeBytes, 0);
+    // Clear list data buffer for types with lists
+    if (translationInfo->hasListField)
+      listDataBuffer.clear();
   }
 
-  // Execute copy ops
+  // Execute copy ops for non-list fields
   for (const auto &op : frameInfo.copyOps)
     std::memcpy(translationBuffer.data() + op.bufferOffset,
                 frameData + op.frameOffset, op.size);
 
-  // Move to the next frame.
+  // Handle list field if present in this frame
+  if (frameInfo.listField.has_value()) {
+    const auto &listInfo = frameInfo.listField.value();
+
+    // Determine how many valid items are in this frame
+    size_t validItems = listInfo.numItemsPerFrame;
+    if (listInfo.sizeFieldOffset != SIZE_MAX) {
+      // Read the _size field to get actual count of valid items
+      validItems = 0;
+      for (size_t i = 0; i < listInfo.sizeFieldWidth; ++i)
+        validItems |= static_cast<size_t>(frameData[listInfo.sizeFieldOffset + i]) << (i * 8);
+      // The _size field indicates valid items (0 to numItems-1 means 1 to numItems valid)
+      // Actually, _size directly indicates the count of valid items
+      if (validItems == 0)
+        validItems = listInfo.numItemsPerFrame; // 0 means all items valid
+    }
+
+    // Copy list data to the accumulator
+    size_t bytesToCopy = validItems * listInfo.elementSize;
+    size_t oldSize = listDataBuffer.size();
+    listDataBuffer.resize(oldSize + bytesToCopy);
+    std::memcpy(listDataBuffer.data() + oldSize,
+                frameData + listInfo.dataOffset, bytesToCopy);
+
+    // Check if this is the last frame of the list
+    uint8_t lastFlag = frameData[listInfo.lastFieldOffset];
+    if (lastFlag) {
+      // List is complete. Build the final message:
+      // [fixed header][list_length (size_t)][list data...]
+      // But actually, list_length is already at listLengthBufferOffset in the
+      // header We need to write the actual length there.
+      size_t listLength = listDataBuffer.size() / listInfo.elementSize;
+      std::memcpy(translationBuffer.data() + listInfo.listLengthBufferOffset,
+                  &listLength, sizeof(size_t));
+
+      // Append list data to translation buffer
+      size_t headerSize = translationBuffer.size();
+      translationBuffer.resize(headerSize + listDataBuffer.size());
+      std::memcpy(translationBuffer.data() + headerSize, listDataBuffer.data(),
+                  listDataBuffer.size());
+
+      // Reset for next message
+      nextFrameIndex = 0;
+      listDataBuffer.clear();
+      accumulatingListData = false;
+      return true;
+    }
+
+    // Not the last frame - stay on this frame index for list accumulation
+    // (list frames repeat until last=true)
+    accumulatingListData = true;
+    return false;
+  }
+
+  // No list field in this frame - advance to next frame
   nextFrameIndex++;
+  size_t numFrames = translationInfo->frames.size();
 
   // Check if all frames have been received.
   if (nextFrameIndex >= numFrames) {
@@ -305,11 +490,98 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
                              " bytes, got " + std::to_string(srcDataSize) +
                              " bytes");
 
+  // Check if we have list fields
+  if (!translationInfo->hasListField) {
+    // No list fields - simple fixed-size translation
+    for (const auto &frameInfo : translationInfo->frames) {
+      std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
+      for (const auto &op : frameInfo.copyOps)
+        std::memcpy(frameBuffer.data() + op.frameOffset,
+                    srcData + op.bufferOffset, op.size);
+      translationBuffer.emplace_back(std::move(frameBuffer));
+    }
+    return;
+  }
+
+  // Handle list fields - need to split list data into multiple frames
   for (const auto &frameInfo : translationInfo->frames) {
-    std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
-    for (const auto &op : frameInfo.copyOps)
-      std::memcpy(frameBuffer.data() + op.frameOffset,
-                  srcData + op.bufferOffset, op.size);
-    translationBuffer.emplace_back(std::move(frameBuffer));
+    if (!frameInfo.listField.has_value()) {
+      // Non-list frame - copy as normal
+      std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
+      for (const auto &op : frameInfo.copyOps)
+        std::memcpy(frameBuffer.data() + op.frameOffset,
+                    srcData + op.bufferOffset, op.size);
+      translationBuffer.emplace_back(std::move(frameBuffer));
+    } else {
+      // List frame - need to generate multiple frames
+      const auto &listInfo = frameInfo.listField.value();
+
+      // Read the list length from the source data
+      size_t listLength = 0;
+      std::memcpy(&listLength, srcData + listInfo.listLengthBufferOffset,
+                  sizeof(size_t));
+
+      // Get pointer to list data (after the fixed header)
+      const uint8_t *listData = srcData + translationInfo->intoTypeBytes;
+
+      // Generate frames for the list
+      size_t itemsRemaining = listLength;
+      size_t listDataOffset = 0;
+
+      // Handle empty list case - still need to send one frame with last=true
+      if (listLength == 0) {
+        std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
+        // Copy non-list fields (header data)
+        for (const auto &op : frameInfo.copyOps)
+          std::memcpy(frameBuffer.data() + op.frameOffset,
+                      srcData + op.bufferOffset, op.size);
+        // Set _size to 0 if present
+        if (listInfo.sizeFieldOffset != SIZE_MAX) {
+          size_t zero = 0;
+          std::memcpy(frameBuffer.data() + listInfo.sizeFieldOffset, &zero,
+                      listInfo.sizeFieldWidth);
+        }
+        // Set last to true
+        frameBuffer[listInfo.lastFieldOffset] = 1;
+        translationBuffer.emplace_back(std::move(frameBuffer));
+        continue;
+      }
+
+      while (itemsRemaining > 0) {
+        std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
+
+        // Copy non-list fields (header data) to each frame
+        for (const auto &op : frameInfo.copyOps)
+          std::memcpy(frameBuffer.data() + op.frameOffset,
+                      srcData + op.bufferOffset, op.size);
+
+        // Determine how many items to put in this frame
+        size_t itemsInThisFrame =
+            std::min(itemsRemaining, listInfo.numItemsPerFrame);
+        size_t bytesInThisFrame = itemsInThisFrame * listInfo.elementSize;
+
+        // Copy list data
+        std::memcpy(frameBuffer.data() + listInfo.dataOffset,
+                    listData + listDataOffset, bytesInThisFrame);
+
+        // Set _size field if present
+        if (listInfo.sizeFieldOffset != SIZE_MAX) {
+          // _size indicates valid items: 0 means all valid (numItemsPerFrame)
+          size_t sizeValue =
+              (itemsInThisFrame == listInfo.numItemsPerFrame) ? 0 : itemsInThisFrame;
+          std::memcpy(frameBuffer.data() + listInfo.sizeFieldOffset, &sizeValue,
+                      listInfo.sizeFieldWidth);
+        }
+
+        // Update remaining count
+        itemsRemaining -= itemsInThisFrame;
+        listDataOffset += bytesInThisFrame;
+
+        // Set last field
+        frameBuffer[listInfo.lastFieldOffset] = (itemsRemaining == 0) ? 1 : 0;
+
+        translationBuffer.emplace_back(std::move(frameBuffer));
+      }
+    }
   }
 }

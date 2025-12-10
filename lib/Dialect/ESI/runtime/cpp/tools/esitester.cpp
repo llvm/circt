@@ -59,6 +59,8 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *,
                                           bool write);
 static void streamingAddTest(AcceleratorConnection *, Accelerator *,
                              uint32_t addAmt, uint32_t numItems);
+static void streamingAddTranslatedTest(AcceleratorConnection *, Accelerator *,
+                                       uint32_t addAmt, uint32_t numItems);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -222,10 +224,13 @@ int main(int argc, const char *argv[]) {
       "streaming_add", "Test StreamingAdder function service with list input");
   uint32_t streamingAddAmt = 5;
   uint32_t streamingNumItems = 5;
+  bool streamingTranslate = false;
   streamingAddSub->add_option("-a,--add", streamingAddAmt,
                               "Amount to add to each element (default 5)");
   streamingAddSub->add_option("-n,--num-items", streamingNumItems,
                               "Number of random items in the list (default 5)");
+  streamingAddSub->add_flag("-t,--translate", streamingTranslate,
+                            "Use message translation (list translation)");
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -260,7 +265,11 @@ int main(int argc, const char *argv[]) {
       aggregateHostmemBandwidthTest(acc, accel, aggWidth, aggCount, aggRead,
                                     aggWrite);
     } else if (*streamingAddSub) {
-      streamingAddTest(acc, accel, streamingAddAmt, streamingNumItems);
+      if (streamingTranslate)
+        streamingAddTranslatedTest(acc, accel, streamingAddAmt,
+                                   streamingNumItems);
+      else
+        streamingAddTest(acc, accel, streamingAddAmt, streamingNumItems);
     }
 
     acc->disconnect();
@@ -1327,5 +1336,151 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
     throw std::runtime_error("Streaming add test failed: result mismatch");
 
   logger.info("esitester", "Streaming add test passed");
+  std::cout << "Streaming add test passed" << std::endl;
+}
+
+/// Test the StreamingAdder module using message translation.
+/// This version uses the list translation support where the message format is:
+///   Argument: { add_amt (4 bytes), input_length (8 bytes), input_data[] }
+///   Result: { data_length (8 bytes), data[] }
+/// The translation layer automatically converts between this format and the
+/// parallel windowed frames used by the hardware.
+
+/// Translated argument struct for StreamingAdder.
+/// Memory layout (SV ordering - fields reversed from declaration order):
+///   struct { add_amt: UInt(32), input: List<UInt(32)> }
+/// becomes:
+///   { input_length (size_t), add_amt (uint32_t), input_data[] }
+#pragma pack(push, 1)
+struct StreamingAddTranslatedArg {
+  size_t inputLength;
+  uint32_t addAmt;
+  uint32_t inputData[]; // Flexible array member
+
+  static size_t allocSize(size_t numItems) {
+    return sizeof(StreamingAddTranslatedArg) + numItems * sizeof(uint32_t);
+  }
+};
+#pragma pack(pop)
+
+/// Translated result struct for StreamingAdder.
+/// Memory layout:
+///   struct { data: List<UInt(32)> }
+/// becomes:
+///   { data_length (size_t), data[] }
+#pragma pack(push, 1)
+struct StreamingAddTranslatedResult {
+  size_t dataLength;
+  uint32_t data[]; // Flexible array member
+
+  static size_t allocSize(size_t numItems) {
+    return sizeof(StreamingAddTranslatedResult) + numItems * sizeof(uint32_t);
+  }
+};
+#pragma pack(pop)
+
+static void streamingAddTranslatedTest(AcceleratorConnection *conn,
+                                       Accelerator *accel, uint32_t addAmt,
+                                       uint32_t numItems) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester",
+              "Starting streaming add test (translated) with add_amt=" +
+                  std::to_string(addAmt) +
+                  ", num_items=" + std::to_string(numItems));
+
+  // Generate random input data.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<uint32_t> inputData;
+  inputData.reserve(numItems);
+  for (uint32_t i = 0; i < numItems; ++i)
+    inputData.push_back(dist(rng));
+
+  // Find the streaming_adder child.
+  auto streamingAdderChild =
+      accel->getChildren().find(AppID("streaming_adder"));
+  if (streamingAdderChild == accel->getChildren().end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_adder' child found");
+
+  auto &ports = streamingAdderChild->second->getPorts();
+  auto addIter = ports.find(AppID("streaming_add"));
+  if (addIter == ports.end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_add' port found");
+
+  // Get the raw read/write channel ports with translation enabled (default).
+  WriteChannelPort &argPort = addIter->second.getRawWrite("arg");
+  ReadChannelPort &resultPort = addIter->second.getRawRead("result");
+
+  // Connect with translation enabled (the default).
+  argPort.connect();
+  resultPort.connect();
+
+  // Allocate and populate the argument struct.
+  size_t argSize = StreamingAddTranslatedArg::allocSize(numItems);
+  auto *arg = reinterpret_cast<StreamingAddTranslatedArg *>(
+      new uint8_t[argSize]);
+  arg->inputLength = numItems;
+  arg->addAmt = addAmt;
+  for (uint32_t i = 0; i < numItems; ++i)
+    arg->inputData[i] = inputData[i];
+
+  logger.debug("esitester",
+               "Sending translated argument: " + std::to_string(argSize) +
+                   " bytes, list_length=" + std::to_string(arg->inputLength) +
+                   ", add_amt=" + std::to_string(arg->addAmt));
+
+  // Send the complete message - translation will split it into frames.
+  argPort.write(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize));
+  delete[] reinterpret_cast<uint8_t *>(arg);
+
+  // Read the translated result.
+  MessageData resMsg;
+  resultPort.read(resMsg);
+
+  logger.debug("esitester", "Received translated result: " +
+                                std::to_string(resMsg.getSize()) + " bytes");
+
+  if (resMsg.getSize() < sizeof(StreamingAddTranslatedResult))
+    throw std::runtime_error(
+        "Streaming add test (translated): result too small");
+
+  const auto *result =
+      reinterpret_cast<const StreamingAddTranslatedResult *>(resMsg.getBytes());
+
+  if (resMsg.getSize() <
+      StreamingAddTranslatedResult::allocSize(result->dataLength))
+    throw std::runtime_error(
+        "Streaming add test (translated): result data truncated");
+
+  // Verify results.
+  if (result->dataLength != inputData.size())
+    throw std::runtime_error(
+        "Streaming add test (translated): result size mismatch. Expected " +
+        std::to_string(inputData.size()) + ", got " +
+        std::to_string(result->dataLength));
+
+  bool passed = true;
+  std::cout << "Streaming add test results:" << std::endl;
+  for (size_t i = 0; i < inputData.size(); ++i) {
+    uint32_t expected = inputData[i] + addAmt;
+    std::cout << "  input[" << i << "]=" << inputData[i] << " + " << addAmt
+              << " = " << result->data[i] << " (expected " << expected << ")";
+    if (result->data[i] != expected) {
+      std::cout << " MISMATCH!";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  argPort.disconnect();
+  resultPort.disconnect();
+
+  if (!passed)
+    throw std::runtime_error(
+        "Streaming add test (translated) failed: result mismatch");
+
+  logger.info("esitester", "Streaming add test passed (translated)");
   std::cout << "Streaming add test passed" << std::endl;
 }

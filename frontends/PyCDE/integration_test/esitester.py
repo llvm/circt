@@ -21,6 +21,7 @@
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester -v cosim env callback -i 5 | FileCheck %s
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add | FileCheck %s --check-prefix=STREAMING_ADD
+# RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add -t | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
