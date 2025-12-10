@@ -113,7 +113,26 @@ public:
 
 protected:
   const Type *type;
-  const WindowType *translationType;
+
+  struct TranslationInfo {
+    TranslationInfo(const WindowType *windowType) : windowType(windowType) {}
+    void precomputeFrameInfo();
+
+    const WindowType *windowType;
+
+    struct CopyOp {
+      size_t frameOffset;
+      size_t bufferOffset;
+      size_t size;
+    };
+    struct FrameInfo {
+      size_t expectedSize;
+      std::vector<CopyOp> copyOps;
+    };
+    std::vector<FrameInfo> frames;
+    size_t intoTypeBytes = 0;
+  };
+  std::unique_ptr<TranslationInfo> translationInfo;
 
   /// Method called by poll() to actually poll the channel if the channel is
   /// connected.
@@ -130,7 +149,9 @@ public:
   using ChannelPort::ChannelPort;
 
   virtual void connect(const ConnectOptions &options = {}) override {
-    translateMessages = options.translateMessage && translationType;
+    translateMessages = options.translateMessage && translationInfo;
+    if (translateMessages)
+      translationInfo->precomputeFrameInfo();
     connectImpl(options);
     connected = true;
   }

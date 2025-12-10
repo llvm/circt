@@ -15,6 +15,7 @@
 #include "esi/Ports.h"
 #include "esi/Types.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -25,11 +26,14 @@ using namespace esi;
 ChannelPort::ChannelPort(const Type *type) {
   if (auto chanType = dynamic_cast<const ChannelType *>(type))
     type = chanType->getInner();
-  translationType = dynamic_cast<const WindowType *>(type);
-  if (translationType)
+  auto translationType = dynamic_cast<const WindowType *>(type);
+  if (translationType) {
     this->type = translationType->getIntoType();
-  else
+    this->translationInfo = std::make_unique<TranslationInfo>(translationType);
+  } else {
     this->type = type;
+    this->translationInfo = nullptr;
+  }
 }
 
 BundlePort::BundlePort(AppID id, const BundleType *type, PortMap channels)
@@ -59,7 +63,8 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
-  if (options.translateMessage && translationType) {
+  if (options.translateMessage && translationInfo) {
+    translationInfo->precomputeFrameInfo();
     this->callback = [this, cb = std::move(callback)](MessageData data) {
       if (translateIncoming(data))
         return cb(MessageData(std::move(translationBuffer)));
@@ -74,7 +79,9 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
-  bool translate = options.translateMessage && translationType;
+  bool translate = options.translateMessage && translationInfo;
+  if (translate)
+    translationInfo->precomputeFrameInfo();
   this->callback = [this, translate](MessageData data) {
     if (translate) {
       if (!translateIncoming(data))
@@ -128,57 +135,27 @@ std::future<MessageData> ReadChannelPort::readAsync() {
 }
 
 //===----------------------------------------------------------------------===//
-// Translation of incoming data for window types.
+// Window translation support
 //===----------------------------------------------------------------------===//
 
-bool ReadChannelPort::translateIncoming(MessageData &data) {
-  assert(translationType &&
-         "Translation type must be set for window translation.");
+void ChannelPort::TranslationInfo::precomputeFrameInfo() {
+  const Type *intoType = windowType->getIntoType();
 
-  const auto &frames = translationType->getFrames();
-  const Type *intoType = translationType->getIntoType();
+  std::ptrdiff_t intoTypeBits = intoType->getBitWidth();
+  if (intoTypeBits < 0)
+    throw std::runtime_error(
+        "Cannot translate window with dynamically-sized intoType");
+  intoTypeBytes = (static_cast<size_t>(intoTypeBits) + 7) / 8;
 
-  // Frames arrive sequentially in order. We track which frame we're expecting
-  // with nextFrameIndex.
-  size_t numFrames = frames.size();
-
-  // Get the frame data directly.
-  const uint8_t *frameData = data.getBytes();
-  size_t frameDataSize = data.size();
-
-  // Get the frame metadata for the current expected frame.
-  const WindowType::Frame &frame = frames[nextFrameIndex];
-
-  // Check if this is the first frame of a new message.
-  // If so, we need to initialize the translation buffer.
-  bool isFirstFrame = (nextFrameIndex == 0);
-
-  if (isFirstFrame) {
-    // Initialize the translation buffer to hold the complete intoType.
-    // The buffer will be filled in as frames arrive.
-    std::ptrdiff_t intoTypeBits = intoType->getBitWidth();
-    if (intoTypeBits < 0)
-      throw std::runtime_error(
-          "Cannot translate window with dynamically-sized intoType");
-    size_t intoTypeBytes = (static_cast<size_t>(intoTypeBits) + 7) / 8;
-    translationBuffer.resize(intoTypeBytes, 0);
-  }
-
-  // Get the intoType as a struct to find field offsets.
   const StructType *intoStruct = dynamic_cast<const StructType *>(intoType);
   if (!intoStruct)
     throw std::runtime_error(
         "Window intoType must be a struct for translation");
 
-  // Build a map of field name to (offset, type) in the intoType.
-  // Offset is in bytes from the start of the struct.
-  // SystemVerilog ordering: last field is at LSB (offset 0).
   const auto &intoFields = intoStruct->getFields();
-  std::map<std::string, std::pair<size_t, const Type *>> fieldInfo;
+  std::map<std::string, std::pair<size_t, const Type *>> fieldMap;
   size_t currentOffset = 0;
 
-  // If the struct is reversed (SV ordering), iterate in reverse to compute
-  // offsets.
   if (intoStruct->isReverse()) {
     for (auto it = intoFields.rbegin(); it != intoFields.rend(); ++it) {
       const auto &[name, fieldType] = *it;
@@ -187,7 +164,7 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
         throw std::runtime_error("Cannot translate field with dynamic size: " +
                                  name);
       size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      fieldInfo[name] = {currentOffset, fieldType};
+      fieldMap[name] = {currentOffset, fieldType};
       currentOffset += fieldBytes;
     }
   } else {
@@ -197,40 +174,102 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
         throw std::runtime_error("Cannot translate field with dynamic size: " +
                                  name);
       size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      fieldInfo[name] = {currentOffset, fieldType};
+      fieldMap[name] = {currentOffset, fieldType};
       currentOffset += fieldBytes;
     }
   }
 
-  // Copy each field from the frame into the appropriate position in the
-  // translation buffer. The frame struct also follows SV ordering.
-  size_t frameOffset = 0;
-  // Frame fields are in the order specified in the window definition.
-  // We iterate them in reverse for SV ordering (last field at LSB).
-  for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
-       ++fieldIt) {
-    const WindowType::Field &field = *fieldIt;
-    auto infoIt = fieldInfo.find(field.name);
-    if (infoIt == fieldInfo.end())
-      throw std::runtime_error("Frame field '" + field.name +
-                               "' not found in intoType");
+  const auto &windowFrames = windowType->getFrames();
+  frames.clear();
+  frames.reserve(windowFrames.size());
 
-    const auto &[destOffset, fieldType] = infoIt->second;
-    std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-    size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+  for (const auto &frame : windowFrames) {
+    FrameInfo frameInfo;
+    size_t frameOffset = 0;
 
-    // Check bounds.
-    if (frameOffset + fieldBytes > frameDataSize)
-      throw std::runtime_error("Frame data too small for field: " + field.name);
-    if (destOffset + fieldBytes > translationBuffer.size())
-      throw std::runtime_error("Translation buffer too small for field: " +
-                               field.name);
+    // Iterate fields in reverse (SV ordering)
+    for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
+         ++fieldIt) {
+      const WindowType::Field &field = *fieldIt;
+      auto it = fieldMap.find(field.name);
+      if (it == fieldMap.end())
+        throw std::runtime_error("Frame field '" + field.name +
+                                 "' not found in intoType");
 
-    // Copy the field data.
-    std::memcpy(translationBuffer.data() + destOffset, frameData + frameOffset,
-                fieldBytes);
-    frameOffset += fieldBytes;
+      size_t bufferOffset = it->second.first;
+      const Type *fieldType = it->second.second;
+      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
+      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
+
+      frameInfo.copyOps.push_back({frameOffset, bufferOffset, fieldBytes});
+      frameOffset += fieldBytes;
+    }
+    frameInfo.expectedSize = frameOffset;
+
+    // Sort by frameOffset to ensure processing order matches frame layout.
+    std::sort(frameInfo.copyOps.begin(), frameInfo.copyOps.end(),
+              [](const CopyOp &a, const CopyOp &b) {
+                return a.frameOffset < b.frameOffset;
+              });
+
+    // Merge adjacent ops
+    if (!frameInfo.copyOps.empty()) {
+      std::vector<CopyOp> mergedOps;
+      mergedOps.reserve(frameInfo.copyOps.size());
+      mergedOps.push_back(frameInfo.copyOps[0]);
+
+      for (size_t i = 1; i < frameInfo.copyOps.size(); ++i) {
+        CopyOp &last = mergedOps.back();
+        const CopyOp &current = frameInfo.copyOps[i];
+
+        if (last.frameOffset + last.size == current.frameOffset &&
+            last.bufferOffset + last.size == current.bufferOffset) {
+          last.size += current.size;
+        } else {
+          mergedOps.push_back(current);
+        }
+      }
+
+      frameInfo.copyOps = std::move(mergedOps);
+    }
+
+    frames.push_back(std::move(frameInfo));
   }
+}
+
+bool ReadChannelPort::translateIncoming(MessageData &data) {
+  assert(translationInfo &&
+         "Translation type must be set for window translation.");
+
+  // Frames arrive sequentially in order. We track which frame we're expecting
+  // with nextFrameIndex.
+  size_t numFrames = translationInfo->frames.size();
+
+  // Get the frame data directly.
+  const uint8_t *frameData = data.getBytes();
+  size_t frameDataSize = data.size();
+
+  // Get the frame metadata for the current expected frame.
+  const auto &frameInfo = translationInfo->frames[nextFrameIndex];
+
+  // Check size
+  if (frameDataSize < frameInfo.expectedSize)
+    throw std::runtime_error("Frame data too small");
+
+  // Check if this is the first frame of a new message.
+  // If so, we need to initialize the translation buffer.
+  bool isFirstFrame = (nextFrameIndex == 0);
+
+  if (isFirstFrame) {
+    // Initialize the translation buffer to hold the complete intoType.
+    // The buffer will be filled in as frames arrive.
+    translationBuffer.resize(translationInfo->intoTypeBytes, 0);
+  }
+
+  // Execute copy ops
+  for (const auto &op : frameInfo.copyOps)
+    std::memcpy(translationBuffer.data() + op.bufferOffset,
+                frameData + op.frameOffset, op.size);
 
   // Move to the next frame.
   nextFrameIndex++;
@@ -245,103 +284,22 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
   return false;
 }
 
-//===----------------------------------------------------------------------===//
-// Translation of outgoing data for window types.
-//===----------------------------------------------------------------------===//
-
 void WriteChannelPort::translateOutgoing(const MessageData &data) {
-  assert(translationType &&
+  assert(translationInfo &&
          "Translation type must be set for window translation.");
 
-  const auto &frames = translationType->getFrames();
-  const Type *intoType = translationType->getIntoType();
-
-  // Get the intoType as a struct to find field offsets.
-  const StructType *intoStruct = dynamic_cast<const StructType *>(intoType);
-  if (!intoStruct)
-    throw std::runtime_error(
-        "Window intoType must be a struct for translation");
-
-  // Build a map of field name to (offset, type) in the intoType.
-  // Offset is in bytes from the start of the struct.
-  // SystemVerilog ordering: last field is at LSB (offset 0).
-  const auto &intoFields = intoStruct->getFields();
-  std::map<std::string, std::pair<size_t, const Type *>> fieldInfo;
-  size_t currentOffset = 0;
-
-  // If the struct is reversed (SV ordering), iterate in reverse to compute
-  // offsets.
-  if (intoStruct->isReverse()) {
-    for (auto it = intoFields.rbegin(); it != intoFields.rend(); ++it) {
-      const auto &[name, fieldType] = *it;
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      if (fieldBits < 0)
-        throw std::runtime_error("Cannot translate field with dynamic size: " +
-                                 name);
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      fieldInfo[name] = {currentOffset, fieldType};
-      currentOffset += fieldBytes;
-    }
-  } else {
-    for (const auto &[name, fieldType] : intoFields) {
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      if (fieldBits < 0)
-        throw std::runtime_error("Cannot translate field with dynamic size: " +
-                                 name);
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      fieldInfo[name] = {currentOffset, fieldType};
-      currentOffset += fieldBytes;
-    }
-  }
-
-  // Get the source data.
   const uint8_t *srcData = data.getBytes();
   size_t srcDataSize = data.size();
 
-  // Generate each frame.
-  for (const WindowType::Frame &frame : frames) {
-    // Calculate the size of this frame.
-    size_t frameSize = 0;
-    for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
-         ++fieldIt) {
-      const WindowType::Field &field = *fieldIt;
-      auto infoIt = fieldInfo.find(field.name);
-      if (infoIt == fieldInfo.end())
-        throw std::runtime_error("Frame field '" + field.name +
-                                 "' not found in intoType");
-      const auto &[srcOffset, fieldType] = infoIt->second;
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-      frameSize += fieldBytes;
-    }
+  if (srcDataSize < translationInfo->intoTypeBytes)
+    throw std::runtime_error("Source data too small");
 
-    // Create the frame buffer.
-    std::vector<uint8_t> frameBuffer(frameSize, 0);
-
-    // Copy each field from the source data into the frame.
-    // Frame fields are in SV ordering (last field at LSB).
-    size_t frameOffset = 0;
-    for (auto fieldIt = frame.fields.rbegin(); fieldIt != frame.fields.rend();
-         ++fieldIt) {
-      const WindowType::Field &field = *fieldIt;
-      auto infoIt = fieldInfo.find(field.name);
-      // Already checked above, so this should not fail.
-      const auto &[srcOffset, fieldType] = infoIt->second;
-      std::ptrdiff_t fieldBits = fieldType->getBitWidth();
-      size_t fieldBytes = (static_cast<size_t>(fieldBits) + 7) / 8;
-
-      // Check bounds.
-      if (srcOffset + fieldBytes > srcDataSize)
-        throw std::runtime_error("Source data too small for field: " +
-                                 field.name);
-
-      // Copy the field data.
-      std::memcpy(frameBuffer.data() + frameOffset, srcData + srcOffset,
-                  fieldBytes);
-      frameOffset += fieldBytes;
-    }
-
-    // Add the frame to the translation buffer.
+  std::vector<uint8_t> frameBuffer;
+  for (const auto &frameInfo : translationInfo->frames) {
+    frameBuffer.resize(frameInfo.expectedSize, 0);
+    for (const auto &op : frameInfo.copyOps)
+      std::memcpy(frameBuffer.data() + op.frameOffset,
+                  srcData + op.bufferOffset, op.size);
     translationBuffer.push_back(MessageData(std::move(frameBuffer)));
   }
 }
