@@ -116,7 +116,7 @@ public:
       : HWModule(info, std::move(children), services, ports), id(id) {}
 
   /// Get the instance's ID, which it will always have.
-  const AppID getID() const { return id; }
+  AppID getID() const { return id; }
 
 protected:
   const AppID id;

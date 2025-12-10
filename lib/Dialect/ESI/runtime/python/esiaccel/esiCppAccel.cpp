@@ -19,6 +19,8 @@
 #include <sstream>
 
 // nanobind includes
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-qual"
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/map.h>
@@ -27,6 +29,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/unique_ptr.h>
 #include <nanobind/stl/vector.h>
+#pragma GCC diagnostic pop
 
 namespace nb = nanobind;
 
@@ -66,12 +69,10 @@ namespace detail {
 template <>
 struct type_hook<ChannelPort> {
   static const std::type_info *get(const ChannelPort *port) {
-    if (auto p = dynamic_cast<const WriteChannelPort *>(port)) {
+    if (dynamic_cast<const WriteChannelPort *>(port))
       return &typeid(WriteChannelPort);
-    }
-    if (auto p = dynamic_cast<const ReadChannelPort *>(port)) {
+    if (dynamic_cast<const ReadChannelPort *>(port))
       return &typeid(ReadChannelPort);
-    }
     return &typeid(ChannelPort);
   }
 };
@@ -79,18 +80,14 @@ struct type_hook<ChannelPort> {
 template <>
 struct type_hook<Service> {
   static const std::type_info *get(const Service *svc) {
-    if (auto p = dynamic_cast<const MMIO *>(svc)) {
+    if (dynamic_cast<const MMIO *>(svc))
       return &typeid(MMIO);
-    }
-    if (auto p = dynamic_cast<const SysInfo *>(svc)) {
+    if (dynamic_cast<const SysInfo *>(svc))
       return &typeid(SysInfo);
-    }
-    if (auto p = dynamic_cast<const HostMem *>(svc)) {
+    if (dynamic_cast<const HostMem *>(svc))
       return &typeid(HostMem);
-    }
-    if (auto p = dynamic_cast<const TelemetryService *>(svc)) {
+    if (dynamic_cast<const TelemetryService *>(svc))
       return &typeid(TelemetryService);
-    }
     return &typeid(Service);
   }
 };
@@ -289,6 +286,8 @@ NB_MODULE(esiCppAccel, m) {
             return self.unmapMemory(reinterpret_cast<void *>(ptr));
           },
           nb::arg("ptr"));
+  nb::class_<services::TelemetryService, services::Service>(m,
+                                                            "TelemetryService");
 
   nb::class_<std::future<MessageData>>(m, "MessageDataFuture")
       .def("valid", [](std::future<MessageData> &f) { return f.valid(); })
@@ -326,14 +325,15 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write",
            [](WriteChannelPort &p, nb::bytearray data) {
-             std::vector<uint8_t> dataVec((uint8_t *)data.c_str(),
-                                          (uint8_t *)data.c_str() +
+             std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
+                                          (const uint8_t *)data.c_str() +
                                               data.size());
              p.write(dataVec);
            })
-      .def("tryWrite", [](WriteChannelPort &p, nb::bytes data) {
-        std::vector<uint8_t> dataVec((uint8_t *)data.c_str(),
-                                     (uint8_t *)data.c_str() + data.size());
+      .def("tryWrite", [](WriteChannelPort &p, nb::bytearray data) {
+        std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
+                                     (const uint8_t *)data.c_str() +
+                                         data.size());
         return p.tryWrite(dataVec);
       });
   nb::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
@@ -366,8 +366,9 @@ NB_MODULE(esiCppAccel, m) {
           "call",
           [](FuncService::Function &self,
              nb::bytes msg) -> std::future<MessageData> {
-            std::vector<uint8_t> dataVec((uint8_t *)msg.c_str(),
-                                         (uint8_t *)msg.c_str() + msg.size());
+            std::vector<uint8_t> dataVec((const uint8_t *)msg.c_str(),
+                                         (const uint8_t *)msg.c_str() +
+                                             msg.size());
             MessageData data(dataVec);
             return self.call(data);
           },
@@ -389,8 +390,8 @@ NB_MODULE(esiCppAccel, m) {
           if (ret.is_none())
             return MessageData();
           nb::bytes retBytes = nb::cast<nb::bytes>(ret);
-          std::vector<uint8_t> dataVec((uint8_t *)retBytes.c_str(),
-                                       (uint8_t *)retBytes.c_str() +
+          std::vector<uint8_t> dataVec((const uint8_t *)retBytes.c_str(),
+                                       (const uint8_t *)retBytes.c_str() +
                                            retBytes.size());
           return MessageData(dataVec);
         });
