@@ -6,6 +6,7 @@ requires = [
   "cmake>=3.31",
   "nanobind>=2.10.1",
   "ninja>=1.13.0",
+  "typing_extensions",
 ]
 build-backend = "setuptools.build_meta"
 

@@ -318,7 +318,7 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
       .def(
           "read",
-          [](ReadChannelPort &p) -> nb::bytes {
+          [](ReadChannelPort &p) -> nb::bytearray {
             MessageData data;
             p.read(data);
             return nb::bytearray((const char *)data.getBytes(), data.getSize());

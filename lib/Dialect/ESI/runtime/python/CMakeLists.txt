@@ -41,6 +41,7 @@ if(Python3_FOUND)
   endif()
 
   # Now, find nanobind.
+  find_package(Python COMPONENTS Interpreter Development.Module)
   find_package(nanobind CONFIG)
   if (NOT nanobind_FOUND)
     message (STATUS "Could not find nanobind. Disabling Python API.")
