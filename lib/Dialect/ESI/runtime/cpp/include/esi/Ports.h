@@ -173,6 +173,9 @@ public:
     }
   }
   /// Flush any buffered data. Returns true if all data was flushed.
+  ///
+  /// If `translateMessages` is false, calling `flush()` will immediately return
+  /// true and perform no action, as there is no buffered data to flush.
   bool flush() {
     while (translationBufferIdx < translationBuffer.size()) {
       if (!tryWriteImpl(translationBuffer[translationBufferIdx]))
@@ -193,7 +196,7 @@ protected:
 
   /// Whether to translate outgoing data if the port type is a window type. Set
   /// by the connect() method.
-  bool translateMessages;
+  bool translateMessages = false;
   /// If tryWrite cannot write all the messages of a windowed type at once, it
   /// stores them here and writes them out one by one on subsequent calls.
   std::vector<MessageData> translationBuffer;

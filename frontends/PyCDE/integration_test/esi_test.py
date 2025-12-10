@@ -204,9 +204,6 @@ class WindowToStructFunc(Module):
     # Unwrap the window to get the union of frames
     frame_union = window_data.unwrap()
 
-    # Get the lowered type to understand the frame structure
-    lowered_type = windowed_struct.lowered_type
-
     # Extract data from both frames (only one is valid at a time based on state)
     # Access the frame structs through the union - the data is reinterpreted
     # based on which frame we're expecting
