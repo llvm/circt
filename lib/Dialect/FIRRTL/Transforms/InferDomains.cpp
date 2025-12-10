@@ -689,7 +689,7 @@ LogicalResult processModulePorts(const DomainInfo &info,
   auto numPorts = module.getNumPorts();
 
   DenseMap<unsigned, DomainTypeID> domainTypeIDTable;
-  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+  for (size_t i = 0; i < numPorts; ++i) {
     BlockArgument port = module.getArgument(i);
     if (!isa<DomainType>(port.getType()))
       continue;
@@ -702,7 +702,7 @@ LogicalResult processModulePorts(const DomainInfo &info,
 
   for (size_t i = 0; i < numPorts; ++i) {
     BlockArgument port = module.getArgument(i);
-    auto type = type_dyn_cast<FIRRTLBaseType>(module.getPortType(i));
+    auto type = type_dyn_cast<FIRRTLBaseType>(port.getType());
     if (!type)
       continue;
 
@@ -740,51 +740,53 @@ template <typename T>
 LogicalResult processInstancePorts(const DomainInfo &info,
                                    TermAllocator &allocator, DomainTable &table,
                                    T op) {
-  auto numDomainTypes = info.getNumDomains();
-  DenseMap<unsigned, DomainTypeID> domainPortTypeIDTable;
+  auto numDomains = info.getNumDomains();
   auto domainInfo = op.getDomainInfoAttr();
-  for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
+  auto numPorts = op.getNumPorts();
+
+  DenseMap<unsigned, DomainTypeID> domainTypeIDTable;
+  for (size_t i = 0; i < numPorts; ++i) {
     Value port = op.getResult(i);
-
-    if (isa<DomainType>(port.getType())) {
-      auto typeID = info.getDomainTypeID(domainInfo, i);
-      domainPortTypeIDTable[i] = typeID;
-      if (op.getPortDirection(i) == Direction::Out)
-        processDomainDefinition(allocator, table, port);
-    }
-
-    if (!isa<FIRRTLBaseType>(port.getType()))
+    if (!isa<DomainType>(port.getType()))
       continue;
 
-    // This is a port, which may have explicit domain information. Associate the
-    // port with a row of domains, where each element is derived from the domain
-    // associations recorded in the domain info attribute of the instance.
-    SmallVector<Term *> elements(numDomainTypes);
-    auto associations = getPortDomainAssociation(domainInfo, i);
-    for (auto domainPortIndexAttr : associations) {
-      auto domainPortIndex = domainPortIndexAttr.getUInt();
-      auto typeID = domainPortTypeIDTable[domainPortIndex];
-      auto *term =
-          getTermForDomain(allocator, table, op.getResult(domainPortIndex));
-      elements[typeID.index] = term;
+    if (op.getPortDirection(i) == Direction::Out)
+      processDomainDefinition(allocator, table, port);
+
+    domainTypeIDTable[i] = info.getDomainTypeID(domainInfo, i);
+  }
+
+  for (size_t i = 0; i < numPorts; ++i) {
+    Value port = op.getResult(i);
+    auto type = type_dyn_cast<FIRRTLBaseType>(port.getType());
+    if (!type)
+      continue;
+
+    SmallVector<IntegerAttr> associations(numDomains);
+    for (auto domainPortIndex : getPortDomainAssociation(domainInfo, i)) {
+      auto domainTypeID = domainTypeIDTable.at(domainPortIndex.getUInt());
+      auto prevDomainPortIndex = associations[domainTypeID.index];
+      if (prevDomainPortIndex) {
+        emitDuplicatePortDomainError(info, op, i, domainTypeID,
+                                     prevDomainPortIndex, domainPortIndex);
+        return failure();
+      }
+      associations[domainTypeID.index] = domainPortIndex;
     }
 
-    // Confirm that we have complete domain information for the port. We can be
-    // missing information if, for example, this was an instance of an
-    // extmodule.
-    for (size_t domainTypeID = 0; domainTypeID < numDomainTypes;
-         ++domainTypeID) {
-      if (elements[domainTypeID])
+    SmallVector<Term *> elements(numDomains);
+    for (size_t domainTypeIndex = 0; domainTypeIndex < numDomains;
+         ++domainTypeIndex) {
+      auto domainPortIndex = associations[domainTypeIndex];
+      if (!domainPortIndex)
         continue;
-      auto domainDecl = info.getDomain(DomainTypeID{domainTypeID});
-      auto domainName = domainDecl.getNameAttr();
-      auto portName = op.getPortNameAttr(i);
-      op->emitOpError() << "missing " << domainName << " association for port "
-                        << portName;
-      return failure();
+      auto domainPortValue = op.getResult(domainPortIndex.getUInt());
+      elements[domainTypeIndex] =
+          getTermForDomain(allocator, table, domainPortValue);
     }
 
-    table.setDomainAssociation(port, allocator.allocRow(elements));
+    auto *domainAssociations = allocator.allocRow(elements);
+    table.setDomainAssociation(port, domainAssociations);
   }
 
   return success();
