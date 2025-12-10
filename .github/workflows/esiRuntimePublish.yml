@@ -68,7 +68,7 @@ jobs:
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib grpc
 
       - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==2.23.3
+        run: python -m pip install cibuildwheel==3.3.0
 
       - name: Build wheels
         if: runner.os != 'Windows'
