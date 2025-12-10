@@ -3,10 +3,11 @@
 // Port annotated with same domain type twice.
 firrtl.circuit "DomainCrossOnPort" {
   firrtl.domain @ClockDomain
+  // expected-note @below {{in module "DomainCrossOnPort"}}
   firrtl.module @DomainCrossOnPort(
-    // expected-note  @below {{associated with "ClockDomain" port "A"}}
+    // expected-note @below {{associated with "ClockDomain" port "A"}}
     in %A: !firrtl.domain of @ClockDomain,
-    // expected-note  @below {{associated with "ClockDomain" port "B"}}
+    // expected-note @below {{associated with "ClockDomain" port "B"}}
     in %B: !firrtl.domain of @ClockDomain,
     // expected-error @below {{duplicate "ClockDomain" association for port "p"}}
     in %p: !firrtl.uint<1> domains [%A, %B]
@@ -49,7 +50,8 @@ firrtl.circuit "IllegalDomainCrossing" {
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
 
-  // expected-error @below {{missing "ClockDomain" association for port "i"}}
+  // expected-note  @+2 {{in extmodule "Top"}}
+  // expected-error @+1 {{missing "ClockDomain" association for port "i"}}
   firrtl.extmodule @Top(in i: !firrtl.uint<1>)
 }
 
@@ -57,6 +59,7 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
 
+  // expected-note @below {{in extmodule "Top"}}
   firrtl.extmodule @Top(
     // expected-note @below {{associated with "ClockDomain" port "D1"}}
     in D1 : !firrtl.domain of @ClockDomain,
@@ -69,8 +72,9 @@ firrtl.circuit "Top" {
 
 // Domain exported multiple times. Which do we choose?
 firrtl.circuit "DoubleExportOfDomain" {
-    firrtl.domain @ClockDomain
+  firrtl.domain @ClockDomain
 
+  // expected-note @below {{in module "DoubleExportOfDomain"}}
   firrtl.module @DoubleExportOfDomain(
     // expected-note @below {{candidate association "DI"}}
     in  %DI : !firrtl.domain of @ClockDomain,
@@ -94,6 +98,7 @@ firrtl.circuit "DoubleExportOfDomain" {
 
   firrtl.extmodule @Generator(out D: !firrtl.domain of @ClockDomain)
 
+  // expected-note @below {{in module "DoubleExportOfDomain"}}
   firrtl.module @DoubleExportOfDomain(
     // expected-note @below {{candidate association "D1"}}
     out %D1 : !firrtl.domain of @ClockDomain,

@@ -7,6 +7,7 @@
 firrtl.circuit "MissingDomain" {
   firrtl.domain @ClockDomain
 
+  // expected-note @below {{in module "MissingDomain"}}
   firrtl.module @MissingDomain(
     // expected-error @below {{missing "ClockDomain" association for port "x"}}
     in %x: !firrtl.uint<1>
@@ -18,6 +19,7 @@ firrtl.circuit "MissingSecondDomain" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
 
+  // expected-note @below {{in module "MissingSecondDomain"}}
   firrtl.module @MissingSecondDomain(
     in %c : !firrtl.domain of @ClockDomain,
     // expected-error @below {{missing "PowerDomain" association for port "x"}}
@@ -29,6 +31,7 @@ firrtl.circuit "MissingSecondDomain" {
 firrtl.circuit "UndrivenOutputDomain" {
   firrtl.domain @ClockDomain
 
+  // expected-note @below {{in module "UndrivenOutputDomain"}}
   firrtl.module @UndrivenOutputDomain(
     // expected-error @below {{undriven domain port "c"}}
     out %c : !firrtl.domain of @ClockDomain
@@ -42,7 +45,8 @@ firrtl.circuit "UndrivenInstanceDomainPort" {
   firrtl.extmodule @Foo(in c : !firrtl.domain of @ClockDomain)
 
   firrtl.module @UndrivenInstanceDomainPort() {
-    // expected-error @below {{undriven domain port "c"}}
+    // expected-note  @+2 {{in instance "foo"}}
+    // expected-error @+1 {{undriven domain port "c"}}
     %foo_c = firrtl.instance foo @Foo(in c : !firrtl.domain of @ClockDomain)
   }
 }
@@ -59,7 +63,8 @@ firrtl.circuit "UndrivenInstanceChoiceDomainPort" {
   firrtl.extmodule @Bar(in c : !firrtl.domain of @ClockDomain)
 
   firrtl.module @UndrivenInstanceChoiceDomainPort() {
-    // expected-error @below {{undriven domain port "c"}}
+    // expected-note  @+2 {{in instance_choice "inst"}} 
+    // expected-error @+1 {{undriven domain port "c"}}
     %inst_c = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar } (in c : !firrtl.domain of @ClockDomain)
   }
 }
@@ -84,6 +89,7 @@ firrtl.circuit "IllegalDomainCrossing" {
 // CHECK-LABEL: ExactDuplicateDomain
 firrtl.circuit "DuplicateDomainEquivalence" {
   firrtl.domain @ClockDomain
+  // expected-note @below {{in module "DuplicateDomainEquivalence"}}
   firrtl.module @DuplicateDomainEquivalence(
     // expected-note @below {{associated with "ClockDomain" port "A"}}
     in %A: !firrtl.domain of @ClockDomain,
@@ -98,6 +104,7 @@ firrtl.circuit "DuplicateDomainEquivalence" {
 // CHECK-LABEL: DuplicateDomainKind
 firrtl.circuit "DuplicateDomainEquivalence" {
   firrtl.domain @ClockDomain
+  // expected-note @below {{in module "DuplicateDomainEquivalence"}}
   firrtl.module @DuplicateDomainEquivalence(
     // expected-note @below {{associated with "ClockDomain" port "A"}}
     in  %A: !firrtl.domain of @ClockDomain,

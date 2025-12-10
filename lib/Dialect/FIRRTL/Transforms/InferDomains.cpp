@@ -536,6 +536,28 @@ RowTerm *getDomainAssociationAsRow(const DomainInfo &info,
   return nullptr;
 }
 
+void noteLocation(mlir::InFlightDiagnostic &diag, Operation *op) {
+  auto &note = diag.attachNote(op->getLoc());
+  if (auto mod = dyn_cast<FModuleOp>(op)) {
+    note << "in module " << mod.getModuleNameAttr();
+    return;
+  }
+  if (auto mod = dyn_cast<FExtModuleOp>(op)) {
+    note << "in extmodule " << mod.getModuleNameAttr();
+    return;
+  }
+  if (auto inst = dyn_cast<InstanceOp>(op)) {
+    note << "in instance " << inst.getInstanceNameAttr();
+    return;
+  }
+  if (auto inst = dyn_cast<InstanceChoiceOp>(op)) {
+    note << "in instance_choice " << inst.getNameAttr();
+    return;
+  }
+
+  note << "here";
+}
+
 template <typename T>
 void emitPortDomainCrossingError(const DomainInfo &info, T op, size_t i,
                                  DomainTypeID domainTypeID, Term *term1,
@@ -557,6 +579,8 @@ void emitPortDomainCrossingError(const DomainInfo &info, T op, size_t i,
   auto &note2 = diag.attachNote();
   note2 << "2nd instance: ";
   render(info, note2, idTable, term2);
+
+  noteLocation(diag, op);
 }
 
 template <typename T>
@@ -579,12 +603,11 @@ void emitDuplicatePortDomainError(const DomainInfo &info, T op, size_t i,
 
   auto diag = emitError(portLoc);
   diag << "duplicate " << domainName << " association for port " << portName;
-
   auto &note1 = diag.attachNote(domainPortLoc1);
   note1 << "associated with " << domainName << " port " << domainPortName1;
-
   auto &note2 = diag.attachNote(domainPortLoc2);
   note2 << "associated with " << domainName << " port " << domainPortName2;
+  noteLocation(diag, op);
 }
 
 /// Emit an error when we fail to infer the concrete domain to drive to a
@@ -607,6 +630,7 @@ void emitDomainPortInferenceError(T op, size_t i) {
       }
     }
   }
+  noteLocation(diag, op);
 }
 
 template <typename T>
@@ -625,6 +649,7 @@ void emitAmbiguousPortDomainAssociation(
     auto loc = op.getPortLocation(arg.getArgNumber());
     diag.attachNote(loc) << "candidate association " << name;
   }
+  noteLocation(diag, op);
 }
 
 template <typename T>
@@ -632,8 +657,10 @@ void emitMissingPortDomainAssociationError(const DomainInfo &info, T op,
                                            DomainTypeID typeID, size_t i) {
   auto domainName = info.getDomain(typeID).getNameAttr();
   auto portName = op.getPortNameAttr(i);
-  emitError(op.getPortLocation(i))
-      << "missing " << domainName << " association for port " << portName;
+  auto diag = emitError(op.getPortLocation(i))
+              << "missing " << domainName << " association for port "
+              << portName;
+  noteLocation(diag, op);
 }
 
 /// Unify the associated domain rows of two terms.
@@ -1184,6 +1211,7 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
                       << "private " << domainName << " association for port "
                       << portName;
           diag.attachNote(domain.getLoc()) << "associated domain: " << domain;
+          noteLocation(diag, module);
           return failure();
         }
 
@@ -1352,7 +1380,9 @@ LogicalResult checkModuleDomainPortDrivers(const DomainInfo &info,
       continue;
 
     auto name = module.getPortNameAttr(i);
-    emitError(module.getPortLocation(i)) << "undriven domain port " << name;
+    auto diag = emitError(module.getPortLocation(i))
+                << "undriven domain port " << name;
+    noteLocation(diag, module);
     return failure();
   }
 
@@ -1370,7 +1400,9 @@ LogicalResult checkInstanceDomainPortDrivers(T op) {
       continue;
 
     auto name = op.getPortNameAttr(i);
-    emitError(op.getPortLocation(i)) << "undriven domain port " << name;
+    auto diag = emitError(op.getPortLocation(i))
+                << "undriven domain port " << name;
+    noteLocation(diag, op);
     return failure();
   }
 

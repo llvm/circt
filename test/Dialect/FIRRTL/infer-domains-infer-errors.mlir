@@ -12,6 +12,7 @@
 firrtl.circuit "MissingDomain" {
   firrtl.domain @ClockDomain
 
+  // expected-note @below {{in module "MissingDomain"}}
   firrtl.module @MissingDomain(
     // expected-error @below {{missing "ClockDomain" association for port "x"}}
     in %x: !firrtl.uint<1>
@@ -23,6 +24,7 @@ firrtl.circuit "MissingSecondDomain" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
 
+  // expected-note @below {{in module "MissingSecondDomain"}}
   firrtl.module @MissingSecondDomain(
     in %c : !firrtl.domain of @ClockDomain,
     // expected-error @below {{missing "PowerDomain" association for port "x"}}
