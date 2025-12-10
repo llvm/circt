@@ -5352,8 +5352,14 @@ private:
 
   ParseResult parseLayer(CircuitOp circuit);
 
-  ParseResult parseDomains(SmallVectorImpl<Attribute> &domains,
-                           const DenseMap<Attribute, size_t> &nameToIndex);
+  ParseResult resolveDomains(
+      const SmallVectorImpl<std::pair<Attribute, llvm::SMLoc>> &domainsByName,
+      const DenseMap<Attribute, size_t> &nameToIndex,
+      SmallVectorImpl<Attribute> &domainsByIndex);
+
+  ParseResult
+  parseDomains(SmallVectorImpl<std::pair<Attribute, llvm::SMLoc>> &domains,
+               const DenseMap<Attribute, size_t> &nameToIndex);
 
   struct DeferredModuleToParse {
     FModuleLike moduleOp;
@@ -5511,10 +5517,14 @@ ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
                                 unsigned indent) {
-  // Record the index of each port name for domain assignment.
+  // Stores of information about domains as they are parsed:
+  //   1. Mapping of domain name to port index
+  //   2. Mapping of port index to domain associations, using domain _names_.
+  // The locations are recorded to generate good error messages.
   DenseMap<Attribute, size_t> nameToIndex;
+  DenseMap<size_t, SmallVector<std::pair<Attribute, SMLoc>>> domainNames;
 
-  // Parse any ports.
+  // Parse any ports.  Populate domain information.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
          getIndentation() > indent) {
@@ -5543,7 +5553,8 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration"))
       return failure();
-    Attribute domainInfoElement;
+    Attribute domainInfoElement = {};
+    size_t portIdx = resultPorts.size();
     if (isa<DomainType>(type)) {
       StringAttr domainKind;
       if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type port") ||
@@ -5551,11 +5562,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
         return failure();
       domainInfoElement = FlatSymbolRefAttr::get(domainKind);
     } else {
-      SmallVector<Attribute, 4> domains;
       if (getToken().is(FIRToken::kw_domains))
-        if (parseDomains(domains, nameToIndex))
+        if (parseDomains(domainNames[portIdx], nameToIndex))
           return failure();
-      domainInfoElement = ArrayAttr::get(getContext(), domains);
     }
 
     if (info.parseOptionalInfo())
@@ -5570,7 +5579,20 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                    {},
                                    domainInfoElement});
     resultPortLocs.push_back(info.getFIRLoc());
-    nameToIndex.insert({name, resultPorts.size() - 1});
+    nameToIndex.insert({name, portIdx});
+  }
+
+  // Apply domain assocations to ports.
+  for (size_t portIdx = 0, e = resultPorts.size(); portIdx != e; ++portIdx) {
+    auto &port = resultPorts[portIdx];
+    Attribute &attr = port.domains;
+    if (attr)
+      continue;
+
+    SmallVector<Attribute> domainInfo;
+    if (failed(resolveDomains(domainNames[portIdx], nameToIndex, domainInfo)))
+      return failure();
+    attr = ArrayAttr::get(getContext(), domainInfo);
   }
 
   // Check for port name collisions.
@@ -6184,9 +6206,29 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
   return success();
 }
 
-ParseResult
-FIRCircuitParser::parseDomains(SmallVectorImpl<Attribute> &domains,
-                               const DenseMap<Attribute, size_t> &nameToIndex) {
+ParseResult FIRCircuitParser::resolveDomains(
+    const SmallVectorImpl<std::pair<Attribute, llvm::SMLoc>> &domainsByName,
+    const DenseMap<Attribute, size_t> &nameToIndex,
+    SmallVectorImpl<Attribute> &domainsByIndex) {
+
+  for (auto [attr, loc] : domainsByName) {
+    auto domain = cast<StringAttr>(attr);
+    auto indexItr = nameToIndex.find(domain);
+    if (indexItr == nameToIndex.end()) {
+      emitError(loc) << "unknown domain name '" << domain.getValue() << "'";
+      return failure();
+    }
+    domainsByIndex.push_back(IntegerAttr::get(
+        IntegerType::get(getContext(), 32, IntegerType::Unsigned),
+        indexItr->second));
+  }
+
+  return success();
+}
+
+ParseResult FIRCircuitParser::parseDomains(
+    SmallVectorImpl<std::pair<Attribute, llvm::SMLoc>> &domains,
+    const DenseMap<Attribute, size_t> &nameToIndex) {
   if (requireFeature(missingSpecFIRVersion, "domains"))
     return failure();
   if (parseToken(FIRToken::kw_domains, "expected 'domains'") ||
@@ -6198,16 +6240,8 @@ FIRCircuitParser::parseDomains(SmallVectorImpl<Attribute> &domains,
         auto domainLoc = getToken().getLoc();
         if (parseId(domain, "expected domain name"))
           return failure();
-        auto indexItr = nameToIndex.find(domain);
-        if (indexItr == nameToIndex.end()) {
-          emitError(domainLoc)
-              << "unknown domain name '" << domain.getValue() << "'";
-          return failure();
-        }
-        return domains.push_back(IntegerAttr::get(
-                   IntegerType::get(getContext(), 32, IntegerType::Unsigned),
-                   indexItr->second)),
-               success();
+        domains.push_back({domain, domainLoc});
+        return success();
       }))
     return failure();
 

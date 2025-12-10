@@ -1245,10 +1245,34 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
   mlir::OpPrintingFlags flags;
 
+  // Return an SSA name for an argument.
+  DenseMap<unsigned, std::string> ssaNames;
+  auto getSsaName = [&](unsigned idx) -> StringRef {
+    // We already computed this name.  Return it.
+    auto itr = ssaNames.find(idx);
+    if (itr != ssaNames.end())
+      return itr->getSecond();
+
+    // Compute the name, insert it, and return it.
+    if (block) {
+      SmallString<32> resultNameStr;
+      // Get the printed format for the argument name.
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(block->getArgument(idx), tmpStream);
+      // If the name wasn't printable in a way that agreed with portName, make
+      // sure to print out an explicit portNames attribute.
+      auto portName = cast<StringAttr>(portNames[idx]).getValue();
+      if (tmpStream.str().drop_front() != portName)
+        printedNamesDontMatch = true;
+      return ssaNames.insert({idx, tmpStream.str().str()}).first->getSecond();
+    }
+
+    auto name = cast<StringAttr>(portNames[idx]).getValue();
+    return ssaNames.insert({idx, name.str()}).first->getSecond();
+  };
+
   // If we are printing the ports as block arguments the op must have a first
   // block.
-  SmallString<32> resultNameStr;
-  DenseMap<unsigned, std::string> domainPortNames;
   p << '(';
   for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
     if (i > 0)
@@ -1261,23 +1285,9 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
     // argument.
     auto portType = cast<TypeAttr>(portTypes[i]).getValue();
     if (block) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(block->getArgument(i), tmpStream);
-      // If the name wasn't printable in a way that agreed with portName, make
-      // sure to print out an explicit portNames attribute.
-      auto portName = cast<StringAttr>(portNames[i]).getValue();
-      if (tmpStream.str().drop_front() != portName)
-        printedNamesDontMatch = true;
-      p << tmpStream.str();
-      if (isa<DomainType>(portType))
-        domainPortNames[i] = tmpStream.str();
+      p << getSsaName(i);
     } else {
-      auto name = cast<StringAttr>(portNames[i]).getValue();
-      p.printKeywordOrString(name);
-      if (isa<DomainType>(portType))
-        domainPortNames[i] = name.str();
+      p.printKeywordOrString(getSsaName(i));
     }
 
     // Print the port type.
@@ -1301,7 +1311,7 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
         if (!domains.empty()) {
           p << " domains [";
           llvm::interleaveComma(domains, p, [&](Attribute attr) {
-            p << domainPortNames[cast<IntegerAttr>(attr).getUInt()];
+            p << getSsaName(cast<IntegerAttr>(attr).getUInt());
           });
           p << "]";
         }
@@ -1344,6 +1354,10 @@ static ParseResult parseModulePorts(
   // Mapping of domain name to port index.
   DenseMap<Attribute, size_t> domainIndex;
 
+  // Mapping of port index to domain names and source locators.
+  using DomainAndLoc = std::pair<Attribute, llvm::SMLoc>;
+  DenseMap<size_t, SmallVector<DomainAndLoc>> domainStrings;
+
   auto parseArgument = [&]() -> ParseResult {
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
@@ -1356,6 +1370,7 @@ static ParseResult parseModulePorts(
     // This is the location or the port declaration in the IR.  If there is no
     // other location information, we use this to point to the MLIR.
     llvm::SMLoc irLoc;
+    auto portIdx = portNames.size();
 
     if (hasSSAIdentifiers) {
       OpAsmParser::Argument arg;
@@ -1391,7 +1406,7 @@ static ParseResult parseModulePorts(
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
     if (isa<DomainType>(portType))
-      domainIndex[portNames.back()] = portNames.size() - 1;
+      domainIndex[portNames.back()] = portIdx;
 
     if (hasSSAIdentifiers)
       entryArgs.back().type = portType;
@@ -1410,15 +1425,18 @@ static ParseResult parseModulePorts(
       portSyms.push_back(innerSymAttr);
     }
 
-    // Parse optional port domain information if it exists.
-    Attribute domainsAttr;
-    SmallVector<Attribute> portDomains;
+    // Parse optional port domain information if it exists.  At this point, this
+    // will be something if this is a domain port or null if domain associations
+    // could exist.  We don't know how to resolve the names of the domains at
+    // this point, so this is only building up the information necessary to add
+    // the domain information later.
+    Attribute domainInfo;
     if (supportsDomains) {
       if (isa<DomainType>(portType)) {
         FlatSymbolRefAttr domainKind;
         if (parseDomainKind(parser, domainKind))
           return failure();
-        domainsAttr = domainKind;
+        domainInfo = domainKind;
       } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
         auto result = parser.parseCommaSeparatedList(
             OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
@@ -1435,26 +1453,14 @@ static ParseResult parseModulePorts(
                   return failure();
                 argName = StringAttr::get(context, portName);
               }
-
-              auto index = domainIndex.find(argName);
-              if (index == domainIndex.end()) {
-                parser.emitError(irLoc)
-                    << "domain name '" << argName << "' not found";
-                return failure();
-              }
-              portDomains.push_back(IntegerAttr::get(
-                  IntegerType::get(context, 32, IntegerType::Unsigned),
-                  index->second));
+              domainStrings[portIdx].push_back({argName, irLoc});
               return success();
             });
         if (failed(result))
           return failure();
-        domainsAttr = parser.getBuilder().getArrayAttr(portDomains);
       }
     }
-    if (!domainsAttr)
-      domainsAttr = parser.getBuilder().getArrayAttr({});
-    domains.push_back(domainsAttr);
+    domains.push_back(domainInfo);
 
     // Parse the port annotations.
     ArrayAttr annos;
@@ -1477,9 +1483,35 @@ static ParseResult parseModulePorts(
     return success();
   };
 
-  // Parse all ports.
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseArgument);
+  // Parse all ports, in two phases.  First, parse all the ports and build up
+  // the information about what domains exist and the _names_ of domains
+  // associated with ports.  After this, the domain information is only
+  // populated for domain ports.  All associations are null.
+  if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                            parseArgument)))
+    return failure();
+
+  // Second, for non-domain ports, convert the domain names to domain indices
+  // and update the domain information.
+  for (auto [portIdx, domainInfo] : llvm::enumerate(domains)) {
+    // Domain ports _already_ have domain info.  Skip them.
+    if (domainInfo)
+      continue;
+    // Convert domain names to domain indices for non-domain ports.
+    SmallVector<Attribute> portDomains;
+    for (auto [domainName, loc] : domainStrings[portIdx]) {
+      auto index = domainIndex.find(domainName);
+      if (index == domainIndex.end()) {
+        parser.emitError(loc) << "domain name '" << domainName << "' not found";
+        return failure();
+      }
+      portDomains.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), index->second));
+    }
+    domains[portIdx] = parser.getBuilder().getArrayAttr(portDomains);
+  }
+
+  return success();
 }
 
 /// Print a paramter list for a module or instance.
