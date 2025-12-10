@@ -4,11 +4,11 @@
 firrtl.circuit "DomainCrossOnPort" {
   firrtl.domain @ClockDomain
   firrtl.module @DomainCrossOnPort(
+    // expected-note  @below {{associated with "ClockDomain" port "A"}}
     in %A: !firrtl.domain of @ClockDomain,
+    // expected-note  @below {{associated with "ClockDomain" port "B"}}
     in %B: !firrtl.domain of @ClockDomain,
-    // expected-error @below {{illegal "ClockDomain" crossing in port "p"}}
-    // expected-note  @below {{1st instance: A}}
-    // expected-note  @below {{2nd instance: B}}
+    // expected-error @below {{duplicate "ClockDomain" association for port "p"}}
     in %p: !firrtl.uint<1> domains [%A, %B]
   ) {}
 }
@@ -62,7 +62,7 @@ firrtl.circuit "Top" {
     in D1 : !firrtl.domain of @ClockDomain,
     // expected-note @below {{associated with "ClockDomain" port "D2"}}
     in D2 : !firrtl.domain of @ClockDomain,
-    // expected-error @below {{ambiguous "ClockDomain" association for port "i"}}
+    // expected-error @below {{duplicate "ClockDomain" association for port "i"}}
     in i: !firrtl.uint<1> domains [D1, D2]
   )
 }

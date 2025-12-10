@@ -297,43 +297,6 @@ void render(const DomainInfo &info, Diagnostic &out, VariableIDTable &idTable,
   }
 }
 
-#ifndef NDEBUG
-
-raw_ostream &dump(llvm::raw_ostream &out, const Term *term);
-
-// NOLINTNEXTLINE(misc-no-recursion)
-raw_ostream &dump(raw_ostream &out, const VariableTerm *term) {
-  return out << "var@" << (void *)term << "{leader=" << term->leader << "}";
-}
-
-// NOLINTNEXTLINE(misc-no-recursion)
-raw_ostream &dump(raw_ostream &out, const ValueTerm *term) {
-  return out << "val@" << term << "{" << term->value << "}";
-}
-
-// NOLINTNEXTLINE(misc-no-recursion)
-raw_ostream &dump(raw_ostream &out, const RowTerm *term) {
-  out << "row@" << term << "{";
-  llvm::interleaveComma(term->elements, out,
-                        [&](auto element) { dump(out, element); });
-  out << "}";
-  return out;
-}
-
-// NOLINTNEXTLINE(misc-no-recursion)
-raw_ostream &dump(raw_ostream &out, const Term *term) {
-  if (!term)
-    return out << "null";
-  if (auto *var = dyn_cast<VariableTerm>(term))
-    return dump(out, var);
-  if (auto *val = dyn_cast<ValueTerm>(term))
-    return dump(out, val);
-  if (auto *row = dyn_cast<RowTerm>(term))
-    return dump(out, row);
-  llvm_unreachable("unknown term");
-}
-#endif // DEBUG
-
 LogicalResult unify(Term *lhs, Term *rhs);
 
 LogicalResult unify(VariableTerm *x, Term *y) {
@@ -373,8 +336,6 @@ LogicalResult unify(RowTerm *lhsRow, Term *rhs) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult unify(Term *lhs, Term *rhs) {
-  LLVM_DEBUG(auto &out = llvm::errs(); out << "unify x="; dump(out, lhs);
-             out << " y="; dump(out, rhs); out << "\n";);
   if (!lhs || !rhs)
     return success();
   lhs = find(lhs);
@@ -598,6 +559,34 @@ void emitPortDomainCrossingError(const DomainInfo &info, T op, size_t i,
   render(info, note2, idTable, term2);
 }
 
+template <typename T>
+void emitDuplicatePortDomainError(const DomainInfo &info, T op, size_t i,
+                                  DomainTypeID domainTypeID,
+                                  IntegerAttr domainPortIndexAttr1,
+                                  IntegerAttr domainPortIndexAttr2) {
+  VariableIDTable idTable;
+
+  auto portName = op.getPortNameAttr(i);
+  auto portLoc = op.getPortLocation(i);
+  auto domainDecl = info.getDomain(domainTypeID);
+  auto domainName = domainDecl.getNameAttr();
+  auto domainPortIndex1 = domainPortIndexAttr1.getUInt();
+  auto domainPortIndex2 = domainPortIndexAttr2.getUInt();
+  auto domainPortName1 = op.getPortNameAttr(domainPortIndex1);
+  auto domainPortName2 = op.getPortNameAttr(domainPortIndex2);
+  auto domainPortLoc1 = op.getPortLocation(domainPortIndex1);
+  auto domainPortLoc2 = op.getPortLocation(domainPortIndex2);
+
+  auto diag = emitError(portLoc);
+  diag << "duplicate " << domainName << " association for port " << portName;
+
+  auto &note1 = diag.attachNote(domainPortLoc1);
+  note1 << "associated with " << domainName << " port " << domainPortName1;
+
+  auto &note2 = diag.attachNote(domainPortLoc2);
+  note2 << "associated with " << domainName << " port " << domainPortName2;
+}
+
 /// Emit an error when we fail to infer the concrete domain to drive to a
 /// domain port.
 template <typename T>
@@ -621,7 +610,22 @@ void emitDomainPortInferenceError(T op, size_t i) {
 }
 
 template <typename T>
-void emitAmbiguousPortDomainAssociation(T op, size_t i) {}
+void emitAmbiguousPortDomainAssociation(
+    const DomainInfo &info, T op,
+    const llvm::TinyPtrVector<mlir::BlockArgument> &exports,
+    DomainTypeID typeID, size_t i) {
+  auto portName = op.getPortNameAttr(i);
+  auto portLoc = op.getPortLocation(i);
+  auto domainDecl = info.getDomain(typeID);
+  auto domainName = domainDecl.getNameAttr();
+  auto diag = emitError(portLoc) << "ambiguous " << domainName
+                                 << " association for port " << portName;
+  for (auto arg : exports) {
+    auto name = op.getPortNameAttr(arg.getArgNumber());
+    auto loc = op.getPortLocation(arg.getArgNumber());
+    diag.attachNote(loc) << "candidate association " << name;
+  }
+}
 
 template <typename T>
 void emitMissingPortDomainAssociationError(const DomainInfo &info, T op,
@@ -636,10 +640,6 @@ void emitMissingPortDomainAssociationError(const DomainInfo &info, T op,
 LogicalResult unifyAssociations(const DomainInfo &info,
                                 TermAllocator &allocator, DomainTable &table,
                                 Operation *op, Value lhs, Value rhs) {
-  LLVM_DEBUG(llvm::errs() << "  unify associations of:\n";
-             llvm::errs() << "    lhs=" << lhs << "\n";
-             llvm::errs() << "    rhs=" << rhs << "\n";);
-
   if (!lhs || !rhs)
     return success();
 
@@ -684,39 +684,53 @@ LogicalResult unifyAssociations(const DomainInfo &info,
 LogicalResult processModulePorts(const DomainInfo &info,
                                  TermAllocator &allocator, DomainTable &table,
                                  FModuleOp module) {
+  auto numDomains = info.getNumDomains();
   auto domainInfo = module.getDomainInfoAttr();
   auto numPorts = module.getNumPorts();
+
   DenseMap<unsigned, DomainTypeID> domainTypeIDTable;
+  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+    BlockArgument port = module.getArgument(i);
+    if (!isa<DomainType>(port.getType()))
+      continue;
+
+    if (module.getPortDirection(i) == Direction::In)
+      processDomainDefinition(allocator, table, port);
+
+    domainTypeIDTable[i] = info.getDomainTypeID(domainInfo, i);
+  }
+
   for (size_t i = 0; i < numPorts; ++i) {
     BlockArgument port = module.getArgument(i);
-
-    if (isa<DomainType>(port.getType())) {
-      auto typeID = info.getDomainTypeID(domainInfo, i);
-      domainTypeIDTable[i] = typeID;
-      if (module.getPortDirection(i) == Direction::In)
-        processDomainDefinition(allocator, table, port);
-      continue;
-    }
-
-    auto portDomains = getPortDomainAssociation(domainInfo, i);
-    if (portDomains.empty())
+    auto type = type_dyn_cast<FIRRTLBaseType>(module.getPortType(i));
+    if (!type)
       continue;
 
-    SmallVector<Term *> elements(info.getNumDomains());
-    for (auto domainPortIndexAttr : portDomains) {
-      auto domainPortIndex = domainPortIndexAttr.getUInt();
-      auto domainTypeID = domainTypeIDTable[domainPortIndex];
-      auto domainValue = module.getArgument(domainPortIndex);
-      auto *term = getTermForDomain(allocator, table, domainValue);
-      auto &slot = elements[domainTypeID.index];
-      if (failed(unify(slot, term))) {
-        emitPortDomainCrossingError(info, module, i, domainTypeID, slot, term);
+    SmallVector<IntegerAttr> associations(numDomains);
+    for (auto domainPortIndex : getPortDomainAssociation(domainInfo, i)) {
+      auto domainTypeID = domainTypeIDTable.at(domainPortIndex.getUInt());
+      auto prevDomainPortIndex = associations[domainTypeID.index];
+      if (prevDomainPortIndex) {
+        emitDuplicatePortDomainError(info, module, i, domainTypeID,
+                                     prevDomainPortIndex, domainPortIndex);
         return failure();
       }
-      elements[domainTypeID.index] = term;
+      associations[domainTypeID.index] = domainPortIndex;
     }
-    auto *row = allocator.allocRow(elements);
-    table.setDomainAssociation(port, row);
+
+    SmallVector<Term *> elements(numDomains);
+    for (size_t domainTypeIndex = 0; domainTypeIndex < numDomains;
+         ++domainTypeIndex) {
+      auto domainPortIndex = associations[domainTypeIndex];
+      if (!domainPortIndex)
+        continue;
+      auto domainPortValue = module.getArgument(domainPortIndex.getUInt());
+      elements[domainTypeIndex] =
+          getTermForDomain(allocator, table, domainPortValue);
+    }
+
+    auto *domainAssociations = allocator.allocRow(elements);
+    table.setDomainAssociation(port, domainAssociations);
   }
 
   return success();
@@ -823,18 +837,19 @@ LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
   auto dst = op.getDest();
   auto *srcTerm = getTermForDomain(allocator, table, src);
   auto *dstTerm = getTermForDomain(allocator, table, dst);
-  if (failed(unify(dstTerm, srcTerm))) {
-    VariableIDTable idTable;
-    auto diag = op->emitOpError("failed to propagate source to destination");
-    auto &note1 = diag.attachNote();
-    note1 << "destination has underlying value: ";
-    render(info, note1, idTable, dstTerm);
+  if (succeeded(unify(dstTerm, srcTerm)))
+    return success();
 
-    auto &note2 = diag.attachNote(src.getLoc());
-    note2 << "source has underlying value: ";
-    render(info, note2, idTable, srcTerm);
-  }
-  return success();
+  VariableIDTable idTable;
+  auto diag = op->emitOpError("failed to propagate source to destination");
+  auto &note1 = diag.attachNote();
+  note1 << "destination has underlying value: ";
+  render(info, note1, idTable, dstTerm);
+
+  auto &note2 = diag.attachNote(src.getLoc());
+  note2 << "source has underlying value: ";
+  render(info, note2, idTable, srcTerm);
+  return failure();
 }
 
 LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
@@ -1171,18 +1186,8 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
         }
 
         if (exports.size() > 1) {
-          auto portName = module.getPortNameAttr(i);
-          auto portLoc = module.getPortLocation(i);
-          auto domainDecl = info.getDomain(domainTypeID);
-          auto domainName = domainDecl.getNameAttr();
-          auto diag = emitError(portLoc)
-                      << "ambiguous " << domainName << " association for port "
-                      << portName;
-          for (auto arg : exports) {
-            auto name = module.getPortNameAttr(arg.getArgNumber());
-            auto loc = module.getPortLocation(arg.getArgNumber());
-            diag.attachNote(loc) << "candidate association " << name;
-          }
+          emitAmbiguousPortDomainAssociation(info, module, exports,
+                                             domainTypeID, i);
           return failure();
         }
 
@@ -1295,49 +1300,38 @@ LogicalResult updateModule(const DomainInfo &info, TermAllocator &allocator,
 LogicalResult checkModulePorts(const DomainInfo &info, FModuleLike module) {
   auto numDomains = info.getNumDomains();
   auto domainInfo = module.getDomainInfoAttr();
-  DenseMap<unsigned, DomainTypeID> typeIDTable;
-  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
-    auto type = module.getPortType(i);
+  auto numPorts = module.getNumPorts();
 
-    if (isa<DomainType>(type)) {
-      auto typeID = info.getDomainTypeID(domainInfo, i);
-      typeIDTable[i] = typeID;
+  DenseMap<unsigned, DomainTypeID> domainTypeIDTable;
+  for (size_t i = 0; i < numPorts; ++i) {
+    if (isa<DomainType>(module.getPortType(i)))
+      domainTypeIDTable[i] = info.getDomainTypeID(domainInfo, i);
+  }
+
+  for (size_t i = 0; i < numPorts; ++i) {
+    auto type = type_dyn_cast<FIRRTLBaseType>(module.getPortType(i));
+    if (!type)
       continue;
+
+    // Record the domain associations of this port.
+    SmallVector<IntegerAttr> associations(numDomains);
+    for (auto domainPortIndex : getPortDomainAssociation(domainInfo, i)) {
+      auto domainTypeID = domainTypeIDTable.at(domainPortIndex.getUInt());
+      auto prevDomainPortIndex = associations[domainTypeID.index];
+      if (prevDomainPortIndex) {
+        emitDuplicatePortDomainError(info, module, i, domainTypeID,
+                                     prevDomainPortIndex, domainPortIndex);
+        return failure();
+      }
+      associations[domainTypeID.index] = domainPortIndex;
     }
 
-    if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
-      SmallVector<IntegerAttr> associations(numDomains);
-      auto domains = getPortDomainAssociation(domainInfo, i);
-      for (auto index : domains) {
-        auto typeID = typeIDTable[index.getUInt()];
-        auto &entry = associations[typeID.index];
-        if (entry && entry != index) {
-          auto domainName = info.getDomain(typeID).getNameAttr();
-          auto portName = module.getPortNameAttr(i);
-          auto diag = emitError(module.getPortLocation(i))
-                      << "ambiguous " << domainName << " association for port "
-                      << portName;
-
-          auto d1Loc = module.getPortLocation(entry.getUInt());
-          auto d1Name = module.getPortNameAttr(entry.getUInt());
-          diag.attachNote(d1Loc)
-              << "associated with " << domainName << " port " << d1Name;
-
-          auto d2Loc = module.getPortLocation(index.getUInt());
-          auto d2Name = module.getPortNameAttr(index.getUInt());
-          diag.attachNote(d2Loc)
-              << "associated with " << domainName << " port " << d2Name;
-        }
-        entry = index;
-      }
-
-      for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
-        auto typeID = DomainTypeID{domainIndex};
-        auto association = associations[domainIndex];
-        if (!association) {
-          emitMissingPortDomainAssociationError(info, module, typeID, i);
-          return failure();
-        }
+    // Check the associations for completeness.
+    for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
+      auto typeID = DomainTypeID{domainIndex};
+      if (!associations[domainIndex]) {
+        emitMissingPortDomainAssociationError(info, module, typeID, i);
+        return failure();
       }
     }
   }

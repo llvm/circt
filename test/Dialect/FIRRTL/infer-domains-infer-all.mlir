@@ -104,20 +104,6 @@ firrtl.circuit "SequenceInference" {
   }
 }
 
-// Domain duplicate equivalence - should be legal.
-// CHECK-LABEL: DuplicateDomainEquivalence
-firrtl.circuit "DuplicateDomainEquivalence" {
-  firrtl.domain @ClockDomain
-  firrtl.module @DuplicateDomainEquivalence(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %a: !firrtl.uint<1> domains [%A, %A],
-    out %b: !firrtl.uint<1> domains [%A]
-  ) {
-    // This should be legal since duplicate domains are canonicalized.
-    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
-  }
-}
-
 // Unsafe domain cast with sequences
 // CHECK-LABEL: UnsafeSequenceCast
 firrtl.circuit "UnsafeSequenceCast" {

@@ -80,3 +80,33 @@ firrtl.circuit "IllegalDomainCrossing" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: ExactDuplicateDomain
+firrtl.circuit "DuplicateDomainEquivalence" {
+  firrtl.domain @ClockDomain
+  firrtl.module @DuplicateDomainEquivalence(
+    // expected-note @below {{associated with "ClockDomain" port "A"}}
+    in %A: !firrtl.domain of @ClockDomain,
+    // expected-error @below {{duplicate "ClockDomain" association for port "a"}}
+    in %a: !firrtl.uint<1> domains [%A, %A],
+    out %b: !firrtl.uint<1> domains [%A]
+  ) {
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: DuplicateDomainKind
+firrtl.circuit "DuplicateDomainEquivalence" {
+  firrtl.domain @ClockDomain
+  firrtl.module @DuplicateDomainEquivalence(
+    // expected-note @below {{associated with "ClockDomain" port "A"}}
+    in  %A: !firrtl.domain of @ClockDomain,
+    // expected-note @below {{associated with "ClockDomain" port "B"}}
+    in  %B: !firrtl.domain of @ClockDomain,
+    // expected-error @below {{duplicate "ClockDomain" association for port "a"}}
+    in  %a: !firrtl.uint<1> domains [%A, %B],
+    out %b: !firrtl.uint<1> domains [%A]
+  ) {
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+}
