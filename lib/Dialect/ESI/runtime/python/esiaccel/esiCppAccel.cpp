@@ -19,8 +19,10 @@
 #include <sstream>
 
 // nanobind includes
+#if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
+#endif
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/map.h>
@@ -29,39 +31,14 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/unique_ptr.h>
 #include <nanobind/stl/vector.h>
+#if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#endif
 
 namespace nb = nanobind;
 
 using namespace esi;
 using namespace esi::services;
-
-// Tell nanobind that these types are not copy constructible.
-// This is needed because nanobind's default detection doesn't work correctly
-// for types with complex member types.
-namespace nanobind {
-namespace detail {
-template <>
-struct is_copy_constructible<HWModule> : std::false_type {};
-template <>
-struct is_copy_constructible<Instance> : std::false_type {};
-template <>
-struct is_copy_constructible<Accelerator> : std::false_type {};
-template <>
-struct is_copy_constructible<std::future<MessageData>> : std::false_type {};
-} // namespace detail
-} // namespace nanobind
-
-// Also specialize std::is_move_constructible for these types to prevent
-// nanobind from generating move wrappers.
-namespace std {
-template <>
-struct is_move_constructible<esi::HWModule> : std::false_type {};
-template <>
-struct is_move_constructible<esi::Instance> : std::false_type {};
-template <>
-struct is_move_constructible<esi::Accelerator> : std::false_type {};
-} // namespace std
 
 namespace nanobind {
 namespace detail {

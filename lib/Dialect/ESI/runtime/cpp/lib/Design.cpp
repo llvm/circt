@@ -42,7 +42,7 @@ buildIndex(const std::vector<std::unique_ptr<BundlePort>> &ports) {
 HWModule::HWModule(std::optional<ModuleInfo> info,
                    std::vector<std::unique_ptr<Instance>> children,
                    std::vector<services::Service *> services,
-                   std::vector<std::unique_ptr<BundlePort>> &ports)
+                   std::vector<std::unique_ptr<BundlePort>> &&ports)
     : info(info), children(std::move(children)),
       childIndex(buildIndex(this->children)), services(services),
       ports(std::move(ports)), portIndex(buildIndex(this->ports)) {}
