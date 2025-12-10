@@ -1486,7 +1486,7 @@ static ParseResult parseModulePorts(
   // Parse all ports, in two phases.  First, parse all the ports and build up
   // the information about what domains exist and the _names_ of domains
   // associated with ports.  After this, the domain information is only
-  // pouplated for domain ports.  All associations are null.
+  // populated for domain ports.  All associations are null.
   if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
                                             parseArgument)))
     return failure();
