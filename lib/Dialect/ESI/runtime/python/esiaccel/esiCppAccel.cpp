@@ -18,7 +18,9 @@
 #include <ranges>
 #include <sstream>
 
-// nanobind includes
+// nanobind includes.
+// Python world does not respect constness. So it doesn't make sense to have
+// const checks. Disable related warnings.
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-qual"
@@ -283,7 +285,7 @@ NB_MODULE(esiCppAccel, m) {
           nb::gil_scoped_release release{};
           data.emplace(f.get());
         }
-        return nb::bytes((const char *)data->getBytes(), data->getSize());
+        return nb::bytearray((const char *)data->getBytes(), data->getSize());
       });
 
   nb::class_<ChannelPort::ConnectOptions>(m, "ConnectOptions")
@@ -319,7 +321,7 @@ NB_MODULE(esiCppAccel, m) {
           [](ReadChannelPort &p) -> nb::bytes {
             MessageData data;
             p.read(data);
-            return nb::bytes((const char *)data.getBytes(), data.getSize());
+            return nb::bytearray((const char *)data.getBytes(), data.getSize());
           },
           "Read data from the channel. Blocking.")
       .def("read_async", &ReadChannelPort::readAsync);

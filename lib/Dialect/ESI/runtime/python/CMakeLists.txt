@@ -58,7 +58,10 @@ if(Python3_FOUND)
 
     # Use nanobind's built-in stubgen for stub generation.
     if(WIN32)
-      # TODO: have the patience to make this work on Windows.
+      # I just wasted all day trying to figure out the DLL search path on
+      # Windows both locally and in the runner. I'm done. Windows wheels
+      # won't have a stub until somebody else figures this out.
+      # TODO: have the patience to make this work.
       message(WARNING "Stub generation is not supported on Windows.")
     else()
       set(stubgen_python_path "$ENV{PYTHONPATH}:${CMAKE_CURRENT_BINARY_DIR}")
