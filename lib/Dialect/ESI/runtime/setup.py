@@ -156,7 +156,7 @@ setup(name="esiaccel",
       ],
       cmdclass={
           "build": CustomBuild,
-          "built_ext": NoopBuildExtension,
+          "build_ext": NoopBuildExtension,
           "build_py": CMakeBuild,
       },
       zip_safe=False,
