@@ -22,7 +22,6 @@ d = acc.build_accelerator()
 
 mmio_svc: esi.accelerator.MMIO
 for svc in d.services:
-  print(f"Service: {svc}")
   if isinstance(svc, esi.accelerator.MMIO):
     mmio_svc = svc
     break

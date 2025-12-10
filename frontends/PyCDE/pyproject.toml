@@ -8,7 +8,6 @@ requires = [
 
   # MLIR build depends.
   "numpy",
-  "pybind11>=2.11,<=2.12",
   "nanobind==2.10.1",
   "PyYAML",
 
