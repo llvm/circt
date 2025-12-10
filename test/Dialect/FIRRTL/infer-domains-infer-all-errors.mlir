@@ -45,7 +45,6 @@ firrtl.circuit "IllegalDomainCrossing" {
   }
 }
 
-
 // Incomplete extmodule domain information.
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain

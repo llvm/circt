@@ -1042,48 +1042,6 @@ void getUpdatesForModulePorts(const DomainInfo &info, TermAllocator &allocator,
   }
 }
 
-/// For each input domain port on the instance, if the value to-be-driven
-/// is unsolved, solve the variable by adding an input port to the pending
-/// updates.
-template <typename T>
-void getUpdatesForInstance(const DomainInfo &info, TermAllocator &allocator,
-                           DomainTable &table, Namespace &ns, size_t ip,
-                           PendingUpdates &pending, T op) {
-  for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
-    auto result = op.getResult(i);
-    if (!isa<DomainType>(result.getType()) ||
-        op.getPortDirection(i) == Direction::Out)
-      continue;
-
-    auto *term = getTermForDomain(allocator, table, result);
-    auto *var = dyn_cast<VariableTerm>(term);
-    if (!var)
-      continue;
-
-    auto typeID = info.getDomainTypeID(result);
-    auto loc = op.getPortLocation(i);
-    ensureSolved(info, ns, typeID, ip, loc, var, pending);
-  }
-}
-
-void getUpdatesForOp(const DomainInfo &info, TermAllocator &allocator,
-                     DomainTable &table, Namespace &ns, size_t ip,
-                     PendingUpdates &pending, Operation *op) {
-  if (auto inst = dyn_cast<InstanceOp>(op))
-    return getUpdatesForInstance(info, allocator, table, ns, ip, pending, inst);
-  if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return getUpdatesForInstance(info, allocator, table, ns, ip, pending, inst);
-}
-
-void getUpdatesForModuleBody(const DomainInfo &info, TermAllocator &allocator,
-                             DomainTable &table, Namespace &ns, FModuleOp mod,
-                             PendingUpdates &pending) {
-  auto ip = mod.getNumPorts();
-  mod->walk([&](Operation *op) {
-    getUpdatesForOp(info, allocator, table, ns, ip, pending, op);
-  });
-}
-
 void getUpdatesForModule(const DomainInfo &info, TermAllocator &allocator,
                          const ExportTable &exports, DomainTable &table,
                          FModuleOp mod, PendingUpdates &pending) {
@@ -1092,7 +1050,6 @@ void getUpdatesForModule(const DomainInfo &info, TermAllocator &allocator,
   for (auto name : names.getAsRange<StringAttr>())
     ns.add(name);
   getUpdatesForModulePorts(info, allocator, exports, table, ns, mod, pending);
-  getUpdatesForModuleBody(info, allocator, table, ns, mod, pending);
 }
 
 void applyUpdatesToModule(const DomainInfo &info, TermAllocator &allocator,
@@ -1249,7 +1206,8 @@ LogicalResult updateModuleDomainInfo(const DomainInfo &info,
 }
 
 template <typename T>
-LogicalResult updateInstance(const DomainTable &table, T op) {
+LogicalResult updateInstance(const DomainInfo &info, TermAllocator &allocator,
+                             DomainTable &table, T op) {
   OpBuilder builder(op.getContext());
   builder.setInsertionPointAfter(op);
   auto numPorts = op->getNumResults();
@@ -1257,38 +1215,49 @@ LogicalResult updateInstance(const DomainTable &table, T op) {
     auto port = op.getResult(i);
     auto type = port.getType();
     auto direction = op.getPortDirection(i);
+
     // If the port is an input domain, we may need to drive the input with
-    // a value. If we don't know what value to drive to the port, error.
+    // a value. If we don't know what value to drive to the port, drive an
+    // anonymous domain.
     if (isa<DomainType>(type) && direction == Direction::In &&
         !isDriven(port)) {
-      auto *term = table.getOptTermForDomain(port);
-      auto *val = llvm::dyn_cast_if_present<ValueTerm>(term);
-      if (!val) {
-        emitDomainPortInferenceError(op, i);
-        return failure();
-      }
-
       auto loc = port.getLoc();
-      auto value = val->value;
-      DomainDefineOp::create(builder, loc, port, value);
+      auto *term = getTermForDomain(allocator, table, port);
+      if (auto *var = dyn_cast<VariableTerm>(term)) {
+        auto name = getDomainPortTypeName(op.getDomainInfo(), i);
+        auto anon = DomainCreateAnonOp::create(builder, loc, name);
+        solve(var, allocator.allocVal(anon));
+        DomainDefineOp::create(builder, loc, port, anon);
+        continue;
+      }
+      if (auto *val = dyn_cast<ValueTerm>(term)) {
+        auto value = val->value;
+        DomainDefineOp::create(builder, loc, port, value);
+        continue;
+      }
+      llvm_unreachable("unhandled domain term type");
     }
   }
+
   return success();
 }
 
-LogicalResult updateOp(const DomainTable &table, Operation *op) {
+LogicalResult updateOp(const DomainInfo &info, TermAllocator &allocator,
+                       DomainTable &table, Operation *op) {
   if (auto instance = dyn_cast<InstanceOp>(op))
-    return updateInstance(table, instance);
+    return updateInstance(info, allocator, table, instance);
   if (auto instance = dyn_cast<InstanceChoiceOp>(op))
-    return updateInstance(table, instance);
+    return updateInstance(info, allocator, table, instance);
   return success();
 }
 
 /// After updating the port domain associations, walk the body of the module
 /// to fix up any child instance modules.
-LogicalResult updateModuleBody(const DomainTable &table, FModuleOp module) {
-  auto result = module.getBodyBlock()->walk(
-      [&](Operation *op) -> WalkResult { return updateOp(table, op); });
+LogicalResult updateModuleBody(const DomainInfo &info, TermAllocator &allocator,
+                               DomainTable &table, FModuleOp module) {
+  auto result = module.getBodyBlock()->walk([&](Operation *op) -> WalkResult {
+    return updateOp(info, allocator, table, op);
+  });
   return failure(result.wasInterrupted());
 }
 
@@ -1315,7 +1284,7 @@ LogicalResult updateModule(const DomainInfo &info, TermAllocator &allocator,
   entry.portDomainInfo = portDomainInfo;
   entry.portInsertions = std::move(pending.insertions);
 
-  return updateModuleBody(table, op);
+  return updateModuleBody(info, allocator, table, op);
 }
 
 //===---------------------------------------------------------------------------
@@ -1482,7 +1451,7 @@ LogicalResult checkAndInferModule(const DomainInfo &info,
   if (failed(driveModuleOutputDomainPorts(info, table, module)))
     return failure();
 
-  return updateModuleBody(table, module);
+  return updateModuleBody(info, allocator, table, module);
 }
 
 LogicalResult runOnModuleLike(InferDomainsMode mode, const DomainInfo &info,
