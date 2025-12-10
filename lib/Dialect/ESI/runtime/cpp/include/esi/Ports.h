@@ -121,12 +121,17 @@ protected:
     const WindowType *windowType;
 
     struct CopyOp {
+      /// Offset in the incoming/outgoing frame data.
       size_t frameOffset;
+      /// Offset in the translation buffer.
       size_t bufferOffset;
+      /// Number of bytes to copy.
       size_t size;
     };
     struct FrameInfo {
+      /// The total size of a frame in bytes.
       size_t expectedSize;
+      /// Precomputed copy operations for translating this frame.
       std::vector<CopyOp> copyOps;
     };
     std::vector<FrameInfo> frames;

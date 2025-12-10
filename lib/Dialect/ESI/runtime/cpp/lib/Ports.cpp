@@ -292,7 +292,10 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
   size_t srcDataSize = data.size();
 
   if (srcDataSize < translationInfo->intoTypeBytes)
-    throw std::runtime_error("Source data too small");
+    throw std::runtime_error(
+        "Source data too small: expected at least " +
+        std::to_string(translationInfo->intoTypeBytes) +
+        " bytes, got " + std::to_string(srcDataSize) + " bytes");
 
   std::vector<uint8_t> frameBuffer;
   for (const auto &frameInfo : translationInfo->frames) {
