@@ -157,8 +157,8 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
   llvm::KnownBits result(*width);
   if (auto aig = dyn_cast<aig::AndInverterOp>(op)) {
     // Initialize to all ones for AND operation
-    result.One = APInt::getAllOnes(width);
-    result.Zero = APInt::getZero(width);
+    result.One = APInt::getAllOnes(*width);
+    result.Zero = APInt::getZero(*width);
 
     for (auto [operand, inverted] :
          llvm::zip(aig.getInputs(), aig.getInverted())) {

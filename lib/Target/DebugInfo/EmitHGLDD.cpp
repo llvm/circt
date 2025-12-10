@@ -725,17 +725,17 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
 
     // Serialize the constant as a base-2 binary string.
     SmallString<64> buffer;
-    buffer.reserve(width);
+    buffer.reserve(*width);
     constOp.getValue().toStringUnsigned(buffer, 2);
 
     // Pad the string with leading zeros such that it is exactly of the required
     // width. This is needed since tools will use the string length to determine
     // the width of the constant.
     std::reverse(buffer.begin(), buffer.end());
-    while (buffer.size() < (size_t)width)
+    while (buffer.size() < (size_t)*width)
       buffer += '0';
     std::reverse(buffer.begin(), buffer.end());
-    assert(buffer.size() == (size_t)width);
+    assert(buffer.size() == (size_t)*width);
 
     return {JObject({{"bit_vector", buffer}}), type};
   }
