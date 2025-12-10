@@ -62,6 +62,39 @@ struct is_move_constructible<esi::Accelerator> : std::false_type {};
 
 namespace nanobind {
 namespace detail {
+
+template <>
+struct type_hook<ChannelPort> {
+  static const std::type_info *get(const ChannelPort *port) {
+    if (auto p = dynamic_cast<const WriteChannelPort *>(port)) {
+      return &typeid(WriteChannelPort);
+    }
+    if (auto p = dynamic_cast<const ReadChannelPort *>(port)) {
+      return &typeid(ReadChannelPort);
+    }
+    return &typeid(ChannelPort);
+  }
+};
+
+template <>
+struct type_hook<Service> {
+  static const std::type_info *get(const Service *svc) {
+    if (auto p = dynamic_cast<const MMIO *>(svc)) {
+      return &typeid(MMIO);
+    }
+    if (auto p = dynamic_cast<const SysInfo *>(svc)) {
+      return &typeid(SysInfo);
+    }
+    if (auto p = dynamic_cast<const HostMem *>(svc)) {
+      return &typeid(HostMem);
+    }
+    if (auto p = dynamic_cast<const TelemetryService *>(svc)) {
+      return &typeid(TelemetryService);
+    }
+    return &typeid(Service);
+  }
+};
+
 /// Nanobind doesn't have a built-in type caster for std::any.
 /// We must provide one which knows about all of the potential types which the
 /// any might be.
@@ -107,8 +140,7 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<ChannelType, Type>(m, "ChannelType")
       .def(nb::init<const Type::ID &, const Type *>(), nb::arg("id"),
            nb::arg("inner"))
-      .def_prop_ro("inner", &ChannelType::getInner,
-                   nb::rv_policy::reference);
+      .def_prop_ro("inner", &ChannelType::getInner, nb::rv_policy::reference);
   nb::enum_<BundleType::Direction>(m, "Direction")
       .value("To", BundleType::Direction::To)
       .value("From", BundleType::Direction::From)
@@ -141,8 +173,7 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<StructType, Type>(m, "StructType")
       .def(nb::init<const Type::ID &, const StructType::FieldVector &, bool>(),
            nb::arg("id"), nb::arg("fields"), nb::arg("reverse") = true)
-      .def_prop_ro("fields", &StructType::getFields,
-                   nb::rv_policy::reference)
+      .def_prop_ro("fields", &StructType::getFields, nb::rv_policy::reference)
       .def_prop_ro("reverse", &StructType::isReverse);
   nb::class_<ArrayType, Type>(m, "ArrayType")
       .def(nb::init<const Type::ID &, const Type *, uint64_t>(), nb::arg("id"),
@@ -187,8 +218,7 @@ NB_MODULE(esiCppAccel, m) {
       .def_prop_ro("repo", [](ModuleInfo &info) { return info.repo; })
       .def_prop_ro("commit_hash",
                    [](ModuleInfo &info) { return info.commitHash; })
-      .def_prop_ro("constants",
-                   [](ModuleInfo &info) { return info.constants; })
+      .def_prop_ro("constants", [](ModuleInfo &info) { return info.constants; })
       // TODO: "extra" field.
       .def("__repr__", [](ModuleInfo &info) {
         std::string ret;
@@ -205,7 +235,8 @@ NB_MODULE(esiCppAccel, m) {
       .export_values();
   nb::class_<Logger>(m, "Logger");
 
-  nb::class_<services::Service>(m, "Service");
+  nb::class_<services::Service>(m, "Service")
+      .def("get_service_symbol", &services::Service::getServiceSymbol);
 
   nb::class_<SysInfo, services::Service>(m, "SysInfo")
       .def("esi_version", &SysInfo::getEsiVersion)
@@ -281,7 +312,8 @@ NB_MODULE(esiCppAccel, m) {
 
   nb::class_<ChannelPort::ConnectOptions>(m, "ConnectOptions")
       .def(nb::init<>())
-      .def_rw("buffer_size", &ChannelPort::ConnectOptions::bufferSize)
+      .def_rw("buffer_size", &ChannelPort::ConnectOptions::bufferSize,
+              nb::arg("buffer_size").none())
       .def_rw("translate_message",
               &ChannelPort::ConnectOptions::translateMessage);
 
@@ -293,9 +325,10 @@ NB_MODULE(esiCppAccel, m) {
 
   nb::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write",
-           [](WriteChannelPort &p, nb::bytes data) {
+           [](WriteChannelPort &p, nb::bytearray data) {
              std::vector<uint8_t> dataVec((uint8_t *)data.c_str(),
-                                          (uint8_t *)data.c_str() + data.size());
+                                          (uint8_t *)data.c_str() +
+                                              data.size());
              p.write(dataVec);
            })
       .def("tryWrite", [](WriteChannelPort &p, nb::bytes data) {
