@@ -188,8 +188,9 @@ public:
     assert(desc.name() == name);
   }
 
+protected:
   /// Send a write message to the server.
-  void write(const MessageData &data) override {
+  void writeImpl(const MessageData &data) override {
     // Add trace logging before sending the message.
     conn.getLogger().trace(
         [this,
@@ -216,12 +217,11 @@ public:
                                ". Details: " + sendStatus.error_details());
   }
 
-  bool tryWrite(const MessageData &data) override {
-    write(data);
+  bool tryWriteImpl(const MessageData &data) override {
+    writeImpl(data);
     return true;
   }
 
-protected:
   AcceleratorConnection &conn;
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.

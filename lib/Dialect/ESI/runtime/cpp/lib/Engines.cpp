@@ -282,12 +282,12 @@ public:
   // Connect allocate a buffer and prime the pump.
   void connectImpl(const ChannelPort::ConnectOptions &options) override;
 
-  void write(const MessageData &) override;
-  bool tryWrite(const MessageData &data) override;
-
   std::string identifier() const { return idPath.toStr() + "." + channelName; }
 
 protected:
+  void writeImpl(const MessageData &) override;
+  bool tryWriteImpl(const MessageData &data) override;
+
   // Size of buffer based on type.
   size_t bufferSize;
   // Owning engine.
@@ -394,13 +394,13 @@ void OneItemBuffersFromHostWritePort::connectImpl(
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
 }
 
-void OneItemBuffersFromHostWritePort::write(const MessageData &data) {
-  while (!tryWrite(data))
+void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
+  while (!tryWriteImpl(data))
     // Wait for the device to read the last data we sent.
     std::this_thread::yield();
 }
 
-bool OneItemBuffersFromHostWritePort::tryWrite(const MessageData &data) {
+bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
   Logger &logger = engine->conn.getLogger();
 
   // Check to see if there's an outstanding write.
