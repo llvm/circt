@@ -152,30 +152,30 @@ verif.formal @ALUFailure {depth = 3} {
 
 verif.formal @RunnerRequireEither {require_runners = ["sby", "circt-bmc"]} {
   %0 = hw.constant true
-  verif.cover %0 : i1
+  verif.assert %0 : i1
 }
 
 verif.formal @RunnerRequireSby {require_runners = ["sby"]} {
   %0 = hw.constant true
-  verif.cover %0 : i1
+  verif.assert %0 : i1
 }
 
 verif.formal @RunnerRequireCirctBmc {require_runners = ["circt-bmc"]} {
   %0 = hw.constant true
-  verif.cover %0 : i1
+  verif.assert %0 : i1
 }
 
 verif.formal @RunnerExcludeEither {exclude_runners = ["sby", "circt-bmc"]} {
   %0 = hw.constant true
-  verif.cover %0 : i1
+  verif.assert %0 : i1
 }
 
 verif.formal @RunnerExcludeSby {exclude_runners = ["sby"]} {
   %0 = hw.constant true
-  verif.cover %0 : i1
+  verif.assert %0 : i1
 }
 
 verif.formal @RunnerExcludeCirctBmc {exclude_runners = ["circt-bmc"]} {
   %0 = hw.constant true
-  verif.cover %0 : i1
+  verif.assert %0 : i1
 }
