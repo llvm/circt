@@ -793,7 +793,6 @@ class IntToRealOpBase<string name> : MooreOp<name, [
 def SIntToRealOp : IntToRealOpBase<"sint_to_real">;
 def UIntToRealOp : IntToRealOpBase<"uint_to_real">;
 
-
 def IntToStringOp : MooreOp<"int_to_string", [
   Pure
 ]> {

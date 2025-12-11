@@ -34,7 +34,6 @@
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
-#include <iostream>
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
@@ -1606,6 +1605,7 @@ struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
       return success();
   }
 };
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//

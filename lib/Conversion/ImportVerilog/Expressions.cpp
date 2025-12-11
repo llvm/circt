@@ -2353,10 +2353,9 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
           dyn_cast<moore::IntType>(value.getType()).getTwoValued(), value, true,
           loc);
 
-    if(isSigned)
+    if (isSigned)
       return builder.createOrFold<moore::SIntToRealOp>(loc, type, twoValInt);
-    else
-      return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
+    return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
   }
 
   if (isa<moore::ClassHandleType>(type) &&
