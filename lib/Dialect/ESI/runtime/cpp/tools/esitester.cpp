@@ -1519,7 +1519,7 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
 /// SV ordering means y comes before x in memory.
 #pragma pack(push, 1)
 struct Coord {
-  uint32_t y;  // SV ordering: last declared field first in memory
+  uint32_t y; // SV ordering: last declared field first in memory
   uint32_t x;
 };
 #pragma pack(pop)
@@ -1535,10 +1535,10 @@ static_assert(sizeof(Coord) == 8, "Coord must be 8 bytes packed");
 /// Note: Fields are in reverse order due to SV struct ordering.
 #pragma pack(push, 1)
 struct CoordTranslateArg {
-  size_t coordsLength;    // 8 bytes on 64-bit platforms
-  uint32_t yTranslation;  // SV ordering: last declared field first in memory
+  size_t coordsLength;   // 8 bytes on 64-bit platforms
+  uint32_t yTranslation; // SV ordering: last declared field first in memory
   uint32_t xTranslation;
-  Coord coords[];  // Flexible array member
+  Coord coords[]; // Flexible array member
 
   static size_t allocSize(size_t numCoords) {
     return sizeof(CoordTranslateArg) + numCoords * sizeof(Coord);
@@ -1554,7 +1554,7 @@ struct CoordTranslateArg {
 #pragma pack(push, 1)
 struct CoordTranslateResult {
   size_t coordsLength;
-  Coord coords[];  // Flexible array member
+  Coord coords[]; // Flexible array member
 
   static size_t allocSize(size_t numCoords) {
     return sizeof(CoordTranslateResult) + numCoords * sizeof(Coord);
@@ -1566,10 +1566,10 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
                                uint32_t xTrans, uint32_t yTrans,
                                uint32_t numCoords) {
   Logger &logger = conn->getLogger();
-  logger.info("esitester",
-              "Starting coord translate test with x_trans=" +
-                  std::to_string(xTrans) + ", y_trans=" + std::to_string(yTrans) +
-                  ", num_coords=" + std::to_string(numCoords));
+  logger.info("esitester", "Starting coord translate test with x_trans=" +
+                               std::to_string(xTrans) +
+                               ", y_trans=" + std::to_string(yTrans) +
+                               ", num_coords=" + std::to_string(numCoords));
 
   // Generate random input coordinates.
   // Note: Coord struct has y before x due to SV ordering, but we generate
@@ -1619,11 +1619,12 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
   for (uint32_t i = 0; i < numCoords; ++i)
     arg->coords[i] = inputCoords[i];
 
-  logger.debug("esitester",
-               "Sending coord translate argument: " + std::to_string(argSize) +
-                   " bytes, coords_length=" + std::to_string(arg->coordsLength) +
-                   ", x_trans=" + std::to_string(arg->xTranslation) +
-                   ", y_trans=" + std::to_string(arg->yTranslation));
+  logger.debug(
+      "esitester",
+      "Sending coord translate argument: " + std::to_string(argSize) +
+          " bytes, coords_length=" + std::to_string(arg->coordsLength) +
+          ", x_trans=" + std::to_string(arg->xTranslation) +
+          ", y_trans=" + std::to_string(arg->yTranslation));
 
   // Call the function - translation happens automatically.
   MessageData resMsg =
@@ -1648,8 +1649,8 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
   if (result->coordsLength != inputCoords.size())
     throw std::runtime_error(
         "Coord translate test: result size mismatch. Expected " +
-        std::to_string(inputCoords.size()) +
-        ", got " + std::to_string(result->coordsLength));
+        std::to_string(inputCoords.size()) + ", got " +
+        std::to_string(result->coordsLength));
 
   bool passed = true;
   std::cout << "Coord translate test results:" << std::endl;

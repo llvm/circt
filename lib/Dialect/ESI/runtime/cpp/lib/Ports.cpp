@@ -280,51 +280,33 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
       if (fieldInfo.isList) {
         // For list fields, the frame layout is (in memory order):
         //   1. 'last' field (1 byte)
-        //   2. '_size' field (if numItems > 1)
-        //   3. list_data array
+        //   2. list_data (one element per frame)
+        // Note: numItems > 1 is not yet supported.
         size_t numItems = field.numItems > 0 ? field.numItems : 1;
+        if (numItems != 1)
+          throw std::runtime_error(
+              "List translation with numItems > 1 is not yet supported. "
+              "Field '" +
+              field.name + "' has numItems=" + std::to_string(numItems));
 
         // 'last' field comes first in memory
         size_t lastOffset = frameOffset;
         frameOffset += 1;
 
-        // '_size' field comes next (if present)
-        size_t sizeOffset = SIZE_MAX;
-        size_t sizeWidth = 0;
-        if (field.numItems > 1) {
-          // Calculate bits needed to represent values 0 to numItems-1.
-          // When numItems == 2, we need 1 bit. For larger values, use clzll.
-          size_t sizeBits;
-          if (field.numItems == 2)
-            sizeBits = 1;
-          else
-            sizeBits = 64 - __builtin_clzll(field.numItems - 1);
-          sizeWidth = (sizeBits + 7) / 8;
-          sizeOffset = frameOffset;
-          frameOffset += sizeWidth;
-        }
-
-        // List data comes after last and _size
+        // List data comes after 'last'
         layout.frameOffset = frameOffset;
-        layout.size = numItems * fieldInfo.listElementSize;
+        layout.size = fieldInfo.listElementSize;
         fieldLayouts.push_back(layout);
         frameOffset += layout.size;
 
-        // Store the computed offsets for use in the second pass
-        // We'll use layout.frameOffset for dataOffset and store last/size
-        // info in a temporary way through the layout struct
-        // Actually, we need to save these for the ListFieldInfo, so let's
-        // create it now instead of in the second pass
+        // Create ListFieldInfo for this list field
         ListFieldInfo listInfo;
         listInfo.fieldName = layout.name;
         listInfo.dataOffset = layout.frameOffset;
-        listInfo.numItemsPerFrame = numItems;
         listInfo.elementSize = fieldInfo.listElementSize;
         listInfo.listLengthBufferOffset = layout.bufferOffset;
         listInfo.listDataBufferOffset = intoTypeBytes;
         listInfo.lastFieldOffset = lastOffset;
-        listInfo.sizeFieldOffset = sizeOffset;
-        listInfo.sizeFieldWidth = sizeWidth;
         frameInfo.listField = listInfo;
       } else {
         // Regular (non-list) field
@@ -419,33 +401,8 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
   if (frameInfo.listField.has_value()) {
     const auto &listInfo = frameInfo.listField.value();
 
-    // Determine how many valid items are in this frame
-    size_t validItems = listInfo.numItemsPerFrame;
-    if (listInfo.sizeFieldOffset != SIZE_MAX) {
-      // Read the _size field to get actual count of valid items.
-      // Note: This assumes little-endian byte order, which matches the
-      // hardware's memory layout.
-      validItems = 0;
-      for (size_t i = 0; i < listInfo.sizeFieldWidth; ++i)
-        validItems |=
-            static_cast<size_t>(frameData[listInfo.sizeFieldOffset + i])
-            << (i * 8);
-      // The _size field interpretation:
-      //   - If _size == 0, all numItemsPerFrame items are valid.
-      //   - Otherwise, _size directly indicates the count of valid items
-      //     (1 to numItemsPerFrame - 1).
-      if (validItems == 0)
-        validItems = listInfo.numItemsPerFrame;
-      // Validate that validItems does not exceed numItemsPerFrame
-      if (validItems > listInfo.numItemsPerFrame)
-        throw std::runtime_error("Invalid _size field value exceeds numItemsPerFrame");
-    }
-
-    // Copy list data to the accumulator
-    // Check for integer overflow in bytesToCopy calculation
-    if (listInfo.elementSize != 0 && validItems > SIZE_MAX / listInfo.elementSize)
-      throw std::runtime_error("List size too large, potential integer overflow");
-    size_t bytesToCopy = validItems * listInfo.elementSize;
+    // With numItems == 1, each frame contains exactly one list element
+    size_t bytesToCopy = listInfo.elementSize;
     // Bounds check to prevent buffer overflow from corrupted _size field
     if (listInfo.dataOffset + bytesToCopy > frameDataSize)
       throw std::runtime_error("List data extends beyond frame bounds");
@@ -462,8 +419,9 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
       // But actually, list_length is already at listLengthBufferOffset in the
       // header We need to write the actual length there.
       size_t listLength = listDataBuffer.size() / listInfo.elementSize;
-      std::memcpy(translationBuffer.data() + listInfo.listLengthBufferOffset,
-                  &listLength, sizeof(size_t));
+      size_t *listLengthPtr = reinterpret_cast<size_t *>(
+          translationBuffer.data() + listInfo.listLengthBufferOffset);
+      *listLengthPtr = listLength;
 
       // Append list data to translation buffer
       size_t headerSize = translationBuffer.size();
@@ -550,23 +508,9 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
       size_t listDataOffset = 0;
 
       // Handle empty list case - still need to send one frame with last=true
-      if (listLength == 0) {
-        std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
-        // Copy non-list fields (header data)
-        for (const auto &op : frameInfo.copyOps)
-          std::memcpy(frameBuffer.data() + op.frameOffset,
-                      srcData + op.bufferOffset, op.size);
-        // Set _size to 0 if present
-        if (listInfo.sizeFieldOffset != SIZE_MAX) {
-          size_t zero = 0;
-          std::memcpy(frameBuffer.data() + listInfo.sizeFieldOffset, &zero,
-                      listInfo.sizeFieldWidth);
-        }
-        // Set last to true
-        frameBuffer[listInfo.lastFieldOffset] = 1;
-        translationBuffer.emplace_back(std::move(frameBuffer));
-        continue;
-      }
+      if (listLength == 0)
+        throw std::runtime_error("Cannot send empty lists - at least one item "
+                                 "is required to parallel ESI list semantics");
 
       while (itemsRemaining > 0) {
         std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);
@@ -576,41 +520,15 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
           std::memcpy(frameBuffer.data() + op.frameOffset,
                       srcData + op.bufferOffset, op.size);
 
-        // Determine how many items to put in this frame
-        size_t itemsInThisFrame =
-            std::min(itemsRemaining, listInfo.numItemsPerFrame);
-        // Check for potential overflow in multiplication
-        if (listInfo.elementSize != 0 &&
-            itemsInThisFrame > (SIZE_MAX / listInfo.elementSize)) {
-          throw std::overflow_error("Integer overflow in bytesInThisFrame calculation");
-        }
-        size_t bytesInThisFrame = itemsInThisFrame * listInfo.elementSize;
-        // Ensure listInfo.listDataSize is set to the total available list data size
-        // If not already set, set it here (assume listInfo.listDataSize is available)
+        // With numItems == 1, each frame contains exactly one list element
+        size_t bytesInThisFrame = listInfo.elementSize;
 
         // Copy list data
-        // Bounds check: ensure we do not read past the end of the source buffer
-        if (listDataOffset + bytesInThisFrame > listInfo.listDataSize) {
-          throw std::runtime_error("List data over-read: not enough source data for requested frame copy");
-        }
         std::memcpy(frameBuffer.data() + listInfo.dataOffset,
                     listData + listDataOffset, bytesInThisFrame);
 
-        // Set _size field if present
-        if (listInfo.sizeFieldOffset != SIZE_MAX) {
-          // _size indicates valid items: 0 means all valid (numItemsPerFrame)
-          size_t sizeValue = (itemsInThisFrame == listInfo.numItemsPerFrame)
-                                 ? 0
-                                 : itemsInThisFrame;
-          // Validate that sizeValue fits in the allocated field width
-          if (sizeValue > ((1ULL << (listInfo.sizeFieldWidth * 8)) - 1))
-            throw std::runtime_error("Too many items for size field width");
-          std::memcpy(frameBuffer.data() + listInfo.sizeFieldOffset, &sizeValue,
-                      listInfo.sizeFieldWidth);
-        }
-
         // Update remaining count
-        itemsRemaining -= itemsInThisFrame;
+        itemsRemaining -= 1;
         listDataOffset += bytesInThisFrame;
 
         // Set last field

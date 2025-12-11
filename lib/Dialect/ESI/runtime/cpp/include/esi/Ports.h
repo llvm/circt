@@ -155,20 +155,15 @@ protected:
     };
 
     /// Information about a list field within a frame (for parallel encoding).
+    /// Note: Currently only numItems == 1 is supported (one list element per
+    /// frame).
     struct ListFieldInfo {
       /// Name of the list field.
       std::string fieldName;
       /// Offset of the list data array in the frame.
       size_t dataOffset;
-      /// Number of elements per frame (numItems from window spec).
-      size_t numItemsPerFrame;
       /// Size of each list element in bytes.
       size_t elementSize;
-      /// Offset of the _size field in the frame (if numItems > 1).
-      /// Set to SIZE_MAX if not present.
-      size_t sizeFieldOffset;
-      /// Width of the _size field in bytes.
-      size_t sizeFieldWidth;
       /// Offset of the 'last' field in the frame.
       size_t lastFieldOffset;
       /// Offset in the translation buffer where list length is stored.

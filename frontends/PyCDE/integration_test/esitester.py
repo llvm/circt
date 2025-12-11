@@ -219,57 +219,75 @@ class LoopbackInOutAdd(Module):
     loopback.assign(data_chan_buffered)
 
 
-class StreamingAdder(Module):
-  """Exposes a function which has an argument of struct {add_amt, list<uint32>}.
-  It then adds add_amt to each element of list and returns the resulting list.
+@modparams
+def StreamingAdder(numItems: int):
+  """Creates a StreamingAdder module parameterized by the number of items per
+  window frame. The module exposes a function which has an argument of struct
+  {add_amt, list<uint32>}. It then adds add_amt to each element of the list in
+  parallel (numItems at a time) and returns the resulting list.
   """
 
-  clk = Clock()
-  rst = Reset()
+  class StreamingAdder(Module):
+    clk = Clock()
+    rst = Reset()
 
-  @generator
-  def construct(ports):
-    from pycde.types import StructType, List, Window
+    @generator
+    def construct(ports):
+      from pycde.types import StructType, List, Window
 
-    # Define the argument type: struct { add_amt: UInt(32), list: List<UInt(32)> }
-    arg_struct_type = StructType([("add_amt", UInt(32)),
-                                  ("input", List(UInt(32)))])
+      # Define the argument type: struct { add_amt: UInt(32), list: List<UInt(32)> }
+      arg_struct_type = StructType([("add_amt", UInt(32)),
+                                    ("input", List(UInt(32)))])
 
-    # Create a windowed version of the argument struct for streaming
-    arg_window_type = Window.default_of(arg_struct_type)
+      # Create a windowed version with numItems parallel elements
+      arg_window_type = Window(
+          "arg_window", arg_struct_type,
+          [Window.Frame(None, ["add_amt", ("input", numItems)])])
 
-    # Result is also a List
-    result_type = List(UInt(32))
-    result_window_type = Window.default_of(result_type)
+      # Result is also a List with numItems parallel elements
+      result_struct_type = StructType([("data", List(UInt(32)))])
+      result_window_type = Window("result_window", result_struct_type,
+                                  [Window.Frame(None, [("data", numItems)])])
 
-    result_chan = Wire(Channel(result_window_type))
-    args = esi.FuncService.get_call_chans(AppID("streaming_add"),
-                                          arg_type=arg_window_type,
-                                          result=result_chan)
+      result_chan = Wire(Channel(result_window_type))
+      args = esi.FuncService.get_call_chans(AppID("streaming_add"),
+                                            arg_type=arg_window_type,
+                                            result=result_chan)
 
-    # Unwrap the argument channel
-    ready = Wire(Bits(1))
-    arg_data, arg_valid = args.unwrap(ready)
+      # Unwrap the argument channel
+      ready = Wire(Bits(1))
+      arg_data, arg_valid = args.unwrap(ready)
 
-    # Unwrap the window to get the struct/union
-    arg_unwrapped = arg_data.unwrap()
+      # Unwrap the window to get the lowered struct
+      # Lowered type: struct { add_amt, input: array[numItems], input_size, last }
+      arg_unwrapped = arg_data.unwrap()
 
-    # Extract add_amt and list from the struct
-    add_amt = arg_unwrapped["add_amt"]
-    input_int = arg_unwrapped["input"]
+      # Extract add_amt and input array from the struct
+      add_amt = arg_unwrapped["add_amt"]
+      input_arr = arg_unwrapped["input"]
 
-    result_int = (add_amt + input_int).as_uint(32)
-    result_window = result_window_type.wrap(
-        result_window_type.lowered_type({
-            "data": result_int,
-            "last": arg_unwrapped.last
-        }))
+      # Perform all additions in parallel
+      result_arr = [
+          (add_amt + input_arr[i]).as_uint(32) for i in range(numItems)
+      ]
 
-    # Wrap the result into a channel
-    result_chan_internal, result_ready = Channel(result_window_type).wrap(
-        result_window, arg_valid)
-    ready.assign(result_ready)
-    result_chan.assign(result_chan_internal)
+      # Build the result lowered type
+      # Lowered type: struct { data: array[numItems], data_size, last }
+      lowered_val = result_window_type.lowered_type({
+          "data": result_arr,
+          "data_size": arg_unwrapped["input_size"],
+          "last": arg_unwrapped["last"]
+      })
+
+      result_window = result_window_type.wrap(lowered_val)
+
+      # Wrap the result into a channel
+      result_chan_internal, result_ready = Channel(result_window_type).wrap(
+          result_window, arg_valid)
+      ready.assign(result_ready)
+      result_chan.assign(result_chan_internal)
+
+  return StreamingAdder
 
 
 class CoordTranslator(Module):
@@ -1001,7 +1019,7 @@ class EsiTester(Module):
         instance_name="loopback",
         appid=AppID("loopback"),
     )
-    StreamingAdder(
+    StreamingAdder(1)(
         clk=ports.clk,
         rst=ports.rst,
         instance_name="streaming_adder",
