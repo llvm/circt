@@ -805,7 +805,7 @@ static void insertPorts(FModuleLike op,
   SmallVector<unsigned> indexMap(oldNumArgs);
   size_t inserted = 0;
   for (size_t i = 0; i < oldNumArgs; ++i) {
-    while (inserted < ports.size() && ports[inserted].first <= i)
+    while (inserted < ports.size() && ports[inserted].first == i)
       ++inserted;
     indexMap[i] = i + inserted;
   }
@@ -909,24 +909,13 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
   if (supportsEmptyAttr && domainInfoAttr.empty())
     return domainInfoAttr;
 
-  // Compute an array where each entry is the number of ports before that
-  // index that have been deleted.  This is used to update domain information.
-  SmallVector<unsigned> numDeleted;
-  numDeleted.resize(portIndices.size());
-  size_t deletionIndex = portIndices.find_first();
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(portIndices.size());
+  size_t deleted = 0;
   for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
-    if (i == deletionIndex) {
-      if (i == 0)
-        numDeleted[i] = 1;
-      else
-        numDeleted[i] = numDeleted[i - 1] + 1;
-      deletionIndex = portIndices.find_next(i);
-      continue;
-    }
-    if (i == 0)
-      numDeleted[i] = 0;
-    else
-      numDeleted[i] = numDeleted[i - 1];
+    indexMap[i] = i - deleted;
+    if (portIndices[i])
+      ++deleted;
   }
 
   // Return a cached empty ArrayAttr.
@@ -964,7 +953,7 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
       if (portIndices.test(oldIdx))
         continue;
       // If the new index is the same, do nothing.
-      auto newIdx = oldIdx - numDeleted[oldIdx];
+      auto newIdx = indexMap[oldIdx];
       if (oldIdx == newIdx) {
         newDomainInfo.push_back(attr);
         continue;
