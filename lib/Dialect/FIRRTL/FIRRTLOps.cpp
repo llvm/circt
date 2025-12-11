@@ -801,6 +801,15 @@ static void insertPorts(FModuleLike op,
   unsigned oldNumArgs = op.getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
 
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(oldNumArgs);
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldNumArgs; ++i) {
+    while (inserted < ports.size() && ports[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
   // Add direction markers and names for new ports.
   auto existingDirections = op.getPortDirectionsAttr();
   ArrayRef<Attribute> existingNames = op.getPortNames();
@@ -822,12 +831,9 @@ static void insertPorts(FModuleLike op,
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
 
-  SmallVector<unsigned> indexMap(oldNumArgs);
-
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
   unsigned oldIdx = 0;
-  unsigned inserted = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
     while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
       newDirections.push_back(existingDirections[oldIdx]);
@@ -838,8 +844,6 @@ static void insertPorts(FModuleLike op,
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
-
-      indexMap[oldIdx] = oldIdx + inserted;
       ++oldIdx;
     }
   };
