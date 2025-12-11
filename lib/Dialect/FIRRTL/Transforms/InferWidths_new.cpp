@@ -127,6 +127,7 @@ public:
 };
 
 #include <list>
+#include <stack>
 class Terms {
 private:
   std::list<Term> terms_;
@@ -2028,16 +2029,18 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
 //===----------------------------------------------------------------------===//
 // upper_bound
 //===----------------------------------------------------------------------===//
+
+struct StackFrame {
+    Node *node;
+    size_t nextChildIndex;
+  };
+  
 std::vector<Node *> findPathBetween(Node *start, Node *end) {
   if (!start || !end)
     return {};
   if (start == end)
     return {start};
 
-  struct StackFrame {
-    Node *node;
-    size_t nextChildIndex;
-  };
   std::stack<StackFrame> stack;
   std::unordered_set<Node *> visited;
   std::vector<Node *> path;
