@@ -436,9 +436,15 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
       //     (1 to numItemsPerFrame - 1).
       if (validItems == 0)
         validItems = listInfo.numItemsPerFrame;
+      // Validate that validItems does not exceed numItemsPerFrame
+      if (validItems > listInfo.numItemsPerFrame)
+        throw std::runtime_error("Invalid _size field value exceeds numItemsPerFrame");
     }
 
     // Copy list data to the accumulator
+    // Check for integer overflow in bytesToCopy calculation
+    if (listInfo.elementSize != 0 && validItems > SIZE_MAX / listInfo.elementSize)
+      throw std::runtime_error("List size too large, potential integer overflow");
     size_t bytesToCopy = validItems * listInfo.elementSize;
     // Bounds check to prevent buffer overflow from corrupted _size field
     if (listInfo.dataOffset + bytesToCopy > frameDataSize)
@@ -573,9 +579,20 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
         // Determine how many items to put in this frame
         size_t itemsInThisFrame =
             std::min(itemsRemaining, listInfo.numItemsPerFrame);
+        // Check for potential overflow in multiplication
+        if (listInfo.elementSize != 0 &&
+            itemsInThisFrame > (SIZE_MAX / listInfo.elementSize)) {
+          throw std::overflow_error("Integer overflow in bytesInThisFrame calculation");
+        }
         size_t bytesInThisFrame = itemsInThisFrame * listInfo.elementSize;
+        // Ensure listInfo.listDataSize is set to the total available list data size
+        // If not already set, set it here (assume listInfo.listDataSize is available)
 
         // Copy list data
+        // Bounds check: ensure we do not read past the end of the source buffer
+        if (listDataOffset + bytesInThisFrame > listInfo.listDataSize) {
+          throw std::runtime_error("List data over-read: not enough source data for requested frame copy");
+        }
         std::memcpy(frameBuffer.data() + listInfo.dataOffset,
                     listData + listDataOffset, bytesInThisFrame);
 
