@@ -62,6 +62,9 @@ static void streamingAddTest(AcceleratorConnection *, Accelerator *,
                              uint32_t addAmt, uint32_t numItems);
 static void streamingAddTranslatedTest(AcceleratorConnection *, Accelerator *,
                                        uint32_t addAmt, uint32_t numItems);
+static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
+                               uint32_t xTrans, uint32_t yTrans,
+                               uint32_t numCoords);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -233,6 +236,19 @@ int main(int argc, const char *argv[]) {
   streamingAddSub->add_flag("-t,--translate", streamingTranslate,
                             "Use message translation (list translation)");
 
+  CLI::App *coordTranslateSub = cli.add_subcommand(
+      "translate_coords",
+      "Test CoordTranslator function service with list of coordinates");
+  uint32_t coordXTrans = 10;
+  uint32_t coordYTrans = 20;
+  uint32_t coordNumItems = 5;
+  coordTranslateSub->add_option("-x,--x-translation", coordXTrans,
+                                "X translation amount (default 10)");
+  coordTranslateSub->add_option("-y,--y-translation", coordYTrans,
+                                "Y translation amount (default 20)");
+  coordTranslateSub->add_option("-n,--num-coords", coordNumItems,
+                                "Number of random coordinates (default 5)");
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -271,6 +287,8 @@ int main(int argc, const char *argv[]) {
                                    streamingNumItems);
       else
         streamingAddTest(acc, accel, streamingAddAmt, streamingNumItems);
+    } else if (*coordTranslateSub) {
+      coordTranslateTest(acc, accel, coordXTrans, coordYTrans, coordNumItems);
     }
 
     acc->disconnect();
@@ -1489,4 +1507,170 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
 
   logger.info("esitester", "Streaming add test passed (translated)");
   std::cout << "Streaming add test passed" << std::endl;
+}
+
+/// Test the CoordTranslator module using message translation.
+/// This version uses the list translation support where the message format is:
+///   Argument: { x_translation, y_translation, coords_length, coords[] }
+///   Result: { coords_length, coords[] }
+/// Each coord is a struct { x, y }.
+
+/// Coordinate struct for CoordTranslator.
+/// SV ordering means y comes before x in memory.
+#pragma pack(push, 1)
+struct Coord {
+  uint32_t y;  // SV ordering: last declared field first in memory
+  uint32_t x;
+};
+#pragma pack(pop)
+static_assert(sizeof(Coord) == 8, "Coord must be 8 bytes packed");
+
+/// Translated argument struct for CoordTranslator.
+/// Memory layout (standard C struct ordering):
+///   ESI type: struct { x_translation: UInt(32), y_translation: UInt(32),
+///                      coords: List<struct{x, y}> }
+/// becomes host struct:
+///   { coords_length (size_t), y_translation (uint32_t),
+///     x_translation (uint32_t), coords[] }
+/// Note: Fields are in reverse order due to SV struct ordering.
+#pragma pack(push, 1)
+struct CoordTranslateArg {
+  size_t coordsLength;    // 8 bytes on 64-bit platforms
+  uint32_t yTranslation;  // SV ordering: last declared field first in memory
+  uint32_t xTranslation;
+  Coord coords[];  // Flexible array member
+
+  static size_t allocSize(size_t numCoords) {
+    return sizeof(CoordTranslateArg) + numCoords * sizeof(Coord);
+  }
+};
+#pragma pack(pop)
+
+/// Translated result struct for CoordTranslator.
+/// Memory layout:
+///   ESI type: List<struct{x, y}>
+/// becomes host struct:
+///   { coords_length (size_t), coords[] }
+#pragma pack(push, 1)
+struct CoordTranslateResult {
+  size_t coordsLength;
+  Coord coords[];  // Flexible array member
+
+  static size_t allocSize(size_t numCoords) {
+    return sizeof(CoordTranslateResult) + numCoords * sizeof(Coord);
+  }
+};
+#pragma pack(pop)
+
+static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
+                               uint32_t xTrans, uint32_t yTrans,
+                               uint32_t numCoords) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester",
+              "Starting coord translate test with x_trans=" +
+                  std::to_string(xTrans) + ", y_trans=" + std::to_string(yTrans) +
+                  ", num_coords=" + std::to_string(numCoords));
+
+  // Generate random input coordinates.
+  // Note: Coord struct has y before x due to SV ordering, but we generate
+  // and display as (x, y) for human readability.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<Coord> inputCoords;
+  inputCoords.reserve(numCoords);
+  for (uint32_t i = 0; i < numCoords; ++i) {
+    Coord c;
+    c.x = dist(rng);
+    c.y = dist(rng);
+    inputCoords.push_back(c);
+  }
+
+  // Find the coord_translator child.
+  auto coordTranslatorChild =
+      accel->getChildren().find(AppID("coord_translator"));
+  if (coordTranslatorChild == accel->getChildren().end())
+    throw std::runtime_error(
+        "Coord translate test: no 'coord_translator' child found");
+
+  auto &ports = coordTranslatorChild->second->getPorts();
+  auto translateIter = ports.find(AppID("translate_coords"));
+  if (translateIter == ports.end())
+    throw std::runtime_error(
+        "Coord translate test: no 'translate_coords' port found");
+
+  // Use FuncService::Function which handles connection and translation.
+  auto *funcPort =
+      translateIter->second.getAs<services::FuncService::Function>();
+  if (!funcPort)
+    throw std::runtime_error(
+        "Coord translate test: 'translate_coords' port not a "
+        "FuncService::Function");
+  funcPort->connect();
+
+  // Allocate and populate the argument struct using unique_ptr for exception
+  // safety. Note: The reinterpret_cast below technically violates strict
+  // aliasing rules, but is acceptable in this test code.
+  size_t argSize = CoordTranslateArg::allocSize(numCoords);
+  auto argBuffer = std::unique_ptr<uint8_t[]>(new uint8_t[argSize]);
+  auto *arg = reinterpret_cast<CoordTranslateArg *>(argBuffer.get());
+  arg->coordsLength = numCoords;
+  arg->xTranslation = xTrans;
+  arg->yTranslation = yTrans;
+  for (uint32_t i = 0; i < numCoords; ++i)
+    arg->coords[i] = inputCoords[i];
+
+  logger.debug("esitester",
+               "Sending coord translate argument: " + std::to_string(argSize) +
+                   " bytes, coords_length=" + std::to_string(arg->coordsLength) +
+                   ", x_trans=" + std::to_string(arg->xTranslation) +
+                   ", y_trans=" + std::to_string(arg->yTranslation));
+
+  // Call the function - translation happens automatically.
+  MessageData resMsg =
+      funcPort
+          ->call(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize))
+          .get();
+  // argBuffer automatically freed when it goes out of scope
+
+  logger.debug("esitester", "Received coord translate result: " +
+                                std::to_string(resMsg.getSize()) + " bytes");
+
+  if (resMsg.getSize() < sizeof(CoordTranslateResult))
+    throw std::runtime_error("Coord translate test: result too small");
+
+  const auto *result =
+      reinterpret_cast<const CoordTranslateResult *>(resMsg.getBytes());
+
+  if (resMsg.getSize() < CoordTranslateResult::allocSize(result->coordsLength))
+    throw std::runtime_error("Coord translate test: result data truncated");
+
+  // Verify results.
+  if (result->coordsLength != inputCoords.size())
+    throw std::runtime_error(
+        "Coord translate test: result size mismatch. Expected " +
+        std::to_string(inputCoords.size()) +
+        ", got " + std::to_string(result->coordsLength));
+
+  bool passed = true;
+  std::cout << "Coord translate test results:" << std::endl;
+  for (size_t i = 0; i < inputCoords.size(); ++i) {
+    uint32_t expectedX = inputCoords[i].x + xTrans;
+    uint32_t expectedY = inputCoords[i].y + yTrans;
+    std::cout << "  coord[" << i << "]=(" << inputCoords[i].x << ","
+              << inputCoords[i].y << ") + (" << xTrans << "," << yTrans
+              << ") = (" << result->coords[i].x << "," << result->coords[i].y
+              << ")";
+    if (result->coords[i].x != expectedX || result->coords[i].y != expectedY) {
+      std::cout << " MISMATCH! (expected (" << expectedX << "," << expectedY
+                << "))";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  if (!passed)
+    throw std::runtime_error("Coord translate test failed: result mismatch");
+
+  logger.info("esitester", "Coord translate test passed");
+  std::cout << "Coord translate test passed" << std::endl;
 }
