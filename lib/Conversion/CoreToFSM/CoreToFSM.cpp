@@ -48,12 +48,11 @@ using namespace fsm;
 
 namespace {
 
-// Forward declaration for our recursive helper function
+// Forward declaration for our helper function
 static void generateConcatenatedValues(
     const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
     const llvm::SmallVector<unsigned> &shifts,
-    llvm::DenseSet<size_t> &finalPossibleValues, size_t operandIdx,
-    size_t currentValue);
+    llvm::DenseSet<size_t> &finalPossibleValues);
 
 static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   if (auto c = dyn_cast_or_null<hw::ConstantOp>(v.getDefiningOp())) {
@@ -108,7 +107,7 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
       shifts[i] = shifts[i + 1] + operandWidths[i + 1];
     }
 
-    generateConcatenatedValues(allOperandValues, shifts, possibleValues, 0, 0);
+    generateConcatenatedValues(allOperandValues, shifts, possibleValues);
     return;
   }
 
@@ -136,15 +135,16 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   return;
 };
 
-static bool isConstant(mlir::Value value) {
+/// Checks if a value is a constant or a tree of muxes with constant leaves.
+static bool isConstantLike(mlir::Value value) {
   Operation *definingOp = value.getDefiningOp();
   if (!definingOp)
     return false;
   if (isa<hw::ConstantOp>(definingOp))
     return true;
   if (auto muxOp = dyn_cast<MuxOp>(definingOp))
-    return isConstant(muxOp.getTrueValue()) &&
-           isConstant(muxOp.getFalseValue());
+    return isConstantLike(muxOp.getTrueValue()) &&
+           isConstantLike(muxOp.getFalseValue());
   return false;
 }
 
@@ -152,7 +152,7 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
   if (op.getPredicate() == ICmpPredicate::eq &&
       op.getLhs().getDefiningOp<MuxOp>() &&
-      (isConstant(op.getLhs()) ||
+      (isConstantLike(op.getLhs()) ||
        op.getRhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
     auto mux = op.getLhs().getDefiningOp<MuxOp>();
@@ -164,14 +164,13 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
     auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
     auto newMux = rewriter.create<MuxOp>(loc, mux.getCond(), eq1.getResult(),
                                          eq2.getResult());
-    Operation *o = newMux;
-    op.replaceAllUsesWith(o);
+    op.replaceAllUsesWith(newMux.getOperation());
     op.erase();
     return llvm::success();
   }
   if (op.getPredicate() == ICmpPredicate::eq &&
       op.getRhs().getDefiningOp<MuxOp>() &&
-      (isConstant(op.getRhs()) ||
+      (isConstantLike(op.getRhs()) ||
        op.getLhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
     auto mux = op.getRhs().getDefiningOp<MuxOp>();
@@ -183,38 +182,45 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
     auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
     auto newMux = rewriter.create<MuxOp>(loc, mux.getCond(), eq1.getResult(),
                                          eq2.getResult());
-    Operation *o = newMux;
-    op.replaceAllUsesWith(o);
+    op.replaceAllUsesWith(newMux.getOperation());
     op.erase();
     return llvm::success();
   }
   return llvm::failure();
 }
 
-/// Recursively builds all possible concatenated integer values.
+/// Iteratively builds all possible concatenated integer values from the
+/// Cartesian product of value sets.
 static void generateConcatenatedValues(
     const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
     const llvm::SmallVector<unsigned> &shifts,
-    llvm::DenseSet<size_t> &finalPossibleValues, size_t operandIdx,
-    size_t currentValue) {
+    llvm::DenseSet<size_t> &finalPossibleValues) {
 
-  // Base case: If we've processed all operands, the currentValue is complete.
-  if (operandIdx >= allOperandValues.size()) {
-    finalPossibleValues.insert(currentValue);
+  if (allOperandValues.empty()) {
+    finalPossibleValues.insert(0);
     return;
   }
 
-  // Recursive step: For each possible value of the current operand,
-  // combine it with the accumulated value and recurse for the next operand.
-  const auto &currentOperandPossibleValues = allOperandValues[operandIdx];
-  unsigned shift = shifts[operandIdx];
+  // Start with the values of the first operand, shifted appropriately.
+  llvm::DenseSet<size_t> currentResults;
+  for (size_t val : allOperandValues[0])
+    currentResults.insert(val << shifts[0]);
 
-  for (size_t val : currentOperandPossibleValues) {
-    // Combine the current operand's value by shifting it and ORing it.
-    size_t nextValue = currentValue | (val << shift);
-    generateConcatenatedValues(allOperandValues, shifts, finalPossibleValues,
-                               operandIdx + 1, nextValue);
+  // For each subsequent operand, combine with all existing partial results.
+  for (size_t operandIdx = 1; operandIdx < allOperandValues.size();
+       ++operandIdx) {
+    llvm::DenseSet<size_t> nextResults;
+    unsigned shift = shifts[operandIdx];
+
+    for (size_t partialValue : currentResults) {
+      for (size_t val : allOperandValues[operandIdx]) {
+        nextResults.insert(partialValue | (val << shift));
+      }
+    }
+    currentResults = std::move(nextResults);
   }
+
+  finalPossibleValues = std::move(currentResults);
 }
 
 static llvm::DenseMap<mlir::Value, int>
@@ -386,13 +392,22 @@ public:
   LogicalResult run() {
     llvm::SmallVector<seq::CompRegOp> stateRegs;
     llvm::SmallVector<seq::CompRegOp> variableRegs;
+    bool hasNonIntegerReg = false;
     moduleOp.walk([&](seq::CompRegOp reg) {
+      // Check that the register type is an integer.
+      if (!isa<IntegerType>(reg.getType())) {
+        reg.emitError("FSM extraction only supports integer-typed registers");
+        hasNonIntegerReg = true;
+        return;
+      }
       if (reg.getName()->contains("state")) {
         stateRegs.push_back(reg);
       } else {
         variableRegs.push_back(reg);
       }
     });
+    if (hasNonIntegerReg)
+      return mlir::failure();
     if (stateRegs.empty()) {
       emitError(moduleOp.getLoc())
           << "Cannot find state register in this FSM. You might need to "
