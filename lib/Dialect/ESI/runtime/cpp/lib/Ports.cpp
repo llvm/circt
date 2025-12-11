@@ -503,8 +503,11 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
                   sizeof(size_t));
 
       // Check that the buffer is large enough for the list data
-      if (translationInfo->intoTypeBytes + (listLength * listInfo.elementSize) > srcDataSize) {
-        throw std::runtime_error("Source buffer too small for list data: possible corrupted or inconsistent list length field");
+      if (translationInfo->intoTypeBytes + (listLength * listInfo.elementSize) >
+          srcDataSize) {
+        throw std::runtime_error(
+            "Source buffer too small for list data: possible corrupted or "
+            "inconsistent list length field");
       }
       // Get pointer to list data (after the fixed header)
       const uint8_t *listData = srcData + translationInfo->intoTypeBytes;
@@ -516,7 +519,9 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
       // Handle empty list case - still need to send one frame with last=true
       if (listLength == 0)
         throw std::runtime_error(
-            "Cannot send empty lists - parallel ESI list encoding requires at least one frame to be sent, and each frame must contain at least one element.");
+            "Cannot send empty lists - parallel ESI list encoding requires at "
+            "least one frame to be sent, and each frame must contain at least "
+            "one element.");
 
       while (itemsRemaining > 0) {
         std::vector<uint8_t> frameBuffer(frameInfo.expectedSize, 0);

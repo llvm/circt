@@ -1384,16 +1384,12 @@ struct StreamingAddTranslatedArg {
   // Use inputData() accessor to access it.
 
   /// Get pointer to trailing input data array.
-  uint32_t *inputData() {
-    return reinterpret_cast<uint32_t *>(this + 1);
-  }
+  uint32_t *inputData() { return reinterpret_cast<uint32_t *>(this + 1); }
   const uint32_t *inputData() const {
     return reinterpret_cast<const uint32_t *>(this + 1);
   }
   /// Get span view of input data (requires inputLength to be set first).
-  std::span<uint32_t> inputDataSpan() {
-    return {inputData(), inputLength};
-  }
+  std::span<uint32_t> inputDataSpan() { return {inputData(), inputLength}; }
   std::span<const uint32_t> inputDataSpan() const {
     return {inputData(), inputLength};
   }
@@ -1717,9 +1713,10 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
     uint32_t expectedY = inputCoords[i].y + yTrans;
     std::cout << "  coord[" << i << "]=(" << inputCoords[i].x << ","
               << inputCoords[i].y << ") + (" << xTrans << "," << yTrans
-              << ") = (" << result->coords()[i].x << "," << result->coords()[i].y
-              << ")";
-    if (result->coords()[i].x != expectedX || result->coords()[i].y != expectedY) {
+              << ") = (" << result->coords()[i].x << ","
+              << result->coords()[i].y << ")";
+    if (result->coords()[i].x != expectedX ||
+        result->coords()[i].y != expectedY) {
       std::cout << " MISMATCH! (expected (" << expectedX << "," << expectedY
                 << "))";
       passed = false;
