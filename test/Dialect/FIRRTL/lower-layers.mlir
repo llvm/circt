@@ -855,6 +855,8 @@ firrtl.circuit "EmptyLayerBlocks" {
   }
   firrtl.module @EmptyLayerBlocks() {}
 
+  // CHECK:     emit.file "layers-EmptyLeaf-A.sv"
+  // CHECK:     emit.file "layers-EmptyLeaf-D-E.sv"
   // CHECK-NOT: @EmptyLeaf_A(
   // CHECK-NOT: @EmptyLeaf_D_E(
   firrtl.module @EmptyLeaf() {
@@ -865,6 +867,9 @@ firrtl.circuit "EmptyLayerBlocks" {
       }
     }
   }
+
+  // CHECK:     emit.file "layers-EmptyIntermediary-A.sv"
+  // CHECK:     emit.file "layers-EmptyIntermediary-A-B.sv"
   // CHECK-NOT: @EmptyIntermediary_A(
   firrtl.module @EmptyIntermediary() {
     firrtl.layerblock @A {
@@ -873,6 +878,9 @@ firrtl.circuit "EmptyLayerBlocks" {
       }
     }
   }
+
+  // CHECK:     emit.file "layers-EmptyAll-A.sv"
+  // CHECK:     emit.file "layers-EmptyAll-A-B.sv"
   // CHECK-NOT: @EmptyAll_A(
   // CHECK-NOT: @EmptyAll_A_B(
   firrtl.module @EmptyAll() {
