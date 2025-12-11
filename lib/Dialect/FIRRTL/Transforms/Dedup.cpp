@@ -1821,7 +1821,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
           if (!canRemoveModule(original))
             continue;
           // Swap the canonical module in the dedup map.
-          for (auto &[originalName, dedupedName] : dedupMap)
+          for (auto &[_, dedupedName] : dedupMap)
             if (dedupedName == originalName)
               dedupedName = moduleName;
           // Update the module hash table to point to the new original, so all
