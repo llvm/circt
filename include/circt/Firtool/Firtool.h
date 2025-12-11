@@ -143,6 +143,8 @@ public:
 
   bool getEmitAllBindFiles() const { return emitAllBindFiles; }
 
+  bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -392,6 +394,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setInlineInputOnlyModules(bool value) {
+    inlineInputOnlyModules = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -446,6 +453,7 @@ private:
   bool lintStaticAsserts;
   bool lintXmrsInDesign;
   bool emitAllBindFiles;
+  bool inlineInputOnlyModules;
 };
 
 void registerFirtoolCLOptions();
