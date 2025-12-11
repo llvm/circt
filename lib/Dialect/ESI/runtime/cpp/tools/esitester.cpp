@@ -26,11 +26,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <future>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <random>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -1378,7 +1380,23 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
 struct StreamingAddTranslatedArg {
   size_t inputLength;
   uint32_t addAmt;
-  uint32_t inputData[]; // Flexible array member
+  // Trailing array data follows immediately after the struct in memory.
+  // Use inputData() accessor to access it.
+
+  /// Get pointer to trailing input data array.
+  uint32_t *inputData() {
+    return reinterpret_cast<uint32_t *>(this + 1);
+  }
+  const uint32_t *inputData() const {
+    return reinterpret_cast<const uint32_t *>(this + 1);
+  }
+  /// Get span view of input data (requires inputLength to be set first).
+  std::span<uint32_t> inputDataSpan() {
+    return {inputData(), inputLength};
+  }
+  std::span<const uint32_t> inputDataSpan() const {
+    return {inputData(), inputLength};
+  }
 
   static size_t allocSize(size_t numItems) {
     return sizeof(StreamingAddTranslatedArg) + numItems * sizeof(uint32_t);
@@ -1394,7 +1412,16 @@ struct StreamingAddTranslatedArg {
 #pragma pack(push, 1)
 struct StreamingAddTranslatedResult {
   size_t dataLength;
-  uint32_t data[]; // Flexible array member
+  // Trailing array data follows immediately after the struct in memory.
+
+  /// Get pointer to trailing result data array.
+  uint32_t *data() { return reinterpret_cast<uint32_t *>(this + 1); }
+  const uint32_t *data() const {
+    return reinterpret_cast<const uint32_t *>(this + 1);
+  }
+  /// Get span view of result data (requires dataLength to be set first).
+  std::span<uint32_t> dataSpan() { return {data(), dataLength}; }
+  std::span<const uint32_t> dataSpan() const { return {data(), dataLength}; }
 
   static size_t allocSize(size_t numItems) {
     return sizeof(StreamingAddTranslatedResult) + numItems * sizeof(uint32_t);
@@ -1440,17 +1467,22 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
   argPort.connect();
   resultPort.connect();
 
-  // Allocate and populate the argument struct using unique_ptr for exception
-  // safety. Note: The reinterpret_cast below technically violates strict
-  // aliasing rules, but is acceptable in this test code. For production use,
-  // consider using std::memcpy or aligned_alloc for proper alignment.
+  // Allocate the argument struct with proper alignment for the struct members.
+  // We use aligned_alloc to ensure the buffer meets alignment requirements.
   size_t argSize = StreamingAddTranslatedArg::allocSize(numItems);
-  auto argBuffer = std::unique_ptr<uint8_t[]>(new uint8_t[argSize]);
-  auto *arg = reinterpret_cast<StreamingAddTranslatedArg *>(argBuffer.get());
+  constexpr size_t alignment = alignof(StreamingAddTranslatedArg);
+  // aligned_alloc requires size to be a multiple of alignment
+  size_t allocSize = ((argSize + alignment - 1) / alignment) * alignment;
+  void *argRaw = std::aligned_alloc(alignment, allocSize);
+  if (!argRaw)
+    throw std::bad_alloc();
+  auto argDeleter = [](void *p) { std::free(p); };
+  std::unique_ptr<void, decltype(argDeleter)> argBuffer(argRaw, argDeleter);
+  auto *arg = static_cast<StreamingAddTranslatedArg *>(argRaw);
   arg->inputLength = numItems;
   arg->addAmt = addAmt;
   for (uint32_t i = 0; i < numItems; ++i)
-    arg->inputData[i] = inputData[i];
+    arg->inputData()[i] = inputData[i];
 
   logger.debug("esitester",
                "Sending translated argument: " + std::to_string(argSize) +
@@ -1492,8 +1524,8 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
   for (size_t i = 0; i < inputData.size(); ++i) {
     uint32_t expected = inputData[i] + addAmt;
     std::cout << "  input[" << i << "]=" << inputData[i] << " + " << addAmt
-              << " = " << result->data[i] << " (expected " << expected << ")";
-    if (result->data[i] != expected) {
+              << " = " << result->data()[i] << " (expected " << expected << ")";
+    if (result->data()[i] != expected) {
       std::cout << " MISMATCH!";
       passed = false;
     }
@@ -1541,7 +1573,16 @@ struct CoordTranslateArg {
   size_t coordsLength;
   uint32_t yTranslation; // SV ordering: last declared field first in memory
   uint32_t xTranslation;
-  Coord coords[]; // Flexible array member
+  // Trailing array data follows immediately after the struct in memory.
+
+  /// Get pointer to trailing coords array.
+  Coord *coords() { return reinterpret_cast<Coord *>(this + 1); }
+  const Coord *coords() const {
+    return reinterpret_cast<const Coord *>(this + 1);
+  }
+  /// Get span view of coords (requires coordsLength to be set first).
+  std::span<Coord> coordsSpan() { return {coords(), coordsLength}; }
+  std::span<const Coord> coordsSpan() const { return {coords(), coordsLength}; }
 
   static size_t allocSize(size_t numCoords) {
     return sizeof(CoordTranslateArg) + numCoords * sizeof(Coord);
@@ -1557,7 +1598,16 @@ struct CoordTranslateArg {
 #pragma pack(push, 1)
 struct CoordTranslateResult {
   size_t coordsLength;
-  Coord coords[]; // Flexible array member
+  // Trailing array data follows immediately after the struct in memory.
+
+  /// Get pointer to trailing coords array.
+  Coord *coords() { return reinterpret_cast<Coord *>(this + 1); }
+  const Coord *coords() const {
+    return reinterpret_cast<const Coord *>(this + 1);
+  }
+  /// Get span view of coords (requires coordsLength to be set first).
+  std::span<Coord> coordsSpan() { return {coords(), coordsLength}; }
+  std::span<const Coord> coordsSpan() const { return {coords(), coordsLength}; }
 
   static size_t allocSize(size_t numCoords) {
     return sizeof(CoordTranslateResult) + numCoords * sizeof(Coord);
@@ -1610,17 +1660,22 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
         "FuncService::Function");
   funcPort->connect();
 
-  // Allocate and populate the argument struct using unique_ptr for exception
-  // safety. Note: The reinterpret_cast below technically violates strict
-  // aliasing rules, but is acceptable in this test code.
+  // Allocate the argument struct with proper alignment for the struct members.
   size_t argSize = CoordTranslateArg::allocSize(numCoords);
-  auto argBuffer = std::unique_ptr<uint8_t[]>(new uint8_t[argSize]);
-  auto *arg = reinterpret_cast<CoordTranslateArg *>(argBuffer.get());
+  constexpr size_t alignment = alignof(CoordTranslateArg);
+  // aligned_alloc requires size to be a multiple of alignment
+  size_t allocSize = ((argSize + alignment - 1) / alignment) * alignment;
+  void *argRaw = std::aligned_alloc(alignment, allocSize);
+  if (!argRaw)
+    throw std::bad_alloc();
+  auto argDeleter = [](void *p) { std::free(p); };
+  std::unique_ptr<void, decltype(argDeleter)> argBuffer(argRaw, argDeleter);
+  auto *arg = static_cast<CoordTranslateArg *>(argRaw);
   arg->coordsLength = numCoords;
   arg->xTranslation = xTrans;
   arg->yTranslation = yTrans;
   for (uint32_t i = 0; i < numCoords; ++i)
-    arg->coords[i] = inputCoords[i];
+    arg->coords()[i] = inputCoords[i];
 
   logger.debug(
       "esitester",
@@ -1662,9 +1717,9 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
     uint32_t expectedY = inputCoords[i].y + yTrans;
     std::cout << "  coord[" << i << "]=(" << inputCoords[i].x << ","
               << inputCoords[i].y << ") + (" << xTrans << "," << yTrans
-              << ") = (" << result->coords[i].x << "," << result->coords[i].y
+              << ") = (" << result->coords()[i].x << "," << result->coords()[i].y
               << ")";
-    if (result->coords[i].x != expectedX || result->coords[i].y != expectedY) {
+    if (result->coords()[i].x != expectedX || result->coords()[i].y != expectedY) {
       std::cout << " MISMATCH! (expected (" << expectedX << "," << expectedY
                 << "))";
       passed = false;
