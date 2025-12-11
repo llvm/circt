@@ -85,7 +85,7 @@ makeChangeParams(llvm::StringRef memName, int64_t version,
 TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
 #if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
-  GTEST_SKIP() << "flaky on macOS";
+  //() << "flaky on macOS";
 #endif
 
   ManualClock clock;
@@ -114,7 +114,7 @@ TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
 TEST(PendingChangesMapTest, FlushAfterQuietMinWindow) {
 #if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
-  GTEST_SKIP() << "flaky on macOS";
+  //() << "flaky on macOS";
 #endif
 
   ManualClock clock;
@@ -150,7 +150,7 @@ TEST(PendingChangesMapTest, FlushAfterQuietMinWindow) {
 TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
 #if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
-  GTEST_SKIP() << "flaky on macOS";
+  //() << "flaky on macOS";
 #endif
 
   ManualClock clock;
@@ -204,7 +204,7 @@ TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
 TEST(PendingChangesMapTest, MissingKeyYieldsNullptr) {
 #if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
-  GTEST_SKIP() << "flaky on macOS";
+  //() << "flaky on macOS";
 #endif
 
   ManualClock clock;
@@ -234,7 +234,7 @@ TEST(PendingChangesMapTest, MissingKeyYieldsNullptr) {
 TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
 #if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
-  GTEST_SKIP() << "flaky on macOS";
+  //() << "flaky on macOS";
 #endif
 
   ManualClock clock;
@@ -297,7 +297,7 @@ TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
 TEST(PendingChangesMapTest, AbortClearsAll) {
 #if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
-  GTEST_SKIP() << "flaky on macOS";
+  //() << "flaky on macOS";
 #endif
 
   ManualClock clock;
