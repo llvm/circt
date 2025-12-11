@@ -387,8 +387,9 @@ static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
 // A converter class to handle the logic of converting a single hw.module.
 class HWModuleOpConverter {
 public:
-  HWModuleOpConverter(OpBuilder &builder, HWModuleOp moduleOp)
-      : moduleOp(moduleOp), opBuilder(builder) {}
+  HWModuleOpConverter(OpBuilder &builder, HWModuleOp moduleOp,
+                      ArrayRef<std::string> stateRegNames)
+      : moduleOp(moduleOp), opBuilder(builder), stateRegNames(stateRegNames) {}
   LogicalResult run() {
     llvm::SmallVector<seq::CompRegOp> stateRegs;
     llvm::SmallVector<seq::CompRegOp> variableRegs;
@@ -400,7 +401,7 @@ public:
         hasNonIntegerReg = true;
         return;
       }
-      if (reg.getName()->contains("state")) {
+      if (isStateRegister(reg)) {
         stateRegs.push_back(reg);
       } else {
         variableRegs.push_back(reg);
@@ -410,8 +411,8 @@ public:
       return mlir::failure();
     if (stateRegs.empty()) {
       emitError(moduleOp.getLoc())
-          << "Cannot find state register in this FSM. You might need to "
-             "manually specify which registers are state registers.\n";
+          << "Cannot find state register in this FSM. Use the --state-regs "
+             "option to specify which registers are state registers.";
       return mlir::failure();
     }
     llvm::DenseMap<mlir::Value, size_t> regToIndexMap;
@@ -883,14 +884,34 @@ public:
   }
 
 private:
+  /// Helper function to determine if a register is a state register.
+  bool isStateRegister(seq::CompRegOp reg) const {
+    auto regName = reg.getName();
+    if (!regName)
+      return false;
+
+    // If user specified state registers, check if this register's name matches
+    // any of them.
+    if (!stateRegNames.empty()) {
+      return llvm::is_contained(stateRegNames, regName->str());
+    }
+
+    // Default behavior: infer state registers by checking if the name contains
+    // "state".
+    return regName->contains("state");
+  }
+
   HWModuleOp moduleOp;
   OpBuilder &opBuilder;
+  ArrayRef<std::string> stateRegNames;
 };
 
 } // namespace
 
 namespace {
 struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
+  using ConvertCoreToFSMBase<CoreToFSMPass>::ConvertCoreToFSMBase;
+
   void runOnOperation() override {
     auto module = getOperation();
     OpBuilder builder(module);
@@ -902,7 +923,7 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
 
     for (auto hwModule : modules) {
       builder.setInsertionPoint(hwModule);
-      HWModuleOpConverter converter(builder, hwModule);
+      HWModuleOpConverter converter(builder, hwModule, stateRegs);
       if (failed(converter.run())) {
         signalPassFailure();
         return;
@@ -911,7 +932,3 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
   }
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::createConvertCoreToFSMPass() {
-  return std::make_unique<CoreToFSMPass>();
-}

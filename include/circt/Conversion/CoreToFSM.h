@@ -9,7 +9,9 @@
 #ifndef CIRCT_CONVERSION_CORETOFSM_H
 #define CIRCT_CONVERSION_CORETOFSM_H
 
+#include "llvm/ADT/SmallVector.h"
 #include <memory>
+#include <string>
 
 namespace mlir {
 class Pass;
