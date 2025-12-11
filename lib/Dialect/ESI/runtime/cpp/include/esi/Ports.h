@@ -77,7 +77,7 @@ public:
     /// struct ExampleList {
     ///   uint32_t headerField2; // SystemVerilog ordering
     ///   uint32_t headerField1;
-    ///   uint32_t list_length; // Number list items
+    ///   size_t   list_length; // Number list items
     ///   struct { uint16_t y, x; } list_data[];
     /// }
     /// ```
@@ -385,6 +385,8 @@ protected:
   std::vector<uint8_t> listDataBuffer;
   /// Flag to track whether we're in the middle of accumulating list data.
   bool accumulatingListData = false;
+  /// Reset translation state buffers and indices.
+  void resetTranslationState();
   /// Translate incoming data if the port type is a window type. Returns true if
   /// the message has been completely received.
   bool translateIncoming(MessageData &data);

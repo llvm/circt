@@ -58,16 +58,20 @@ ReadChannelPort &BundlePort::getRawRead(const std::string &name) const {
     throw std::runtime_error("Channel '" + name + "' is not a read channel");
   return *read;
 }
+
+void ReadChannelPort::resetTranslationState() {
+  nextFrameIndex = 0;
+  accumulatingListData = false;
+  translationBuffer.clear();
+  listDataBuffer.clear();
+}
+
 void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
                               const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
-  // Reset translation state
-  nextFrameIndex = 0;
-  accumulatingListData = false;
-  translationBuffer.clear();
-  listDataBuffer.clear();
+  resetTranslationState();
 
   if (options.translateMessage && translationInfo) {
     translationInfo->precomputeFrameInfo();
@@ -86,11 +90,7 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
 void ReadChannelPort::connect(const ConnectOptions &options) {
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
 
-  // Reset translation state
-  nextFrameIndex = 0;
-  accumulatingListData = false;
-  translationBuffer.clear();
-  listDataBuffer.clear();
+  resetTranslationState();
 
   bool translate = options.translateMessage && translationInfo;
   if (translate)
@@ -194,9 +194,9 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
             name);
       size_t elemBytes = (static_cast<size_t>(elemBits) + 7) / 8;
       fieldMap[name] = {currentOffset, fieldType, true, elemType, elemBytes};
-      // Reserve space for list_length. We use size_t which is 8 bytes on 64-bit
-      // platforms. Note: This runtime currently only supports 64-bit platforms.
-      // For 32-bit support, consider using a fixed-size type like uint64_t.
+      // Reserve space for list_length. We use size_t (8 bytes on 64-bit
+      // platforms) for consistency with standard C/C++ container sizes.
+      // Note: This means the translated message format is platform-dependent.
       currentOffset += sizeof(size_t);
       // List data will be appended dynamically after the fixed header
     } else {
@@ -415,9 +415,8 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
     uint8_t lastFlag = frameData[listInfo.lastFieldOffset];
     if (lastFlag) {
       // List is complete. Build the final message:
-      // [fixed header][list_length (size_t)][list data...]
-      // But actually, list_length is already at listLengthBufferOffset in the
-      // header We need to write the actual length there.
+      // [fixed header with list_length (size_t)][list data...]
+      // Write the actual length to the listLengthBufferOffset position.
       size_t listLength = listDataBuffer.size() / listInfo.elementSize;
       size_t *listLengthPtr = reinterpret_cast<size_t *>(
           translationBuffer.data() + listInfo.listLengthBufferOffset);

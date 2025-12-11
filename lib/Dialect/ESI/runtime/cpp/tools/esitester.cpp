@@ -1369,12 +1369,14 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
 /// Memory layout (standard C struct ordering, fields in declaration order):
 ///   ESI type: struct { add_amt: UInt(32), input: List<UInt(32)> }
 /// becomes host struct:
-///   { input_length (size_t), add_amt (uint32_t), input_data[] }
+///   { input_length (size_t, 8 bytes on 64-bit), add_amt (uint32_t),
+///   input_data[] }
 /// Note: The translation layer handles the conversion between this C struct
 /// layout and the hardware's SystemVerilog frame format.
+/// Note: size_t is used for list lengths, so this format is platform-dependent.
 #pragma pack(push, 1)
 struct StreamingAddTranslatedArg {
-  size_t inputLength; // 8 bytes on 64-bit platforms
+  size_t inputLength;
   uint32_t addAmt;
   uint32_t inputData[]; // Flexible array member
 
@@ -1388,7 +1390,7 @@ struct StreamingAddTranslatedArg {
 /// Memory layout:
 ///   struct { data: List<UInt(32)> }
 /// becomes:
-///   { data_length (size_t), data[] }
+///   { data_length (size_t, 8 bytes on 64-bit), data[] }
 #pragma pack(push, 1)
 struct StreamingAddTranslatedResult {
   size_t dataLength;
@@ -1530,12 +1532,13 @@ static_assert(sizeof(Coord) == 8, "Coord must be 8 bytes packed");
 ///   ESI type: struct { x_translation: UInt(32), y_translation: UInt(32),
 ///                      coords: List<struct{x, y}> }
 /// becomes host struct:
-///   { coords_length (size_t), y_translation (uint32_t),
+///   { coords_length (size_t, 8 bytes on 64-bit), y_translation (uint32_t),
 ///     x_translation (uint32_t), coords[] }
 /// Note: Fields are in reverse order due to SV struct ordering.
+/// Note: size_t is used for list lengths, so this format is platform-dependent.
 #pragma pack(push, 1)
 struct CoordTranslateArg {
-  size_t coordsLength;   // 8 bytes on 64-bit platforms
+  size_t coordsLength;
   uint32_t yTranslation; // SV ordering: last declared field first in memory
   uint32_t xTranslation;
   Coord coords[]; // Flexible array member
@@ -1550,7 +1553,7 @@ struct CoordTranslateArg {
 /// Memory layout:
 ///   ESI type: List<struct{x, y}>
 /// becomes host struct:
-///   { coords_length (size_t), coords[] }
+///   { coords_length (size_t, 8 bytes on 64-bit), coords[] }
 #pragma pack(push, 1)
 struct CoordTranslateResult {
   size_t coordsLength;
