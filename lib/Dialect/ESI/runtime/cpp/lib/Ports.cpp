@@ -251,10 +251,10 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
       size_t frameOffset;
       size_t size;
       bool isList;
-      size_t numItems;              // From window spec
-      size_t listElementSize;       // Size of each list element
-      size_t bufferOffset;          // Offset in translation buffer
-      const Type *listElementType;  // Element type for list fields
+      size_t numItems;             // From window spec
+      size_t listElementSize;      // Size of each list element
+      size_t bufferOffset;         // Offset in translation buffer
+      const Type *listElementType; // Element type for list fields
     };
     std::vector<FrameFieldLayout> fieldLayouts;
 
@@ -290,9 +290,13 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
         size_t sizeOffset = SIZE_MAX;
         size_t sizeWidth = 0;
         if (field.numItems > 1) {
-          size_t sizeBits = 64 - __builtin_clzll(field.numItems - 1);
-          if (sizeBits == 0)
+          // Calculate bits needed to represent values 0 to numItems-1.
+          // When numItems == 2, we need 1 bit. For larger values, use clzll.
+          size_t sizeBits;
+          if (field.numItems == 2)
             sizeBits = 1;
+          else
+            sizeBits = 64 - __builtin_clzll(field.numItems - 1);
           sizeWidth = (sizeBits + 7) / 8;
           sizeOffset = frameOffset;
           frameOffset += sizeWidth;
@@ -416,18 +420,27 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
     // Determine how many valid items are in this frame
     size_t validItems = listInfo.numItemsPerFrame;
     if (listInfo.sizeFieldOffset != SIZE_MAX) {
-      // Read the _size field to get actual count of valid items
+      // Read the _size field to get actual count of valid items.
+      // Note: This assumes little-endian byte order, which matches the
+      // hardware's memory layout.
       validItems = 0;
       for (size_t i = 0; i < listInfo.sizeFieldWidth; ++i)
-        validItems |= static_cast<size_t>(frameData[listInfo.sizeFieldOffset + i]) << (i * 8);
-      // The _size field indicates valid items (0 to numItems-1 means 1 to numItems valid)
-      // Actually, _size directly indicates the count of valid items
+        validItems |=
+            static_cast<size_t>(frameData[listInfo.sizeFieldOffset + i])
+            << (i * 8);
+      // The _size field interpretation:
+      //   - If _size == 0, all numItemsPerFrame items are valid.
+      //   - Otherwise, _size directly indicates the count of valid items
+      //     (1 to numItemsPerFrame - 1).
       if (validItems == 0)
-        validItems = listInfo.numItemsPerFrame; // 0 means all items valid
+        validItems = listInfo.numItemsPerFrame;
     }
 
     // Copy list data to the accumulator
     size_t bytesToCopy = validItems * listInfo.elementSize;
+    // Bounds check to prevent buffer overflow from corrupted _size field
+    if (listInfo.dataOffset + bytesToCopy > frameDataSize)
+      throw std::runtime_error("List data extends beyond frame bounds");
     size_t oldSize = listDataBuffer.size();
     listDataBuffer.resize(oldSize + bytesToCopy);
     std::memcpy(listDataBuffer.data() + oldSize,
@@ -567,8 +580,12 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
         // Set _size field if present
         if (listInfo.sizeFieldOffset != SIZE_MAX) {
           // _size indicates valid items: 0 means all valid (numItemsPerFrame)
-          size_t sizeValue =
-              (itemsInThisFrame == listInfo.numItemsPerFrame) ? 0 : itemsInThisFrame;
+          size_t sizeValue = (itemsInThisFrame == listInfo.numItemsPerFrame)
+                                 ? 0
+                                 : itemsInThisFrame;
+          // Validate that sizeValue fits in the allocated field width
+          if (sizeValue > ((1ULL << (listInfo.sizeFieldWidth * 8)) - 1))
+            throw std::runtime_error("Too many items for size field width");
           std::memcpy(frameBuffer.data() + listInfo.sizeFieldOffset, &sizeValue,
                       listInfo.sizeFieldWidth);
         }

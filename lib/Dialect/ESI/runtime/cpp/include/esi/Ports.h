@@ -82,7 +82,7 @@ public:
     /// }
     /// ```
     ///
-    /// In a parallalel encoding, each frame's host memory data layout would be:
+    /// In a parallel encoding, each frame's host memory data layout would be:
     /// ```
     /// struct ExampleListFrame {
     ///   uint8_t list_last; // Non-zero indicates last item in list

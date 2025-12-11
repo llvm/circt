@@ -29,6 +29,7 @@
 #include <future>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -1347,13 +1348,15 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
 /// parallel windowed frames used by the hardware.
 
 /// Translated argument struct for StreamingAdder.
-/// Memory layout (SV ordering - fields reversed from declaration order):
-///   struct { add_amt: UInt(32), input: List<UInt(32)> }
-/// becomes:
+/// Memory layout (standard C struct ordering, fields in declaration order):
+///   ESI type: struct { add_amt: UInt(32), input: List<UInt(32)> }
+/// becomes host struct:
 ///   { input_length (size_t), add_amt (uint32_t), input_data[] }
+/// Note: The translation layer handles the conversion between this C struct
+/// layout and the hardware's SystemVerilog frame format.
 #pragma pack(push, 1)
 struct StreamingAddTranslatedArg {
-  size_t inputLength;
+  size_t inputLength;   // 8 bytes on 64-bit platforms
   uint32_t addAmt;
   uint32_t inputData[]; // Flexible array member
 
@@ -1417,10 +1420,11 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
   argPort.connect();
   resultPort.connect();
 
-  // Allocate and populate the argument struct.
+  // Allocate and populate the argument struct using unique_ptr for exception
+  // safety.
   size_t argSize = StreamingAddTranslatedArg::allocSize(numItems);
-  auto *arg = reinterpret_cast<StreamingAddTranslatedArg *>(
-      new uint8_t[argSize]);
+  auto argBuffer = std::unique_ptr<uint8_t[]>(new uint8_t[argSize]);
+  auto *arg = reinterpret_cast<StreamingAddTranslatedArg *>(argBuffer.get());
   arg->inputLength = numItems;
   arg->addAmt = addAmt;
   for (uint32_t i = 0; i < numItems; ++i)
@@ -1433,7 +1437,7 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
 
   // Send the complete message - translation will split it into frames.
   argPort.write(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize));
-  delete[] reinterpret_cast<uint8_t *>(arg);
+  // argBuffer automatically freed when it goes out of scope
 
   // Read the translated result.
   MessageData resMsg;
