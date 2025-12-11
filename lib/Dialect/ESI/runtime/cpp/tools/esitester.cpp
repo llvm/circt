@@ -1356,7 +1356,7 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
 /// layout and the hardware's SystemVerilog frame format.
 #pragma pack(push, 1)
 struct StreamingAddTranslatedArg {
-  size_t inputLength;   // 8 bytes on 64-bit platforms
+  size_t inputLength; // 8 bytes on 64-bit platforms
   uint32_t addAmt;
   uint32_t inputData[]; // Flexible array member
 
@@ -1421,7 +1421,9 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
   resultPort.connect();
 
   // Allocate and populate the argument struct using unique_ptr for exception
-  // safety.
+  // safety. Note: The reinterpret_cast below technically violates strict
+  // aliasing rules, but is acceptable in this test code. For production use,
+  // consider using std::memcpy or aligned_alloc for proper alignment.
   size_t argSize = StreamingAddTranslatedArg::allocSize(numItems);
   auto argBuffer = std::unique_ptr<uint8_t[]>(new uint8_t[argSize]);
   auto *arg = reinterpret_cast<StreamingAddTranslatedArg *>(argBuffer.get());

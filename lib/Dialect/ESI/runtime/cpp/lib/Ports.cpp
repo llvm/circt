@@ -194,7 +194,9 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
             name);
       size_t elemBytes = (static_cast<size_t>(elemBits) + 7) / 8;
       fieldMap[name] = {currentOffset, fieldType, true, elemType, elemBytes};
-      // Reserve space for list_length (8 bytes for size_t)
+      // Reserve space for list_length. We use size_t which is 8 bytes on 64-bit
+      // platforms. Note: This runtime currently only supports 64-bit platforms.
+      // For 32-bit support, consider using a fixed-size type like uint64_t.
       currentOffset += sizeof(size_t);
       // List data will be appended dynamically after the fixed header
     } else {

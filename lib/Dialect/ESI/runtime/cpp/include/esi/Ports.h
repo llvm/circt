@@ -78,16 +78,16 @@ public:
     ///   uint32_t headerField2; // SystemVerilog ordering
     ///   uint32_t headerField1;
     ///   uint32_t list_length; // Number list items
-    ///   struct { uint16_t x, y; } list_data[];
+    ///   struct { uint16_t y, x; } list_data[];
     /// }
     /// ```
     ///
-    /// In a parallel encoding, each frame's host memory data layout would be:
+    /// In a parallel encoding, each frame's wire format (from hardware) is:
     /// ```
     /// struct ExampleListFrame {
     ///   uint8_t list_last; // Non-zero indicates last item in list
-    ///   struct { uint16_t x, y; } list_data[numItems];
-    ///   uint32_t headerField2;
+    ///   struct { uint16_t y, x; } list_data[numItems]; // SV field ordering
+    ///   uint32_t headerField2; // SV struct ordering (reversed)
     ///   uint32_t headerField1;
     /// }
     /// ```
