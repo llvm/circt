@@ -69,16 +69,34 @@ public:
     ///      been completely transmitted and reading should continue until a
     ///      'count' of zero is received.
     ///
-    /// In both cases, the returned MessageData contains the complete header
+    /// In both cases, the host-side MessageData contains the complete header
     /// followed by the list data. In other words, header data is not duplicated
-    /// in the returned message.
+    /// in the returned message. So for a windowed type with header fields and
+    /// a list of (x,y) coordinates, the host memory layout would be:
+    /// ```
+    /// struct ExampleList {
+    ///   uint32_t headerField2; // SystemVerilog ordering
+    ///   uint32_t headerField1;
+    ///   size_t   list_length; // Number list items
+    ///   struct { uint16_t y, x; } list_data[];
+    /// }
+    /// ```
+    ///
+    /// In a parallel encoding, each frame's wire format (from hardware) is:
+    /// ```
+    /// struct ExampleListFrame {
+    ///   uint8_t list_last; // Non-zero indicates last item in list
+    ///   struct { uint16_t y, x; } list_data[numItems]; // SV field ordering
+    ///   uint32_t headerField2; // SV struct ordering (reversed)
+    ///   uint32_t headerField1;
+    /// }
+    /// ```
     ///
     /// Important note: for consistency, preserves SystemVerilog struct field
     /// ordering! So it's the opposite of C struct ordering.
     ///
     /// Implementation status:
-    ///   - Lists are not yet supported.
-    ///   - Write ports are not yet supported.
+    ///   - Only parallel list encoding is supported.
     ///   - Fields must be byte-aligned.
     ///
     /// See the CIRCT documentation (or td files) for more details on windowed
@@ -135,17 +153,43 @@ protected:
       /// Number of bytes to copy.
       size_t size;
     };
+
+    /// Information about a list field within a frame (for parallel encoding).
+    /// Note: Currently only numItems == 1 is supported (one list element per
+    /// frame).
+    struct ListFieldInfo {
+      /// Name of the list field.
+      std::string fieldName;
+      /// Offset of the list data array in the frame.
+      size_t dataOffset;
+      /// Size of each list element in bytes.
+      size_t elementSize;
+      /// Offset of the 'last' field in the frame.
+      size_t lastFieldOffset;
+      /// Offset in the translation buffer where list length is stored.
+      size_t listLengthBufferOffset;
+      /// Offset in the translation buffer where list data starts.
+      size_t listDataBufferOffset;
+    };
+
     /// Information about each frame in the windowed type.
     struct FrameInfo {
       /// The total size of a frame in bytes.
       size_t expectedSize;
-      /// Precomputed copy operations for translating this frame.
+      /// Precomputed copy operations for translating this frame (non-list
+      /// fields).
       std::vector<CopyOp> copyOps;
+      /// Information about list fields in this frame (parallel encoding).
+      /// Currently only one list field per frame is supported.
+      std::optional<ListFieldInfo> listField;
     };
     /// Precomputed information about each frame.
     std::vector<FrameInfo> frames;
-    /// Size of the 'into' type in bytes.
+    /// Size of the 'into' type in bytes (for fixed-size types).
+    /// For types with lists, this is the size of the fixed header portion.
     size_t intoTypeBytes = 0;
+    /// True if the window contains a list field (variable-size message).
+    bool hasListField = false;
   };
   std::unique_ptr<TranslationInfo> translationInfo;
 
@@ -337,6 +381,12 @@ protected:
   std::vector<uint8_t> translationBuffer;
   /// Index of the next expected frame (for multi-frame windows).
   size_t nextFrameIndex = 0;
+  /// For list fields: accumulated list data across frames.
+  std::vector<uint8_t> listDataBuffer;
+  /// Flag to track whether we're in the middle of accumulating list data.
+  bool accumulatingListData = false;
+  /// Reset translation state buffers and indices.
+  void resetTranslationState();
   /// Translate incoming data if the port type is a window type. Returns true if
   /// the message has been completely received.
   bool translateIncoming(MessageData &data);
