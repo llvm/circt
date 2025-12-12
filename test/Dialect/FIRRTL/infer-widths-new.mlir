@@ -1,6 +1,8 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths-new))' --verify-diagnostics %s | FileCheck %s
 
 firrtl.circuit "Foo" {
+
+  firrtl.module @Foo() {}
   
   //===----------------------------------------------------------------------===//
   // New Test: issue9140_0
