@@ -516,8 +516,9 @@ struct Equivalence {
       }
 
       if (failed(check(diag,
-                       "bundle element \'" + aElement.name.getValue() + "'", a,
-                       aElement.type, b, bElement.type)))
+                       message + " -> bundle element \'" +
+                           aElement.name.getValue() + "'",
+                       a, aElement.type, b, bElement.type)))
         return failure();
     }
     return success();
