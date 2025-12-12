@@ -13,3 +13,20 @@ else()
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../@ESIRT_INSTALL_LIBDIR@/libESICppRuntime.so"
   )
 endif()
+
+add_library(esiaccel::CosimBackend SHARED IMPORTED)
+set_target_properties(esiaccel::CosimBackend PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../include"
+  INTERFACE_LINK_LIBRARIES esiaccel::ESICppRuntime
+)
+
+if(WIN32)
+  set_target_properties(esiaccel::CosimBackend PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.dll"
+    IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.lib"
+  )
+else()
+  set_target_properties(esiaccel::CosimBackend PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../@ESIRT_INSTALL_LIBDIR@/libCosimBackend.so"
+  )
+endif()

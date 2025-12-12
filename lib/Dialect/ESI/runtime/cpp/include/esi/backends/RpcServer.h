@@ -24,6 +24,7 @@ namespace cosim {
 /// TODO: make this a proper backend (as much as possible).
 class RpcServer {
 public:
+  RpcServer();
   ~RpcServer();
 
   /// Set the manifest and version. There is a race condition here in that the
@@ -40,13 +41,19 @@ public:
                                       const std::string &type);
 
   void stop();
-  void run(int port);
+
+  // Start the RPC server. If no port is provided, the RPC server will let the
+  // OS pick a port.
+  void run(int port = -1);
+
+  // Return which port the RPC server is executing on.
+  int getPort();
 
   /// Hide the implementation details from this header file.
   class Impl;
 
 private:
-  Impl *impl = nullptr;
+  std::unique_ptr<Impl> impl;
 };
 
 } // namespace cosim

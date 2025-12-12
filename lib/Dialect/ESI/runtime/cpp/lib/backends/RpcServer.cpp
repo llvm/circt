@@ -69,6 +69,8 @@ public:
 
   void stop();
 
+  int getPort() { return port; }
+
   //===--------------------------------------------------------------------===//
   // RPC API implementations. See the .proto file for the API documentation.
   //===--------------------------------------------------------------------===//
@@ -90,7 +92,7 @@ private:
   std::vector<uint8_t> compressedManifest;
   std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
   std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
-
+  int port = -1;
   std::unique_ptr<Server> server;
 };
 using Impl = esi::cosim::RpcServer::Impl;
@@ -152,6 +154,7 @@ Impl::Impl(int port) : esiVersion(-1) {
   if (!server)
     throw std::runtime_error("Failed to start server on " + server_address);
   writePort(port);
+  this->port = port;
   std::cout << "Server listening on 127.0.0.1:" << port << std::endl;
 }
 
@@ -353,24 +356,41 @@ Impl::SendToServer(CallbackServerContext *context,
 //===----------------------------------------------------------------------===//
 // RpcServer pass throughs to the actual implementations above.
 //===----------------------------------------------------------------------===//
-RpcServer::~RpcServer() {
-  if (impl)
-    delete impl;
-}
+RpcServer::RpcServer() {}
+RpcServer::~RpcServer() = default;
+
 void RpcServer::setManifest(int esiVersion,
                             const std::vector<uint8_t> &compressedManifest) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+
   impl->setManifest(esiVersion, compressedManifest);
 }
+
 ReadChannelPort &RpcServer::registerReadPort(const std::string &name,
                                              const std::string &type) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
   return impl->registerReadPort(name, type);
 }
+
 WriteChannelPort &RpcServer::registerWritePort(const std::string &name,
                                                const std::string &type) {
   return impl->registerWritePort(name, type);
 }
-void RpcServer::run(int port) { impl = new Impl(port); }
+void RpcServer::run(int port) {
+  if (impl)
+    throw std::runtime_error("Server already running");
+  impl = std::make_unique<Impl>(port);
+}
 void RpcServer::stop() {
-  assert(impl && "Server not running");
+  if (!impl)
+    throw std::runtime_error("Server not running");
   impl->stop();
+}
+
+int RpcServer::getPort() {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+  return impl->getPort();
 }
