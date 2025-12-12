@@ -2031,10 +2031,10 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 struct StackFrame {
-    Node *node;
-    size_t nextChildIndex;
-  };
-  
+  Node *node;
+  size_t nextChildIndex;
+};
+
 std::vector<Node *> findPathBetween(Node *start, Node *end) {
   if (!start || !end)
     return {};
