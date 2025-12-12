@@ -16,6 +16,7 @@
 #ifndef ESI_COSIM_RPCSERVER_H
 #define ESI_COSIM_RPCSERVER_H
 
+#include "esi/Context.h"
 #include "esi/Ports.h"
 
 namespace esi {
@@ -24,8 +25,11 @@ namespace cosim {
 /// TODO: make this a proper backend (as much as possible).
 class RpcServer {
 public:
-  RpcServer();
+  RpcServer(Context &ctxt);
   ~RpcServer();
+
+  /// Get the context.
+  Context &getContext() { return ctxt; }
 
   /// Set the manifest and version. There is a race condition here in that the
   /// RPC server can be started and a connection from the client could happen
@@ -53,6 +57,7 @@ public:
   class Impl;
 
 private:
+  Context &ctxt;
   std::unique_ptr<Impl> impl;
 };
 

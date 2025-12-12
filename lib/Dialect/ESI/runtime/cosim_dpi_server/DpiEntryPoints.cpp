@@ -17,20 +17,26 @@
 //===----------------------------------------------------------------------===//
 
 #include "dpi.h"
+#include "esi/Context.h"
 #include "esi/Ports.h"
 #include "esi/backends/RpcServer.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <format>
 
 using namespace esi;
 using namespace esi::cosim;
 
 /// If non-null, log to this file. Protected by 'serverMutex`.
 static FILE *logFile;
+static std::unique_ptr<Context> context = nullptr;
 static std::unique_ptr<RpcServer> server = nullptr;
 static std::mutex serverMutex;
+
+/// Get the logger from the context.
+static Logger &getLogger() { return context->getLogger(); }
 
 // ---- Helper functions ----
 
@@ -62,11 +68,12 @@ static void log(char *epId, bool toClient, const MessageData &msg) {
 static int findPort() {
   const char *portEnv = getenv("COSIM_PORT");
   if (portEnv == nullptr) {
-    printf(
-        "[COSIM] RPC server port not found. Letting RPC server select one\n");
+    getLogger().info(
+        "cosim", "RPC server port not found. Letting RPC server select one");
     return 0;
   }
-  printf("[COSIM] Opening RPC server on port %s\n", portEnv);
+  getLogger().info("cosim",
+                   std::format("Opening RPC server on port {}", portEnv));
   return std::strtoull(portEnv, nullptr, 10);
 }
 
@@ -75,27 +82,32 @@ static int findPort() {
 static int validateSvOpenArray(const svOpenArrayHandle data,
                                int expectedElemSize) {
   if (svDimensions(data) != 1) {
-    printf("DPI-C: ERROR passed array argument that doesn't have expected 1D "
-           "dimensions\n");
+    getLogger().error(
+        "cosim",
+        "passed array argument that doesn't have expected 1D dimensions");
     return -1;
   }
   if (svGetArrayPtr(data) == NULL) {
-    printf("DPI-C: ERROR passed array argument that doesn't have C layout "
-           "(ptr==NULL)\n");
+    getLogger().error(
+        "cosim",
+        "passed array argument that doesn't have C layout (ptr==NULL)");
     return -2;
   }
   int totalBytes = svSizeOfArray(data);
   if (totalBytes == 0) {
-    printf("DPI-C: ERROR passed array argument that doesn't have C layout "
-           "(total_bytes==0)\n");
+    getLogger().error(
+        "cosim",
+        "passed array argument that doesn't have C layout (total_bytes==0)");
     return -3;
   }
   int numElems = svSize(data, 1);
   int elemSize = numElems == 0 ? 0 : (totalBytes / numElems);
   if (numElems * expectedElemSize != totalBytes) {
-    printf("DPI-C: ERROR: passed array argument that doesn't have expected "
-           "element-size: expected=%d actual=%d numElems=%d totalBytes=%d\n",
-           expectedElemSize, elemSize, numElems, totalBytes);
+    getLogger().error(
+        "cosim", std::format("passed array argument that doesn't have expected "
+                             "element-size: expected={} actual={} numElems={} "
+                             "totalBytes={}",
+                             expectedElemSize, elemSize, numElems, totalBytes));
     return -4;
   }
   return 0;
@@ -122,11 +134,12 @@ DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeIdC,
 
   // Both only one type allowed.
   if (!(fromHostTypeId.empty() ^ toHostTypeId.empty())) {
-    printf("ERROR: Only one of fromHostTypeId and toHostTypeId can be set!\n");
+    getLogger().error(
+        "cosim", "Only one of fromHostTypeId and toHostTypeId can be set!");
     return -2;
   }
   if (readPorts.contains(endpointId)) {
-    printf("ERROR: Endpoint already registered!\n");
+    getLogger().error("cosim", "Endpoint already registered!");
     return -3;
   }
 
@@ -157,7 +170,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
 
   auto portIt = readPorts.find(endpointId);
   if (portIt == readPorts.end()) {
-    fprintf(stderr, "Endpoint not found in registry!\n");
+    getLogger().error("cosim", "Endpoint not found in registry!");
     return -4;
   }
 
@@ -177,8 +190,9 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   // simulator is going to poll up to every tick and there's not going to be
   // a message most of the time, this is important for performance.
   if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
-    printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-           __LINE__);
+    getLogger().error("cosim",
+                      std::format("DPI-func={} line={} event=invalid-sv-array",
+                                  __func__, __LINE__));
     return -2;
   }
 
@@ -186,14 +200,16 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   if (*dataSize == ~0u) {
     *dataSize = svSizeOfArray(data);
   } else if (*dataSize > (unsigned)svSizeOfArray(data)) {
-    printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n", __func__,
-           __LINE__, (unsigned)svSizeOfArray(data));
+    getLogger().error(
+        "cosim",
+        std::format("DPI-func={} line={} event=invalid-size (max {})", __func__,
+                    __LINE__, (unsigned)svSizeOfArray(data)));
     return -3;
   }
   // Verify it'll fit.
   size_t msgSize = msg.getSize();
   if (msgSize > *dataSize) {
-    printf("ERROR: Message size too big to fit in HW buffer\n");
+    getLogger().error("cosim", "Message size too big to fit in HW buffer");
     return -5;
   }
 
@@ -224,8 +240,9 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
     return -1;
 
   if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
-    printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-           __LINE__);
+    getLogger().error("cosim",
+                      std::format("DPI-func={} line={} event=invalid-sv-array",
+                                  __func__, __LINE__));
     return -2;
   }
 
@@ -233,8 +250,10 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
   if (dataSize < 0) {
     dataSize = svSizeOfArray(data);
   } else if (dataSize > svSizeOfArray(data)) { // not enough data
-    printf("ERROR: DPI-func=%s line %d event=invalid-size limit %d array %d\n",
-           __func__, __LINE__, dataSize, svSizeOfArray(data));
+    getLogger().error(
+        "cosim",
+        std::format("DPI-func={} line={} event=invalid-size limit={} array={}",
+                    __func__, __LINE__, dataSize, svSizeOfArray(data)));
     return -3;
   }
 
@@ -248,7 +267,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
   // Queue the blob.
   auto portIt = writePorts.find(endpointId);
   if (portIt == writePorts.end()) {
-    fprintf(stderr, "Endpoint not found in registry!\n");
+    getLogger().error("cosim", "Endpoint not found in registry!");
     return -4;
   }
   log(endpointId, true, *blob);
@@ -261,7 +280,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
 // from active clients).
 DPI void sv2cCosimserverFinish() {
   std::lock_guard<std::mutex> g(serverMutex);
-  printf("[cosim] Tearing down RPC server.\n");
+  getLogger().info("cosim", "Tearing down RPC server.");
   if (server != nullptr) {
     server->stop();
     server = nullptr;
@@ -275,17 +294,20 @@ DPI void sv2cCosimserverFinish() {
 // connections from new SW-clients).
 DPI int sv2cCosimserverInit() {
   std::lock_guard<std::mutex> g(serverMutex);
+  if (context == nullptr)
+    context = Context::withLogger<ConsoleLogger>(Logger::Level::Debug);
+
   if (server == nullptr) {
     // Open log file if requested.
     const char *logFN = getenv("COSIM_DEBUG_FILE");
     if (logFN != nullptr) {
-      printf("[cosim] Opening debug log: %s\n", logFN);
+      getLogger().info("cosim", std::format("Opening debug log: {}", logFN));
       logFile = fopen(logFN, "w");
     }
 
     // Find the port and run.
-    printf("[cosim] Starting RPC server.\n");
-    server = std::make_unique<RpcServer>();
+    getLogger().info("cosim", "Starting RPC server.");
+    server = std::make_unique<RpcServer>(*context);
     server->run(findPort());
   }
   return 0;
@@ -300,8 +322,9 @@ sv2cCosimserverSetManifest(int esiVersion,
     sv2cCosimserverInit();
 
   if (validateSvOpenArray(compressedManifest, sizeof(int8_t)) != 0) {
-    printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-           __LINE__);
+    getLogger().error("cosim",
+                      std::format("DPI-func={} line={} event=invalid-sv-array",
+                                  __func__, __LINE__));
     return;
   }
 
@@ -311,8 +334,9 @@ sv2cCosimserverSetManifest(int esiVersion,
   for (int i = 0; i < size; ++i) {
     blob[size - i - 1] = *(char *)svGetArrElemPtr1(compressedManifest, i);
   }
-  printf("[cosim] Setting manifest (esiVersion=%d, size=%d)\n", esiVersion,
-         size);
+  getLogger().info("cosim",
+                   std::format("Setting manifest (esiVersion={}, size={})",
+                               esiVersion, size));
   server->setManifest(esiVersion, blob);
 }
 
@@ -325,7 +349,7 @@ sv2cCosimserverSetManifest(int esiVersion,
 static bool mmioRegistered = false;
 DPI int sv2cCosimserverMMIORegister() {
   if (mmioRegistered) {
-    printf("ERROR: DPI MMIO master already registered!");
+    getLogger().error("cosim", "DPI MMIO master already registered!");
     return -1;
   }
   sv2cCosimserverInit();
